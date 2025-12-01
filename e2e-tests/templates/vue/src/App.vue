@@ -7,9 +7,11 @@ import { SuperDoc } from 'superdoc';
 import { CustomMark } from './custom-mark.js';
 import { nextTick } from 'vue';
 
+const props = defineProps(['filename']);
 window.fileData = null;
 const urlParams = new URLSearchParams(window.location.search);
 const useLayoutEngine = urlParams.get('layout') === '1';
+
 const superdoc = shallowRef(null);
 const hideRulerByDefault = true;
 
@@ -159,8 +161,11 @@ const onFontsResolved = ({ documentFonts, unsupportedFonts }) => {
   }
 };
 
-onMounted(() => {
-  init();
+onMounted(async () => {
+  if (props.filename) {
+    window.fileData = await getFileObject(props.filename);
+  }
+  await init();
 });
 </script>
 

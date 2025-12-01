@@ -70,3 +70,7 @@ perf-baseline-results.json
 .claude
 plans/
 dev/
+
+# Storybook output
+*storybook.log
+storybook-static

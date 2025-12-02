@@ -67,6 +67,7 @@ export default defineConfig(({ mode, command}) => {
     vue(),
     !skipDts && dts({
       include: ['src/**/*', '../super-editor/src/**/*'],
+      exclude: ["**/*.stories.js", "**/*.stories.ts"],
       outDir: 'dist',
     }),
     copy({

@@ -1,8 +1,8 @@
 <script setup>
-import 'superdoc/style.css';
+import '@harbour-enterprises/super-editor/style.css';
 import BlankDOCX from './data/blank.docx?url';
 import { onMounted, shallowRef } from 'vue';
-import { SuperDoc } from 'superdoc';
+import { SuperDoc } from '@superdoc';
 
 import { CustomMark } from './custom-mark.js';
 import { nextTick } from 'vue';

@@ -7,7 +7,11 @@ import { SuperDoc } from 'superdoc';
 import { CustomMark } from './custom-mark.js';
 import { nextTick } from 'vue';
 
-const props = defineProps(['filename']);
+const props = defineProps({
+  filename: String,
+  onReady: Function,
+});
+
 window.fileData = null;
 const urlParams = new URLSearchParams(window.location.search);
 const useLayoutEngine = urlParams.get('layout') === '1';
@@ -123,6 +127,9 @@ const onReady = () => {
   hideRulerIfNeeded();
   if (window.superdocReady) {
     window.superdocReady();
+  }
+  if (props.onReady) {
+    props.onReady();
   }
 };
 

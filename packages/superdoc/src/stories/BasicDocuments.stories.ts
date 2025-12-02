@@ -10,8 +10,15 @@ const meta = {
   tags: ['autodocs'],
   argTypes: {
     filename: { control: 'text' },
+    onReady: { table: { disable: true } },
   },
-  args: {
+  mount: ({ args, canvas, renderToCanvas }) => async () => {
+    const { promise: readyPromise, resolve: onReady } = Promise.withResolvers();
+    args.onReady = onReady;
+
+    await renderToCanvas();
+    await readyPromise;
+    return canvas;
   },
 } satisfies Meta<typeof App>;
 

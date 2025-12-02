@@ -6,8 +6,7 @@ import App from '../../../../e2e-tests/templates/vue/src/App.vue';
 const meta = {
   title: 'Basic Documents',
   component: App,
-  // This component will have an automatically generated docsPage entry: https://storybook.js.org/docs/writing-docs/autodocs
-  tags: ['autodocs'],
+  tags: ['!autodocs'],
   argTypes: {
     filename: { control: 'text' },
     onReady: { table: { disable: true } },

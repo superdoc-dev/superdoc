@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite';
 
-import App from '../../../../e2e-tests/templates/vue/src/App.vue';
+import App from '../../../../../e2e-tests/templates/vue/src/App.vue';
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories
 const meta = {
-  title: 'Basic Documents',
+  title: 'E2E Tests/Basic Documents',
   component: App,
   tags: ['!autodocs'],
   argTypes: {
@@ -335,4 +335,3 @@ export const VerticalMerge: Story = {
     filename: 'basic-documents/vertical-merge.docx',
   },
 };
-

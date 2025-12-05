@@ -1,5 +1,5 @@
 <script setup>
-import '@harbour-enterprises/super-editor/style.css';
+import '@/style.css';
 import BlankDOCX from './data/blank.docx?url';
 import { onMounted, shallowRef } from 'vue';
 import { SuperDoc } from '@superdoc';

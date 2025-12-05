@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import NodeRenderer from './NodeRenderer.vue';
-import { createTable, createTableBorders } from '@harbour-enterprises/super-editor/extensions/table/tableHelpers';
+import { createTable, createTableBorders } from '@extensions/table/tableHelpers';
 
 const props = defineProps({
   rows: Number,

@@ -9,7 +9,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@harbour-enterprises/super-editor': 'superdoc/super-editor',
+      '@': 'superdoc/super-editor',
       '@superdoc': 'superdoc',
     },
   },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import '@harbour-enterprises/super-editor/style.css';
+import '@/style.css';
 import { Editor } from '@superdoc';
 import { onBeforeUnmount, onMounted, shallowRef, ref, watch } from 'vue';
 import type { Schema } from 'prosemirror-model';

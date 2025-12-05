@@ -1,4 +1,4 @@
-import { Extensions } from '@harbour-enterprises/super-editor';
+import { Extensions } from '@';
 
 const { Attribute } = Extensions;
 export const CustomMark = Extensions.Mark.create({

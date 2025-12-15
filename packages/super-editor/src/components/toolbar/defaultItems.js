@@ -4,6 +4,7 @@ import { sanitizeNumber } from './helpers';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
+import NumberingTypeButtons from './NumberingTypeButtons.vue';
 import DocumentMode from './DocumentMode.vue';
 import LinkedStyle from './LinkedStyle.vue';
 import LinkInput from './LinkInput.vue';
@@ -647,7 +648,7 @@ export const makeDefaultItems = ({
     type: 'button',
     name: 'numberedlist',
     command: 'toggleOrderedList',
-    icon: toolbarIcons.numberedList,
+    icon: toolbarIcons.numberedListDecimal,
     active: false,
     tooltip: toolbarTexts.numberedList,
     restoreEditorFocus: true,
@@ -655,6 +656,76 @@ export const makeDefaultItems = ({
       ariaLabel: 'Numbered list',
     },
   });
+
+  // numbering type dropdown
+  const numberedListType = useToolbarItem({
+    type: 'dropdown',
+    name: 'numberedlisttype',
+    tooltip: 'Numbering type',
+    icon: null,
+    command: 'changeListNumberingType',
+    hasCaret: true,
+    suppressActiveHighlight: true,
+    isNarrow: true,
+    attributes: {
+      ariaLabel: 'Numbering type',
+      className: 'toolbar-item-caret-only',
+    },
+    options: [
+      {
+        type: 'render',
+        render: () => {
+          const handleSelect = (numberingType) => {
+            closeDropdown(numberedListType);
+            // Store the selected type for future list creation
+            superToolbar.selectedNumberingType = numberingType;
+            // Update the numbered list button icon
+            setNumberedListIcon(numberedList, numberingType);
+            // If we're in an active list, change its type
+            const buttonWithCommand = { ...numberedListType, command: 'changeListNumberingType' };
+            superToolbar.emitCommand({ item: buttonWithCommand, argument: numberingType });
+          };
+
+          return h('div', {}, [
+            h(NumberingTypeButtons, {
+              selectedType: superToolbar.selectedNumberingType,
+              onSelect: handleSelect,
+            }),
+          ]);
+        },
+        key: 'numberingType',
+      },
+    ],
+    onActivate: ({ numberingType }) => {
+      if (numberingType) {
+        // Update stored type when activating on an existing list
+        superToolbar.selectedNumberingType = numberingType;
+        setNumberedListIcon(numberedList, numberingType);
+      }
+    },
+    onDeactivate: () => {
+      // Keep the selected type even when deactivated
+    },
+  });
+
+  const setNumberedListIcon = (button, numberingType) => {
+    // Map numbering type to appropriate icon
+    const iconMap = {
+      decimalPlain: toolbarIcons.numberedListDecimalPlain,
+      decimal: toolbarIcons.numberedListDecimal,
+      decimalParen: toolbarIcons.numberedListDecimalParen,
+      upperLetter: toolbarIcons.numberedListAlphaUpper,
+      lowerLetter: toolbarIcons.numberedListAlphaLower,
+      letterParen: toolbarIcons.numberedListAlphaLowerParen,
+      upperRoman: toolbarIcons.numberedListRomanUpper,
+      lowerRoman: toolbarIcons.numberedListRomanLower,
+    };
+
+    const icon = iconMap[numberingType] || toolbarIcons.numberedListDecimal;
+    if (button.icon && button.icon.value !== icon) {
+      button.icon.value = icon;
+    }
+  };
 
   // indent left
   const indentLeft = useToolbarItem({
@@ -1086,6 +1157,7 @@ export const makeDefaultItems = ({
     alignment,
     bulletedList,
     numberedList,
+    numberedListType,
     indentLeft,
     indentRight,
     lineHeight,

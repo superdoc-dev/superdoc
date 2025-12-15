@@ -66,6 +66,7 @@ export * from './removeNumberingProperties.js';
 export * from './insertListItemAt.js';
 export * from './setListTypeAt.js';
 export * from './exitListItemAt.js';
+export * from './changeListNumberingType.js';
 
 // Selection
 export * from './restoreSelection.js';

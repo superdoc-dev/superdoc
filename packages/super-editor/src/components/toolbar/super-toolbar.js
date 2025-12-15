@@ -194,6 +194,7 @@ export class SuperToolbar extends EventEmitter {
     this.superdoc = config.superdoc;
     this.role = config.role || 'editor';
     this.toolbarContainer = null;
+    this.selectedNumberingType = 'decimal'; // Store selected numbering type for list creation
 
     if (this.config.editor) {
       this.config.mode = this.config.editor.options.mode;
@@ -992,6 +993,23 @@ export class SuperToolbar extends EventEmitter {
           item.activate();
         } else if (item.name.value === 'numberedlist' && numberingType !== 'bullet') {
           item.activate();
+          // Update icon based on numbering type
+          this.updateNumberedListIcon(item, numberingType);
+          // Store this as the selected type for future lists
+          this.selectedNumberingType = numberingType;
+        } else if (item.name.value === 'numberedlisttype' && numberingType !== 'bullet') {
+          // Activate numbering type dropdown for ordered lists
+          item.activate({ numberingType: numberingType });
+        }
+      } else {
+        // When not in a list, update the numbered list button icon to show the stored preference
+        if (item.name.value === 'numberedlist') {
+          this.updateNumberedListIcon(item, this.selectedNumberingType);
+        }
+        // Always enable the numbering type dropdown to allow changing the default
+        if (item.name.value === 'numberedlisttype') {
+          // Don't activate (no highlight), but update based on stored preference
+          item.deactivate();
         }
       }
 
@@ -1004,6 +1022,29 @@ export class SuperToolbar extends EventEmitter {
         }
       }
     });
+  }
+
+  /**
+   * Update the numbered list button icon based on the current numbering type
+   * @param {Object} item - The toolbar item to update
+   * @param {string} numberingType - The current numbering type
+   */
+  updateNumberedListIcon(item, numberingType) {
+    const iconMap = {
+      decimalPlain: toolbarIcons.numberedListDecimalPlain,
+      decimal: toolbarIcons.numberedListDecimal,
+      decimalParen: toolbarIcons.numberedListDecimalParen,
+      upperLetter: toolbarIcons.numberedListAlphaUpper,
+      lowerLetter: toolbarIcons.numberedListAlphaLower,
+      letterParen: toolbarIcons.numberedListAlphaLowerParen,
+      upperRoman: toolbarIcons.numberedListRomanUpper,
+      lowerRoman: toolbarIcons.numberedListRomanLower,
+    };
+
+    const icon = iconMap[numberingType] || toolbarIcons.numberedListDecimal;
+    if (item.icon && item.icon.value !== icon) {
+      item.icon.value = icon;
+    }
   }
 
   /**

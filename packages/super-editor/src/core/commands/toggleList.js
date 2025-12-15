@@ -6,7 +6,7 @@ import { isVisuallyEmptyParagraph } from './removeNumberingProperties.js';
 import { TextSelection } from 'prosemirror-state';
 
 export const toggleList =
-  (listType) =>
+  (listType, numberingFormat = null) =>
   ({ editor, state, tr, dispatch }) => {
     // 1. Find first paragraph in selection that is a list of the same type
     let predicate;
@@ -92,7 +92,27 @@ export const toggleList =
 
     if (mode === 'create') {
       const numId = ListHelpers.getNewListId(editor);
-      ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor });
+
+      // Use the provided numbering format or default settings
+      if (listType === 'orderedList' && numberingFormat) {
+        const formatConfig = getFormatConfig(numberingFormat);
+        if (formatConfig) {
+          ListHelpers.generateNewListDefinition({
+            numId: Number(numId),
+            listType,
+            level: '0',
+            start: '1',
+            text: formatConfig.lvlText,
+            fmt: formatConfig.fmt,
+            editor,
+          });
+        } else {
+          ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor });
+        }
+      } else {
+        ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor });
+      }
+
       sharedNumberingProperties = {
         numId: Number(numId),
         ilvl: 0,
@@ -149,3 +169,47 @@ export const toggleList =
     dispatch(tr);
     return true;
   };
+
+/**
+ * Get the format configuration for a given numbering format
+ * @param {string} format - The numbering format
+ * @returns {Object|null} Configuration object with fmt and lvlText
+ */
+function getFormatConfig(format) {
+  const configs = {
+    decimalPlain: {
+      fmt: 'decimal',
+      lvlText: '%1',
+    },
+    decimal: {
+      fmt: 'decimal',
+      lvlText: '%1.',
+    },
+    decimalParen: {
+      fmt: 'decimal',
+      lvlText: '%1)',
+    },
+    upperLetter: {
+      fmt: 'upperLetter',
+      lvlText: '%1.',
+    },
+    lowerLetter: {
+      fmt: 'lowerLetter',
+      lvlText: '%1.',
+    },
+    letterParen: {
+      fmt: 'lowerLetter',
+      lvlText: '%1)',
+    },
+    upperRoman: {
+      fmt: 'upperRoman',
+      lvlText: '%1.',
+    },
+    lowerRoman: {
+      fmt: 'lowerRoman',
+      lvlText: '%1.',
+    },
+  };
+
+  return configs[format] || null;
+}

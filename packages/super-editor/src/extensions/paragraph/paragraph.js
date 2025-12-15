@@ -7,6 +7,7 @@ import { isList } from '@core/commands/list-helpers';
 import { findParentNode } from '@helpers/index.js';
 import { InputRule } from '@core/InputRule.js';
 import { toggleList } from '@core/commands/index.js';
+import { changeListNumberingType } from '@core/commands/changeListNumberingType.js';
 import { restartNumbering } from '@core/commands/restartNumbering.js';
 import { ParagraphNodeView } from './ParagraphNodeView.js';
 import { createNumberingPlugin } from './numberingPlugin.js';
@@ -307,7 +308,10 @@ export const Paragraph = OxmlNode.create({
        * @note Converts selection to ordered list or back to paragraphs
        */
       toggleOrderedList: () => (params) => {
-        return toggleList('orderedList')(params);
+        // Get selected numbering type from toolbar if available
+        const toolbar = params.editor?.toolbar;
+        const numberingFormat = toolbar?.selectedNumberingType || 'decimal';
+        return toggleList('orderedList', numberingFormat)(params);
       },
 
       /**
@@ -320,6 +324,18 @@ export const Paragraph = OxmlNode.create({
        */
       toggleBulletList: () => (params) => {
         return toggleList('bulletList')(params);
+      },
+
+      /**
+       * Change the numbering type of an ordered list
+       * @category Command
+       * @param {string} numberingFormat - The format to apply (decimal, lowerRoman, upperRoman, lowerLetter, upperLetter, etc.)
+       * @example
+       * editor.commands.changeListNumberingType('upperRoman')
+       * @note Changes the numbering format of selected ordered list items
+       */
+      changeListNumberingType: (numberingFormat) => (params) => {
+        return changeListNumberingType(numberingFormat)(params);
       },
 
       /**

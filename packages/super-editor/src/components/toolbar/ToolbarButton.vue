@@ -161,6 +161,16 @@ const caretIcon = computed(() => {
   margin: 0 1px;
 }
 
+.toolbar-item-caret-only {
+  min-width: 18px;
+  margin: 0 0 0 -2px;
+}
+
+.toolbar-item-caret-only .toolbar-button {
+  padding: 5px 3px;
+  min-width: 18px;
+}
+
 .visually-hidden {
   position: absolute;
   left: -9999px;

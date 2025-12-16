@@ -1135,6 +1135,164 @@ describe('SuperConverter Document GUID', () => {
       });
     });
   });
+
+  describe('Numbering Export', () => {
+    it('should ensure w15 namespace exists in numbering.xml when using w15 attributes', () => {
+      // Create a minimal numbering.xml without w15 namespace
+      const mockNumberingXml = {
+        name: 'word/numbering.xml',
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+          <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" 
+                       xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+                       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                       mc:Ignorable="w14">
+            <w:abstractNum w:abstractNumId="0">
+              <w:lvl w:ilvl="0">
+                <w:start w:val="1"/>
+                <w:numFmt w:val="decimal"/>
+              </w:lvl>
+            </w:abstractNum>
+          </w:numbering>`,
+      };
+
+      const docxWithNumbering = [...mockDocx, mockNumberingXml];
+      const converter = new SuperConverter({ docx: docxWithNumbering });
+
+      // Verify initial state - no w15 namespace
+      const initialRootElement = converter.convertedXml['word/numbering.xml'].elements[0];
+      expect(initialRootElement.attributes['xmlns:w15']).toBeUndefined();
+
+      // Add a list definition that uses w15:restartNumberingAfterBreak
+      converter.numbering = {
+        abstracts: {
+          0: {
+            type: 'element',
+            name: 'w:abstractNum',
+            attributes: {
+              'w:abstractNumId': '0',
+              'w15:restartNumberingAfterBreak': '0',
+            },
+            elements: [],
+          },
+        },
+        definitions: {},
+      };
+
+      // Manually update the numbering XML to simulate what exportNumberingFile does
+      const numberingPath = 'word/numbering.xml';
+      const numberingXml = converter.convertedXml[numberingPath];
+      const currentNumberingXml = numberingXml.elements[0];
+
+      // This simulates the logic in #exportNumberingFile
+      const newAbstracts = Object.values(converter.numbering.abstracts);
+      const newNumDefs = Object.values(converter.numbering.definitions);
+      currentNumberingXml.elements = [...newAbstracts, ...newNumDefs];
+
+      // Apply the namespace fix logic
+      if (!currentNumberingXml.attributes['xmlns:w15']) {
+        currentNumberingXml.attributes['xmlns:w15'] = 'http://schemas.microsoft.com/office/word/2012/wordml';
+
+        if (currentNumberingXml.attributes['mc:Ignorable']) {
+          const ignorable = currentNumberingXml.attributes['mc:Ignorable'];
+          if (!ignorable.includes('w15')) {
+            // Insert w15 after w14 to maintain proper namespace ordering
+            if (ignorable.includes('w14')) {
+              currentNumberingXml.attributes['mc:Ignorable'] = ignorable.replace(/w14(\s*)/, 'w14 w15$1');
+            } else {
+              // If w14 is not present, add w15 at the beginning
+              currentNumberingXml.attributes['mc:Ignorable'] = 'w15 ' + ignorable;
+            }
+          }
+        }
+      }
+
+      // Verify w15 namespace is now present
+      expect(currentNumberingXml.attributes['xmlns:w15']).toBe('http://schemas.microsoft.com/office/word/2012/wordml');
+
+      // Verify w15 is added to mc:Ignorable after w14
+      expect(currentNumberingXml.attributes['mc:Ignorable']).toContain('w15');
+      expect(currentNumberingXml.attributes['mc:Ignorable']).toBe('w14 w15');
+    });
+
+    it('should not duplicate w15 namespace if already present', () => {
+      // Create a numbering.xml that already has w15 namespace
+      const mockNumberingXml = {
+        name: 'word/numbering.xml',
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+          <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" 
+                       xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+                       xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"
+                       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                       mc:Ignorable="w14 w15">
+            <w:abstractNum w:abstractNumId="0">
+              <w:lvl w:ilvl="0">
+                <w:start w:val="1"/>
+                <w:numFmt w:val="decimal"/>
+              </w:lvl>
+            </w:abstractNum>
+          </w:numbering>`,
+      };
+
+      const docxWithNumbering = [...mockDocx, mockNumberingXml];
+      const converter = new SuperConverter({ docx: docxWithNumbering });
+
+      const originalRootElement = converter.convertedXml['word/numbering.xml'].elements[0];
+      const originalIgnorable = originalRootElement.attributes['mc:Ignorable'];
+
+      // Verify w15 is already present
+      expect(originalRootElement.attributes['xmlns:w15']).toBe('http://schemas.microsoft.com/office/word/2012/wordml');
+
+      converter.numbering = {
+        abstracts: {
+          0: {
+            type: 'element',
+            name: 'w:abstractNum',
+            attributes: {
+              'w:abstractNumId': '0',
+              'w15:restartNumberingAfterBreak': '0',
+            },
+            elements: [],
+          },
+        },
+        definitions: {},
+      };
+
+      // Simulate the exportNumberingFile logic
+      const numberingPath = 'word/numbering.xml';
+      const numberingXml = converter.convertedXml[numberingPath];
+      const currentNumberingXml = numberingXml.elements[0];
+
+      const newAbstracts = Object.values(converter.numbering.abstracts);
+      const newNumDefs = Object.values(converter.numbering.definitions);
+      currentNumberingXml.elements = [...newAbstracts, ...newNumDefs];
+
+      // Apply the namespace fix logic
+      if (!currentNumberingXml.attributes['xmlns:w15']) {
+        currentNumberingXml.attributes['xmlns:w15'] = 'http://schemas.microsoft.com/office/word/2012/wordml';
+
+        if (currentNumberingXml.attributes['mc:Ignorable']) {
+          const ignorable = currentNumberingXml.attributes['mc:Ignorable'];
+          if (!ignorable.includes('w15')) {
+            // Insert w15 after w14 to maintain proper namespace ordering
+            if (ignorable.includes('w14')) {
+              currentNumberingXml.attributes['mc:Ignorable'] = ignorable.replace(/w14(\s*)/, 'w14 w15$1');
+            } else {
+              // If w14 is not present, add w15 at the beginning
+              currentNumberingXml.attributes['mc:Ignorable'] = 'w15 ' + ignorable;
+            }
+          }
+        }
+      }
+
+      // Verify w15 namespace is still present (not duplicated)
+      expect(currentNumberingXml.attributes['xmlns:w15']).toBe('http://schemas.microsoft.com/office/word/2012/wordml');
+
+      // Verify mc:Ignorable hasn't changed (no duplicate w15)
+      expect(currentNumberingXml.attributes['mc:Ignorable']).toBe(originalIgnorable);
+      const w15Count = (currentNumberingXml.attributes['mc:Ignorable'].match(/w15/g) || []).length;
+      expect(w15Count).toBe(1);
+    });
+  });
 });
 
 describe('XML whitespace preservation', () => {

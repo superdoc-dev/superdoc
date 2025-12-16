@@ -1298,6 +1298,25 @@ class SuperConverter {
 
     currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
 
+    // Ensure w15 namespace is defined when using w15:restartNumberingAfterBreak
+    if (!currentNumberingXml.attributes['xmlns:w15']) {
+      currentNumberingXml.attributes['xmlns:w15'] = 'http://schemas.microsoft.com/office/word/2012/wordml';
+
+      // Also add w15 to mc:Ignorable if it exists and doesn't already include it
+      if (currentNumberingXml.attributes['mc:Ignorable']) {
+        const ignorable = currentNumberingXml.attributes['mc:Ignorable'];
+        if (!ignorable.includes('w15')) {
+          // Insert w15 after w14 to maintain proper namespace ordering
+          if (ignorable.includes('w14')) {
+            currentNumberingXml.attributes['mc:Ignorable'] = ignorable.replace(/w14(\s*)/, 'w14 w15$1');
+          } else {
+            // If w14 is not present, add w15 at the beginning
+            currentNumberingXml.attributes['mc:Ignorable'] = 'w15 ' + ignorable;
+          }
+        }
+      }
+    }
+
     // Update the numbering file
     this.convertedXml[numberingPath] = numberingXml;
   }

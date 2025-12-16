@@ -2,6 +2,60 @@ import { Node } from 'prosemirror-model';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
+ * Computes paragraph-level diffs between two ProseMirror documents, returning inserts, deletes and text modifications.
+ * @param {Node} oldPmDoc - The previous ProseMirror document.
+ * @param {Node} newPmDoc - The updated ProseMirror document.
+ * @returns {Array<object>} List of diff objects describing added, deleted or modified paragraphs.
+ */
+export function computeDiff(oldPmDoc, newPmDoc) {
+  const diffs = [];
+
+  // 1. Extract all paragraphs from old document and create a map using their IDs
+  const oldParagraphsMap = extractParagraphs(oldPmDoc);
+
+  // 2. Extract all paragraphs from new document and create a map using their IDs
+  const newParagraphsMap = extractParagraphs(newPmDoc);
+
+  // 3. Compare paragraphs in old and new documents
+  let insertPos = 0;
+  newParagraphsMap.forEach((newPara, paraId) => {
+    const oldPara = oldParagraphsMap.get(paraId);
+    if (!oldPara) {
+      diffs.push({
+        type: 'added',
+        paraId,
+        node: newPara.node,
+        text: newPara.node.textContent,
+        pos: insertPos,
+      });
+      return;
+    } else if (oldPara.node.textContent !== newPara.node.textContent) {
+      const oldTextContent = getTextContent(oldPara.node, oldPara.pos);
+      const newTextContent = getTextContent(newPara.node, newPara.pos);
+      const textDiffs = getLCSdiff(oldPara.node.textContent, newPara.node.textContent, oldTextContent.resolvePosition);
+      diffs.push({
+        type: 'modified',
+        paraId,
+        oldText: oldTextContent.text,
+        newText: newTextContent.text,
+        pos: oldPara.pos,
+        textDiffs,
+      });
+    }
+    insertPos = oldPara.pos + oldPara.node.nodeSize;
+  });
+
+  // 4. Identify deleted paragraphs
+  oldParagraphsMap.forEach((oldPara, paraId) => {
+    if (!newParagraphsMap.has(paraId)) {
+      diffs.push({ type: 'deleted', paraId, node: oldPara.node, pos: oldPara.pos });
+    }
+  });
+
+  return diffs;
+}
+
+/**
  * Collects paragraphs from a ProseMirror document and returns them by paragraph ID.
  * @param {Node} pmDoc - ProseMirror document to scan.
  * @returns {Map<string, {node: Node, pos: number}>} Map keyed by paraId containing paragraph nodes and positions.

@@ -12,6 +12,7 @@ import { renderColorOptions } from './color-dropdown-helpers.js';
 import TableGrid from './TableGrid.vue';
 import TableActions from './TableActions.vue';
 import { scrollToElement } from './scroll-helpers.js';
+import { getNumberingIcon } from './numbering-icon-map.js';
 
 import checkIconSvg from '@superdoc/common/icons/check.svg?raw';
 import SearchInput from './SearchInput.vue';
@@ -709,19 +710,7 @@ export const makeDefaultItems = ({
   });
 
   const setNumberedListIcon = (button, numberingType) => {
-    // Map numbering type to appropriate icon
-    const iconMap = {
-      decimalPlain: toolbarIcons.numberedListDecimalPlain,
-      decimal: toolbarIcons.numberedListDecimal,
-      decimalParen: toolbarIcons.numberedListDecimalParen,
-      upperLetter: toolbarIcons.numberedListAlphaUpper,
-      lowerLetter: toolbarIcons.numberedListAlphaLower,
-      letterParen: toolbarIcons.numberedListAlphaLowerParen,
-      upperRoman: toolbarIcons.numberedListRomanUpper,
-      lowerRoman: toolbarIcons.numberedListRomanLower,
-    };
-
-    const icon = iconMap[numberingType] || toolbarIcons.numberedListDecimal;
+    const icon = getNumberingIcon(numberingType);
     if (button.icon && button.icon.value !== icon) {
       button.icon.value = icon;
     }

@@ -69,3 +69,85 @@ export function getTextContent(paragraph, paragraphPos = 0) {
 
   return { text, resolvePosition };
 }
+
+/**
+ * Computes text-level additions and deletions between two strings using LCS, mapping back to document positions.
+ * @param {string} oldText - Source text.
+ * @param {string} newText - Target text.
+ * @param {(index: number) => number|null} positionResolver - Maps string indices to document positions.
+ * @returns {Array<object>} List of addition/deletion ranges with document positions and text content.
+ */
+export function getLCSdiff(oldText, newText, positionResolver) {
+  const oldLen = oldText.length;
+  const newLen = newText.length;
+
+  // Build LCS length table
+  const lcs = Array.from({ length: oldLen + 1 }, () => Array(newLen + 1).fill(0));
+  for (let i = oldLen - 1; i >= 0; i -= 1) {
+    for (let j = newLen - 1; j >= 0; j -= 1) {
+      if (oldText[i] === newText[j]) {
+        lcs[i][j] = lcs[i + 1][j + 1] + 1;
+      } else {
+        lcs[i][j] = Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      }
+    }
+  }
+
+  // Reconstruct the LCS path to figure out unmatched segments
+  const matches = [];
+  for (let i = 0, j = 0; i < oldLen && j < newLen; ) {
+    if (oldText[i] === newText[j]) {
+      matches.push({ oldIdx: i, newIdx: j });
+      i += 1;
+      j += 1;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+
+  const diffs = [];
+  let prevOld = 0;
+  let prevNew = 0;
+
+  for (const { oldIdx, newIdx } of matches) {
+    if (oldIdx > prevOld) {
+      diffs.push({
+        type: 'deletion',
+        startIdx: positionResolver(prevOld),
+        endIdx: positionResolver(oldIdx),
+        text: oldText.slice(prevOld, oldIdx),
+      });
+    }
+    if (newIdx > prevNew) {
+      diffs.push({
+        type: 'addition',
+        startIdx: positionResolver(prevOld),
+        endIdx: positionResolver(prevOld),
+        text: newText.slice(prevNew, newIdx),
+      });
+    }
+    prevOld = oldIdx + 1;
+    prevNew = newIdx + 1;
+  }
+
+  if (prevOld < oldLen) {
+    diffs.push({
+      type: 'deletion',
+      startIdx: positionResolver(prevOld),
+      endIdx: positionResolver(oldLen - 1),
+      text: oldText.slice(prevOld),
+    });
+  }
+  if (prevNew < newLen) {
+    diffs.push({
+      type: 'addition',
+      startIdx: positionResolver(prevOld),
+      endIdx: positionResolver(prevOld),
+      text: newText.slice(prevNew),
+    });
+  }
+
+  return diffs;
+}

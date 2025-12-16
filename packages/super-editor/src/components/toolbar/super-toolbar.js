@@ -993,13 +993,18 @@ export class SuperToolbar extends EventEmitter {
           item.activate();
         } else if (item.name.value === 'numberedlist' && numberingType !== 'bullet') {
           item.activate();
-          // Update icon based on numbering type
-          this.updateNumberedListIcon(item, numberingType);
+          // Detect exact format from numberingType and markerText
+          const markerText = listParent.attrs.listRendering.markerText;
+          const exactFormat = this.detectNumberingFormat(numberingType, markerText);
+          // Update icon based on exact format
+          this.updateNumberedListIcon(item, exactFormat);
           // Store this as the selected type for future lists
-          this.selectedNumberingType = numberingType;
+          this.selectedNumberingType = exactFormat;
         } else if (item.name.value === 'numberedlisttype' && numberingType !== 'bullet') {
-          // Activate numbering type dropdown for ordered lists
-          item.activate({ numberingType: numberingType });
+          // Detect exact format and activate numbering type dropdown
+          const markerText = listParent.attrs.listRendering.markerText;
+          const exactFormat = this.detectNumberingFormat(numberingType, markerText);
+          item.activate({ numberingType: exactFormat });
         }
       } else {
         // When not in a list, update the numbered list button icon to show the stored preference
@@ -1022,6 +1027,47 @@ export class SuperToolbar extends EventEmitter {
         }
       }
     });
+  }
+
+  /**
+   * Detect the exact numbering format from numberingType and markerText
+   * @param {string} numberingType - The Word numFmt value (decimal, lowerLetter, etc.)
+   * @param {string} markerText - The actual rendered marker text (e.g., "1.", "1)", "1", "a)")
+   * @returns {string} The format key (decimalPlain, decimal, decimalParen, etc.)
+   */
+  detectNumberingFormat(numberingType, markerText) {
+    if (!numberingType || !markerText) {
+      return 'decimal';
+    }
+
+    // Remove the counter value to get just the suffix pattern
+    // For example: "1." -> ".", "1)" -> ")", "1" -> "", "a." -> ".", "I." -> "."
+    const pattern = markerText.replace(/^[0-9]+|^[a-z]+|^[A-Z]+|^[ivxlcdm]+|^[IVXLCDM]+/, '');
+
+    switch (numberingType) {
+      case 'decimal':
+        if (pattern === '') return 'decimalPlain';
+        if (pattern === '.') return 'decimal';
+        if (pattern === ')') return 'decimalParen';
+        return 'decimal';
+
+      case 'lowerLetter':
+        if (pattern === '.') return 'lowerLetter';
+        if (pattern === ')') return 'letterParen';
+        return 'lowerLetter';
+
+      case 'upperLetter':
+        return 'upperLetter';
+
+      case 'lowerRoman':
+        return 'lowerRoman';
+
+      case 'upperRoman':
+        return 'upperRoman';
+
+      default:
+        return 'decimal';
+    }
   }
 
   /**

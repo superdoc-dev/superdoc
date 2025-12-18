@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { getTextContent, computeDiff, extractParagraphs, getTextDiff } from './computeDiff';
+import { computeDiff } from './computeDiff';
 
 import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
 
-export const getDocument = async (name) => {
+const getDocument = async (name) => {
   const buffer = await getTestDataAsBuffer(name);
   const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
 
@@ -30,196 +30,108 @@ describe('Diff', () => {
     const docAfter = await getDocument('diff_after.docx');
 
     const diffs = computeDiff(docBefore, docAfter);
-    console.log(JSON.stringify(diffs, null, 2));
-  });
-});
+    const getDiff = (type, predicate) => diffs.find((diff) => diff.type === type && predicate(diff));
 
-describe('extractParagraphs', () => {
-  it('collects all paragraph nodes keyed by their paraId', () => {
-    const firstParagraph = {
-      type: { name: 'paragraph' },
-      attrs: { paraId: 'para-1' },
-      textContent: 'First paragraph',
-    };
-    const nonParagraph = {
-      type: { name: 'heading' },
-      attrs: { paraId: 'heading-1' },
-    };
-    const secondParagraph = {
-      type: { name: 'paragraph' },
-      attrs: { paraId: 'para-2' },
-      textContent: 'Second paragraph',
-    };
-    const pmDoc = {
-      descendants: (callback) => {
-        callback(firstParagraph, 0);
-        callback(nonParagraph, 5);
-        callback(secondParagraph, 10);
-      },
-    };
+    expect(diffs).toHaveLength(15);
+    expect(diffs.filter((diff) => diff.type === 'modified')).toHaveLength(5);
+    expect(diffs.filter((diff) => diff.type === 'added')).toHaveLength(5);
+    expect(diffs.filter((diff) => diff.type === 'deleted')).toHaveLength(5);
 
-    const paragraphs = extractParagraphs(pmDoc);
+    // Modified paragraph with multiple text diffs
+    let diff = getDiff(
+      'modified',
+      (diff) => diff.oldText === 'Curabitur facilisis ligula suscipit enim pretium, sed porttitor augue consequat.',
+    );
+    expect(diff?.newText).toBe(
+      'Curabitur facilisis ligula suscipit enim pretium et nunc ligula, porttitor augue consequat maximus.',
+    );
+    expect(diff?.textDiffs).toHaveLength(6);
 
-    expect(paragraphs.size).toBe(2);
-    expect(paragraphs.get('para-1')).toEqual({ node: firstParagraph, pos: 0 });
-    expect(paragraphs.get('para-2')).toEqual({ node: secondParagraph, pos: 10 });
-  });
+    // Deleted paragraph
+    diff = getDiff(
+      'deleted',
+      (diff) => diff.oldText === 'Vestibulum gravida eros sed nulla malesuada, vel eleifend sapien bibendum.',
+    );
+    expect(diff).toBeDefined();
 
-  it('generates unique IDs when paragraph nodes are missing paraId', () => {
-    const firstParagraph = {
-      type: { name: 'paragraph' },
-      attrs: {},
-      textContent: 'Anonymous first',
-    };
-    const secondParagraph = {
-      type: { name: 'paragraph' },
-      attrs: undefined,
-      textContent: 'Anonymous second',
-    };
-    const pmDoc = {
-      descendants: (callback) => {
-        callback(firstParagraph, 2);
-        callback(secondParagraph, 8);
-      },
-    };
+    // Added paragraph
+    diff = getDiff(
+      'added',
+      (diff) =>
+        diff.text === 'Lorem tempor velit eget lorem posuere, id luctus dolor ultricies, to track supplier risks.',
+    );
+    expect(diff).toBeDefined();
 
-    const paragraphs = extractParagraphs(pmDoc);
-    const entries = [...paragraphs.entries()];
-    const firstEntry = entries.find(([, value]) => value.node === firstParagraph);
-    const secondEntry = entries.find(([, value]) => value.node === secondParagraph);
+    // Another modified paragraph
+    diff = getDiff(
+      'modified',
+      (diff) => diff.oldText === 'Quisque posuere risus a ligula cursus vulputate et vitae ipsum.',
+    );
+    expect(diff?.newText).toBe(
+      'Quisque dapibus risus convallis ligula cursus vulputate, ornare dictum ipsum et vehicula nisl.',
+    );
 
-    expect(paragraphs.size).toBe(2);
-    expect(firstEntry?.[0]).toBeTruthy();
-    expect(secondEntry?.[0]).toBeTruthy();
-    expect(firstEntry?.[0]).not.toBe(secondEntry?.[0]);
-    expect(firstEntry?.[1].pos).toBe(2);
-    expect(secondEntry?.[1].pos).toBe(8);
-  });
-});
+    // Simple modified paragraph
+    diff = getDiff('modified', (diff) => diff.oldText === 'OK' && diff.newText === 'No');
+    expect(diff).toBeDefined();
 
-describe('getTextContent', () => {
-  it('Handles basic text nodes', () => {
-    const mockParagraph = {
-      content: {
-        size: 5,
-      },
-      nodesBetween: (from, to, callback) => {
-        callback({ isText: true, text: 'Hello' }, 0);
-      },
-    };
+    // Added, trimmed, merged, removed, and moved paragraphs
+    diff = getDiff('added', (diff) => diff.text === 'Sed et nibh in nulla blandit maximus et dapibus.');
+    expect(diff).toBeDefined();
 
-    const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('Hello');
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(4)).toBe(5);
+    const trimmedParagraph = getDiff(
+      'modified',
+      (diff) =>
+        diff.oldText ===
+          'Sed et nibh in nulla blandit maximus et dapibus. Etiam egestas diam luctus sit amet gravida purus.' &&
+        diff.newText === 'Etiam egestas diam luctus sit amet gravida purus.',
+    );
+    expect(trimmedParagraph).toBeDefined();
+
+    const mergedParagraph = getDiff(
+      'added',
+      (diff) =>
+        diff.text ===
+        'Praesent dapibus lacus vitae tellus laoreet, eget facilisis mi facilisis, donec mollis lacus sed nisl posuere, nec feugiat massa fringilla.',
+    );
+    expect(mergedParagraph).toBeDefined();
+
+    const removedParagraph = getDiff(
+      'modified',
+      (diff) =>
+        diff.oldText === 'Praesent dapibus lacus vitae tellus laoreet, eget facilisis mi facilisis.' &&
+        diff.newText === '',
+    );
+    expect(removedParagraph).toBeDefined();
+
+    const movedParagraph = getDiff(
+      'added',
+      (diff) => diff.text === 'Aenean hendrerit elit vitae sem fermentum, vel sagittis erat gravida.',
+    );
+    expect(movedParagraph).toBeDefined();
   });
 
-  it('Handles leaf nodes with leafText', () => {
-    const mockParagraph = {
-      content: {
-        size: 4,
-      },
-      nodesBetween: (from, to, callback) => {
-        callback({ isLeaf: true, type: { spec: { leafText: () => 'Leaf' } } }, 0);
-      },
-    };
+  it('Compare two documents with simple changes', async () => {
+    const docBefore = await getDocument('diff_before2.docx');
+    const docAfter = await getDocument('diff_after2.docx');
 
-    const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('Leaf');
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(3)).toBe(4);
-  });
+    const diffs = computeDiff(docBefore, docAfter);
+    expect(diffs).toHaveLength(4);
 
-  it('Handles mixed content', () => {
-    const mockParagraph = {
-      content: {
-        size: 9,
-      },
-      nodesBetween: (from, to, callback) => {
-        callback({ isText: true, text: 'Hello' }, 0);
-        callback({ isLeaf: true, type: { spec: { leafText: () => 'Leaf' } } }, 5);
-      },
-    };
+    let diff = diffs.find((diff) => diff.type === 'modified' && diff.oldText === 'Here’s some text.');
 
-    const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('HelloLeaf');
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(5)).toBe(6);
-    expect(result.resolvePosition(9)).toBe(10);
-  });
+    expect(diff.newText).toBe('Here’s some NEW text.');
+    expect(diff.textDiffs).toHaveLength(1);
+    expect(diff.textDiffs[0].text).toBe('NEW ');
 
-  it('Handles empty content', () => {
-    const mockParagraph = {
-      content: {
-        size: 0,
-      },
-      nodesBetween: () => {},
-    };
+    diff = diffs.find((diff) => diff.type === 'deleted' && diff.oldText === 'I deleted this sentence.');
+    expect(diff).toBeDefined();
 
-    const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('');
-    expect(result.resolvePosition(0)).toBe(1);
-  });
+    diff = diffs.find((diff) => diff.type === 'added' && diff.text === 'I added this sentence.');
+    expect(diff).toBeDefined();
 
-  it('Handles nested nodes', () => {
-    const mockParagraph = {
-      content: {
-        size: 6,
-      },
-      nodesBetween: (from, to, callback) => {
-        callback({ isText: true, text: 'Nested' }, 0);
-      },
-    };
-
-    const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('Nested');
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(6)).toBe(7);
-  });
-});
-
-describe('getTextDiff', () => {
-  it('returns an empty diff list when both strings are identical', () => {
-    const resolver = () => 0;
-
-    const diffs = getTextDiff('unchanged', 'unchanged', resolver);
-
-    expect(diffs).toEqual([]);
-  });
-
-  it('detects text insertions and maps them to resolver positions', () => {
-    const resolver = (index) => index + 10;
-
-    const diffs = getTextDiff('abc', 'abXc', resolver);
-
-    expect(diffs).toEqual([
-      {
-        type: 'addition',
-        startIdx: 12,
-        endIdx: 12,
-        text: 'X',
-      },
-    ]);
-  });
-
-  it('detects deletions and additions in the same diff sequence', () => {
-    const resolver = (index) => index + 5;
-
-    const diffs = getTextDiff('abcd', 'abXYd', resolver);
-
-    expect(diffs).toEqual([
-      {
-        type: 'deletion',
-        startIdx: 7,
-        endIdx: 8,
-        text: 'c',
-      },
-      {
-        type: 'addition',
-        startIdx: 7,
-        endIdx: 7,
-        text: 'XY',
-      },
-    ]);
+    diff = diffs.find((diff) => diff.type === 'modified' && diff.oldText === 'We are not done yet.');
+    expect(diff.newText).toBe('We are done now.');
+    expect(diff.textDiffs).toHaveLength(3);
   });
 });

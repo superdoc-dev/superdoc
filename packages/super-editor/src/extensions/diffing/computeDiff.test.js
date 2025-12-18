@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getTextContent, computeDiff, extractParagraphs, getLCSdiff } from './computeDiff';
+import { getTextContent, computeDiff, extractParagraphs, getTextDiff } from './computeDiff';
 
 import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
@@ -178,11 +178,11 @@ describe('getTextContent', () => {
   });
 });
 
-describe('getLCSdiff', () => {
+describe('getTextDiff', () => {
   it('returns an empty diff list when both strings are identical', () => {
     const resolver = () => 0;
 
-    const diffs = getLCSdiff('unchanged', 'unchanged', resolver);
+    const diffs = getTextDiff('unchanged', 'unchanged', resolver);
 
     expect(diffs).toEqual([]);
   });
@@ -190,7 +190,7 @@ describe('getLCSdiff', () => {
   it('detects text insertions and maps them to resolver positions', () => {
     const resolver = (index) => index + 10;
 
-    const diffs = getLCSdiff('abc', 'abXc', resolver);
+    const diffs = getTextDiff('abc', 'abXc', resolver);
 
     expect(diffs).toEqual([
       {
@@ -205,7 +205,7 @@ describe('getLCSdiff', () => {
   it('detects deletions and additions in the same diff sequence', () => {
     const resolver = (index) => index + 5;
 
-    const diffs = getLCSdiff('abcd', 'abXYd', resolver);
+    const diffs = getTextDiff('abcd', 'abXYd', resolver);
 
     expect(diffs).toEqual([
       {

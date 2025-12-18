@@ -32,7 +32,7 @@ export function computeDiff(oldPmDoc, newPmDoc) {
     } else if (oldPara.node.textContent !== newPara.node.textContent) {
       const oldTextContent = getTextContent(oldPara.node, oldPara.pos);
       const newTextContent = getTextContent(newPara.node, newPara.pos);
-      const textDiffs = getLCSdiff(oldPara.node.textContent, newPara.node.textContent, oldTextContent.resolvePosition);
+      const textDiffs = getTextDiff(oldPara.node.textContent, newPara.node.textContent, oldTextContent.resolvePosition);
       diffs.push({
         type: 'modified',
         paraId,
@@ -125,83 +125,199 @@ export function getTextContent(paragraph, paragraphPos = 0) {
 }
 
 /**
- * Computes text-level additions and deletions between two strings using LCS, mapping back to document positions.
+ * Computes text-level additions and deletions between two strings using Myers diff algorithm, mapping back to document positions.
  * @param {string} oldText - Source text.
  * @param {string} newText - Target text.
  * @param {(index: number) => number|null} positionResolver - Maps string indices to document positions.
  * @returns {Array<object>} List of addition/deletion ranges with document positions and text content.
  */
-export function getLCSdiff(oldText, newText, positionResolver) {
+export function getTextDiff(oldText, newText, positionResolver) {
   const oldLen = oldText.length;
   const newLen = newText.length;
 
-  // Build LCS length table
-  const lcs = Array.from({ length: oldLen + 1 }, () => Array(newLen + 1).fill(0));
-  for (let i = oldLen - 1; i >= 0; i -= 1) {
-    for (let j = newLen - 1; j >= 0; j -= 1) {
-      if (oldText[i] === newText[j]) {
-        lcs[i][j] = lcs[i + 1][j + 1] + 1;
+  if (oldLen === 0 && newLen === 0) {
+    return [];
+  }
+
+  // Myers diff bookkeeping: +2 padding keeps diagonal lookups in bounds.
+  const max = oldLen + newLen;
+  const size = 2 * max + 3;
+  const offset = max + 1;
+  const v = new Array(size).fill(-1);
+  v[offset + 1] = 0;
+
+  const trace = [];
+  let foundPath = false;
+
+  for (let d = 0; d <= max && !foundPath; d += 1) {
+    for (let k = -d; k <= d; k += 2) {
+      const index = offset + k;
+      let x;
+
+      if (k === -d || (k !== d && v[index - 1] < v[index + 1])) {
+        x = v[index + 1];
       } else {
-        lcs[i][j] = Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+        x = v[index - 1] + 1;
+      }
+
+      let y = x - k;
+      while (x < oldLen && y < newLen && oldText[x] === newText[y]) {
+        x += 1;
+        y += 1;
+      }
+
+      v[index] = x;
+
+      if (x >= oldLen && y >= newLen) {
+        foundPath = true;
+        break;
       }
     }
+    trace.push(v.slice());
   }
 
-  // Reconstruct the LCS path to figure out unmatched segments
-  const matches = [];
-  for (let i = 0, j = 0; i < oldLen && j < newLen; ) {
-    if (oldText[i] === newText[j]) {
-      matches.push({ oldIdx: i, newIdx: j });
-      i += 1;
-      j += 1;
-    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-      i += 1;
+  const operations = backtrackMyers(trace, oldLen, newLen, offset);
+  return buildDiffFromOperations(operations, oldText, newText, positionResolver);
+}
+
+/**
+ * Reconstructs the shortest edit script by walking the previously recorded V vectors.
+ *
+ * @param {Array<number[]>} trace - Snapshot of diagonal furthest-reaching points per edit distance.
+ * @param {number} oldLen - Length of the original string.
+ * @param {number} newLen - Length of the target string.
+ * @param {number} offset - Offset applied to diagonal indexes to keep array lookups positive.
+ * @returns {Array<'equal'|'delete'|'insert'>} Concrete step-by-step operations.
+ */
+function backtrackMyers(trace, oldLen, newLen, offset) {
+  const operations = [];
+  let x = oldLen;
+  let y = newLen;
+
+  for (let d = trace.length - 1; d > 0; d -= 1) {
+    const v = trace[d - 1];
+    const k = x - y;
+    const index = offset + k;
+
+    let prevK;
+    if (k === -d || (k !== d && v[index - 1] < v[index + 1])) {
+      prevK = k + 1;
     } else {
-      j += 1;
+      prevK = k - 1;
+    }
+
+    const prevIndex = offset + prevK;
+    const prevX = v[prevIndex];
+    const prevY = prevX - prevK;
+
+    while (x > prevX && y > prevY) {
+      x -= 1;
+      y -= 1;
+      operations.push('equal');
+    }
+
+    if (x === prevX) {
+      y -= 1;
+      operations.push('insert');
+    } else {
+      x -= 1;
+      operations.push('delete');
     }
   }
 
-  const diffs = [];
-  let prevOld = 0;
-  let prevNew = 0;
+  while (x > 0 && y > 0) {
+    x -= 1;
+    y -= 1;
+    operations.push('equal');
+  }
 
-  for (const { oldIdx, newIdx } of matches) {
-    if (oldIdx > prevOld) {
+  while (x > 0) {
+    x -= 1;
+    operations.push('delete');
+  }
+
+  while (y > 0) {
+    y -= 1;
+    operations.push('insert');
+  }
+
+  return operations.reverse();
+}
+
+/**
+ * Groups edit operations into contiguous additions/deletions and maps them to document positions.
+ *
+ * @param {Array<'equal'|'delete'|'insert'>} operations - Raw operation list produced by the backtracked Myers path.
+ * @param {string} oldText - Source text.
+ * @param {string} newText - Target text.
+ * @param {(index: number) => number|null} positionResolver - Maps string indexes to ProseMirror positions.
+ * @returns {Array<object>} Final diff payload matching the existing API surface.
+ */
+function buildDiffFromOperations(operations, oldText, newText, positionResolver) {
+  const diffs = [];
+  let run = null;
+  let oldIdx = 0;
+  let newIdx = 0;
+  let insertionAnchor = 0;
+
+  const flushRun = () => {
+    if (!run || run.text.length === 0) {
+      run = null;
+      return;
+    }
+
+    if (run.type === 'delete') {
+      const startIdx = positionResolver(run.startOldIdx);
+      const endIdx = positionResolver(run.endOldIdx);
       diffs.push({
         type: 'deletion',
-        startIdx: positionResolver(prevOld),
-        endIdx: positionResolver(oldIdx),
-        text: oldText.slice(prevOld, oldIdx),
+        startIdx,
+        endIdx,
+        text: run.text,
       });
-    }
-    if (newIdx > prevNew) {
+    } else if (run.type === 'insert') {
+      const startIdx = positionResolver(run.referenceOldIdx);
+      const endIdx = positionResolver(run.referenceOldIdx);
       diffs.push({
         type: 'addition',
-        startIdx: positionResolver(prevOld),
-        endIdx: positionResolver(prevOld),
-        text: newText.slice(prevNew, newIdx),
+        startIdx,
+        endIdx,
+        text: run.text,
       });
     }
-    prevOld = oldIdx + 1;
-    prevNew = newIdx + 1;
+
+    run = null;
+  };
+
+  for (const op of operations) {
+    if (op === 'equal') {
+      flushRun();
+      oldIdx += 1;
+      newIdx += 1;
+      insertionAnchor = oldIdx;
+      continue;
+    }
+
+    if (!run || run.type !== op) {
+      flushRun();
+      if (op === 'delete') {
+        run = { type: 'delete', startOldIdx: oldIdx, endOldIdx: oldIdx, text: '' };
+      } else if (op === 'insert') {
+        run = { type: 'insert', referenceOldIdx: insertionAnchor, text: '' };
+      }
+    }
+
+    if (op === 'delete') {
+      run.text += oldText[oldIdx];
+      oldIdx += 1;
+      run.endOldIdx = oldIdx;
+    } else if (op === 'insert') {
+      run.text += newText[newIdx];
+      newIdx += 1;
+    }
   }
 
-  if (prevOld < oldLen) {
-    diffs.push({
-      type: 'deletion',
-      startIdx: positionResolver(prevOld),
-      endIdx: positionResolver(oldLen - 1),
-      text: oldText.slice(prevOld),
-    });
-  }
-  if (prevNew < newLen) {
-    diffs.push({
-      type: 'addition',
-      startIdx: positionResolver(prevOld),
-      endIdx: positionResolver(prevOld),
-      text: newText.slice(prevNew),
-    });
-  }
+  flushRun();
 
   return diffs;
 }

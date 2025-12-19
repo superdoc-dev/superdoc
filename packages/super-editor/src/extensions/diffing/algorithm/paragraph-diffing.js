@@ -1,5 +1,6 @@
 import { myersDiff } from './myers-diff.js';
 import { getTextDiff } from './text-diffing.js';
+import { levenshteinDistance } from './similarity.js';
 
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
 const SIMILARITY_THRESHOLD = 0.65;
@@ -222,10 +223,9 @@ function getTextSimilarityScore(oldText, newText) {
     return 1;
   }
 
-  const operations = myersDiff(oldText, newText, (a, b) => a === b);
-  const edits = operations.filter((op) => op !== 'equal').length;
+  const distance = levenshteinDistance(oldText, newText);
   const maxLength = Math.max(oldText.length, newText.length) || 1;
-  return 1 - edits / maxLength; // Proportion of unchanged characters
+  return 1 - distance / maxLength;
 }
 
 /**

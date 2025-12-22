@@ -1,5 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+vi.mock('./myers-diff.js', async () => {
+  const actual = await vi.importActual('./myers-diff.js');
+  return {
+    myersDiff: vi.fn(actual.myersDiff),
+  };
+});
 import { getTextDiff } from './text-diffing';
+import { myersDiff } from './myers-diff.js';
 
 describe('getTextDiff', () => {
   it('returns an empty diff list when both strings are identical', () => {
@@ -43,6 +50,30 @@ describe('getTextDiff', () => {
         type: 'addition',
         startIdx: 22,
         endIdx: 24,
+        text: 'XY',
+      },
+    ]);
+  });
+
+  it('merges interleaved delete/insert steps within a contiguous change', () => {
+    const oldResolver = (index) => index + 1;
+    const newResolver = (index) => index + 50;
+    const customOperations = ['delete', 'insert', 'delete', 'insert'];
+    myersDiff.mockImplementationOnce(() => customOperations);
+
+    const diffs = getTextDiff('ab', 'XY', oldResolver, newResolver);
+
+    expect(diffs).toEqual([
+      {
+        type: 'deletion',
+        startIdx: 1,
+        endIdx: 3,
+        text: 'ab',
+      },
+      {
+        type: 'addition',
+        startIdx: 50,
+        endIdx: 52,
         text: 'XY',
       },
     ]);

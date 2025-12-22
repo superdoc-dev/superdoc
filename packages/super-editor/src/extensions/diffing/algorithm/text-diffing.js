@@ -17,7 +17,8 @@ export function getTextDiff(oldText, newText, oldPositionResolver, newPositionRe
   }
 
   const operations = myersDiff(oldText, newText, (a, b) => a === b);
-  return buildDiffFromOperations(operations, oldText, newText, oldPositionResolver, newPositionResolver);
+  const normalizedOperations = reorderTextOperations(operations);
+  return buildDiffFromOperations(normalizedOperations, oldText, newText, oldPositionResolver, newPositionResolver);
 }
 
 /**
@@ -99,4 +100,45 @@ function buildDiffFromOperations(operations, oldText, newText, oldPositionResolv
   flushChange();
 
   return diffs;
+}
+
+/**
+ * Normalizes the Myers operation list so contiguous edit regions are represented by single delete/insert runs.
+ * Myers may emit interleaved delete/insert steps for a single contiguous region, which would otherwise show up as
+ * multiple discrete diff entries even though the user edited one continuous block.
+ * @param {Array<'equal'|'delete'|'insert'>} operations
+ * @returns {Array<'equal'|'delete'|'insert'>}
+ */
+function reorderTextOperations(operations) {
+  const normalized = [];
+
+  for (let i = 0; i < operations.length; i += 1) {
+    const op = operations[i];
+    if (op === 'equal') {
+      normalized.push(op);
+      continue;
+    }
+
+    let deleteCount = 0;
+    let insertCount = 0;
+    while (i < operations.length && operations[i] !== 'equal') {
+      if (operations[i] === 'delete') {
+        deleteCount += 1;
+      } else if (operations[i] === 'insert') {
+        insertCount += 1;
+      }
+      i += 1;
+    }
+
+    for (let k = 0; k < deleteCount; k += 1) {
+      normalized.push('delete');
+    }
+    for (let k = 0; k < insertCount; k += 1) {
+      normalized.push('insert');
+    }
+
+    i -= 1; // account for the for-loop increment since we advanced i while counting
+  }
+
+  return normalized;
 }

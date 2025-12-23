@@ -1,6 +1,7 @@
 import { myersDiff } from './myers-diff.js';
 import { getTextDiff } from './text-diffing.js';
 import { getAttributesDiff } from './attributes-diffing.js';
+import { diffSequences } from './sequence-diffing.js';
 import { levenshteinDistance } from './similarity.js';
 
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
@@ -50,79 +51,17 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
  * @returns {Array<ParagraphDiff>}
  */
 export function diffParagraphs(oldParagraphs, newParagraphs) {
-  // Run Myers diff on the paragraph level to get a base set of operations.
-  const rawOperations = myersDiff(oldParagraphs, newParagraphs, paragraphComparator);
-  const operations = reorderParagraphOperations(rawOperations);
-
-  // Build a step-by-step operation list with paragraph indices for easier processing.
-  let oldIdx = 0;
-  let newIdx = 0;
-  const steps = [];
-  for (const op of operations) {
-    if (op === 'equal') {
-      steps.push({ type: 'equal', oldIdx, newIdx });
-      oldIdx += 1;
-      newIdx += 1;
-    } else if (op === 'delete') {
-      steps.push({ type: 'delete', oldIdx });
-      oldIdx += 1;
-    } else if (op === 'insert') {
-      steps.push({ type: 'insert', newIdx });
-      newIdx += 1;
-    }
-  }
-
-  // Process the operation steps into a normalized diff output.
-  const diffs = [];
-  for (let i = 0; i < steps.length; i += 1) {
-    const step = steps[i];
-
-    switch (step.type) {
-      case 'equal':
-        const oldPara = oldParagraphs[step.oldIdx];
-        const newPara = newParagraphs[step.newIdx];
-        if (
-          oldPara.text !== newPara.text ||
-          JSON.stringify(oldPara.node.attrs) !== JSON.stringify(newPara.node.attrs)
-        ) {
-          // Text or attributes changed within the same paragraph
-          const diff = buildModifiedParagraphDiff(oldPara, newPara);
-          if (diff) {
-            diffs.push(diff);
-          }
-        }
-        break;
-
-      case 'delete':
-        const nextStep = steps[i + 1];
-
-        // Check if the next step is an insertion that can be paired as a modification.
-        if (nextStep?.type === 'insert') {
-          const oldPara = oldParagraphs[step.oldIdx];
-          const newPara = newParagraphs[nextStep.newIdx];
-          if (canTreatAsModification(oldPara, newPara)) {
-            const diff = buildModifiedParagraphDiff(oldPara, newPara);
-            if (diff) {
-              diffs.push(diff);
-            }
-            i += 1; // Skip the next insert step as it's paired
-          } else {
-            // The paragraph that was deleted is significantly different from any nearby insertions; treat as a deletion.
-            diffs.push(buildDeletedParagraphDiff(oldParagraphs[step.oldIdx]));
-          }
-        } else {
-          // No matching insertion; treat as a deletion.
-          diffs.push(buildDeletedParagraphDiff(oldParagraphs[step.oldIdx]));
-        }
-        break;
-
-      case 'insert':
-        diffs.push(buildAddedParagraphDiff(newParagraphs[step.newIdx]));
-        break;
-    }
-  }
-
-  return diffs;
+  return diffSequences(oldParagraphs, newParagraphs, {
+    comparator: paragraphComparator,
+    reorderOperations: reorderParagraphOperations,
+    shouldProcessEqual: (oldParagraph, newParagraph) =>
+      oldParagraph.text !== newParagraph.text ||
+      JSON.stringify(oldParagraph.node.attrs) !== JSON.stringify(newParagraph.node.attrs),
+    canTreatAsModification,
+    buildAdded: (paragraph) => buildAddedParagraphDiff(paragraph),
+    buildDeleted: (paragraph) => buildDeletedParagraphDiff(paragraph),
+    buildModified: (oldParagraph, newParagraph) => buildModifiedParagraphDiff(oldParagraph, newParagraph),
+  });
 }
 
 /**

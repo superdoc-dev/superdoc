@@ -1,7 +1,7 @@
 import { myersDiff } from './myers-diff.js';
 import { getTextDiff } from './text-diffing.js';
 import { getAttributesDiff } from './attributes-diffing.js';
-import { diffSequences } from './sequence-diffing.js';
+import { diffSequences, reorderDiffOperations } from './sequence-diffing.js';
 import { levenshteinDistance } from './similarity.js';
 
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
@@ -187,42 +187,4 @@ function getTextSimilarityScore(oldText, newText) {
  * @param {Array<'equal'|'delete'|'insert'>} operations
  * @returns {Array<'equal'|'delete'|'insert'>}
  */
-function reorderParagraphOperations(operations) {
-  const normalized = [];
-
-  for (let i = 0; i < operations.length; i += 1) {
-    const op = operations[i];
-    if (op !== 'delete') {
-      normalized.push(op);
-      continue;
-    }
-
-    let deleteCount = 0;
-    while (i < operations.length && operations[i] === 'delete') {
-      deleteCount += 1;
-      i += 1;
-    }
-
-    let insertCount = 0;
-    let insertCursor = i;
-    while (insertCursor < operations.length && operations[insertCursor] === 'insert') {
-      insertCount += 1;
-      insertCursor += 1;
-    }
-
-    const pairCount = Math.min(deleteCount, insertCount);
-    for (let k = 0; k < pairCount; k += 1) {
-      normalized.push('delete', 'insert');
-    }
-    for (let k = pairCount; k < deleteCount; k += 1) {
-      normalized.push('delete');
-    }
-    for (let k = pairCount; k < insertCount; k += 1) {
-      normalized.push('insert');
-    }
-
-    i = insertCursor - 1;
-  }
-
-  return normalized;
-}
+const reorderParagraphOperations = reorderDiffOperations;

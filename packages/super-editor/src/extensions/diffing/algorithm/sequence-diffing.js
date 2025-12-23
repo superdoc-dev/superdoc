@@ -5,7 +5,7 @@ import { myersDiff } from './myers-diff.js';
  * @property {(a: any, b: any) => boolean} [comparator] equality test passed to Myers diff
  * @property {(item: any, index: number) => any} buildAdded maps newly inserted entries
  * @property {(item: any, index: number) => any} buildDeleted maps removed entries
- * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => any|null} buildModified maps paired entries
+ * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => any|null} buildModified maps paired entries. If it returns null/undefined, it means no modification should be recorded.
  * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => boolean} [shouldProcessEqual] decides if equal-aligned entries should emit a modification
  * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => boolean} [canTreatAsModification] determines if delete/insert pairs are modifications
  * @property {(operations: Array<'equal'|'delete'|'insert'>) => Array<'equal'|'delete'|'insert'>} [reorderOperations] optional hook to normalize raw Myers operations
@@ -114,4 +114,49 @@ function buildOperationSteps(operations) {
   }
 
   return steps;
+}
+
+/**
+ * Normalizes interleaved delete/insert operations so consumers can treat replacements as paired steps.
+ * @param {Array<'equal'|'delete'|'insert'>} operations
+ * @returns {Array<'equal'|'delete'|'insert'>}
+ */
+export function reorderDiffOperations(operations) {
+  const normalized = [];
+
+  for (let i = 0; i < operations.length; i += 1) {
+    const op = operations[i];
+    if (op !== 'delete') {
+      normalized.push(op);
+      continue;
+    }
+
+    let deleteCount = 0;
+    while (i < operations.length && operations[i] === 'delete') {
+      deleteCount += 1;
+      i += 1;
+    }
+
+    let insertCount = 0;
+    let insertCursor = i;
+    while (insertCursor < operations.length && operations[insertCursor] === 'insert') {
+      insertCount += 1;
+      insertCursor += 1;
+    }
+
+    const pairCount = Math.min(deleteCount, insertCount);
+    for (let k = 0; k < pairCount; k += 1) {
+      normalized.push('delete', 'insert');
+    }
+    for (let k = pairCount; k < deleteCount; k += 1) {
+      normalized.push('delete');
+    }
+    for (let k = pairCount; k < insertCount; k += 1) {
+      normalized.push('insert');
+    }
+
+    i = insertCursor - 1;
+  }
+
+  return normalized;
 }

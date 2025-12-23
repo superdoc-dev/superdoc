@@ -46,26 +46,15 @@ function buildDiffFromOperations(operations, oldText, newText, oldPositionResolv
       return;
     }
 
-    if (change.type === 'delete') {
-      const startIdx = resolveOld(change.startOldIdx);
-      const endIdx = resolveOld(change.endOldIdx);
-      diffs.push({
-        type: 'deletion',
-        startIdx,
-        endIdx,
-        text: change.text,
-      });
-    } else if (change.type === 'insert') {
-      const startIdx = resolveNew(change.startNewIdx);
-      const endIdx = resolveNew(change.endNewIdx);
-      diffs.push({
-        type: 'addition',
-        startIdx,
-        endIdx,
-        text: change.text,
-      });
-    }
+    const startPos = resolveOld(change.startIdx);
+    const endPos = resolveOld(change.endIdx);
 
+    diffs.push({
+      type: change.type,
+      startPos,
+      endPos,
+      text: change.text,
+    });
     change = null;
   };
 
@@ -79,21 +68,16 @@ function buildDiffFromOperations(operations, oldText, newText, oldPositionResolv
 
     if (!change || change.type !== op) {
       flushChange();
-      if (op === 'delete') {
-        change = { type: 'delete', startOldIdx: oldIdx, endOldIdx: oldIdx, text: '' };
-      } else if (op === 'insert') {
-        change = { type: 'insert', startNewIdx: newIdx, endNewIdx: newIdx, text: '' };
-      }
+      change = { type: op, startIdx: oldIdx, endIdx: oldIdx, text: '' };
     }
 
     if (op === 'delete') {
       change.text += oldText[oldIdx];
+      change.endIdx += 1;
       oldIdx += 1;
-      change.endOldIdx = oldIdx;
     } else if (op === 'insert') {
       change.text += newText[newIdx];
       newIdx += 1;
-      change.endNewIdx = newIdx;
     }
   }
 

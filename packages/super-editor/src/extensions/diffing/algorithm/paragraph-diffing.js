@@ -1,5 +1,6 @@
 import { myersDiff } from './myers-diff.js';
 import { getTextDiff } from './text-diffing.js';
+import { getAttributesDiff } from './attributes-diffing.js';
 import { levenshteinDistance } from './similarity.js';
 
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
@@ -32,6 +33,7 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
  * @property {string} newText text after the edit
  * @property {number} pos original document position for anchoring UI
  * @property {Array<object>} textDiffs granular inline diff data returned by `getTextDiff`
+ * @property {import('./attributes-diffing.js').AttributesDiff|null} attrsDiff attribute-level changes between the old and new paragraph nodes
  */
 
 /**
@@ -79,10 +81,13 @@ export function diffParagraphs(oldParagraphs, newParagraphs) {
       case 'equal':
         const oldPara = oldParagraphs[step.oldIdx];
         const newPara = newParagraphs[step.newIdx];
-        if (oldPara.text !== newPara.text) {
-          // Text changed within the same paragraph
+        if (
+          oldPara.text !== newPara.text ||
+          JSON.stringify(oldPara.node.attrs) !== JSON.stringify(newPara.node.attrs)
+        ) {
+          // Text or attributes changed within the same paragraph
           const diff = buildModifiedParagraphDiff(oldPara, newPara);
-          if (diff.textDiffs.length > 0) {
+          if (diff) {
             diffs.push(diff);
           }
         }
@@ -97,7 +102,7 @@ export function diffParagraphs(oldParagraphs, newParagraphs) {
           const newPara = newParagraphs[nextStep.newIdx];
           if (canTreatAsModification(oldPara, newPara)) {
             const diff = buildModifiedParagraphDiff(oldPara, newPara);
-            if (diff.textDiffs.length > 0) {
+            if (diff) {
               diffs.push(diff);
             }
             i += 1; // Skip the next insert step as it's paired
@@ -179,12 +184,19 @@ function buildModifiedParagraphDiff(oldParagraph, newParagraph) {
     newParagraph.resolvePosition,
   );
 
+  const attrsDiff = getAttributesDiff(oldParagraph.node.attrs, newParagraph.node.attrs);
+
+  if (textDiffs.length === 0 && !attrsDiff) {
+    return null;
+  }
+
   return {
     type: 'modified',
     oldText: oldParagraph.text,
     newText: newParagraph.text,
     pos: oldParagraph.pos,
     textDiffs,
+    attrsDiff,
   };
 }
 

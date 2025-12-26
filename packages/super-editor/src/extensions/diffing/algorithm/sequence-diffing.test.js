@@ -23,7 +23,7 @@ describe('diffSequences', () => {
 
     const diffs = diffSequences(oldSeq, newSeq, {
       comparator: (a, b) => a.id === b.id,
-      shouldProcessEqual: (oldItem, newItem) => oldItem.value !== newItem.value,
+      shouldProcessEqualAsModification: (oldItem, newItem) => oldItem.value !== newItem.value,
       buildAdded,
       buildDeleted,
       buildModified,
@@ -45,7 +45,7 @@ describe('diffSequences', () => {
     const diffs = diffSequences(oldSeq, newSeq, {
       comparator: (a, b) => a.id === b.id,
       canTreatAsModification: (oldItem, newItem) => oldItem.value[0] === newItem.value[0],
-      shouldProcessEqual: () => false,
+      shouldProcessEqualAsModification: () => false,
       buildAdded,
       buildDeleted,
       buildModified,

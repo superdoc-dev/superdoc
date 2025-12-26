@@ -5,14 +5,15 @@ vi.mock('./myers-diff.js', async () => {
     myersDiff: vi.fn(actual.myersDiff),
   };
 });
-import { getTextDiff } from './text-diffing';
-import { myersDiff } from './myers-diff.js';
+import { getTextDiff } from './text-diffing.js';
+
+const buildTextRuns = (text, runAttrs = {}) =>
+  text.split('').map((char) => ({ char, runAttrs: JSON.stringify(runAttrs) }));
 
 describe('getTextDiff', () => {
   it('returns an empty diff list when both strings are identical', () => {
-    const resolver = () => 0;
-
-    const diffs = getTextDiff('unchanged', 'unchanged', resolver);
+    const resolver = (index) => index;
+    const diffs = getTextDiff(buildTextRuns('unchanged'), buildTextRuns('unchanged'), resolver);
 
     expect(diffs).toEqual([]);
   });
@@ -21,14 +22,15 @@ describe('getTextDiff', () => {
     const oldResolver = (index) => index + 10;
     const newResolver = (index) => index + 100;
 
-    const diffs = getTextDiff('abc', 'abXc', oldResolver, newResolver);
+    const diffs = getTextDiff(buildTextRuns('abc'), buildTextRuns('abXc'), oldResolver, newResolver);
 
     expect(diffs).toEqual([
       {
-        type: 'addition',
-        startIdx: 102,
-        endIdx: 103,
+        type: 'added',
+        startPos: 12,
+        endPos: 12,
         text: 'X',
+        runAttrs: {},
       },
     ]);
   });
@@ -37,44 +39,66 @@ describe('getTextDiff', () => {
     const oldResolver = (index) => index + 5;
     const newResolver = (index) => index + 20;
 
-    const diffs = getTextDiff('abcd', 'abXYd', oldResolver, newResolver);
+    const diffs = getTextDiff(buildTextRuns('abcd'), buildTextRuns('abXYd'), oldResolver, newResolver);
 
     expect(diffs).toEqual([
       {
-        type: 'deletion',
-        startIdx: 7,
-        endIdx: 8,
+        type: 'deleted',
+        startPos: 7,
+        endPos: 7,
         text: 'c',
+        runAttrs: {},
       },
       {
-        type: 'addition',
-        startIdx: 22,
-        endIdx: 24,
+        type: 'added',
+        startPos: 8,
+        endPos: 8,
         text: 'XY',
+        runAttrs: {},
       },
     ]);
   });
 
-  it('merges interleaved delete/insert steps within a contiguous change', () => {
-    const oldResolver = (index) => index + 1;
-    const newResolver = (index) => index + 50;
-    const customOperations = ['delete', 'insert', 'delete', 'insert'];
-    myersDiff.mockImplementationOnce(() => customOperations);
+  it('marks attribute-only changes as modifications and surfaces attribute diffs', () => {
+    const resolver = (index) => index;
 
-    const diffs = getTextDiff('ab', 'XY', oldResolver, newResolver);
+    const diffs = getTextDiff(buildTextRuns('a', { bold: true }), buildTextRuns('a', { italic: true }), resolver);
 
     expect(diffs).toEqual([
       {
-        type: 'deletion',
-        startIdx: 1,
-        endIdx: 3,
-        text: 'ab',
+        type: 'modified',
+        startPos: 0,
+        endPos: 0,
+        oldText: 'a',
+        newText: 'a',
+        runAttrsDiff: {
+          added: { italic: true },
+          deleted: { bold: true },
+          modified: {},
+        },
       },
+    ]);
+  });
+
+  it('merges contiguous attribute edits that share the same diff metadata', () => {
+    const resolver = (index) => index + 5;
+
+    const diffs = getTextDiff(buildTextRuns('ab', { bold: true }), buildTextRuns('ab', { bold: false }), resolver);
+
+    expect(diffs).toEqual([
       {
-        type: 'addition',
-        startIdx: 50,
-        endIdx: 52,
-        text: 'XY',
+        type: 'modified',
+        startPos: 5,
+        endPos: 6,
+        oldText: 'ab',
+        newText: 'ab',
+        runAttrsDiff: {
+          added: {},
+          deleted: {},
+          modified: {
+            bold: { from: true, to: false },
+          },
+        },
       },
     ]);
   });

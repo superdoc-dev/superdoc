@@ -6,7 +6,7 @@ import { myersDiff } from './myers-diff.js';
  * @property {(item: any, index: number) => any} buildAdded maps newly inserted entries
  * @property {(item: any, index: number) => any} buildDeleted maps removed entries
  * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => any|null} buildModified maps paired entries. If it returns null/undefined, it means no modification should be recorded.
- * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => boolean} [shouldProcessEqual] decides if equal-aligned entries should emit a modification
+ * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => boolean} [shouldProcessEqualAsModification] decides if equal-aligned entries should emit a modification
  * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => boolean} [canTreatAsModification] determines if delete/insert pairs are modifications
  * @property {(operations: Array<'equal'|'delete'|'insert'>) => Array<'equal'|'delete'|'insert'>} [reorderOperations] optional hook to normalize raw Myers operations
  */
@@ -28,7 +28,7 @@ export function diffSequences(oldSeq, newSeq, options) {
   const comparator = options.comparator ?? ((a, b) => a === b);
   const reorder = options.reorderOperations ?? ((ops) => ops);
   const canTreatAsModification = options.canTreatAsModification;
-  const shouldProcessEqual = options.shouldProcessEqual;
+  const shouldProcessEqualAsModification = options.shouldProcessEqualAsModification;
 
   if (typeof options.buildAdded !== 'function') {
     throw new Error('diffSequences requires a buildAdded option.');
@@ -48,12 +48,12 @@ export function diffSequences(oldSeq, newSeq, options) {
     const step = steps[i];
 
     if (step.type === 'equal') {
-      if (!shouldProcessEqual) {
+      if (!shouldProcessEqualAsModification) {
         continue;
       }
       const oldItem = oldSeq[step.oldIdx];
       const newItem = newSeq[step.newIdx];
-      if (!shouldProcessEqual(oldItem, newItem, step.oldIdx, step.newIdx)) {
+      if (!shouldProcessEqualAsModification(oldItem, newItem, step.oldIdx, step.newIdx)) {
         continue;
       }
       const diff = options.buildModified(oldItem, newItem, step.oldIdx, step.newIdx);
@@ -76,13 +76,13 @@ export function diffSequences(oldSeq, newSeq, options) {
         }
         i += 1;
       } else {
-        diffs.push(options.buildDeleted(oldSeq[step.oldIdx], step.oldIdx));
+        diffs.push(options.buildDeleted(oldSeq[step.oldIdx], step.oldIdx, step.newIdx));
       }
       continue;
     }
 
     if (step.type === 'insert') {
-      diffs.push(options.buildAdded(newSeq[step.newIdx], step.newIdx));
+      diffs.push(options.buildAdded(newSeq[step.newIdx], step.oldIdx, step.newIdx));
     }
   }
 
@@ -105,10 +105,10 @@ function buildOperationSteps(operations) {
       oldIdx += 1;
       newIdx += 1;
     } else if (op === 'delete') {
-      steps.push({ type: 'delete', oldIdx });
+      steps.push({ type: 'delete', oldIdx, newIdx });
       oldIdx += 1;
     } else if (op === 'insert') {
-      steps.push({ type: 'insert', newIdx });
+      steps.push({ type: 'insert', oldIdx, newIdx });
       newIdx += 1;
     }
   }

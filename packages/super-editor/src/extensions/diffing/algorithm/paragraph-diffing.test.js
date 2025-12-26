@@ -1,12 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { diffParagraphs } from './paragraph-diffing.js';
 
-const createParagraph = (text, attrs = {}) => ({
-  node: { attrs },
-  pos: attrs.pos ?? 0,
-  text,
-  resolvePosition: (index) => index,
-});
+const buildTextRuns = (text, runAttrs = {}) =>
+  text.split('').map((char) => ({ char, runAttrs: JSON.stringify(runAttrs) }));
+
+const createParagraph = (text, attrs = {}, options = {}) => {
+  const { pos = 0, textAttrs = {} } = options;
+  const textRuns = buildTextRuns(text, textAttrs);
+
+  return {
+    node: { attrs },
+    pos,
+    text: textRuns,
+    resolvePosition: (index) => pos + 1 + index,
+    get fullText() {
+      return textRuns.map((c) => c.char).join('');
+    },
+  };
+};
 
 describe('diffParagraphs', () => {
   it('treats similar paragraphs without IDs as modifications', () => {

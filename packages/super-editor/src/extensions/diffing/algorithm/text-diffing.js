@@ -1,128 +1,119 @@
 import { myersDiff } from './myers-diff.js';
+import { getAttributesDiff } from './attributes-diffing.js';
+import { diffSequences } from './sequence-diffing.js';
 
 /**
  * Computes text-level additions and deletions between two strings using Myers diff algorithm, mapping back to document positions.
- * @param {string} oldText - Source text.
- * @param {string} newText - Target text.
+ * @param {{char: string, runAttrs: Record<string, any>}[]} oldText - Source text.
+ * @param {{char: string, runAttrs: Record<string, any>}[]} newText - Target text.
  * @param {(index: number) => number|null} oldPositionResolver - Maps string indexes to the original document.
  * @param {(index: number) => number|null} [newPositionResolver=oldPositionResolver] - Maps string indexes to the updated document.
  * @returns {Array<object>} List of addition/deletion ranges with document positions and text content.
  */
 export function getTextDiff(oldText, newText, oldPositionResolver, newPositionResolver = oldPositionResolver) {
-  const oldLen = oldText.length;
-  const newLen = newText.length;
+  const buildCharDiff = (type, char, oldIdx) => ({
+    type,
+    idx: oldIdx,
+    text: char.char,
+    runAttrs: char.runAttrs,
+  });
+  let diffs = diffSequences(oldText, newText, {
+    comparator: (a, b) => a.char === b.char,
+    shouldProcessEqualAsModification: (oldChar, newChar) => oldChar.runAttrs !== newChar.runAttrs,
+    canTreatAsModification: (oldChar, newChar) => false,
+    buildAdded: (char, oldIdx, newIdx) => buildCharDiff('added', char, oldIdx),
+    buildDeleted: (char, oldIdx, newIdx) => buildCharDiff('deleted', char, oldIdx),
+    buildModified: (oldChar, newChar, oldIdx, newIdx) => ({
+      type: 'modified',
+      idx: oldIdx,
+      newText: newChar.char,
+      oldText: oldChar.char,
+      oldAttrs: oldChar.runAttrs,
+      newAttrs: newChar.runAttrs,
+    }),
+  });
 
-  if (oldLen === 0 && newLen === 0) {
-    return [];
-  }
-
-  const operations = myersDiff(oldText, newText, (a, b) => a === b);
-  const normalizedOperations = reorderTextOperations(operations);
-  return buildDiffFromOperations(normalizedOperations, oldText, newText, oldPositionResolver, newPositionResolver);
+  const groupedDiffs = groupDiffs(diffs, oldPositionResolver, newPositionResolver);
+  return groupedDiffs;
 }
 
-/**
- * Groups edit operations into contiguous additions/deletions and maps them to document positions.
- *
- * @param {Array<'equal'|'delete'|'insert'>} operations - Raw operation list produced by the backtracked Myers path.
- * @param {string} oldText - Source text.
- * @param {string} newText - Target text.
- * @param {(index: number) => number|null} oldPositionResolver - Maps string indexes to the previous document.
- * @param {(index: number) => number|null} newPositionResolver - Maps string indexes to the updated document.
- * @returns {Array<object>} Final diff payload matching the existing API surface.
- */
-function buildDiffFromOperations(operations, oldText, newText, oldPositionResolver, newPositionResolver) {
-  const diffs = [];
-  let change = null;
-  let oldIdx = 0;
-  let newIdx = 0;
-  const resolveOld = oldPositionResolver ?? (() => null);
-  const resolveNew = newPositionResolver ?? resolveOld;
+function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
+  const grouped = [];
+  let currentGroup = null;
 
-  /** Flushes the current change block into the diffs list. */
-  const flushChange = () => {
-    if (!change || change.text.length === 0) {
-      change = null;
-      return;
+  const compareDiffs = (group, diff) => {
+    if (group.type !== diff.type) {
+      return false;
     }
-
-    const startPos = resolveOld(change.startIdx);
-    const endPos = resolveOld(change.endIdx);
-
-    diffs.push({
-      type: change.type,
-      startPos,
-      endPos,
-      text: change.text,
-    });
-    change = null;
+    if (group.type === 'modified') {
+      return group.oldAttrs === diff.oldAttrs && group.newAttrs === diff.newAttrs;
+    }
+    return group.runAttrs === diff.runAttrs;
   };
 
-  for (const op of operations) {
-    if (op === 'equal') {
-      flushChange();
-      oldIdx += 1;
-      newIdx += 1;
-      continue;
+  const comparePositions = (group, diff) => {
+    if (group.type === 'added') {
+      return group.startPos === oldPositionResolver(diff.idx);
+    } else {
+      return group.endPos + 1 === oldPositionResolver(diff.idx);
     }
+  };
 
-    if (!change || change.type !== op) {
-      flushChange();
-      change = { type: op, startIdx: oldIdx, endIdx: oldIdx, text: '' };
-    }
-
-    if (op === 'delete') {
-      change.text += oldText[oldIdx];
-      change.endIdx += 1;
-      oldIdx += 1;
-    } else if (op === 'insert') {
-      change.text += newText[newIdx];
-      newIdx += 1;
-    }
-  }
-
-  flushChange();
-
-  return diffs;
-}
-
-/**
- * Normalizes the Myers operation list so contiguous edit regions are represented by single delete/insert runs.
- * Myers may emit interleaved delete/insert steps for a single contiguous region, which would otherwise show up as
- * multiple discrete diff entries even though the user edited one continuous block.
- * @param {Array<'equal'|'delete'|'insert'>} operations
- * @returns {Array<'equal'|'delete'|'insert'>}
- */
-function reorderTextOperations(operations) {
-  const normalized = [];
-
-  for (let i = 0; i < operations.length; i += 1) {
-    const op = operations[i];
-    if (op === 'equal') {
-      normalized.push(op);
-      continue;
-    }
-
-    let deleteCount = 0;
-    let insertCount = 0;
-    while (i < operations.length && operations[i] !== 'equal') {
-      if (operations[i] === 'delete') {
-        deleteCount += 1;
-      } else if (operations[i] === 'insert') {
-        insertCount += 1;
+  for (const diff of diffs) {
+    if (currentGroup == null) {
+      currentGroup = {
+        type: diff.type,
+        startPos: oldPositionResolver(diff.idx),
+        endPos: oldPositionResolver(diff.idx),
+      };
+      if (diff.type === 'modified') {
+        currentGroup.newText = diff.newText;
+        currentGroup.oldText = diff.oldText;
+        currentGroup.oldAttrs = diff.oldAttrs;
+        currentGroup.newAttrs = diff.newAttrs;
+      } else {
+        currentGroup.text = diff.text;
+        currentGroup.runAttrs = diff.runAttrs;
       }
-      i += 1;
+    } else if (!compareDiffs(currentGroup, diff) || !comparePositions(currentGroup, diff)) {
+      grouped.push(currentGroup);
+      currentGroup = {
+        type: diff.type,
+        startPos: oldPositionResolver(diff.idx),
+        endPos: oldPositionResolver(diff.idx),
+      };
+      if (diff.type === 'modified') {
+        currentGroup.newText = diff.newText;
+        currentGroup.oldText = diff.oldText;
+        currentGroup.oldAttrs = diff.oldAttrs;
+        currentGroup.newAttrs = diff.newAttrs;
+      } else {
+        currentGroup.text = diff.text;
+        currentGroup.runAttrs = diff.runAttrs;
+      }
+    } else {
+      currentGroup.endPos = oldPositionResolver(diff.idx);
+      if (diff.type === 'modified') {
+        currentGroup.newText += diff.newText;
+        currentGroup.oldText += diff.oldText;
+      } else {
+        currentGroup.text += diff.text;
+      }
     }
-
-    for (let k = 0; k < deleteCount; k += 1) {
-      normalized.push('delete');
-    }
-    for (let k = 0; k < insertCount; k += 1) {
-      normalized.push('insert');
-    }
-
-    i -= 1; // account for the for-loop increment since we advanced i while counting
   }
 
-  return normalized;
+  if (currentGroup != null) grouped.push(currentGroup);
+  return grouped.map((group) => {
+    let ret = { ...group };
+    if (group.type === 'modified') {
+      ret.oldAttrs = JSON.parse(group.oldAttrs);
+      ret.newAttrs = JSON.parse(group.newAttrs);
+      ret.runAttrsDiff = getAttributesDiff(ret.oldAttrs, ret.newAttrs);
+      delete ret.oldAttrs;
+      delete ret.newAttrs;
+    } else {
+      ret.runAttrs = JSON.parse(group.runAttrs);
+    }
+    return ret;
+  });
 }

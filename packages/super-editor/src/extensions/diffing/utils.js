@@ -2,10 +2,10 @@
  * Flattens a paragraph node into text and provides a resolver to map string indices back to document positions.
  * @param {Node} paragraph - Paragraph node to flatten.
  * @param {number} [paragraphPos=0] - Position of the paragraph in the document.
- * @returns {{text: string, resolvePosition: (index: number) => number|null}} Concatenated text and position resolver.
+ * @returns {{text: {char: string, runAttrs: Record<string, any>}[], resolvePosition: (index: number) => number|null}} Concatenated text and position resolver.
  */
 export function getTextContent(paragraph, paragraphPos = 0) {
-  let text = '';
+  let text = [];
   const segments = [];
 
   paragraph.nodesBetween(
@@ -27,8 +27,12 @@ export function getTextContent(paragraph, paragraphPos = 0) {
       const start = text.length;
       const end = start + nodeText.length;
 
-      segments.push({ start, end, pos });
-      text += nodeText;
+      // Get parent run node and its attributes
+      const runNode = paragraph.nodeAt(pos - 1);
+      const runAttrs = runNode.attrs || {};
+
+      segments.push({ start, end, pos, runAttrs });
+      text = text.concat(nodeText.split('').map((char) => ({ char, runAttrs: JSON.stringify(runAttrs) })));
     },
     0,
   );
@@ -61,7 +65,15 @@ export function extractParagraphs(pmDoc) {
   pmDoc.descendants((node, pos) => {
     if (node.type.name === 'paragraph') {
       const { text, resolvePosition } = getTextContent(node, pos);
-      paragraphs.push({ node, pos, text, resolvePosition });
+      paragraphs.push({
+        node,
+        pos,
+        text,
+        resolvePosition,
+        get fullText() {
+          return text.map((c) => c.char).join('');
+        },
+      });
       return false; // Do not descend further
     }
   });

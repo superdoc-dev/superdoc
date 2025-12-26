@@ -11,7 +11,7 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
 /**
  * A paragraph addition diff emitted when new content is inserted.
  * @typedef {Object} AddedParagraphDiff
- * @property {'added'} type
+ * @property {'added'} action
  * @property {Node} node reference to the ProseMirror node for consumers needing schema details
  * @property {string} text textual contents of the inserted paragraph
  * @property {number} pos document position where the paragraph was inserted
@@ -20,7 +20,7 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
 /**
  * A paragraph deletion diff emitted when content is removed.
  * @typedef {Object} DeletedParagraphDiff
- * @property {'deleted'} type
+ * @property {'deleted'} action
  * @property {Node} node reference to the original ProseMirror node
  * @property {string} oldText text that was removed
  * @property {number} pos starting document position of the original paragraph
@@ -29,7 +29,7 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
 /**
  * A paragraph modification diff that carries inline text-level changes.
  * @typedef {Object} ModifiedParagraphDiff
- * @property {'modified'} type
+ * @property {'modified'} action
  * @property {string} oldText text before the edit
  * @property {string} newText text after the edit
  * @property {number} pos original document position for anchoring UI
@@ -88,7 +88,7 @@ function paragraphComparator(oldParagraph, newParagraph) {
  */
 function buildAddedParagraphDiff(paragraph) {
   return {
-    type: 'added',
+    action: 'added',
     node: paragraph.node,
     text: paragraph.fullText,
     pos: paragraph.pos,
@@ -102,7 +102,7 @@ function buildAddedParagraphDiff(paragraph) {
  */
 function buildDeletedParagraphDiff(paragraph) {
   return {
-    type: 'deleted',
+    action: 'deleted',
     node: paragraph.node,
     oldText: paragraph.fullText,
     pos: paragraph.pos,
@@ -129,7 +129,7 @@ function buildModifiedParagraphDiff(oldParagraph, newParagraph) {
   }
 
   return {
-    type: 'modified',
+    action: 'modified',
     oldText: oldParagraph.fullText,
     newText: newParagraph.fullText,
     pos: oldParagraph.pos,

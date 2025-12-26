@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { diffSequences } from './sequence-diffing.js';
 
-const buildAdded = (item) => ({ type: 'added', id: item.id });
-const buildDeleted = (item) => ({ type: 'deleted', id: item.id });
+const buildAdded = (item) => ({ action: 'added', id: item.id });
+const buildDeleted = (item) => ({ action: 'deleted', id: item.id });
 const buildModified = (oldItem, newItem) => ({
-  type: 'modified',
+  action: 'modified',
   id: oldItem.id ?? newItem.id,
   from: oldItem.value,
   to: newItem.value,
@@ -29,7 +29,7 @@ describe('diffSequences', () => {
       buildModified,
     });
 
-    expect(diffs).toEqual([{ type: 'modified', id: 'b', from: 'World', to: 'World!!!' }]);
+    expect(diffs).toEqual([{ action: 'modified', id: 'b', from: 'World', to: 'World!!!' }]);
   });
 
   it('pairs delete/insert operations into modifications when allowed', () => {
@@ -51,7 +51,7 @@ describe('diffSequences', () => {
       buildModified,
     });
 
-    expect(diffs).toEqual([{ type: 'modified', id: 'b', from: 'Beta', to: 'Beta v2' }]);
+    expect(diffs).toEqual([{ action: 'modified', id: 'b', from: 'Beta', to: 'Beta v2' }]);
   });
 
   it('emits additions and deletions when items cannot be paired', () => {
@@ -66,8 +66,8 @@ describe('diffSequences', () => {
     });
 
     expect(diffs).toEqual([
-      { type: 'deleted', id: 'a' },
-      { type: 'added', id: 'b' },
+      { action: 'deleted', id: 'a' },
+      { action: 'added', id: 'b' },
     ]);
   });
 });

@@ -1,5 +1,5 @@
 import { myersDiff } from './myers-diff.js';
-import { getTextDiff } from './text-diffing.js';
+import { getInlineDiff } from './inline-diffing.js';
 import { getAttributesDiff } from './attributes-diffing.js';
 import { diffSequences, reorderDiffOperations } from './sequence-diffing.js';
 import { levenshteinDistance } from './similarity.js';
@@ -33,7 +33,7 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
  * @property {string} oldText text before the edit
  * @property {string} newText text after the edit
  * @property {number} pos original document position for anchoring UI
- * @property {Array<object>} textDiffs granular inline diff data returned by `getTextDiff`
+ * @property {Array<object>} contentDiff granular inline diff data
  * @property {import('./attributes-diffing.js').AttributesDiff|null} attrsDiff attribute-level changes between the old and new paragraph nodes
  */
 
@@ -116,7 +116,7 @@ function buildDeletedParagraphDiff(paragraph) {
  * @returns {ModifiedParagraphDiff}
  */
 function buildModifiedParagraphDiff(oldParagraph, newParagraph) {
-  const textDiffs = getTextDiff(
+  const contentDiff = getInlineDiff(
     oldParagraph.text,
     newParagraph.text,
     oldParagraph.resolvePosition,
@@ -124,7 +124,7 @@ function buildModifiedParagraphDiff(oldParagraph, newParagraph) {
   );
 
   const attrsDiff = getAttributesDiff(oldParagraph.node.attrs, newParagraph.node.attrs);
-  if (textDiffs.length === 0 && !attrsDiff) {
+  if (contentDiff.length === 0 && !attrsDiff) {
     return null;
   }
 
@@ -133,7 +133,7 @@ function buildModifiedParagraphDiff(oldParagraph, newParagraph) {
     oldText: oldParagraph.fullText,
     newText: newParagraph.fullText,
     pos: oldParagraph.pos,
-    textDiffs,
+    contentDiff,
     attrsDiff,
   };
 }

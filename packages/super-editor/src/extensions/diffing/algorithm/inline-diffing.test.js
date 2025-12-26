@@ -5,15 +5,15 @@ vi.mock('./myers-diff.js', async () => {
     myersDiff: vi.fn(actual.myersDiff),
   };
 });
-import { getTextDiff } from './text-diffing.js';
+import { getInlineDiff } from './inline-diffing.js';
 
 const buildTextRuns = (text, runAttrs = {}) =>
-  text.split('').map((char) => ({ char, runAttrs: JSON.stringify(runAttrs) }));
+  text.split('').map((char) => ({ char, runAttrs: JSON.stringify(runAttrs), kind: 'text' }));
 
-describe('getTextDiff', () => {
+describe('getInlineDiff', () => {
   it('returns an empty diff list when both strings are identical', () => {
     const resolver = (index) => index;
-    const diffs = getTextDiff(buildTextRuns('unchanged'), buildTextRuns('unchanged'), resolver);
+    const diffs = getInlineDiff(buildTextRuns('unchanged'), buildTextRuns('unchanged'), resolver);
 
     expect(diffs).toEqual([]);
   });
@@ -22,11 +22,12 @@ describe('getTextDiff', () => {
     const oldResolver = (index) => index + 10;
     const newResolver = (index) => index + 100;
 
-    const diffs = getTextDiff(buildTextRuns('abc'), buildTextRuns('abXc'), oldResolver, newResolver);
+    const diffs = getInlineDiff(buildTextRuns('abc'), buildTextRuns('abXc'), oldResolver, newResolver);
 
     expect(diffs).toEqual([
       {
         action: 'added',
+        kind: 'text',
         startPos: 12,
         endPos: 12,
         text: 'X',
@@ -39,11 +40,12 @@ describe('getTextDiff', () => {
     const oldResolver = (index) => index + 5;
     const newResolver = (index) => index + 20;
 
-    const diffs = getTextDiff(buildTextRuns('abcd'), buildTextRuns('abXYd'), oldResolver, newResolver);
+    const diffs = getInlineDiff(buildTextRuns('abcd'), buildTextRuns('abXYd'), oldResolver, newResolver);
 
     expect(diffs).toEqual([
       {
         action: 'deleted',
+        kind: 'text',
         startPos: 7,
         endPos: 7,
         text: 'c',
@@ -51,6 +53,7 @@ describe('getTextDiff', () => {
       },
       {
         action: 'added',
+        kind: 'text',
         startPos: 8,
         endPos: 8,
         text: 'XY',
@@ -62,11 +65,12 @@ describe('getTextDiff', () => {
   it('marks attribute-only changes as modifications and surfaces attribute diffs', () => {
     const resolver = (index) => index;
 
-    const diffs = getTextDiff(buildTextRuns('a', { bold: true }), buildTextRuns('a', { italic: true }), resolver);
+    const diffs = getInlineDiff(buildTextRuns('a', { bold: true }), buildTextRuns('a', { italic: true }), resolver);
 
     expect(diffs).toEqual([
       {
         action: 'modified',
+        kind: 'text',
         startPos: 0,
         endPos: 0,
         oldText: 'a',
@@ -83,11 +87,12 @@ describe('getTextDiff', () => {
   it('merges contiguous attribute edits that share the same diff metadata', () => {
     const resolver = (index) => index + 5;
 
-    const diffs = getTextDiff(buildTextRuns('ab', { bold: true }), buildTextRuns('ab', { bold: false }), resolver);
+    const diffs = getInlineDiff(buildTextRuns('ab', { bold: true }), buildTextRuns('ab', { bold: false }), resolver);
 
     expect(diffs).toEqual([
       {
         action: 'modified',
+        kind: 'text',
         startPos: 5,
         endPos: 6,
         oldText: 'ab',

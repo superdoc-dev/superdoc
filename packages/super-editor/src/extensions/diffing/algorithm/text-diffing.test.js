@@ -26,7 +26,7 @@ describe('getTextDiff', () => {
 
     expect(diffs).toEqual([
       {
-        type: 'added',
+        action: 'added',
         startPos: 12,
         endPos: 12,
         text: 'X',
@@ -43,14 +43,14 @@ describe('getTextDiff', () => {
 
     expect(diffs).toEqual([
       {
-        type: 'deleted',
+        action: 'deleted',
         startPos: 7,
         endPos: 7,
         text: 'c',
         runAttrs: {},
       },
       {
-        type: 'added',
+        action: 'added',
         startPos: 8,
         endPos: 8,
         text: 'XY',
@@ -66,7 +66,7 @@ describe('getTextDiff', () => {
 
     expect(diffs).toEqual([
       {
-        type: 'modified',
+        action: 'modified',
         startPos: 0,
         endPos: 0,
         oldText: 'a',
@@ -87,7 +87,7 @@ describe('getTextDiff', () => {
 
     expect(diffs).toEqual([
       {
-        type: 'modified',
+        action: 'modified',
         startPos: 5,
         endPos: 6,
         oldText: 'ab',

@@ -30,11 +30,11 @@ describe('Diff', () => {
     const docAfter = await getDocument('diff_after.docx');
 
     const diffs = computeDiff(docBefore, docAfter);
-    const getDiff = (type, predicate) => diffs.find((diff) => diff.type === type && predicate(diff));
+    const getDiff = (action, predicate) => diffs.find((diff) => diff.action === action && predicate(diff));
 
-    const modifiedDiffs = diffs.filter((diff) => diff.type === 'modified');
-    const addedDiffs = diffs.filter((diff) => diff.type === 'added');
-    const deletedDiffs = diffs.filter((diff) => diff.type === 'deleted');
+    const modifiedDiffs = diffs.filter((diff) => diff.action === 'modified');
+    const addedDiffs = diffs.filter((diff) => diff.action === 'added');
+    const deletedDiffs = diffs.filter((diff) => diff.action === 'deleted');
     const attrOnlyDiffs = modifiedDiffs.filter((diff) => diff.textDiffs.length === 0);
 
     expect(diffs).toHaveLength(19);
@@ -51,7 +51,7 @@ describe('Diff', () => {
     expect(diff?.newText).toBe(
       'Curabitur facilisis ligula suscipit enim pretium et nunc ligula, porttitor augue consequat maximus.',
     );
-    const textPropsChanges = diff?.textDiffs.filter((textDiff) => textDiff.type === 'modified');
+    const textPropsChanges = diff?.textDiffs.filter((textDiff) => textDiff.action === 'modified');
     expect(textPropsChanges).toHaveLength(18);
     expect(diff?.textDiffs).toHaveLength(24);
 
@@ -132,7 +132,7 @@ describe('Diff', () => {
     const diffs = computeDiff(docBefore, docAfter);
     expect(diffs).toHaveLength(4);
 
-    let diff = diffs.find((diff) => diff.type === 'modified' && diff.oldText === 'Here’s some text.');
+    let diff = diffs.find((diff) => diff.action === 'modified' && diff.oldText === 'Here’s some text.');
 
     expect(diff.newText).toBe('Here’s some NEW text.');
     expect(diff.textDiffs).toHaveLength(3);
@@ -141,13 +141,13 @@ describe('Diff', () => {
     expect(diff.textDiffs[2].text).toBe(' ');
     expect(diff.attrsDiff?.modified?.textId).toBeDefined();
 
-    diff = diffs.find((diff) => diff.type === 'deleted' && diff.oldText === 'I deleted this sentence.');
+    diff = diffs.find((diff) => diff.action === 'deleted' && diff.oldText === 'I deleted this sentence.');
     expect(diff).toBeDefined();
 
-    diff = diffs.find((diff) => diff.type === 'added' && diff.text === 'I added this sentence.');
+    diff = diffs.find((diff) => diff.action === 'added' && diff.text === 'I added this sentence.');
     expect(diff).toBeDefined();
 
-    diff = diffs.find((diff) => diff.type === 'modified' && diff.oldText === 'We are not done yet.');
+    diff = diffs.find((diff) => diff.action === 'modified' && diff.oldText === 'We are not done yet.');
     expect(diff.newText).toBe('We are done now.');
     expect(diff.textDiffs).toHaveLength(3);
     expect(diff.attrsDiff?.modified?.textId).toBeDefined();
@@ -161,6 +161,6 @@ describe('Diff', () => {
 
     expect(diffs).toHaveLength(1);
     const diff = diffs[0];
-    expect(diff.type).toBe('modified');
+    expect(diff.action).toBe('modified');
   });
 });

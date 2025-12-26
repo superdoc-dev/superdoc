@@ -27,7 +27,7 @@ describe('diffParagraphs', () => {
     const diffs = diffParagraphs(oldParagraphs, newParagraphs);
 
     expect(diffs).toHaveLength(1);
-    expect(diffs[0].type).toBe('modified');
+    expect(diffs[0].action).toBe('modified');
     expect(diffs[0].textDiffs.length).toBeGreaterThan(0);
   });
 
@@ -38,8 +38,8 @@ describe('diffParagraphs', () => {
     const diffs = diffParagraphs(oldParagraphs, newParagraphs);
 
     expect(diffs).toHaveLength(2);
-    expect(diffs[0].type).toBe('deleted');
-    expect(diffs[1].type).toBe('added');
+    expect(diffs[0].action).toBe('deleted');
+    expect(diffs[1].action).toBe('added');
   });
 
   it('detects modifications even when Myers emits grouped deletes and inserts', () => {
@@ -55,9 +55,9 @@ describe('diffParagraphs', () => {
     const diffs = diffParagraphs(oldParagraphs, newParagraphs);
 
     expect(diffs).toHaveLength(3);
-    expect(diffs[0].type).toBe('modified');
+    expect(diffs[0].action).toBe('modified');
     expect(diffs[0].textDiffs.length).toBeGreaterThan(0);
-    expect(diffs[1].type).toBe('deleted');
-    expect(diffs[2].type).toBe('added');
+    expect(diffs[1].action).toBe('deleted');
+    expect(diffs[2].action).toBe('added');
   });
 });

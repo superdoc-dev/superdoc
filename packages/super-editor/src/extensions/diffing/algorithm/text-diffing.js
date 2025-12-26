@@ -11,8 +11,8 @@ import { diffSequences } from './sequence-diffing.js';
  * @returns {Array<object>} List of addition/deletion ranges with document positions and text content.
  */
 export function getTextDiff(oldText, newText, oldPositionResolver, newPositionResolver = oldPositionResolver) {
-  const buildCharDiff = (type, char, oldIdx) => ({
-    type,
+  const buildCharDiff = (action, char, oldIdx) => ({
+    action,
     idx: oldIdx,
     text: char.char,
     runAttrs: char.runAttrs,
@@ -24,7 +24,7 @@ export function getTextDiff(oldText, newText, oldPositionResolver, newPositionRe
     buildAdded: (char, oldIdx, newIdx) => buildCharDiff('added', char, oldIdx),
     buildDeleted: (char, oldIdx, newIdx) => buildCharDiff('deleted', char, oldIdx),
     buildModified: (oldChar, newChar, oldIdx, newIdx) => ({
-      type: 'modified',
+      action: 'modified',
       idx: oldIdx,
       newText: newChar.char,
       oldText: oldChar.char,
@@ -42,17 +42,17 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
   let currentGroup = null;
 
   const compareDiffs = (group, diff) => {
-    if (group.type !== diff.type) {
+    if (group.action !== diff.action) {
       return false;
     }
-    if (group.type === 'modified') {
+    if (group.action === 'modified') {
       return group.oldAttrs === diff.oldAttrs && group.newAttrs === diff.newAttrs;
     }
     return group.runAttrs === diff.runAttrs;
   };
 
   const comparePositions = (group, diff) => {
-    if (group.type === 'added') {
+    if (group.action === 'added') {
       return group.startPos === oldPositionResolver(diff.idx);
     } else {
       return group.endPos + 1 === oldPositionResolver(diff.idx);
@@ -62,11 +62,11 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
   for (const diff of diffs) {
     if (currentGroup == null) {
       currentGroup = {
-        type: diff.type,
+        action: diff.action,
         startPos: oldPositionResolver(diff.idx),
         endPos: oldPositionResolver(diff.idx),
       };
-      if (diff.type === 'modified') {
+      if (diff.action === 'modified') {
         currentGroup.newText = diff.newText;
         currentGroup.oldText = diff.oldText;
         currentGroup.oldAttrs = diff.oldAttrs;
@@ -78,11 +78,11 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
     } else if (!compareDiffs(currentGroup, diff) || !comparePositions(currentGroup, diff)) {
       grouped.push(currentGroup);
       currentGroup = {
-        type: diff.type,
+        action: diff.action,
         startPos: oldPositionResolver(diff.idx),
         endPos: oldPositionResolver(diff.idx),
       };
-      if (diff.type === 'modified') {
+      if (diff.action === 'modified') {
         currentGroup.newText = diff.newText;
         currentGroup.oldText = diff.oldText;
         currentGroup.oldAttrs = diff.oldAttrs;
@@ -93,7 +93,7 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
       }
     } else {
       currentGroup.endPos = oldPositionResolver(diff.idx);
-      if (diff.type === 'modified') {
+      if (diff.action === 'modified') {
         currentGroup.newText += diff.newText;
         currentGroup.oldText += diff.oldText;
       } else {
@@ -105,7 +105,7 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
   if (currentGroup != null) grouped.push(currentGroup);
   return grouped.map((group) => {
     let ret = { ...group };
-    if (group.type === 'modified') {
+    if (group.action === 'modified') {
       ret.oldAttrs = JSON.parse(group.oldAttrs);
       ret.newAttrs = JSON.parse(group.newAttrs);
       ret.runAttrsDiff = getAttributesDiff(ret.oldAttrs, ret.newAttrs);

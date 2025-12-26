@@ -53,9 +53,9 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
 export function diffParagraphs(oldParagraphs, newParagraphs) {
   return diffSequences(oldParagraphs, newParagraphs, {
     comparator: paragraphComparator,
-    reorderOperations: reorderParagraphOperations,
-    shouldProcessEqual: (oldParagraph, newParagraph) =>
-      oldParagraph.text !== newParagraph.text ||
+    reorderOperations: reorderDiffOperations,
+    shouldProcessEqualAsModification: (oldParagraph, newParagraph) =>
+      JSON.stringify(oldParagraph.text) !== JSON.stringify(newParagraph.text) ||
       JSON.stringify(oldParagraph.node.attrs) !== JSON.stringify(newParagraph.node.attrs),
     canTreatAsModification,
     buildAdded: (paragraph) => buildAddedParagraphDiff(paragraph),
@@ -78,7 +78,7 @@ function paragraphComparator(oldParagraph, newParagraph) {
   if (oldId && newId && oldId === newId) {
     return true;
   }
-  return oldParagraph?.text === newParagraph?.text;
+  return oldParagraph?.fullText === newParagraph?.fullText;
 }
 
 /**
@@ -90,7 +90,7 @@ function buildAddedParagraphDiff(paragraph) {
   return {
     type: 'added',
     node: paragraph.node,
-    text: paragraph.text,
+    text: paragraph.fullText,
     pos: paragraph.pos,
   };
 }
@@ -104,7 +104,7 @@ function buildDeletedParagraphDiff(paragraph) {
   return {
     type: 'deleted',
     node: paragraph.node,
-    oldText: paragraph.text,
+    oldText: paragraph.fullText,
     pos: paragraph.pos,
   };
 }
@@ -124,15 +124,14 @@ function buildModifiedParagraphDiff(oldParagraph, newParagraph) {
   );
 
   const attrsDiff = getAttributesDiff(oldParagraph.node.attrs, newParagraph.node.attrs);
-
   if (textDiffs.length === 0 && !attrsDiff) {
     return null;
   }
 
   return {
     type: 'modified',
-    oldText: oldParagraph.text,
-    newText: newParagraph.text,
+    oldText: oldParagraph.fullText,
+    newText: newParagraph.fullText,
     pos: oldParagraph.pos,
     textDiffs,
     attrsDiff,
@@ -151,8 +150,8 @@ function canTreatAsModification(oldParagraph, newParagraph) {
     return true;
   }
 
-  const oldText = oldParagraph?.text ?? '';
-  const newText = newParagraph?.text ?? '';
+  const oldText = oldParagraph.fullText;
+  const newText = newParagraph.fullText;
   const maxLength = Math.max(oldText.length, newText.length);
   if (maxLength < MIN_LENGTH_FOR_SIMILARITY) {
     return false;
@@ -178,13 +177,3 @@ function getTextSimilarityScore(oldText, newText) {
   const maxLength = Math.max(oldText.length, newText.length) || 1;
   return 1 - distance / maxLength;
 }
-
-/**
- * Normalizes Myers diff operations for paragraph comparisons so consecutive replacements are easier to classify.
- * Myers tends to emit all deletes before inserts when a paragraph is replaced, even if it's a one-for-one swap, and
- * that pattern would otherwise hide opportunities to treat those operations as modifications. Reordering the list here
- * ensures higher-level diff logic stays simple while avoiding side effects for other consumers of the same operations.
- * @param {Array<'equal'|'delete'|'insert'>} operations
- * @returns {Array<'equal'|'delete'|'insert'>}
- */
-const reorderParagraphOperations = reorderDiffOperations;

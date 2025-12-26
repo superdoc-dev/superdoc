@@ -5,9 +5,6 @@ import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
 
-import { ChangeSet } from 'prosemirror-changeset';
-import { Transform } from 'prosemirror-transform';
-
 const getDocument = async (name) => {
   const buffer = await getTestDataAsBuffer(name);
   const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
@@ -45,9 +42,6 @@ describe('Diff', () => {
     expect(addedDiffs).toHaveLength(5);
     expect(deletedDiffs).toHaveLength(5);
     expect(attrOnlyDiffs).toHaveLength(4);
-    attrOnlyDiffs.forEach((diff) => {
-      expect(diff.attrsDiff).not.toBeNull();
-    });
 
     // Modified paragraph with multiple text diffs
     let diff = getDiff(
@@ -57,7 +51,9 @@ describe('Diff', () => {
     expect(diff?.newText).toBe(
       'Curabitur facilisis ligula suscipit enim pretium et nunc ligula, porttitor augue consequat maximus.',
     );
-    expect(diff?.textDiffs).toHaveLength(6);
+    const textPropsChanges = diff?.textDiffs.filter((textDiff) => textDiff.type === 'modified');
+    expect(textPropsChanges).toHaveLength(18);
+    expect(diff?.textDiffs).toHaveLength(24);
 
     // Deleted paragraph
     diff = getDiff(
@@ -139,8 +135,10 @@ describe('Diff', () => {
     let diff = diffs.find((diff) => diff.type === 'modified' && diff.oldText === 'Here’s some text.');
 
     expect(diff.newText).toBe('Here’s some NEW text.');
-    expect(diff.textDiffs).toHaveLength(1);
-    expect(diff.textDiffs[0].text).toBe('NEW ');
+    expect(diff.textDiffs).toHaveLength(3);
+    expect(diff.textDiffs[0].newText).toBe(' ');
+    expect(diff.textDiffs[1].text).toBe('NEW');
+    expect(diff.textDiffs[2].text).toBe(' ');
     expect(diff.attrsDiff?.modified?.textId).toBeDefined();
 
     diff = diffs.find((diff) => diff.type === 'deleted' && diff.oldText === 'I deleted this sentence.');
@@ -155,31 +153,14 @@ describe('Diff', () => {
     expect(diff.attrsDiff?.modified?.textId).toBeDefined();
   });
 
-  // it.only('Test prosemirror-changeset', async () => {
-  //   const docA = await getDocument('diff_before.docx');
-  //   const docB = await getDocument('diff_after.docx');
-  //
-  //   // Produce StepMaps that turn A into B
-  //   const tr = new Transform(docA)
-  //   tr.replaceWith(0, docA.content.size, docB.content)
-  //
-  //   // Diff them: metadata tags each span with the author
-  //   const encoder = {
-  //     encodeCharacter: (char, marks) => (JSON.stringify({type: "char", char, marks})),
-  //     encodeNodeStart: node => (JSON.stringify({type: "open", name: node.type.name, attrs: node.attrs})),
-  //     encodeNodeEnd: node => (JSON.stringify({type: "close", name: node.type.name})),
-  //     compareTokens: (a, b) => JSON.stringify(a) === JSON.stringify(b)
-  //   }
-  //   const originalChangeSet = ChangeSet
-  //     .create(docA, (a, b) => a === b ? a : null, encoder);
-  //
-  //   debugger;
-  //   const changeSet = originalChangeSet
-  //     .addSteps(docB, tr.mapping.maps)
-  //
-  //   // Inspect the replacements
-  //   for (const change of changeSet.changes) {
-  //     console.log(JSON.stringify(change, null, 2));
-  //   }
-  // });
+  it('Compare another set of two documents with only formatting changes', async () => {
+    const docBefore = await getDocument('diff_before4.docx');
+    const docAfter = await getDocument('diff_after4.docx');
+
+    const diffs = computeDiff(docBefore, docAfter);
+
+    expect(diffs).toHaveLength(1);
+    const diff = diffs[0];
+    expect(diff.type).toBe('modified');
+  });
 });

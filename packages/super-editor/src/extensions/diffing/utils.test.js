@@ -1,11 +1,7 @@
 import { extractParagraphs, getTextContent } from './utils';
 
-/**
- * Creates a lightweight mock paragraph node for tests.
- * @param {string} text
- * @param {Record<string, any>} [attrs={}]
- * @returns {object}
- */
+const buildRuns = (text, attrs = {}) => text.split('').map((char) => ({ char, runAttrs: JSON.stringify(attrs) }));
+
 const createParagraphNode = (text, attrs = {}) => ({
   type: { name: 'paragraph' },
   attrs,
@@ -14,7 +10,41 @@ const createParagraphNode = (text, attrs = {}) => ({
   nodesBetween: (from, to, callback) => {
     callback({ isText: true, text }, 0);
   },
+  nodeAt: () => ({ attrs }),
 });
+
+const createParagraphWithSegments = (segments, contentSize) => {
+  const computedSegments = segments.map((segment) => {
+    const segmentText = segment.text ?? segment.leafText();
+    const length = segmentText.length;
+    return {
+      ...segment,
+      length,
+      start: segment.start ?? 0,
+      attrs: segment.attrs ?? {},
+    };
+  });
+  const size =
+    contentSize ?? computedSegments.reduce((max, segment) => Math.max(max, segment.start + segment.length), 0);
+  const attrsMap = new Map();
+  computedSegments.forEach((segment) => {
+    attrsMap.set(segment.start - 1, segment.attrs);
+  });
+
+  return {
+    content: { size },
+    nodesBetween: (from, to, callback) => {
+      computedSegments.forEach((segment) => {
+        if (segment.text != null) {
+          callback({ isText: true, text: segment.text }, segment.start);
+        } else {
+          callback({ isLeaf: true, type: { spec: { leafText: segment.leafText } } }, segment.start);
+        }
+      });
+    },
+    nodeAt: (pos) => ({ attrs: attrsMap.get(pos) ?? {} }),
+  };
+};
 
 describe('extractParagraphs', () => {
   it('collects paragraph nodes in document order', () => {
@@ -35,8 +65,11 @@ describe('extractParagraphs', () => {
     const paragraphs = extractParagraphs(pmDoc);
 
     expect(paragraphs).toHaveLength(2);
-    expect(paragraphs[0]).toMatchObject({ node: firstParagraph, pos: 0, text: 'First paragraph' });
-    expect(paragraphs[1]).toMatchObject({ node: secondParagraph, pos: 10, text: 'Second paragraph' });
+    expect(paragraphs[0]).toMatchObject({ node: firstParagraph, pos: 0 });
+    expect(paragraphs[0].text).toEqual(buildRuns('First paragraph', { paraId: 'para-1' }));
+    expect(paragraphs[0].fullText).toBe('First paragraph');
+    expect(paragraphs[1]).toMatchObject({ node: secondParagraph, pos: 10 });
+    expect(paragraphs[1].text).toEqual(buildRuns('Second paragraph', { paraId: 'para-2' }));
   });
 
   it('includes position resolvers for paragraphs with missing IDs', () => {
@@ -60,82 +93,54 @@ describe('extractParagraphs', () => {
 });
 
 describe('getTextContent', () => {
-  it('Handles basic text nodes', () => {
-    const mockParagraph = {
-      content: {
-        size: 5,
-      },
-      nodesBetween: (from, to, callback) => {
-        callback({ isText: true, text: 'Hello' }, 0);
-      },
-    };
+  it('handles basic text nodes', () => {
+    const mockParagraph = createParagraphWithSegments([{ text: 'Hello', start: 0, attrs: { bold: true } }], 5);
 
     const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('Hello');
+    expect(result.text).toEqual(buildRuns('Hello', { bold: true }));
     expect(result.resolvePosition(0)).toBe(1);
     expect(result.resolvePosition(4)).toBe(5);
   });
 
-  it('Handles leaf nodes with leafText', () => {
-    const mockParagraph = {
-      content: {
-        size: 4,
-      },
-      nodesBetween: (from, to, callback) => {
-        callback({ isLeaf: true, type: { spec: { leafText: () => 'Leaf' } } }, 0);
-      },
-    };
+  it('handles leaf nodes with leafText', () => {
+    const mockParagraph = createParagraphWithSegments(
+      [{ leafText: () => 'Leaf', start: 0, attrs: { type: 'leaf' } }],
+      4,
+    );
 
     const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('Leaf');
+    expect(result.text).toEqual(buildRuns('Leaf', { type: 'leaf' }));
     expect(result.resolvePosition(0)).toBe(1);
     expect(result.resolvePosition(3)).toBe(4);
   });
 
-  it('Handles mixed content', () => {
-    const mockParagraph = {
-      content: {
-        size: 9,
-      },
-      nodesBetween: (from, to, callback) => {
-        callback({ isText: true, text: 'Hello' }, 0);
-        callback({ isLeaf: true, type: { spec: { leafText: () => 'Leaf' } } }, 5);
-      },
-    };
+  it('handles mixed content', () => {
+    const mockParagraph = createParagraphWithSegments([
+      { text: 'Hello', start: 0, attrs: { bold: true } },
+      { leafText: () => 'Leaf', start: 5, attrs: { italic: true } },
+    ]);
 
     const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('HelloLeaf');
+    expect(result.text).toEqual([...buildRuns('Hello', { bold: true }), ...buildRuns('Leaf', { italic: true })]);
     expect(result.resolvePosition(0)).toBe(1);
     expect(result.resolvePosition(5)).toBe(6);
     expect(result.resolvePosition(9)).toBe(10);
   });
 
-  it('Handles empty content', () => {
-    const mockParagraph = {
-      content: {
-        size: 0,
-      },
-      nodesBetween: () => {},
-    };
+  it('handles empty content', () => {
+    const mockParagraph = createParagraphWithSegments([], 0);
 
     const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('');
+    expect(result.text).toEqual([]);
     expect(result.resolvePosition(0)).toBe(1);
   });
 
-  it('Handles nested nodes', () => {
-    const mockParagraph = {
-      content: {
-        size: 6,
-      },
-      nodesBetween: (from, to, callback) => {
-        callback({ isText: true, text: 'Nested' }, 0);
-      },
-    };
+  it('applies paragraph position offsets to the resolver', () => {
+    const mockParagraph = createParagraphWithSegments([{ text: 'Nested', start: 0 }], 6);
 
-    const result = getTextContent(mockParagraph);
-    expect(result.text).toBe('Nested');
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(6)).toBe(7);
+    const result = getTextContent(mockParagraph, 10);
+    expect(result.text).toEqual(buildRuns('Nested', {}));
+    expect(result.resolvePosition(0)).toBe(11);
+    expect(result.resolvePosition(6)).toBe(17);
   });
 });

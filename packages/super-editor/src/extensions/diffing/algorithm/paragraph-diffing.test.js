@@ -28,7 +28,7 @@ describe('diffParagraphs', () => {
 
     expect(diffs).toHaveLength(1);
     expect(diffs[0].action).toBe('modified');
-    expect(diffs[0].textDiffs.length).toBeGreaterThan(0);
+    expect(diffs[0].contentDiff.length).toBeGreaterThan(0);
   });
 
   it('keeps unrelated paragraphs as deletion + addition', () => {
@@ -56,7 +56,7 @@ describe('diffParagraphs', () => {
 
     expect(diffs).toHaveLength(3);
     expect(diffs[0].action).toBe('modified');
-    expect(diffs[0].textDiffs.length).toBeGreaterThan(0);
+    expect(diffs[0].contentDiff.length).toBeGreaterThan(0);
     expect(diffs[1].action).toBe('deleted');
     expect(diffs[2].action).toBe('added');
   });

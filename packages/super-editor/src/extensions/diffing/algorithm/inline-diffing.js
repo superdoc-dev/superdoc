@@ -4,37 +4,83 @@ import { diffSequences } from './sequence-diffing.js';
 
 /**
  * Computes text-level additions and deletions between two strings using Myers diff algorithm, mapping back to document positions.
- * @param {{char: string, runAttrs: Record<string, any>}[]} oldText - Source text.
- * @param {{char: string, runAttrs: Record<string, any>}[]} newText - Target text.
+ * @param {{char: string, runAttrs: Record<string, any>}[]} oldContent - Source text.
+ * @param {{char: string, runAttrs: Record<string, any>}[]} newContent - Target text.
  * @param {(index: number) => number|null} oldPositionResolver - Maps string indexes to the original document.
  * @param {(index: number) => number|null} [newPositionResolver=oldPositionResolver] - Maps string indexes to the updated document.
  * @returns {Array<object>} List of addition/deletion ranges with document positions and text content.
  */
-export function getTextDiff(oldText, newText, oldPositionResolver, newPositionResolver = oldPositionResolver) {
-  const buildCharDiff = (action, char, oldIdx) => ({
-    action,
-    idx: oldIdx,
-    text: char.char,
-    runAttrs: char.runAttrs,
-  });
-  let diffs = diffSequences(oldText, newText, {
-    comparator: (a, b) => a.char === b.char,
-    shouldProcessEqualAsModification: (oldChar, newChar) => oldChar.runAttrs !== newChar.runAttrs,
-    canTreatAsModification: (oldChar, newChar) => false,
-    buildAdded: (char, oldIdx, newIdx) => buildCharDiff('added', char, oldIdx),
-    buildDeleted: (char, oldIdx, newIdx) => buildCharDiff('deleted', char, oldIdx),
-    buildModified: (oldChar, newChar, oldIdx, newIdx) => ({
-      action: 'modified',
-      idx: oldIdx,
-      newText: newChar.char,
-      oldText: oldChar.char,
-      oldAttrs: oldChar.runAttrs,
-      newAttrs: newChar.runAttrs,
-    }),
+export function getInlineDiff(oldContent, newContent, oldPositionResolver, newPositionResolver = oldPositionResolver) {
+  const buildCharDiff = (action, token, oldIdx) => {
+    if (token.kind !== 'text') {
+      return {
+        action,
+        idx: oldIdx,
+        ...token,
+      };
+    } else {
+      return {
+        action,
+        idx: oldIdx,
+        kind: 'text',
+        text: token.char,
+        runAttrs: token.runAttrs,
+      };
+    }
+  };
+  let diffs = diffSequences(oldContent, newContent, {
+    comparator: inlineComparator,
+    shouldProcessEqualAsModification,
+    canTreatAsModification: (oldToken, newToken, oldIdx, newIdx) =>
+      oldToken.kind === newToken.kind && oldToken.kind !== 'text' && oldToken.node.type.type === newToken.node.type,
+    buildAdded: (token, oldIdx, newIdx) => buildCharDiff('added', token, oldIdx),
+    buildDeleted: (token, oldIdx, newIdx) => buildCharDiff('deleted', token, oldIdx),
+    buildModified: (oldToken, newToken, oldIdx, newIdx) => {
+      if (oldToken.kind !== 'text') {
+        return {
+          action: 'modified',
+          idx: oldIdx,
+          kind: 'inlineNode',
+          oldNode: oldToken.node,
+          newNode: newToken.node,
+          nodeType: oldToken.nodeType,
+        };
+      } else {
+        return {
+          action: 'modified',
+          idx: oldIdx,
+          kind: 'text',
+          newText: newToken.char,
+          oldText: oldToken.char,
+          oldAttrs: oldToken.runAttrs,
+          newAttrs: newToken.runAttrs,
+        };
+      }
+    },
   });
 
   const groupedDiffs = groupDiffs(diffs, oldPositionResolver, newPositionResolver);
   return groupedDiffs;
+}
+
+function inlineComparator(a, b) {
+  if (a.kind !== b.kind) {
+    return false;
+  }
+
+  if (a.kind === 'text') {
+    return a.char === b.char;
+  } else {
+    return true;
+  }
+}
+
+function shouldProcessEqualAsModification(oldToken, newToken) {
+  if (oldToken.kind === 'text') {
+    return oldToken.runAttrs !== newToken.runAttrs;
+  } else {
+    return JSON.stringify(oldToken.nodeAttrs) !== JSON.stringify(newToken.nodeAttrs);
+  }
 }
 
 function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
@@ -60,11 +106,33 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
   };
 
   for (const diff of diffs) {
+    if (diff.kind !== 'text') {
+      if (currentGroup != null) {
+        grouped.push(currentGroup);
+        currentGroup = null;
+      }
+      grouped.push({
+        action: diff.action,
+        kind: 'inlineNode',
+        startPos: oldPositionResolver(diff.idx),
+        endPos: oldPositionResolver(diff.idx),
+        nodeType: diff.nodeType,
+        ...(diff.action === 'modified'
+          ? {
+              oldNode: diff.oldNode,
+              newNode: diff.newNode,
+              diffNodeAttrs: getAttributesDiff(diff.oldAttrs, diff.newAttrs),
+            }
+          : { node: diff.node }),
+      });
+      continue;
+    }
     if (currentGroup == null) {
       currentGroup = {
         action: diff.action,
         startPos: oldPositionResolver(diff.idx),
         endPos: oldPositionResolver(diff.idx),
+        kind: 'text',
       };
       if (diff.action === 'modified') {
         currentGroup.newText = diff.newText;
@@ -81,6 +149,7 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
         action: diff.action,
         startPos: oldPositionResolver(diff.idx),
         endPos: oldPositionResolver(diff.idx),
+        kind: 'text',
       };
       if (diff.action === 'modified') {
         currentGroup.newText = diff.newText;
@@ -105,6 +174,9 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
   if (currentGroup != null) grouped.push(currentGroup);
   return grouped.map((group) => {
     let ret = { ...group };
+    if (group.kind === 'inlineNode') {
+      return ret;
+    }
     if (group.action === 'modified') {
       ret.oldAttrs = JSON.parse(group.oldAttrs);
       ret.newAttrs = JSON.parse(group.newAttrs);

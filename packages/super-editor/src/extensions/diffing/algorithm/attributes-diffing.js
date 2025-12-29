@@ -65,6 +65,12 @@ function diffObjects(objectA, objectB, basePath, diff) {
       continue;
     }
 
+    if (Array.isArray(valueA) && Array.isArray(valueB)) {
+      if (valueA.length === valueB.length && valueA.every((item, index) => deepEquals(item, valueB[index]))) {
+        continue;
+      }
+    }
+
     if (valueA !== valueB) {
       diff.modified[path] = {
         from: valueA,
@@ -129,4 +135,44 @@ function joinPath(base, key) {
  */
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Checks deep equality for primitives, arrays, and plain objects.
+ * @param {any} a
+ * @param {any} b
+ * @returns {boolean}
+ */
+function deepEquals(a, b) {
+  if (a === b) {
+    return true;
+  }
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) {
+      return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEquals(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) {
+      return false;
+    }
+    for (const key of keysA) {
+      if (!deepEquals(a[key], b[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  return false;
 }

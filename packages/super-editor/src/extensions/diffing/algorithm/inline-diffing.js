@@ -1,17 +1,32 @@
-import { myersDiff } from './myers-diff.js';
 import { getAttributesDiff } from './attributes-diffing.js';
 import { diffSequences } from './sequence-diffing.js';
 
 /**
- * Computes text-level additions and deletions between two strings using Myers diff algorithm, mapping back to document positions.
- * @param {{char: string, runAttrs: Record<string, any>}[]} oldContent - Source text.
- * @param {{char: string, runAttrs: Record<string, any>}[]} newContent - Target text.
+ * @typedef {{kind: 'text', char: string, runAttrs: string}} InlineTextToken
+ */
+
+/**
+ * @typedef {{kind: 'inlineNode', node: import('prosemirror-model').Node, nodeType?: string}} InlineNodeToken
+ */
+
+/**
+ * @typedef {InlineTextToken|InlineNodeToken} InlineDiffToken
+ */
+
+/**
+ * @typedef {{action: 'added'|'deleted'|'modified', kind: 'text'|'inlineNode', startPos: number|null, endPos: number|null, text?: string, oldText?: string, newText?: string, runAttrs?: Record<string, any>, runAttrsDiff?: import('./attributes-diffing.js').AttributesDiff, node?: import('prosemirror-model').Node, nodeType?: string, oldNode?: import('prosemirror-model').Node, newNode?: import('prosemirror-model').Node}} InlineDiffResult
+ */
+
+/**
+ * Computes text-level additions and deletions between two sequences using the generic sequence diff, mapping back to document positions.
+ * @param {InlineDiffToken[]} oldContent - Source tokens.
+ * @param {InlineDiffToken[]} newContent - Target tokens.
  * @param {(index: number) => number|null} oldPositionResolver - Maps string indexes to the original document.
  * @param {(index: number) => number|null} [newPositionResolver=oldPositionResolver] - Maps string indexes to the updated document.
- * @returns {Array<object>} List of addition/deletion ranges with document positions and text content.
+ * @returns {InlineDiffResult[]} List of grouped inline diffs with document positions and text content.
  */
 export function getInlineDiff(oldContent, newContent, oldPositionResolver, newPositionResolver = oldPositionResolver) {
-  const buildCharDiff = (action, token, oldIdx) => {
+  const buildInlineDiff = (action, token, oldIdx) => {
     if (token.kind !== 'text') {
       return {
         action,
@@ -31,11 +46,11 @@ export function getInlineDiff(oldContent, newContent, oldPositionResolver, newPo
   let diffs = diffSequences(oldContent, newContent, {
     comparator: inlineComparator,
     shouldProcessEqualAsModification,
-    canTreatAsModification: (oldToken, newToken, oldIdx, newIdx) =>
+    canTreatAsModification: (oldToken, newToken) =>
       oldToken.kind === newToken.kind && oldToken.kind !== 'text' && oldToken.node.type.type === newToken.node.type,
-    buildAdded: (token, oldIdx, newIdx) => buildCharDiff('added', token, oldIdx),
-    buildDeleted: (token, oldIdx, newIdx) => buildCharDiff('deleted', token, oldIdx),
-    buildModified: (oldToken, newToken, oldIdx, newIdx) => {
+    buildAdded: (token, oldIdx) => buildInlineDiff('added', token, oldIdx),
+    buildDeleted: (token, oldIdx) => buildInlineDiff('deleted', token, oldIdx),
+    buildModified: (oldToken, newToken, oldIdx) => {
       if (oldToken.kind !== 'text') {
         return {
           action: 'modified',
@@ -63,6 +78,13 @@ export function getInlineDiff(oldContent, newContent, oldPositionResolver, newPo
   return groupedDiffs;
 }
 
+/**
+ * Compares two inline tokens to decide if they can be considered equal for the Myers diff.
+ * Text tokens compare character equality while inline nodes compare their type.
+ * @param {InlineDiffToken} a
+ * @param {InlineDiffToken} b
+ * @returns {boolean}
+ */
 function inlineComparator(a, b) {
   if (a.kind !== b.kind) {
     return false;
@@ -71,18 +93,31 @@ function inlineComparator(a, b) {
   if (a.kind === 'text') {
     return a.char === b.char;
   } else {
-    return true;
+    return a.node.type === b.node.type;
   }
 }
 
+/**
+ * Determines whether equal tokens should still be treated as modifications, either because run attributes changed or the node payload differs.
+ * @param {InlineDiffToken} oldToken
+ * @param {InlineDiffToken} newToken
+ * @returns {boolean}
+ */
 function shouldProcessEqualAsModification(oldToken, newToken) {
   if (oldToken.kind === 'text') {
     return oldToken.runAttrs !== newToken.runAttrs;
   } else {
-    return JSON.stringify(oldToken.nodeAttrs) !== JSON.stringify(newToken.nodeAttrs);
+    return JSON.stringify(oldToken.toJSON()) !== JSON.stringify(newToken.toJSON());
   }
 }
 
+/**
+ * Groups raw diff operations into contiguous ranges and converts serialized run attrs back to objects.
+ * @param {Array<{action:'added'|'deleted'|'modified', idx:number, kind:'text'|'inlineNode', text?: string, runAttrs?: string, newText?: string, oldText?: string, oldAttrs?: string, newAttrs?: string, nodeType?: string, node?: import('prosemirror-model').Node, oldNode?: import('prosemirror-model').Node, newNode?: import('prosemirror-model').Node}>} diffs
+ * @param {(index: number) => number|null} oldPositionResolver
+ * @param {(index: number) => number|null} newPositionResolver
+ * @returns {InlineDiffResult[]}
+ */
 function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
   const grouped = [];
   let currentGroup = null;

@@ -101,7 +101,7 @@ export interface InlineDiffResult {
   nodeType?: string;
   oldNode?: PMNode;
   newNode?: PMNode;
-  diffNodeAttrs?: AttributesDiff | null;
+  attrsDiff?: AttributesDiff | null;
 }
 
 /**
@@ -284,7 +284,7 @@ function groupDiffs(diffs: RawDiff[], oldPositionResolver: PositionResolver): In
           ? {
               oldNode: diff.oldNode,
               newNode: diff.newNode,
-              diffNodeAttrs: getAttributesDiff(diff.oldAttrs, diff.newAttrs),
+              attrsDiff: getAttributesDiff(diff.oldNode.attrs, diff.newNode.attrs),
             }
           : { node: diff.node }),
       });

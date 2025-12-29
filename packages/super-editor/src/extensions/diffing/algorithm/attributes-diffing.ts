@@ -1,21 +1,35 @@
+const IGNORED_ATTRIBUTE_KEYS = new Set(['sdBlockId']);
+
 /**
- * @typedef {Object} AttributesDiff
- * @property {Record<string, any>} added
- * @property {Record<string, any>} deleted
- * @property {Record<string, {from: any, to: any}>} modified
+ * Represents a single attribute change capturing the previous and next values.
  */
+export interface AttributeChange {
+  from: unknown;
+  to: unknown;
+}
+
+/**
+ * Aggregated attribute diff broken down into added, deleted, and modified dotted paths.
+ */
+export interface AttributesDiff {
+  added: Record<string, unknown>;
+  deleted: Record<string, unknown>;
+  modified: Record<string, AttributeChange>;
+}
 
 /**
  * Computes the attribute level diff between two arbitrary objects.
  * Produces a map of dotted paths to added, deleted and modified values.
- * @param {Record<string, any>} objectA
- * @param {Record<string, any>} objectB
- * @returns {AttributesDiff|null}
+ *
+ * @param objectA Baseline attributes to compare.
+ * @param objectB Updated attributes to compare.
+ * @returns Structured diff or null when objects are effectively equal.
  */
-const IGNORED_ATTRIBUTE_KEYS = new Set(['sdBlockId']);
-
-export function getAttributesDiff(objectA = {}, objectB = {}) {
-  const diff = {
+export function getAttributesDiff(
+  objectA: Record<string, unknown> | null | undefined = {},
+  objectB: Record<string, unknown> | null | undefined = {},
+): AttributesDiff | null {
+  const diff: AttributesDiff = {
     added: {},
     deleted: {},
     modified: {},
@@ -30,12 +44,18 @@ export function getAttributesDiff(objectA = {}, objectB = {}) {
 
 /**
  * Recursively compares two objects and fills the diff buckets.
- * @param {Record<string, any>} objectA
- * @param {Record<string, any>} objectB
- * @param {string} basePath
- * @param {AttributesDiff} diff
+ *
+ * @param objectA Baseline attributes being inspected.
+ * @param objectB Updated attributes being inspected.
+ * @param basePath Dotted path prefix used for nested keys.
+ * @param diff Aggregated diff being mutated.
  */
-function diffObjects(objectA, objectB, basePath, diff) {
+function diffObjects(
+  objectA: Record<string, unknown>,
+  objectB: Record<string, unknown>,
+  basePath: string,
+  diff: AttributesDiff,
+): void {
   const keys = new Set([...Object.keys(objectA || {}), ...Object.keys(objectB || {})]);
 
   for (const key of keys) {
@@ -71,7 +91,7 @@ function diffObjects(objectA, objectB, basePath, diff) {
       }
     }
 
-    if (valueA !== valueB) {
+    if (!deepEquals(valueA, valueB)) {
       diff.modified[path] = {
         from: valueA,
         to: valueB,
@@ -82,11 +102,12 @@ function diffObjects(objectA, objectB, basePath, diff) {
 
 /**
  * Records a nested value as an addition, flattening objects into dotted paths.
- * @param {any} value
- * @param {string} path
- * @param {{added: Record<string, any>}} diff
+ *
+ * @param value Value being marked as added.
+ * @param path Dotted attribute path for the value.
+ * @param diff Bucket used to capture additions.
  */
-function recordAddedValue(value, path, diff) {
+function recordAddedValue(value: unknown, path: string, diff: Pick<AttributesDiff, 'added'>): void {
   if (isPlainObject(value)) {
     for (const [childKey, childValue] of Object.entries(value)) {
       if (IGNORED_ATTRIBUTE_KEYS.has(childKey)) {
@@ -101,11 +122,12 @@ function recordAddedValue(value, path, diff) {
 
 /**
  * Records a nested value as a deletion, flattening objects into dotted paths.
- * @param {any} value
- * @param {string} path
- * @param {{deleted: Record<string, any>}} diff
+ *
+ * @param value Value being marked as removed.
+ * @param path Dotted attribute path for the value.
+ * @param diff Bucket used to capture deletions.
  */
-function recordDeletedValue(value, path, diff) {
+function recordDeletedValue(value: unknown, path: string, diff: Pick<AttributesDiff, 'deleted'>): void {
   if (isPlainObject(value)) {
     for (const [childKey, childValue] of Object.entries(value)) {
       if (IGNORED_ATTRIBUTE_KEYS.has(childKey)) {
@@ -120,30 +142,33 @@ function recordDeletedValue(value, path, diff) {
 
 /**
  * Builds dotted attribute paths.
- * @param {string} base
- * @param {string} key
- * @returns {string}
+ *
+ * @param base Existing path prefix.
+ * @param key Current key being appended.
+ * @returns Combined dotted path.
  */
-function joinPath(base, key) {
+function joinPath(base: string, key: string): string {
   return base ? `${base}.${key}` : key;
 }
 
 /**
  * Determines if a value is a plain object (no arrays or nulls).
- * @param {any} value
- * @returns {value is Record<string, any>}
+ *
+ * @param value Value to inspect.
+ * @returns True when the value is a non-null object.
  */
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
  * Checks deep equality for primitives, arrays, and plain objects.
- * @param {any} a
- * @param {any} b
- * @returns {boolean}
+ *
+ * @param a First value.
+ * @param b Second value.
+ * @returns True when both values are deeply equal.
  */
-function deepEquals(a, b) {
+function deepEquals(a: unknown, b: unknown): boolean {
   if (a === b) {
     return true;
   }

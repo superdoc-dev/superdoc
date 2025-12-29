@@ -7,7 +7,7 @@ import {
   buildDeletedParagraphDiff,
   buildModifiedParagraphDiff,
   canTreatAsModification,
-} from './paragraph-diffing.js';
+} from './paragraph-diffing.ts';
 
 const buildRuns = (text, attrs = {}) =>
   text.split('').map((char) => ({ char, runAttrs: JSON.stringify(attrs), kind: 'text' }));

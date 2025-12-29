@@ -1,10 +1,11 @@
 /**
  * Computes the Levenshtein edit distance between two strings.
- * @param {string} a
- * @param {string} b
- * @returns {number}
+ *
+ * @param a First string.
+ * @param b Second string.
+ * @returns Minimum number of edits required to transform {@link a} into {@link b}.
  */
-export function levenshteinDistance(a, b) {
+export function levenshteinDistance(a: string, b: string): number {
   const lenA = a.length;
   const lenB = b.length;
 
@@ -15,8 +16,8 @@ export function levenshteinDistance(a, b) {
     return lenA;
   }
 
-  let previous = new Array(lenB + 1);
-  let current = new Array(lenB + 1);
+  let previous = new Array<number>(lenB + 1);
+  let current = new Array<number>(lenB + 1);
 
   for (let j = 0; j <= lenB; j += 1) {
     previous[j] = j;

@@ -74,7 +74,7 @@ export function getInlineDiff(oldContent, newContent, oldPositionResolver, newPo
     },
   });
 
-  const groupedDiffs = groupDiffs(diffs, oldPositionResolver, newPositionResolver);
+  const groupedDiffs = groupDiffs(diffs, oldPositionResolver);
   return groupedDiffs;
 }
 
@@ -115,37 +115,38 @@ function shouldProcessEqualAsModification(oldToken, newToken) {
  * Groups raw diff operations into contiguous ranges and converts serialized run attrs back to objects.
  * @param {Array<{action:'added'|'deleted'|'modified', idx:number, kind:'text'|'inlineNode', text?: string, runAttrs?: string, newText?: string, oldText?: string, oldAttrs?: string, newAttrs?: string, nodeType?: string, node?: import('prosemirror-model').Node, oldNode?: import('prosemirror-model').Node, newNode?: import('prosemirror-model').Node}>} diffs
  * @param {(index: number) => number|null} oldPositionResolver
- * @param {(index: number) => number|null} newPositionResolver
  * @returns {InlineDiffResult[]}
  */
-function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
+function groupDiffs(diffs, oldPositionResolver) {
   const grouped = [];
   let currentGroup = null;
 
-  const compareDiffs = (group, diff) => {
-    if (group.action !== diff.action) {
-      return false;
+  /**
+   * Finalizes the current text group (if any) and appends it to the grouped result list.
+   * Resets the working group so the caller can start accumulating the next run.
+   */
+  const pushCurrentGroup = () => {
+    if (!currentGroup) {
+      return;
     }
-    if (group.action === 'modified') {
-      return group.oldAttrs === diff.oldAttrs && group.newAttrs === diff.newAttrs;
-    }
-    return group.runAttrs === diff.runAttrs;
-  };
-
-  const comparePositions = (group, diff) => {
-    if (group.action === 'added') {
-      return group.startPos === oldPositionResolver(diff.idx);
+    const result = { ...currentGroup };
+    if (currentGroup.action === 'modified') {
+      const oldAttrs = JSON.parse(currentGroup.oldAttrs);
+      const newAttrs = JSON.parse(currentGroup.newAttrs);
+      result.runAttrsDiff = getAttributesDiff(oldAttrs, newAttrs);
+      delete result.oldAttrs;
+      delete result.newAttrs;
     } else {
-      return group.endPos + 1 === oldPositionResolver(diff.idx);
+      result.runAttrs = JSON.parse(currentGroup.runAttrs);
     }
+    grouped.push(result);
+    currentGroup = null;
   };
 
+  // Iterate over raw diffs and group text changes where possible
   for (const diff of diffs) {
     if (diff.kind !== 'text') {
-      if (currentGroup != null) {
-        grouped.push(currentGroup);
-        currentGroup = null;
-      }
+      pushCurrentGroup();
       grouped.push({
         action: diff.action,
         kind: 'inlineNode',
@@ -162,65 +163,84 @@ function groupDiffs(diffs, oldPositionResolver, newPositionResolver) {
       });
       continue;
     }
-    if (currentGroup == null) {
-      currentGroup = {
-        action: diff.action,
-        startPos: oldPositionResolver(diff.idx),
-        endPos: oldPositionResolver(diff.idx),
-        kind: 'text',
-      };
-      if (diff.action === 'modified') {
-        currentGroup.newText = diff.newText;
-        currentGroup.oldText = diff.oldText;
-        currentGroup.oldAttrs = diff.oldAttrs;
-        currentGroup.newAttrs = diff.newAttrs;
-      } else {
-        currentGroup.text = diff.text;
-        currentGroup.runAttrs = diff.runAttrs;
-      }
-    } else if (!compareDiffs(currentGroup, diff) || !comparePositions(currentGroup, diff)) {
-      grouped.push(currentGroup);
-      currentGroup = {
-        action: diff.action,
-        startPos: oldPositionResolver(diff.idx),
-        endPos: oldPositionResolver(diff.idx),
-        kind: 'text',
-      };
-      if (diff.action === 'modified') {
-        currentGroup.newText = diff.newText;
-        currentGroup.oldText = diff.oldText;
-        currentGroup.oldAttrs = diff.oldAttrs;
-        currentGroup.newAttrs = diff.newAttrs;
-      } else {
-        currentGroup.text = diff.text;
-        currentGroup.runAttrs = diff.runAttrs;
-      }
+
+    if (!currentGroup || !canExtendGroup(currentGroup, diff, oldPositionResolver)) {
+      pushCurrentGroup();
+      currentGroup = createTextGroup(diff, oldPositionResolver);
     } else {
-      currentGroup.endPos = oldPositionResolver(diff.idx);
-      if (diff.action === 'modified') {
-        currentGroup.newText += diff.newText;
-        currentGroup.oldText += diff.oldText;
-      } else {
-        currentGroup.text += diff.text;
-      }
+      extendTextGroup(currentGroup, diff, oldPositionResolver);
     }
   }
 
-  if (currentGroup != null) grouped.push(currentGroup);
-  return grouped.map((group) => {
-    let ret = { ...group };
-    if (group.kind === 'inlineNode') {
-      return ret;
+  pushCurrentGroup();
+  return grouped;
+}
+
+/**
+ * Builds a fresh text diff group seeded with the current diff token.
+ * @param {{action:'added'|'deleted'|'modified', idx:number, kind:'text', text?: string, runAttrs?: string, newText?: string, oldText?: string, oldAttrs?: string, newAttrs?: string}} diff
+ * @param {(index:number)=>number|null} positionResolver
+ * @returns {{action:'added'|'deleted'|'modified', kind:'text', startPos:number, endPos:number, text?: string, runAttrs?: string, newText?: string, oldText?: string, oldAttrs?: string, newAttrs?: string}}
+ */
+function createTextGroup(diff, positionResolver) {
+  const baseGroup = {
+    action: diff.action,
+    kind: 'text',
+    startPos: positionResolver(diff.idx),
+    endPos: positionResolver(diff.idx),
+  };
+  if (diff.action === 'modified') {
+    baseGroup.newText = diff.newText;
+    baseGroup.oldText = diff.oldText;
+    baseGroup.oldAttrs = diff.oldAttrs;
+    baseGroup.newAttrs = diff.newAttrs;
+  } else {
+    baseGroup.text = diff.text;
+    baseGroup.runAttrs = diff.runAttrs;
+  }
+  return baseGroup;
+}
+
+/**
+ * Expands the current text group with the incoming diff token.
+ * Keeps start/end positions updated while concatenating text payloads.
+ * @param {{action:'added'|'deleted'|'modified', kind:'text', startPos:number, endPos:number, text?: string, runAttrs?: string, newText?: string, oldText?: string, oldAttrs?: string, newAttrs?: string}} group
+ * @param {{action:'added'|'deleted'|'modified', idx:number, kind:'text', text?: string, runAttrs?: string, newText?: string, oldText?: string}} diff
+ * @param {(index:number)=>number|null} positionResolver
+ */
+function extendTextGroup(group, diff, positionResolver) {
+  group.endPos = positionResolver(diff.idx);
+  if (group.action === 'modified') {
+    group.newText += diff.newText;
+    group.oldText += diff.oldText;
+  } else {
+    group.text += diff.text;
+  }
+}
+
+/**
+ * Determines whether a text diff token can be merged into the current group.
+ * Checks action, attributes, and adjacency constraints required by the grouping heuristic.
+ * @param {{action:'added'|'deleted'|'modified', kind:'text', startPos:number, endPos:number, runAttrs?: string, oldAttrs?: string, newAttrs?: string}} group
+ * @param {{action:'added'|'deleted'|'modified', idx:number, kind:'text', runAttrs?: string, oldAttrs?: string, newAttrs?: string}} diff
+ * @param {(index:number)=>number|null} positionResolver
+ * @returns {boolean}
+ */
+function canExtendGroup(group, diff, positionResolver) {
+  if (group.action !== diff.action) {
+    return false;
+  }
+
+  if (group.action === 'modified') {
+    if (group.oldAttrs !== diff.oldAttrs || group.newAttrs !== diff.newAttrs) {
+      return false;
     }
-    if (group.action === 'modified') {
-      ret.oldAttrs = JSON.parse(group.oldAttrs);
-      ret.newAttrs = JSON.parse(group.newAttrs);
-      ret.runAttrsDiff = getAttributesDiff(ret.oldAttrs, ret.newAttrs);
-      delete ret.oldAttrs;
-      delete ret.newAttrs;
-    } else {
-      ret.runAttrs = JSON.parse(group.runAttrs);
-    }
-    return ret;
-  });
+  } else if (group.runAttrs !== diff.runAttrs) {
+    return false;
+  }
+
+  if (group.action === 'added') {
+    return group.startPos === positionResolver(diff.idx);
+  }
+  return group.endPos + 1 === positionResolver(diff.idx);
 }

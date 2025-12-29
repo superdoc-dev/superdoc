@@ -126,6 +126,13 @@ function nodeComparator(oldNodeInfo: NodeInfo, newNodeInfo: NodeInfo): boolean {
   }
   if (isParagraphNodeInfo(oldNodeInfo) && isParagraphNodeInfo(newNodeInfo)) {
     return paragraphComparator(oldNodeInfo, newNodeInfo);
+  } else if (
+    oldNodeInfo.node.type.name === 'tableRow' &&
+    newNodeInfo.node.type.name === 'tableRow' &&
+    oldNodeInfo.node.attrs.paraId &&
+    newNodeInfo.node.attrs.paraId
+  ) {
+    return oldNodeInfo.node.attrs.paraId === newNodeInfo.node.attrs.paraId;
   }
   return true;
 }

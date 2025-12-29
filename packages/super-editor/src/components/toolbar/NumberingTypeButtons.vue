@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
+import { numberingIcons } from './numbering-icons.js';
 
 const { isHighContrastMode } = useHighContrastMode();
 const emit = defineEmits(['select']);
@@ -14,48 +15,48 @@ const props = defineProps({
 
 const numberingButtonsRefs = ref([]);
 
-// Define the numbering type options with their visual representations
+// Define the numbering type options with their SVG icons
 // Ordered as specified: plain, period, paren, then letters, then roman
 const numberingButtons = [
   {
     key: 'decimalPlain',
     ariaLabel: 'Decimal without period (1, 2, 3)',
-    display: '1',
+    icon: numberingIcons.decimalPlain,
   },
   {
     key: 'decimal',
     ariaLabel: 'Decimal with period (1., 2., 3.)',
-    display: '1.',
+    icon: numberingIcons.decimal,
   },
   {
     key: 'decimalParen',
     ariaLabel: 'Decimal with parenthesis (1), 2), 3))',
-    display: '1)',
+    icon: numberingIcons.decimalParen,
   },
   {
     key: 'upperLetter',
     ariaLabel: 'Uppercase letter with period (A., B., C.)',
-    display: 'A.',
+    icon: numberingIcons.upperLetter,
   },
   {
     key: 'lowerLetter',
     ariaLabel: 'Lowercase letter with period (a., b., c.)',
-    display: 'a.',
+    icon: numberingIcons.lowerLetter,
   },
   {
     key: 'letterParen',
     ariaLabel: 'Lowercase letter with parenthesis (a), b), c))',
-    display: 'a)',
+    icon: numberingIcons.letterParen,
   },
   {
     key: 'upperRoman',
     ariaLabel: 'Uppercase Roman numeral with period (I., II., III.)',
-    display: 'I.',
+    icon: numberingIcons.upperRoman,
   },
   {
     key: 'lowerRoman',
     ariaLabel: 'Lowercase Roman numeral with period (i., ii., iii.)',
-    display: 'i.',
+    icon: numberingIcons.lowerRoman,
   },
 ];
 
@@ -85,15 +86,47 @@ const moveToPreviousButton = (index) => {
   }
 };
 
+const ITEMS_PER_ROW = 4;
+
 const handleKeyDown = (e, index) => {
+  const totalItems = numberingButtons.length;
+  const currentRow = Math.floor(index / ITEMS_PER_ROW);
+  const currentCol = index % ITEMS_PER_ROW;
+
   switch (e.key) {
     case 'ArrowUp':
       e.preventDefault();
-      moveToPreviousButton(index);
+      if (currentRow > 0) {
+        const newIndex = index - ITEMS_PER_ROW;
+        const prevButton = numberingButtonsRefs.value[newIndex];
+        if (prevButton) {
+          prevButton.setAttribute('tabindex', '0');
+          prevButton.focus();
+        }
+      }
       break;
     case 'ArrowDown':
       e.preventDefault();
-      moveToNextButton(index);
+      const newIndex = index + ITEMS_PER_ROW;
+      if (newIndex < totalItems) {
+        const nextButton = numberingButtonsRefs.value[newIndex];
+        if (nextButton) {
+          nextButton.setAttribute('tabindex', '0');
+          nextButton.focus();
+        }
+      }
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (currentCol > 0) {
+        moveToPreviousButton(index);
+      }
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      if (currentCol < ITEMS_PER_ROW - 1 && index < totalItems - 1) {
+        moveToNextButton(index);
+      }
       break;
     case 'Enter':
     case ' ':
@@ -131,30 +164,31 @@ onMounted(() => {
       tabindex="-1"
       @keydown="(event) => handleKeyDown(event, index)"
     >
-      <span class="numbering-display">{{ button.display }}</span>
+      <div class="numbering-icon" v-html="button.icon"></div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .numbering-type-buttons {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px;
   box-sizing: border-box;
-  min-width: 80px;
+  width: 100%;
 
   .numbering-option {
     cursor: pointer;
-    padding: 8px 12px;
-    font-size: 14px;
+    padding: 4px;
     border-radius: 4px;
     display: flex;
     align-items: center;
+    justify-content: center;
     box-sizing: border-box;
     transition: background-color 0.15s ease;
     user-select: none;
+    aspect-ratio: 4 / 3;
 
     &:hover {
       background-color: #d8dee5;
@@ -170,10 +204,21 @@ onMounted(() => {
       font-weight: 600;
     }
 
-    .numbering-display {
-      font-weight: 500;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      min-width: 24px;
+    .numbering-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+
+      /* SVG scales to fit container */
+      :deep(svg) {
+        width: 100%;
+        height: 100%;
+        max-width: 100px;
+        max-height: 75px;
+        display: block;
+      }
     }
   }
 
@@ -183,12 +228,32 @@ onMounted(() => {
 
       &:hover {
         background-color: #000;
-        color: #fff;
         border-color: #fff;
       }
 
       &:focus {
         outline: 2px solid #fff;
+      }
+
+      /* Invert colors in high contrast mode */
+      .numbering-icon :deep(svg) {
+        .list-text {
+          fill: currentColor;
+        }
+
+        .list-line {
+          stroke: currentColor;
+        }
+      }
+
+      &:hover .numbering-icon :deep(svg) {
+        .list-text {
+          fill: #fff;
+        }
+
+        .list-line {
+          stroke: #fff;
+        }
       }
     }
   }

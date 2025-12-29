@@ -3,14 +3,6 @@ import italicIconSvg from '@superdoc/common/icons/italic-solid.svg?raw';
 import underlineIconSvg from '@superdoc/common/icons/underline-solid.svg?raw';
 import listIconSvg from '@superdoc/common/icons/list-solid.svg?raw';
 import listOlIconSvg from '@superdoc/common/icons/list-ol-solid.svg?raw';
-import listDecimalPlainIconSvg from '@superdoc/common/icons/list-decimal-plain.svg?raw';
-import listDecimalIconSvg from '@superdoc/common/icons/list-decimal.svg?raw';
-import listDecimalParenIconSvg from '@superdoc/common/icons/list-decimal-paren.svg?raw';
-import listRomanUpperIconSvg from '@superdoc/common/icons/list-roman-upper.svg?raw';
-import listRomanLowerIconSvg from '@superdoc/common/icons/list-roman-lower.svg?raw';
-import listAlphaUpperIconSvg from '@superdoc/common/icons/list-alpha-upper.svg?raw';
-import listAlphaLowerIconSvg from '@superdoc/common/icons/list-alpha-lower.svg?raw';
-import listAlphaLowerParenIconSvg from '@superdoc/common/icons/list-alpha-lower-paren.svg?raw';
 import imageIconSvg from '@superdoc/common/icons/image-solid.svg?raw';
 import linkIconSvg from '@superdoc/common/icons/link-solid.svg?raw';
 import alignLeftIconSvg from '@superdoc/common/icons/align-left-solid.svg?raw';
@@ -73,14 +65,6 @@ export const toolbarIcons = {
   alignJustify: alignJustifyIconSvg,
   bulletList: listIconSvg,
   numberedList: listOlIconSvg,
-  numberedListDecimalPlain: listDecimalPlainIconSvg,
-  numberedListDecimal: listDecimalIconSvg,
-  numberedListDecimalParen: listDecimalParenIconSvg,
-  numberedListAlphaUpper: listAlphaUpperIconSvg,
-  numberedListAlphaLower: listAlphaLowerIconSvg,
-  numberedListAlphaLowerParen: listAlphaLowerParenIconSvg,
-  numberedListRomanUpper: listRomanUpperIconSvg,
-  numberedListRomanLower: listRomanLowerIconSvg,
   indentLeft: outdentIconSvg,
   indentRight: indentIconSvg,
   pageBreak: fileHalfDashedIconSvg,

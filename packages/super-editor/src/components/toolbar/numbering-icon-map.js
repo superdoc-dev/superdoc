@@ -1,23 +1,23 @@
 // @ts-check
-import { toolbarIcons } from './toolbarIcons.js';
+import { numberingIcons } from './numbering-icons.js';
 
 /**
  * Get the icon for a given numbering format
- * Maps numbering format keys to their corresponding toolbar icons
+ * Maps numbering format keys to their corresponding icons
  * @param {string} numberingType - The numbering format key
  * @returns {string} The SVG icon for the format
  */
 export function getNumberingIcon(numberingType) {
   const iconMap = {
-    decimalPlain: toolbarIcons.numberedListDecimalPlain,
-    decimal: toolbarIcons.numberedListDecimal,
-    decimalParen: toolbarIcons.numberedListDecimalParen,
-    upperLetter: toolbarIcons.numberedListAlphaUpper,
-    lowerLetter: toolbarIcons.numberedListAlphaLower,
-    letterParen: toolbarIcons.numberedListAlphaLowerParen,
-    upperRoman: toolbarIcons.numberedListRomanUpper,
-    lowerRoman: toolbarIcons.numberedListRomanLower,
+    decimalPlain: numberingIcons.decimalPlain,
+    decimal: numberingIcons.decimal,
+    decimalParen: numberingIcons.decimalParen,
+    upperLetter: numberingIcons.upperLetter,
+    lowerLetter: numberingIcons.lowerLetter,
+    letterParen: numberingIcons.letterParen,
+    upperRoman: numberingIcons.upperRoman,
+    lowerRoman: numberingIcons.lowerRoman,
   };
 
-  return iconMap[numberingType] || toolbarIcons.numberedListDecimal;
+  return iconMap[numberingType] || numberingIcons.decimal;
 }

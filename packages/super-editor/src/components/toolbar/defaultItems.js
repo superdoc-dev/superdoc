@@ -649,7 +649,7 @@ export const makeDefaultItems = ({
     type: 'button',
     name: 'numberedlist',
     command: 'toggleOrderedList',
-    icon: toolbarIcons.numberedListDecimal,
+    icon: getNumberingIcon('decimal'), // Default to decimal numbering
     active: false,
     tooltip: toolbarTexts.numberedList,
     restoreEditorFocus: true,

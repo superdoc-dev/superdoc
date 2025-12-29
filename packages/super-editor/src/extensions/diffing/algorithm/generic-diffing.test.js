@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffNodes } from './generic-diffing.js';
+import { diffNodes } from './generic-diffing.ts';
 
 const createDocFromNodes = (nodes = []) => ({
   descendants(callback) {

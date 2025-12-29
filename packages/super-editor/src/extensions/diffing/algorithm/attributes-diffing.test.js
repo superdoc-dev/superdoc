@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAttributesDiff } from './attributes-diffing.js';
+import { getAttributesDiff } from './attributes-diffing.ts';
 
 describe('getAttributesDiff', () => {
   it('detects nested additions, deletions, and modifications', () => {

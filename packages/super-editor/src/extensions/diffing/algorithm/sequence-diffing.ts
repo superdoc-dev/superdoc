@@ -1,32 +1,52 @@
-import { myersDiff } from './myers-diff.js';
+import { myersDiff, type MyersOperation } from './myers-diff.ts';
 
 /**
- * @typedef {Object} SequenceDiffOptions
- * @property {(a: any, b: any) => boolean} [comparator] equality test passed to Myers diff
- * @property {(item: any, oldIdx: number, previousOldItem: any, index: number) => any} buildAdded maps newly inserted entries
- * @property {(item: any, index: number) => any} buildDeleted maps removed entries
- * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => any|null} buildModified maps paired entries. If it returns null/undefined, it means no modification should be recorded.
- * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => boolean} [shouldProcessEqualAsModification] decides if equal-aligned entries should emit a modification
- * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => boolean} [canTreatAsModification] determines if delete/insert pairs are modifications
- * @property {(operations: Array<'equal'|'delete'|'insert'>) => Array<'equal'|'delete'|'insert'>} [reorderOperations] optional hook to normalize raw Myers operations
+ * Comparator used to determine whether two sequence values are equal.
  */
+type Comparator<T> = (a: T, b: T) => boolean;
+
+/**
+ * Discrete operation emitted by the Myers diff before higher-level mapping.
+ */
+type OperationStep =
+  | { type: 'equal'; oldIdx: number; newIdx: number }
+  | { type: 'delete'; oldIdx: number; newIdx: number }
+  | { type: 'insert'; oldIdx: number; newIdx: number };
+
+/**
+ * Hooks and comparators used to translate raw Myers operations into domain-specific diffs.
+ */
+export interface SequenceDiffOptions<T, Added, Deleted, Modified> {
+  comparator?: Comparator<T>;
+  buildAdded: (item: T, oldIdx: number, previousOldItem: T | undefined, newIdx: number) => Added | null | undefined;
+  buildDeleted: (item: T, oldIdx: number, newIdx: number) => Deleted;
+  buildModified: (oldItem: T, newItem: T, oldIdx: number, newIdx: number) => Modified | null | undefined;
+  shouldProcessEqualAsModification?: (oldItem: T, newItem: T, oldIdx: number, newIdx: number) => boolean;
+  canTreatAsModification?: (deletedItem: T, insertedItem: T, oldIdx: number, newIdx: number) => boolean;
+  reorderOperations?: (operations: MyersOperation[]) => MyersOperation[];
+}
 
 /**
  * Generic sequence diff helper built on top of Myers algorithm.
  * Allows callers to provide custom comparators and payload builders that determine how
  * additions, deletions, and modifications should be reported.
- * @param {Array<any>} oldSeq
- * @param {Array<any>} newSeq
- * @param {SequenceDiffOptions} options
- * @returns {Array<any>}
+ *
+ * @param oldSeq Original sequence to diff from.
+ * @param newSeq Target sequence to diff against.
+ * @param options Hook bundle that controls how additions/deletions/modifications are emitted.
+ * @returns Sequence of mapped diff payloads produced by the caller-provided builders.
  */
-export function diffSequences(oldSeq, newSeq, options) {
+export function diffSequences<T, Added, Deleted, Modified>(
+  oldSeq: T[],
+  newSeq: T[],
+  options: SequenceDiffOptions<T, Added, Deleted, Modified>,
+): Array<Added | Deleted | Modified> {
   if (!options) {
     throw new Error('diffSequences requires an options object.');
   }
 
-  const comparator = options.comparator ?? ((a, b) => a === b);
-  const reorder = options.reorderOperations ?? ((ops) => ops);
+  const comparator: Comparator<T> = options.comparator ?? ((a: T, b: T) => a === b);
+  const reorder = options.reorderOperations ?? ((ops: MyersOperation[]) => ops);
   const canTreatAsModification = options.canTreatAsModification;
   const shouldProcessEqualAsModification = options.shouldProcessEqualAsModification;
 
@@ -43,7 +63,7 @@ export function diffSequences(oldSeq, newSeq, options) {
   const operations = reorder(myersDiff(oldSeq, newSeq, comparator));
   const steps = buildOperationSteps(operations);
 
-  const diffs = [];
+  const diffs: Array<Added | Deleted | Modified> = [];
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
 
@@ -57,7 +77,7 @@ export function diffSequences(oldSeq, newSeq, options) {
         continue;
       }
       const diff = options.buildModified(oldItem, newItem, step.oldIdx, step.newIdx);
-      if (diff) {
+      if (diff != null) {
         diffs.push(diff);
       }
       continue;
@@ -71,7 +91,7 @@ export function diffSequences(oldSeq, newSeq, options) {
         canTreatAsModification(oldSeq[step.oldIdx], newSeq[nextStep.newIdx], step.oldIdx, nextStep.newIdx)
       ) {
         const diff = options.buildModified(oldSeq[step.oldIdx], newSeq[nextStep.newIdx], step.oldIdx, nextStep.newIdx);
-        if (diff) {
+        if (diff != null) {
           diffs.push(diff);
         }
         i += 1;
@@ -83,7 +103,7 @@ export function diffSequences(oldSeq, newSeq, options) {
 
     if (step.type === 'insert') {
       const diff = options.buildAdded(newSeq[step.newIdx], step.oldIdx, oldSeq[step.oldIdx - 1], step.newIdx);
-      if (diff) {
+      if (diff != null) {
         diffs.push(diff);
       }
     }
@@ -94,13 +114,14 @@ export function diffSequences(oldSeq, newSeq, options) {
 
 /**
  * Translates the raw Myers operations into indexed steps so higher-level logic can reason about positions.
- * @param {Array<'equal'|'delete'|'insert'>} operations
- * @returns {Array<object>}
+ *
+ * @param operations Myers diff operations produced for the input sequences.
+ * @returns Indexed steps that reference the original `oldSeq` and `newSeq` positions.
  */
-function buildOperationSteps(operations) {
+function buildOperationSteps(operations: MyersOperation[]): OperationStep[] {
   let oldIdx = 0;
   let newIdx = 0;
-  const steps = [];
+  const steps: OperationStep[] = [];
 
   for (const op of operations) {
     if (op === 'equal') {
@@ -121,11 +142,12 @@ function buildOperationSteps(operations) {
 
 /**
  * Normalizes interleaved delete/insert operations so consumers can treat replacements as paired steps.
- * @param {Array<'equal'|'delete'|'insert'>} operations
- * @returns {Array<'equal'|'delete'|'insert'>}
+ *
+ * @param operations Raw Myers operations.
+ * @returns Normalized operation sequence with deletes and inserts paired.
  */
-export function reorderDiffOperations(operations) {
-  const normalized = [];
+export function reorderDiffOperations(operations: MyersOperation[]): MyersOperation[] {
+  const normalized: MyersOperation[] = [];
 
   for (let i = 0; i < operations.length; i += 1) {
     const op = operations[i];

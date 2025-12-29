@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { Extension } from '@core/Extension.js';
-import { computeDiff } from './computeDiff.js';
+import { computeDiff } from './computeDiff.ts';
 
 export const Diffing = Extension.create({
   name: 'documentDiffing',

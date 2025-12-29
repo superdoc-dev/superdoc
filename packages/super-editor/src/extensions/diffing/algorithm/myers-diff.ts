@@ -1,11 +1,26 @@
 /**
- * Computes a Myers diff operation list for arbitrary sequences.
- * @param {Array|String} oldSeq
- * @param {Array|String} newSeq
- * @param {(a: any, b: any) => boolean} isEqual
- * @returns {Array<'equal'|'insert'|'delete'>}
+ * A primitive Myers diff operation describing equality, insertion, or deletion.
  */
-export function myersDiff(oldSeq, newSeq, isEqual) {
+export type MyersOperation = 'equal' | 'insert' | 'delete';
+
+/**
+ * Minimal read-only sequence abstraction required by the diff algorithm.
+ */
+type Sequence<T> = ArrayLike<T>;
+/**
+ * Equality predicate applied while traversing sequences.
+ */
+type Comparator<T> = (a: T, b: T) => boolean;
+
+/**
+ * Computes a Myers diff operation list for arbitrary sequences.
+ *
+ * @param oldSeq Original sequence to compare.
+ * @param newSeq Updated sequence to compare.
+ * @param isEqual Equality predicate used to determine matching elements.
+ * @returns Ordered list of diff operations describing how to transform {@link oldSeq} into {@link newSeq}.
+ */
+export function myersDiff<T>(oldSeq: Sequence<T>, newSeq: Sequence<T>, isEqual: Comparator<T>): MyersOperation[] {
   const oldLen = oldSeq.length;
   const newLen = newSeq.length;
 
@@ -17,16 +32,16 @@ export function myersDiff(oldSeq, newSeq, isEqual) {
   const max = oldLen + newLen;
   const size = 2 * max + 3;
   const offset = max + 1;
-  const v = new Array(size).fill(-1);
+  const v = new Array<number>(size).fill(-1);
   v[offset + 1] = 0;
 
-  const trace = [];
+  const trace: number[][] = [];
   let foundPath = false;
 
   for (let d = 0; d <= max && !foundPath; d += 1) {
     for (let k = -d; k <= d; k += 2) {
       const index = offset + k;
-      let x;
+      let x: number;
 
       if (k === -d || (k !== d && v[index - 1] < v[index + 1])) {
         x = v[index + 1];
@@ -56,14 +71,14 @@ export function myersDiff(oldSeq, newSeq, isEqual) {
 /**
  * Reconstructs the shortest edit script by walking the previously recorded V vectors.
  *
- * @param {Array<number[]>} trace - Snapshot of diagonal furthest-reaching points per edit distance.
- * @param {number} oldLen - Length of the original string.
- * @param {number} newLen - Length of the target string.
- * @param {number} offset - Offset applied to diagonal indexes to keep array lookups positive.
- * @returns {Array<'equal'|'delete'|'insert'>} Concrete step-by-step operations.
+ * @param trace Snapshot of diagonal furthest-reaching points per edit distance.
+ * @param oldLen Length of the original sequence.
+ * @param newLen Length of the target sequence.
+ * @param offset Offset applied to diagonal indexes to keep array lookups positive.
+ * @returns Concrete step-by-step operations transforming {@link oldLen} chars into {@link newLen} chars.
  */
-function backtrackMyers(trace, oldLen, newLen, offset) {
-  const operations = [];
+function backtrackMyers(trace: number[][], oldLen: number, newLen: number, offset: number): MyersOperation[] {
+  const operations: MyersOperation[] = [];
   let x = oldLen;
   let y = newLen;
 
@@ -72,7 +87,7 @@ function backtrackMyers(trace, oldLen, newLen, offset) {
     const k = x - y;
     const index = offset + k;
 
-    let prevK;
+    let prevK: number;
     if (k === -d || (k !== d && v[index - 1] < v[index + 1])) {
       prevK = k + 1;
     } else {

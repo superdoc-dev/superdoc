@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-vi.mock('./myers-diff.js', async () => {
-  const actual = await vi.importActual('./myers-diff.js');
+vi.mock('./myers-diff.ts', async () => {
+  const actual = await vi.importActual('./myers-diff.ts');
   return {
     myersDiff: vi.fn(actual.myersDiff),
   };
 });
-import { getInlineDiff } from './inline-diffing.js';
+import { getInlineDiff } from './inline-diffing.ts';
 
 const buildTextRuns = (text, runAttrs = {}) =>
   text.split('').map((char) => ({ char, runAttrs: JSON.stringify(runAttrs), kind: 'text' }));

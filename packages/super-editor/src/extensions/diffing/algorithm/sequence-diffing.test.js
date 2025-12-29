@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffSequences } from './sequence-diffing.js';
+import { diffSequences } from './sequence-diffing.ts';
 
 const buildAdded = (item) => ({ action: 'added', id: item.id });
 const buildDeleted = (item) => ({ action: 'deleted', id: item.id });

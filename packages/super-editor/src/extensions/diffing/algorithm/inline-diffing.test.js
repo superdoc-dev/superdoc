@@ -10,6 +10,19 @@ import { getInlineDiff } from './inline-diffing.ts';
 const buildTextRuns = (text, runAttrs = {}) =>
   text.split('').map((char) => ({ char, runAttrs: JSON.stringify(runAttrs), kind: 'text' }));
 
+const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }) => {
+  const nodeAttrs = { ...attrs };
+  return {
+    kind: 'inlineNode',
+    nodeType: 'link',
+    node: {
+      type,
+      attrs: nodeAttrs,
+      toJSON: () => ({ type: 'link', attrs: nodeAttrs }),
+    },
+  };
+};
+
 describe('getInlineDiff', () => {
   it('returns an empty diff list when both strings are identical', () => {
     const resolver = (index) => index;
@@ -102,6 +115,37 @@ describe('getInlineDiff', () => {
           deleted: {},
           modified: {
             bold: { from: true, to: false },
+          },
+        },
+      },
+    ]);
+  });
+
+  it('surfaces attribute diffs for inline node modifications', () => {
+    const resolver = (index) => index + 3;
+    const sharedType = { name: 'link' };
+    const oldNode = buildInlineNodeToken({ href: 'https://old.example', label: 'Example' }, sharedType);
+    const newNode = buildInlineNodeToken({ href: 'https://new.example', label: 'Example' }, sharedType);
+
+    const diffs = getInlineDiff([oldNode], [newNode], resolver);
+
+    expect(diffs).toEqual([
+      {
+        action: 'modified',
+        kind: 'inlineNode',
+        nodeType: 'link',
+        startPos: 3,
+        endPos: 3,
+        oldNode: oldNode.node,
+        newNode: newNode.node,
+        attrsDiff: {
+          added: {},
+          deleted: {},
+          modified: {
+            href: {
+              from: 'https://old.example',
+              to: 'https://new.example',
+            },
           },
         },
       },

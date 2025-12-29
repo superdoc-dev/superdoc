@@ -122,4 +122,45 @@ describe('getAttributesDiff', () => {
       'nested.value': { from: 1, to: 2 },
     });
   });
+
+  it('handles array equality and modifications', () => {
+    const objectA = {
+      tags: ['alpha', 'beta'],
+      nested: {
+        metrics: [
+          { name: 'views', value: 10 },
+          { name: 'likes', value: 5 },
+        ],
+      },
+    };
+
+    const objectB = {
+      tags: ['alpha', 'beta'],
+      nested: {
+        metrics: [
+          { name: 'views', value: 12 },
+          { name: 'likes', value: 5 },
+        ],
+      },
+    };
+
+    let diff = getAttributesDiff(objectA, objectB);
+    expect(diff.added).toEqual({});
+    expect(diff.deleted).toEqual({});
+    expect(diff.modified).toEqual({
+      'nested.metrics': {
+        from: [
+          { name: 'views', value: 10 },
+          { name: 'likes', value: 5 },
+        ],
+        to: [
+          { name: 'views', value: 12 },
+          { name: 'likes', value: 5 },
+        ],
+      },
+    });
+
+    diff = getAttributesDiff(objectA, { ...objectA });
+    expect(diff).toBeNull();
+  });
 });

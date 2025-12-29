@@ -3,7 +3,7 @@ import { myersDiff } from './myers-diff.js';
 /**
  * @typedef {Object} SequenceDiffOptions
  * @property {(a: any, b: any) => boolean} [comparator] equality test passed to Myers diff
- * @property {(item: any, index: number) => any} buildAdded maps newly inserted entries
+ * @property {(item: any, oldIdx: number, previousOldItem: any, index: number) => any} buildAdded maps newly inserted entries
  * @property {(item: any, index: number) => any} buildDeleted maps removed entries
  * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => any|null} buildModified maps paired entries. If it returns null/undefined, it means no modification should be recorded.
  * @property {(oldItem: any, newItem: any, oldIndex: number, newIndex: number) => boolean} [shouldProcessEqualAsModification] decides if equal-aligned entries should emit a modification
@@ -82,7 +82,10 @@ export function diffSequences(oldSeq, newSeq, options) {
     }
 
     if (step.type === 'insert') {
-      diffs.push(options.buildAdded(newSeq[step.newIdx], step.oldIdx, step.newIdx));
+      const diff = options.buildAdded(newSeq[step.newIdx], step.oldIdx, oldSeq[step.oldIdx - 1], step.newIdx);
+      if (diff) {
+        diffs.push(diff);
+      }
     }
   }
 

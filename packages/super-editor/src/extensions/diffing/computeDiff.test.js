@@ -191,4 +191,68 @@ describe('Diff', () => {
     expect(diff.contentDiff[2].action).toBe('added');
     expect(diff.contentDiff[2].kind).toBe('text');
   });
+
+  it('Compare a complex document with table edits and tracked formatting', async () => {
+    const docBefore = await getDocument('diff_before7.docx');
+    const docAfter = await getDocument('diff_after7.docx');
+
+    const diffs = computeDiff(docBefore, docAfter);
+    expect(diffs).toHaveLength(9);
+    expect(diffs.filter((diff) => diff.action === 'modified')).toHaveLength(6);
+    expect(diffs.filter((diff) => diff.action === 'added')).toHaveLength(2);
+    expect(diffs.filter((diff) => diff.action === 'deleted')).toHaveLength(1);
+
+    const formattingDiff = diffs.find(
+      (diff) => diff.action === 'modified' && diff.oldText === 'This paragraph formatting will change.',
+    );
+    expect(formattingDiff?.contentDiff?.[0]?.runAttrsDiff?.added).toHaveProperty('runProperties.bold', true);
+
+    const upgradedParagraph = diffs.find(
+      (diff) => diff.action === 'modified' && diff.oldText === 'This paragraph will have words.',
+    );
+    expect(upgradedParagraph?.newText).toBe('This paragraph will have NEW words.');
+    expect(
+      upgradedParagraph?.contentDiff?.some(
+        (change) => change.action === 'added' && typeof change.text === 'string' && change.text.includes('NEW'),
+      ),
+    ).toBe(true);
+
+    const deletion = diffs.find(
+      (diff) => diff.action === 'deleted' && diff.oldText === 'This paragraph will be deleted.',
+    );
+    expect(deletion).toBeDefined();
+
+    const wordRemoval = diffs.find(
+      (diff) => diff.action === 'modified' && diff.oldText === 'This word will be deleted.',
+    );
+    expect(wordRemoval?.newText).toBe('This will be deleted.');
+    expect(wordRemoval?.contentDiff).toHaveLength(1);
+    expect(wordRemoval?.contentDiff?.[0].action).toBe('deleted');
+
+    const tableModification = diffs.find(
+      (diff) => diff.action === 'modified' && diff.nodeType === 'table' && diff.oldNode,
+    );
+    expect(tableModification).toBeUndefined();
+
+    const tableAddition = diffs.find((diff) => diff.action === 'added' && diff.nodeType === 'table');
+    expect(tableAddition?.node?.textContent?.trim()).toBe('New table');
+
+    const trailingParagraph = diffs.find(
+      (diff) => diff.action === 'added' && diff.nodeType === 'paragraph' && diff.text === '',
+    );
+    expect(trailingParagraph).toBeDefined();
+
+    const thirdHeaderDiff = diffs.find(
+      (diff) =>
+        diff.action === 'modified' && diff.oldText === 'Third header' && diff.newText === 'Third header modified',
+    );
+    expect(
+      thirdHeaderDiff?.contentDiff?.some((change) => change.action === 'added' && change.text === ' modified'),
+    ).toBe(true);
+
+    const firstCellDiff = diffs.find(
+      (diff) => diff.action === 'modified' && diff.oldText === 'First cell' && diff.newText === 'cell',
+    );
+    expect(firstCellDiff?.contentDiff?.[0]?.text).toBe('First ');
+  });
 });

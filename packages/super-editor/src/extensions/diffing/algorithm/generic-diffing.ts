@@ -215,7 +215,7 @@ function buildModifiedDiff(oldNodeInfo: NodeInfo, newNodeInfo: NodeInfo): NodeDi
     nodeType: oldNodeInfo.node.type.name,
     oldNode: oldNodeInfo.node,
     newNode: newNodeInfo.node,
-    pos: newNodeInfo.pos,
+    pos: oldNodeInfo.pos,
     attrsDiff,
   };
 }

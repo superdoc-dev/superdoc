@@ -109,18 +109,14 @@ export interface InlineDiffResult {
  *
  * @param oldContent Source tokens.
  * @param newContent Target tokens.
- * @param oldPositionResolver Maps string indexes to the original document.
- * @param newPositionResolver Maps string indexes to the updated document.
+ * @param oldPositionResolver Maps indexes to the original document.
  * @returns List of grouped inline diffs with document positions and text content.
  */
 export function getInlineDiff(
   oldContent: InlineDiffToken[],
   newContent: InlineDiffToken[],
   oldPositionResolver: PositionResolver,
-  newPositionResolver: PositionResolver = oldPositionResolver,
 ): InlineDiffResult[] {
-  void newPositionResolver;
-
   const buildInlineDiff = (action: InlineAction, token: InlineDiffToken, oldIdx: number): RawDiff => {
     if (token.kind !== 'text') {
       return {

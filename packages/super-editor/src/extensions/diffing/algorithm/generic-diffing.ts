@@ -20,6 +20,7 @@ import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts'
 type BaseNodeInfo = {
   node: PMNode;
   pos: number;
+  depth: number;
 };
 
 /**
@@ -94,12 +95,19 @@ export function diffNodes(oldRoot: PMNode, newRoot: PMNode): NodeDiff[] {
  */
 function normalizeNodes(pmDoc: PMNode): NodeInfo[] {
   const nodes: NodeInfo[] = [];
-  pmDoc.descendants((node, pos) => {
+  const depthMap = new WeakMap<PMNode, number>();
+  depthMap.set(pmDoc, -1);
+
+  pmDoc.descendants((node, pos, parent) => {
+    const parentDepth = parent ? (depthMap.get(parent) ?? -1) : -1;
+    const depth = parentDepth + 1;
+    depthMap.set(node, depth);
     if (node.type.name === 'paragraph') {
       const { text, resolvePosition } = getParagraphContent(node, pos);
       const fullText = getFullText(text);
       nodes.push({
         node,
+        depth,
         pos,
         text,
         resolvePosition,
@@ -107,7 +115,7 @@ function normalizeNodes(pmDoc: PMNode): NodeInfo[] {
       });
       return false;
     }
-    nodes.push({ node, pos });
+    nodes.push({ node, pos, depth });
     return undefined;
   });
   return nodes;
@@ -179,9 +187,14 @@ function buildAddedDiff(
     addedNodesSet.add(childNode);
   });
 
-  const previousPos = previousOldNodeInfo?.pos ?? -1;
-  const previousSize = previousOldNodeInfo?.node.nodeSize ?? 0;
-  const pos = previousPos >= 0 ? previousPos + previousSize : 0;
+  let pos;
+  if (nodeInfo.depth === previousOldNodeInfo?.depth) {
+    const previousPos = previousOldNodeInfo?.pos ?? -1;
+    const previousSize = previousOldNodeInfo?.node.nodeSize ?? 0;
+    pos = previousPos >= 0 ? previousPos + previousSize : 0;
+  } else {
+    pos = (previousOldNodeInfo?.pos ?? -1) + 1;
+  }
   return {
     action: 'added',
     nodeType: nodeInfo.node.type.name,

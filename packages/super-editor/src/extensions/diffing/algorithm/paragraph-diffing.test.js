@@ -292,7 +292,8 @@ describe('paragraph diff builders', () => {
     expect(diff).toMatchObject({
       action: 'modified',
       nodeType: 'paragraph',
-      nodeJSON: oldParagraph.node.toJSON(),
+      oldNodeJSON: oldParagraph.node.toJSON(),
+      newNodeJSON: newParagraph.node.toJSON(),
       oldText: 'foo',
       newText: 'bar',
       pos: 5,
@@ -322,7 +323,8 @@ describe('paragraph diff builders', () => {
     expect(diff).not.toBeNull();
     expect(diff.contentDiff).toEqual([]);
     expect(diff.attrsDiff?.modified).toHaveProperty('align');
-    expect(diff.nodeJSON).toEqual(oldParagraph.node.toJSON());
+    expect(diff.oldNodeJSON).toEqual(oldParagraph.node.toJSON());
+    expect(diff.newNodeJSON).toEqual(newParagraph.node.toJSON());
   });
 });
 

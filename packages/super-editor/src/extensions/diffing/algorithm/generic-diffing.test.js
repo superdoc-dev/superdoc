@@ -1,11 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { diffNodes } from './generic-diffing.ts';
 
-const createDocFromNodes = (nodes = []) => ({
-  descendants(callback) {
-    nodes.forEach(({ node, pos }) => callback(node, pos));
-  },
-});
+const createDocFromNodes = (nodes = []) => {
+  const docNode = {
+    type: { name: 'doc', spec: {} },
+    descendants(callback) {
+      const childIndexMap = new WeakMap();
+      const depthStack = [docNode];
+      for (const entry of nodes) {
+        const { node, pos, depth = 1 } = entry;
+        depthStack.length = depth;
+        const parentNode = depthStack[depth - 1] ?? docNode;
+        const currentIndex = childIndexMap.get(parentNode) ?? 0;
+        childIndexMap.set(parentNode, currentIndex + 1);
+        callback(node, pos, parentNode, currentIndex);
+        depthStack[depth] = node;
+      }
+    },
+  };
+
+  return docNode;
+};
 
 const buildSimpleNode = (typeName, attrs = {}, options = {}) => {
   const { nodeSize = 2, children = [] } = options;
@@ -27,7 +42,7 @@ const buildSimpleNode = (typeName, attrs = {}, options = {}) => {
 };
 
 const createParagraph = (text, attrs = {}, options = {}) => {
-  const { pos = 0, textAttrs = {} } = options;
+  const { pos = 0, textAttrs = {}, depth = 1 } = options;
   const paragraphNode = {
     attrs,
     type: { name: 'paragraph', spec: {} },
@@ -54,15 +69,15 @@ const createParagraph = (text, attrs = {}, options = {}) => {
   };
   paragraphNode.toJSON = () => ({ type: paragraphNode.type.name, attrs: paragraphNode.attrs });
 
-  return { node: paragraphNode, pos };
+  return { node: paragraphNode, pos, depth };
 };
 
 describe('diffParagraphs', () => {
   it('treats similar paragraphs without IDs as modifications', () => {
     const oldParagraphs = [createParagraph('Hello world from ProseMirror.')];
     const newParagraphs = [createParagraph('Hello brave new world from ProseMirror.')];
-    const oldRoot = { descendants: (cb) => oldParagraphs.forEach((p) => cb(p.node, p.pos)) };
-    const newRoot = { descendants: (cb) => newParagraphs.forEach((p) => cb(p.node, p.pos)) };
+    const oldRoot = createDocFromNodes(oldParagraphs);
+    const newRoot = createDocFromNodes(newParagraphs);
 
     const diffs = diffNodes(oldRoot, newRoot);
 
@@ -74,8 +89,8 @@ describe('diffParagraphs', () => {
   it('keeps unrelated paragraphs as deletion + addition', () => {
     const oldParagraphs = [createParagraph('Alpha paragraph with some text.')];
     const newParagraphs = [createParagraph('Zephyr quickly jinxed the new passage.')];
-    const oldRoot = { descendants: (cb) => oldParagraphs.forEach((p) => cb(p.node, p.pos)) };
-    const newRoot = { descendants: (cb) => newParagraphs.forEach((p) => cb(p.node, p.pos)) };
+    const oldRoot = createDocFromNodes(oldParagraphs);
+    const newRoot = createDocFromNodes(newParagraphs);
 
     const diffs = diffNodes(oldRoot, newRoot);
 
@@ -93,8 +108,8 @@ describe('diffParagraphs', () => {
       createParagraph('Original introduction paragraph that now has tweaks.'),
       createParagraph('Completely different replacement paragraph.'),
     ];
-    const oldRoot = { descendants: (cb) => oldParagraphs.forEach((p) => cb(p.node, p.pos)) };
-    const newRoot = { descendants: (cb) => newParagraphs.forEach((p) => cb(p.node, p.pos)) };
+    const oldRoot = createDocFromNodes(oldParagraphs);
+    const newRoot = createDocFromNodes(newParagraphs);
 
     const diffs = diffNodes(oldRoot, newRoot);
 
@@ -117,8 +132,8 @@ describe('diffParagraphs', () => {
   });
 
   it('emits attribute diffs for non-paragraph nodes', () => {
-    const oldHeading = { node: buildSimpleNode('heading', { level: 1 }), pos: 0 };
-    const newHeading = { node: buildSimpleNode('heading', { level: 2 }), pos: 0 };
+    const oldHeading = { node: buildSimpleNode('heading', { level: 1 }), pos: 0, depth: 1 };
+    const newHeading = { node: buildSimpleNode('heading', { level: 2 }), pos: 0, depth: 1 };
     const diffs = diffNodes(createDocFromNodes([oldHeading]), createDocFromNodes([newHeading]));
 
     expect(diffs).toHaveLength(1);
@@ -139,8 +154,8 @@ describe('diffParagraphs', () => {
       createDocFromNodes([oldParagraph]),
       createDocFromNodes([
         newParagraph,
-        { node: parentNode, pos: insertionPos },
-        { node: childNode, pos: insertionPos + 1 },
+        { node: parentNode, pos: insertionPos, depth: 1 },
+        { node: childNode, pos: insertionPos + 1, depth: 2 },
       ]),
     );
 
@@ -156,13 +171,41 @@ describe('diffParagraphs', () => {
     const figurePos = paragraph.pos + paragraph.node.nodeSize;
 
     const diffs = diffNodes(
-      createDocFromNodes([paragraph, { node: parentNode, pos: figurePos }, { node: childNode, pos: figurePos + 1 }]),
+      createDocFromNodes([
+        paragraph,
+        { node: parentNode, pos: figurePos, depth: 1 },
+        { node: childNode, pos: figurePos + 1, depth: 2 },
+      ]),
       createDocFromNodes([paragraph]),
     );
 
     const deletions = diffs.filter((diff) => diff.action === 'deleted');
     expect(deletions).toHaveLength(1);
     expect(deletions[0].nodeType).toBe('figure');
+  });
+
+  it('computes insertion position for nodes added to the beginning of a container', () => {
+    const oldRow = buildSimpleNode('tableRow', { paraId: 'row-1' }, { nodeSize: 4 });
+    const oldTable = buildSimpleNode('table', {}, { nodeSize: 10, children: [oldRow] });
+    const oldDoc = createDocFromNodes([
+      { node: oldTable, pos: 0, depth: 1 },
+      { node: oldRow, pos: 1, depth: 2 },
+    ]);
+
+    const insertedRow = buildSimpleNode('tableRow', { paraId: 'row-2' }, { nodeSize: 4 });
+    const persistedRow = buildSimpleNode('tableRow', { paraId: 'row-1' }, { nodeSize: 4 });
+    const newTable = buildSimpleNode('table', {}, { nodeSize: 14, children: [insertedRow, persistedRow] });
+    const newDoc = createDocFromNodes([
+      { node: newTable, pos: 0, depth: 1 },
+      { node: insertedRow, pos: 1, depth: 2 },
+      { node: persistedRow, pos: 1 + insertedRow.nodeSize, depth: 2 },
+    ]);
+
+    const diffs = diffNodes(oldDoc, newDoc);
+
+    const addition = diffs.find((diff) => diff.action === 'added' && diff.nodeType === 'tableRow');
+    expect(addition).toBeDefined();
+    expect(addition.pos).toBe(1);
   });
 
   it('computes insertion position based on the previous old node', () => {
@@ -173,7 +216,7 @@ describe('diffParagraphs', () => {
 
     const diffs = diffNodes(
       createDocFromNodes([oldParagraph]),
-      createDocFromNodes([newParagraph, { node: headingNode, pos: expectedPos }]),
+      createDocFromNodes([newParagraph, { node: headingNode, pos: expectedPos, depth: 1 }]),
     );
 
     const addition = diffs.find((diff) => diff.action === 'added' && diff.nodeType === 'heading');

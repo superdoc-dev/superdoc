@@ -39,6 +39,7 @@ export interface ParagraphContent {
 export interface ParagraphNodeReference {
   node: PMNode;
   pos: number;
+  depth: number;
 }
 
 /**
@@ -200,9 +201,14 @@ export function buildAddedParagraphDiff(
   paragraph: ParagraphSnapshot,
   previousOldNodeInfo?: ParagraphNodeReference,
 ): AddedParagraphDiff {
-  const previousNodeSize = previousOldNodeInfo?.node.nodeSize ?? 0;
-  const previousPos = previousOldNodeInfo?.pos ?? -1;
-  const pos = previousPos >= 0 ? previousPos + previousNodeSize : 0;
+  let pos;
+  if (paragraph.depth === previousOldNodeInfo?.depth) {
+    const previousPos = previousOldNodeInfo?.pos ?? -1;
+    const previousSize = previousOldNodeInfo?.node.nodeSize ?? 0;
+    pos = previousPos >= 0 ? previousPos + previousSize : 0;
+  } else {
+    pos = (previousOldNodeInfo?.pos ?? -1) + 1;
+  }
   return {
     action: 'added',
     nodeType: paragraph.node.type.name,

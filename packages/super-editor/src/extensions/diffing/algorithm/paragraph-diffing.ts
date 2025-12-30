@@ -144,6 +144,7 @@ export function getParagraphContent(paragraph: PMNode, paragraphPos = 0): Paragr
         content.push({
           kind: 'inlineNode',
           node,
+          nodeType: node.type.name,
         });
         segments.push({ start, end, pos });
       }

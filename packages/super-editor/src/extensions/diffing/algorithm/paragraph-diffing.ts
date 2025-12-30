@@ -10,20 +10,12 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
 
-/**
- * Maps flattened indexes back to the ProseMirror document.
- */
-export type PositionResolver = (index: number) => number | null;
-
-/**
- * Rich snapshot of a paragraph node with flattened content and helpers.
- */
 export interface ParagraphNodeInfo {
   node: PMNode;
   pos: number;
   depth: number;
   text: InlineDiffToken[];
-  resolvePosition: PositionResolver;
+  endPos: number;
   fullText: string;
 }
 
@@ -72,34 +64,30 @@ export type ParagraphDiff = AddedParagraphDiff | DeletedParagraphDiff | Modified
  * @param paragraph Paragraph node to flatten.
  * @param paragraphPos Position of the paragraph in the document.
  * @param depth Depth of the paragraph within the document tree.
- * @returns Snapshot containing tokens, resolver, and derived metadata.
+ * @returns Snapshot containing tokens (with offsets) and derived metadata.
  */
 export function createParagraphSnapshot(paragraph: PMNode, paragraphPos: number, depth: number): ParagraphNodeInfo {
-  const { text, resolvePosition } = buildParagraphContent(paragraph, paragraphPos);
+  const text = buildParagraphContent(paragraph, paragraphPos);
   return {
     node: paragraph,
     pos: paragraphPos,
     depth,
     text,
-    resolvePosition,
+    endPos: paragraphPos + 1 + paragraph.content.size,
     fullText: text.map((token) => (token.kind === 'text' ? token.char : '')).join(''),
   };
 }
 
 /**
- * Flattens a paragraph node into inline diff tokens and a resolver that tracks document positions.
+ * Flattens a paragraph node into inline diff tokens, embedding absolute document offsets.
  *
  * @param paragraph Paragraph node being tokenized.
  * @param paragraphPos Absolute document position for the paragraph; used to offset resolver results.
- * @returns Flattened tokens plus a resolver that maps token indexes back to document positions.
+ * @returns Flattened tokens enriched with document offsets.
  */
-function buildParagraphContent(
-  paragraph: PMNode,
-  paragraphPos = 0,
-): { text: InlineDiffToken[]; resolvePosition: PositionResolver } {
+function buildParagraphContent(paragraph: PMNode, paragraphPos = 0): InlineDiffToken[] {
   const content: InlineDiffToken[] = [];
-  const segments: Array<{ start: number; end: number; pos: number }> = [];
-
+  const paragraphOffset = paragraphPos + 1;
   paragraph.nodesBetween(
     0,
     paragraph.content.size,
@@ -116,50 +104,33 @@ function buildParagraphContent(
       }
 
       if (nodeText) {
-        const start = content.length;
-        const end = start + nodeText.length;
         const runNode = paragraph.nodeAt(pos - 1);
         const runAttrs = runNode?.attrs ?? {};
-        segments.push({ start, end, pos });
-        const chars = nodeText.split('').map((char) => ({
-          kind: 'text',
-          char,
-          runAttrs,
-        }));
-        content.push(...(chars as InlineDiffToken[]));
+        const baseOffset = paragraphOffset + pos;
+        for (let i = 0; i < nodeText.length; i += 1) {
+          content.push({
+            kind: 'text',
+            char: nodeText[i] ?? '',
+            runAttrs,
+            offset: baseOffset + i,
+          });
+        }
         return;
       }
 
       if (node.type.name !== 'run' && node.isInline) {
-        const start = content.length;
-        const end = start + 1;
         content.push({
           kind: 'inlineNode',
           node,
           nodeType: node.type.name,
           nodeJSON: node.toJSON(),
+          pos: paragraphOffset + pos,
         });
-        segments.push({ start, end, pos });
       }
     },
     0,
   );
-
-  const resolvePosition: PositionResolver = (index) => {
-    if (index < 0 || index > content.length) {
-      return null;
-    }
-
-    for (const segment of segments) {
-      if (index >= segment.start && index < segment.end) {
-        return paragraphPos + 1 + segment.pos + (index - segment.start);
-      }
-    }
-
-    return paragraphPos + 1 + paragraph.content.size;
-  };
-
-  return { text: content, resolvePosition };
+  return content;
 }
 
 /**
@@ -224,7 +195,7 @@ export function buildModifiedParagraphDiff(
   oldParagraph: ParagraphNodeInfo,
   newParagraph: ParagraphNodeInfo,
 ): ModifiedParagraphDiff | null {
-  const contentDiff = getInlineDiff(oldParagraph.text, newParagraph.text, oldParagraph.resolvePosition);
+  const contentDiff = getInlineDiff(oldParagraph.text, newParagraph.text, oldParagraph.endPos);
 
   const attrsDiff = getAttributesDiff(oldParagraph.node.attrs, newParagraph.node.attrs);
   if (contentDiff.length === 0 && !attrsDiff) {

@@ -16,6 +16,7 @@ export type InlineTextToken = {
   kind: 'text';
   char: string;
   runAttrs: Record<string, unknown>;
+  offset?: number | null;
 };
 
 /**
@@ -27,6 +28,7 @@ export type InlineNodeToken = {
   nodeType?: string;
   toJSON?: () => unknown;
   nodeJSON?: NodeJSON;
+  pos?: number | null;
 };
 
 /**
@@ -82,11 +84,6 @@ type RawInlineNodeDiff =
 type RawDiff = RawTextDiff | RawInlineNodeDiff;
 
 /**
- * Maps flattened string indexes back to ProseMirror document positions.
- */
-type PositionResolver = (index: number) => number | null;
-
-/**
  * Final grouped inline diff exposed to downstream consumers.
  */
 export interface InlineDiffResult {
@@ -109,15 +106,15 @@ export interface InlineDiffResult {
 /**
  * Computes text-level additions and deletions between two sequences using the generic sequence diff, mapping back to document positions.
  *
- * @param oldContent Source tokens.
+ * @param oldContent Source tokens enriched with document offsets.
  * @param newContent Target tokens.
- * @param oldPositionResolver Maps indexes to the original document.
+ * @param oldParagraphEndPos Absolute document position at the end of the old paragraph (used for trailing inserts).
  * @returns List of grouped inline diffs with document positions and text content.
  */
 export function getInlineDiff(
   oldContent: InlineDiffToken[],
   newContent: InlineDiffToken[],
-  oldPositionResolver: PositionResolver,
+  oldParagraphEndPos: number,
 ): InlineDiffResult[] {
   const buildInlineDiff = (action: InlineAction, token: InlineDiffToken, oldIdx: number): RawDiff => {
     if (token.kind !== 'text') {
@@ -173,7 +170,7 @@ export function getInlineDiff(
     },
   });
 
-  return groupDiffs(diffs, oldPositionResolver);
+  return groupDiffs(diffs, oldContent, oldParagraphEndPos);
 }
 
 /**
@@ -235,13 +232,14 @@ type TextDiffGroup =
     };
 
 /**
- * Groups raw diff operations into contiguous ranges and converts serialized run attrs back to objects.
+ * Groups raw diff operations into contiguous ranges.
  *
  * @param diffs Raw diff operations from the sequence diff.
- * @param oldPositionResolver Maps text indexes to original document positions.
+ * @param oldTokens Flattened tokens from the old paragraph, used to derive document positions.
+ * @param oldParagraphEndPos Absolute document position marking the paragraph boundary.
  * @returns Grouped inline diffs with start/end document positions.
  */
-function groupDiffs(diffs: RawDiff[], oldPositionResolver: PositionResolver): InlineDiffResult[] {
+function groupDiffs(diffs: RawDiff[], oldTokens: InlineDiffToken[], oldParagraphEndPos: number): InlineDiffResult[] {
   const grouped: InlineDiffResult[] = [];
   let currentGroup: TextDiffGroup | null = null;
 
@@ -275,8 +273,8 @@ function groupDiffs(diffs: RawDiff[], oldPositionResolver: PositionResolver): In
       grouped.push({
         action: diff.action,
         kind: 'inlineNode',
-        startPos: oldPositionResolver(diff.idx),
-        endPos: oldPositionResolver(diff.idx),
+        startPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
+        endPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
         nodeType: diff.nodeType,
         ...(diff.action === 'modified'
           ? {
@@ -289,11 +287,11 @@ function groupDiffs(diffs: RawDiff[], oldPositionResolver: PositionResolver): In
       continue;
     }
 
-    if (!currentGroup || !canExtendGroup(currentGroup, diff, oldPositionResolver)) {
+    if (!currentGroup || !canExtendGroup(currentGroup, diff, oldTokens, oldParagraphEndPos)) {
       pushCurrentGroup();
-      currentGroup = createTextGroup(diff, oldPositionResolver);
+      currentGroup = createTextGroup(diff, oldTokens, oldParagraphEndPos);
     } else {
-      extendTextGroup(currentGroup, diff, oldPositionResolver);
+      extendTextGroup(currentGroup, diff, oldTokens, oldParagraphEndPos);
     }
   }
 
@@ -304,14 +302,14 @@ function groupDiffs(diffs: RawDiff[], oldPositionResolver: PositionResolver): In
 /**
  * Builds a fresh text diff group seeded with the current diff token.
  */
-function createTextGroup(diff: RawTextDiff, positionResolver: PositionResolver): TextDiffGroup {
+function createTextGroup(diff: RawTextDiff, oldTokens: InlineDiffToken[], oldParagraphEndPos: number): TextDiffGroup {
   const baseGroup =
     diff.action === 'modified'
       ? {
           action: diff.action,
           kind: 'text' as const,
-          startPos: positionResolver(diff.idx),
-          endPos: positionResolver(diff.idx),
+          startPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
+          endPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
           newText: diff.newText,
           oldText: diff.oldText,
           oldAttrs: diff.oldAttrs,
@@ -320,8 +318,8 @@ function createTextGroup(diff: RawTextDiff, positionResolver: PositionResolver):
       : {
           action: diff.action,
           kind: 'text' as const,
-          startPos: positionResolver(diff.idx),
-          endPos: positionResolver(diff.idx),
+          startPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
+          endPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
           text: diff.text,
           runAttrs: diff.runAttrs,
         };
@@ -333,8 +331,13 @@ function createTextGroup(diff: RawTextDiff, positionResolver: PositionResolver):
  * Expands the current text group with the incoming diff token.
  * Keeps start/end positions updated while concatenating text payloads.
  */
-function extendTextGroup(group: TextDiffGroup, diff: RawTextDiff, positionResolver: PositionResolver): void {
-  group.endPos = positionResolver(diff.idx);
+function extendTextGroup(
+  group: TextDiffGroup,
+  diff: RawTextDiff,
+  oldTokens: InlineDiffToken[],
+  oldParagraphEndPos: number,
+): void {
+  group.endPos = resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos);
   if (group.action === 'modified' && diff.action === 'modified') {
     group.newText += diff.newText;
     group.oldText += diff.oldText;
@@ -347,7 +350,12 @@ function extendTextGroup(group: TextDiffGroup, diff: RawTextDiff, positionResolv
  * Determines whether a text diff token can be merged into the current group.
  * Checks action, attributes, and adjacency constraints required by the grouping heuristic.
  */
-function canExtendGroup(group: TextDiffGroup, diff: RawTextDiff, positionResolver: PositionResolver): boolean {
+function canExtendGroup(
+  group: TextDiffGroup,
+  diff: RawTextDiff,
+  oldTokens: InlineDiffToken[],
+  oldParagraphEndPos: number,
+): boolean {
   if (group.action !== diff.action) {
     return false;
   }
@@ -364,12 +372,48 @@ function canExtendGroup(group: TextDiffGroup, diff: RawTextDiff, positionResolve
     return false;
   }
 
+  const diffPos = resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos);
   if (group.action === 'added') {
-    return group.startPos === positionResolver(diff.idx);
+    return group.startPos === diffPos;
   }
-  return (group.endPos ?? 0) + 1 === positionResolver(diff.idx);
+  if (diffPos == null || group.endPos == null) {
+    return false;
+  }
+  return group.endPos + 1 === diffPos;
 }
 
+/**
+ * Maps a raw diff index back to an absolute document position using the original token offsets.
+ *
+ * @param tokens Flattened tokens from the old paragraph.
+ * @param idx Index provided by the Myers diff output.
+ * @param paragraphEndPos Absolute document position marking the paragraph boundary; used when idx equals the token length.
+ * @returns Document position or null when the index is outside the known ranges.
+ */
+function resolveTokenPosition(tokens: InlineDiffToken[], idx: number, paragraphEndPos: number): number | null {
+  if (idx < 0) {
+    return null;
+  }
+  const token = tokens[idx];
+  if (token) {
+    if (token.kind === 'text') {
+      return token.offset ?? null;
+    }
+    return token.pos ?? null;
+  }
+  if (idx === tokens.length) {
+    return paragraphEndPos;
+  }
+  return null;
+}
+
+/**
+ * Compares two sets of inline attributes and determines if they are equal.
+ *
+ * @param a - The first set of attributes to compare.
+ * @param b - The second set of attributes to compare.
+ * @returns `true` if the attributes are equal, `false` otherwise.
+ */
 function areInlineAttrsEqual(a: Record<string, unknown> | undefined, b: Record<string, unknown> | undefined): boolean {
   return !getAttributesDiff(a ?? {}, b ?? {});
 }

@@ -7,10 +7,15 @@ vi.mock('./myers-diff.ts', async () => {
 });
 import { getInlineDiff } from './inline-diffing.ts';
 
-const buildTextRuns = (text, runAttrs = {}) =>
-  text.split('').map((char) => ({ char, runAttrs: { ...runAttrs }, kind: 'text' }));
+const buildTextRuns = (text, runAttrs = {}, offsetStart = 0) =>
+  text.split('').map((char, index) => ({
+    char,
+    runAttrs: { ...runAttrs },
+    kind: 'text',
+    offset: offsetStart + index,
+  }));
 
-const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }) => {
+const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }, pos = 0) => {
   const nodeAttrs = { ...attrs };
   return {
     kind: 'inlineNode',
@@ -21,22 +26,22 @@ const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }) => {
       toJSON: () => ({ type: 'link', attrs: nodeAttrs }),
     },
     nodeJSON: { type: 'link', attrs: nodeAttrs },
+    pos,
   };
 };
 
 describe('getInlineDiff', () => {
   it('returns an empty diff list when both strings are identical', () => {
-    const resolver = (index) => index;
-    const diffs = getInlineDiff(buildTextRuns('unchanged'), buildTextRuns('unchanged'), resolver);
+    const oldRuns = buildTextRuns('unchanged');
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('unchanged'), oldRuns.length);
 
     expect(diffs).toEqual([]);
   });
 
   it('detects text insertions and maps them to resolver positions', () => {
-    const oldResolver = (index) => index + 10;
-    const newResolver = (index) => index + 100;
-
-    const diffs = getInlineDiff(buildTextRuns('abc'), buildTextRuns('abXc'), oldResolver, newResolver);
+    const startOffset = 10;
+    const oldRuns = buildTextRuns('abc', {}, startOffset);
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('abXc', {}, startOffset), startOffset + oldRuns.length);
 
     expect(diffs).toEqual([
       {
@@ -51,10 +56,9 @@ describe('getInlineDiff', () => {
   });
 
   it('detects deletions and additions in the same diff sequence', () => {
-    const oldResolver = (index) => index + 5;
-    const newResolver = (index) => index + 20;
-
-    const diffs = getInlineDiff(buildTextRuns('abcd'), buildTextRuns('abXYd'), oldResolver, newResolver);
+    const startOffset = 5;
+    const oldRuns = buildTextRuns('abcd', {}, startOffset);
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('abXYd', {}, startOffset), startOffset + oldRuns.length);
 
     expect(diffs).toEqual([
       {
@@ -77,9 +81,8 @@ describe('getInlineDiff', () => {
   });
 
   it('marks attribute-only changes as modifications and surfaces attribute diffs', () => {
-    const resolver = (index) => index;
-
-    const diffs = getInlineDiff(buildTextRuns('a', { bold: true }), buildTextRuns('a', { italic: true }), resolver);
+    const oldRuns = buildTextRuns('a', { bold: true }, 0);
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('a', { italic: true }), oldRuns.length);
 
     expect(diffs).toEqual([
       {
@@ -99,9 +102,13 @@ describe('getInlineDiff', () => {
   });
 
   it('merges contiguous attribute edits that share the same diff metadata', () => {
-    const resolver = (index) => index + 5;
-
-    const diffs = getInlineDiff(buildTextRuns('ab', { bold: true }), buildTextRuns('ab', { bold: false }), resolver);
+    const startOffset = 5;
+    const oldRuns = buildTextRuns('ab', { bold: true }, startOffset);
+    const diffs = getInlineDiff(
+      oldRuns,
+      buildTextRuns('ab', { bold: false }, startOffset),
+      startOffset + oldRuns.length,
+    );
 
     expect(diffs).toEqual([
       {
@@ -123,12 +130,11 @@ describe('getInlineDiff', () => {
   });
 
   it('surfaces attribute diffs for inline node modifications', () => {
-    const resolver = (index) => index + 3;
     const sharedType = { name: 'link' };
-    const oldNode = buildInlineNodeToken({ href: 'https://old.example', label: 'Example' }, sharedType);
-    const newNode = buildInlineNodeToken({ href: 'https://new.example', label: 'Example' }, sharedType);
+    const oldNode = buildInlineNodeToken({ href: 'https://old.example', label: 'Example' }, sharedType, 3);
+    const newNode = buildInlineNodeToken({ href: 'https://new.example', label: 'Example' }, sharedType, 3);
 
-    const diffs = getInlineDiff([oldNode], [newNode], resolver);
+    const diffs = getInlineDiff([oldNode], [newNode], 4);
 
     expect(diffs).toEqual([
       {

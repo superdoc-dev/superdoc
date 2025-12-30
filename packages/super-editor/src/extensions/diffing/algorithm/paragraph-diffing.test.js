@@ -26,15 +26,30 @@ const createParagraphNode = (overrides = {}) => {
 
 const createParagraphInfo = (overrides = {}) => {
   const fullText = overrides.fullText ?? 'text';
-  const textTokens = overrides.text ?? buildRuns(fullText);
+  const paragraphPos = overrides.pos ?? 0;
+  const baseTokens =
+    overrides.text ??
+    buildRuns(fullText).map((token, index) => ({
+      ...token,
+      offset: paragraphPos + 1 + index,
+    }));
+  const textTokens = baseTokens.map((token, index) => {
+    if (token.kind === 'text' && token.offset == null) {
+      return { ...token, offset: paragraphPos + 1 + index };
+    }
+    if (token.kind === 'inlineNode' && token.pos == null) {
+      return { ...token, pos: paragraphPos + 1 + index };
+    }
+    return token;
+  });
 
   return {
     node: createParagraphNode(overrides.node),
-    pos: 0,
+    pos: paragraphPos,
     depth: 0,
     fullText,
     text: textTokens,
-    resolvePosition: (idx) => idx,
+    endPos: overrides.endPos ?? paragraphPos + 1 + fullText.length,
     ...overrides,
   };
 };
@@ -109,14 +124,19 @@ const createParagraphWithSegments = (segments, contentSize) => {
   };
 };
 
+const stripOffsets = (tokens) =>
+  tokens.map((token) =>
+    token.kind === 'text' ? { kind: token.kind, char: token.char, runAttrs: token.runAttrs } : token,
+  );
+
 describe('createParagraphSnapshot', () => {
   it('handles basic text nodes', () => {
     const mockParagraph = createParagraphWithSegments([{ text: 'Hello', start: 0, attrs: { bold: true } }], 5);
 
     const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(result.text).toEqual(buildRuns('Hello', { bold: true }));
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(4)).toBe(5);
+    expect(stripOffsets(result.text)).toEqual(buildRuns('Hello', { bold: true }));
+    expect(result.text[0]?.offset).toBe(1);
+    expect(result.text[4]?.offset).toBe(5);
   });
 
   it('handles leaf nodes with leafText', () => {
@@ -126,9 +146,9 @@ describe('createParagraphSnapshot', () => {
     );
 
     const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(result.text).toEqual(buildRuns('Leaf', { type: 'leaf' }));
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(3)).toBe(4);
+    expect(stripOffsets(result.text)).toEqual(buildRuns('Leaf', { type: 'leaf' }));
+    expect(result.text[0]?.offset).toBe(1);
+    expect(result.text[3]?.offset).toBe(4);
   });
 
   it('handles mixed content', () => {
@@ -138,10 +158,14 @@ describe('createParagraphSnapshot', () => {
     ]);
 
     const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(result.text).toEqual([...buildRuns('Hello', { bold: true }), ...buildRuns('Leaf', { italic: true })]);
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(5)).toBe(6);
-    expect(result.resolvePosition(9)).toBe(10);
+    expect(stripOffsets(result.text)).toEqual([
+      ...buildRuns('Hello', { bold: true }),
+      ...buildRuns('Leaf', { italic: true }),
+    ]);
+    expect(result.text[0]?.offset).toBe(1);
+    expect(result.text[5]?.offset).toBe(6);
+    expect(result.text[result.text.length - 1]?.offset).toBe(9);
+    expect(result.endPos).toBe(10);
   });
 
   it('handles empty content', () => {
@@ -149,7 +173,7 @@ describe('createParagraphSnapshot', () => {
 
     const result = createParagraphSnapshot(mockParagraph, 0, 0);
     expect(result.text).toEqual([]);
-    expect(result.resolvePosition(0)).toBe(1);
+    expect(result.endPos).toBe(1);
   });
 
   it('includes inline nodes that have no textual content', () => {
@@ -167,28 +191,26 @@ describe('createParagraphSnapshot', () => {
         type: 'tab',
         attrs: inlineAttrs,
       },
+      pos: 1,
     });
-    expect(result.text.slice(1)).toEqual(buildRuns('Text', { bold: false }));
-    expect(result.resolvePosition(0)).toBe(1);
-    expect(result.resolvePosition(1)).toBe(2);
+    expect(stripOffsets(result.text.slice(1))).toEqual(buildRuns('Text', { bold: false }));
+    expect(result.text[1]?.offset).toBe(2);
   });
 
   it('applies paragraph position offsets to the resolver', () => {
     const mockParagraph = createParagraphWithSegments([{ text: 'Nested', start: 0 }], 6);
 
     const result = createParagraphSnapshot(mockParagraph, 10, 0);
-    expect(result.text).toEqual(buildRuns('Nested', {}));
-    expect(result.resolvePosition(0)).toBe(11);
-    expect(result.resolvePosition(6)).toBe(17);
+    expect(stripOffsets(result.text)).toEqual(buildRuns('Nested', {}));
+    expect(result.text[0]?.offset).toBe(11);
+    expect(result.text[5]?.offset).toBe(16);
+    expect(result.endPos).toBe(17);
   });
 
   it('returns null when index is outside the flattened text array', () => {
     const mockParagraph = createParagraphWithSegments([{ text: 'Hi', start: 0 }], 2);
-    const { resolvePosition } = createParagraphSnapshot(mockParagraph, 0, 0);
-
-    expect(resolvePosition(-1)).toBeNull();
-    expect(resolvePosition(3)).toBeNull();
-    expect(resolvePosition(2)).toBe(3);
+    const result = createParagraphSnapshot(mockParagraph, 0, 0);
+    expect(result.endPos).toBe(3);
   });
 });
 

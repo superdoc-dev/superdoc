@@ -11,12 +11,18 @@ import {
 
 const buildRuns = (text, attrs = {}) => text.split('').map((char) => ({ char, runAttrs: attrs, kind: 'text' }));
 
-const createParagraphNode = (overrides = {}) => ({
-  type: { name: 'paragraph', ...(overrides.type || {}) },
-  attrs: {},
-  nodeSize: 5,
-  ...overrides,
-});
+const createParagraphNode = (overrides = {}) => {
+  const node = {
+    type: { name: 'paragraph', ...(overrides.type || {}) },
+    attrs: {},
+    nodeSize: 5,
+    ...overrides,
+  };
+  if (typeof node.toJSON !== 'function') {
+    node.toJSON = () => ({ type: node.type.name, attrs: node.attrs });
+  }
+  return node;
+};
 
 const createParagraphInfo = (overrides = {}) => {
   const fullText = overrides.fullText ?? 'text';
@@ -45,6 +51,12 @@ const createParagraphWithSegments = (segments, contentSize) => {
           typeName: segment.inlineNode.typeName ?? 'inline',
           attrs: segment.inlineNode.attrs ?? {},
           isLeaf: segment.inlineNode.isLeaf ?? true,
+          toJSON:
+            segment.inlineNode.toJSON ??
+            (() => ({
+              type: segment.inlineNode.typeName ?? 'inline',
+              attrs: segment.inlineNode.attrs ?? {},
+            })),
         },
       };
     }
@@ -82,6 +94,10 @@ const createParagraphWithSegments = (segments, contentSize) => {
               isLeaf: segment.inlineNode.isLeaf,
               type: { name: segment.inlineNode.typeName, spec: {} },
               attrs: segment.inlineNode.attrs,
+              toJSON: () => ({
+                type: segment.inlineNode.typeName,
+                attrs: segment.inlineNode.attrs,
+              }),
             },
             segment.start,
           );
@@ -143,21 +159,13 @@ describe('getParagraphContent', () => {
     ]);
 
     const result = getParagraphContent(mockParagraph);
-    expect(result.text[0]).toEqual({
+    expect(result.text[0]).toMatchObject({
       kind: 'inlineNode',
-      node: {
-        attrs: {
-          kind: 'tab',
-          width: 120,
-        },
-        isInline: true,
-        isLeaf: true,
-        type: {
-          name: 'tab',
-          spec: {},
-        },
-      },
       nodeType: 'tab',
+      nodeJSON: {
+        type: 'tab',
+        attrs: inlineAttrs,
+      },
     });
     expect(result.text.slice(1)).toEqual(buildRuns('Text', { bold: false }));
     expect(result.resolvePosition(0)).toBe(1);
@@ -224,7 +232,7 @@ describe('paragraph diff builders', () => {
     expect(buildAddedParagraphDiff(paragraph, previousNode)).toEqual({
       action: 'added',
       nodeType: 'paragraph',
-      node: paragraph.node,
+      nodeJSON: paragraph.node.toJSON(),
       text: 'Hello',
       pos: 14,
     });
@@ -236,7 +244,7 @@ describe('paragraph diff builders', () => {
     expect(buildDeletedParagraphDiff(paragraph)).toEqual({
       action: 'deleted',
       nodeType: 'paragraph',
-      node: paragraph.node,
+      nodeJSON: paragraph.node.toJSON(),
       oldText: 'Old text',
       pos: 7,
     });

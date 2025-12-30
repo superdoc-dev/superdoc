@@ -20,6 +20,7 @@ const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }) => {
       attrs: nodeAttrs,
       toJSON: () => ({ type: 'link', attrs: nodeAttrs }),
     },
+    nodeJSON: { type: 'link', attrs: nodeAttrs },
   };
 };
 
@@ -136,8 +137,8 @@ describe('getInlineDiff', () => {
         nodeType: 'link',
         startPos: 3,
         endPos: 3,
-        oldNode: oldNode.node,
-        newNode: newNode.node,
+        oldNodeJSON: oldNode.nodeJSON,
+        newNodeJSON: newNode.nodeJSON,
         attrsDiff: {
           added: {},
           deleted: {},

@@ -9,8 +9,7 @@ import {
   canTreatAsModification,
 } from './paragraph-diffing.ts';
 
-const buildRuns = (text, attrs = {}) =>
-  text.split('').map((char) => ({ char, runAttrs: JSON.stringify(attrs), kind: 'text' }));
+const buildRuns = (text, attrs = {}) => text.split('').map((char) => ({ char, runAttrs: attrs, kind: 'text' }));
 
 const createParagraphNode = (overrides = {}) => ({
   type: { name: 'paragraph', ...(overrides.type || {}) },

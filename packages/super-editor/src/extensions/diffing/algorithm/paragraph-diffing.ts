@@ -32,21 +32,21 @@ interface ParagraphDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
 /**
  * Diff payload produced when a paragraph is inserted.
  */
-export type AddedParagraphDiff = ParagraphDiffBase<'added'> & {
+type AddedParagraphDiff = ParagraphDiffBase<'added'> & {
   text: string;
 };
 
 /**
  * Diff payload produced when a paragraph is deleted.
  */
-export type DeletedParagraphDiff = ParagraphDiffBase<'deleted'> & {
+type DeletedParagraphDiff = ParagraphDiffBase<'deleted'> & {
   oldText: string;
 };
 
 /**
  * Diff payload emitted when a paragraph changes, including inline edits.
  */
-export type ModifiedParagraphDiff = ParagraphDiffBase<'modified'> & {
+type ModifiedParagraphDiff = ParagraphDiffBase<'modified'> & {
   oldText: string;
   newText: string;
   contentDiff: InlineDiffResult[];

@@ -7,6 +7,17 @@ export const Diffing = Extension.create({
 
   addCommands() {
     return {
+      /**
+       * Compares the current document against `updatedDocument` and returns the diffs required to
+       * transform the former into the latter.
+       *
+       * These diffs are intended to be replayed on-top of the old document, so apply the
+       * returned list in reverse (last entry first) to keep insertions that share the same
+       * `pos` anchor in the correct order.
+       *
+       * @param {import('prosemirror-model').Node} updatedDocument
+       * @returns {import('./computeDiff.ts').NodeDiff[]}
+       */
       compareDocuments:
         (updatedDocument) =>
         ({ state }) => {

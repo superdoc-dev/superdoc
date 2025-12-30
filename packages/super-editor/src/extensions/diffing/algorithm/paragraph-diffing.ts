@@ -132,7 +132,7 @@ export function getParagraphContent(paragraph: PMNode, paragraphPos = 0): Paragr
         const chars = nodeText.split('').map((char) => ({
           kind: 'text',
           char,
-          runAttrs: JSON.stringify(runAttrs),
+          runAttrs,
         }));
         content.push(...(chars as ParagraphContentToken[]));
         return;

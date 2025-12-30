@@ -8,7 +8,7 @@ vi.mock('./myers-diff.ts', async () => {
 import { getInlineDiff } from './inline-diffing.ts';
 
 const buildTextRuns = (text, runAttrs = {}) =>
-  text.split('').map((char) => ({ char, runAttrs: JSON.stringify(runAttrs), kind: 'text' }));
+  text.split('').map((char) => ({ char, runAttrs: { ...runAttrs }, kind: 'text' }));
 
 const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }) => {
   const nodeAttrs = { ...attrs };

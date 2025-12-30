@@ -13,7 +13,7 @@ type InlineAction = 'added' | 'deleted' | 'modified';
 export type InlineTextToken = {
   kind: 'text';
   char: string;
-  runAttrs: string;
+  runAttrs: Record<string, unknown>;
 };
 
 /**
@@ -40,7 +40,7 @@ type RawTextDiff =
       idx: number;
       kind: 'text';
       text: string;
-      runAttrs: string;
+      runAttrs: Record<string, unknown>;
     }
   | {
       action: 'modified';
@@ -48,8 +48,8 @@ type RawTextDiff =
       kind: 'text';
       newText: string;
       oldText: string;
-      oldAttrs: string;
-      newAttrs: string;
+      oldAttrs: Record<string, unknown>;
+      newAttrs: Record<string, unknown>;
     };
 
 /**
@@ -195,12 +195,12 @@ function inlineComparator(a: InlineDiffToken, b: InlineDiffToken): boolean {
  */
 function shouldProcessEqualAsModification(oldToken: InlineDiffToken, newToken: InlineDiffToken): boolean {
   if (oldToken.kind === 'text' && newToken.kind === 'text') {
-    return oldToken.runAttrs !== newToken.runAttrs;
+    return Boolean(getAttributesDiff(oldToken.runAttrs, newToken.runAttrs));
   }
 
   if (oldToken.kind === 'inlineNode' && newToken.kind === 'inlineNode') {
-    const oldJSON = oldToken.toJSON?.() ?? oldToken.node.toJSON();
-    const newJSON = newToken.toJSON?.() ?? newToken.node.toJSON();
+    const oldJSON = oldToken.node.toJSON();
+    const newJSON = newToken.node.toJSON();
     return JSON.stringify(oldJSON) !== JSON.stringify(newJSON);
   }
 
@@ -217,7 +217,7 @@ type TextDiffGroup =
       startPos: number | null;
       endPos: number | null;
       text: string;
-      runAttrs: string;
+      runAttrs: Record<string, unknown>;
     }
   | {
       action: 'modified';
@@ -226,8 +226,8 @@ type TextDiffGroup =
       endPos: number | null;
       newText: string;
       oldText: string;
-      oldAttrs: string;
-      newAttrs: string;
+      oldAttrs: Record<string, unknown>;
+      newAttrs: Record<string, unknown>;
     };
 
 /**
@@ -253,14 +253,12 @@ function groupDiffs(diffs: RawDiff[], oldPositionResolver: PositionResolver): In
     };
 
     if (currentGroup.action === 'modified') {
-      const oldAttrs = JSON.parse(currentGroup.oldAttrs);
-      const newAttrs = JSON.parse(currentGroup.newAttrs);
       result.oldText = currentGroup.oldText;
       result.newText = currentGroup.newText;
-      result.runAttrsDiff = getAttributesDiff(oldAttrs, newAttrs);
+      result.runAttrsDiff = getAttributesDiff(currentGroup.oldAttrs, currentGroup.newAttrs);
     } else {
       result.text = currentGroup.text;
-      result.runAttrs = JSON.parse(currentGroup.runAttrs);
+      result.runAttrs = currentGroup.runAttrs;
     }
 
     grouped.push(result);
@@ -351,11 +349,11 @@ function canExtendGroup(group: TextDiffGroup, diff: RawTextDiff, positionResolve
   }
 
   if (group.action === 'modified' && diff.action === 'modified') {
-    if (group.oldAttrs !== diff.oldAttrs || group.newAttrs !== diff.newAttrs) {
+    if (!areInlineAttrsEqual(group.oldAttrs, diff.oldAttrs) || !areInlineAttrsEqual(group.newAttrs, diff.newAttrs)) {
       return false;
     }
   } else if (group.action !== 'modified' && diff.action !== 'modified') {
-    if (group.runAttrs !== diff.runAttrs) {
+    if (!areInlineAttrsEqual(group.runAttrs, diff.runAttrs)) {
       return false;
     }
   } else {
@@ -366,4 +364,8 @@ function canExtendGroup(group: TextDiffGroup, diff: RawTextDiff, positionResolve
     return group.startPos === positionResolver(diff.idx);
   }
   return (group.endPos ?? 0) + 1 === positionResolver(diff.idx);
+}
+
+function areInlineAttrsEqual(a: Record<string, unknown> | undefined, b: Record<string, unknown> | undefined): boolean {
+  return !getAttributesDiff(a ?? {}, b ?? {});
 }

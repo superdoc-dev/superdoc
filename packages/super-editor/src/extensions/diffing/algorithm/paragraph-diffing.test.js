@@ -157,6 +157,7 @@ describe('getParagraphContent', () => {
           spec: {},
         },
       },
+      nodeType: 'tab',
     });
     expect(result.text.slice(1)).toEqual(buildRuns('Text', { bold: false }));
     expect(result.resolvePosition(0)).toBe(1);

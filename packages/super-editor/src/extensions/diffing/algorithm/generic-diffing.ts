@@ -76,6 +76,7 @@ export function diffNodes(oldRoot: PMNode, newRoot: PMNode): NodeDiff[] {
   const newNodes = normalizeNodes(newRoot);
 
   const addedNodesSet = new Set<PMNode>();
+  const deletedNodesSet = new Set<PMNode>();
   return diffSequences<NodeInfo, NodeDiff, NodeDiff, NodeDiff>(oldNodes, newNodes, {
     comparator: nodeComparator,
     reorderOperations: reorderDiffOperations,
@@ -83,7 +84,7 @@ export function diffNodes(oldRoot: PMNode, newRoot: PMNode): NodeDiff[] {
     canTreatAsModification,
     buildAdded: (nodeInfo, _oldIdx, previousOldNodeInfo) =>
       buildAddedDiff(nodeInfo, previousOldNodeInfo, addedNodesSet),
-    buildDeleted: buildDeletedDiff,
+    buildDeleted: (nodeInfo) => buildDeletedDiff(nodeInfo, deletedNodesSet),
     buildModified: buildModifiedDiff,
   });
 }
@@ -192,10 +193,17 @@ function buildAddedDiff(
 /**
  * Builds the diff payload for a deleted node.
  */
-function buildDeletedDiff(nodeInfo: NodeInfo): NodeDiff {
+function buildDeletedDiff(nodeInfo: NodeInfo, deletedNodesSet: Set<PMNode>): NodeDiff | null {
+  if (deletedNodesSet.has(nodeInfo.node)) {
+    return null;
+  }
+  deletedNodesSet.add(nodeInfo.node);
   if (isParagraphNodeInfo(nodeInfo)) {
     return buildDeletedParagraphDiff(nodeInfo);
   }
+  nodeInfo.node.descendants((childNode) => {
+    deletedNodesSet.add(childNode);
+  });
   return {
     action: 'deleted',
     nodeType: nodeInfo.node.type.name,

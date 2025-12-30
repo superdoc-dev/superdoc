@@ -149,6 +149,22 @@ describe('diffParagraphs', () => {
     expect(additions[0].nodeType).toBe('figure');
   });
 
+  it('deduplicates deleted nodes and their descendants', () => {
+    const childNode = buildSimpleNode('image');
+    const parentNode = buildSimpleNode('figure', {}, { children: [childNode] });
+    const paragraph = createParagraph('Base paragraph', {}, { pos: 0 });
+    const figurePos = paragraph.pos + paragraph.node.nodeSize;
+
+    const diffs = diffNodes(
+      createDocFromNodes([paragraph, { node: parentNode, pos: figurePos }, { node: childNode, pos: figurePos + 1 }]),
+      createDocFromNodes([paragraph]),
+    );
+
+    const deletions = diffs.filter((diff) => diff.action === 'deleted');
+    expect(deletions).toHaveLength(1);
+    expect(deletions[0].nodeType).toBe('figure');
+  });
+
   it('computes insertion position based on the previous old node', () => {
     const oldParagraph = createParagraph('Hello!', {}, { pos: 0 });
     const newParagraph = createParagraph('Hello!', {}, { pos: 0 });

@@ -238,12 +238,7 @@ export function buildModifiedParagraphDiff(
   oldParagraph: ParagraphResolvedSnapshot,
   newParagraph: ParagraphResolvedSnapshot,
 ): ModifiedParagraphDiff | null {
-  const contentDiff = getInlineDiff(
-    oldParagraph.text,
-    newParagraph.text,
-    oldParagraph.resolvePosition,
-    newParagraph.resolvePosition,
-  );
+  const contentDiff = getInlineDiff(oldParagraph.text, newParagraph.text, oldParagraph.resolvePosition);
 
   const attrsDiff = getAttributesDiff(oldParagraph.node.attrs, newParagraph.node.attrs);
   if (contentDiff.length === 0 && !attrsDiff) {

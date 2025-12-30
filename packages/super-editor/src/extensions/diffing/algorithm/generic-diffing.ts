@@ -1,15 +1,14 @@
 import type { Node as PMNode } from 'prosemirror-model';
 import {
-  getParagraphContent,
+  createParagraphSnapshot,
   paragraphComparator,
   canTreatAsModification as canTreatParagraphDeletionInsertionAsModification,
   shouldProcessEqualAsModification as shouldProcessEqualParagraphsAsModification,
   buildAddedParagraphDiff,
   buildDeletedParagraphDiff,
   buildModifiedParagraphDiff,
-  type ParagraphContentToken,
   type ParagraphDiff,
-  type ParagraphResolvedSnapshot,
+  type ParagraphNodeInfo,
 } from './paragraph-diffing.ts';
 import { diffSequences, reorderDiffOperations } from './sequence-diffing.ts';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
@@ -26,50 +25,43 @@ type BaseNodeInfo = {
 };
 
 /**
- * Paragraph-specific node info enriched with textual content and resolvers.
- */
-type ParagraphNodeInfo = ParagraphResolvedSnapshot;
-/**
  * Union describing every node processed by the generic diff.
  */
 type NodeInfo = BaseNodeInfo | ParagraphNodeInfo;
 
+interface NodeDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
+  action: Action;
+  nodeType: string;
+  pos: number;
+}
+
 /**
  * Diff payload describing an inserted non-paragraph node.
  */
-interface NonParagraphAddedDiff {
-  action: 'added';
-  nodeType: string;
+interface NodeAddedDiff extends NodeDiffBase<'added'> {
   nodeJSON: NodeJSON;
-  pos: number;
 }
 
 /**
  * Diff payload describing a deleted non-paragraph node.
  */
-interface NonParagraphDeletedDiff {
-  action: 'deleted';
-  nodeType: string;
+interface NodeDeletedDiff extends NodeDiffBase<'deleted'> {
   nodeJSON: NodeJSON;
-  pos: number;
 }
 
 /**
  * Diff payload describing an attribute-only change on non-paragraph nodes.
  */
-interface NonParagraphModifiedDiff {
-  action: 'modified';
-  nodeType: string;
+interface NodeModifiedDiff extends NodeDiffBase<'modified'> {
   oldNodeJSON: NodeJSON;
   newNodeJSON: NodeJSON;
-  pos: number;
   attrsDiff: AttributesDiff;
 }
 
 /**
  * Union of every diff type emitted by the generic diffing layer.
  */
-export type NodeDiff = ParagraphDiff | NonParagraphAddedDiff | NonParagraphDeletedDiff | NonParagraphModifiedDiff;
+export type NodeDiff = ParagraphDiff | NodeAddedDiff | NodeDeletedDiff | NodeModifiedDiff;
 
 /**
  * Produces a sequence diff between two ProseMirror documents, flattening paragraphs for inline-aware comparisons.
@@ -105,26 +97,13 @@ function normalizeNodes(pmDoc: PMNode): NodeInfo[] {
     const depth = parentDepth + 1;
     depthMap.set(node, depth);
     if (node.type.name === 'paragraph') {
-      const { text, resolvePosition } = getParagraphContent(node, pos);
-      const fullText = getFullText(text);
-      nodes.push({
-        node,
-        depth,
-        pos,
-        text,
-        resolvePosition,
-        fullText,
-      });
+      nodes.push(createParagraphSnapshot(node, pos, depth));
       return false;
     }
     nodes.push({ node, pos, depth });
     return undefined;
   });
   return nodes;
-}
-
-function getFullText(tokens: ParagraphContentToken[]): string {
-  return tokens.map((token) => (token.kind === 'text' ? token.char : '')).join('');
 }
 
 /**

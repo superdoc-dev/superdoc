@@ -3,95 +3,62 @@ import { getInlineDiff, type InlineDiffToken, type InlineDiffResult } from './in
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
 import { levenshteinDistance } from './similarity.ts';
 
-type NodeJSON = ReturnType<PMNode['toJSON']>;
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
 const SIMILARITY_THRESHOLD = 0.65;
 const MIN_LENGTH_FOR_SIMILARITY = 4;
 
-/**
- * Flattened token emitted from a paragraph. Delegates to inline diff tokens.
- */
-export type ParagraphContentToken = InlineDiffToken;
+type NodeJSON = ReturnType<PMNode['toJSON']>;
+
 /**
  * Maps flattened indexes back to the ProseMirror document.
  */
 export type PositionResolver = (index: number) => number | null;
 
 /**
- * Internal bookkeeping entry that remembers the start/end indexes for shallow nodes.
+ * Rich snapshot of a paragraph node with flattened content and helpers.
  */
-interface ParagraphSegment {
-  start: number;
-  end: number;
-  pos: number;
-}
-
-/**
- * Computed textual representation of a paragraph plus its index resolver.
- */
-export interface ParagraphContent {
-  text: ParagraphContentToken[];
-  resolvePosition: PositionResolver;
-}
-
-/**
- * Bare reference to a paragraph node and its document position.
- */
-export interface ParagraphNodeReference {
+export interface ParagraphNodeInfo {
   node: PMNode;
   pos: number;
   depth: number;
-}
-
-/**
- * Snapshot of a paragraph that includes its flattened text form.
- */
-export interface ParagraphSnapshot extends ParagraphNodeReference {
+  text: InlineDiffToken[];
+  resolvePosition: PositionResolver;
   fullText: string;
 }
 
 /**
- * Paragraph snapshot extended with the tokenized content and resolver.
+ * Base shape shared by every paragraph diff payload.
  */
-export interface ParagraphResolvedSnapshot extends ParagraphSnapshot {
-  text: ParagraphContentToken[];
-  resolvePosition: PositionResolver;
+interface ParagraphDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
+  action: Action;
+  nodeType: string;
+  nodeJSON: NodeJSON;
+  pos: number;
 }
 
 /**
  * Diff payload produced when a paragraph is inserted.
  */
-export interface AddedParagraphDiff {
-  action: 'added';
-  nodeType: string;
-  nodeJSON: NodeJSON;
+export type AddedParagraphDiff = ParagraphDiffBase<'added'> & {
   text: string;
-  pos: number;
-}
+};
 
 /**
  * Diff payload produced when a paragraph is deleted.
  */
-export interface DeletedParagraphDiff {
-  action: 'deleted';
-  nodeType: string;
-  nodeJSON: NodeJSON;
+export type DeletedParagraphDiff = ParagraphDiffBase<'deleted'> & {
   oldText: string;
-  pos: number;
-}
+};
 
 /**
  * Diff payload emitted when a paragraph changes, including inline edits.
  */
-export interface ModifiedParagraphDiff {
-  action: 'modified';
-  nodeType: string;
+export type ModifiedParagraphDiff = ParagraphDiffBase<'modified'> & {
   oldText: string;
   newText: string;
-  pos: number;
   contentDiff: InlineDiffResult[];
   attrsDiff: AttributesDiff | null;
-}
+};
 
 /**
  * Union of every diff variant the paragraph diffing logic can produce.
@@ -99,15 +66,38 @@ export interface ModifiedParagraphDiff {
 export type ParagraphDiff = AddedParagraphDiff | DeletedParagraphDiff | ModifiedParagraphDiff;
 
 /**
- * Flattens a paragraph node into text and provides a resolver to map string indices back to document positions.
+ * Creates a reusable snapshot that stores flattened paragraph content plus position metadata.
  *
  * @param paragraph Paragraph node to flatten.
  * @param paragraphPos Position of the paragraph in the document.
- * @returns Concatenated text tokens and a resolver that maps indexes to document positions.
+ * @param depth Depth of the paragraph within the document tree.
+ * @returns Snapshot containing tokens, resolver, and derived metadata.
  */
-export function getParagraphContent(paragraph: PMNode, paragraphPos = 0): ParagraphContent {
-  const content: ParagraphContentToken[] = [];
-  const segments: ParagraphSegment[] = [];
+export function createParagraphSnapshot(paragraph: PMNode, paragraphPos: number, depth: number): ParagraphNodeInfo {
+  const { text, resolvePosition } = buildParagraphContent(paragraph, paragraphPos);
+  return {
+    node: paragraph,
+    pos: paragraphPos,
+    depth,
+    text,
+    resolvePosition,
+    fullText: text.map((token) => (token.kind === 'text' ? token.char : '')).join(''),
+  };
+}
+
+/**
+ * Flattens a paragraph node into inline diff tokens and a resolver that tracks document positions.
+ *
+ * @param paragraph Paragraph node being tokenized.
+ * @param paragraphPos Absolute document position for the paragraph; used to offset resolver results.
+ * @returns Flattened tokens plus a resolver that maps token indexes back to document positions.
+ */
+function buildParagraphContent(
+  paragraph: PMNode,
+  paragraphPos = 0,
+): { text: InlineDiffToken[]; resolvePosition: PositionResolver } {
+  const content: InlineDiffToken[] = [];
+  const segments: Array<{ start: number; end: number; pos: number }> = [];
 
   paragraph.nodesBetween(
     0,
@@ -135,7 +125,7 @@ export function getParagraphContent(paragraph: PMNode, paragraphPos = 0): Paragr
           char,
           runAttrs,
         }));
-        content.push(...(chars as ParagraphContentToken[]));
+        content.push(...(chars as InlineDiffToken[]));
         return;
       }
 
@@ -179,8 +169,8 @@ export function getParagraphContent(paragraph: PMNode, paragraphPos = 0): Paragr
  * @returns True when the serialized JSON payload differs.
  */
 export function shouldProcessEqualAsModification(
-  oldParagraph: ParagraphNodeReference,
-  newParagraph: ParagraphNodeReference,
+  oldParagraph: ParagraphNodeInfo,
+  newParagraph: ParagraphNodeInfo,
 ): boolean {
   return JSON.stringify(oldParagraph.node.toJSON()) !== JSON.stringify(newParagraph.node.toJSON());
 }
@@ -188,7 +178,7 @@ export function shouldProcessEqualAsModification(
 /**
  * Compares two paragraphs for identity based on paraId or text content.
  */
-export function paragraphComparator(oldParagraph: ParagraphSnapshot, newParagraph: ParagraphSnapshot): boolean {
+export function paragraphComparator(oldParagraph: ParagraphNodeInfo, newParagraph: ParagraphNodeInfo): boolean {
   const oldId = oldParagraph?.node?.attrs?.paraId;
   const newId = newParagraph?.node?.attrs?.paraId;
   if (oldId && newId && oldId === newId) {
@@ -201,8 +191,8 @@ export function paragraphComparator(oldParagraph: ParagraphSnapshot, newParagrap
  * Builds a normalized payload describing a paragraph addition, ensuring all consumers receive the same metadata shape.
  */
 export function buildAddedParagraphDiff(
-  paragraph: ParagraphSnapshot,
-  previousOldNodeInfo?: ParagraphNodeReference,
+  paragraph: ParagraphNodeInfo,
+  previousOldNodeInfo?: Pick<ParagraphNodeInfo, 'node' | 'pos' | 'depth'>,
 ): AddedParagraphDiff {
   let pos;
   if (paragraph.depth === previousOldNodeInfo?.depth) {
@@ -224,7 +214,7 @@ export function buildAddedParagraphDiff(
 /**
  * Builds a normalized payload describing a paragraph deletion so diff consumers can show removals with all context.
  */
-export function buildDeletedParagraphDiff(paragraph: ParagraphSnapshot): DeletedParagraphDiff {
+export function buildDeletedParagraphDiff(paragraph: ParagraphNodeInfo): DeletedParagraphDiff {
   return {
     action: 'deleted',
     nodeType: paragraph.node.type.name,
@@ -238,8 +228,8 @@ export function buildDeletedParagraphDiff(paragraph: ParagraphSnapshot): Deleted
  * Builds the payload for a paragraph modification, including text-level diffs, so renderers can highlight edits inline.
  */
 export function buildModifiedParagraphDiff(
-  oldParagraph: ParagraphResolvedSnapshot,
-  newParagraph: ParagraphResolvedSnapshot,
+  oldParagraph: ParagraphNodeInfo,
+  newParagraph: ParagraphNodeInfo,
 ): ModifiedParagraphDiff | null {
   const contentDiff = getInlineDiff(oldParagraph.text, newParagraph.text, oldParagraph.resolvePosition);
 
@@ -251,6 +241,7 @@ export function buildModifiedParagraphDiff(
   return {
     action: 'modified',
     nodeType: oldParagraph.node.type.name,
+    nodeJSON: oldParagraph.node.toJSON(),
     oldText: oldParagraph.fullText,
     newText: newParagraph.fullText,
     pos: oldParagraph.pos,
@@ -262,7 +253,7 @@ export function buildModifiedParagraphDiff(
 /**
  * Decides whether a delete/insert pair should be reinterpreted as a modification to minimize noisy diff output.
  */
-export function canTreatAsModification(oldParagraph: ParagraphSnapshot, newParagraph: ParagraphSnapshot): boolean {
+export function canTreatAsModification(oldParagraph: ParagraphNodeInfo, newParagraph: ParagraphNodeInfo): boolean {
   if (paragraphComparator(oldParagraph, newParagraph)) {
     return true;
   }

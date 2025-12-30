@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  getParagraphContent,
+  createParagraphSnapshot,
   shouldProcessEqualAsModification,
   paragraphComparator,
   buildAddedParagraphDiff,
@@ -31,6 +31,7 @@ const createParagraphInfo = (overrides = {}) => {
   return {
     node: createParagraphNode(overrides.node),
     pos: 0,
+    depth: 0,
     fullText,
     text: textTokens,
     resolvePosition: (idx) => idx,
@@ -108,11 +109,11 @@ const createParagraphWithSegments = (segments, contentSize) => {
   };
 };
 
-describe('getParagraphContent', () => {
+describe('createParagraphSnapshot', () => {
   it('handles basic text nodes', () => {
     const mockParagraph = createParagraphWithSegments([{ text: 'Hello', start: 0, attrs: { bold: true } }], 5);
 
-    const result = getParagraphContent(mockParagraph);
+    const result = createParagraphSnapshot(mockParagraph, 0, 0);
     expect(result.text).toEqual(buildRuns('Hello', { bold: true }));
     expect(result.resolvePosition(0)).toBe(1);
     expect(result.resolvePosition(4)).toBe(5);
@@ -124,7 +125,7 @@ describe('getParagraphContent', () => {
       4,
     );
 
-    const result = getParagraphContent(mockParagraph);
+    const result = createParagraphSnapshot(mockParagraph, 0, 0);
     expect(result.text).toEqual(buildRuns('Leaf', { type: 'leaf' }));
     expect(result.resolvePosition(0)).toBe(1);
     expect(result.resolvePosition(3)).toBe(4);
@@ -136,7 +137,7 @@ describe('getParagraphContent', () => {
       { leafText: () => 'Leaf', start: 5, attrs: { italic: true } },
     ]);
 
-    const result = getParagraphContent(mockParagraph);
+    const result = createParagraphSnapshot(mockParagraph, 0, 0);
     expect(result.text).toEqual([...buildRuns('Hello', { bold: true }), ...buildRuns('Leaf', { italic: true })]);
     expect(result.resolvePosition(0)).toBe(1);
     expect(result.resolvePosition(5)).toBe(6);
@@ -146,7 +147,7 @@ describe('getParagraphContent', () => {
   it('handles empty content', () => {
     const mockParagraph = createParagraphWithSegments([], 0);
 
-    const result = getParagraphContent(mockParagraph);
+    const result = createParagraphSnapshot(mockParagraph, 0, 0);
     expect(result.text).toEqual([]);
     expect(result.resolvePosition(0)).toBe(1);
   });
@@ -158,7 +159,7 @@ describe('getParagraphContent', () => {
       { text: 'Text', start: 1, attrs: { bold: false } },
     ]);
 
-    const result = getParagraphContent(mockParagraph);
+    const result = createParagraphSnapshot(mockParagraph, 0, 0);
     expect(result.text[0]).toMatchObject({
       kind: 'inlineNode',
       nodeType: 'tab',
@@ -175,7 +176,7 @@ describe('getParagraphContent', () => {
   it('applies paragraph position offsets to the resolver', () => {
     const mockParagraph = createParagraphWithSegments([{ text: 'Nested', start: 0 }], 6);
 
-    const result = getParagraphContent(mockParagraph, 10);
+    const result = createParagraphSnapshot(mockParagraph, 10, 0);
     expect(result.text).toEqual(buildRuns('Nested', {}));
     expect(result.resolvePosition(0)).toBe(11);
     expect(result.resolvePosition(6)).toBe(17);
@@ -183,7 +184,7 @@ describe('getParagraphContent', () => {
 
   it('returns null when index is outside the flattened text array', () => {
     const mockParagraph = createParagraphWithSegments([{ text: 'Hi', start: 0 }], 2);
-    const { resolvePosition } = getParagraphContent(mockParagraph);
+    const { resolvePosition } = createParagraphSnapshot(mockParagraph, 0, 0);
 
     expect(resolvePosition(-1)).toBeNull();
     expect(resolvePosition(3)).toBeNull();
@@ -227,7 +228,7 @@ describe('paragraph diff builders', () => {
       node: createParagraphNode({ type: { name: 'paragraph' } }),
       fullText: 'Hello',
     });
-    const previousNode = { pos: 10, node: { nodeSize: 4 } };
+    const previousNode = { pos: 10, depth: 0, node: { nodeSize: 4 } };
 
     expect(buildAddedParagraphDiff(paragraph, previousNode)).toEqual({
       action: 'added',
@@ -269,6 +270,7 @@ describe('paragraph diff builders', () => {
     expect(diff).toMatchObject({
       action: 'modified',
       nodeType: 'paragraph',
+      nodeJSON: oldParagraph.node.toJSON(),
       oldText: 'foo',
       newText: 'bar',
       pos: 5,
@@ -298,6 +300,7 @@ describe('paragraph diff builders', () => {
     expect(diff).not.toBeNull();
     expect(diff.contentDiff).toEqual([]);
     expect(diff.attrsDiff?.modified).toHaveProperty('align');
+    expect(diff.nodeJSON).toEqual(oldParagraph.node.toJSON());
   });
 });
 

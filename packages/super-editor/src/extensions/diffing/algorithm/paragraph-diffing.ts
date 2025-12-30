@@ -25,7 +25,6 @@ export interface ParagraphNodeInfo {
 interface ParagraphDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
   action: Action;
   nodeType: string;
-  nodeJSON: NodeJSON;
   pos: number;
 }
 
@@ -33,6 +32,7 @@ interface ParagraphDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
  * Diff payload produced when a paragraph is inserted.
  */
 type AddedParagraphDiff = ParagraphDiffBase<'added'> & {
+  nodeJSON: NodeJSON;
   text: string;
 };
 
@@ -40,6 +40,7 @@ type AddedParagraphDiff = ParagraphDiffBase<'added'> & {
  * Diff payload produced when a paragraph is deleted.
  */
 type DeletedParagraphDiff = ParagraphDiffBase<'deleted'> & {
+  nodeJSON: NodeJSON;
   oldText: string;
 };
 
@@ -47,6 +48,8 @@ type DeletedParagraphDiff = ParagraphDiffBase<'deleted'> & {
  * Diff payload emitted when a paragraph changes, including inline edits.
  */
 type ModifiedParagraphDiff = ParagraphDiffBase<'modified'> & {
+  oldNodeJSON: NodeJSON;
+  newNodeJSON: NodeJSON;
   oldText: string;
   newText: string;
   contentDiff: InlineDiffResult[];
@@ -205,7 +208,8 @@ export function buildModifiedParagraphDiff(
   return {
     action: 'modified',
     nodeType: oldParagraph.node.type.name,
-    nodeJSON: oldParagraph.node.toJSON(),
+    oldNodeJSON: oldParagraph.node.toJSON(),
+    newNodeJSON: newParagraph.node.toJSON(),
     oldText: oldParagraph.fullText,
     newText: newParagraph.fullText,
     pos: oldParagraph.pos,

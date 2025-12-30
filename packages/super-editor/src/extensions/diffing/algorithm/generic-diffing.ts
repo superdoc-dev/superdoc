@@ -12,6 +12,7 @@ import {
 } from './paragraph-diffing.ts';
 import { diffSequences, reorderDiffOperations } from './sequence-diffing.ts';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
+import { getInsertionPos } from './diff-utils.ts';
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
 
@@ -168,19 +169,11 @@ function buildAddedDiff(
     addedNodesSet.add(childNode);
   });
 
-  let pos;
-  if (nodeInfo.depth === previousOldNodeInfo?.depth) {
-    const previousPos = previousOldNodeInfo?.pos ?? -1;
-    const previousSize = previousOldNodeInfo?.node.nodeSize ?? 0;
-    pos = previousPos >= 0 ? previousPos + previousSize : 0;
-  } else {
-    pos = (previousOldNodeInfo?.pos ?? -1) + 1;
-  }
   return {
     action: 'added',
     nodeType: nodeInfo.node.type.name,
     nodeJSON: nodeInfo.node.toJSON(),
-    pos,
+    pos: getInsertionPos(nodeInfo.depth, previousOldNodeInfo),
   };
 }
 

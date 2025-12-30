@@ -1,6 +1,7 @@
 import type { Node as PMNode } from 'prosemirror-model';
 import { getInlineDiff, type InlineDiffToken, type InlineDiffResult } from './inline-diffing.ts';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
+import { getInsertionPos } from './diff-utils.ts';
 import { levenshteinDistance } from './similarity.ts';
 
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
@@ -194,20 +195,12 @@ export function buildAddedParagraphDiff(
   paragraph: ParagraphNodeInfo,
   previousOldNodeInfo?: Pick<ParagraphNodeInfo, 'node' | 'pos' | 'depth'>,
 ): AddedParagraphDiff {
-  let pos;
-  if (paragraph.depth === previousOldNodeInfo?.depth) {
-    const previousPos = previousOldNodeInfo?.pos ?? -1;
-    const previousSize = previousOldNodeInfo?.node.nodeSize ?? 0;
-    pos = previousPos >= 0 ? previousPos + previousSize : 0;
-  } else {
-    pos = (previousOldNodeInfo?.pos ?? -1) + 1;
-  }
   return {
     action: 'added',
     nodeType: paragraph.node.type.name,
     nodeJSON: paragraph.node.toJSON(),
     text: paragraph.fullText,
-    pos,
+    pos: getInsertionPos(paragraph.depth, previousOldNodeInfo),
   };
 }
 

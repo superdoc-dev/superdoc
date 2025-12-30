@@ -2,6 +2,8 @@ import type { Node as PMNode } from 'prosemirror-model';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
 import { diffSequences } from './sequence-diffing.ts';
 
+type NodeJSON = ReturnType<PMNode['toJSON']>;
+
 /**
  * Supported diff operations for inline changes.
  */
@@ -24,6 +26,7 @@ export type InlineNodeToken = {
   node: PMNode;
   nodeType?: string;
   toJSON?: () => unknown;
+  nodeJSON?: NodeJSON;
 };
 
 /**
@@ -60,18 +63,17 @@ type RawInlineNodeDiff =
       action: Exclude<InlineAction, 'modified'>;
       idx: number;
       kind: 'inlineNode';
-      node: PMNode;
+      nodeJSON: NodeJSON;
       nodeType?: string;
     }
   | {
       action: 'modified';
       idx: number;
       kind: 'inlineNode';
-      oldNode: PMNode;
-      newNode: PMNode;
       nodeType?: string;
-      oldAttrs?: Record<string, unknown>;
-      newAttrs?: Record<string, unknown>;
+      oldNodeJSON: NodeJSON;
+      newNodeJSON: NodeJSON;
+      attrsDiff: AttributesDiff | null;
     };
 
 /**
@@ -97,10 +99,10 @@ export interface InlineDiffResult {
   newText?: string;
   runAttrs?: Record<string, unknown>;
   runAttrsDiff?: AttributesDiff | null;
-  node?: PMNode;
   nodeType?: string;
-  oldNode?: PMNode;
-  newNode?: PMNode;
+  nodeJSON?: NodeJSON;
+  oldNodeJSON?: NodeJSON;
+  newNodeJSON?: NodeJSON;
   attrsDiff?: AttributesDiff | null;
 }
 
@@ -123,7 +125,7 @@ export function getInlineDiff(
         action,
         idx: oldIdx,
         kind: 'inlineNode',
-        node: token.node,
+        nodeJSON: token.nodeJSON ?? token.node.toJSON(),
         nodeType: token.nodeType,
       };
     }
@@ -145,13 +147,15 @@ export function getInlineDiff(
     buildDeleted: (token, oldIdx) => buildInlineDiff('deleted', token, oldIdx),
     buildModified: (oldToken, newToken, oldIdx) => {
       if (oldToken.kind !== 'text' && newToken.kind !== 'text') {
+        const attrsDiff = getAttributesDiff(oldToken.node.attrs, newToken.node.attrs);
         return {
           action: 'modified',
           idx: oldIdx,
           kind: 'inlineNode',
-          oldNode: oldToken.node,
-          newNode: newToken.node,
+          oldNodeJSON: oldToken.node.toJSON(),
+          newNodeJSON: newToken.node.toJSON(),
           nodeType: oldToken.nodeType,
+          attrsDiff,
         };
       }
       if (oldToken.kind === 'text' && newToken.kind === 'text') {
@@ -276,11 +280,11 @@ function groupDiffs(diffs: RawDiff[], oldPositionResolver: PositionResolver): In
         nodeType: diff.nodeType,
         ...(diff.action === 'modified'
           ? {
-              oldNode: diff.oldNode,
-              newNode: diff.newNode,
-              attrsDiff: getAttributesDiff(diff.oldNode.attrs, diff.newNode.attrs),
+              oldNodeJSON: diff.oldNodeJSON,
+              newNodeJSON: diff.newNodeJSON,
+              attrsDiff: diff.attrsDiff ?? null,
             }
-          : { node: diff.node }),
+          : { nodeJSON: diff.nodeJSON }),
       });
       continue;
     }

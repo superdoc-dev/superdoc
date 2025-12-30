@@ -14,6 +14,8 @@ import {
 import { diffSequences, reorderDiffOperations } from './sequence-diffing.ts';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
 
+type NodeJSON = ReturnType<PMNode['toJSON']>;
+
 /**
  * Minimal node metadata extracted during document traversal.
  */
@@ -38,7 +40,7 @@ type NodeInfo = BaseNodeInfo | ParagraphNodeInfo;
 interface NonParagraphAddedDiff {
   action: 'added';
   nodeType: string;
-  node: PMNode;
+  nodeJSON: NodeJSON;
   pos: number;
 }
 
@@ -48,7 +50,7 @@ interface NonParagraphAddedDiff {
 interface NonParagraphDeletedDiff {
   action: 'deleted';
   nodeType: string;
-  node: PMNode;
+  nodeJSON: NodeJSON;
   pos: number;
 }
 
@@ -58,8 +60,8 @@ interface NonParagraphDeletedDiff {
 interface NonParagraphModifiedDiff {
   action: 'modified';
   nodeType: string;
-  oldNode: PMNode;
-  newNode: PMNode;
+  oldNodeJSON: NodeJSON;
+  newNodeJSON: NodeJSON;
   pos: number;
   attrsDiff: AttributesDiff;
 }
@@ -198,7 +200,7 @@ function buildAddedDiff(
   return {
     action: 'added',
     nodeType: nodeInfo.node.type.name,
-    node: nodeInfo.node,
+    nodeJSON: nodeInfo.node.toJSON(),
     pos,
   };
 }
@@ -220,7 +222,7 @@ function buildDeletedDiff(nodeInfo: NodeInfo, deletedNodesSet: Set<PMNode>): Nod
   return {
     action: 'deleted',
     nodeType: nodeInfo.node.type.name,
-    node: nodeInfo.node,
+    nodeJSON: nodeInfo.node.toJSON(),
     pos: nodeInfo.pos,
   };
 }
@@ -241,8 +243,8 @@ function buildModifiedDiff(oldNodeInfo: NodeInfo, newNodeInfo: NodeInfo): NodeDi
   return {
     action: 'modified',
     nodeType: oldNodeInfo.node.type.name,
-    oldNode: oldNodeInfo.node,
-    newNode: newNodeInfo.node,
+    oldNodeJSON: oldNodeInfo.node.toJSON(),
+    newNodeJSON: newNodeInfo.node.toJSON(),
     pos: oldNodeInfo.pos,
     attrsDiff,
   };

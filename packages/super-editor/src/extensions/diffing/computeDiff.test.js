@@ -24,6 +24,19 @@ const getDocument = async (name) => {
   return editor.state.doc;
 };
 
+const getNodeTextContent = (nodeJSON) => {
+  if (!nodeJSON) {
+    return '';
+  }
+  if (typeof nodeJSON.text === 'string') {
+    return nodeJSON.text;
+  }
+  if (Array.isArray(nodeJSON.content)) {
+    return nodeJSON.content.map((child) => getNodeTextContent(child)).join('');
+  }
+  return '';
+};
+
 describe('Diff', () => {
   it('Compares two documents and identifies added, deleted, and modified paragraphs', async () => {
     const docBefore = await getDocument('diff_before.docx');
@@ -230,12 +243,12 @@ describe('Diff', () => {
     expect(wordRemoval?.contentDiff?.[0].action).toBe('deleted');
 
     const tableModification = diffs.find(
-      (diff) => diff.action === 'modified' && diff.nodeType === 'table' && diff.oldNode,
+      (diff) => diff.action === 'modified' && diff.nodeType === 'table' && diff.oldNodeJSON,
     );
     expect(tableModification).toBeUndefined();
 
     const tableAddition = diffs.find((diff) => diff.action === 'added' && diff.nodeType === 'table');
-    expect(tableAddition?.node?.textContent?.trim()).toBe('New table');
+    expect(getNodeTextContent(tableAddition?.nodeJSON)?.trim()).toBe('New table');
 
     const trailingParagraph = diffs.find(
       (diff) => diff.action === 'added' && diff.nodeType === 'paragraph' && diff.text === '',

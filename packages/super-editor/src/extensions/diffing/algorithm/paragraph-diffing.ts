@@ -3,6 +3,7 @@ import { getInlineDiff, type InlineDiffToken, type InlineDiffResult } from './in
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
 import { levenshteinDistance } from './similarity.ts';
 
+type NodeJSON = ReturnType<PMNode['toJSON']>;
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
 const SIMILARITY_THRESHOLD = 0.65;
 const MIN_LENGTH_FOR_SIMILARITY = 4;
@@ -63,7 +64,7 @@ export interface ParagraphResolvedSnapshot extends ParagraphSnapshot {
 export interface AddedParagraphDiff {
   action: 'added';
   nodeType: string;
-  node: PMNode;
+  nodeJSON: NodeJSON;
   text: string;
   pos: number;
 }
@@ -74,7 +75,7 @@ export interface AddedParagraphDiff {
 export interface DeletedParagraphDiff {
   action: 'deleted';
   nodeType: string;
-  node: PMNode;
+  nodeJSON: NodeJSON;
   oldText: string;
   pos: number;
 }
@@ -145,6 +146,7 @@ export function getParagraphContent(paragraph: PMNode, paragraphPos = 0): Paragr
           kind: 'inlineNode',
           node,
           nodeType: node.type.name,
+          nodeJSON: node.toJSON(),
         });
         segments.push({ start, end, pos });
       }
@@ -213,7 +215,7 @@ export function buildAddedParagraphDiff(
   return {
     action: 'added',
     nodeType: paragraph.node.type.name,
-    node: paragraph.node,
+    nodeJSON: paragraph.node.toJSON(),
     text: paragraph.fullText,
     pos,
   };
@@ -226,7 +228,7 @@ export function buildDeletedParagraphDiff(paragraph: ParagraphSnapshot): Deleted
   return {
     action: 'deleted',
     nodeType: paragraph.node.type.name,
-    node: paragraph.node,
+    nodeJSON: paragraph.node.toJSON(),
     oldText: paragraph.fullText,
     pos: paragraph.pos,
   };

@@ -19,7 +19,7 @@ type OperationStep =
 export interface SequenceDiffOptions<T, Added, Deleted, Modified> {
   comparator?: Comparator<T>;
   buildAdded: (item: T, oldIdx: number, previousOldItem: T | undefined, newIdx: number) => Added | null | undefined;
-  buildDeleted: (item: T, oldIdx: number, newIdx: number) => Deleted;
+  buildDeleted: (item: T, oldIdx: number, newIdx: number) => Deleted | null | undefined;
   buildModified: (oldItem: T, newItem: T, oldIdx: number, newIdx: number) => Modified | null | undefined;
   shouldProcessEqualAsModification?: (oldItem: T, newItem: T, oldIdx: number, newIdx: number) => boolean;
   canTreatAsModification?: (deletedItem: T, insertedItem: T, oldIdx: number, newIdx: number) => boolean;
@@ -96,7 +96,10 @@ export function diffSequences<T, Added, Deleted, Modified>(
         }
         i += 1;
       } else {
-        diffs.push(options.buildDeleted(oldSeq[step.oldIdx], step.oldIdx, step.newIdx));
+        const diff = options.buildDeleted(oldSeq[step.oldIdx], step.oldIdx, step.newIdx);
+        if (diff != null) {
+          diffs.push(diff);
+        }
       }
       continue;
     }

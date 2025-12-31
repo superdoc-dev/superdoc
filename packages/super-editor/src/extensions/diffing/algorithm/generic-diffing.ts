@@ -20,8 +20,11 @@ type NodeJSON = ReturnType<PMNode['toJSON']>;
  * Minimal node metadata extracted during document traversal.
  */
 export type BaseNodeInfo = {
+  /** ProseMirror node reference. */
   node: PMNode;
+  /** Absolute position of the node in the document. */
   pos: number;
+  /** Depth of the node within the document tree. */
   depth: number;
 };
 
@@ -31,8 +34,11 @@ export type BaseNodeInfo = {
 export type NodeInfo = BaseNodeInfo | ParagraphNodeInfo;
 
 interface NodeDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
+  /** Change type for this node. */
   action: Action;
+  /** ProseMirror node type name. */
   nodeType: string;
+  /** Anchor position in the old document for replaying diffs. */
   pos: number;
 }
 
@@ -40,6 +46,7 @@ interface NodeDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
  * Diff payload describing an inserted non-paragraph node.
  */
 interface NodeAddedDiff extends NodeDiffBase<'added'> {
+  /** Serialized node payload inserted into the document. */
   nodeJSON: NodeJSON;
 }
 
@@ -47,6 +54,7 @@ interface NodeAddedDiff extends NodeDiffBase<'added'> {
  * Diff payload describing a deleted non-paragraph node.
  */
 interface NodeDeletedDiff extends NodeDiffBase<'deleted'> {
+  /** Serialized node payload removed from the document. */
   nodeJSON: NodeJSON;
 }
 
@@ -54,8 +62,11 @@ interface NodeDeletedDiff extends NodeDiffBase<'deleted'> {
  * Diff payload describing an attribute-only change on non-paragraph nodes.
  */
 interface NodeModifiedDiff extends NodeDiffBase<'modified'> {
+  /** Serialized node payload before the change. */
   oldNodeJSON: NodeJSON;
+  /** Serialized node payload after the change. */
   newNodeJSON: NodeJSON;
+  /** Attribute-level diff for the node. */
   attrsDiff: AttributesDiff;
 }
 

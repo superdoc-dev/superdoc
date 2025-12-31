@@ -17,12 +17,19 @@ type OperationStep =
  * Hooks and comparators used to translate raw Myers operations into domain-specific diffs.
  */
 export interface SequenceDiffOptions<T, Added, Deleted, Modified> {
+  /** Comparator to determine whether two items are equivalent. */
   comparator?: Comparator<T>;
+  /** Builder invoked for insertions in the new sequence. */
   buildAdded: (item: T, oldIdx: number, previousOldItem: T | undefined, newIdx: number) => Added | null | undefined;
+  /** Builder invoked for deletions in the old sequence. */
   buildDeleted: (item: T, oldIdx: number, newIdx: number) => Deleted | null | undefined;
+  /** Builder invoked for modifications between old and new items. */
   buildModified: (oldItem: T, newItem: T, oldIdx: number, newIdx: number) => Modified | null | undefined;
+  /** Predicate to emit modifications even when items compare equal. */
   shouldProcessEqualAsModification?: (oldItem: T, newItem: T, oldIdx: number, newIdx: number) => boolean;
+  /** Predicate to treat delete+insert pairs as a modification. */
   canTreatAsModification?: (deletedItem: T, insertedItem: T, oldIdx: number, newIdx: number) => boolean;
+  /** Optional reordering hook for Myers operations before mapping. */
   reorderOperations?: (operations: MyersOperation[]) => MyersOperation[];
 }
 

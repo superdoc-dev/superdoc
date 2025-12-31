@@ -1,8 +1,11 @@
 import type { Node as PMNode } from 'prosemirror-model';
 
 interface NodePositionInfo {
+  /** ProseMirror node reference. */
   node: PMNode;
+  /** Absolute position of the node in the document. */
   pos: number;
+  /** Depth of the node within the document tree. */
   depth: number;
 }
 

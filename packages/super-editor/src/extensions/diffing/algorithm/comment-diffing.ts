@@ -36,8 +36,11 @@ export interface CommentToken {
  * Base shape shared by every comment diff payload.
  */
 export interface CommentDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
+  /** Change type for this comment. */
   action: Action;
+  /** Node type identifier for comment diffs. */
   nodeType: 'comment';
+  /** Resolved comment identifier (importedId → id → commentId). */
   commentId: string;
 }
 
@@ -45,7 +48,9 @@ export interface CommentDiffBase<Action extends 'added' | 'deleted' | 'modified'
  * Diff payload describing an added comment.
  */
 export type CommentAddedDiff = CommentDiffBase<'added'> & {
+  /** Serialized comment payload inserted into the document. */
   commentJSON: CommentInput;
+  /** Plain-text representation of the comment body. */
   text: string;
 };
 
@@ -53,7 +58,9 @@ export type CommentAddedDiff = CommentDiffBase<'added'> & {
  * Diff payload describing a deleted comment.
  */
 export type CommentDeletedDiff = CommentDiffBase<'deleted'> & {
+  /** Serialized comment payload removed from the document. */
   commentJSON: CommentInput;
+  /** Plain-text representation of the removed comment body. */
   oldText: string;
 };
 
@@ -61,11 +68,17 @@ export type CommentDeletedDiff = CommentDiffBase<'deleted'> & {
  * Diff payload describing a modified comment.
  */
 export type CommentModifiedDiff = CommentDiffBase<'modified'> & {
+  /** Serialized comment payload before the change. */
   oldCommentJSON: CommentInput;
+  /** Serialized comment payload after the change. */
   newCommentJSON: CommentInput;
+  /** Plain-text content before the change. */
   oldText: string;
+  /** Plain-text content after the change. */
   newText: string;
+  /** Node-level diff for the comment body content. */
   contentDiff: NodeDiff[];
+  /** Attribute-level diff for comment metadata. */
   attrsDiff: AttributesDiff | null;
 };
 

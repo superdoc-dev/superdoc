@@ -5,8 +5,16 @@ vi.mock('./myers-diff.ts', async () => {
     myersDiff: vi.fn(actual.myersDiff),
   };
 });
-import { getInlineDiff } from './inline-diffing.ts';
+import { getInlineDiff, tokenizeInlineContent } from './inline-diffing.ts';
 
+/**
+ * Builds text tokens with offsets for inline diff tests.
+ *
+ * @param {string} text Text content to tokenize.
+ * @param {Record<string, unknown>} runAttrs Run attributes to attach.
+ * @param {number} offsetStart Offset base for the first token.
+ * @returns {import('./inline-diffing.ts').InlineTextToken[]}
+ */
 const buildTextRuns = (text, runAttrs = {}, offsetStart = 0) =>
   text.split('').map((char, index) => ({
     char,
@@ -15,6 +23,15 @@ const buildTextRuns = (text, runAttrs = {}, offsetStart = 0) =>
     offset: offsetStart + index,
   }));
 
+/**
+ * Builds marked text tokens with offsets for inline diff tests.
+ *
+ * @param {string} text Text content to tokenize.
+ * @param {Array<Record<string, unknown>>} marks Marks to attach.
+ * @param {Record<string, unknown>} runAttrs Run attributes to attach.
+ * @param {number} offsetStart Offset base for the first token.
+ * @returns {import('./inline-diffing.ts').InlineTextToken[]}
+ */
 const buildMarkedTextRuns = (text, marks, runAttrs = {}, offsetStart = 0) =>
   text.split('').map((char, index) => ({
     char,
@@ -24,6 +41,14 @@ const buildMarkedTextRuns = (text, marks, runAttrs = {}, offsetStart = 0) =>
     marks,
   }));
 
+/**
+ * Builds a mock inline-node token for diff tests.
+ *
+ * @param {Record<string, unknown>} attrs Node attributes.
+ * @param {{ name: string }} type Node type descriptor.
+ * @param {number} pos Position offset for the inline node.
+ * @returns {import('./inline-diffing.ts').InlineNodeToken}
+ */
 const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }, pos = 0) => {
   const nodeAttrs = { ...attrs };
   return {
@@ -38,6 +63,122 @@ const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }, pos = 0) => {
     pos,
   };
 };
+
+/**
+ * Builds text tokens without offsets for tokenizer assertions.
+ *
+ * @param {string} text Text content to tokenize.
+ * @param {Record<string, unknown>} runAttrs Run attributes to attach.
+ * @param {Array<Record<string, unknown>>} marks Marks to attach.
+ * @returns {import('./inline-diffing.ts').InlineTextToken[]}
+ */
+const buildTextTokens = (text, runAttrs = {}, marks = []) =>
+  text.split('').map((char) => ({
+    char,
+    runAttrs,
+    kind: 'text',
+    marks,
+  }));
+
+/**
+ * Creates a mock inline container with configurable segments for tokenizer tests.
+ *
+ * @param {Array<Record<string, unknown>>} segments Inline segments to emit.
+ * @param {number | null} contentSize Optional content size override.
+ * @returns {import('prosemirror-model').Node}
+ */
+const createInlineContainer = (segments, contentSize) => {
+  const computedSegments = segments.map((segment) => {
+    if (segment.inlineNode) {
+      return {
+        ...segment,
+        kind: 'inline',
+        length: segment.length ?? 1,
+        start: segment.start ?? 0,
+        attrs: segment.attrs ?? segment.inlineNode.attrs ?? {},
+        inlineNode: {
+          typeName: segment.inlineNode.typeName ?? 'inline',
+          attrs: segment.inlineNode.attrs ?? {},
+          isLeaf: segment.inlineNode.isLeaf ?? true,
+          toJSON:
+            segment.inlineNode.toJSON ??
+            (() => ({
+              type: segment.inlineNode.typeName ?? 'inline',
+              attrs: segment.inlineNode.attrs ?? {},
+            })),
+        },
+      };
+    }
+
+    const segmentText = segment.text ?? segment.leafText();
+    const length = segmentText.length;
+    return {
+      ...segment,
+      kind: segment.text != null ? 'text' : 'leaf',
+      length,
+      start: segment.start ?? 0,
+      attrs: segment.attrs ?? {},
+    };
+  });
+  const size =
+    contentSize ?? computedSegments.reduce((max, segment) => Math.max(max, segment.start + segment.length), 0);
+  const attrsMap = new Map();
+  computedSegments.forEach((segment) => {
+    const key = segment.kind === 'inline' ? segment.start : segment.start - 1;
+    attrsMap.set(key, segment.attrs);
+  });
+
+  return {
+    content: { size },
+    nodesBetween: (from, to, callback) => {
+      computedSegments.forEach((segment) => {
+        if (segment.kind === 'text') {
+          callback({ isText: true, text: segment.text, marks: segment.marks ?? [] }, segment.start);
+        } else if (segment.kind === 'leaf') {
+          callback({ isLeaf: true, type: { spec: { leafText: segment.leafText } } }, segment.start);
+        } else {
+          callback(
+            {
+              isInline: true,
+              isLeaf: segment.inlineNode.isLeaf,
+              type: { name: segment.inlineNode.typeName, spec: {} },
+              attrs: segment.inlineNode.attrs,
+              toJSON: () => ({
+                type: segment.inlineNode.typeName,
+                attrs: segment.inlineNode.attrs,
+              }),
+            },
+            segment.start,
+          );
+        }
+      });
+    },
+    nodeAt: (pos) => ({ attrs: attrsMap.get(pos) ?? {} }),
+  };
+};
+
+/**
+ * Strips positional fields from tokens for assertions.
+ *
+ * @param {import('./inline-diffing.ts').InlineDiffToken[]} tokens Tokens to normalize.
+ * @returns {Array<Record<string, unknown>>}
+ */
+const stripTokenOffsets = (tokens) =>
+  tokens.map((token) => {
+    if (token.kind === 'text') {
+      return {
+        kind: token.kind,
+        char: token.char,
+        runAttrs: token.runAttrs,
+        marks: token.marks,
+      };
+    }
+    return {
+      kind: token.kind,
+      nodeType: token.nodeType,
+      nodeJSON: token.nodeJSON,
+    };
+  });
 
 describe('getInlineDiff', () => {
   it('returns an empty diff list when both strings are identical', () => {
@@ -192,5 +333,87 @@ describe('getInlineDiff', () => {
         },
       },
     ]);
+  });
+});
+
+describe('tokenizeInlineContent', () => {
+  it('handles basic text nodes', () => {
+    const mockParagraph = createInlineContainer([{ text: 'Hello', start: 0, attrs: { bold: true } }], 5);
+
+    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    expect(stripTokenOffsets(tokens)).toEqual(buildTextTokens('Hello', { bold: true }, []));
+    expect(tokens[0]?.offset).toBe(1);
+    expect(tokens[4]?.offset).toBe(5);
+  });
+
+  it('handles leaf nodes with leafText', () => {
+    const mockParagraph = createInlineContainer([{ leafText: () => 'Leaf', start: 0, attrs: { type: 'leaf' } }], 4);
+
+    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    expect(stripTokenOffsets(tokens)).toEqual(buildTextTokens('Leaf', { type: 'leaf' }, []));
+    expect(tokens[0]?.offset).toBe(1);
+    expect(tokens[3]?.offset).toBe(4);
+  });
+
+  it('handles mixed content', () => {
+    const mockParagraph = createInlineContainer([
+      { text: 'Hello', start: 0, attrs: { bold: true } },
+      { leafText: () => 'Leaf', start: 5, attrs: { italic: true } },
+    ]);
+
+    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    expect(stripTokenOffsets(tokens)).toEqual([
+      ...buildTextTokens('Hello', { bold: true }, []),
+      ...buildTextTokens('Leaf', { italic: true }, []),
+    ]);
+    expect(tokens[0]?.offset).toBe(1);
+    expect(tokens[5]?.offset).toBe(6);
+    expect(tokens[tokens.length - 1]?.offset).toBe(9);
+  });
+
+  it('handles empty content', () => {
+    const mockParagraph = createInlineContainer([], 0);
+
+    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    expect(tokens).toEqual([]);
+  });
+
+  it('includes inline nodes that have no textual content', () => {
+    const inlineAttrs = { kind: 'tab', width: 120 };
+    const mockParagraph = createInlineContainer([
+      { inlineNode: { typeName: 'tab', attrs: inlineAttrs }, start: 0 },
+      { text: 'Text', start: 1, attrs: { bold: false } },
+    ]);
+
+    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    expect(tokens[0]).toMatchObject({
+      kind: 'inlineNode',
+      nodeType: 'tab',
+      nodeJSON: {
+        type: 'tab',
+        attrs: inlineAttrs,
+      },
+      pos: 1,
+    });
+    expect(stripTokenOffsets(tokens.slice(1))).toEqual(buildTextTokens('Text', { bold: false }, []));
+    expect(tokens[1]?.offset).toBe(2);
+  });
+
+  it('captures marks from text nodes', () => {
+    const boldMark = { toJSON: () => ({ type: 'bold', attrs: { level: 2 } }) };
+    const mockParagraph = createInlineContainer([{ text: 'Hi', start: 0, marks: [boldMark] }], 2);
+
+    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    expect(tokens[0]?.marks).toEqual([{ type: 'bold', attrs: { level: 2 } }]);
+    expect(tokens[1]?.marks).toEqual([{ type: 'bold', attrs: { level: 2 } }]);
+  });
+
+  it('applies the base offset to token positions', () => {
+    const mockParagraph = createInlineContainer([{ text: 'Nested', start: 0 }], 6);
+
+    const tokens = tokenizeInlineContent(mockParagraph, 11);
+    expect(stripTokenOffsets(tokens)).toEqual(buildTextTokens('Nested', {}, []));
+    expect(tokens[0]?.offset).toBe(11);
+    expect(tokens[5]?.offset).toBe(16);
   });
 });

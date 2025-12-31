@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createParagraphSnapshot,
   shouldProcessEqualAsModification,
   paragraphComparator,
   buildAddedParagraphDiff,
@@ -9,8 +8,24 @@ import {
   canTreatAsModification,
 } from './paragraph-diffing.ts';
 
+/**
+ * Builds text tokens without offsets for paragraph diff tests.
+ *
+ * @param {string} text Text content to tokenize.
+ * @param {Record<string, unknown>} attrs Run attributes to attach.
+ * @returns {Array<Record<string, unknown>>}
+ */
 const buildRuns = (text, attrs = {}) => text.split('').map((char) => ({ char, runAttrs: attrs, kind: 'text' }));
 
+/**
+ * Builds marked text tokens with offsets for paragraph diff tests.
+ *
+ * @param {string} text Text content to tokenize.
+ * @param {Array<Record<string, unknown>>} marks Marks to attach.
+ * @param {Record<string, unknown>} attrs Run attributes to attach.
+ * @param {number} offsetStart Offset base for the first token.
+ * @returns {Array<Record<string, unknown>>}
+ */
 const buildMarkedRuns = (text, marks, attrs = {}, offsetStart = 0) =>
   text.split('').map((char, index) => ({
     char,
@@ -20,6 +35,12 @@ const buildMarkedRuns = (text, marks, attrs = {}, offsetStart = 0) =>
     offset: offsetStart + index,
   }));
 
+/**
+ * Creates a mock paragraph node with default attributes.
+ *
+ * @param {Record<string, unknown>} overrides Overrides for the mock node.
+ * @returns {Record<string, unknown>}
+ */
 const createParagraphNode = (overrides = {}) => {
   const node = {
     type: { name: 'paragraph', ...(overrides.type || {}) },
@@ -33,6 +54,12 @@ const createParagraphNode = (overrides = {}) => {
   return node;
 };
 
+/**
+ * Creates a paragraph snapshot stub for diff builder tests.
+ *
+ * @param {Record<string, unknown>} overrides Overrides for the snapshot.
+ * @returns {Record<string, unknown>}
+ */
 const createParagraphInfo = (overrides = {}) => {
   const fullText = overrides.fullText ?? 'text';
   const paragraphPos = overrides.pos ?? 0;
@@ -62,175 +89,6 @@ const createParagraphInfo = (overrides = {}) => {
     ...overrides,
   };
 };
-
-const createParagraphWithSegments = (segments, contentSize) => {
-  const computedSegments = segments.map((segment) => {
-    if (segment.inlineNode) {
-      return {
-        ...segment,
-        kind: 'inline',
-        length: segment.length ?? 1,
-        start: segment.start ?? 0,
-        attrs: segment.attrs ?? segment.inlineNode.attrs ?? {},
-        inlineNode: {
-          typeName: segment.inlineNode.typeName ?? 'inline',
-          attrs: segment.inlineNode.attrs ?? {},
-          isLeaf: segment.inlineNode.isLeaf ?? true,
-          toJSON:
-            segment.inlineNode.toJSON ??
-            (() => ({
-              type: segment.inlineNode.typeName ?? 'inline',
-              attrs: segment.inlineNode.attrs ?? {},
-            })),
-        },
-      };
-    }
-
-    const segmentText = segment.text ?? segment.leafText();
-    const length = segmentText.length;
-    return {
-      ...segment,
-      kind: segment.text != null ? 'text' : 'leaf',
-      length,
-      start: segment.start ?? 0,
-      attrs: segment.attrs ?? {},
-    };
-  });
-  const size =
-    contentSize ?? computedSegments.reduce((max, segment) => Math.max(max, segment.start + segment.length), 0);
-  const attrsMap = new Map();
-  computedSegments.forEach((segment) => {
-    const key = segment.kind === 'inline' ? segment.start : segment.start - 1;
-    attrsMap.set(key, segment.attrs);
-  });
-
-  return {
-    content: { size },
-    nodesBetween: (from, to, callback) => {
-      computedSegments.forEach((segment) => {
-        if (segment.kind === 'text') {
-          callback({ isText: true, text: segment.text, marks: segment.marks ?? [] }, segment.start);
-        } else if (segment.kind === 'leaf') {
-          callback({ isLeaf: true, type: { spec: { leafText: segment.leafText } } }, segment.start);
-        } else {
-          callback(
-            {
-              isInline: true,
-              isLeaf: segment.inlineNode.isLeaf,
-              type: { name: segment.inlineNode.typeName, spec: {} },
-              attrs: segment.inlineNode.attrs,
-              toJSON: () => ({
-                type: segment.inlineNode.typeName,
-                attrs: segment.inlineNode.attrs,
-              }),
-            },
-            segment.start,
-          );
-        }
-      });
-    },
-    nodeAt: (pos) => ({ attrs: attrsMap.get(pos) ?? {} }),
-  };
-};
-
-const stripOffsets = (tokens) =>
-  tokens.map((token) =>
-    token.kind === 'text' ? { kind: token.kind, char: token.char, runAttrs: token.runAttrs } : token,
-  );
-
-describe('createParagraphSnapshot', () => {
-  it('handles basic text nodes', () => {
-    const mockParagraph = createParagraphWithSegments([{ text: 'Hello', start: 0, attrs: { bold: true } }], 5);
-
-    const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(stripOffsets(result.text)).toEqual(buildRuns('Hello', { bold: true }));
-    expect(result.text[0]?.offset).toBe(1);
-    expect(result.text[4]?.offset).toBe(5);
-  });
-
-  it('handles leaf nodes with leafText', () => {
-    const mockParagraph = createParagraphWithSegments(
-      [{ leafText: () => 'Leaf', start: 0, attrs: { type: 'leaf' } }],
-      4,
-    );
-
-    const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(stripOffsets(result.text)).toEqual(buildRuns('Leaf', { type: 'leaf' }));
-    expect(result.text[0]?.offset).toBe(1);
-    expect(result.text[3]?.offset).toBe(4);
-  });
-
-  it('handles mixed content', () => {
-    const mockParagraph = createParagraphWithSegments([
-      { text: 'Hello', start: 0, attrs: { bold: true } },
-      { leafText: () => 'Leaf', start: 5, attrs: { italic: true } },
-    ]);
-
-    const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(stripOffsets(result.text)).toEqual([
-      ...buildRuns('Hello', { bold: true }),
-      ...buildRuns('Leaf', { italic: true }),
-    ]);
-    expect(result.text[0]?.offset).toBe(1);
-    expect(result.text[5]?.offset).toBe(6);
-    expect(result.text[result.text.length - 1]?.offset).toBe(9);
-    expect(result.endPos).toBe(10);
-  });
-
-  it('handles empty content', () => {
-    const mockParagraph = createParagraphWithSegments([], 0);
-
-    const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(result.text).toEqual([]);
-    expect(result.endPos).toBe(1);
-  });
-
-  it('includes inline nodes that have no textual content', () => {
-    const inlineAttrs = { kind: 'tab', width: 120 };
-    const mockParagraph = createParagraphWithSegments([
-      { inlineNode: { typeName: 'tab', attrs: inlineAttrs }, start: 0 },
-      { text: 'Text', start: 1, attrs: { bold: false } },
-    ]);
-
-    const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(result.text[0]).toMatchObject({
-      kind: 'inlineNode',
-      nodeType: 'tab',
-      nodeJSON: {
-        type: 'tab',
-        attrs: inlineAttrs,
-      },
-      pos: 1,
-    });
-    expect(stripOffsets(result.text.slice(1))).toEqual(buildRuns('Text', { bold: false }));
-    expect(result.text[1]?.offset).toBe(2);
-  });
-
-  it('captures marks from text nodes in the snapshot', () => {
-    const boldMark = { toJSON: () => ({ type: 'bold', attrs: { level: 2 } }) };
-    const mockParagraph = createParagraphWithSegments([{ text: 'Hi', start: 0, marks: [boldMark] }], 2);
-
-    const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(result.text[0]?.marks).toEqual([{ type: 'bold', attrs: { level: 2 } }]);
-    expect(result.text[1]?.marks).toEqual([{ type: 'bold', attrs: { level: 2 } }]);
-  });
-
-  it('applies paragraph position offsets to the resolver', () => {
-    const mockParagraph = createParagraphWithSegments([{ text: 'Nested', start: 0 }], 6);
-
-    const result = createParagraphSnapshot(mockParagraph, 10, 0);
-    expect(stripOffsets(result.text)).toEqual(buildRuns('Nested', {}));
-    expect(result.text[0]?.offset).toBe(11);
-    expect(result.text[5]?.offset).toBe(16);
-    expect(result.endPos).toBe(17);
-  });
-
-  it('returns null when index is outside the flattened text array', () => {
-    const mockParagraph = createParagraphWithSegments([{ text: 'Hi', start: 0 }], 2);
-    const result = createParagraphSnapshot(mockParagraph, 0, 0);
-    expect(result.endPos).toBe(3);
-  });
-});
 
 describe('shouldProcessEqualAsModification', () => {
   it('returns true when node JSON differs', () => {

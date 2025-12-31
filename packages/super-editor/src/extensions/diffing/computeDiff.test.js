@@ -9,7 +9,7 @@ import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers
  * Loads a DOCX fixture and returns the ProseMirror document and schema.
  *
  * @param {string} name DOCX fixture filename.
- * @returns {Promise<{ doc: import('prosemirror-model').Node; schema: import('prosemirror-model').Schema }>}
+ * @returns {Promise<{ doc: import('prosemirror-model').Node; schema: import('prosemirror-model').Schema; comments: Array<Record<string, unknown>> }>}
  */
 const getDocument = async (name) => {
   const buffer = await getTestDataAsBuffer(name);
@@ -27,7 +27,7 @@ const getDocument = async (name) => {
     annotations: true,
   });
 
-  return { doc: editor.state.doc, schema: editor.schema };
+  return { doc: editor.state.doc, schema: editor.schema, comments: editor.converter.comments };
 };
 
 /**
@@ -287,12 +287,59 @@ describe('Diff', () => {
     expect(firstCellDiff?.contentDiff?.[0]?.text).toBe('First ');
   });
 
-  it('Compare a complex document with table edits and tracked formatting', async () => {
-    const { doc: docBefore, schema } = await getDocument('diff_before8.docx');
-    const { doc: docAfter } = await getDocument('diff_after8.docx');
+  it('Compare documents with comments and tracked changes', async () => {
+    const { doc: docBefore, schema, comments: commentsBefore } = await getDocument('diff_before8.docx');
+    const { doc: docAfter, comments: commentsAfter } = await getDocument('diff_after8.docx');
 
-    const { docDiffs } = computeDiff(docBefore, docAfter, schema);
-    const diffs = docDiffs;
-    console.log(JSON.stringify(diffs, null, 2));
+    const { docDiffs, commentDiffs } = computeDiff(docBefore, docAfter, schema, commentsBefore, commentsAfter);
+
+    expect(docDiffs.length).toBeGreaterThan(0);
+    expect(docDiffs.filter((diff) => diff.action === 'modified')).toHaveLength(2);
+    expect(commentDiffs).toHaveLength(2);
+
+    const commentAnchorDiff = docDiffs.find(
+      (diff) => diff.action === 'modified' && diff.oldText === 'Here’s some text. It has a comment.',
+    );
+    expect(commentAnchorDiff).toBeDefined();
+    expect(commentAnchorDiff?.contentDiff?.some((change) => change.kind === 'inlineNode')).toBe(true);
+    expect(
+      commentAnchorDiff?.contentDiff?.some(
+        (change) => change.kind === 'inlineNode' && change.nodeType === 'commentRangeStart',
+      ),
+    ).toBe(true);
+    expect(
+      commentAnchorDiff?.contentDiff?.some(
+        (change) => change.kind === 'text' && change.marksDiff?.deleted?.some((mark) => mark.name === 'commentMark'),
+      ),
+    ).toBe(true);
+
+    const trackedChangeDiff = docDiffs.find(
+      (diff) => diff.action === 'modified' && diff.oldText === 'I will add a comment to this one too.',
+    );
+    expect(trackedChangeDiff).toBeDefined();
+    expect(
+      trackedChangeDiff?.contentDiff?.some(
+        (change) => change.kind === 'text' && change.marksDiff?.added?.some((mark) => mark.name === 'commentMark'),
+      ),
+    ).toBe(true);
+    expect(
+      trackedChangeDiff?.contentDiff?.some(
+        (change) => change.kind === 'text' && change.marksDiff?.added?.some((mark) => mark.name === 'trackDelete'),
+      ),
+    ).toBe(true);
+
+    const modifiedComment = commentDiffs.find(
+      (diff) => diff.action === 'modified' && diff.nodeType === 'comment' && diff.commentId === '0',
+    );
+    expect(modifiedComment).toBeDefined();
+    expect(modifiedComment?.oldText).toBe('Old comment.');
+    expect(modifiedComment?.newText).toBe('Old comment.');
+    expect(modifiedComment?.attrsDiff?.modified?.isDone).toEqual({ from: false, to: true });
+
+    const addedComment = commentDiffs.find(
+      (diff) => diff.action === 'added' && diff.nodeType === 'comment' && diff.commentId === '1',
+    );
+    expect(addedComment).toBeDefined();
+    expect(addedComment?.text).toBe('New comment');
   });
 });

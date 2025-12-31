@@ -16,12 +16,19 @@ export const Diffing = Extension.create({
        * `pos` anchor in the correct order.
        *
        * @param {import('prosemirror-model').Node} updatedDocument
+       * @param {import('./algorithm/comment-diffing.ts').CommentInput[]} [updatedComments]
        * @returns {import('./computeDiff.ts').DiffResult}
        */
       compareDocuments:
-        (updatedDocument) =>
+        (updatedDocument, updatedComments = []) =>
         ({ state }) => {
-          const diffs = computeDiff(state.doc, updatedDocument, state.schema);
+          const diffs = computeDiff(
+            state.doc,
+            updatedDocument,
+            state.schema,
+            this.editor.converter?.comments ?? [],
+            updatedComments,
+          );
           return diffs;
         },
     };

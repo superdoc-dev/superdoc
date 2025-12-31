@@ -111,6 +111,61 @@ export interface InlineDiffResult {
 }
 
 /**
+ * Tokenizes inline content into diffable text and inline-node tokens.
+ *
+ * @param pmNode ProseMirror node containing inline content.
+ * @param baseOffset Offset applied to every token position (default: 0).
+ * @returns Flattened inline tokens with offsets relative to the base offset.
+ */
+export function tokenizeInlineContent(pmNode: PMNode, baseOffset = 0): InlineDiffToken[] {
+  const content: InlineDiffToken[] = [];
+  pmNode.nodesBetween(
+    0,
+    pmNode.content.size,
+    (node, pos) => {
+      let nodeText = '';
+
+      if (node.isText) {
+        nodeText = node.text ?? '';
+      } else if (node.isLeaf) {
+        const leafTextFn = (node.type.spec as { leafText?: (node: PMNode) => string } | undefined)?.leafText;
+        if (leafTextFn) {
+          nodeText = leafTextFn(node);
+        }
+      }
+
+      if (nodeText) {
+        const runNode = pmNode.nodeAt(pos - 1);
+        const runAttrs = runNode?.attrs ?? {};
+        const tokenOffset = baseOffset + pos;
+        for (let i = 0; i < nodeText.length; i += 1) {
+          content.push({
+            kind: 'text',
+            char: nodeText[i] ?? '',
+            runAttrs,
+            offset: tokenOffset + i,
+            marks: node.marks?.map((mark) => mark.toJSON()) ?? [],
+          });
+        }
+        return;
+      }
+
+      if (node.type.name !== 'run' && node.isInline) {
+        content.push({
+          kind: 'inlineNode',
+          node,
+          nodeType: node.type.name,
+          nodeJSON: node.toJSON(),
+          pos: baseOffset + pos,
+        });
+      }
+    },
+    0,
+  );
+  return content;
+}
+
+/**
  * Computes text-level additions and deletions between two sequences using the generic sequence diff, mapping back to document positions.
  *
  * @param oldContent Source tokens enriched with document offsets.

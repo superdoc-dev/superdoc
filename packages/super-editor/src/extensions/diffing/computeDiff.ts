@@ -1,4 +1,5 @@
 import type { Node as PMNode, Schema } from 'prosemirror-model';
+import { diffComments, type CommentInput, type CommentDiff } from './algorithm/comment-diffing.ts';
 import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing.ts';
 
 /**
@@ -28,13 +29,20 @@ export interface DiffResult {
  *
  * @param oldPmDoc The previous ProseMirror document.
  * @param newPmDoc The updated ProseMirror document.
- * @param schema The schema used to interpret document nodes (unused for now).
+ * @param schema The schema used to interpret document nodes.
+ * @param oldComments Comment list from the old document.
+ * @param newComments Comment list from the new document.
  * @returns Object containing document and comment diffs.
  */
-export function computeDiff(oldPmDoc: PMNode, newPmDoc: PMNode, schema: Schema): DiffResult {
-  void schema;
+export function computeDiff(
+  oldPmDoc: PMNode,
+  newPmDoc: PMNode,
+  schema: Schema,
+  oldComments: CommentInput[] = [],
+  newComments: CommentInput[] = [],
+): DiffResult {
   return {
     docDiffs: diffNodes(normalizeNodes(oldPmDoc), normalizeNodes(newPmDoc)),
-    commentDiffs: [],
+    commentDiffs: diffComments(oldComments, newComments, schema),
   };
 }

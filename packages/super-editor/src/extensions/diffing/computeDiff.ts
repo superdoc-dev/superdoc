@@ -1,5 +1,20 @@
-import type { Node as PMNode } from 'prosemirror-model';
+import type { Node as PMNode, Schema } from 'prosemirror-model';
 import { diffNodes, type NodeDiff } from './algorithm/generic-diffing.ts';
+
+/**
+ * Placeholder type for comment diffs until comment diffing is implemented.
+ */
+export type CommentDiff = Record<string, never>;
+
+/**
+ * Result payload for document diffing.
+ */
+export interface DiffResult {
+  /** Diffs computed from the ProseMirror document structure. */
+  docDiffs: NodeDiff[];
+  /** Diffs computed from comment content and metadata. */
+  commentDiffs: CommentDiff[];
+}
 
 /**
  * Computes structural diffs between two ProseMirror documents, emitting insert/delete/modify operations for any block
@@ -13,8 +28,13 @@ import { diffNodes, type NodeDiff } from './algorithm/generic-diffing.ts';
  *
  * @param oldPmDoc The previous ProseMirror document.
  * @param newPmDoc The updated ProseMirror document.
- * @returns List of diff objects describing added, deleted or modified nodes (with inline-level diffs for paragraphs).
+ * @param schema The schema used to interpret document nodes (unused for now).
+ * @returns Object containing document and comment diffs.
  */
-export function computeDiff(oldPmDoc: PMNode, newPmDoc: PMNode): NodeDiff[] {
-  return diffNodes(oldPmDoc, newPmDoc);
+export function computeDiff(oldPmDoc: PMNode, newPmDoc: PMNode, schema: Schema): DiffResult {
+  void schema;
+  return {
+    docDiffs: diffNodes(oldPmDoc, newPmDoc),
+    commentDiffs: [],
+  };
 }

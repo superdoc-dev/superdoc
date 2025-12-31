@@ -16,12 +16,12 @@ export const Diffing = Extension.create({
        * `pos` anchor in the correct order.
        *
        * @param {import('prosemirror-model').Node} updatedDocument
-       * @returns {import('./computeDiff.ts').NodeDiff[]}
+       * @returns {import('./computeDiff.ts').DiffResult}
        */
       compareDocuments:
         (updatedDocument) =>
         ({ state }) => {
-          const diffs = computeDiff(state.doc, updatedDocument);
+          const diffs = computeDiff(state.doc, updatedDocument, state.schema);
           return diffs;
         },
     };

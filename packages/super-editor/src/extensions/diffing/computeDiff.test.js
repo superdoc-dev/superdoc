@@ -12,7 +12,7 @@ import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers
  * @returns {Promise<{ doc: import('prosemirror-model').Node; schema: import('prosemirror-model').Schema; comments: Array<Record<string, unknown>> }>}
  */
 const getDocument = async (name) => {
-  const buffer = await getTestDataAsBuffer(name);
+  const buffer = await getTestDataAsBuffer(`diffing/${name}`);
   const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
 
   const editor = new Editor({

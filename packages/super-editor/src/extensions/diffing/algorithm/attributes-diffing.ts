@@ -12,8 +12,11 @@ export interface AttributeChange {
  * Aggregated attribute diff broken down into added, deleted, and modified dotted paths.
  */
 export interface AttributesDiff {
+  /** Attributes added in the new payload. */
   added: Record<string, unknown>;
+  /** Attributes removed from the old payload. */
   deleted: Record<string, unknown>;
+  /** Attributes that changed values between old and new payloads. */
   modified: Record<string, AttributeChange>;
 }
 
@@ -21,8 +24,11 @@ export interface AttributesDiff {
  * Aggregated marks diff broken down into added, deleted, and modified marks.
  */
 export interface MarksDiff {
+  /** Marks added in the new payload. */
   added: { name: string; attrs: Record<string, unknown> }[];
+  /** Marks removed from the old payload. */
   deleted: { name: string; attrs: Record<string, unknown> }[];
+  /** Marks whose attributes changed between old and new payloads. */
   modified: { name: string; oldAttrs: Record<string, unknown>; newAttrs: Record<string, unknown> }[];
 }
 

@@ -11,11 +11,17 @@ const MIN_LENGTH_FOR_SIMILARITY = 4;
 type NodeJSON = ReturnType<PMNode['toJSON']>;
 
 export interface ParagraphNodeInfo {
+  /** ProseMirror paragraph node reference. */
   node: PMNode;
+  /** Absolute position of the paragraph in the document. */
   pos: number;
+  /** Depth of the paragraph within the document tree. */
   depth: number;
+  /** Flattened inline tokens for inline diffing. */
   text: InlineDiffToken[];
+  /** Absolute end position used for trailing inserts. */
   endPos: number;
+  /** Plain-text representation of the paragraph content. */
   fullText: string;
 }
 
@@ -23,8 +29,11 @@ export interface ParagraphNodeInfo {
  * Base shape shared by every paragraph diff payload.
  */
 interface ParagraphDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
+  /** Change type for this paragraph. */
   action: Action;
+  /** Node type name (always `paragraph`). */
   nodeType: string;
+  /** Anchor position in the old document for replaying diffs. */
   pos: number;
 }
 
@@ -32,7 +41,9 @@ interface ParagraphDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
  * Diff payload produced when a paragraph is inserted.
  */
 type AddedParagraphDiff = ParagraphDiffBase<'added'> & {
+  /** Serialized paragraph payload inserted into the document. */
   nodeJSON: NodeJSON;
+  /** Plain-text content of the inserted paragraph. */
   text: string;
 };
 
@@ -40,7 +51,9 @@ type AddedParagraphDiff = ParagraphDiffBase<'added'> & {
  * Diff payload produced when a paragraph is deleted.
  */
 type DeletedParagraphDiff = ParagraphDiffBase<'deleted'> & {
+  /** Serialized paragraph payload removed from the document. */
   nodeJSON: NodeJSON;
+  /** Plain-text content of the removed paragraph. */
   oldText: string;
 };
 
@@ -48,11 +61,17 @@ type DeletedParagraphDiff = ParagraphDiffBase<'deleted'> & {
  * Diff payload emitted when a paragraph changes, including inline edits.
  */
 type ModifiedParagraphDiff = ParagraphDiffBase<'modified'> & {
+  /** Serialized paragraph payload before the change. */
   oldNodeJSON: NodeJSON;
+  /** Serialized paragraph payload after the change. */
   newNodeJSON: NodeJSON;
+  /** Plain-text content before the change. */
   oldText: string;
+  /** Plain-text content after the change. */
   newText: string;
+  /** Inline diff operations within the paragraph. */
   contentDiff: InlineDiffResult[];
+  /** Attribute-level diff for the paragraph. */
   attrsDiff: AttributesDiff | null;
 };
 

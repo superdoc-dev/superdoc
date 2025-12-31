@@ -92,21 +92,37 @@ type RawDiff = RawTextDiff | RawInlineNodeDiff;
  * Final grouped inline diff exposed to downstream consumers.
  */
 export interface InlineDiffResult {
+  /** Change type for this inline segment. */
   action: InlineAction;
+  /** Token kind associated with the diff. */
   kind: 'text' | 'inlineNode';
+  /** Start position in the old document (or null when unknown). */
   startPos: number | null;
+  /** End position in the old document (or null when unknown). */
   endPos: number | null;
+  /** Inserted text for additions. */
   text?: string;
+  /** Removed text for deletions/modifications. */
   oldText?: string;
+  /** Inserted text for modifications. */
   newText?: string;
+  /** Run attributes for added/deleted text. */
   runAttrs?: Record<string, unknown>;
+  /** Attribute diff for modified runs. */
   runAttrsDiff?: AttributesDiff | null;
+  /** Marks applied to added/deleted text. */
   marks?: Record<string, unknown>[];
+  /** Mark diff for modified text. */
   marksDiff?: MarksDiff | null;
+  /** Inline node type name for node diffs. */
   nodeType?: string;
+  /** Serialized inline node payload for additions/deletions. */
   nodeJSON?: NodeJSON;
+  /** Serialized inline node payload before the change. */
   oldNodeJSON?: NodeJSON;
+  /** Serialized inline node payload after the change. */
   newNodeJSON?: NodeJSON;
+  /** Attribute diff for modified inline nodes. */
   attrsDiff?: AttributesDiff | null;
 }
 

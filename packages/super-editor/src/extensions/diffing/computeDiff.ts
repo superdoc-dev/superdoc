@@ -3,11 +3,6 @@ import { diffComments, type CommentInput, type CommentDiff } from './algorithm/c
 import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing.ts';
 
 /**
- * Placeholder type for comment diffs until comment diffing is implemented.
- */
-export type CommentDiff = Record<string, never>;
-
-/**
  * Result payload for document diffing.
  */
 export interface DiffResult {

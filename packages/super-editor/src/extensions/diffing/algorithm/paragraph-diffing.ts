@@ -116,6 +116,7 @@ function buildParagraphContent(paragraph: PMNode, paragraphPos = 0): InlineDiffT
             char: nodeText[i] ?? '',
             runAttrs,
             offset: baseOffset + i,
+            marks: node.marks?.map((mark) => mark.toJSON()) ?? [],
           });
         }
         return;

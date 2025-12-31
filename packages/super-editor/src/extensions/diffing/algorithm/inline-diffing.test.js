@@ -15,6 +15,15 @@ const buildTextRuns = (text, runAttrs = {}, offsetStart = 0) =>
     offset: offsetStart + index,
   }));
 
+const buildMarkedTextRuns = (text, marks, runAttrs = {}, offsetStart = 0) =>
+  text.split('').map((char, index) => ({
+    char,
+    runAttrs: { ...runAttrs },
+    kind: 'text',
+    offset: offsetStart + index,
+    marks,
+  }));
+
 const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }, pos = 0) => {
   const nodeAttrs = { ...attrs };
   return {
@@ -97,6 +106,7 @@ describe('getInlineDiff', () => {
           deleted: { bold: true },
           modified: {},
         },
+        marksDiff: null,
       },
     ]);
   });
@@ -124,6 +134,31 @@ describe('getInlineDiff', () => {
           modified: {
             bold: { from: true, to: false },
           },
+        },
+        marksDiff: null,
+      },
+    ]);
+  });
+
+  it('treats mark-only changes as modifications and surfaces marks diffs', () => {
+    const oldRuns = buildMarkedTextRuns('a', [{ type: 'bold', attrs: { level: 1 } }]);
+    const newRuns = buildMarkedTextRuns('a', [{ type: 'italic', attrs: {} }]);
+
+    const diffs = getInlineDiff(oldRuns, newRuns, oldRuns.length);
+
+    expect(diffs).toEqual([
+      {
+        action: 'modified',
+        kind: 'text',
+        startPos: 0,
+        endPos: 0,
+        oldText: 'a',
+        newText: 'a',
+        runAttrsDiff: null,
+        marksDiff: {
+          added: [{ name: 'italic', attrs: {} }],
+          deleted: [{ name: 'bold', attrs: { level: 1 } }],
+          modified: [],
         },
       },
     ]);

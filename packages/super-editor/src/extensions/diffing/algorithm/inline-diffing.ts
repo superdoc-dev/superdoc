@@ -1,8 +1,9 @@
 import type { Node as PMNode } from 'prosemirror-model';
-import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
+import { getAttributesDiff, getMarksDiff, type AttributesDiff, type MarksDiff } from './attributes-diffing.ts';
 import { diffSequences } from './sequence-diffing.ts';
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
+type MarkJSON = { type: string; attrs?: Record<string, unknown> };
 
 /**
  * Supported diff operations for inline changes.
@@ -16,6 +17,7 @@ export type InlineTextToken = {
   kind: 'text';
   char: string;
   runAttrs: Record<string, unknown>;
+  marks: MarkJSON[];
   offset?: number | null;
 };
 
@@ -46,6 +48,7 @@ type RawTextDiff =
       kind: 'text';
       text: string;
       runAttrs: Record<string, unknown>;
+      marks: MarkJSON[];
     }
   | {
       action: 'modified';
@@ -55,6 +58,8 @@ type RawTextDiff =
       oldText: string;
       oldAttrs: Record<string, unknown>;
       newAttrs: Record<string, unknown>;
+      oldMarks: MarkJSON[];
+      newMarks: MarkJSON[];
     };
 
 /**
@@ -96,6 +101,8 @@ export interface InlineDiffResult {
   newText?: string;
   runAttrs?: Record<string, unknown>;
   runAttrsDiff?: AttributesDiff | null;
+  marks?: Record<string, unknown>[];
+  marksDiff?: MarksDiff | null;
   nodeType?: string;
   nodeJSON?: NodeJSON;
   oldNodeJSON?: NodeJSON;
@@ -116,7 +123,11 @@ export function getInlineDiff(
   newContent: InlineDiffToken[],
   oldParagraphEndPos: number,
 ): InlineDiffResult[] {
-  const buildInlineDiff = (action: InlineAction, token: InlineDiffToken, oldIdx: number): RawDiff => {
+  const buildInlineDiff = (
+    action: Exclude<InlineAction, 'modified'>,
+    token: InlineDiffToken,
+    oldIdx: number,
+  ): RawDiff => {
     if (token.kind !== 'text') {
       return {
         action,
@@ -132,6 +143,7 @@ export function getInlineDiff(
       kind: 'text',
       text: token.char,
       runAttrs: token.runAttrs,
+      marks: token.marks,
     };
   };
 
@@ -164,6 +176,8 @@ export function getInlineDiff(
           oldText: oldToken.char,
           oldAttrs: oldToken.runAttrs,
           newAttrs: newToken.runAttrs,
+          oldMarks: oldToken.marks,
+          newMarks: newToken.marks,
         };
       }
       return null;
@@ -196,7 +210,11 @@ function inlineComparator(a: InlineDiffToken, b: InlineDiffToken): boolean {
  */
 function shouldProcessEqualAsModification(oldToken: InlineDiffToken, newToken: InlineDiffToken): boolean {
   if (oldToken.kind === 'text' && newToken.kind === 'text') {
-    return Boolean(getAttributesDiff(oldToken.runAttrs, newToken.runAttrs));
+    return (
+      Boolean(getAttributesDiff(oldToken.runAttrs, newToken.runAttrs)) ||
+      oldToken.marks?.length !== newToken.marks?.length ||
+      Boolean(getMarksDiff(oldToken.marks, newToken.marks))
+    );
   }
 
   if (oldToken.kind === 'inlineNode' && newToken.kind === 'inlineNode') {
@@ -219,6 +237,7 @@ type TextDiffGroup =
       endPos: number | null;
       text: string;
       runAttrs: Record<string, unknown>;
+      marks: MarkJSON[];
     }
   | {
       action: 'modified';
@@ -229,6 +248,8 @@ type TextDiffGroup =
       oldText: string;
       oldAttrs: Record<string, unknown>;
       newAttrs: Record<string, unknown>;
+      oldMarks: MarkJSON[];
+      newMarks: MarkJSON[];
     };
 
 /**
@@ -258,9 +279,11 @@ function groupDiffs(diffs: RawDiff[], oldTokens: InlineDiffToken[], oldParagraph
       result.oldText = currentGroup.oldText;
       result.newText = currentGroup.newText;
       result.runAttrsDiff = getAttributesDiff(currentGroup.oldAttrs, currentGroup.newAttrs);
+      result.marksDiff = getMarksDiff(currentGroup.oldMarks, currentGroup.newMarks);
     } else {
       result.text = currentGroup.text;
       result.runAttrs = currentGroup.runAttrs;
+      result.marks = currentGroup.marks;
     }
 
     grouped.push(result);
@@ -314,6 +337,8 @@ function createTextGroup(diff: RawTextDiff, oldTokens: InlineDiffToken[], oldPar
           oldText: diff.oldText,
           oldAttrs: diff.oldAttrs,
           newAttrs: diff.newAttrs,
+          oldMarks: diff.oldMarks,
+          newMarks: diff.newMarks,
         }
       : {
           action: diff.action,
@@ -322,6 +347,7 @@ function createTextGroup(diff: RawTextDiff, oldTokens: InlineDiffToken[], oldPar
           endPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
           text: diff.text,
           runAttrs: diff.runAttrs,
+          marks: diff.marks,
         };
 
   return baseGroup;
@@ -364,8 +390,14 @@ function canExtendGroup(
     if (!areInlineAttrsEqual(group.oldAttrs, diff.oldAttrs) || !areInlineAttrsEqual(group.newAttrs, diff.newAttrs)) {
       return false;
     }
+    if (!areInlineMarksEqual(group.oldMarks, diff.oldMarks) || !areInlineMarksEqual(group.newMarks, diff.newMarks)) {
+      return false;
+    }
   } else if (group.action !== 'modified' && diff.action !== 'modified') {
     if (!areInlineAttrsEqual(group.runAttrs, diff.runAttrs)) {
+      return false;
+    }
+    if (!areInlineMarksEqual(group.marks, diff.marks)) {
       return false;
     }
   } else {
@@ -416,4 +448,15 @@ function resolveTokenPosition(tokens: InlineDiffToken[], idx: number, paragraphE
  */
 function areInlineAttrsEqual(a: Record<string, unknown> | undefined, b: Record<string, unknown> | undefined): boolean {
   return !getAttributesDiff(a ?? {}, b ?? {});
+}
+
+/**
+ * Compares two sets of inline marks and determines if they are equal.
+ *
+ * @param a - The first set of marks to compare.
+ * @param b - The second set of marks to compare.
+ * @returns `true` if the marks are equal, `false` otherwise.
+ */
+function areInlineMarksEqual(a: MarkJSON[] | undefined, b: MarkJSON[] | undefined): boolean {
+  return !getMarksDiff(a ?? [], b ?? []);
 }

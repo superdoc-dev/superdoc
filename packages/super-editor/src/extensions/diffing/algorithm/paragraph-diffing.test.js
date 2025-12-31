@@ -11,6 +11,15 @@ import {
 
 const buildRuns = (text, attrs = {}) => text.split('').map((char) => ({ char, runAttrs: attrs, kind: 'text' }));
 
+const buildMarkedRuns = (text, marks, attrs = {}, offsetStart = 0) =>
+  text.split('').map((char, index) => ({
+    char,
+    runAttrs: attrs,
+    kind: 'text',
+    marks,
+    offset: offsetStart + index,
+  }));
+
 const createParagraphNode = (overrides = {}) => {
   const node = {
     type: { name: 'paragraph', ...(overrides.type || {}) },
@@ -100,7 +109,7 @@ const createParagraphWithSegments = (segments, contentSize) => {
     nodesBetween: (from, to, callback) => {
       computedSegments.forEach((segment) => {
         if (segment.kind === 'text') {
-          callback({ isText: true, text: segment.text }, segment.start);
+          callback({ isText: true, text: segment.text, marks: segment.marks ?? [] }, segment.start);
         } else if (segment.kind === 'leaf') {
           callback({ isLeaf: true, type: { spec: { leafText: segment.leafText } } }, segment.start);
         } else {
@@ -195,6 +204,15 @@ describe('createParagraphSnapshot', () => {
     });
     expect(stripOffsets(result.text.slice(1))).toEqual(buildRuns('Text', { bold: false }));
     expect(result.text[1]?.offset).toBe(2);
+  });
+
+  it('captures marks from text nodes in the snapshot', () => {
+    const boldMark = { toJSON: () => ({ type: 'bold', attrs: { level: 2 } }) };
+    const mockParagraph = createParagraphWithSegments([{ text: 'Hi', start: 0, marks: [boldMark] }], 2);
+
+    const result = createParagraphSnapshot(mockParagraph, 0, 0);
+    expect(result.text[0]?.marks).toEqual([{ type: 'bold', attrs: { level: 2 } }]);
+    expect(result.text[1]?.marks).toEqual([{ type: 'bold', attrs: { level: 2 } }]);
   });
 
   it('applies paragraph position offsets to the resolver', () => {
@@ -300,6 +318,45 @@ describe('paragraph diff builders', () => {
       attrsDiff: null,
     });
     expect(diff.contentDiff.length).toBeGreaterThan(0);
+  });
+
+  it('returns a diff when only inline marks change', () => {
+    const oldParagraph = createParagraphInfo({
+      fullText: 'a',
+      text: buildMarkedRuns('a', [{ type: 'bold', attrs: { level: 1 } }], {}, 1),
+      node: createParagraphNode({ attrs: { align: 'left' } }),
+    });
+    const newParagraph = createParagraphInfo({
+      fullText: 'a',
+      text: buildMarkedRuns('a', [{ type: 'bold', attrs: { level: 2 } }], {}, 1),
+      node: createParagraphNode({ attrs: { align: 'left' } }),
+    });
+
+    const diff = buildModifiedParagraphDiff(oldParagraph, newParagraph);
+    expect(diff).not.toBeNull();
+    expect(diff?.attrsDiff).toBeNull();
+    expect(diff?.contentDiff).toEqual([
+      {
+        action: 'modified',
+        kind: 'text',
+        startPos: 1,
+        endPos: 1,
+        oldText: 'a',
+        newText: 'a',
+        runAttrsDiff: null,
+        marksDiff: {
+          added: [],
+          deleted: [],
+          modified: [
+            {
+              name: 'bold',
+              oldAttrs: { level: 1 },
+              newAttrs: { level: 2 },
+            },
+          ],
+        },
+      },
+    ]);
   });
 
   it('returns null when neither text nor attributes changed', () => {

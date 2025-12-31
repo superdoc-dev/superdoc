@@ -5,6 +5,12 @@ import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
 
+/**
+ * Loads a DOCX fixture and returns the ProseMirror document and schema.
+ *
+ * @param {string} name DOCX fixture filename.
+ * @returns {Promise<{ doc: import('prosemirror-model').Node; schema: import('prosemirror-model').Schema }>}
+ */
 const getDocument = async (name) => {
   const buffer = await getTestDataAsBuffer(name);
   const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
@@ -21,9 +27,15 @@ const getDocument = async (name) => {
     annotations: true,
   });
 
-  return editor.state.doc;
+  return { doc: editor.state.doc, schema: editor.schema };
 };
 
+/**
+ * Flattens a ProseMirror JSON node to its text content.
+ *
+ * @param {import('prosemirror-model').Node | import('prosemirror-model').Node['toJSON'] | null | undefined} nodeJSON
+ * @returns {string}
+ */
 const getNodeTextContent = (nodeJSON) => {
   if (!nodeJSON) {
     return '';
@@ -39,10 +51,11 @@ const getNodeTextContent = (nodeJSON) => {
 
 describe('Diff', () => {
   it('Compares two documents and identifies added, deleted, and modified paragraphs', async () => {
-    const docBefore = await getDocument('diff_before.docx');
-    const docAfter = await getDocument('diff_after.docx');
+    const { doc: docBefore, schema } = await getDocument('diff_before.docx');
+    const { doc: docAfter } = await getDocument('diff_after.docx');
 
-    const diffs = computeDiff(docBefore, docAfter);
+    const { docDiffs } = computeDiff(docBefore, docAfter, schema);
+    const diffs = docDiffs;
     const getDiff = (action, predicate) => diffs.find((diff) => diff.action === action && predicate(diff));
 
     const modifiedDiffs = diffs.filter((diff) => diff.action === 'modified');
@@ -139,10 +152,11 @@ describe('Diff', () => {
   });
 
   it('Compare two documents with simple changes', async () => {
-    const docBefore = await getDocument('diff_before2.docx');
-    const docAfter = await getDocument('diff_after2.docx');
+    const { doc: docBefore, schema } = await getDocument('diff_before2.docx');
+    const { doc: docAfter } = await getDocument('diff_after2.docx');
 
-    const diffs = computeDiff(docBefore, docAfter);
+    const { docDiffs } = computeDiff(docBefore, docAfter, schema);
+    const diffs = docDiffs;
     expect(diffs).toHaveLength(4);
 
     let diff = diffs.find((diff) => diff.action === 'modified' && diff.oldText === 'Here’s some text.');
@@ -167,10 +181,11 @@ describe('Diff', () => {
   });
 
   it('Compare another set of two documents with only formatting changes', async () => {
-    const docBefore = await getDocument('diff_before4.docx');
-    const docAfter = await getDocument('diff_after4.docx');
+    const { doc: docBefore, schema } = await getDocument('diff_before4.docx');
+    const { doc: docAfter } = await getDocument('diff_after4.docx');
 
-    const diffs = computeDiff(docBefore, docAfter);
+    const { docDiffs } = computeDiff(docBefore, docAfter, schema);
+    const diffs = docDiffs;
 
     expect(diffs).toHaveLength(1);
     const diff = diffs[0];
@@ -178,10 +193,11 @@ describe('Diff', () => {
   });
 
   it('Compare another set of two documents with only formatting changes', async () => {
-    const docBefore = await getDocument('diff_before5.docx');
-    const docAfter = await getDocument('diff_after5.docx');
+    const { doc: docBefore, schema } = await getDocument('diff_before5.docx');
+    const { doc: docAfter } = await getDocument('diff_after5.docx');
 
-    const diffs = computeDiff(docBefore, docAfter);
+    const { docDiffs } = computeDiff(docBefore, docAfter, schema);
+    const diffs = docDiffs;
 
     expect(diffs).toHaveLength(1);
     const diff = diffs[0];
@@ -189,10 +205,11 @@ describe('Diff', () => {
   });
 
   it('Compare another set of two documents where an image was added', async () => {
-    const docBefore = await getDocument('diff_before6.docx');
-    const docAfter = await getDocument('diff_after6.docx');
+    const { doc: docBefore, schema } = await getDocument('diff_before6.docx');
+    const { doc: docAfter } = await getDocument('diff_after6.docx');
 
-    const diffs = computeDiff(docBefore, docAfter);
+    const { docDiffs } = computeDiff(docBefore, docAfter, schema);
+    const diffs = docDiffs;
     expect(diffs).toHaveLength(1);
     const diff = diffs[0];
     expect(diff.action).toBe('modified');
@@ -206,10 +223,11 @@ describe('Diff', () => {
   });
 
   it('Compare a complex document with table edits and tracked formatting', async () => {
-    const docBefore = await getDocument('diff_before7.docx');
-    const docAfter = await getDocument('diff_after7.docx');
+    const { doc: docBefore, schema } = await getDocument('diff_before7.docx');
+    const { doc: docAfter } = await getDocument('diff_after7.docx');
 
-    const diffs = computeDiff(docBefore, docAfter);
+    const { docDiffs } = computeDiff(docBefore, docAfter, schema);
+    const diffs = docDiffs;
     expect(diffs).toHaveLength(9);
     expect(diffs.filter((diff) => diff.action === 'modified')).toHaveLength(6);
     expect(diffs.filter((diff) => diff.action === 'added')).toHaveLength(2);
@@ -267,5 +285,14 @@ describe('Diff', () => {
       (diff) => diff.action === 'modified' && diff.oldText === 'First cell' && diff.newText === 'cell',
     );
     expect(firstCellDiff?.contentDiff?.[0]?.text).toBe('First ');
+  });
+
+  it('Compare a complex document with table edits and tracked formatting', async () => {
+    const { doc: docBefore, schema } = await getDocument('diff_before8.docx');
+    const { doc: docAfter } = await getDocument('diff_after8.docx');
+
+    const { docDiffs } = computeDiff(docBefore, docAfter, schema);
+    const diffs = docDiffs;
+    console.log(JSON.stringify(diffs, null, 2));
   });
 });

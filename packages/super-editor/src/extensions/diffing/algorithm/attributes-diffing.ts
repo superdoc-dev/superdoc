@@ -32,11 +32,13 @@ export interface MarksDiff {
  *
  * @param objectA Baseline attributes to compare.
  * @param objectB Updated attributes to compare.
+ * @param ignoreKeys Additional attribute keys to ignore.
  * @returns Structured diff or null when objects are effectively equal.
  */
 export function getAttributesDiff(
   objectA: Record<string, unknown> | null | undefined = {},
   objectB: Record<string, unknown> | null | undefined = {},
+  ignoreKeys: string[] = [],
 ): AttributesDiff | null {
   const diff: AttributesDiff = {
     added: {},
@@ -44,7 +46,8 @@ export function getAttributesDiff(
     modified: {},
   };
 
-  diffObjects(objectA ?? {}, objectB ?? {}, '', diff);
+  const ignored = new Set([...IGNORED_ATTRIBUTE_KEYS, ...ignoreKeys]);
+  diffObjects(objectA ?? {}, objectB ?? {}, '', diff, ignored);
   const hasChanges =
     Object.keys(diff.added).length > 0 || Object.keys(diff.deleted).length > 0 || Object.keys(diff.modified).length > 0;
 
@@ -126,17 +129,19 @@ export function getMarksDiff(
  * @param objectB Updated attributes being inspected.
  * @param basePath Dotted path prefix used for nested keys.
  * @param diff Aggregated diff being mutated.
+ * @param ignoreKeys Set of attribute keys to ignore.
  */
 function diffObjects(
   objectA: Record<string, unknown>,
   objectB: Record<string, unknown>,
   basePath: string,
   diff: AttributesDiff,
+  ignoreKeys: Set<string>,
 ): void {
   const keys = new Set([...Object.keys(objectA || {}), ...Object.keys(objectB || {})]);
 
   for (const key of keys) {
-    if (IGNORED_ATTRIBUTE_KEYS.has(key)) {
+    if (ignoreKeys.has(key)) {
       continue;
     }
 
@@ -145,12 +150,12 @@ function diffObjects(
     const hasB = Object.prototype.hasOwnProperty.call(objectB, key);
 
     if (hasA && !hasB) {
-      recordDeletedValue(objectA[key], path, diff);
+      recordDeletedValue(objectA[key], path, diff, ignoreKeys);
       continue;
     }
 
     if (!hasA && hasB) {
-      recordAddedValue(objectB[key], path, diff);
+      recordAddedValue(objectB[key], path, diff, ignoreKeys);
       continue;
     }
 
@@ -158,7 +163,7 @@ function diffObjects(
     const valueB = objectB[key];
 
     if (isPlainObject(valueA) && isPlainObject(valueB)) {
-      diffObjects(valueA, valueB, path, diff);
+      diffObjects(valueA, valueB, path, diff, ignoreKeys);
       continue;
     }
 
@@ -183,14 +188,20 @@ function diffObjects(
  * @param value Value being marked as added.
  * @param path Dotted attribute path for the value.
  * @param diff Bucket used to capture additions.
+ * @param ignoreKeys Set of attribute keys to ignore.
  */
-function recordAddedValue(value: unknown, path: string, diff: Pick<AttributesDiff, 'added'>): void {
+function recordAddedValue(
+  value: unknown,
+  path: string,
+  diff: Pick<AttributesDiff, 'added'>,
+  ignoreKeys: Set<string>,
+): void {
   if (isPlainObject(value)) {
     for (const [childKey, childValue] of Object.entries(value)) {
-      if (IGNORED_ATTRIBUTE_KEYS.has(childKey)) {
+      if (ignoreKeys.has(childKey)) {
         continue;
       }
-      recordAddedValue(childValue, joinPath(path, childKey), diff);
+      recordAddedValue(childValue, joinPath(path, childKey), diff, ignoreKeys);
     }
     return;
   }
@@ -203,14 +214,20 @@ function recordAddedValue(value: unknown, path: string, diff: Pick<AttributesDif
  * @param value Value being marked as removed.
  * @param path Dotted attribute path for the value.
  * @param diff Bucket used to capture deletions.
+ * @param ignoreKeys Set of attribute keys to ignore.
  */
-function recordDeletedValue(value: unknown, path: string, diff: Pick<AttributesDiff, 'deleted'>): void {
+function recordDeletedValue(
+  value: unknown,
+  path: string,
+  diff: Pick<AttributesDiff, 'deleted'>,
+  ignoreKeys: Set<string>,
+): void {
   if (isPlainObject(value)) {
     for (const [childKey, childValue] of Object.entries(value)) {
-      if (IGNORED_ATTRIBUTE_KEYS.has(childKey)) {
+      if (ignoreKeys.has(childKey)) {
         continue;
       }
-      recordDeletedValue(childValue, joinPath(path, childKey), diff);
+      recordDeletedValue(childValue, joinPath(path, childKey), diff, ignoreKeys);
     }
     return;
   }

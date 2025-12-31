@@ -18,6 +18,15 @@ export interface AttributesDiff {
 }
 
 /**
+ * Aggregated marks diff broken down into added, deleted, and modified marks.
+ */
+export interface MarksDiff {
+  added: { name: string; attrs: Record<string, unknown> }[];
+  deleted: { name: string; attrs: Record<string, unknown> }[];
+  modified: { name: string; oldAttrs: Record<string, unknown>; newAttrs: Record<string, unknown> }[];
+}
+
+/**
  * Computes the attribute level diff between two arbitrary objects.
  * Produces a map of dotted paths to added, deleted and modified values.
  *
@@ -40,6 +49,74 @@ export function getAttributesDiff(
     Object.keys(diff.added).length > 0 || Object.keys(diff.deleted).length > 0 || Object.keys(diff.modified).length > 0;
 
   return hasChanges ? diff : null;
+}
+
+/**
+ * Computes the attribute level diff between two sets of ProseMirror marks.
+ * Produces a map of dotted paths to added, deleted and modified values.
+ *
+ * @param marksA Baseline marks to compare.
+ * @param marksB Updated marks to compare.
+ * @returns Structured diff or null when marks are effectively equal.
+ *
+ */
+export function getMarksDiff(
+  marksA: Array<{ type: string; attrs?: Record<string, unknown> }> | null = [],
+  marksB: Array<{ type: string; attrs?: Record<string, unknown> }> | null = [],
+): MarksDiff | null {
+  marksA = marksA || [];
+  marksB = marksB || [];
+
+  const normalizeMarkAttrs = (attrs?: Record<string, unknown>): Record<string, unknown> => {
+    if (!attrs) {
+      return {};
+    }
+    const normalized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(attrs)) {
+      if (IGNORED_ATTRIBUTE_KEYS.has(key)) {
+        continue;
+      }
+      normalized[key] = value;
+    }
+    return normalized;
+  };
+  const marksDiff: MarksDiff = {
+    added: [],
+    deleted: [],
+    modified: [],
+  };
+  const marksMapA = new Map<string, Record<string, unknown>>();
+  const marksMapB = new Map<string, Record<string, unknown>>();
+
+  for (const mark of marksA) {
+    marksMapA.set(mark.type, normalizeMarkAttrs(mark.attrs));
+  }
+  for (const mark of marksB) {
+    marksMapB.set(mark.type, normalizeMarkAttrs(mark.attrs));
+  }
+
+  const markNames = new Set([...marksMapA.keys(), ...marksMapB.keys()]);
+  for (const name of markNames) {
+    const attrsA = marksMapA.get(name);
+    const attrsB = marksMapB.get(name);
+
+    if (attrsA && !attrsB) {
+      marksDiff.deleted.push({ name, attrs: attrsA });
+      continue;
+    }
+
+    if (!attrsA && attrsB) {
+      marksDiff.added.push({ name, attrs: attrsB });
+      continue;
+    }
+
+    if (attrsA && attrsB && !deepEquals(attrsA, attrsB)) {
+      marksDiff.modified.push({ name, oldAttrs: attrsA, newAttrs: attrsB });
+    }
+  }
+
+  const hasChanges = marksDiff.added.length > 0 || marksDiff.deleted.length > 0 || marksDiff.modified.length > 0;
+  return hasChanges ? marksDiff : null;
 }
 
 /**

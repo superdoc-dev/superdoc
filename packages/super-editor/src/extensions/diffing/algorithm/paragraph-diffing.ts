@@ -1,5 +1,5 @@
 import type { Node as PMNode } from 'prosemirror-model';
-import { getInlineDiff, type InlineDiffToken, type InlineDiffResult } from './inline-diffing.ts';
+import { getInlineDiff, tokenizeInlineContent, type InlineDiffToken, type InlineDiffResult } from './inline-diffing.ts';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
 import { getInsertionPos } from './diff-utils.ts';
 import { levenshteinDistance } from './similarity.ts';
@@ -70,7 +70,7 @@ export type ParagraphDiff = AddedParagraphDiff | DeletedParagraphDiff | Modified
  * @returns Snapshot containing tokens (with offsets) and derived metadata.
  */
 export function createParagraphSnapshot(paragraph: PMNode, paragraphPos: number, depth: number): ParagraphNodeInfo {
-  const text = buildParagraphContent(paragraph, paragraphPos);
+  const text = tokenizeInlineContent(paragraph, paragraphPos + 1);
   return {
     node: paragraph,
     pos: paragraphPos,
@@ -79,62 +79,6 @@ export function createParagraphSnapshot(paragraph: PMNode, paragraphPos: number,
     endPos: paragraphPos + 1 + paragraph.content.size,
     fullText: text.map((token) => (token.kind === 'text' ? token.char : '')).join(''),
   };
-}
-
-/**
- * Flattens a paragraph node into inline diff tokens, embedding absolute document offsets.
- *
- * @param paragraph Paragraph node being tokenized.
- * @param paragraphPos Absolute document position for the paragraph; used to offset resolver results.
- * @returns Flattened tokens enriched with document offsets.
- */
-function buildParagraphContent(paragraph: PMNode, paragraphPos = 0): InlineDiffToken[] {
-  const content: InlineDiffToken[] = [];
-  const paragraphOffset = paragraphPos + 1;
-  paragraph.nodesBetween(
-    0,
-    paragraph.content.size,
-    (node, pos) => {
-      let nodeText = '';
-
-      if (node.isText) {
-        nodeText = node.text ?? '';
-      } else if (node.isLeaf) {
-        const leafTextFn = (node.type.spec as { leafText?: (node: PMNode) => string } | undefined)?.leafText;
-        if (leafTextFn) {
-          nodeText = leafTextFn(node);
-        }
-      }
-
-      if (nodeText) {
-        const runNode = paragraph.nodeAt(pos - 1);
-        const runAttrs = runNode?.attrs ?? {};
-        const baseOffset = paragraphOffset + pos;
-        for (let i = 0; i < nodeText.length; i += 1) {
-          content.push({
-            kind: 'text',
-            char: nodeText[i] ?? '',
-            runAttrs,
-            offset: baseOffset + i,
-            marks: node.marks?.map((mark) => mark.toJSON()) ?? [],
-          });
-        }
-        return;
-      }
-
-      if (node.type.name !== 'run' && node.isInline) {
-        content.push({
-          kind: 'inlineNode',
-          node,
-          nodeType: node.type.name,
-          nodeJSON: node.toJSON(),
-          pos: paragraphOffset + pos,
-        });
-      }
-    },
-    0,
-  );
-  return content;
 }
 
 /**

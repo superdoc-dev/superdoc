@@ -65,12 +65,13 @@ interface NodeModifiedDiff extends NodeDiffBase<'modified'> {
 export type NodeDiff = ParagraphDiff | NodeAddedDiff | NodeDeletedDiff | NodeModifiedDiff;
 
 /**
- * Produces a sequence diff between two ProseMirror documents, flattening paragraphs for inline-aware comparisons.
+ * Produces a sequence diff between two normalized node lists.
+ *
+ * @param oldNodes Normalized nodes from the old document.
+ * @param newNodes Normalized nodes from the new document.
+ * @returns List of node diffs describing the changes.
  */
-export function diffNodes(oldRoot: PMNode, newRoot: PMNode): NodeDiff[] {
-  const oldNodes = normalizeNodes(oldRoot);
-  const newNodes = normalizeNodes(newRoot);
-
+export function diffNodes(oldNodes: NodeInfo[], newNodes: NodeInfo[]): NodeDiff[] {
   const addedNodesSet = new Set<PMNode>();
   const deletedNodesSet = new Set<PMNode>();
   return diffSequences<NodeInfo, NodeDiff, NodeDiff, NodeDiff>(oldNodes, newNodes, {
@@ -88,7 +89,7 @@ export function diffNodes(oldRoot: PMNode, newRoot: PMNode): NodeDiff[] {
 /**
  * Traverses a ProseMirror document and converts paragraphs to richer node info objects.
  */
-function normalizeNodes(pmDoc: PMNode): NodeInfo[] {
+export function normalizeNodes(pmDoc: PMNode): NodeInfo[] {
   const nodes: NodeInfo[] = [];
   const depthMap = new WeakMap<PMNode, number>();
   depthMap.set(pmDoc, -1);

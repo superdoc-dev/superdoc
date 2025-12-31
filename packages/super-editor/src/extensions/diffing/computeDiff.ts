@@ -1,5 +1,5 @@
 import type { Node as PMNode, Schema } from 'prosemirror-model';
-import { diffNodes, type NodeDiff } from './algorithm/generic-diffing.ts';
+import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing.ts';
 
 /**
  * Placeholder type for comment diffs until comment diffing is implemented.
@@ -34,7 +34,7 @@ export interface DiffResult {
 export function computeDiff(oldPmDoc: PMNode, newPmDoc: PMNode, schema: Schema): DiffResult {
   void schema;
   return {
-    docDiffs: diffNodes(oldPmDoc, newPmDoc),
+    docDiffs: diffNodes(normalizeNodes(oldPmDoc), normalizeNodes(newPmDoc)),
     commentDiffs: [],
   };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffNodes } from './generic-diffing.ts';
+import { diffNodes, normalizeNodes } from './generic-diffing.ts';
 
 const createDocFromNodes = (nodes = []) => {
   const docNode = {
@@ -79,7 +79,7 @@ describe('diffParagraphs', () => {
     const oldRoot = createDocFromNodes(oldParagraphs);
     const newRoot = createDocFromNodes(newParagraphs);
 
-    const diffs = diffNodes(oldRoot, newRoot);
+    const diffs = diffNodes(normalizeNodes(oldRoot), normalizeNodes(newRoot));
 
     expect(diffs).toHaveLength(1);
     expect(diffs[0].action).toBe('modified');
@@ -92,7 +92,7 @@ describe('diffParagraphs', () => {
     const oldRoot = createDocFromNodes(oldParagraphs);
     const newRoot = createDocFromNodes(newParagraphs);
 
-    const diffs = diffNodes(oldRoot, newRoot);
+    const diffs = diffNodes(normalizeNodes(oldRoot), normalizeNodes(newRoot));
 
     expect(diffs).toHaveLength(2);
     expect(diffs[0].action).toBe('deleted');
@@ -111,7 +111,7 @@ describe('diffParagraphs', () => {
     const oldRoot = createDocFromNodes(oldParagraphs);
     const newRoot = createDocFromNodes(newParagraphs);
 
-    const diffs = diffNodes(oldRoot, newRoot);
+    const diffs = diffNodes(normalizeNodes(oldRoot), normalizeNodes(newRoot));
 
     expect(diffs).toHaveLength(3);
     expect(diffs[0].action).toBe('modified');
@@ -123,7 +123,10 @@ describe('diffParagraphs', () => {
   it('treats paragraph attribute-only changes as modifications', () => {
     const oldParagraph = createParagraph('Consistent text', { align: 'left' });
     const newParagraph = createParagraph('Consistent text', { align: 'right' });
-    const diffs = diffNodes(createDocFromNodes([oldParagraph]), createDocFromNodes([newParagraph]));
+    const diffs = diffNodes(
+      normalizeNodes(createDocFromNodes([oldParagraph])),
+      normalizeNodes(createDocFromNodes([newParagraph])),
+    );
 
     expect(diffs).toHaveLength(1);
     expect(diffs[0].action).toBe('modified');
@@ -134,7 +137,10 @@ describe('diffParagraphs', () => {
   it('emits attribute diffs for non-paragraph nodes', () => {
     const oldHeading = { node: buildSimpleNode('heading', { level: 1 }), pos: 0, depth: 1 };
     const newHeading = { node: buildSimpleNode('heading', { level: 2 }), pos: 0, depth: 1 };
-    const diffs = diffNodes(createDocFromNodes([oldHeading]), createDocFromNodes([newHeading]));
+    const diffs = diffNodes(
+      normalizeNodes(createDocFromNodes([oldHeading])),
+      normalizeNodes(createDocFromNodes([newHeading])),
+    );
 
     expect(diffs).toHaveLength(1);
     expect(diffs[0]).toMatchObject({
@@ -151,12 +157,14 @@ describe('diffParagraphs', () => {
     const newParagraph = createParagraph('Base paragraph', {}, { pos: 0 });
     const insertionPos = oldParagraph.pos + oldParagraph.node.nodeSize;
     const diffs = diffNodes(
-      createDocFromNodes([oldParagraph]),
-      createDocFromNodes([
-        newParagraph,
-        { node: parentNode, pos: insertionPos, depth: 1 },
-        { node: childNode, pos: insertionPos + 1, depth: 2 },
-      ]),
+      normalizeNodes(createDocFromNodes([oldParagraph])),
+      normalizeNodes(
+        createDocFromNodes([
+          newParagraph,
+          { node: parentNode, pos: insertionPos, depth: 1 },
+          { node: childNode, pos: insertionPos + 1, depth: 2 },
+        ]),
+      ),
     );
 
     const additions = diffs.filter((diff) => diff.action === 'added');
@@ -171,12 +179,14 @@ describe('diffParagraphs', () => {
     const figurePos = paragraph.pos + paragraph.node.nodeSize;
 
     const diffs = diffNodes(
-      createDocFromNodes([
-        paragraph,
-        { node: parentNode, pos: figurePos, depth: 1 },
-        { node: childNode, pos: figurePos + 1, depth: 2 },
-      ]),
-      createDocFromNodes([paragraph]),
+      normalizeNodes(
+        createDocFromNodes([
+          paragraph,
+          { node: parentNode, pos: figurePos, depth: 1 },
+          { node: childNode, pos: figurePos + 1, depth: 2 },
+        ]),
+      ),
+      normalizeNodes(createDocFromNodes([paragraph])),
     );
 
     const deletions = diffs.filter((diff) => diff.action === 'deleted');
@@ -201,7 +211,7 @@ describe('diffParagraphs', () => {
       { node: persistedRow, pos: 1 + insertedRow.nodeSize, depth: 2 },
     ]);
 
-    const diffs = diffNodes(oldDoc, newDoc);
+    const diffs = diffNodes(normalizeNodes(oldDoc), normalizeNodes(newDoc));
 
     const addition = diffs.find((diff) => diff.action === 'added' && diff.nodeType === 'tableRow');
     expect(addition).toBeDefined();
@@ -215,8 +225,8 @@ describe('diffParagraphs', () => {
     const expectedPos = oldParagraph.pos + oldParagraph.node.nodeSize;
 
     const diffs = diffNodes(
-      createDocFromNodes([oldParagraph]),
-      createDocFromNodes([newParagraph, { node: headingNode, pos: expectedPos, depth: 1 }]),
+      normalizeNodes(createDocFromNodes([oldParagraph])),
+      normalizeNodes(createDocFromNodes([newParagraph, { node: headingNode, pos: expectedPos, depth: 1 }])),
     );
 
     const addition = diffs.find((diff) => diff.action === 'added' && diff.nodeType === 'heading');

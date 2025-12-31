@@ -19,7 +19,7 @@ type NodeJSON = ReturnType<PMNode['toJSON']>;
 /**
  * Minimal node metadata extracted during document traversal.
  */
-type BaseNodeInfo = {
+export type BaseNodeInfo = {
   node: PMNode;
   pos: number;
   depth: number;
@@ -28,7 +28,7 @@ type BaseNodeInfo = {
 /**
  * Union describing every node processed by the generic diff.
  */
-type NodeInfo = BaseNodeInfo | ParagraphNodeInfo;
+export type NodeInfo = BaseNodeInfo | ParagraphNodeInfo;
 
 interface NodeDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
   action: Action;

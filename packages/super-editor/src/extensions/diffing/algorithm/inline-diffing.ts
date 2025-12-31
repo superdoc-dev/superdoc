@@ -135,7 +135,7 @@ export function tokenizeInlineContent(pmNode: PMNode, baseOffset = 0): InlineDif
       }
 
       if (nodeText) {
-        const runNode = pmNode.nodeAt(pos - 1);
+        const runNode = pos > 0 ? pmNode.nodeAt(pos - 1) : null;
         const runAttrs = runNode?.attrs ?? {};
         const tokenOffset = baseOffset + pos;
         for (let i = 0; i < nodeText.length; i += 1) {

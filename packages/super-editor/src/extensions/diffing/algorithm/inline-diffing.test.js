@@ -338,18 +338,18 @@ describe('getInlineDiff', () => {
 
 describe('tokenizeInlineContent', () => {
   it('handles basic text nodes', () => {
-    const mockParagraph = createInlineContainer([{ text: 'Hello', start: 0, attrs: { bold: true } }], 5);
+    const mockParagraph = createInlineContainer([{ text: 'Hello', start: 1, attrs: { bold: true } }], 6);
 
-    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    const tokens = tokenizeInlineContent(mockParagraph, 0);
     expect(stripTokenOffsets(tokens)).toEqual(buildTextTokens('Hello', { bold: true }, []));
     expect(tokens[0]?.offset).toBe(1);
     expect(tokens[4]?.offset).toBe(5);
   });
 
   it('handles leaf nodes with leafText', () => {
-    const mockParagraph = createInlineContainer([{ leafText: () => 'Leaf', start: 0, attrs: { type: 'leaf' } }], 4);
+    const mockParagraph = createInlineContainer([{ leafText: () => 'Leaf', start: 1, attrs: { type: 'leaf' } }], 5);
 
-    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    const tokens = tokenizeInlineContent(mockParagraph, 0);
     expect(stripTokenOffsets(tokens)).toEqual(buildTextTokens('Leaf', { type: 'leaf' }, []));
     expect(tokens[0]?.offset).toBe(1);
     expect(tokens[3]?.offset).toBe(4);
@@ -357,11 +357,11 @@ describe('tokenizeInlineContent', () => {
 
   it('handles mixed content', () => {
     const mockParagraph = createInlineContainer([
-      { text: 'Hello', start: 0, attrs: { bold: true } },
-      { leafText: () => 'Leaf', start: 5, attrs: { italic: true } },
+      { text: 'Hello', start: 1, attrs: { bold: true } },
+      { leafText: () => 'Leaf', start: 6, attrs: { italic: true } },
     ]);
 
-    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    const tokens = tokenizeInlineContent(mockParagraph, 0);
     expect(stripTokenOffsets(tokens)).toEqual([
       ...buildTextTokens('Hello', { bold: true }, []),
       ...buildTextTokens('Leaf', { italic: true }, []),
@@ -374,18 +374,18 @@ describe('tokenizeInlineContent', () => {
   it('handles empty content', () => {
     const mockParagraph = createInlineContainer([], 0);
 
-    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    const tokens = tokenizeInlineContent(mockParagraph, 0);
     expect(tokens).toEqual([]);
   });
 
   it('includes inline nodes that have no textual content', () => {
     const inlineAttrs = { kind: 'tab', width: 120 };
     const mockParagraph = createInlineContainer([
-      { inlineNode: { typeName: 'tab', attrs: inlineAttrs }, start: 0 },
-      { text: 'Text', start: 1, attrs: { bold: false } },
+      { inlineNode: { typeName: 'tab', attrs: inlineAttrs }, start: 1 },
+      { text: 'Text', start: 2, attrs: { bold: false } },
     ]);
 
-    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    const tokens = tokenizeInlineContent(mockParagraph, 0);
     expect(tokens[0]).toMatchObject({
       kind: 'inlineNode',
       nodeType: 'tab',
@@ -401,17 +401,17 @@ describe('tokenizeInlineContent', () => {
 
   it('captures marks from text nodes', () => {
     const boldMark = { toJSON: () => ({ type: 'bold', attrs: { level: 2 } }) };
-    const mockParagraph = createInlineContainer([{ text: 'Hi', start: 0, marks: [boldMark] }], 2);
+    const mockParagraph = createInlineContainer([{ text: 'Hi', start: 1, marks: [boldMark] }], 3);
 
-    const tokens = tokenizeInlineContent(mockParagraph, 1);
+    const tokens = tokenizeInlineContent(mockParagraph, 0);
     expect(tokens[0]?.marks).toEqual([{ type: 'bold', attrs: { level: 2 } }]);
     expect(tokens[1]?.marks).toEqual([{ type: 'bold', attrs: { level: 2 } }]);
   });
 
   it('applies the base offset to token positions', () => {
-    const mockParagraph = createInlineContainer([{ text: 'Nested', start: 0 }], 6);
+    const mockParagraph = createInlineContainer([{ text: 'Nested', start: 1 }], 7);
 
-    const tokens = tokenizeInlineContent(mockParagraph, 11);
+    const tokens = tokenizeInlineContent(mockParagraph, 10);
     expect(stripTokenOffsets(tokens)).toEqual(buildTextTokens('Nested', {}, []));
     expect(tokens[0]?.offset).toBe(11);
     expect(tokens[5]?.offset).toBe(16);

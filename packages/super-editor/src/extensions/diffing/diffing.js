@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Extension } from '@core/Extension.js';
 import { computeDiff } from './computeDiff.ts';
+import { replayDiffs } from './replayDiffs.ts';
 
 export const Diffing = Extension.create({
   name: 'documentDiffing',
@@ -30,6 +31,25 @@ export const Diffing = Extension.create({
             updatedComments,
           );
           return diffs;
+        },
+
+      /**
+       * Replays a diff result onto the current document as tracked changes.
+       *
+       * @param {import('./computeDiff.ts').DiffResult} diff
+       * @param {{ user: import('@core/types/EditorConfig.js').User; applyTrackedChanges?: boolean }} options
+       * @returns {import('prosemirror-state').Transaction}
+       */
+      replayDifferences:
+        (diff, { user, applyTrackedChanges = true }) =>
+        ({ state }) => {
+          const result = replayDiffs({
+            state,
+            diff,
+            schema: state.schema,
+            options: { user, applyTrackedChanges },
+          });
+          return result.tr;
         },
     };
   },

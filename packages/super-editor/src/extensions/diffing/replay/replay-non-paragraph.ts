@@ -46,6 +46,10 @@ export function replayNonParagraphDiff({
   }
 
   const { pos } = diff;
+  if (pos < 0 || pos > tr.doc.content.size) {
+    skipWithWarning(`Position ${pos} outside of document.`);
+    return result;
+  }
 
   if (diff.action === 'added') {
     if (!diff.nodeJSON) {

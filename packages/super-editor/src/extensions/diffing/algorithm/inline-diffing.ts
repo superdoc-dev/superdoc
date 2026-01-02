@@ -111,7 +111,7 @@ export interface InlineDiffResult {
   /** Attribute diff for modified runs. */
   runAttrsDiff?: AttributesDiff | null;
   /** Marks applied to added/deleted text. */
-  marks?: Record<string, unknown>[];
+  marks?: MarkJSON[];
   /** Mark diff for modified text. */
   marksDiff?: MarksDiff | null;
   /** Inline node type name for node diffs. */

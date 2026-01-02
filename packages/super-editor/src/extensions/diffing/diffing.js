@@ -41,15 +41,20 @@ export const Diffing = Extension.create({
        * @returns {import('prosemirror-state').Transaction}
        */
       replayDifferences:
-        (diff, { user, applyTrackedChanges = true }) =>
-        ({ state }) => {
-          const result = replayDiffs({
-            state,
+        (diff, { applyTrackedChanges = true }) =>
+        ({ state, dispatch }) => {
+          replayDiffs({
+            tr: state.tr,
             diff,
             schema: state.schema,
-            options: { user, applyTrackedChanges },
           });
-          return result.tr;
+          if (applyTrackedChanges) {
+            state.tr.setMeta('trackChanges', true);
+          }
+          if (dispatch && state.tr.docChanged) {
+            dispatch(state.tr);
+          }
+          return true;
         },
     };
   },

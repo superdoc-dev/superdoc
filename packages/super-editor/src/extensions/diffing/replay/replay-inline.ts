@@ -1,6 +1,7 @@
 import { Fragment, Slice } from 'prosemirror-model';
 import { ReplaceStep } from 'prosemirror-transform';
 
+import { applyAttrsDiff } from './replay-attrs.ts';
 import { marksFromDiff } from './marks-from-diff.ts';
 import { ReplayResult } from './replay-types.ts';
 
@@ -68,6 +69,14 @@ export function replayInlineDiff({
   }
 
   if (diff.kind === 'text') {
+    const textForRange = diff.action === 'modified' ? diff.oldText : diff.text;
+    const rangeLength = typeof textForRange === 'string' ? textForRange.length : null;
+    if (!isAddition && rangeLength !== null && from !== null) {
+      to = from + rangeLength;
+    } else if (!isAddition && to !== null && from !== null) {
+      to = to + 1;
+    }
+
     if (isAddition) {
       if (!diff.text) {
         skipWithWarning('Missing text content for inline addition.');
@@ -102,9 +111,16 @@ export function replayInlineDiff({
     }
 
     if (isModification) {
-      if (!diff.newText) {
+      if (diff.newText == null) {
         skipWithWarning('Missing newText for inline modification.');
         return result;
+      }
+      if (diff.runAttrsDiff) {
+        const runUpdate = applyRunAttrsDiff(tr, from, diff.runAttrsDiff);
+        result.applied += runUpdate.applied;
+        if (runUpdate.warning) {
+          skipWithWarning(runUpdate.warning);
+        }
       }
       const oldMarks = getMarksAtPosition(tr.doc, from);
       const marks = marksFromDiff({
@@ -151,6 +167,12 @@ export function replayInlineDiff({
     }
 
     if (isDeletion) {
+      const node = tr.doc.nodeAt(from);
+      if (!node) {
+        skipWithWarning(`No inline node found at ${from} for deletion.`);
+        return result;
+      }
+      to = from + node.nodeSize;
       const step = new ReplaceStep(from, to, Slice.empty);
       const stepResult = tr.maybeStep(step);
       if (stepResult.failed) {
@@ -167,6 +189,12 @@ export function replayInlineDiff({
         return result;
       }
       try {
+        const existingNode = tr.doc.nodeAt(from);
+        if (!existingNode) {
+          skipWithWarning(`No inline node found at ${from} for modification.`);
+          return result;
+        }
+        to = from + existingNode.nodeSize;
         const node = schema.nodeFromJSON(diff.newNodeJSON);
         const slice = new Slice(Fragment.from(node), 0, 0);
         const step = new ReplaceStep(from, to, slice);
@@ -208,4 +236,35 @@ const getMarksAtPosition = (
     type: mark.type.name,
     attrs: mark.attrs ?? {},
   }));
+};
+
+/**
+ * Applies a run-attributes diff to the nearest run node at a position.
+ *
+ * @param tr Transaction to update.
+ * @param pos Document position to resolve.
+ * @param diff Run-attributes diff to apply.
+ * @returns Result describing whether the update was applied.
+ */
+const applyRunAttrsDiff = (
+  tr: import('prosemirror-state').Transaction,
+  pos: number,
+  diff: import('../algorithm/attributes-diffing.ts').AttributesDiff,
+): { applied: number; warning?: string } => {
+  const resolved = tr.doc.resolve(pos);
+  for (let depth = resolved.depth; depth > 0; depth -= 1) {
+    const node = resolved.node(depth);
+    if (node.type.name !== 'run') {
+      continue;
+    }
+    const nodePos = resolved.before(depth);
+    const updatedAttrs = applyAttrsDiff({ attrs: node.attrs, diff });
+    try {
+      tr.setNodeMarkup(nodePos, undefined, updatedAttrs, node.marks);
+      return { applied: 1 };
+    } catch (error) {
+      return { applied: 0, warning: `Failed to update run attrs at ${nodePos}.` };
+    }
+  }
+  return { applied: 0, warning: `No run node found at ${pos} for run-attr update.` };
 };

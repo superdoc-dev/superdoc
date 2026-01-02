@@ -335,8 +335,8 @@ const handleCompareFile = async (event) => {
     const compareComments = compareEditor.converter?.comments ?? [];
     const diff = editor.commands.compareDocuments(compareDoc, compareComments);
     const userToApply = editor.options?.user ?? user;
-    const tr = editor.commands.replayDifferences(diff, { user: userToApply, applyTrackedChanges: true });
-    editor.view.dispatch(tr);
+    console.log('diffs', JSON.stringify(diff, null, 2));
+    editor.commands.replayDifferences(diff, { user: userToApply, applyTrackedChanges: true });
   } finally {
     compareEditor?.destroy?.();
   }

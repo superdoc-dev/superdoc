@@ -115,6 +115,7 @@ const testTextDeleteRange = () => {
     kind: 'text',
     startPos,
     endPos,
+    text: 'ell',
   };
 
   const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: endPos });
@@ -143,6 +144,7 @@ const testTextModifyRange = () => {
     kind: 'text',
     startPos,
     endPos,
+    oldText: 'H',
     newText: 'Y',
     marks: [],
     marksDiff: null,

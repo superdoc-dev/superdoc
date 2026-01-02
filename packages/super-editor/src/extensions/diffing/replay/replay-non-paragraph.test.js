@@ -57,6 +57,7 @@ const findNodePos = (doc, typeName) => {
 
 /**
  * Verifies that non-paragraph insertions apply at the diff position.
+ * @returns {void}
  */
 const testNonParagraphInsert = () => {
   const schema = createSchema();
@@ -84,6 +85,7 @@ const testNonParagraphInsert = () => {
 
 /**
  * Verifies that non-paragraph deletions remove the node at the diff position.
+ * @returns {void}
  */
 const testNonParagraphDelete = () => {
   const schema = createSchema();
@@ -115,6 +117,7 @@ const testNonParagraphDelete = () => {
 
 /**
  * Verifies that non-paragraph attribute updates preserve content.
+ * @returns {void}
  */
 const testNonParagraphModify = () => {
   const schema = createSchema();
@@ -153,6 +156,7 @@ const testNonParagraphModify = () => {
 
 /**
  * Runs the non-paragraph diff replay suite.
+ * @returns {void}
  */
 const runNonParagraphSuite = () => {
   it('inserts a non-paragraph node using the diff position', testNonParagraphInsert);

@@ -8,6 +8,12 @@ import { ReplayResult } from './replay-types.ts';
 
 /**
  * Replays a non-paragraph node diff into a transaction.
+ *
+ * @param params Input bundle for replaying a diff.
+ * @param params.tr Transaction to append steps to.
+ * @param params.diff Diff payload to replay.
+ * @param params.schema Schema used to rebuild nodes.
+ * @returns Result summary for the applied diff.
  */
 export function replayNonParagraphDiff({
   tr,
@@ -26,6 +32,8 @@ export function replayNonParagraphDiff({
 
   /**
    * Records a skipped diff with a warning message.
+   *
+   * @param message Warning to record for a skipped diff.
    */
   const skipWithWarning = (message: string) => {
     result.skipped += 1;

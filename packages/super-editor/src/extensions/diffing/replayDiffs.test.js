@@ -12,6 +12,7 @@ import {
 
 /**
  * Verifies the replay entry points are exposed as functions.
+ * @returns {void}
  */
 const testReplayEntrypoints = () => {
   expect(typeof replayDiffs).toBe('function');
@@ -24,6 +25,7 @@ const testReplayEntrypoints = () => {
 };
 /**
  * Runs the replay scaffolding suite.
+ * @returns {void}
  */
 const runReplayScaffoldingSuite = () => {
   it('exposes replay entry points', testReplayEntrypoints);

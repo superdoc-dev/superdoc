@@ -97,19 +97,19 @@ export function replayParagraphDiff({
       return result;
     }
 
-    // if (diff.attrsDiff) {
-    //   if (!diff.newNodeJSON?.attrs) {
-    //     skipWithWarning(`Missing newNodeJSON attrs at pos ${pos} for paragraph modification.`);
-    //     return result;
-    //   }
-    //   try {
-    //     tr.setNodeMarkup(pos, undefined, diff.newNodeJSON.attrs, node.marks);
-    //     result.applied += 1;
-    //   } catch (error) {
-    //     skipWithWarning(`Failed to update paragraph attrs at pos ${pos}.`);
-    //     return result;
-    //   }
-    // }
+    if (diff.attrsDiff) {
+      if (!diff.newNodeJSON?.attrs) {
+        skipWithWarning(`Missing newNodeJSON attrs at pos ${pos} for paragraph modification.`);
+        return result;
+      }
+      try {
+        tr.setNodeMarkup(pos, undefined, diff.newNodeJSON.attrs, node.marks);
+        result.applied += 1;
+      } catch (error) {
+        skipWithWarning(`Failed to update paragraph attrs at pos ${pos}.`);
+        return result;
+      }
+    }
 
     const paragraphEndPos = pos + 1 + node.content.size;
     const contentDiffs = [...(diff.contentDiff ?? [])].sort((a, b) => {

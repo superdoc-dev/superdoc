@@ -875,18 +875,21 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     });
   }
 
-  const emitParams = createOrUpdateTrackedChangeComment({
-    documentId: editor.options.documentId,
-    event: isNewChange ? 'add' : 'update',
-    marks: {
-      insertedMark,
-      deletionMark,
-      formatMark,
-    },
-    deletionNodes,
-    nodes,
-    newEditorState,
-  });
+  const hasCandidateNodes = nodes.length > 0 || Boolean(deletionNodes?.length);
+  const emitParams = hasCandidateNodes
+    ? createOrUpdateTrackedChangeComment({
+        documentId: editor.options.documentId,
+        event: isNewChange ? 'add' : 'update',
+        marks: {
+          insertedMark,
+          deletionMark,
+          formatMark,
+        },
+        deletionNodes,
+        nodes,
+        newEditorState,
+      })
+    : null;
 
   if (emitParams && emitCommentEvent) editor.emit('commentsUpdate', emitParams);
 

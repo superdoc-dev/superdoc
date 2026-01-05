@@ -27,8 +27,8 @@ export function marksFromDiff({
   }
 
   if (action === 'modified') {
-    if (marksDiff && oldMarks.length > 0) {
-      const updatedMarks = applyMarksDiff(oldMarks, marksDiff);
+    if (marksDiff) {
+      const updatedMarks = applyMarksDiff(marksDiff);
       return buildMarksFromJSON(schema, updatedMarks);
     }
     if (marks.length > 0) {
@@ -52,14 +52,9 @@ export function marksFromDiff({
  * @returns Updated mark JSON entries.
  */
 const applyMarksDiff = (
-  existingMarks: Array<{ type: string; attrs?: Record<string, unknown> }>,
   marksDiff: import('../algorithm/attributes-diffing.ts').MarksDiff,
 ): Array<{ type: string; attrs?: Record<string, unknown> }> => {
   const byType = new Map<string, Record<string, unknown>>();
-
-  existingMarks.forEach((mark) => {
-    byType.set(mark.type, mark.attrs ?? {});
-  });
 
   marksDiff.deleted.forEach((mark) => {
     byType.delete(mark.name);

@@ -1,5 +1,5 @@
 import { Fragment, Slice } from 'prosemirror-model';
-import { ReplaceStep } from 'prosemirror-transform';
+import { ReplaceStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 
 import { applyAttrsDiff } from './replay-attrs.ts';
 import { marksFromDiff } from './marks-from-diff.ts';
@@ -115,29 +115,35 @@ export function replayInlineDiff({
         skipWithWarning('Missing newText for inline modification.');
         return result;
       }
-      if (diff.runAttrsDiff) {
-        const runUpdate = applyRunAttrsDiff(tr, from, diff.runAttrsDiff);
-        result.applied += runUpdate.applied;
-        if (runUpdate.warning) {
-          skipWithWarning(runUpdate.warning);
-        }
-      }
-      const oldMarks = getMarksAtPosition(tr.doc, from);
       const marks = marksFromDiff({
         schema,
         action: diff.action,
         marks: diff.marks,
         marksDiff: diff.marksDiff,
-        oldMarks,
+        oldMarks: [],
       });
-      const textNode = schema.text(diff.newText, marks);
-      const slice = new Slice(Fragment.from(textNode), 0, 0);
-      const step = new ReplaceStep(from, to, slice);
-      const stepResult = tr.maybeStep(step);
-      if (stepResult.failed) {
-        skipWithWarning(`Failed to replace text at ${from}-${to}.`);
-        return result;
-      }
+      marks.forEach((mark) => {
+        const step = new AddMarkStep(from, to!, mark);
+        const stepResult = tr.maybeStep(step);
+        if (stepResult.failed) {
+          skipWithWarning(`Failed to add mark ${mark.type.name} at ${from}-${to}.`);
+        }
+      });
+
+      (diff.marksDiff?.deleted ?? []).forEach((markEntry) => {
+        const markType = schema.marks[markEntry.name];
+        if (!markType) {
+          skipWithWarning(`Unknown mark type ${markEntry.name} for deletion.`);
+          return;
+        }
+        const mark = markType.create(markEntry.attrs || {});
+        const step = new RemoveMarkStep(from, to!, mark);
+        const stepResult = tr.maybeStep(step);
+        if (stepResult.failed) {
+          skipWithWarning(`Failed to remove mark ${mark.type.name} at ${from}-${to}.`);
+        }
+      });
+
       result.applied += 1;
       return result;
     }

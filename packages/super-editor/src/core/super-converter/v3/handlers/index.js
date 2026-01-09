@@ -34,6 +34,7 @@ import { translator as w_contextualSpacing } from './w/contextualSpacing/context
 import { translator as w_cs } from './w/cs/cs-translator.js';
 import { translator as w_del_translator } from './w/del/del-translator.js';
 import { translator as w_divId_translator } from './w/divId/divId-translator.js';
+import { translator as w_docDefaults_translator } from './w/docDefaults/docDefaults-translator.js';
 import { translator as w_drawing_translator } from './w/drawing/drawing-translator.js';
 import { translator as w_dstrike_translator } from './w/dstrike/dstrike-translator.js';
 import { translator as w_eastAsianLayout_translator } from './w/eastAsianLayout/eastAsianLayout-translator.js';
@@ -204,6 +205,7 @@ const translatorList = Array.from(
     w_cs,
     w_del_translator,
     w_divId_translator,
+    w_docDefaults_translator,
     w_drawing_translator,
     w_dstrike_translator,
     w_eastAsianLayout_translator,

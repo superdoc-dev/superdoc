@@ -291,6 +291,60 @@ export function decodeProperties(params, translatorsBySdName, properties) {
 }
 
 /**
+ * Helper to encode properties by key (eg: w:style elements by styleId)
+ * @param {string} xmlName The XML element name (with namespace).
+ * @param {string} sdName The SuperDoc attribute name (without namespace).
+ * @param {import('@translator').NodeTranslator} translator The node translator to use for encoding.
+ * @param {import('@translator').SCEncoderConfig} params The encoding parameters containing the nodes to process.
+ * @param {object} node The XML node containing the elements to encode.
+ * @param {string} keyAttr The attribute name to use as the key in the resulting object.
+ * @returns {object} The encoded properties as an object keyed by the specified attribute.
+ */
+export function encodePropertiesByKey(xmlName, sdName, translator, params, node, keyAttr) {
+  const result = {};
+  const elements = node.elements?.filter((el) => el.name === xmlName) || [];
+  if (elements.length > 0) {
+    const items = elements.map((el) => translator.encode({ ...params, nodes: [el] })).filter(Boolean);
+    if (items.length > 0) {
+      result[sdName] = items.reduce((acc, item) => {
+        if (item[keyAttr]) {
+          acc[item[keyAttr]] = item;
+        }
+        return acc;
+      }, {});
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Helper to decode properties by key (eg: w:style elements by styleId)
+ * @param {string} xmlName The XML element name (with namespace).
+ * @param {string} sdName The SuperDoc attribute name (without namespace).
+ * @param {import('@translator').NodeTranslator} translator The node translator to use for decoding.
+ * @param {import('@translator').SCDecoderConfig} params The decoding parameters containing the node to process.
+ * @param {object} attrs The attributes object containing the properties to decode.
+ * @param {string} keyAttr The attribute name to use as the key in the resulting object.
+ * @returns {Array} An array of decoded elements.
+ */
+export function decodePropertiesByKey(xmlName, sdName, translator, params, attrs) {
+  const elements = [];
+  if (attrs[sdName] != null) {
+    Object.values(attrs[sdName]).forEach((item) => {
+      const decoded = translator.decode({
+        ...params,
+        node: { attrs: { [translator.sdNodeOrKeyName]: item } },
+      });
+      if (decoded) {
+        elements.push(decoded);
+      }
+    });
+  }
+  return elements;
+}
+
+/**
  * Helper to create property handlers for nested properties (eg: w:tcBorders => borders)
  * @param {string} xmlName The XML element name (with namespace).
  * @param {string} sdName The SuperDoc attribute name (without namespace).

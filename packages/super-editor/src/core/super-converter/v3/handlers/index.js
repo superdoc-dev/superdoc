@@ -72,9 +72,11 @@ import { translator as w_lang_translator } from './w/lang/lang-translator.js';
 import { translator as w_latentStyles_translator } from './w/latentStyles/latentStyles-translator.js';
 import { translator as w_locked_translator } from './w/locked/locked-translator.js';
 import { translator as w_link_translator } from './w/link/link-translator.js';
+import { translator as w_lvlJc_translator } from './w/lvlJc/lvlJc-translator.js';
 import { translator as w_lvlPicBulletId_translator } from './w/lvlPicBulletId/lvlPicBulletId-translator.js';
 import { translator as w_lvlRestart_translator } from './w/lvlRestart/lvlRestart-translator.js';
 import { translator as w_lvlStart_translator } from './w/start/lvlStart-translator.js';
+import { translator as w_lvlText_translator } from './w/lvlText/lvlText-translator.js';
 import { translator as w_mirrorIndents_translator } from './w/mirrorIndents/mirrorIndents-translator.js';
 import { translator as w_left_translator } from './w/left/left-translator.js';
 import { translator as w_lsdException_translator } from './w/lsdException/lsdException-translator.js';
@@ -120,6 +122,7 @@ import { translator as w_spacing_translator } from './w/spacing/spacing-translat
 import { translator as w_suppressAutoHyphens_translator } from './w/suppressAutoHyphens/suppressAutoHyphens-translator.js';
 import { translator as w_suppressLineNumbers_translator } from './w/suppressLineNumbers/suppressLineNumbers-translator.js';
 import { translator as w_suppressOverlap_translator } from './w/suppressOverlap/suppressOverlap-translator.js';
+import { translator as w_suff_translator } from './w/suff/suff-translator.js';
 import { translator as w_sz_translator } from './w/sz/sz-translator.js';
 import { translator as w_szCs_translator } from './w/szcs/szcs-translator.js';
 import { translator as w_t_translator } from './w/t/t-translator.js';
@@ -253,9 +256,11 @@ const translatorList = Array.from(
     w_left_translator,
     w_lsdException_translator,
     w_link_translator,
+    w_lvlJc_translator,
     w_lvlPicBulletId_translator,
     w_lvlRestart_translator,
     w_lvlStart_translator,
+    w_lvlText_translator,
     w_locked_translator,
     w_mirrorIndents_translator,
     w_name_translator,
@@ -296,6 +301,7 @@ const translatorList = Array.from(
     w_suppressAutoHyphens_translator,
     w_suppressLineNumbers_translator,
     w_suppressOverlap_translator,
+    w_suff_translator,
     w_specVanish_translator,
     w_start_translator,
     w_strike_translator,

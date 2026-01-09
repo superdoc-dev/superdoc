@@ -62,6 +62,7 @@ import { translator as w_ind_translator } from './w/ind/ind-translator.js';
 import { translator as w_ins_translator } from './w/ins/ins-translator.js';
 import { translator as w_insideH_translator } from './w/insideH/insideH-translator.js';
 import { translator as w_insideV_translator } from './w/insideV/insideV-translator.js';
+import { translator as w_isLgl_translator } from './w/isLgl/isLgl-translator.js';
 import { translator as w_jc_translator } from './w/jc/jc-translator.js';
 import { translator as w_keepLines_translator } from './w/keepLines/keepLines-translator.js';
 import { translator as w_keepNext_translator } from './w/keepNext/keepNext-translator.js';
@@ -241,6 +242,7 @@ const translatorList = Array.from(
     w_ins_translator,
     w_insideH_translator,
     w_insideV_translator,
+    w_isLgl_translator,
     w_jc_translator,
     w_keepLines_translator,
     w_keepNext_translator,

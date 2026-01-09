@@ -80,6 +80,7 @@ import { translator as w_lvlPicBulletId_translator } from './w/lvlPicBulletId/lv
 import { translator as w_lvlRestart_translator } from './w/lvlRestart/lvlRestart-translator.js';
 import { translator as w_lvlStart_translator } from './w/start/lvlStart-translator.js';
 import { translator as w_lvlText_translator } from './w/lvlText/lvlText-translator.js';
+import { translator as w_multiLevelType_translator } from './w/multiLevelType/multiLevelType-translator.js';
 import { translator as w_mirrorIndents_translator } from './w/mirrorIndents/mirrorIndents-translator.js';
 import { translator as w_left_translator } from './w/left/left-translator.js';
 import { translator as w_lsdException_translator } from './w/lsdException/lsdException-translator.js';
@@ -91,6 +92,7 @@ import { translator as w_num_translator } from './w/num/num-translator.js';
 import { translator as w_numFmt_translator } from './w/numFmt/numFmt-translator.js';
 import { translator as w_numId_translator } from './w/numId/numId-translator.js';
 import { translator as w_numPr_translator } from './w/numPr/numPr-translator.js';
+import { translator as w_numStyleLink_translator } from './w/numStyleLink/numStyleLink-translator.js';
 import { translator as w_nsid_translator } from './w/nsid/nsid-translator.js';
 import { translator as w_oMath_translator } from './w/oMath/oMath-translator.js';
 import { translator as w_outline_translator } from './w/outline/outline-translator.js';
@@ -124,6 +126,7 @@ import { translator as w_start_translator } from './w/start/start-translator.js'
 import { translator as w_startOverride_translator } from './w/startOverride/startOverride-translator.js';
 import { translator as w_strike_translator } from './w/strike/strike-translator.js';
 import { translator as w_style_translator } from './w/style/style-translator.js';
+import { translator as w_styleLink_translator } from './w/styleLink/styleLink-translator.js';
 import { translator as w_styles_translator } from './w/styles/styles-translator.js';
 import { translator as w_spacing_translator } from './w/spacing/spacing-translator.js';
 import { translator as w_suppressAutoHyphens_translator } from './w/suppressAutoHyphens/suppressAutoHyphens-translator.js';
@@ -272,6 +275,7 @@ const translatorList = Array.from(
     w_lvlRestart_translator,
     w_lvlStart_translator,
     w_lvlText_translator,
+    w_multiLevelType_translator,
     w_locked_translator,
     w_mirrorIndents_translator,
     w_name_translator,
@@ -282,6 +286,7 @@ const translatorList = Array.from(
     w_numFmt_translator,
     w_numId_translator,
     w_numPr_translator,
+    w_numStyleLink_translator,
     w_nsid_translator,
     w_outline_translator,
     w_outlineLvl_translator,
@@ -321,6 +326,7 @@ const translatorList = Array.from(
     w_startOverride_translator,
     w_strike_translator,
     w_style_translator,
+    w_styleLink_translator,
     w_styles_translator,
     w_sz_translator,
     w_szCs_translator,

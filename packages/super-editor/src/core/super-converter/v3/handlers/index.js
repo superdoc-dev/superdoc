@@ -117,6 +117,7 @@ import { translator as w_shd_translator } from './w/shd/shd-translator.js';
 import { translator as w_smallCaps_translator } from './w/smallCaps/smallCaps-translator.js';
 import { translator as w_snapToGrid_translator } from './w/snapToGrid/snapToGrid-translator.js';
 import { translator as w_start_translator } from './w/start/start-translator.js';
+import { translator as w_startOverride_translator } from './w/startOverride/startOverride-translator.js';
 import { translator as w_strike_translator } from './w/strike/strike-translator.js';
 import { translator as w_style_translator } from './w/style/style-translator.js';
 import { translator as w_styles_translator } from './w/styles/styles-translator.js';
@@ -308,6 +309,7 @@ const translatorList = Array.from(
     w_suff_translator,
     w_specVanish_translator,
     w_start_translator,
+    w_startOverride_translator,
     w_strike_translator,
     w_style_translator,
     w_styles_translator,

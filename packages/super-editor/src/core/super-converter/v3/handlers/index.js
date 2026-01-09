@@ -6,6 +6,7 @@ import { translator as sd_index_translator } from './sd/index/index-translator.j
 import { translator as sd_indexEntry_translator } from './sd/indexEntry/indexEntry-translator.js';
 import { translator as sd_autoPageNumber_translator } from './sd/autoPageNumber/autoPageNumber-translator.js';
 import { translator as sd_totalPageNumber_translator } from './sd/totalPageNumber/totalPageNumber-translator.js';
+import { translator as w_abstractNumId_translator } from './w/abstractNumId/abstractNumId-translator.js';
 import { translator as w_adjustRightInd_translator } from './w/adjustRightInd/adjustRightInd-translator.js';
 import { translator as w_autoRedefine_translator } from './w/autoRedefine/autoRedefine-translator.js';
 import { translator as w_autoSpaceDE_translator } from './w/autoSpaceDE/autoSpaceDE-translator.js';
@@ -197,6 +198,7 @@ const translatorList = Array.from(
     sd_indexEntry_translator,
     sd_autoPageNumber_translator,
     sd_totalPageNumber_translator,
+    w_abstractNumId_translator,
     w_adjustRightInd_translator,
     w_autoRedefine_translator,
     w_autoSpaceDE_translator,

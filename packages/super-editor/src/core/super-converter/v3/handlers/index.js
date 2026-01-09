@@ -91,6 +91,7 @@ import { translator as w_num_translator } from './w/num/num-translator.js';
 import { translator as w_numFmt_translator } from './w/numFmt/numFmt-translator.js';
 import { translator as w_numId_translator } from './w/numId/numId-translator.js';
 import { translator as w_numPr_translator } from './w/numPr/numPr-translator.js';
+import { translator as w_nsid_translator } from './w/nsid/nsid-translator.js';
 import { translator as w_oMath_translator } from './w/oMath/oMath-translator.js';
 import { translator as w_outline_translator } from './w/outline/outline-translator.js';
 import { translator as w_outlineLvl_translator } from './w/outlineLvl/outlineLvl-translator.js';
@@ -171,6 +172,7 @@ import { translator as w_tcFitText_translator } from './w/tcFitText/tcFitText-tr
 import { translator as w_tcW_translator } from './w/tcW/tcW-translator.js';
 import { translator as w_textDirection_translator } from './w/textDirection/textDirection-translator.js';
 import { translator as w_tl2br_translator } from './w/tl2br/tl2br-translator.js';
+import { translator as w_tmpl_translator } from './w/tmpl/tmpl-translator.js';
 import { translator as w_tr2bl_translator } from './w/tr2bl/tr2bl-translator.js';
 import { translator as w_tcBorders_translator } from './w/tcBorders/tcBorders-translator.js';
 import { translator as w_tcMar_translator } from './w/tcMar/tcMar-translator.js';
@@ -280,6 +282,7 @@ const translatorList = Array.from(
     w_numFmt_translator,
     w_numId_translator,
     w_numPr_translator,
+    w_nsid_translator,
     w_outline_translator,
     w_outlineLvl_translator,
     w_overflowPunct,
@@ -350,6 +353,7 @@ const translatorList = Array.from(
     w_tcW_translator,
     w_textDirection_translator,
     w_tl2br_translator,
+    w_tmpl_translator,
     w_tr_translator,
     w_tr2bl_translator,
     w_trHeight_translator,

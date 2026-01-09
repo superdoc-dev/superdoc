@@ -84,6 +84,7 @@ import { translator as w_name_translator } from './w/name/name-translator.js';
 import { translator as w_next_translator } from './w/next/next-translator.js';
 import { translator as w_noProof_translator } from './w/noProof/noProof-translator.js';
 import { translator as w_noWrap_translator } from './w/noWrap/noWrap-translator.js';
+import { translator as w_numFmt_translator } from './w/numFmt/numFmt-translator.js';
 import { translator as w_numId_translator } from './w/numId/numId-translator.js';
 import { translator as w_numPr_translator } from './w/numPr/numPr-translator.js';
 import { translator as w_oMath_translator } from './w/oMath/oMath-translator.js';
@@ -267,6 +268,7 @@ const translatorList = Array.from(
     w_next_translator,
     w_noProof_translator,
     w_noWrap_translator,
+    w_numFmt_translator,
     w_numId_translator,
     w_numPr_translator,
     w_outline_translator,

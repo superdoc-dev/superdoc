@@ -296,9 +296,16 @@ export function decodeProperties(params, translatorsBySdName, properties) {
  * @param {string} sdName The SuperDoc attribute name (without namespace).
  * @param {import('@translator').NodeTranslator[]} propertyTranslators An array of property translators to handle nested properties.
  * @param {object} [defaultEncodedAttrs={}] Optional default attributes to include during encoding.
+ * @param {import('@translator').AttrConfig[]} [attributeHandlers=[]] Optional additional attribute handlers for the nested element.
  * @returns {import('@translator').NodeTranslatorConfig} The nested property handler config with xmlName, sdName, encode, and decode functions.
  */
-export function createNestedPropertiesTranslator(xmlName, sdName, propertyTranslators, defaultEncodedAttrs = {}) {
+export function createNestedPropertiesTranslator(
+  xmlName,
+  sdName,
+  propertyTranslators,
+  defaultEncodedAttrs = {},
+  attributeHandlers = [],
+) {
   const propertyTranslatorsByXmlName = {};
   const propertyTranslatorsBySdName = {};
   propertyTranslators.forEach((translator) => {
@@ -310,20 +317,22 @@ export function createNestedPropertiesTranslator(xmlName, sdName, propertyTransl
     xmlName: xmlName,
     sdNodeOrKeyName: sdName,
     type: NodeTranslator.translatorTypes.NODE,
-    attributes: [],
-    encode: (params) => {
+    attributes: attributeHandlers,
+    encode: (params, encodedAttrs) => {
       const { nodes } = params;
       const node = nodes[0];
 
       // Process property translators
       const attributes = {
         ...defaultEncodedAttrs,
+        ...encodedAttrs,
         ...encodeProperties({ ...params, nodes: [node] }, propertyTranslatorsByXmlName),
       };
 
       return Object.keys(attributes).length > 0 ? attributes : undefined;
     },
-    decode: (params) => {
+    decode: function (params) {
+      const decodedAttrs = this.decodeAttributes({ node: { ...params.node, attrs: params.node.attrs[sdName] || {} } });
       const currentValue = params.node.attrs?.[sdName];
 
       // Process property translators
@@ -336,7 +345,7 @@ export function createNestedPropertiesTranslator(xmlName, sdName, propertyTransl
       const newNode = {
         name: xmlName,
         type: 'element',
-        attributes: {},
+        attributes: decodedAttrs,
         elements: elements,
       };
 

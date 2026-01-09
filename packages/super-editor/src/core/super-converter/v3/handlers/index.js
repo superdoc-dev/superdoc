@@ -7,6 +7,7 @@ import { translator as sd_indexEntry_translator } from './sd/indexEntry/indexEnt
 import { translator as sd_autoPageNumber_translator } from './sd/autoPageNumber/autoPageNumber-translator.js';
 import { translator as sd_totalPageNumber_translator } from './sd/totalPageNumber/totalPageNumber-translator.js';
 import { translator as w_adjustRightInd_translator } from './w/adjustRightInd/adjustRightInd-translator.js';
+import { translator as w_autoRedefine_translator } from './w/autoRedefine/autoRedefine-translator.js';
 import { translator as w_autoSpaceDE_translator } from './w/autoSpaceDE/autoSpaceDE-translator.js';
 import { translator as w_autoSpaceDN_translator } from './w/autoSpaceDN/autoSpaceDN-translator.js';
 import { translator as w_aliases_translator } from './w/aliases/aliases-translator.js';
@@ -66,6 +67,7 @@ import { translator as w_keepNext_translator } from './w/keepNext/keepNext-trans
 import { translator as w_kern_translator } from './w/kern/kern-translator.js';
 import { translator as w_kinsoku_translator } from './w/kinsoku/kinsoku-translator.js';
 import { translator as w_lang_translator } from './w/lang/lang-translator.js';
+import { translator as w_locked_translator } from './w/locked/locked-translator.js';
 import { translator as w_link_translator } from './w/link/link-translator.js';
 import { translator as w_mirrorIndents_translator } from './w/mirrorIndents/mirrorIndents-translator.js';
 import { translator as w_left_translator } from './w/left/left-translator.js';
@@ -82,6 +84,9 @@ import { translator as w_overflowPunct } from './w/overflowPunct/overflowPunct-t
 import { translator as w_p_translator } from './w/p/p-translator.js';
 import { translator as w_pageBreakBefore_translator } from './w/pageBreakBefore/pageBreakBefore-translator.js';
 import { translator as w_pBdr_translator } from './w/pBdr/pBdr-translator.js';
+import { translator as w_personal_translator } from './w/personal/personal-translator.js';
+import { translator as w_personalCompose_translator } from './w/personalCompose/personalCompose-translator.js';
+import { translator as w_personalReply_translator } from './w/personalReply/personalReply-translator.js';
 import { translator as w_position_translator } from './w/position/position-translator.js';
 import { translator as w_pPr_translator } from './w/pPr/pPr-translator.js';
 import { translator as w_pStyle_translator } from './w/pStyle/pStyle-translator.js';
@@ -94,6 +99,7 @@ import { translator as w_rStyle_translator } from './w/rStyle/rstyle-translator.
 import { translator as w_rtl_translator } from './w/rtl/rtl-translator.js';
 import { translator as w_right_translator } from './w/right/right-translator.js';
 import { translator as w_sdt_translator } from './w/sdt/sdt-translator.js';
+import { translator as w_semiHidden_translator } from './w/semiHidden/semiHidden-translator.js';
 import { translator as w_shadow_translator } from './w/shadow/shadow-translator.js';
 import { translator as w_shd_translator } from './w/shd/shd-translator.js';
 import { translator as w_smallCaps_translator } from './w/smallCaps/smallCaps-translator.js';
@@ -133,6 +139,7 @@ import { translator as w_tr_translator } from './w/tr/tr-translator.js';
 import { translator as w_trHeight_translator } from './w/trHeight/trHeight-translator.js';
 import { translator as w_trPr_translator } from './w/trPr/trPr-translator.js';
 import { translator as w_u_translator } from './w/u/u-translator.js';
+import { translator as w_unhideWhenUsed_translator } from './w/unhideWhenUsed/unhideWhenUsed-translator.js';
 import { translator as w_w_translator } from './w/w/w-translator.js';
 import { translator as w_wAfter_translator } from './w/wAfter/wAfter-translator.js';
 import { translator as w_wBefore_translator } from './w/wBefore/wBefore-translator.js';
@@ -155,6 +162,7 @@ import { translator as w_vanish_translator } from './w/vanish/vanish-translator.
 import { translator as w_webHidden_translator } from './w/webHidden/webHidden-translator.js';
 import { translator as w_widowControl_translator } from './w/widowControl/widowControl-translator.js';
 import { translator as w_wordWrap_translator } from './w/wordWrap/wordWrap-translator.js';
+import { translator as w_qFormat_translator } from './w/qFormat/qFormat-translator.js';
 import { translator as wp_anchor_translator } from './wp/anchor/anchor-translator.js';
 import { translator as wp_inline_translator } from './wp/inline/inline-translator.js';
 
@@ -172,6 +180,7 @@ const translatorList = Array.from(
     sd_autoPageNumber_translator,
     sd_totalPageNumber_translator,
     w_adjustRightInd_translator,
+    w_autoRedefine_translator,
     w_autoSpaceDE_translator,
     w_autoSpaceDN_translator,
     w_aliases_translator,
@@ -229,6 +238,7 @@ const translatorList = Array.from(
     w_lang_translator,
     w_left_translator,
     w_link_translator,
+    w_locked_translator,
     w_mirrorIndents_translator,
     w_name_translator,
     w_next_translator,
@@ -243,6 +253,9 @@ const translatorList = Array.from(
     w_p_translator,
     w_pageBreakBefore_translator,
     w_pBdr_translator,
+    w_personal_translator,
+    w_personalCompose_translator,
+    w_personalReply_translator,
     w_position_translator,
     w_pPr_translator,
     w_pStyle_translator,
@@ -255,6 +268,7 @@ const translatorList = Array.from(
     w_rtl_translator,
     w_right_translator,
     w_sdt_translator,
+    w_semiHidden_translator,
     w_shadow_translator,
     w_shd_translator,
     w_smallCaps_translator,
@@ -306,6 +320,7 @@ const translatorList = Array.from(
     w_topLinePunct_translator,
     w_top_translator,
     w_u_translator,
+    w_unhideWhenUsed_translator,
     w_vAlign_translator,
     w_vanish_translator,
     w_vertAlign_translator,
@@ -316,6 +331,7 @@ const translatorList = Array.from(
     w_webHidden_translator,
     w_widowControl_translator,
     w_wordWrap_translator,
+    w_qFormat_translator,
     wp_anchor_translator,
     wp_inline_translator,
     w_commentRangeStart_translator,

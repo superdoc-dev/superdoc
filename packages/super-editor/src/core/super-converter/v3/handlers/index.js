@@ -9,7 +9,9 @@ import { translator as sd_totalPageNumber_translator } from './sd/totalPageNumbe
 import { translator as w_adjustRightInd_translator } from './w/adjustRightInd/adjustRightInd-translator.js';
 import { translator as w_autoSpaceDE_translator } from './w/autoSpaceDE/autoSpaceDE-translator.js';
 import { translator as w_autoSpaceDN_translator } from './w/autoSpaceDN/autoSpaceDN-translator.js';
+import { translator as w_aliases_translator } from './w/aliases/aliases-translator.js';
 import { translator as w_b_translator } from './w/b/b-translator.js';
+import { translator as w_basedOn_translator } from './w/basedOn/basedOn-translator.js';
 import { translator as w_bdr_translator } from './w/bdr/bdr-translator.js';
 import { translator as w_bar_translator } from './w/bar/bar-translator.js';
 import { translator as w_bCs_translator } from './w/bCs/bCs-translator.js';
@@ -64,8 +66,11 @@ import { translator as w_keepNext_translator } from './w/keepNext/keepNext-trans
 import { translator as w_kern_translator } from './w/kern/kern-translator.js';
 import { translator as w_kinsoku_translator } from './w/kinsoku/kinsoku-translator.js';
 import { translator as w_lang_translator } from './w/lang/lang-translator.js';
+import { translator as w_link_translator } from './w/link/link-translator.js';
 import { translator as w_mirrorIndents_translator } from './w/mirrorIndents/mirrorIndents-translator.js';
 import { translator as w_left_translator } from './w/left/left-translator.js';
+import { translator as w_name_translator } from './w/name/name-translator.js';
+import { translator as w_next_translator } from './w/next/next-translator.js';
 import { translator as w_noProof_translator } from './w/noProof/noProof-translator.js';
 import { translator as w_noWrap_translator } from './w/noWrap/noWrap-translator.js';
 import { translator as w_numId_translator } from './w/numId/numId-translator.js';
@@ -169,9 +174,11 @@ const translatorList = Array.from(
     w_adjustRightInd_translator,
     w_autoSpaceDE_translator,
     w_autoSpaceDN_translator,
+    w_aliases_translator,
     w_b_translator,
     w_bar_translator,
     w_bCs_translator,
+    w_basedOn_translator,
     w_bdr_translator,
     w_bidiVisual_translator,
     w_bookmarkEnd_translator,
@@ -221,7 +228,10 @@ const translatorList = Array.from(
     w_kinsoku_translator,
     w_lang_translator,
     w_left_translator,
+    w_link_translator,
     w_mirrorIndents_translator,
+    w_name_translator,
+    w_next_translator,
     w_noProof_translator,
     w_noWrap_translator,
     w_numId_translator,

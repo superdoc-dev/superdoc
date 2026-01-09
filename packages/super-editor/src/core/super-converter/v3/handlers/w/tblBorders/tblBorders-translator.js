@@ -11,7 +11,7 @@ import { translator as wTopTranslator } from '../top';
 
 // Property translators for w:tblBorders child elements
 // Each translator handles a specific border property of the table
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   wBottomTranslator,
   wEndTranslator,

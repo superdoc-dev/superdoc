@@ -294,7 +294,7 @@ export function decodeProperties(params, translatorsBySdName, properties) {
  * Helper to create property handlers for nested properties (eg: w:tcBorders => borders)
  * @param {string} xmlName The XML element name (with namespace).
  * @param {string} sdName The SuperDoc attribute name (without namespace).
- * @param {import('@translator').NodeTranslatorConfig[]} propertyTranslators An array of property translators to handle nested properties.
+ * @param {import('@translator').NodeTranslator[]} propertyTranslators An array of property translators to handle nested properties.
  * @param {object} [defaultEncodedAttrs={}] Optional default attributes to include during encoding.
  * @returns {import('@translator').NodeTranslatorConfig} The nested property handler config with xmlName, sdName, encode, and decode functions.
  */

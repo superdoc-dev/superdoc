@@ -17,7 +17,7 @@ import { translator as headersTranslator } from '@converter/v3/handlers/w/header
 
 // Property translators for w:tcPr child elements
 // Each translator handles a specific property of the table cell
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   cnfStyleTranslator,
   tcWTranslator,

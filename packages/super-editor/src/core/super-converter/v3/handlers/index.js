@@ -110,6 +110,8 @@ import { translator as w_smallCaps_translator } from './w/smallCaps/smallCaps-tr
 import { translator as w_snapToGrid_translator } from './w/snapToGrid/snapToGrid-translator.js';
 import { translator as w_start_translator } from './w/start/start-translator.js';
 import { translator as w_strike_translator } from './w/strike/strike-translator.js';
+import { translator as w_style_translator } from './w/style/style-translator.js';
+import { translator as w_styles_translator } from './w/styles/styles-translator.js';
 import { translator as w_spacing_translator } from './w/spacing/spacing-translator.js';
 import { translator as w_suppressAutoHyphens_translator } from './w/suppressAutoHyphens/suppressAutoHyphens-translator.js';
 import { translator as w_suppressLineNumbers_translator } from './w/suppressLineNumbers/suppressLineNumbers-translator.js';
@@ -289,6 +291,8 @@ const translatorList = Array.from(
     w_specVanish_translator,
     w_start_translator,
     w_strike_translator,
+    w_style_translator,
+    w_styles_translator,
     w_sz_translator,
     w_szCs_translator,
     w_t_translator,

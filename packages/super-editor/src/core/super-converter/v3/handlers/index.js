@@ -96,6 +96,7 @@ import { translator as w_r_translator } from './w/r/r-translator.js';
 import { translator as w_rFonts_translator } from './w/rFonts/rFonts-translator.js';
 import { translator as w_rPr_translator } from './w/rpr/rpr-translator.js';
 import { translator as w_rStyle_translator } from './w/rStyle/rstyle-translator.js';
+import { translator as w_rsid_translator } from './w/rsid/rsid-translator.js';
 import { translator as w_rtl_translator } from './w/rtl/rtl-translator.js';
 import { translator as w_right_translator } from './w/right/right-translator.js';
 import { translator as w_sdt_translator } from './w/sdt/sdt-translator.js';
@@ -139,6 +140,7 @@ import { translator as w_tr_translator } from './w/tr/tr-translator.js';
 import { translator as w_trHeight_translator } from './w/trHeight/trHeight-translator.js';
 import { translator as w_trPr_translator } from './w/trPr/trPr-translator.js';
 import { translator as w_u_translator } from './w/u/u-translator.js';
+import { translator as w_uiPriority_translator } from './w/uiPriority/uiPriority-translator.js';
 import { translator as w_unhideWhenUsed_translator } from './w/unhideWhenUsed/unhideWhenUsed-translator.js';
 import { translator as w_w_translator } from './w/w/w-translator.js';
 import { translator as w_wAfter_translator } from './w/wAfter/wAfter-translator.js';
@@ -265,6 +267,7 @@ const translatorList = Array.from(
     w_rFonts_translator,
     w_rPr_translator,
     w_rStyle_translator,
+    w_rsid_translator,
     w_rtl_translator,
     w_right_translator,
     w_sdt_translator,
@@ -320,6 +323,7 @@ const translatorList = Array.from(
     w_topLinePunct_translator,
     w_top_translator,
     w_u_translator,
+    w_uiPriority_translator,
     w_unhideWhenUsed_translator,
     w_vAlign_translator,
     w_vanish_translator,

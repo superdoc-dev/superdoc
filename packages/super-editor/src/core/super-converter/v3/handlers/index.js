@@ -72,6 +72,7 @@ import { translator as w_lang_translator } from './w/lang/lang-translator.js';
 import { translator as w_latentStyles_translator } from './w/latentStyles/latentStyles-translator.js';
 import { translator as w_locked_translator } from './w/locked/locked-translator.js';
 import { translator as w_link_translator } from './w/link/link-translator.js';
+import { translator as w_lvl_translator } from './w/lvl/lvl-translator.js';
 import { translator as w_lvlJc_translator } from './w/lvlJc/lvlJc-translator.js';
 import { translator as w_lvlPicBulletId_translator } from './w/lvlPicBulletId/lvlPicBulletId-translator.js';
 import { translator as w_lvlRestart_translator } from './w/lvlRestart/lvlRestart-translator.js';
@@ -257,6 +258,7 @@ const translatorList = Array.from(
     w_left_translator,
     w_lsdException_translator,
     w_link_translator,
+    w_lvl_translator,
     w_lvlJc_translator,
     w_lvlPicBulletId_translator,
     w_lvlRestart_translator,

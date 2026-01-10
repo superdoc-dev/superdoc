@@ -92,6 +92,7 @@ import { translator as w_noWrap_translator } from './w/noWrap/noWrap-translator.
 import { translator as w_num_translator } from './w/num/num-translator.js';
 import { translator as w_numFmt_translator } from './w/numFmt/numFmt-translator.js';
 import { translator as w_numId_translator } from './w/numId/numId-translator.js';
+import { translator as w_numIdMacAtCleanup_translator } from './w/numIdMacAtCleanup/numIdMacAtCleanup-translator.js';
 import { translator as w_numPr_translator } from './w/numPr/numPr-translator.js';
 import { translator as w_numStyleLink_translator } from './w/numStyleLink/numStyleLink-translator.js';
 import { translator as w_nsid_translator } from './w/nsid/nsid-translator.js';
@@ -287,6 +288,7 @@ const translatorList = Array.from(
     w_num_translator,
     w_numFmt_translator,
     w_numId_translator,
+    w_numIdMacAtCleanup_translator,
     w_numPr_translator,
     w_numStyleLink_translator,
     w_nsid_translator,

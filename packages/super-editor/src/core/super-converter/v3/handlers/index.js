@@ -72,6 +72,7 @@ import { translator as w_locked_translator } from './w/locked/locked-translator.
 import { translator as w_link_translator } from './w/link/link-translator.js';
 import { translator as w_mirrorIndents_translator } from './w/mirrorIndents/mirrorIndents-translator.js';
 import { translator as w_left_translator } from './w/left/left-translator.js';
+import { translator as w_lsdException_translator } from './w/lsdException/lsdException-translator.js';
 import { translator as w_name_translator } from './w/name/name-translator.js';
 import { translator as w_next_translator } from './w/next/next-translator.js';
 import { translator as w_noProof_translator } from './w/noProof/noProof-translator.js';
@@ -241,6 +242,7 @@ const translatorList = Array.from(
     w_kinsoku_translator,
     w_lang_translator,
     w_left_translator,
+    w_lsdException_translator,
     w_link_translator,
     w_locked_translator,
     w_mirrorIndents_translator,

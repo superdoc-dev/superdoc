@@ -1,0 +1,27 @@
+# Cloudflare Pages Configuration
+# Documentation: https://developers.cloudflare.com/pages/
+
+name = "commands-example"
+
+# Uncomment and set if you want to use a custom domain
+# routes = [
+#   { pattern = "your-domain.com", custom_domain = true }
+# ]
+
+[build]
+command = "npm run build"
+cwd = "."
+
+[build.upload]
+dir = "dist"
+
+# Environment variables for production
+# [vars]
+# API_URL = "https://api.example.com"
+
+# Preview/staging environment (optional)
+# [env.preview]
+# name = "commands-example-preview"
+
+# Compatibility settings
+compatibility_date = "2024-01-01"

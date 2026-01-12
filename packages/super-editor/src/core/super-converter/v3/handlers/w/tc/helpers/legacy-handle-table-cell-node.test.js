@@ -97,6 +97,13 @@ describe('legacy-handle-table-cell-node', () => {
       right: { color: '#111111', size: 1, space: 1 },
     };
 
+    const tableBorders = {
+      right: { color: '#111111', size: 1, space: 1 },
+      left: { color: '#111111', size: 1, space: 1 },
+      top: { color: '#111111', size: 1, space: 1 },
+      bottom: { color: '#111111', size: 1, space: 1 },
+    };
+
     const params = {
       docx: {},
       nodeListHandler: { handler: vi.fn(() => 'CONTENT') },
@@ -110,6 +117,7 @@ describe('legacy-handle-table-cell-node', () => {
       table,
       row: row1,
       rowBorders,
+      baseTableBorders: tableBorders,
       columnIndex: 1,
       columnWidth: null,
       allColumnWidths: [90, 100, 110],
@@ -143,7 +151,7 @@ describe('legacy-handle-table-cell-node', () => {
     expect(out.attrs.borders.bottom.size).toBeCloseTo(4, 3);
     expect(out.attrs.borders.left).toEqual({ val: 'none' }); // inline nil creates explicit 'none' entry
     // right comes from rowBorders (cell is in last column position)
-    expect(out.attrs.borders.right).toEqual(rowBorders.right);
+    expect(out.attrs.borders.right).toEqual(tableBorders.right);
 
     // rowspan derived from vertical merge (restart + 2 continuations)
     expect(out.attrs.rowspan).toBe(3);

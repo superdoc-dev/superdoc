@@ -124,7 +124,7 @@ const encode = (params, encodedAttrs) => {
       extraParams: {
         row,
         table: node,
-        rowBorders: encodedAttrs.borders,
+        tableBorders: encodedAttrs.borders,
         columnWidths,
         activeRowSpans: activeRowSpans.slice(),
         rowIndex,

@@ -59,11 +59,10 @@ const encode = (params, encodedAttrs) => {
   encodedAttrs['cantSplit'] = tableRowProperties['cantSplit'];
 
   // Handle borders
-  const baseBorders = params.extraParams?.rowBorders;
-  const rowTableBorders = getRowTableBorders({
+  const baseBorders = params.extraParams?.tableBorders;
+  const rowBorders = getRowBorders({
     params,
     row,
-    baseBorders,
   });
 
   // Handling cells
@@ -107,8 +106,9 @@ const encode = (params, encodedAttrs) => {
         ...params.extraParams,
         rowBorders: {
           ...baseBorders,
-          ...rowTableBorders,
+          ...rowBorders,
         },
+        baseTableBorders: baseBorders,
         node,
         columnIndex: startColumn,
         columnWidth,
@@ -149,30 +149,29 @@ const encode = (params, encodedAttrs) => {
  * @param {Object} args
  * @param {import('@translator').SCEncoderConfig} args.params
  * @param {Object} args.row - OOXML <w:tr> element
- * @param {Record<string, unknown> | undefined} args.baseBorders - Processed base table borders for the table
  * @returns {Record<string, unknown> | undefined}
  */
-function getRowTableBorders({ params, row, baseBorders }) {
+function getRowBorders({ params, row }) {
   const tblPrEx = row?.elements?.find?.((el) => el.name === 'w:tblPrEx');
   const tblBorders = tblPrEx?.elements?.find?.((el) => el.name === 'w:tblBorders');
 
   if (!tblBorders) {
-    return baseBorders;
+    return {};
   }
 
   const rawOverrides = tblBordersTranslator.encode({ ...params, nodes: [tblBorders] }) || {};
   const overrides = processRawTableBorders(rawOverrides);
 
   if (!Object.keys(overrides).length) {
-    return baseBorders;
+    return {};
   }
 
-  return { ...(baseBorders || {}), ...overrides };
+  return { ...overrides };
 }
 
 /**
  * Normalize raw w:tblBorders output to match table border processing.
- * @param {Object[]} [rawBorders]
+ * @param {Object} [rawBorders]
  * @returns {Object}
  */
 function processRawTableBorders(rawBorders) {

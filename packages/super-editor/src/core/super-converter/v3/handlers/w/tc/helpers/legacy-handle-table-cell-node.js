@@ -11,6 +11,7 @@ export function handleTableCellNode({
   table,
   row,
   rowBorders,
+  baseTableBorders,
   columnIndex,
   columnWidth = null,
   allColumnWidths = [],
@@ -48,29 +49,35 @@ export function handleTableCellNode({
   // This is needed for border-collapse: when tblPrEx sets borders to 'none', cells need
   // explicit 'border-X: none' to counter adjacent cells' borders.
   const cellBorders = {};
+  if (baseTableBorders) {
+    if (isFirstRow && baseTableBorders.top) {
+      cellBorders.top = baseTableBorders.top;
+    }
+    if (isLastRow && baseTableBorders.bottom) {
+      cellBorders.bottom = baseTableBorders.bottom;
+    }
+    if (isFirstColumn && baseTableBorders.left) {
+      cellBorders.left = baseTableBorders.left;
+    }
+    if (isLastColumn && baseTableBorders.right) {
+      cellBorders.right = baseTableBorders.right;
+    }
+  }
+
   if (rowBorders) {
-    // OUTER BORDERS: Apply 'none' always, position-check only for actual borders
-    if (rowBorders.top?.val === 'none') {
-      cellBorders.top = rowBorders.top;
-    } else if (isFirstRow && rowBorders.top) {
+    if (rowBorders.top?.val) {
       cellBorders.top = rowBorders.top;
     }
 
-    if (rowBorders.bottom?.val === 'none') {
-      cellBorders.bottom = rowBorders.bottom;
-    } else if (isLastRow && rowBorders.bottom) {
+    if (rowBorders.bottom?.val) {
       cellBorders.bottom = rowBorders.bottom;
     }
 
-    if (rowBorders.left?.val === 'none') {
-      cellBorders.left = rowBorders.left;
-    } else if (isFirstColumn && rowBorders.left) {
+    if (rowBorders.left?.val) {
       cellBorders.left = rowBorders.left;
     }
 
-    if (rowBorders.right?.val === 'none') {
-      cellBorders.right = rowBorders.right;
-    } else if (isLastColumn && rowBorders.right) {
+    if (rowBorders.right?.val) {
       cellBorders.right = rowBorders.right;
     }
 

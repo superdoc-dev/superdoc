@@ -75,7 +75,7 @@ catalog:
   semantic-release-linear-app: ^0.5.1
   tippy.js: ^6.3.7
   tsx: ^4.20.6
-  typescript: ^5.9.2
+  typescript: ^5.9.3
   typescript-eslint: ^8.49.0
   unified: ^11.0.5
   uuid: ^9.0.1

@@ -381,9 +381,13 @@ const markerFontString = (run?: MarkerRun): string => {
  * // (96px = 1 inch at 96dpi, 48px = 0.5 inch default interval)
  * ```
  */
+const sanitizeIndentValue = (value: number | undefined): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : 0;
+
 const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabIntervalTwips?: number): TabStopPx[] => {
+  const indentLeftPx = sanitizeIndentValue(indent?.left);
   const paragraphIndentTwips = {
-    left: pxToTwips(Math.max(0, indent?.left ?? 0)),
+    left: pxToTwips(indentLeftPx),
     right: pxToTwips(Math.max(0, indent?.right ?? 0)),
     firstLine: pxToTwips(Math.max(0, indent?.firstLine ?? 0)),
     hanging: pxToTwips(Math.max(0, indent?.hanging ?? 0)),
@@ -395,8 +399,10 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     paragraphIndent: paragraphIndentTwips,
   });
 
+  const leftShiftTwips = paragraphIndentTwips.left ?? 0;
+
   return stops.map((stop: TabStop) => ({
-    pos: twipsToPx(stop.pos),
+    pos: twipsToPx(Math.max(0, stop.pos - leftShiftTwips)),
     val: stop.val,
     leader: stop.leader,
   }));

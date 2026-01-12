@@ -34,6 +34,8 @@ import { permStartHandlerEntity } from './permStartImporter.js';
 import { permEndHandlerEntity } from './permEndImporter.js';
 import bookmarkStartAttrConfigs from '@converter/v3/handlers/w/bookmark-start/attributes/index.js';
 import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attributes/index.js';
+import { translator as wStylesTranslator } from '@converter/v3/handlers/w/styles/index.js';
+import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/numbering/index.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -168,6 +170,9 @@ export const createDocumentJson = (docx, converter, editor) => {
       },
     };
 
+    const translatedLinkedStyles = translateStyleDefinitions(docx);
+    const translatedNumbering = translateNumberingDefinitions(docx);
+
     return {
       pmDoc: result,
       savedTagsToRestore: node,
@@ -176,7 +181,9 @@ export const createDocumentJson = (docx, converter, editor) => {
       footnotes,
       inlineDocumentFonts,
       linkedStyles: getStyleDefinitions(docx, converter, editor),
+      translatedLinkedStyles,
       numbering: getNumberingDefinitions(docx, converter),
+      translatedNumbering,
       themeColors: getThemeColorPalette(docx),
     };
   }
@@ -565,6 +572,22 @@ function getStyleDefinitions(docx) {
   });
 
   return allParsedStyles;
+}
+
+function translateStyleDefinitions(docx) {
+  const styles = docx['word/styles.xml'];
+  if (!styles) return [];
+  const stylesElement = styles.elements[0];
+  const parsedStyles = wStylesTranslator.encode({ nodes: [stylesElement] });
+  return parsedStyles;
+}
+
+function translateNumberingDefinitions(docx) {
+  const numbering = docx['word/numbering.xml'];
+  if (!numbering) return null;
+  const numberingElement = numbering.elements[0];
+  const parsedNumbering = wNumberingTranslator.encode({ nodes: [numberingElement] });
+  return parsedNumbering;
 }
 
 /**

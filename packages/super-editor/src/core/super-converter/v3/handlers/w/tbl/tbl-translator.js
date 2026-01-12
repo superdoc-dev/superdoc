@@ -6,6 +6,7 @@ import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/i
 import { translator as trTranslator } from '../tr';
 import { translator as tblPrTranslator } from '../tblPr';
 import { translator as tblGridTranslator } from '../tblGrid';
+import { translator as tblStylePrTranslator } from '@converter/v3/handlers/w/tblStylePr';
 import { buildFallbackGridForTable } from '@core/super-converter/helpers/tableFallbackHelpers.js';
 
 /** @type {import('@translator').XmlNodeName} */
@@ -340,7 +341,19 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
     }
   }
 
-  return stylesToReturn;
+  const tblStylePr = styleTag.elements.filter((el) => el.name === 'w:tblStylePr');
+  let styleProps = {};
+  if (tblStylePr) {
+    styleProps = tblStylePr.reduce((acc, el) => {
+      acc[el.attributes['w:type']] = tblStylePrTranslator.encode({ ...params, nodes: [el] });
+      return acc;
+    }, {});
+  }
+
+  return {
+    ...stylesToReturn,
+    ...styleProps,
+  };
 }
 
 /**

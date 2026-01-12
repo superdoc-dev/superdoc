@@ -63,6 +63,7 @@ const encode = (params, encodedAttrs) => {
   const rowBorders = getRowBorders({
     params,
     row,
+    baseBorders,
   });
 
   // Handling cells
@@ -104,10 +105,7 @@ const encode = (params, encodedAttrs) => {
       path: [...(params.path || []), node],
       extraParams: {
         ...params.extraParams,
-        rowBorders: {
-          ...baseBorders,
-          ...rowBorders,
-        },
+        rowBorders,
         baseTableBorders: baseBorders,
         node,
         columnIndex: startColumn,
@@ -149,24 +147,34 @@ const encode = (params, encodedAttrs) => {
  * @param {Object} args
  * @param {import('@translator').SCEncoderConfig} args.params
  * @param {Object} args.row - OOXML <w:tr> element
+ * @param {Record<string, unknown> | undefined} args.baseBorders - Processed base table borders for the table
  * @returns {Record<string, unknown> | undefined}
  */
-function getRowBorders({ params, row }) {
+function getRowBorders({ params, row, baseBorders }) {
   const tblPrEx = row?.elements?.find?.((el) => el.name === 'w:tblPrEx');
   const tblBorders = tblPrEx?.elements?.find?.((el) => el.name === 'w:tblBorders');
+  /** @type {Record<string, unknown>} */
+  const rowBaseBorders = {};
+  if (baseBorders?.insideV) {
+    rowBaseBorders.insideV = baseBorders?.insideV;
+  }
+
+  if (baseBorders?.insideH) {
+    rowBaseBorders.insideH = baseBorders?.insideH;
+  }
 
   if (!tblBorders) {
-    return {};
+    return rowBaseBorders;
   }
 
   const rawOverrides = tblBordersTranslator.encode({ ...params, nodes: [tblBorders] }) || {};
   const overrides = processRawTableBorders(rawOverrides);
 
   if (!Object.keys(overrides).length) {
-    return {};
+    return rowBaseBorders;
   }
 
-  return { ...overrides };
+  return { ...rowBaseBorders, ...overrides };
 }
 
 /**

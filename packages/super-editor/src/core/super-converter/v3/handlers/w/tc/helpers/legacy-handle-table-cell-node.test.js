@@ -157,6 +157,115 @@ describe('legacy-handle-table-cell-node', () => {
     expect(out.attrs.rowspan).toBe(3);
   });
 
+  it('applies firstRow/firstCol conditional borders from referenced styles', () => {
+    const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
+    const row1 = { name: 'w:tr', elements: [cellNode] };
+    const row2 = { name: 'w:tr', elements: [{ name: 'w:tc', elements: [{ name: 'w:p' }] }] };
+    const table = { name: 'w:tbl', elements: [row1, row2] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row: row1,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90, 100],
+      rowIndex: 0,
+      totalRows: 2,
+      totalColumns: 2,
+      _referencedStyles: {
+        firstRow: {
+          tableCellProperties: {
+            borders: {
+              top: { val: 'single', color: '#00FF00', size: 8 },
+              left: { val: 'single', color: '#FF00FF', size: 8 }, // should be ignored (firstRow only controls top)
+            },
+          },
+        },
+        firstCol: {
+          tableCellProperties: {
+            borders: {
+              left: { val: 'single', color: '#0000FF', size: 16 },
+              top: { val: 'single', color: '#FFFF00', size: 16 }, // should be ignored (firstCol only controls left)
+            },
+          },
+        },
+      },
+    });
+
+    expect(out.attrs.borders.top).toEqual({ val: 'single', color: '#00FF00', size: expect.any(Number) });
+    expect(out.attrs.borders.top.size).toBeCloseTo(1.3333, 3);
+    expect(out.attrs.borders.left).toEqual({ val: 'single', color: '#0000FF', size: expect.any(Number) });
+    expect(out.attrs.borders.left.size).toBeCloseTo(2.6666, 3);
+  });
+
+  it('applies lastRow/lastCol conditional borders', () => {
+    const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
+    const row1 = {
+      name: 'w:tr',
+      elements: [
+        { name: 'w:tc', elements: [{ name: 'w:p' }] },
+        { name: 'w:tc', elements: [{ name: 'w:p' }] },
+      ],
+    };
+    const row2 = { name: 'w:tr', elements: [{ name: 'w:tc', elements: [{ name: 'w:p' }] }, cellNode] };
+    const table = { name: 'w:tbl', elements: [row1, row2] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row: row2,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 1,
+      columnWidth: null,
+      allColumnWidths: [90, 100],
+      rowIndex: 1,
+      totalRows: 2,
+      totalColumns: 2,
+      _referencedStyles: {
+        lastRow: {
+          tableCellProperties: {
+            borders: {
+              bottom: { val: 'single', color: '#00AAAA', size: 8 },
+              top: { val: 'single', color: '#AA0000', size: 8 },
+            },
+          },
+        },
+        lastCol: {
+          tableCellProperties: {
+            borders: {
+              right: { val: 'single', color: '#AAAA00', size: 16 },
+              bottom: { val: 'single', color: '#0000AA', size: 16 }, // should be ignored (lastCol only controls right)
+            },
+          },
+        },
+      },
+    });
+
+    expect(out.attrs.borders.bottom).toEqual({ val: 'single', color: '#00AAAA', size: expect.any(Number) });
+    expect(out.attrs.borders.right).toEqual({ val: 'single', color: '#AAAA00', size: expect.any(Number) });
+    expect(out.attrs.borders.top).toEqual({ val: 'single', color: '#AA0000', size: expect.any(Number) });
+  });
+
   it('moves leading bookmark markers into the first block within the cell', () => {
     const bookmarkStart = { type: 'bookmarkStart', attrs: { id: '0', name: 'title' } };
     const bookmarkEnd = { type: 'bookmarkEnd', attrs: { id: '0' } };

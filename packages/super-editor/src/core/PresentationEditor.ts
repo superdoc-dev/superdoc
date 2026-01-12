@@ -614,6 +614,9 @@ export class PresentationEditor extends EventEmitter {
   #remoteCursorUpdateScheduled = false;
   #epochMapper = new EpochPositionMapper();
   #layoutEpoch = 0;
+  #htmlAnnotationHeights: Map<string, number> = new Map();
+  #htmlAnnotationMeasureEpoch = -1;
+  #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
   #debugLastPointer: SelectionDebugHudState['lastPointer'] = null;
@@ -4585,6 +4588,8 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
 
+      this.#applyHtmlAnnotationMeasurements(blocks);
+
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
       const footnotesLayoutInput = this.#buildFootnotesLayoutInput({
         converterContext,
@@ -4732,6 +4737,10 @@ export class PresentationEditor extends EventEmitter {
       this.#rebuildDomPositionIndex();
       this.#domIndexObserverManager?.resume();
       this.#layoutEpoch = layoutEpoch;
+      if (this.#updateHtmlAnnotationMeasurements(layoutEpoch)) {
+        this.#pendingDocChange = true;
+        this.#scheduleRerender();
+      }
       this.#epochMapper.onLayoutComplete(layoutEpoch);
       this.#selectionSync.onLayoutComplete(layoutEpoch);
       layoutCompleted = true;
@@ -4794,6 +4803,80 @@ export class PresentationEditor extends EventEmitter {
       });
     }
     return this.#domPainter;
+  }
+
+  #applyHtmlAnnotationMeasurements(blocks: FlowBlock[]) {
+    if (this.#htmlAnnotationHeights.size === 0) return;
+
+    blocks.forEach((block) => {
+      if (block.kind !== 'paragraph') return;
+
+      block.runs.forEach((run) => {
+        if (run.kind !== 'fieldAnnotation' || run.variant !== 'html') {
+          return;
+        }
+        if (run.pmStart == null || run.pmEnd == null) {
+          return;
+        }
+
+        const key = `${run.pmStart}-${run.pmEnd}`;
+        const height = this.#htmlAnnotationHeights.get(key);
+        if (!height || height <= 0) {
+          return;
+        }
+
+        const currentSize = run.size ?? {};
+        if (currentSize.height === height) {
+          return;
+        }
+
+        run.size = { ...currentSize, height };
+      });
+    });
+  }
+
+  #updateHtmlAnnotationMeasurements(layoutEpoch: number): boolean {
+    const nextHeights = new Map(this.#htmlAnnotationHeights);
+    const annotations = this.#painterHost.querySelectorAll('.annotation[data-type="html"]');
+    const threshold = 1;
+
+    let changed = false;
+    annotations.forEach((annotation) => {
+      const element = annotation as HTMLElement;
+      const pmStart = element.dataset.pmStart;
+      const pmEnd = element.dataset.pmEnd;
+      if (!pmStart || !pmEnd) {
+        return;
+      }
+      const height = element.offsetHeight;
+      if (height <= 0) {
+        return;
+      }
+      const key = `${pmStart}-${pmEnd}`;
+      const prev = nextHeights.get(key);
+      if (prev != null && Math.abs(prev - height) <= threshold) {
+        return;
+      }
+      nextHeights.set(key, height);
+      changed = true;
+    });
+
+    if (layoutEpoch !== this.#htmlAnnotationMeasureEpoch) {
+      this.#htmlAnnotationMeasureEpoch = layoutEpoch;
+      this.#htmlAnnotationMeasureAttempts = 0;
+    }
+
+    this.#htmlAnnotationHeights = nextHeights;
+    if (!changed) {
+      return false;
+    }
+
+    if (this.#htmlAnnotationMeasureAttempts >= 2) {
+      return false;
+    }
+
+    this.#htmlAnnotationMeasureAttempts += 1;
+    return true;
   }
 
   /**

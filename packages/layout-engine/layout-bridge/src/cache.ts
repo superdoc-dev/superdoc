@@ -9,6 +9,7 @@ import type {
   TableCellAttrs,
   Run,
 } from '@superdoc/contracts';
+import { fieldAnnotationKey } from './field-annotation-key.js';
 import { hasTrackedChange, resolveTrackedChangesEnabled } from './tracked-changes-utils.js';
 import { hashParagraphBorders, hashTableBorders, hashCellBorders } from './paragraph-hash-utils.js';
 
@@ -278,12 +279,13 @@ const hashRuns = (block: FlowBlock): string => {
         return `img:${srcHash}:${imgRun.width}x${imgRun.height}`;
       }
 
+      if (run.kind === 'fieldAnnotation') {
+        return `fa:${fieldAnnotationKey(run)}`;
+      }
+
       // Text is used verbatim without normalization - whitespace affects measurements
       // (Fix for PR #1551: previously /\s+/g normalization caused cache collisions)
-      const text =
-        'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
-          ? ''
-          : (run.text ?? '');
+      const text = 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' ? '' : (run.text ?? '');
       const bold = 'bold' in run ? run.bold : false;
       const italic = 'italic' in run ? run.italic : false;
       const color = 'color' in run ? run.color : undefined;

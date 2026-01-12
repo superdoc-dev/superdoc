@@ -4178,12 +4178,18 @@ export class DomPainter {
     // Apply explicit size if present
     if (run.size) {
       if (run.size.width) {
-        annotation.style.width = `${run.size.width}px`;
-        annotation.style.display = 'inline-block';
-        annotation.style.overflow = 'hidden';
+        const requiresImage = run.variant === 'image' || run.variant === 'signature';
+        if (!requiresImage || run.imageSrc) {
+          annotation.style.width = `${run.size.width}px`;
+          annotation.style.display = 'inline-block';
+          annotation.style.overflow = 'hidden';
+        }
       }
-      if (run.size.height) {
-        annotation.style.height = `${run.size.height}px`;
+      if (run.size.height && run.variant !== 'html') {
+        const requiresImage = run.variant === 'image' || run.variant === 'signature';
+        if (!requiresImage || run.imageSrc) {
+          annotation.style.height = `${run.size.height}px`;
+        }
       }
     }
 
@@ -4253,6 +4259,9 @@ export class DomPainter {
           content.appendChild(img);
           annotation.style.display = 'inline-block';
           content.style.display = 'inline-block';
+          // Prevent line-height inheritance from the line container from breaking image layout.
+          annotation.style.lineHeight = 'normal';
+          content.style.lineHeight = 'normal';
         } else {
           content.textContent = run.displayLabel || (run.variant === 'signature' ? 'Signature' : '');
         }
@@ -4282,11 +4291,13 @@ export class DomPainter {
 
       case 'html': {
         if (run.rawHtml && typeof run.rawHtml === 'string') {
-          // Note: For security, HTML content should be sanitized before rendering
-          // In headless/layout mode, we just render the displayLabel for safety
-          content.textContent = run.displayLabel;
+          // Note: rawHtml is expected to be sanitized upstream.
+          content.innerHTML = run.rawHtml.trim();
           annotation.style.display = 'inline-block';
           content.style.display = 'inline-block';
+          // Prevent line-height inheritance from the line container from affecting HTML layout.
+          annotation.style.lineHeight = 'normal';
+          content.style.lineHeight = 'normal';
         } else {
           content.textContent = run.displayLabel;
         }
@@ -5572,6 +5583,35 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         if (run.kind === 'tab') {
           // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           return [run.text ?? '', 'tab'].join(',');
+        }
+
+        // Handle FieldAnnotationRun
+        if (run.kind === 'fieldAnnotation') {
+          const size = run.size ? `${run.size.width ?? ''}x${run.size.height ?? ''}` : '';
+          const highlighted = run.highlighted !== false ? 1 : 0;
+          return [
+            'field',
+            run.variant ?? '',
+            run.displayLabel ?? '',
+            run.fieldColor ?? '',
+            run.borderColor ?? '',
+            highlighted,
+            run.hidden ? 1 : 0,
+            run.visibility ?? '',
+            run.imageSrc ?? '',
+            run.linkUrl ?? '',
+            run.rawHtml ?? '',
+            size,
+            run.fontFamily ?? '',
+            run.fontSize ?? '',
+            run.textColor ?? '',
+            run.textHighlight ?? '',
+            run.bold ? 1 : 0,
+            run.italic ? 1 : 0,
+            run.underline ? 1 : 0,
+            run.fieldId ?? '',
+            run.fieldType ?? '',
+          ].join(',');
         }
 
         // Handle TextRun (kind is 'text' or undefined)

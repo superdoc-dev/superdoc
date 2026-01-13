@@ -5,10 +5,12 @@ export type Comment = {
   fileType: string;
   mentions: unknown[];
   creatorName: string;
+  creatorEmail?: string;
   createdTime: number;
   importedId: string;
   importedAuthor: {
     name: string;
+    email?: string;
   };
   isInternal: boolean;
   commentText: string;

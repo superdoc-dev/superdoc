@@ -55,7 +55,63 @@ const decode = (params) => {
     commentSchema = [commentSchema, commentReference];
   }
 
-  return commentSchema;
+  const usesRangeThreading =
+    originalComment.threadingStyleOverride === 'range-based' ||
+    originalComment.threadingMethod === 'range-based' ||
+    originalComment.originalXmlStructure?.hasCommentsExtended === false;
+
+  if (!usesRangeThreading) {
+    return commentSchema;
+  }
+
+  const trackedMark = node.marks?.find((mark) => mark.type === 'trackInsert' || mark.type === 'trackDelete');
+  if (trackedMark) {
+    const wrapperName = trackedMark.type === 'trackDelete' ? 'w:del' : 'w:ins';
+    const markAttrs = trackedMark.attrs || {};
+    const date = markAttrs.date || new Date(Date.now()).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const wrapperAttributes = {
+      ...(markAttrs.id ? { 'w:id': String(markAttrs.id) } : {}),
+      ...(markAttrs.author ? { 'w:author': markAttrs.author } : {}),
+      ...(markAttrs.authorEmail ? { 'w:authorEmail': markAttrs.authorEmail } : {}),
+      'w:date': date,
+    };
+
+    return {
+      name: wrapperName,
+      attributes: wrapperAttributes,
+      elements: Array.isArray(commentSchema) ? commentSchema : [commentSchema],
+    };
+  }
+
+  if (!parentComment?.trackedChange) {
+    return commentSchema;
+  }
+
+  const trackedChangeType = parentComment.trackedChangeType;
+  const isReplace = trackedChangeType === 'both';
+  const wrapperName =
+    type === 'commentRangeStart'
+      ? 'w:ins'
+      : isReplace
+        ? 'w:del'
+        : trackedChangeType === 'trackDelete'
+          ? 'w:del'
+          : 'w:ins';
+
+  const createdTime = parentComment.createdTime || Date.now();
+  const date = new Date(createdTime).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const wrapperAttributes = {
+    'w:id': String(parentComment.commentId),
+    ...(parentComment.creatorName ? { 'w:author': parentComment.creatorName } : {}),
+    ...(parentComment.creatorEmail ? { 'w:authorEmail': parentComment.creatorEmail } : {}),
+    'w:date': date,
+  };
+
+  return {
+    name: wrapperName,
+    attributes: wrapperAttributes,
+    elements: Array.isArray(commentSchema) ? commentSchema : [commentSchema],
+  };
 };
 
 /**

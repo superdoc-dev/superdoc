@@ -124,4 +124,122 @@ describe('w:commentRangeStart and w:commentRangeEnd', () => {
       ]);
     });
   });
+
+  describe('decode:range-based tracked change wrappers', () => {
+    test('wraps range markers with w:ins when trackInsert mark is present', () => {
+      const result = commentRangeStartTranslator.decode({
+        node: {
+          type: 'commentRangeStart',
+          attrs: { 'w:id': 'id1' },
+          marks: [
+            {
+              type: 'trackInsert',
+              attrs: {
+                id: 'tc-1',
+                author: 'Author A',
+                authorEmail: 'author@example.com',
+                date: '2025-01-01T00:00:00Z',
+              },
+            },
+          ],
+        },
+        comments: [{ commentId: 'id1', threadingMethod: 'range-based' }],
+        exportedCommentDefs: [{}],
+        commentsExportType: 'external',
+      });
+
+      expect(result).toStrictEqual({
+        name: 'w:ins',
+        attributes: {
+          'w:id': 'tc-1',
+          'w:author': 'Author A',
+          'w:authorEmail': 'author@example.com',
+          'w:date': '2025-01-01T00:00:00Z',
+        },
+        elements: [{ attributes: { 'w:id': '0' }, name: 'w:commentRangeStart' }],
+      });
+    });
+
+    test('wraps range markers with w:del when trackDelete mark is present', () => {
+      const result = commentRangeEndTranslator.decode({
+        node: {
+          type: 'commentRangeEnd',
+          attrs: { 'w:id': 'id1' },
+          marks: [
+            {
+              type: 'trackDelete',
+              attrs: {
+                id: 'tc-2',
+                author: 'Author B',
+                authorEmail: 'authorb@example.com',
+                date: '2025-01-02T00:00:00Z',
+              },
+            },
+          ],
+        },
+        comments: [{ commentId: 'id1', threadingMethod: 'range-based' }],
+        exportedCommentDefs: [{}],
+        commentsExportType: 'external',
+      });
+
+      expect(result.name).toBe('w:del');
+      expect(result.attributes).toStrictEqual({
+        'w:id': 'tc-2',
+        'w:author': 'Author B',
+        'w:authorEmail': 'authorb@example.com',
+        'w:date': '2025-01-02T00:00:00Z',
+      });
+      expect(result.elements[0]).toStrictEqual({ attributes: { 'w:id': '0' }, name: 'w:commentRangeEnd' });
+      expect(result.elements[1].name).toBe('w:r');
+      expect(result.elements[1].elements[0]).toStrictEqual({
+        attributes: { 'w:id': '0' },
+        name: 'w:commentReference',
+      });
+    });
+
+    test('wraps replace threading with w:ins for start and w:del for end', () => {
+      const createdTime = Date.UTC(2025, 0, 1);
+      const comments = [
+        { commentId: 'child', parentCommentId: 'parent', threadingMethod: 'range-based' },
+        {
+          commentId: 'parent',
+          trackedChange: true,
+          trackedChangeType: 'both',
+          creatorName: 'Parent Author',
+          creatorEmail: 'parent@example.com',
+          createdTime,
+        },
+      ];
+
+      const startResult = commentRangeStartTranslator.decode({
+        node: { type: 'commentRangeStart', attrs: { 'w:id': 'child' } },
+        comments,
+        exportedCommentDefs: [{}],
+        commentsExportType: 'external',
+      });
+
+      const endResult = commentRangeEndTranslator.decode({
+        node: { type: 'commentRangeEnd', attrs: { 'w:id': 'child' } },
+        comments,
+        exportedCommentDefs: [{}],
+        commentsExportType: 'external',
+      });
+
+      expect(startResult.name).toBe('w:ins');
+      expect(startResult.attributes).toStrictEqual({
+        'w:id': 'parent',
+        'w:author': 'Parent Author',
+        'w:authorEmail': 'parent@example.com',
+        'w:date': '2025-01-01T00:00:00Z',
+      });
+
+      expect(endResult.name).toBe('w:del');
+      expect(endResult.attributes).toStrictEqual({
+        'w:id': 'parent',
+        'w:author': 'Parent Author',
+        'w:authorEmail': 'parent@example.com',
+        'w:date': '2025-01-01T00:00:00Z',
+      });
+    });
+  });
 });

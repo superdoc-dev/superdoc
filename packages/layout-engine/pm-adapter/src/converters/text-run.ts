@@ -163,15 +163,5 @@ export function tokenNodeToRun(
   if (marksAsAttrs.length > 0) {
     (run as TextRun & { _explicitFont?: boolean })._explicitFont = true;
   }
-  console.debug('[token-debug] tokenNodeToRun', {
-    token,
-    fontFamily: run.fontFamily,
-    fontSize: run.fontSize,
-    defaultFont,
-    defaultSize,
-    nodeMarksCount: nodeMarks.length,
-    marksAsAttrsCount: marksAsAttrs.length,
-    inheritedMarksCount: inheritedMarks?.length ?? 0,
-  });
   return run;
 }

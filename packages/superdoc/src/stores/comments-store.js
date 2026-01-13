@@ -477,6 +477,10 @@ export const useCommentsStore = defineStore('comments', () => {
         trackedChangeText: comment.trackedChangeText,
         trackedChangeType: comment.trackedChangeType,
         deletedText: comment.trackedDeletedText,
+        // Preserve origin metadata for export
+        origin: comment.origin || 'word', // Default to 'word' for backward compatibility
+        threadingMethod: comment.threadingMethod,
+        originalXmlStructure: comment.originalXmlStructure,
       });
 
       addComment({ superdoc, comment: newComment });

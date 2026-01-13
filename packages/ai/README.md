@@ -463,7 +463,7 @@ AGPL-3.0 - see [LICENSE](../../LICENSE) for details.
 
 - 📖 [Documentation](https://superdoc.dev/docs/ai)
 - 💬 [Discord Community](https://discord.gg/superdoc)
-- 🐛 [Issue Tracker](https://github.com/harbour-enterprises/superdoc/issues)
+- 🐛 [Issue Tracker](https://github.com/superdoc-dev/superdoc/issues)
 - 📧 [Email Support](mailto:support@superdoc.dev)
 
 ## Version & Compatibility

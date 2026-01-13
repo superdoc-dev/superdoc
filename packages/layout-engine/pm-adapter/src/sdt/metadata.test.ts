@@ -317,6 +317,98 @@ describe('metadata', () => {
       expect(tableBlock.rows[1].cells[0].paragraph.attrs?.sdt).toEqual(metadata);
     });
 
+    it('applies metadata to paragraph blocks within cell.blocks', () => {
+      const tableBlock: TableBlock = {
+        kind: 'table',
+        id: 't2',
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'p1',
+                    runs: [{ text: 'Cell 1', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'p2',
+                    runs: [{ text: 'Cell 2', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const metadata: SdtMetadata = {
+        type: 'documentSection',
+        id: 'section-2',
+      };
+
+      applySdtMetadataToTableBlock(tableBlock, metadata);
+
+      const cellBlocks = tableBlock.rows[0].cells[0].blocks ?? [];
+      expect((cellBlocks[0] as ParagraphBlock).attrs?.sdt).toEqual(metadata);
+      expect((cellBlocks[1] as ParagraphBlock).attrs?.sdt).toEqual(metadata);
+    });
+
+    it('applies metadata to nested tables within cell.blocks', () => {
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-1',
+        rows: [
+          {
+            cells: [
+              {
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'p-nested',
+                  runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 12 }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const tableBlock: TableBlock = {
+        kind: 'table',
+        id: 't3',
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'p1',
+                    runs: [{ text: 'Cell 1', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                  nestedTable,
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const metadata: SdtMetadata = {
+        type: 'documentSection',
+        id: 'section-3',
+      };
+
+      applySdtMetadataToTableBlock(tableBlock, metadata);
+
+      const cellBlocks = tableBlock.rows[0].cells[0].blocks ?? [];
+      const nested = cellBlocks.find((block) => block.kind === 'table') as TableBlock | undefined;
+
+      expect(nested?.attrs?.sdt).toEqual(metadata);
+      expect(nested?.rows[0].cells[0].paragraph?.attrs?.sdt).toEqual(metadata);
+    });
+
     it('does nothing when metadata is undefined', () => {
       const tableBlock: TableBlock = {
         kind: 'table',

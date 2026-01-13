@@ -1,5 +1,5 @@
 import type { ParagraphAttrs, ParagraphIndent, ParagraphSpacing } from '@superdoc/contracts';
-import { createOoxmlResolver, resolveDocxFontFamily } from '@superdoc/style-engine/ooxml';
+import { createOoxmlResolver, resolveDocxFontFamily, type OoxmlTranslator } from '@superdoc/style-engine/ooxml';
 import { SuperConverter } from '@superdoc/super-editor/converter/internal/SuperConverter.js';
 import { translator as w_pPrTranslator } from '@superdoc/super-editor/converter/internal/v3/handlers/w/pPr/index.js';
 import { translator as w_rPrTranslator } from '@superdoc/super-editor/converter/internal/v3/handlers/w/rpr/index.js';
@@ -18,7 +18,15 @@ const EMPTY_NUMBERING_CONTEXT: ConverterNumberingContext = {
   abstracts: {},
 };
 
-const ooxmlResolver = createOoxmlResolver({ pPr: w_pPrTranslator, rPr: w_rPrTranslator });
+const toOoxmlTranslator = (translator: { xmlName: string; encode: (params: any) => unknown }): OoxmlTranslator => ({
+  xmlName: translator.xmlName,
+  encode: (params) => translator.encode(params) as Record<string, unknown> | null | undefined,
+});
+
+const ooxmlResolver = createOoxmlResolver({
+  pPr: toOoxmlTranslator(w_pPrTranslator),
+  rPr: toOoxmlTranslator(w_rPrTranslator),
+});
 
 /**
  * Result of hydrating paragraph attributes from style resolution.

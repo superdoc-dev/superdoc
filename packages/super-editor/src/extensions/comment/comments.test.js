@@ -568,3 +568,133 @@ it('removes comment range nodes even when converter metadata is missing', () => 
 
   expect(remainingCommentNodes).toHaveLength(0);
 });
+
+describe('tracked change + comment threading export', () => {
+  // Schema with track change marks for testing export behavior
+  const createSchemaWithTrackChanges = () => {
+    const nodes = {
+      doc: { content: 'block+' },
+      paragraph: { content: 'inline*', group: 'block' },
+      text: { group: 'inline' },
+      commentRangeStart: {
+        inline: true,
+        group: 'inline',
+        atom: true,
+        attrs: { 'w:id': {}, internal: { default: true } },
+        toDOM: (node) => ['commentRangeStart', node.attrs],
+        parseDOM: [{ tag: 'commentRangeStart' }],
+      },
+      commentRangeEnd: {
+        inline: true,
+        group: 'inline',
+        atom: true,
+        attrs: { 'w:id': {}, internal: { default: true } },
+        toDOM: (node) => ['commentRangeEnd', node.attrs],
+        parseDOM: [{ tag: 'commentRangeEnd' }],
+      },
+    };
+
+    const marks = {
+      [CommentMarkName]: {
+        attrs: { commentId: {}, importedId: { default: null }, internal: { default: true } },
+        inclusive: false,
+        toDOM: (mark) => [CommentMarkName, mark.attrs],
+        parseDOM: [{ tag: CommentMarkName }],
+      },
+      trackInsert: {
+        attrs: { id: {}, author: { default: null }, date: { default: null } },
+        inclusive: false,
+        toDOM: (mark) => ['trackInsert', mark.attrs],
+        parseDOM: [{ tag: 'trackInsert' }],
+      },
+      trackDelete: {
+        attrs: { id: {}, author: { default: null }, date: { default: null } },
+        inclusive: false,
+        toDOM: (mark) => ['trackDelete', mark.attrs],
+        parseDOM: [{ tag: 'trackDelete' }],
+      },
+    };
+
+    return new Schema({ nodes, marks });
+  };
+
+  it('creates comment ranges for comments that are children of tracked changes', () => {
+    const schema = createSchemaWithTrackChanges();
+    const trackMark = schema.marks.trackInsert.create({ id: 'tracked-change-1', author: 'Test' });
+    const paragraph = schema.nodes.paragraph.create(null, schema.text('Inserted text', [trackMark]));
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    // Comment that is a child of the tracked change (parentCommentId = tracked change id)
+    const comments = [
+      { commentId: 'child-comment-1', parentCommentId: 'tracked-change-1', createdTime: 1, isInternal: false },
+    ];
+
+    prepareCommentsForExport(state.doc, tr, schema, comments);
+
+    const applied = state.apply(tr);
+    const insertedStarts = [];
+    const insertedEnds = [];
+
+    applied.doc.descendants((node) => {
+      if (node.type.name === 'commentRangeStart') insertedStarts.push(node.attrs['w:id']);
+      if (node.type.name === 'commentRangeEnd') insertedEnds.push(node.attrs['w:id']);
+    });
+
+    // The child comment should have ranges created at the tracked change position
+    expect(insertedStarts).toContain('child-comment-1');
+    expect(insertedEnds).toContain('child-comment-1');
+  });
+
+  it('handles multiple comments on the same tracked change', () => {
+    const schema = createSchemaWithTrackChanges();
+    const trackMark = schema.marks.trackDelete.create({ id: 'deletion-1', author: 'Test' });
+    const paragraph = schema.nodes.paragraph.create(null, schema.text('Deleted text', [trackMark]));
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    // Multiple comments on the same tracked change
+    const comments = [
+      { commentId: 'reply-2', parentCommentId: 'deletion-1', createdTime: 3, isInternal: false },
+      { commentId: 'reply-1', parentCommentId: 'deletion-1', createdTime: 2, isInternal: false },
+    ];
+
+    prepareCommentsForExport(state.doc, tr, schema, comments);
+
+    const applied = state.apply(tr);
+    const insertedStarts = [];
+
+    applied.doc.descendants((node) => {
+      if (node.type.name === 'commentRangeStart') insertedStarts.push(node.attrs['w:id']);
+    });
+
+    // Both comments should have ranges, ordered by creation time
+    expect(insertedStarts).toEqual(['reply-1', 'reply-2']);
+  });
+
+  it('does not duplicate ranges for comments already processed via comment marks', () => {
+    const schema = createSchemaWithTrackChanges();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'comment-1', internal: false });
+    const paragraph = schema.nodes.paragraph.create(null, schema.text('Commented text', [commentMark]));
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    // Comment that exists as a mark (normal comment, not on tracked change)
+    const comments = [{ commentId: 'comment-1', createdTime: 1, isInternal: false }];
+
+    prepareCommentsForExport(state.doc, tr, schema, comments);
+
+    const applied = state.apply(tr);
+    const insertedStarts = [];
+
+    applied.doc.descendants((node) => {
+      if (node.type.name === 'commentRangeStart') insertedStarts.push(node.attrs['w:id']);
+    });
+
+    // Comment should appear exactly once (from the comment mark processing)
+    expect(insertedStarts.filter((id) => id === 'comment-1')).toHaveLength(1);
+  });
+});

@@ -2384,4 +2384,286 @@ describe('renderTableCell', () => {
       expect(drawingEl.style.height).toBe('100%');
     });
   });
+
+  describe('SDT container styling in cells', () => {
+    it('should set overflow:visible when cell contains SDT container (structuredContent block)', () => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-sdt',
+        runs: [{ text: 'SDT content', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          sdt: {
+            type: 'structuredContent',
+            scope: 'block',
+            id: 'sdt-1',
+            alias: 'Test Block',
+          },
+        },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 11,
+            width: 80,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-sdt-container',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      // Cell should have overflow:visible to allow SDT labels to extend outside
+      expect(cellElement.style.overflow).toBe('visible');
+    });
+
+    it('should set overflow:visible when cell contains documentSection SDT', () => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-doc-section',
+        runs: [{ text: 'Section content', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          sdt: {
+            type: 'documentSection',
+            id: 'section-1',
+            title: 'My Section',
+          },
+        },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 15,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-doc-section',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      expect(cellElement.style.overflow).toBe('visible');
+    });
+
+    it('should keep overflow:hidden when no SDT container is present', () => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-no-sdt',
+        runs: [{ text: 'Regular paragraph', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 17,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-no-sdt',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      // Cell should maintain default overflow:hidden
+      expect(cellElement.style.overflow).toBe('hidden');
+    });
+
+    it('should not apply SDT container styling when block SDT matches tableSdt', () => {
+      const tableSdt = {
+        type: 'structuredContent' as const,
+        scope: 'block' as const,
+        id: 'table-sdt',
+        alias: 'Table Container',
+      };
+
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-same-sdt',
+        runs: [{ text: 'Content in table SDT', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          sdt: tableSdt, // Same reference as tableSdt
+        },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 20,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-table-sdt',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+        tableSdt, // Pass the same SDT as the table level
+      });
+
+      // Cell should keep overflow:hidden because block SDT matches tableSdt
+      // (no duplicate container styling needed)
+      expect(cellElement.style.overflow).toBe('hidden');
+    });
+
+    it('should keep overflow:hidden for inline scope structuredContent (not a block container)', () => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-inline-sdt',
+        runs: [{ text: 'Inline SDT content', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline', // inline scope, not block
+            id: 'inline-sdt-1',
+            alias: 'Inline Field',
+          },
+        },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 18,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-inline-sdt',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      // Inline SDTs don't get container styling, so overflow stays hidden
+      expect(cellElement.style.overflow).toBe('hidden');
+    });
+  });
 });

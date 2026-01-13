@@ -475,3 +475,604 @@ describe('Google Docs threading (missing commentsExtended.xml)', () => {
     expect(comments[0].isDone).toBe(true);
   });
 });
+
+describe('Google Docs threading (missing commentsExtended.xml)', () => {
+  it('detects parent-child relationship from nested ranges', () => {
+    const docx = buildDocx({
+      comments: [{ id: 0, internalId: 'parent-comment-id' }, { id: 1 }],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:commentRangeStart',
+              attributes: { 'w:id': '0' },
+            },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Text' }] }],
+            },
+            {
+              name: 'w:commentRangeStart',
+              attributes: { 'w:id': '1' },
+            },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'More text' }] }],
+            },
+            {
+              name: 'w:commentRangeEnd',
+              attributes: { 'w:id': '1' },
+            },
+            {
+              name: 'w:commentRangeEnd',
+              attributes: { 'w:id': '0' },
+            },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const parentComment = comments.find((c) => c.commentId === 'parent-comment-id');
+    const childComment = comments.find((c) => c.commentId !== 'parent-comment-id');
+
+    expect(parentComment).toBeDefined();
+    expect(childComment).toBeDefined();
+    expect(parentComment.parentCommentId).toBeUndefined();
+    expect(childComment.parentCommentId).toBe(parentComment.commentId);
+  });
+
+  it('handles multiple levels of nesting', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'parent-id' },
+        { id: 1, internalId: 'child-id' },
+        { id: 2, internalId: 'grandchild-id' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:commentRangeStart',
+              attributes: { 'w:id': '0' },
+            },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Parent' }] }],
+            },
+            {
+              name: 'w:commentRangeStart',
+              attributes: { 'w:id': '1' },
+            },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Child' }] }],
+            },
+            {
+              name: 'w:commentRangeStart',
+              attributes: { 'w:id': '2' },
+            },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Grandchild' }] }],
+            },
+            {
+              name: 'w:commentRangeEnd',
+              attributes: { 'w:id': '2' },
+            },
+            {
+              name: 'w:commentRangeEnd',
+              attributes: { 'w:id': '1' },
+            },
+            {
+              name: 'w:commentRangeEnd',
+              attributes: { 'w:id': '0' },
+            },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(3);
+
+    const parent = comments.find((c) => c.commentId === 'parent-id');
+    const child = comments.find((c) => c.commentId === 'child-id');
+    const grandchild = comments.find((c) => c.commentId === 'grandchild-id');
+
+    expect(parent.parentCommentId).toBeUndefined();
+    expect(child.parentCommentId).toBe(parent.commentId);
+    expect(grandchild.parentCommentId).toBe(child.commentId);
+  });
+
+  it('returns comments unchanged when no ranges exist', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'comment-1' },
+        { id: 1, internalId: 'comment-2' },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    comments.forEach((comment) => {
+      expect(comment.parentCommentId).toBeUndefined();
+    });
+  });
+
+  it('detects threading from comments sharing same range start position (multi-author)', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'parent-id', author: 'Author A', date: '2024-01-01T10:00:00Z' },
+        { id: 1, internalId: 'child-id', author: 'Author B', date: '2024-01-01T10:05:00Z' },
+        { id: 2, internalId: 'grandchild-id', author: 'Author C', date: '2024-01-01T10:10:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '2' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Shared text' }] }],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '2' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(3);
+
+    const parent = comments.find((c) => c.commentId === 'parent-id');
+    const child = comments.find((c) => c.commentId === 'child-id');
+    const grandchild = comments.find((c) => c.commentId === 'grandchild-id');
+
+    expect(parent.parentCommentId).toBeUndefined();
+    expect(child.parentCommentId).toBe(parent.commentId);
+    expect(grandchild.parentCommentId).toBe(parent.commentId);
+  });
+
+  it('detects threading from sequential ranges at same position (different authors)', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'author-a-comment', author: 'Author A', date: '2024-01-01T10:00:00Z' },
+        { id: 1, internalId: 'author-b-reply', author: 'Author B', date: '2024-01-01T10:05:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Selected text' }] }],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const parentComment = comments.find((c) => c.commentId === 'author-a-comment');
+    const childComment = comments.find((c) => c.commentId === 'author-b-reply');
+
+    expect(parentComment.parentCommentId).toBeUndefined();
+    expect(childComment.parentCommentId).toBe(parentComment.commentId);
+  });
+
+  it('detects threading when reply comments have no ranges (only in comments.xml)', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'parent-with-range', author: 'Author A', date: '2024-01-01T10:00:00Z' },
+        { id: 1, internalId: 'reply-no-range', author: 'Author B', date: '2024-01-01T10:05:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Commented text' }] }],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const parentComment = comments.find((c) => c.commentId === 'parent-with-range');
+    const replyComment = comments.find((c) => c.commentId === 'reply-no-range');
+
+    expect(parentComment.parentCommentId).toBeUndefined();
+    expect(replyComment.parentCommentId).toBe(parentComment.commentId);
+  });
+
+  it('preserves existing nested range detection while adding shared position detection', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'parent-nested', author: 'Author A', date: '2024-01-01T10:00:00Z' },
+        { id: 1, internalId: 'child-nested', author: 'Author B', date: '2024-01-01T10:05:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Outer' }] }],
+            },
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Inner' }] }],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const parent = comments.find((c) => c.commentId === 'parent-nested');
+    const child = comments.find((c) => c.commentId === 'child-nested');
+
+    expect(parent.parentCommentId).toBeUndefined();
+    expect(child.parentCommentId).toBe(parent.commentId);
+  });
+});
+
+describe('Google Docs tracked change comment threading', () => {
+  it('detects comment inside tracked change deletion as child of tracked change', () => {
+    const docx = buildDocx({
+      comments: [{ id: 4, internalId: 'comment-on-deletion', author: 'Missy Fox', date: '2024-01-01T10:00:00Z' }],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:del',
+              attributes: { 'w:id': '0', 'w:author': 'Missy Fox', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '4' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:delText', elements: [{ type: 'text', text: 'Tracked changes' }] }],
+                },
+              ],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '4' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(1);
+
+    const comment = comments[0];
+    // The parent should be the tracked change ID ('0')
+    expect(comment.parentCommentId).toBe('0');
+  });
+
+  it('detects comment inside tracked change insertion as child of tracked change', () => {
+    const docx = buildDocx({
+      comments: [{ id: 7, internalId: 'comment-on-insertion', author: 'Missy Fox', date: '2024-01-01T10:00:00Z' }],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': '2', 'w:author': 'Missy Fox', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '7' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:t', elements: [{ type: 'text', text: ' more more ' }] }],
+                },
+              ],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '7' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(1);
+
+    const comment = comments[0];
+    expect(comment.parentCommentId).toBe('2');
+  });
+
+  it('detects multiple comments inside same tracked change', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 5, internalId: 'first-comment', author: 'Author A', date: '2024-01-01T10:00:00Z' },
+        { id: 6, internalId: 'second-comment', author: 'Author B', date: '2024-01-01T10:05:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': '1', 'w:author': 'Author A', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '5' } },
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '6' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Inserted text' }] }],
+                },
+              ],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '5' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '6' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const firstComment = comments.find((c) => c.commentId === 'first-comment');
+    const secondComment = comments.find((c) => c.commentId === 'second-comment');
+
+    // Both should have the tracked change as parent
+    expect(firstComment.parentCommentId).toBe('1');
+    expect(secondComment.parentCommentId).toBe('1');
+  });
+
+  it('detects comments inside replacement tracked change (ins + del)', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 8, internalId: 'replacement-comment-1', author: 'Missy Fox', date: '2024-01-01T10:00:00Z' },
+        { id: 9, internalId: 'replacement-comment-2', author: 'Priya', date: '2024-01-01T10:05:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': '3', 'w:author': 'Missy Fox', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '8' } },
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '9' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'So much more! ' }] }],
+                },
+              ],
+            },
+            {
+              name: 'w:del',
+              attributes: { 'w:id': '3', 'w:author': 'Missy Fox', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '8' } },
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '9' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:delText', elements: [{ type: 'text', text: 'And more and more' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const comment1 = comments.find((c) => c.commentId === 'replacement-comment-1');
+    const comment2 = comments.find((c) => c.commentId === 'replacement-comment-2');
+
+    // Both should have the tracked change (ins) as parent since their range starts in the ins element
+    expect(comment1.parentCommentId).toBe('3');
+    expect(comment2.parentCommentId).toBe('3');
+  });
+
+  it('does not affect comments outside tracked changes', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'regular-comment', author: 'Author A', date: '2024-01-01T10:00:00Z' },
+        { id: 4, internalId: 'tc-comment', author: 'Author B', date: '2024-01-01T10:05:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Regular text' }] }],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+          ],
+        },
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:del',
+              attributes: { 'w:id': '1', 'w:author': 'Author B', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '4' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:delText', elements: [{ type: 'text', text: 'Deleted text' }] }],
+                },
+              ],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '4' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const regularComment = comments.find((c) => c.commentId === 'regular-comment');
+    const tcComment = comments.find((c) => c.commentId === 'tc-comment');
+
+    // Regular comment should have no parent
+    expect(regularComment.parentCommentId).toBeUndefined();
+    // TC comment should have the tracked change as parent
+    expect(tcComment.parentCommentId).toBe('1');
+  });
+});
+
+describe('Word tracked change comment threading (with commentsExtended.xml)', () => {
+  it('detects comment inside tracked change insertion as child of tracked change even when commentsExtended.xml exists', () => {
+    const docx = buildDocx({
+      comments: [{ id: 7, internalId: 'comment-on-insertion', author: 'Missy Fox', date: '2024-01-01T10:00:00Z' }],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': '2', 'w:author': 'Missy Fox', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '7' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:t', elements: [{ type: 'text', text: ' more more ' }] }],
+                },
+              ],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '7' } },
+          ],
+        },
+      ],
+      extended: [{ paraId: 'para-7', done: '0' }],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(1);
+
+    const comment = comments[0];
+    expect(comment.parentCommentId).toBe('2');
+  });
+
+  it('detects root comment of a thread as child of tracked change, and replies as child of root', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 10, internalId: 'root-comment', paraId: 'para-10' },
+        { id: 11, internalId: 'reply-comment', paraId: 'para-11' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': '99', 'w:author': 'Author', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '10' } },
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '11' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Threaded text' }] }],
+                },
+              ],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '10' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '11' } },
+          ],
+        },
+      ],
+      extended: [
+        { paraId: 'para-10', done: '0' },
+        { paraId: 'para-11', done: '0', parent: 'para-10' },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const root = comments.find((c) => c.commentId === 'root-comment');
+    const reply = comments.find((c) => c.commentId === 'reply-comment');
+
+    // Root should point to tracked change
+    expect(root.parentCommentId).toBe('99');
+    // Reply should point to tracked change (flattened)
+    expect(reply.parentCommentId).toBe('99');
+  });
+
+  it('detects comments that end before a deletion in the same paragraph as children of the deletion', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 7, internalId: 'comment-on-delete', author: 'Author', date: '2024-01-01T10:00:00Z' },
+        { id: 8, internalId: 'thread-on-delete', author: 'Author', date: '2024-01-01T10:01:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '7' } },
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '8' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'an' }] }],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '7' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '8' } },
+            {
+              name: 'w:del',
+              attributes: { 'w:id': '9', 'w:author': 'Author', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:delText', elements: [{ type: 'text', text: 'deletion' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      extended: [
+        { paraId: 'para-7', done: '0' },
+        { paraId: 'para-8', done: '0', parent: 'para-7' },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const comment1 = comments.find((c) => c.commentId === 'comment-on-delete');
+    const comment2 = comments.find((c) => c.commentId === 'thread-on-delete');
+
+    // Both comments should be associated with the deletion (flattened, not threaded)
+    expect(comment1.parentCommentId).toBe('9');
+    expect(comment2.parentCommentId).toBe('9');
+  });
+});

@@ -32,6 +32,11 @@ const isAllowedObjectFit = (value?: string): value is 'contain' | 'cover' | 'fil
   return value === 'contain' || value === 'cover' || value === 'fill' || value === 'scale-down';
 };
 
+const isHiddenDrawing = (attrs: Record<string, unknown>): boolean => {
+  if (toBoolean(attrs.hidden) === true) return true;
+  return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
+};
+
 // ============================================================================
 // Helper Functions - Box & Spacing
 // ============================================================================
@@ -218,6 +223,9 @@ export function imageNodeToBlock(
   _trackedChanges?: TrackedChangesConfig,
 ): ImageBlock | null {
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
+  if (isHiddenDrawing(attrs)) {
+    return null;
+  }
   if (!attrs.src || typeof attrs.src !== 'string') {
     return null;
   }

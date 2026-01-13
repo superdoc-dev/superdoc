@@ -24,8 +24,12 @@ const validXmlAttributes = [
  * @returns {import('@translator').SCEncoderResult}
  */
 const encode = (params, encodedAttrs = {}) => {
-  const { nodeListHandler, extraParams = {} } = params;
+  const { nodeListHandler, extraParams = {}, converter } = params;
   const { node } = extraParams;
+
+  if (encodedAttrs.id && converter?.trackedChangeIdMap?.has(encodedAttrs.id)) {
+    encodedAttrs.id = converter.trackedChangeIdMap.get(encodedAttrs.id);
+  }
 
   const subs = nodeListHandler.handler({
     ...params,
@@ -35,6 +39,10 @@ const encode = (params, encodedAttrs = {}) => {
   });
 
   encodedAttrs.importedAuthor = `${encodedAttrs.author} (imported)`;
+
+  if (converter?.documentOrigin) {
+    encodedAttrs.origin = converter.documentOrigin;
+  }
 
   subs.forEach((subElement) => {
     subElement.marks = [];

@@ -165,6 +165,14 @@ describe('updateStructuredContentById', () => {
     schema = null;
   });
 
+  it('throws error when updating ID with a non-integer value', () => {
+    expect(() => {
+      editor.commands.updateStructuredContentById(INLINE_ID, {
+        attrs: { id: 'abc-123' },
+      });
+    }).toThrow('Invalid structured content id - must be an integer, got: abc-123');
+  });
+
   describe('keepTextNodeStyles option', () => {
     it('preserves marks from the first text node when keepTextNodeStyles is true', () => {
       const didUpdate = editor.commands.updateStructuredContentById(INLINE_ID, {
@@ -407,6 +415,14 @@ describe('updateStructuredContentByGroup', () => {
     schema = null;
   });
 
+  it('throws error when updating ID with a non-integer value', () => {
+    expect(() => {
+      editor.commands.updateStructuredContentByGroup(GROUP_NAME, {
+        attrs: { id: 'abc-123' },
+      });
+    }).toThrow('Invalid structured content id - must be an integer, got: abc-123');
+  });
+
   describe('keepTextNodeStyles option', () => {
     it('preserves marks from the first text node for all nodes in group when keepTextNodeStyles is true', () => {
       const didUpdate = editor.commands.updateStructuredContentByGroup(GROUP_NAME, {
@@ -536,6 +552,129 @@ describe('updateStructuredContentByGroup', () => {
       });
 
       consoleErrorSpy.mockRestore();
+    });
+  });
+});
+
+describe('StructuredContent ID Validation', () => {
+  let editor;
+
+  beforeEach(() => {
+    ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
+  });
+
+  afterEach(() => {
+    editor?.destroy();
+    editor = null;
+  });
+
+  describe('insertStructuredContentInline', () => {
+    it('accepts valid integer string IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentInline({
+          attrs: { id: '123' },
+          text: 'Test content',
+        });
+      }).not.toThrow();
+    });
+
+    it('accepts valid negative integer string IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentInline({
+          attrs: { id: '-456' },
+          text: 'Test content',
+        });
+      }).not.toThrow();
+    });
+
+    it('accepts numeric integer IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentInline({
+          attrs: { id: 789 },
+          text: 'Test content',
+        });
+      }).not.toThrow();
+    });
+
+    it('auto-generates ID when not provided', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentInline({
+          text: 'Test content',
+        });
+      }).not.toThrow();
+    });
+
+    it('throws error for non-integer string IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentInline({
+          attrs: { id: 'abc-123' },
+          text: 'Test content',
+        });
+      }).toThrow('Invalid structured content id - must be an integer, got: abc-123');
+    });
+
+    it('throws error for float IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentInline({
+          attrs: { id: '123.45' },
+          text: 'Test content',
+        });
+      }).toThrow('Invalid structured content id - must be an integer, got: 123.45');
+    });
+
+    it('throws error for UUID-style IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentInline({
+          attrs: { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' },
+          text: 'Test content',
+        });
+      }).toThrow('Invalid structured content id - must be an integer, got: a1b2c3d4-e5f6-7890-abcd-ef1234567890');
+    });
+  });
+
+  describe('insertStructuredContentBlock', () => {
+    it('accepts valid integer string IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentBlock({
+          attrs: { id: '123' },
+          html: '<p>Test content</p>',
+        });
+      }).not.toThrow();
+    });
+
+    it('accepts valid negative integer string IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentBlock({
+          attrs: { id: '-456' },
+          html: '<p>Test content</p>',
+        });
+      }).not.toThrow();
+    });
+
+    it('auto-generates ID when not provided', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentBlock({
+          html: '<p>Test content</p>',
+        });
+      }).not.toThrow();
+    });
+
+    it('throws error for non-integer string IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentBlock({
+          attrs: { id: 'my-block-id' },
+          html: '<p>Test content</p>',
+        });
+      }).toThrow('Invalid structured content id - must be an integer, got: my-block-id');
+    });
+
+    it('throws error for float IDs', () => {
+      expect(() => {
+        editor.commands.insertStructuredContentBlock({
+          attrs: { id: '99.99' },
+          html: '<p>Test content</p>',
+        });
+      }).toThrow('Invalid structured content id - must be an integer, got: 99.99');
     });
   });
 });

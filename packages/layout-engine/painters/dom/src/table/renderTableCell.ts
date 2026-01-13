@@ -1,18 +1,27 @@
 import type {
   CellBorders,
   DrawingBlock,
+  Fragment,
   Line,
   ParagraphBlock,
   ParagraphMeasure,
   ImageBlock,
   SdtMetadata,
   TableBlock,
+  TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
 import { applyCellBorders } from './border-utils.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../renderer.js';
 import { toCssFontFamily } from '@superdoc/font-utils';
+import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
+import {
+  applySdtContainerStyling,
+  getSdtContainerConfig,
+  getSdtContainerKey,
+  type SdtBoundaryOptions,
+} from '../utils/sdt-helpers.js';
 
 /**
  * Default gap between list marker and text content in pixels.
@@ -171,6 +180,125 @@ function renderListMarker(params: MarkerRenderParams): HTMLElement {
 }
 
 /**
+ * Applies inline CSS styles to an element, filtering out null/undefined/empty values.
+ *
+ * Only applies styles where the key exists in the element's style object and
+ * the value is non-null and non-empty. This prevents accidentally clearing
+ * existing styles with undefined values.
+ *
+ * @param el - The HTML element to apply styles to
+ * @param styles - Partial CSSStyleDeclaration with styles to apply
+ */
+const applyInlineStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
+  Object.entries(styles).forEach(([key, value]) => {
+    if (value != null && value !== '' && key in el.style) {
+      (el.style as unknown as Record<string, string>)[key] = String(value);
+    }
+  });
+};
+
+/**
+ * Parameters for rendering a nested table inside a table cell.
+ *
+ * When a table cell contains another table (nested/embedded table), we render it
+ * using the same table rendering infrastructure but with a synthetic TableFragment
+ * positioned at (0,0) within the cell content area.
+ */
+type EmbeddedTableRenderParams = {
+  /** Document object for creating DOM elements */
+  doc: Document;
+  /** The nested table block to render */
+  table: TableBlock;
+  /** Measurement data for the nested table */
+  measure: TableMeasure;
+  /** Rendering context (section, page, column info) */
+  context: FragmentRenderContext;
+  /** Function to render a line of paragraph content */
+  renderLine: (
+    block: ParagraphBlock,
+    line: Line,
+    context: FragmentRenderContext,
+    lineIndex: number,
+    isLastLine: boolean,
+  ) => HTMLElement;
+  /** Optional callback to render drawing content (shapes, etc.) */
+  renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
+  /** Function to apply SDT metadata as data attributes */
+  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
+};
+
+/**
+ * Version identifier for embedded table block lookups.
+ * Used to distinguish nested tables from top-level tables in the block lookup map.
+ */
+const EMBEDDED_TABLE_VERSION = 'embedded-table';
+
+/**
+ * Renders a nested table that appears inside a table cell.
+ *
+ * This function creates a synthetic TableFragment positioned at (0,0) within the cell
+ * and delegates to the standard table fragment renderer. The embedded table reuses the
+ * same rendering infrastructure as top-level tables but with its own isolated block lookup.
+ *
+ * @param params - Parameters including the table block, measure, and rendering callbacks
+ * @returns The rendered table element ready to be appended to the cell content
+ *
+ * @example
+ * ```typescript
+ * const tableEl = renderEmbeddedTable({
+ *   doc,
+ *   table: nestedTableBlock,
+ *   measure: nestedTableMeasure,
+ *   context,
+ *   renderLine,
+ *   applySdtDataset,
+ * });
+ * cellContent.appendChild(tableEl);
+ * ```
+ */
+const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => {
+  const { doc, table, measure, context, renderLine, renderDrawingContent, applySdtDataset } = params;
+  const fragment: TableFragment = {
+    kind: 'table',
+    blockId: table.id,
+    fromRow: 0,
+    toRow: table.rows.length,
+    x: 0,
+    y: 0,
+    width: measure.totalWidth,
+    height: measure.totalHeight,
+  };
+  const blockLookup: BlockLookup = new Map([
+    [
+      table.id,
+      {
+        block: table,
+        measure,
+        version: EMBEDDED_TABLE_VERSION,
+      },
+    ],
+  ]);
+  const applyFragmentFrame = (el: HTMLElement, frag: Fragment): void => {
+    el.style.left = `${frag.x}px`;
+    el.style.top = `${frag.y}px`;
+    el.style.width = `${frag.width}px`;
+    el.dataset.blockId = frag.blockId;
+  };
+
+  return renderTableFragmentElement({
+    doc,
+    fragment,
+    context,
+    blockLookup,
+    renderLine,
+    renderDrawingContent,
+    applyFragmentFrame,
+    applySdtDataset,
+    applyStyles: applyInlineStyles,
+  });
+};
+
+/**
  * Apply paragraph-level visual styling such as borders and shading.
  * Borders are set per side with sensible defaults and clamping.
  */
@@ -257,6 +385,8 @@ type TableCellRenderDependencies = {
   context: FragmentRenderContext;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
+  /** Table-level SDT metadata for suppressing duplicate container styling in cells */
+  tableSdt?: SdtMetadata | null;
   /** Starting line index for partial row rendering (inclusive) */
   fromLine?: number;
   /** Ending line index for partial row rendering (exclusive), -1 means render to end */
@@ -340,6 +470,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     renderDrawingContent,
     context,
     applySdtDataset,
+    tableSdt,
     fromLine,
     toLine,
   } = deps;
@@ -379,7 +510,60 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   // Support multi-block cells with backward compatibility
   const cellBlocks = cell?.blocks ?? (cell?.paragraph ? [cell.paragraph] : []);
   const blockMeasures = cellMeasure?.blocks ?? (cellMeasure?.paragraph ? [cellMeasure.paragraph] : []);
+  const sdtContainerKeys = cellBlocks.map((block) => {
+    if (block.kind !== 'paragraph') {
+      return null;
+    }
+    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
+    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
+  });
 
+  const sdtBoundaries = sdtContainerKeys.map((key, index): SdtBoundaryOptions | undefined => {
+    if (!key) return undefined;
+    const prev = index > 0 ? sdtContainerKeys[index - 1] : null;
+    const next = index < sdtContainerKeys.length - 1 ? sdtContainerKeys[index + 1] : null;
+    return { isStart: key !== prev, isEnd: key !== next };
+  });
+  /**
+   * Determines if SDT container styling should be applied to a block.
+   *
+   * We skip styling when the block's SDT matches the table's SDT to prevent
+   * duplicate visual containers - the table already has the SDT container styling,
+   * so individual paragraphs inside it shouldn't also show container borders.
+   *
+   * @param sdt - The block's direct SDT metadata
+   * @param containerSdt - The block's inherited container SDT metadata
+   * @returns True if container styling should be applied
+   */
+  const tableSdtKey = tableSdt ? getSdtContainerKey(tableSdt, null) : null;
+  const shouldApplySdtContainerStyling = (
+    sdt?: SdtMetadata | null,
+    containerSdt?: SdtMetadata | null,
+    blockKey?: string | null,
+  ): boolean => {
+    const resolvedKey = blockKey ?? getSdtContainerKey(sdt, containerSdt);
+    // Skip if this SDT is the same as the table's SDT (already styled at table level)
+    if (tableSdtKey && resolvedKey && tableSdtKey === resolvedKey) {
+      return false;
+    }
+    if (tableSdt && (sdt === tableSdt || containerSdt === tableSdt)) {
+      return false;
+    }
+    return Boolean(getSdtContainerConfig(sdt) || getSdtContainerConfig(containerSdt));
+  };
+
+  // Check if any block in the cell has SDT container styling
+  const hasSdtContainer = cellBlocks.some((block, index) => {
+    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
+    const blockKey = sdtContainerKeys[index] ?? null;
+    return shouldApplySdtContainerStyling(attrs?.sdt, attrs?.containerSdt, blockKey);
+  });
+
+  // SDT containers display labels that extend above the content boundary.
+  // Change overflow to 'visible' so these labels aren't clipped by the cell.
+  if (hasSdtContainer) {
+    cellEl.style.overflow = 'visible';
+  }
   if (cellBlocks.length > 0 && blockMeasures.length > 0) {
     // Content is a child of the cell, positioned relative to it
     // Cell's overflow:hidden handles clipping, no explicit width needed
@@ -421,6 +605,29 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
       const blockMeasure = blockMeasures[i];
       const block = cellBlocks[i];
+
+      if (blockMeasure.kind === 'table' && block?.kind === 'table') {
+        const tableMeasure = blockMeasure as TableMeasure;
+        const tableWrapper = doc.createElement('div');
+        tableWrapper.style.position = 'relative';
+        tableWrapper.style.width = '100%';
+        tableWrapper.style.height = `${tableMeasure.totalHeight}px`;
+        tableWrapper.style.boxSizing = 'border-box';
+
+        const tableEl = renderEmbeddedTable({
+          doc,
+          table: block as TableBlock,
+          measure: tableMeasure,
+          context: { ...context, section: 'body' },
+          renderLine,
+          renderDrawingContent,
+          applySdtDataset,
+        });
+        tableWrapper.appendChild(tableEl);
+        content.appendChild(tableWrapper);
+        // Tables don't contribute to line count (they have their own internal line tracking)
+        continue;
+      }
 
       if (blockMeasure.kind === 'image' && block?.kind === 'image') {
         const imageWrapper = doc.createElement('div');
@@ -558,6 +765,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         paraWrapper.style.left = '0';
         paraWrapper.style.width = '100%';
         applySdtDataset(paraWrapper, block.attrs?.sdt);
+        const sdtBoundary = sdtBoundaries[i];
+        const blockKey = sdtContainerKeys[i] ?? null;
+        if (shouldApplySdtContainerStyling(block.attrs?.sdt, block.attrs?.containerSdt, blockKey)) {
+          applySdtContainerStyling(doc, paraWrapper, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+        }
         applyParagraphBordersAndShading(paraWrapper, block as ParagraphBlock);
 
         // Apply paragraph-level border and shading styles (SD-1296)
@@ -731,11 +943,9 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         }
 
         cumulativeLineCount += blockLineCount;
-      } else {
-        // Non-paragraph block - skip for now
-        cumulativeLineCount += 0;
       }
-      // TODO: Handle other block types (list, image) if needed
+      // Unsupported block types are skipped (no line count contribution)
+      // TODO: Handle other block types (list) if needed
     }
   }
 

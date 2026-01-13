@@ -89,6 +89,33 @@ export function extractStrokeWidth(spPr) {
 }
 
 /**
+ * Extracts line end marker configuration (arrowheads) from a shape's properties.
+ * @param {Object} spPr - The shape properties element
+ * @returns {{ head?: { type?: string, width?: string, length?: string }, tail?: { type?: string, width?: string, length?: string } }|null}
+ *   Line end configuration, or null when not present.
+ */
+export function extractLineEnds(spPr) {
+  const ln = spPr?.elements?.find((el) => el.name === 'a:ln');
+  if (!ln?.elements) return null;
+
+  const parseEnd = (name) => {
+    const end = ln.elements.find((el) => el.name === name);
+    if (!end?.attributes) return null;
+    const type = end.attributes?.['type'];
+    if (!type || type === 'none') return null;
+    const width = end.attributes?.['w'];
+    const length = end.attributes?.['len'];
+    return { type, width, length };
+  };
+
+  const head = parseEnd('a:headEnd');
+  const tail = parseEnd('a:tailEnd');
+
+  if (!head && !tail) return null;
+  return { head: head ?? undefined, tail: tail ?? undefined };
+}
+
+/**
  * Extracts the stroke color from a shape's properties.
  * Checks direct stroke definition in spPr first, then falls back to style reference.
  * @param {Object} spPr - The shape properties element

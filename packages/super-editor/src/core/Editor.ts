@@ -1231,6 +1231,38 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Get the DOM element for a document position.
+   * In presentation mode, returns the painted element.
+   */
+  getElementAtPos(
+    pos: number,
+    options: { forceRebuild?: boolean; fallbackToCoords?: boolean } = {},
+  ): HTMLElement | null {
+    if (this.presentationEditor) {
+      return this.presentationEditor.getElementAtPos(pos, options);
+    }
+
+    if (!this.view) return null;
+    if (!Number.isFinite(pos)) return null;
+
+    const maxPos = this.view.state.doc.content.size;
+    const clampedPos = Math.max(0, Math.min(pos, maxPos));
+
+    try {
+      const { node } = this.view.domAtPos(clampedPos);
+      if (node && node.nodeType === 1) {
+        return node as HTMLElement;
+      }
+      if (node && node.nodeType === 3) {
+        return node.parentElement;
+      }
+      return node?.parentElement ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Get position from client-space coordinates.
    * In layout/presentation mode, uses PresentationEditor hit testing for accurate coordinate mapping.
    * Falls back to ProseMirror view for standard editing mode.

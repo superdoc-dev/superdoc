@@ -1818,6 +1818,45 @@ describe('layoutDocument', () => {
       expect(layout.pages[1].fragments[0].blockId).toBe('p2');
     });
 
+    it('skips empty sectPr marker paragraph before forced section break', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [{ text: 'Content', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: { sectPrMarker: true },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb1',
+          type: 'nextPage',
+          margins: {},
+          pageSize: { w: 612, h: 792 },
+          columns: { count: 1, gap: 0 },
+          attrs: { source: 'sectPr' },
+        },
+        { kind: 'paragraph', id: 'p2', runs: [{ text: 'After break', fontFamily: 'Arial', fontSize: 12 }] },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      });
+
+      expect(layout.pages).toHaveLength(2);
+      expect(layout.pages[0].fragments).toHaveLength(1);
+      expect(layout.pages[0].fragments[0].blockId).toBe('p1');
+      expect(layout.pages[1].fragments).toHaveLength(1);
+      expect(layout.pages[1].fragments[0].blockId).toBe('p2');
+    });
+
     it('does NOT skip empty paragraph if not between pageBreak and sectionBreak', () => {
       const blocks: FlowBlock[] = [
         { kind: 'paragraph', id: 'p1', runs: [{ text: 'Content', fontFamily: 'Arial', fontSize: 12 }] },

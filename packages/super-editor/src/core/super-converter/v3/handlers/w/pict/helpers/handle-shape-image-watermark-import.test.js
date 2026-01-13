@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { handleShapeImageImport } from './handle-shape-image-import';
+import { handleShapeImageWatermarkImport } from './handle-shape-image-watermark-import';
 
-describe('handleShapeImageImport', () => {
+describe('handleShapeImageWatermarkImport', () => {
   const createMockDocx = (relTarget = 'media/image1.png') => ({
     'word/_rels/header1.xml.rels': {
       elements: [
@@ -59,7 +59,7 @@ describe('handleShapeImageImport', () => {
     };
     const pict = createWatermarkPict();
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result).toEqual({
       type: 'image',
@@ -97,7 +97,7 @@ describe('handleShapeImageImport', () => {
       'position:absolute;margin-left:0;margin-top:0;width:466.55pt;height:233.25pt;z-index:-251653120;mso-position-horizontal:center;mso-position-horizontal-relative:margin;mso-position-vertical:center;mso-position-vertical-relative:margin';
     const pict = createWatermarkPict('rId1', style);
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result.attrs.anchorData).toEqual({
       hRelativeFrom: 'margin',
@@ -115,7 +115,7 @@ describe('handleShapeImageImport', () => {
     const style = 'position:absolute;width:466.55pt;height:233.25pt;z-index:0';
     const pict = createWatermarkPict('rId1', style);
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result.attrs.wrap.attrs.behindDoc).toBe(false);
   });
@@ -127,7 +127,7 @@ describe('handleShapeImageImport', () => {
     };
     const pict = createWatermarkPict();
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     // 466.55pt = 466.55 * (96/72) ≈ 622.07 pixels
     // 233.25pt = 233.25 * (96/72) ≈ 311.00 pixels
@@ -142,7 +142,7 @@ describe('handleShapeImageImport', () => {
     };
     const pict = createWatermarkPict();
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result.attrs.vmlAttributes).toEqual(
       expect.objectContaining({
@@ -168,7 +168,7 @@ describe('handleShapeImageImport', () => {
     };
     const pict = { elements: [] };
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result).toBeNull();
   });
@@ -188,7 +188,7 @@ describe('handleShapeImageImport', () => {
       ],
     };
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result).toBeNull();
   });
@@ -213,7 +213,7 @@ describe('handleShapeImageImport', () => {
       ],
     };
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result).toBeNull();
   });
@@ -225,7 +225,7 @@ describe('handleShapeImageImport', () => {
     };
     const pict = createWatermarkPict('rIdNonExistent');
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result).toBeNull();
   });
@@ -255,7 +255,7 @@ describe('handleShapeImageImport', () => {
     };
     const pict = createWatermarkPict();
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result.attrs.src).toBe('word/media/fallback.png');
   });
@@ -267,7 +267,7 @@ describe('handleShapeImageImport', () => {
     };
     const pict = createWatermarkPict();
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result.attrs.src).toBe('word/media/watermark.jpg');
     expect(result.attrs.extension).toBe('jpg');
@@ -297,7 +297,7 @@ describe('handleShapeImageImport', () => {
       ],
     };
 
-    const result = handleShapeImageImport({ params, pict });
+    const result = handleShapeImageWatermarkImport({ params, pict });
 
     expect(result).not.toBeNull();
     expect(result.attrs.gain).toBeUndefined();

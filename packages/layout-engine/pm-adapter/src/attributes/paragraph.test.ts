@@ -1468,9 +1468,13 @@ describe('computeParagraphAttrs', () => {
 
       expect(result?.tabs).toBeDefined();
       expect(result?.tabs).toHaveLength(3);
-      expect(result?.tabs?.[0].val).toBe('start');
-      expect(result?.tabs?.[1].val).toBe('center');
-      expect(result?.tabs?.[2].val).toBe('end');
+      // Note: tabs are now sorted by position, so order is 1440, 2160, 2880
+      expect(result?.tabs?.[0].val).toBe('center');
+      expect(result?.tabs?.[0].pos).toBe(1440);
+      expect(result?.tabs?.[1].val).toBe('end');
+      expect(result?.tabs?.[1].pos).toBe(2160);
+      expect(result?.tabs?.[2].val).toBe('start');
+      expect(result?.tabs?.[2].pos).toBe(2880);
     });
 
     it('should return undefined for non-array input', () => {
@@ -1577,6 +1581,237 @@ describe('computeParagraphAttrs', () => {
 
       expect(result?.tabs).toBeDefined();
       expect(result?.tabs?.[0].leader).toBe('hyphen');
+    });
+  });
+
+  describe('mergeTabStopSources behavior', () => {
+    // Note: mergeTabStopSources is an internal function that merges tab stops from multiple sources.
+    // We test it indirectly through computeParagraphAttrs by providing tabs in attrs, hydrated, and paragraphProps.
+
+    it('should merge tab stops from attrs and hydrated sources', () => {
+      const para: PMNode = {
+        attrs: {
+          tabs: [{ val: 'left', pos: 1440 }], // Tab at position 1440
+        },
+      };
+      const styleContext = createTestStyleContext({
+        styles: {
+          testStyle: {
+            type: 'paragraph',
+            paragraphProps: {
+              tabStops: [{ val: 'center', pos: 2880 }], // Tab at position 2880
+            },
+          },
+        },
+      });
+
+      // Pass hydrated props via a style reference
+      para.attrs = {
+        ...para.attrs,
+        styleId: 'testStyle',
+      };
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      // Should have both tabs merged
+      expect(result?.tabs).toBeDefined();
+      expect(result?.tabs?.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should override tab stops at same position with later source', () => {
+      // When multiple sources have tabs at the same position, later sources win
+      // Merge order is: hydratedTabStops, paragraphTabStops, attrTabStops
+      // So attrTabStops (last) should override earlier sources
+      const para: PMNode = {
+        attrs: {
+          tabs: [{ val: 'decimal', pos: 1440 }], // Same position as style, different alignment
+          styleId: 'testStyle',
+        },
+      };
+      const styleContext = createTestStyleContext({
+        styles: {
+          testStyle: {
+            type: 'paragraph',
+            paragraphProps: {
+              tabStops: [{ val: 'center', pos: 1440 }], // Same position
+            },
+          },
+        },
+      });
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+      // attrTabStops is processed last, so 'decimal' should override 'center'
+      const tab1440 = result?.tabs?.find((t) => t.pos === 1440);
+      expect(tab1440?.val).toBe('decimal');
+    });
+
+    it('should sort merged tab stops by position', () => {
+      const para: PMNode = {
+        attrs: {
+          // Just test sorting with direct tabs from attrs
+          tabs: [
+            { val: 'end', pos: 4320 }, // Third position
+            { val: 'center', pos: 2880 }, // Second position
+            { val: 'start', pos: 1440 }, // First position
+          ],
+        },
+      };
+      const styleContext = createTestStyleContext();
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+      expect(result?.tabs?.length).toBe(3);
+      // Should be sorted by position
+      expect(result?.tabs?.[0].pos).toBe(1440);
+      expect(result?.tabs?.[0].val).toBe('start');
+      expect(result?.tabs?.[1].pos).toBe(2880);
+      expect(result?.tabs?.[1].val).toBe('center');
+      expect(result?.tabs?.[2].pos).toBe(4320);
+      expect(result?.tabs?.[2].val).toBe('end');
+    });
+
+    it('should handle getTabStopPosition with originalPos property', () => {
+      const para: PMNode = {
+        attrs: {
+          tabs: [{ val: 'left', originalPos: 1440, pos: 100 }], // originalPos takes priority
+        },
+      };
+      const styleContext = createTestStyleContext();
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+      // The merge uses originalPos for deduplication key
+      expect(result?.tabs?.[0].pos).toBe(1440); // Uses originalPos
+    });
+
+    it('should handle getTabStopPosition with position property', () => {
+      const para: PMNode = {
+        attrs: {
+          tabStops: [{ val: 'left', position: 2880 }], // Uses position property
+        },
+      };
+      const styleContext = createTestStyleContext();
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+    });
+
+    it('should handle getTabStopPosition with offset property', () => {
+      const para: PMNode = {
+        attrs: {
+          tabStops: [{ val: 'center', offset: 1440 }], // Uses offset property
+        },
+      };
+      const styleContext = createTestStyleContext();
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+    });
+
+    it('should skip tab stops without valid position', () => {
+      const para: PMNode = {
+        attrs: {
+          tabs: [
+            { val: 'left' }, // No position - should be skipped by merge
+            { val: 'center', pos: 1440 }, // Valid
+          ],
+        },
+      };
+      const styleContext = createTestStyleContext();
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+      // Only the valid tab should be included
+      expect(result?.tabs?.length).toBe(1);
+      expect(result?.tabs?.[0].val).toBe('center');
+    });
+
+    it('should deduplicate tabs at same position from different sources', () => {
+      const para: PMNode = {
+        attrs: {
+          tabs: [
+            { val: 'center', pos: 1440 },
+            { val: 'decimal', pos: 1440 }, // Same position, should be deduplicated
+          ],
+        },
+      };
+      const styleContext = createTestStyleContext();
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+      // Should only have one tab at position 1440 (last one wins)
+      const tabs1440 = result?.tabs?.filter((t) => t.pos === 1440);
+      expect(tabs1440?.length).toBe(1);
+      expect(tabs1440?.[0].val).toBe('decimal');
+    });
+
+    it('should deduplicate tabs that normalize to the same position', () => {
+      const para: PMNode = {
+        attrs: {
+          tabs: [{ val: 'decimal', pos: 96 }], // 96px -> 1440 twips
+          styleId: 'testStyle',
+        },
+      };
+      const styleContext = createTestStyleContext({
+        styles: {
+          testStyle: {
+            type: 'paragraph',
+            paragraphProps: {
+              tabStops: [{ val: 'center', pos: 1440 }], // Same position in twips
+            },
+          },
+        },
+      });
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+      const tabs1440 = result?.tabs?.filter((t) => t.pos === 1440);
+      expect(tabs1440?.length).toBe(1);
+      expect(tabs1440?.[0].val).toBe('decimal');
+    });
+
+    it('should return undefined when all sources are empty or invalid', () => {
+      const para: PMNode = {
+        attrs: {
+          tabs: [],
+        },
+      };
+      const styleContext = createTestStyleContext();
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      // No tabs should be set when all sources are empty
+      expect(result?.tabs).toBeUndefined();
+    });
+
+    it('should handle non-object entries in tab array', () => {
+      const para: PMNode = {
+        attrs: {
+          tabs: [
+            null,
+            undefined,
+            'string',
+            123,
+            { val: 'center', pos: 1440 }, // Only valid entry
+          ],
+        },
+      };
+      const styleContext = createTestStyleContext();
+
+      const result = computeParagraphAttrs(para, styleContext);
+
+      expect(result?.tabs).toBeDefined();
+      expect(result?.tabs?.length).toBe(1);
+      expect(result?.tabs?.[0].val).toBe('center');
     });
   });
 

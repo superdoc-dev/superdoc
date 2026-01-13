@@ -12,6 +12,7 @@ import { CommentMarkName } from './comments-constants.js';
 // Example tracked-change keys, if needed
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '../track-changes/plugins/index.js';
+import { getTrackChanges } from '../track-changes/trackChangesHelpers/getTrackChanges.js';
 import { comments_module_events } from '@superdoc/common';
 import { normalizeCommentEventPayload, updatePosition } from './helpers/index.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -606,14 +607,27 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
   return newTrackedChanges;
 };
 
-const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsertion }) => {
+const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsertion, marks }) => {
   let trackedChangeText = '';
   let deletionText = '';
 
-  if (trackedChangeType === TrackInsertMarkName) {
+  // Extract deletion text first
+  if (trackedChangeType === TrackDeleteMarkName || isDeletionInsertion) {
+    deletionText = nodes.reduce((acc, node) => {
+      const hasDeleteMark = node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName);
+      if (!hasDeleteMark) return acc;
+      const nodeText = node?.text || node?.textContent || '';
+      acc += nodeText;
+      return acc;
+    }, '');
+  }
+
+  if (trackedChangeType === TrackInsertMarkName || isDeletionInsertion) {
     trackedChangeText = nodes.reduce((acc, node) => {
-      if (!node.marks.find((nodeMark) => nodeMark.type.name === mark.type.name)) return acc;
-      acc += node?.text || node?.textContent || '';
+      const hasInsertMark = node.marks.find((nodeMark) => nodeMark.type.name === TrackInsertMarkName);
+      if (!hasInsertMark) return acc;
+      const nodeText = node?.text || node?.textContent || '';
+      acc += nodeText;
       return acc;
     }, '');
   }
@@ -621,14 +635,6 @@ const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsert
   // If this is a format change, let's get the string of what changes were made
   if (trackedChangeType === TrackFormatMarkName) {
     trackedChangeText = translateFormatChangesToEnglish(mark.attrs);
-  }
-
-  if (trackedChangeType === TrackDeleteMarkName || isDeletionInsertion) {
-    deletionText = nodes.reduce((acc, node) => {
-      if (!node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName)) return acc;
-      acc += node?.text || node?.textContent || '';
-      return acc;
-    }, '');
   }
 
   return {
@@ -646,25 +652,64 @@ const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes
   const id = attrs.id;
 
   const node = nodes[0];
-  const isDeletionInsertion = !!(marks.insertedMark && marks.deletionMark);
+  // Use getTrackChanges to find all tracked changes with the matching ID
+  // This will find both insertion and deletion marks if they exist with the same ID
+  const trackedChangesWithId = getTrackChanges(newEditorState, id);
 
+  // Check metadata first - this should be set correctly by groupChanges() in createCommentForTrackChanges
+  // for both newly created and imported tracked changes
+  let isDeletionInsertion = !!(marks.insertedMark && marks.deletionMark);
+
+  // Fallback: If metadata doesn't indicate replacement (e.g., edge cases during import),
+  // check the document state directly to detect replacements by finding both marks with same ID
+  // This ensures robustness even if groupChanges() misses a replacement or metadata isn't set
+  if (!isDeletionInsertion) {
+    const hasInsertMark = trackedChangesWithId.some(({ mark }) => mark.type.name === TrackInsertMarkName);
+    const hasDeleteMark = trackedChangesWithId.some(({ mark }) => mark.type.name === TrackDeleteMarkName);
+    isDeletionInsertion = hasInsertMark && hasDeleteMark;
+  }
+
+  // Collect nodes from the tracked changes found
+  // We need to get the actual nodes at those positions
   let nodesWithMark = [];
-  newEditorState.doc.descendants((node) => {
-    const { marks = [] } = node;
-    const changeMarks = marks.filter((mark) => TRACK_CHANGE_MARKS.includes(mark.type.name));
-    if (!changeMarks.length) return;
-    const hasMatchingId = changeMarks.find((mark) => mark.attrs.id === id);
-    if (hasMatchingId) nodesWithMark.push(node);
+  trackedChangesWithId.forEach(({ from, to, mark }) => {
+    newEditorState.doc.nodesBetween(from, to, (node, pos) => {
+      // Only collect inline text nodes
+      if (node.isText) {
+        // Check if this node has the mark (it should, since getTrackChanges found it)
+        const hasMatchingMark = node.marks?.some((m) => TRACK_CHANGE_MARKS.includes(m.type.name) && m.attrs.id === id);
+        if (hasMatchingMark) {
+          // Check if we already have this node (by reference, not by content)
+          const alreadyAdded = nodesWithMark.some((n) => n === node);
+          if (!alreadyAdded) {
+            nodesWithMark.push(node);
+          }
+        }
+      }
+    });
   });
 
-  const nodesToProcess = nodesWithMark.length ? nodesWithMark : node ? [node] : [];
-  if (!nodesToProcess.length) {
+  // For replacements, we need both insertion nodes and deletion nodes
+  // When isDeletionInsertion is true, nodesWithMark should contain both types
+  let nodesToUse;
+  if (isDeletionInsertion) {
+    // For replacements, use nodes found in document (which should include both insertion and deletion)
+    // Also include nodes from step.slice and deletionNodes if they exist (for newly created replacements)
+    const allNodes = [...nodesWithMark, ...nodes, ...(deletionNodes || [])];
+    // Remove duplicates by comparing node identity
+    nodesToUse = Array.from(new Set(allNodes));
+  } else {
+    // For non-replacements, use nodes found in document or fall back to step nodes
+    nodesToUse = nodesWithMark.length ? nodesWithMark : node ? [node] : [];
+  }
+
+  if (!nodesToUse.length) {
     return;
   }
 
   const { deletionText, trackedChangeText } = getTrackedChangeText({
     state: newEditorState,
-    nodes: nodesToProcess,
+    nodes: nodesToUse,
     mark: trackedMark,
     marks,
     trackedChangeType,

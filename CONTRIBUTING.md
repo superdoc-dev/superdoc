@@ -20,7 +20,7 @@ This project and everyone participating in it are governed by our Code of Conduc
 
 ### Reporting Bugs
 
-Before creating bug reports, please check [existing issues](https://github.com/Harbour-Enterprises/SuperDoc/issues) as you might find that the issue has already been reported. When creating a bug report, include as many details as possible:
+Before creating bug reports, please check [existing issues](https://github.com/superdoc-dev/superdoc/issues) as you might find that the issue has already been reported. When creating a bug report, include as many details as possible:
 
 - A clear and descriptive title
 - Steps to reproduce the issue
@@ -65,7 +65,7 @@ Documentation is crucial for our project. You can help by:
 1. **Fork and Clone**:
 
    ```bash
-   git clone https://github.com/Harbour-Enterprises/SuperDoc.git
+   git clone https://github.com/superdoc-dev/superdoc.git
    cd SuperDoc
    ```
 
@@ -268,14 +268,14 @@ npm run lint:fix
 ## Community
 
 - Join our [Discord server](https://discord.gg/wjMccuygvy) for discussions
-- Participate in [GitHub Discussions](https://github.com/Harbour-Enterprises/SuperDoc/discussions)
-- Follow development updates on our [roadmap](https://github.com/Harbour-Enterprises/SuperDoc/wiki/🎯️-SuperDoc-Roadmap)
+- Participate in [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions)
+- Follow development updates on our [roadmap](https://github.com/superdoc-dev/superdoc/wiki/🎯️-SuperDoc-Roadmap)
 
 ### Recognition
 
 We recognize contributions in several ways:
 
-- Featured in our [contributors page](https://github.com/Harbour-Enterprises/SuperDoc#contributors)
+- Featured in our [contributors page](https://github.com/superdoc-dev/superdoc#contributors)
 - Mentioned in release notes
 - Community contributor badge in Discord
 - Opportunities to join the core team
@@ -284,7 +284,7 @@ We recognize contributions in several ways:
 
 If you have questions, feel free to:
 
-- Start a [GitHub Discussion](https://github.com/Harbour-Enterprises/SuperDoc/discussions)
+- Start a [GitHub Discussion](https://github.com/superdoc-dev/superdoc/discussions)
 - Join our [Discord server](https://discord.gg/wjMccuygvy)
 - Email us at [support@harbourshare.com](mailto:support@harbourshare.com)
 

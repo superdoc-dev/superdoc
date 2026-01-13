@@ -199,15 +199,25 @@ const decode = (params, decodedAttrs) => {
   // @ts-expect-error - preProcessVerticalMergeCells expects ProseMirror table shape, but receives SuperDoc node
   params.node = preProcessVerticalMergeCells(params.node, params);
   const { node } = params;
-  const elements = translateChildNodes(params);
+  const rawGrid = node.attrs?.grid;
+  const grid = Array.isArray(rawGrid) ? rawGrid : [];
+  const preferTableGrid = node.attrs?.userEdited !== true && grid.length > 0;
+  const totalColumns = preferTableGrid ? grid.length : undefined;
+  const extraParams = {
+    ...(params.extraParams || {}),
+    preferTableGrid,
+    totalColumns,
+  };
+
+  const elements = translateChildNodes({ ...params, extraParams });
 
   // Table grid - generate if not present
   const firstRow = node.content?.find((n) => n.type === 'tableRow');
-  const properties = node.attrs.grid;
   const element = tblGridTranslator.decode({
     ...params,
-    node: { ...node, attrs: { ...node.attrs, grid: properties } },
+    node: { ...node, attrs: { ...node.attrs, grid } },
     extraParams: {
+      ...extraParams,
       firstRow,
     },
   });

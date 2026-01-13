@@ -307,5 +307,36 @@ describe('w:tr translator', () => {
         },
       });
     });
+
+    it('trims cells to the stored grid when preferTableGrid is true', () => {
+      const placeholder = { type: 'tableCell', attrs: { __placeholder: 'gridBefore', colwidth: [0] }, content: [] };
+      const cell = () => ({ type: 'tableCell', attrs: { colspan: 1 }, content: [] });
+      const mockNode = {
+        type: 'tableRow',
+        attrs: {
+          tableRowProperties: { gridBefore: 1 },
+        },
+        content: [placeholder, cell(), cell(), cell()],
+      };
+      const params = {
+        node: mockNode,
+        extraParams: {
+          preferTableGrid: true,
+          totalColumns: 3,
+        },
+      };
+
+      translator.decode(params, {});
+
+      expect(translateChildNodes).toHaveBeenCalledWith(
+        expect.objectContaining({
+          node: expect.objectContaining({
+            content: expect.arrayContaining([expect.any(Object), expect.any(Object)]),
+          }),
+        }),
+      );
+      const translateCall = translateChildNodes.mock.calls[0][0];
+      expect(translateCall.node.content).toHaveLength(2);
+    });
   });
 });

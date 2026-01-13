@@ -51,9 +51,41 @@ import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attrib
  * @param {Editor} editor instance.
  * @returns {{pmDoc: PmNodeJson, savedTagsToRestore: XmlNode, pageStyles: *}|null}
  */
+/**
+ * Detect document origin (Word vs Google Docs) based on XML structure
+ * @param {ParsedDocx} docx The parsed docx object
+ * @returns {'word' | 'google-docs' | 'unknown'} The detected origin
+ */
+const detectDocumentOrigin = (docx) => {
+  const commentsExtended = docx['word/commentsExtended.xml'];
+  if (commentsExtended) {
+    const { elements: initialElements = [] } = commentsExtended;
+    if (initialElements?.length > 0) {
+      const { elements = [] } = initialElements[0] ?? {};
+      const commentEx = elements.filter((el) => el.name === 'w15:commentEx');
+      if (commentEx.length > 0) {
+        return 'word';
+      }
+    }
+  }
+
+  // Check for comments.xml - if it exists but no commentsExtended.xml, likely Google Docs
+  const comments = docx['word/comments.xml'];
+  if (comments && !commentsExtended) {
+    // Google Docs often exports without commentsExtended.xml, using range-based threading
+    return 'google-docs';
+  }
+
+  return 'unknown';
+};
+
 export const createDocumentJson = (docx, converter, editor) => {
   const json = carbonCopy(getInitialJSON(docx));
   if (!json) return null;
+
+  if (converter) {
+    converter.documentOrigin = detectDocumentOrigin(docx);
+  }
 
   // Track initial document structure
   if (converter?.telemetry) {
@@ -490,13 +522,13 @@ function getStyleDefinitions(docx) {
   const styles = docx['word/styles.xml'];
   if (!styles) return [];
 
-  const { elements } = styles.elements[0];
+  const elements = styles.elements?.[0]?.elements ?? [];
   const styleDefinitions = elements.filter((el) => el.name === 'w:style');
 
   // Track latent style exceptions
   const latentStyles = elements.find((el) => el.name === 'w:latentStyles');
   const matchedLatentStyles = [];
-  latentStyles?.elements.forEach((el) => {
+  (latentStyles?.elements ?? []).forEach((el) => {
     const { attributes } = el;
     const match = styleDefinitions.find((style) => style.attributes['w:styleId'] === attributes['w:name']);
     if (match) matchedLatentStyles.push(el);

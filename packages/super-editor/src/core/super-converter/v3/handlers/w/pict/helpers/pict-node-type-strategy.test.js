@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { pictNodeTypeStrategy } from './pict-node-type-strategy';
 import { handleVRectImport } from './handle-v-rect-import';
 import { handleShapeTextboxImport } from './handle-shape-textbox-import';
-import { handleShapeImageImport } from './handle-shape-image-import';
+import { handleShapeImageWatermarkImport } from './handle-shape-image-watermark-import';
 
 describe('pictNodeTypeStrategy', () => {
   const createNode = (elements = []) => ({
@@ -91,7 +91,7 @@ describe('pictNodeTypeStrategy', () => {
 
       expect(result).toEqual({
         type: 'image',
-        handler: handleShapeImageImport,
+        handler: handleShapeImageWatermarkImport,
       });
     });
   });
@@ -104,7 +104,7 @@ describe('pictNodeTypeStrategy', () => {
 
       expect(result).toEqual({
         type: 'image',
-        handler: handleShapeImageImport,
+        handler: handleShapeImageWatermarkImport,
       });
     });
 
@@ -144,7 +144,7 @@ describe('pictNodeTypeStrategy', () => {
 
       expect(result).toEqual({
         type: 'image',
-        handler: handleShapeImageImport,
+        handler: handleShapeImageWatermarkImport,
       });
     });
   });

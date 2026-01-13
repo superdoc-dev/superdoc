@@ -214,6 +214,7 @@ export class SuperDoc extends EventEmitter {
 
     this.isDev = this.config.isDev || false;
 
+    /** @type {Editor | null | undefined} */
     this.activeEditor = null;
     this.comments = [];
 

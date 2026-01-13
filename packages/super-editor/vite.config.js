@@ -7,6 +7,10 @@ import vue from '@vitejs/plugin-vue'
 import { version as superdocVersion } from '../superdoc/package.json';
 import sourceResolve from '../../vite.sourceResolve'
 
+const testPool = process.env.VITEST_POOL ?? 'threads';
+const minWorkers = process.env.VITEST_MIN_WORKERS ?? '50%';
+const maxWorkers = process.env.VITEST_MAX_WORKERS ?? '75%';
+
 export default defineConfig(({ mode }) => {
   const plugins = [vue()];
 
@@ -17,6 +21,9 @@ export default defineConfig(({ mode }) => {
     // Combined test configuration
     test: {
       name: '✏️ @super-editor',
+      pool: testPool,
+      minWorkers,
+      maxWorkers,
       globals: true,
       environment: 'jsdom',
       retry: 2,

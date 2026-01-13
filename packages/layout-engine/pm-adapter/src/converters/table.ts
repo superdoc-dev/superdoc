@@ -38,6 +38,11 @@ import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { annotateBlockWithTrackedChange, shouldHideTrackedNode } from '../tracked-changes.js';
+import {
+  resolveNodeSdtMetadata,
+  applySdtMetadataToParagraphBlocks,
+  applySdtMetadataToTableBlock,
+} from '../sdt/index.js';
 
 type ParagraphConverter = (
   node: PMNode,
@@ -194,9 +199,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     return null;
   }
 
-  // Convert all paragraphs in the cell to blocks
-  // Note: Table cells can only contain paragraphs, images, and drawings (not nested tables)
-  const blocks: (ParagraphBlock | ImageBlock | DrawingBlock)[] = [];
+  // Convert all cell children into blocks.
+  // Table cells can contain paragraphs, images/drawings, structured content blocks, and nested tables.
+  const blocks: (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[] = [];
 
   // Extract cell background color for auto text color resolution
   const cellBackground = cellNode.attrs?.background as { color?: string } | undefined;
@@ -225,7 +230,34 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       : context.converterContext;
 
   const paragraphToFlowBlocks = context.converters?.paragraphToFlowBlocks ?? context.paragraphToFlowBlocks;
+  const tableNodeToBlock = context.converters?.tableNodeToBlock;
   const listCounterContext = context.listCounterContext;
+
+  /**
+   * Appends converted paragraph blocks to the cell's blocks array.
+   *
+   * This helper:
+   * 1. Applies SDT metadata to paragraph blocks (for structured content inheritance)
+   * 2. Filters to only include supported block types (paragraph, image, drawing)
+   * 3. Appends the filtered blocks to the cell's blocks array
+   *
+   * @param paragraphBlocks - The converted flow blocks from a paragraph node
+   * @param sdtMetadata - Optional SDT metadata to apply (from parent structuredContentBlock)
+   */
+  const appendParagraphBlocks = (
+    paragraphBlocks: FlowBlock[],
+    sdtMetadata?: ReturnType<typeof resolveNodeSdtMetadata>,
+  ) => {
+    applySdtMetadataToParagraphBlocks(
+      paragraphBlocks.filter((block) => block.kind === 'paragraph') as ParagraphBlock[],
+      sdtMetadata,
+    );
+    paragraphBlocks.forEach((block) => {
+      if (block.kind === 'paragraph' || block.kind === 'image' || block.kind === 'drawing') {
+        blocks.push(block);
+      }
+    });
+  };
 
   for (const childNode of cellNode.content) {
     if (childNode.type === 'paragraph') {
@@ -244,11 +276,77 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.themeColors,
         cellConverterContext,
       );
-      paragraphBlocks.forEach((block) => {
-        if (block.kind === 'paragraph' || block.kind === 'image' || block.kind === 'drawing') {
-          blocks.push(block);
+      appendParagraphBlocks(paragraphBlocks);
+      continue;
+    }
+
+    if (childNode.type === 'structuredContentBlock' && Array.isArray(childNode.content)) {
+      const structuredContentMetadata = resolveNodeSdtMetadata(childNode, 'structuredContentBlock');
+      for (const nestedNode of childNode.content) {
+        if (nestedNode.type === 'paragraph') {
+          if (!paragraphToFlowBlocks) continue;
+          const paragraphBlocks = paragraphToFlowBlocks(
+            nestedNode,
+            context.nextBlockId,
+            context.positions,
+            context.defaultFont,
+            context.defaultSize,
+            context.styleContext,
+            listCounterContext,
+            context.trackedChanges,
+            context.bookmarks,
+            context.hyperlinkConfig,
+            context.themeColors,
+            cellConverterContext,
+          );
+          appendParagraphBlocks(paragraphBlocks, structuredContentMetadata);
+          continue;
         }
-      });
+        if (nestedNode.type === 'table' && tableNodeToBlock) {
+          const tableBlock = tableNodeToBlock(
+            nestedNode,
+            context.nextBlockId,
+            context.positions,
+            context.defaultFont,
+            context.defaultSize,
+            context.styleContext,
+            context.trackedChanges,
+            context.bookmarks,
+            context.hyperlinkConfig,
+            context.themeColors,
+            paragraphToFlowBlocks,
+            context.converterContext,
+            { listCounterContext, converters: context.converters },
+          );
+          if (tableBlock && tableBlock.kind === 'table') {
+            applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
+            blocks.push(tableBlock);
+          }
+          continue;
+        }
+      }
+      continue;
+    }
+
+    if (childNode.type === 'table' && tableNodeToBlock) {
+      const tableBlock = tableNodeToBlock(
+        childNode,
+        context.nextBlockId,
+        context.positions,
+        context.defaultFont,
+        context.defaultSize,
+        context.styleContext,
+        context.trackedChanges,
+        context.bookmarks,
+        context.hyperlinkConfig,
+        context.themeColors,
+        paragraphToFlowBlocks,
+        context.converterContext,
+        { listCounterContext, converters: context.converters },
+      );
+      if (tableBlock && tableBlock.kind === 'table') {
+        blocks.push(tableBlock);
+      }
       continue;
     }
 
@@ -317,6 +415,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       if (drawingBlock && drawingBlock.kind === 'drawing') {
         blocks.push(drawingBlock);
       }
+      continue;
     }
   }
 

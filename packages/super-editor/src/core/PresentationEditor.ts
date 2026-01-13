@@ -2234,6 +2234,48 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Get the painted DOM element that contains a document position (body only).
+   *
+   * Uses the DomPositionIndex which maps data-pm-start/end attributes to rendered
+   * elements. Returns null when the position is not currently mounted (virtualization)
+   * or when in header/footer mode.
+   *
+   * @param pos - Document position in the active editor
+   * @param options.forceRebuild - Rebuild the index before lookup
+   * @param options.fallbackToCoords - Use elementFromPoint with layout rects if index lookup fails
+   * @returns The nearest painted DOM element for the position, or null if unavailable
+   */
+  getElementAtPos(
+    pos: number,
+    options: { forceRebuild?: boolean; fallbackToCoords?: boolean } = {},
+  ): HTMLElement | null {
+    if (!Number.isFinite(pos)) return null;
+    if (!this.#painterHost) return null;
+    if (this.#session.mode !== 'body') return null;
+
+    if (options.forceRebuild || this.#domPositionIndex.size === 0) {
+      this.#rebuildDomPositionIndex();
+    }
+
+    const indexed = this.#domPositionIndex.findElementAtPosition(pos);
+    if (indexed) return indexed;
+
+    if (!options.fallbackToCoords) return null;
+    const rects = this.getRangeRects(pos, pos);
+    if (!rects.length) return null;
+
+    const doc = this.#visibleHost.ownerDocument ?? document;
+    for (const rect of rects) {
+      const el = doc.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      if (el instanceof HTMLElement && this.#painterHost.contains(el)) {
+        return (el.closest('[data-pm-start][data-pm-end]') as HTMLElement | null) ?? el;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Scroll the visible host so a given document position is brought into view.
    *
    * This is primarily used by commands like search navigation when running in
@@ -3003,6 +3045,49 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  #resolveFieldAnnotationSelectionFromElement(
+    annotationEl: HTMLElement,
+  ): { node: ProseMirrorNode; pos: number } | null {
+    const pmStartRaw = annotationEl.dataset?.pmStart;
+    if (pmStartRaw == null) {
+      return null;
+    }
+
+    const pmStart = Number(pmStartRaw);
+    if (!Number.isFinite(pmStart)) {
+      return null;
+    }
+
+    const doc = this.#editor.state?.doc;
+    if (!doc) {
+      return null;
+    }
+
+    const layoutEpochRaw = annotationEl.dataset?.layoutEpoch;
+    const layoutEpoch = layoutEpochRaw != null ? Number(layoutEpochRaw) : NaN;
+    const effectiveEpoch = Number.isFinite(layoutEpoch) ? layoutEpoch : this.#epochMapper.getCurrentEpoch();
+    const mapped = this.#epochMapper.mapPosFromLayoutToCurrentDetailed(pmStart, effectiveEpoch, 1);
+    if (!mapped.ok) {
+      const fallbackPos = Math.max(0, Math.min(pmStart, doc.content.size));
+      const fallbackNode = doc.nodeAt(fallbackPos);
+      if (fallbackNode?.type?.name === 'fieldAnnotation') {
+        return { node: fallbackNode, pos: fallbackPos };
+      }
+
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+      return null;
+    }
+
+    const clampedPos = Math.max(0, Math.min(mapped.pos, doc.content.size));
+    const node = doc.nodeAt(clampedPos);
+    if (!node || node.type.name !== 'fieldAnnotation') {
+      return null;
+    }
+
+    return { node, pos: clampedPos };
+  }
+
   #setupInputBridge() {
     this.#inputBridge?.destroy();
     // Pass both window (for keyboard events that bubble) and visibleHost (for beforeinput events that don't)
@@ -3117,8 +3202,33 @@ export class PresentationEditor extends EventEmitter {
       linkEl.dispatchEvent(linkClickEvent);
       return;
     }
+
+    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
     const isDraggableAnnotation = target?.closest?.('[data-draggable="true"]') != null;
     this.#suppressFocusInFromDraggable = isDraggableAnnotation;
+
+    if (annotationEl) {
+      if (!this.#editor.isEditable) {
+        return;
+      }
+
+      const resolved = this.#resolveFieldAnnotationSelectionFromElement(annotationEl);
+      if (resolved) {
+        try {
+          const tr = this.#editor.state.tr.setSelection(NodeSelection.create(this.#editor.state.doc, resolved.pos));
+          this.#editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#editor.emit('fieldAnnotationClicked', {
+          editor: this.#editor,
+          node: resolved.node,
+          nodePos: resolved.pos,
+          event,
+          currentTarget: annotationEl,
+        });
+      }
+      return;
+    }
 
     if (!this.#layoutState.layout) {
       // Layout not ready yet, but still focus the editor and set cursor to start

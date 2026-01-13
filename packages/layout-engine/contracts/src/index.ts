@@ -181,6 +181,7 @@ export type TextRun = RunMarks & {
     commentId: string;
     importedId?: string;
     internal?: boolean;
+    trackedChange?: boolean;
   }>;
   /**
    * Custom data attributes propagated from ProseMirror marks (keys must be data-*).
@@ -456,7 +457,7 @@ export type TableAttrs = {
 export type TableCell = {
   id: BlockId;
   /** Multi-block cell content (new feature) */
-  blocks?: (ParagraphBlock | ImageBlock | DrawingBlock)[];
+  blocks?: (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[];
   /** Single paragraph (backward compatibility) */
   paragraph?: ParagraphBlock;
   rowSpan?: number;
@@ -629,10 +630,29 @@ export type ShapeTextContent = {
   horizontalAlign?: 'left' | 'center' | 'right';
 };
 
+export type LineEnd = {
+  type?: string;
+  width?: string;
+  length?: string;
+};
+
+export type LineEnds = {
+  head?: LineEnd;
+  tail?: LineEnd;
+};
+
+export type EffectExtent = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
 export type VectorShapeStyle = {
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
+  lineEnds?: LineEnds;
   textContent?: ShapeTextContent;
   textAlign?: string;
 };
@@ -698,6 +718,8 @@ export type VectorShapeDrawing = DrawingBlockBase & {
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
+  lineEnds?: LineEnds;
+  effectExtent?: EffectExtent;
   textContent?: ShapeTextContent;
   textAlign?: string;
   textVerticalAlign?: 'top' | 'center' | 'bottom';
@@ -1161,6 +1183,8 @@ export type ParagraphAttrs = {
   keepLines?: boolean;
   trackedChangesMode?: TrackedChangesMode;
   trackedChangesEnabled?: boolean;
+  /** Marks an empty paragraph that only exists to carry section properties. */
+  sectPrMarker?: boolean;
   direction?: 'ltr' | 'rtl';
   rtl?: boolean;
   isTocEntry?: boolean;

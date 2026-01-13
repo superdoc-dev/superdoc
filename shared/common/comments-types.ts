@@ -25,6 +25,13 @@ export type Comment = {
   resolvedByEmail: string | null;
   resolvedByName: string | null;
   commentJSON: CommentJSON;
+  origin?: 'word' | 'google-docs' | 'unknown';
+  threadingMethod?: 'commentsExtended' | 'range-based' | 'mixed';
+  originalXmlStructure?: {
+    hasCommentsExtended: boolean;
+    hasCommentsExtensible: boolean;
+    hasCommentsIds: boolean;
+  };
 };
 
 export type CommentContent = {

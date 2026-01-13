@@ -1,6 +1,9 @@
 import { CommentMarkName } from './comments-constants.js';
 import { CommentsPluginKey } from './comments-plugin.js';
 import { ensureFallbackComment, resolveCommentMeta } from './comment-import-helpers.js';
+import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../track-changes/constants.js';
+
+const TRACK_CHANGE_MARKS = [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName];
 
 /**
  * Remove comment by id
@@ -241,6 +244,41 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         });
       });
     });
+
+    const trackedChangeMark = node.marks?.find((mark) => TRACK_CHANGE_MARKS.includes(mark.type.name));
+    if (trackedChangeMark) {
+      const trackedChangeId = trackedChangeMark.attrs?.id;
+      if (trackedChangeId) {
+        const childComments = comments
+          .filter((c) => c.parentCommentId === trackedChangeId && !c.trackedChange)
+          .sort((a, b) => a.createdTime - b.createdTime);
+
+        childComments.forEach((c) => {
+          if (seen.has(c.commentId)) return;
+          seen.add(c.commentId);
+
+          const childMark = getPreparedComment({
+            commentId: c.commentId,
+            internal: c.isInternal,
+          });
+          const childStartNode = schema.nodes.commentRangeStart.create(childMark);
+          startNodes.push({
+            pos,
+            node: childStartNode,
+            commentId: c.commentId,
+            parentCommentId: c.parentCommentId,
+          });
+
+          const childEndNode = schema.nodes.commentRangeEnd.create(childMark);
+          endNodes.push({
+            pos: pos + node.nodeSize,
+            node: childEndNode,
+            commentId: c.commentId,
+            parentCommentId: c.parentCommentId,
+          });
+        });
+      }
+    }
   });
 
   // Sort start nodes to ensure proper nesting order for Google Docs format:
@@ -331,19 +369,20 @@ export const prepareCommentsForImport = (doc, tr, schema, converter) => {
     const commentNodes = ['commentRangeStart', 'commentRangeEnd', 'commentReference'];
     if (!commentNodes.includes(type.name)) return;
 
-    const { resolvedCommentId, importedId, internal, matchingImportedComment } = resolveCommentMeta({
-      converter,
-      importedId: node.attrs['w:id'],
-    });
+    const { resolvedCommentId, importedId, internal, matchingImportedComment, trackedChange } = resolveCommentMeta({
+        converter,
+        importedId: node.attrs['w:id'],
+      });
     const isDone = !!matchingImportedComment?.isDone;
 
     // If the node is a commentRangeStart, record it so we can place a mark once we find the end.
     if (type.name === 'commentRangeStart') {
-      if (!isDone) {
+      if (!matchingImportedComment || !matchingImportedComment.isDone) {
         toMark.push({
           commentId: resolvedCommentId,
           importedId,
           internal,
+          trackedChange,
           start: pos,
         });
       }
@@ -392,6 +431,7 @@ export const prepareCommentsForImport = (doc, tr, schema, converter) => {
         commentId: itemToMark.commentId,
         importedId,
         internal: itemToMark.internal,
+        trackedChange: itemToMark.trackedChange,
       };
 
       tr.addMark(start, pos + 1, schema.marks[CommentMarkName].create(markAttrs));

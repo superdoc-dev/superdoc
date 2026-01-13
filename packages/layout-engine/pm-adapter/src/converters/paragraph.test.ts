@@ -665,6 +665,63 @@ describe('paragraph converters', () => {
         });
       });
 
+      it('flags empty sectPr paragraph as a section marker', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              sectPr: { type: 'element', name: 'w:sectPr', elements: [] },
+            },
+          },
+        };
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+
+        expect(blocks).toHaveLength(1);
+        const paraBlock = blocks[0] as ParagraphBlock;
+        expect(paraBlock.attrs?.sectPrMarker).toBe(true);
+      });
+
+      it('should skip empty paragraph when paragraph runProperties.vanish is true', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                vanish: true,
+              },
+            },
+          },
+          content: [],
+        };
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+
+        expect(blocks).toHaveLength(0);
+      });
+
+      it('should still render text when paragraph runProperties.vanish is true', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                vanish: true,
+              },
+            },
+          },
+          content: [{ type: 'text', text: 'Visible text' }],
+        };
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+
+        expect(blocks).toHaveLength(1);
+        const paraBlock = blocks[0] as ParagraphBlock;
+        expect(paraBlock.runs).toHaveLength(1);
+        expect(paraBlock.runs[0].text).toBe('Visible text');
+      });
+
       it('should create empty paragraph for node without content property', () => {
         const para: PMNode = {
           type: 'paragraph',
@@ -783,6 +840,28 @@ describe('paragraph converters', () => {
           undefined,
           true, // enableComments defaults to true
         );
+      });
+
+      it('should skip run content when runProperties.vanish is true', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: {
+                runProperties: {
+                  vanish: true,
+                },
+              },
+              content: [{ type: 'text', text: 'Hidden text' }],
+            },
+          ],
+        };
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+
+        expect(blocks).toHaveLength(0);
+        expect(vi.mocked(textNodeToRun)).not.toHaveBeenCalled();
       });
 
       it('should merge marks from nested run nodes', () => {

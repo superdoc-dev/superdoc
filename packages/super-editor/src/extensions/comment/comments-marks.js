@@ -22,6 +22,10 @@ export const CommentsMark = Mark.create({
         default: true,
         rendered: false,
       },
+      trackedChange: {
+        default: false,
+        rendered: false,
+      },
     };
   },
 

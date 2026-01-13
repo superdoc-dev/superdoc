@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode, getVectorShape } from './encode-image-node-helpers.js';
 import { emuToPixels, polygonToObj, rotToDegrees } from '@converter/helpers.js';
-import { extractFillColor, extractStrokeColor, extractStrokeWidth } from './vector-shape-helpers.js';
+import { extractFillColor, extractStrokeColor, extractStrokeWidth, extractLineEnds } from './vector-shape-helpers.js';
 
 vi.mock('@converter/helpers.js', () => ({
   emuToPixels: vi.fn(),
@@ -13,6 +13,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractFillColor: vi.fn(),
   extractStrokeColor: vi.fn(),
   extractStrokeWidth: vi.fn(),
+  extractLineEnds: vi.fn(),
 }));
 
 describe('handleImageNode', () => {
@@ -429,6 +430,26 @@ describe('handleImageNode', () => {
 
     const result = handleImageNode(node, makeParams(), false);
     expect(result.type).toBe('vectorShape');
+  });
+
+  it('renders rect shapes as vectorShapes', () => {
+    extractFillColor.mockReturnValue('#123456');
+    extractStrokeColor.mockReturnValue('#654321');
+    extractStrokeWidth.mockReturnValue(2);
+
+    const node = makeShapeNode({ prst: 'rect' });
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result.type).toBe('vectorShape');
+    expect(result.attrs.kind).toBe('rect');
+    expect(result.attrs.width).toBe(5);
+    expect(result.attrs.height).toBe(6);
+    expect(result.attrs.fillColor).toBe('#123456');
+    expect(result.attrs.strokeColor).toBe('#654321');
+    expect(result.attrs.strokeWidth).toBe(2);
+    expect(extractFillColor).toHaveBeenCalled();
+    expect(extractStrokeColor).toHaveBeenCalled();
+    expect(extractStrokeWidth).toHaveBeenCalled();
   });
 
   it('renders textbox shapes as vectorShapes with text content', () => {
@@ -927,6 +948,7 @@ describe('getVectorShape', () => {
     extractFillColor.mockReturnValue('#70ad47');
     extractStrokeColor.mockReturnValue('#000000');
     extractStrokeWidth.mockReturnValue(1);
+    extractLineEnds.mockReturnValue(null);
   });
 
   const makeGraphicData = (overrides = {}) => ({
@@ -1015,6 +1037,63 @@ describe('getVectorShape', () => {
     expect(result.attrs.fillColor).toBe('#70ad47');
     expect(result.attrs.strokeColor).toBe('#000000');
     expect(result.attrs.strokeWidth).toBe(1);
+  });
+
+  it('adds line end markers from helper extraction', () => {
+    extractLineEnds.mockReturnValue({
+      tail: { type: 'triangle', width: 'med', length: 'lg' },
+    });
+    const graphicData = makeGraphicData({
+      spPrElements: [
+        {
+          name: 'a:ln',
+          elements: [
+            {
+              name: 'a:tailEnd',
+              attributes: { type: 'triangle', w: 'med', len: 'lg' },
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = getVectorShape({
+      params: makeParams(),
+      node: {},
+      graphicData,
+      size: { width: 72, height: 72 },
+    });
+
+    expect(extractLineEnds).toHaveBeenCalled();
+    expect(result.attrs.lineEnds).toEqual({
+      tail: { type: 'triangle', width: 'med', length: 'lg' },
+    });
+  });
+
+  it('extracts effectExtent from wp:effectExtent', () => {
+    const graphicData = makeGraphicData();
+    const node = {
+      elements: [
+        {
+          name: 'wp:effectExtent',
+          attributes: { l: '12700', t: '25400', r: '38100', b: '0' },
+        },
+      ],
+    };
+
+    const result = getVectorShape({
+      params: makeParams(),
+      node,
+      graphicData,
+      size: { width: 72, height: 72 },
+    });
+
+    expect(result.attrs.effectExtent).toEqual({
+      left: 1,
+      top: 2,
+      right: 3,
+      bottom: 0,
+    });
   });
 
   it('handles rotation and flips from a:xfrm', () => {

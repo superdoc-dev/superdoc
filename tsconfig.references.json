@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/word-layout/tsconfig.json" },
     { "path": "packages/layout-engine/contracts/tsconfig.json" },
     { "path": "packages/layout-engine/geometry-utils/tsconfig.json" },
     { "path": "packages/layout-engine/layout-engine/tsconfig.json" },

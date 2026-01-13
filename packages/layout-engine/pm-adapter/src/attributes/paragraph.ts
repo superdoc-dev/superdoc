@@ -1186,20 +1186,49 @@ export const computeParagraphAttrs = (
   };
 
   const styleNodeAttrs = { ...attrs };
-  const attrTabStops = unwrapTabStops(styleNodeAttrs.tabStops ?? styleNodeAttrs.tabs) ?? styleNodeAttrs.tabStops;
-  const hydratedTabStops = unwrapTabStops(hydrated?.tabStops) ?? hydrated?.tabStops;
-  const paragraphTabStops = unwrapTabStops(paragraphProps.tabStops) ?? paragraphProps.tabStops;
+  const asTabStopArray = (value: unknown): Array<Record<string, unknown>> | undefined => {
+    return Array.isArray(value) ? (value as Array<Record<string, unknown>>) : undefined;
+  };
+  const attrTabStops =
+    unwrapTabStops(styleNodeAttrs.tabStops ?? styleNodeAttrs.tabs) ?? asTabStopArray(styleNodeAttrs.tabStops);
+  const hydratedTabStops = unwrapTabStops(hydrated?.tabStops) ?? asTabStopArray(hydrated?.tabStops);
+  const paragraphTabStops = unwrapTabStops(paragraphProps.tabStops) ?? asTabStopArray(paragraphProps.tabStops);
 
-  let tabSource = attrTabStops;
-  if (!tabSource && hydratedTabStops) {
-    tabSource = hydratedTabStops;
-  }
-  if (!tabSource && paragraphTabStops) {
-    tabSource = paragraphTabStops;
-  }
+  // Keep the unit heuristic aligned with normalizeOoxmlTabs.
+  const TAB_STOP_PX_TO_TWIPS = 15;
+  const TAB_STOP_TWIPS_THRESHOLD = 1000;
 
-  if (tabSource) {
-    styleNodeAttrs.tabStops = tabSource;
+  const getTabStopPosition = (entry: Record<string, unknown>): number | undefined => {
+    const originalPos = pickNumber(entry.originalPos);
+    if (originalPos != null) return originalPos;
+    const posValue = pickNumber(entry.pos ?? entry.position ?? entry.offset);
+    if (posValue == null) return undefined;
+    return posValue > TAB_STOP_TWIPS_THRESHOLD ? posValue : Math.round(posValue * TAB_STOP_PX_TO_TWIPS);
+  };
+
+  const mergeTabStopSources = (
+    ...sources: Array<Array<Record<string, unknown>> | undefined>
+  ): Array<Record<string, unknown>> | undefined => {
+    const merged = new Map<number, Record<string, unknown>>();
+    for (const source of sources) {
+      if (!Array.isArray(source)) continue;
+      for (const stop of source) {
+        if (!stop || typeof stop !== 'object') continue;
+        const position = getTabStopPosition(stop);
+        if (position == null) continue;
+        merged.set(position, { ...stop });
+      }
+    }
+    if (merged.size === 0) return undefined;
+    return Array.from(merged.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([, stop]) => stop);
+  };
+
+  const mergedTabStops = mergeTabStopSources(hydratedTabStops, paragraphTabStops, attrTabStops);
+
+  if (mergedTabStops) {
+    styleNodeAttrs.tabStops = mergedTabStops;
     if ('tabs' in styleNodeAttrs) {
       delete styleNodeAttrs.tabs;
     }
@@ -1354,6 +1383,11 @@ export const computeParagraphAttrs = (
 
   if (computed.paragraph.tabs && computed.paragraph.tabs.length > 0) {
     paragraphAttrs.tabs = computed.paragraph.tabs.map((tab) => ({ ...tab }));
+  } else if (mergedTabStops) {
+    const normalizedTabs = normalizeOoxmlTabs(mergedTabStops as unknown);
+    if (normalizedTabs) {
+      paragraphAttrs.tabs = normalizedTabs;
+    }
   } else if (hydratedTabStops) {
     const normalizedTabs = normalizeOoxmlTabs(hydratedTabStops as unknown);
     if (normalizedTabs) {

@@ -25,6 +25,12 @@ const validXmlAttributes = ['w:rsidDel', 'w:rsidR', 'w:rsidRPr', 'w:rsidTr', 'w1
   (xmlName) => createAttributeHandler(xmlName),
 );
 
+const getColspan = (cell) => {
+  const rawColspan = cell?.attrs?.colspan;
+  const numericColspan = typeof rawColspan === 'string' ? parseInt(rawColspan, 10) : rawColspan;
+  return Number.isFinite(numericColspan) && numericColspan > 0 ? numericColspan : 1;
+};
+
 /**
  * Encode a w:tr element as a SuperDoc 'tableRow' node.
  * @param {import('@translator').SCEncoderConfig} [params]
@@ -219,7 +225,28 @@ const decode = (params, decodedAttrs) => {
     }
     return cell;
   });
-  const trimmedContent = sanitizedCells.filter((_, index) => !isPlaceholderCell(trimmedSlice[index]));
+  let trimmedContent = sanitizedCells.filter((_, index) => !isPlaceholderCell(trimmedSlice[index]));
+
+  const preferTableGrid = params.extraParams?.preferTableGrid === true;
+  const totalColumns = params.extraParams?.totalColumns;
+  if (preferTableGrid && typeof totalColumns === 'number' && Number.isFinite(totalColumns) && totalColumns > 0) {
+    const rawGridBefore = node.attrs?.tableRowProperties?.gridBefore;
+    const numericGridBefore = typeof rawGridBefore === 'string' ? parseInt(rawGridBefore, 10) : rawGridBefore;
+    const safeGridBefore = Number.isFinite(numericGridBefore) && numericGridBefore > 0 ? numericGridBefore : 0;
+    const effectiveGridBefore = leadingPlaceholders > 0 ? leadingPlaceholders : safeGridBefore;
+    const availableColumns = Math.max(totalColumns - effectiveGridBefore, 0);
+    let usedColumns = 0;
+    const constrainedCells = [];
+    for (const cell of trimmedContent) {
+      const colspan = getColspan(cell);
+      if (usedColumns + colspan > availableColumns) {
+        break;
+      }
+      constrainedCells.push(cell);
+      usedColumns += colspan;
+    }
+    trimmedContent = constrainedCells;
+  }
 
   const translateParams = {
     ...params,

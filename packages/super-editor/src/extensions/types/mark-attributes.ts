@@ -233,6 +233,8 @@ export interface CommentMarkAttrs {
   importedId?: string;
   /** Whether this is an internal comment */
   internal?: boolean;
+  /** Whether this comment is attached to a tracked change */
+  trackedChange?: boolean;
 }
 
 // ============================================

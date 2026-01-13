@@ -101,6 +101,11 @@ export const Image = Node.create({
 
       id: { rendered: false },
 
+      hidden: {
+        default: false,
+        rendered: false,
+      },
+
       title: {
         default: null,
       },

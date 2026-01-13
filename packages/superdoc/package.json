@@ -5,12 +5,12 @@
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Harbour-Enterprises/SuperDoc.git",
+    "url": "git+https://github.com/superdoc-dev/superdoc.git",
     "directory": "packages/superdoc"
   },
   "homepage": "https://www.superdoc.dev/",
   "bugs": {
-    "url": "https://github.com/Harbour-Enterprises/SuperDoc/issues"
+    "url": "https://github.com/superdoc-dev/superdoc/issues"
   },
   "readme": "../../README.md",
   "files": [

@@ -141,7 +141,7 @@ describe('insertContentAt', () => {
     expect(tr.replaceWith).toHaveBeenCalledWith(9, 11, blockNode);
   });
 
-  // https://github.com/Harbour-Enterprises/SuperDoc/issues/842
+  // https://github.com/superdoc-dev/superdoc/issues/842
   it('when value has newlines, still inserts text using tr.insertText', () => {
     const value = 'Line 1\nLine 2';
 

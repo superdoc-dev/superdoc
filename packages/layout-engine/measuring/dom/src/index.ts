@@ -683,11 +683,18 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   // suppressFirstLineIndent=true for these cases.
   const suppressFirstLine = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
   const rawFirstLineOffset = suppressFirstLine ? 0 : firstLine - hanging;
-  // When wordLayout is present, the hanging region is occupied by the list marker/tab.
-  // Do not expand the first-line width; use the same content width as subsequent lines.
-  // Do not let hanging expand the available width; clamp negative offset to zero.
+  // When wordLayout is present, the hanging region is occupied by the list marker/tab,
+  // so keep the same available width as body lines. For normal paragraphs we must honor
+  // negative offsets (hanging indent) so the first line can extend into the hanging region.
   const clampedFirstLineOffset = Math.max(0, rawFirstLineOffset);
-  const firstLineOffset = isWordLayoutList ? 0 : clampedFirstLineOffset;
+  const hasNegativeIndent = indentLeft < 0 || indentRight < 0;
+  // Avoid widening the first line when negative indents already expand fragment width.
+  const allowNegativeFirstLineOffset = !isWordLayoutList && !hasNegativeIndent && rawFirstLineOffset < 0;
+  const firstLineOffset = isWordLayoutList
+    ? 0
+    : allowNegativeFirstLineOffset
+      ? rawFirstLineOffset
+      : clampedFirstLineOffset;
   const contentWidth = Math.max(1, maxWidth - indentLeft - indentRight);
   // Body lines use contentWidth (same as first line for most cases).
   // The hanging indent affects WHERE body lines start (indentLeft), not their available width.
@@ -2105,112 +2112,6 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           if (!currentLine.leaders) currentLine.leaders = [];
           currentLine.leaders.push({ from, to, style: leaderStyle });
         }
-
-        // Note: Bar tabs are now added at paragraph-level via addBarTabsToLine()
-        // (OOXML spec: bars appear on all lines, not just where tab chars occur)
-
-        /* Build hyphen-aware segments: keep '-' with the left part to allow a wrap like "two-" | "column"
-      const parts = word.split('-');
-      const segments: string[] = [];
-      for (let i = 0; i < parts.length; i += 1) {
-        const last = i === parts.length - 1;
-        segments.push(last ? parts[i] : parts[i] + '-');
-      }
-
-      for (let segIndex = 0; segIndex < segments.length; segIndex++) {
-        const segText = segments[segIndex];
-        const isLastSegmentOfWord = segIndex === segments.length - 1;
-
-        // Width for fit check (no trailing space)
-        const segOnlyWidth = measureText(segText, font, ctx, fontFamily, letterSpacing);
-        // Width for commit: include trailing space only for last segment of a word that is not the last word
-        const fullSegmentText = isLastSegmentOfWord && !isLastWord ? segText + ' ' : segText;
-        const fullSegmentWidth = measureText(fullSegmentText, font, ctx, fontFamily, letterSpacing);
-
-        const segStartChar = charPosInRun;
-        const segEndChar = charPosInRun + fullSegmentText.length;
-
-        // Initialize line if needed
-        if (!currentLine) {
-          currentLine = {
-            fromRun: runIndex,
-            fromChar: segStartChar,
-            toRun: runIndex,
-            toChar: segEndChar,
-            width: fullSegmentWidth,
-            maxFontSize: run.fontSize,
-          };
-          charPosInRun = segEndChar;
-          continue;
-        }
-
-        const boundarySpacing = currentLine.width > 0 ? letterSpacing : 0;
-        // Small safety margin for floating-point precision and minor measurement variations
-        const SAFETY_MARGIN_PX = 0.25;
-        const wouldFit =
-          currentLine.width + boundarySpacing + segOnlyWidth + SAFETY_MARGIN_PX <= maxWidth ||
-          currentLine.width === 0;
-
-        if (!wouldFit) {
-          // Finish current line before adding this segment
-          trimTrailingSpace(currentLine);
-          const metrics = calculateTypographyMetrics(currentLine.maxFontSize);
-          lines.push({
-            ...currentLine,
-            ...metrics,
-          });
-
-          // Start new line with this segment
-          currentLine = {
-            fromRun: runIndex,
-            fromChar: segStartChar,
-            toRun: runIndex,
-            toChar: segEndChar,
-            width: fullSegmentWidth,
-            maxFontSize: run.fontSize,
-          };
-        } else {
-          // Append segment to current line
-          const prevToRun = currentLine.toRun;
-          const prevToChar = currentLine.toChar;
-          const prevWidth = currentLine.width;
-
-          currentLine.toRun = runIndex;
-          currentLine.toChar = segEndChar;
-          currentLine.width += boundarySpacing + fullSegmentWidth;
-          currentLine.maxFontSize = Math.max(currentLine.maxFontSize, run.fontSize);
-
-          // Safety: if we exceeded maxWidth after appending (e.g., trailing space pushed us over),
-          // revert and wrap this segment to next line instead
-          if (currentLine.width > maxWidth) {
-            // Undo the append
-            currentLine.toRun = prevToRun;
-            currentLine.toChar = prevToChar;
-            currentLine.width = prevWidth;
-
-            // Finish current line
-            trimTrailingSpace(currentLine);
-            const metrics = calculateTypographyMetrics(currentLine.maxFontSize);
-            lines.push({
-              ...currentLine,
-              ...metrics,
-            });
-
-            // Start new line with this segment
-            currentLine = {
-              fromRun: runIndex,
-              fromChar: segStartChar,
-              toRun: runIndex,
-              toChar: segEndChar,
-              width: fullSegmentWidth,
-              maxFontSize: run.fontSize,
-            };
-          }
-        }
-
-        // Advance position within the run
-        charPosInRun = segEndChar;
-*/
       }
     }
 

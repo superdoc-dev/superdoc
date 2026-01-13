@@ -7,7 +7,7 @@ import { wrapTextInRun } from '@converter/exporter';
  * @param {Object} params - The parameters for translation.
  * @returns {Object} The XML representation (w:p containing w:pict).
  */
-export function translateVmlWatermark(params) {
+export function translateImageWatermark(params) {
   const { node } = params;
   const { attrs } = node;
 

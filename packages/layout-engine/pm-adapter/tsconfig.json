@@ -4,7 +4,12 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@superdoc/super-editor/converter/internal/*.js": ["../../super-editor/dist/core/super-converter/*.d.ts"],
+      "@translator": ["../../super-editor/dist/core/super-converter/v3/node-translator/index.d.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/fixtures/**/*.json"]
 }

@@ -645,5 +645,34 @@ describe('negative indent measurement', () => {
       // Body lines also use full contentWidth - hanging affects position, not available width
       expect(measure.lines[1].maxWidth).toBe(maxWidth + Math.abs(negativeLeft));
     });
+
+    it('keeps first-line width aligned when negative left/right indents include hanging', async () => {
+      const maxWidth = 468;
+      const negativeLeft = -36;
+      const negativeRight = -54;
+      const hanging = 24;
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-neg-left-right-hanging',
+        runs: [
+          {
+            text: 'This paragraph uses negative left and right indents with a hanging indent to ensure the first line does not expand beyond the body line width.',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+        ],
+        attrs: {
+          indent: { left: negativeLeft, right: negativeRight, hanging },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
+      expect(measure.lines.length).toBeGreaterThan(1);
+
+      const contentWidth = maxWidth + Math.abs(negativeLeft) + Math.abs(negativeRight);
+      expect(measure.lines[0].maxWidth).toBe(contentWidth);
+      expect(measure.lines[1].maxWidth).toBe(contentWidth);
+    });
   });
 });

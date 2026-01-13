@@ -63,6 +63,7 @@ type CommentAnnotation = {
   commentId: string;
   importedId?: string;
   internal?: boolean;
+  trackedChange?: boolean;
 };
 
 /**
@@ -293,6 +294,7 @@ const pushCommentAnnotation = (run: TextRun, attrs: Record<string, unknown> | un
   const commentId = typeof attrs?.commentId === 'string' ? attrs.commentId : undefined;
   const importedId = typeof attrs?.importedId === 'string' ? attrs.importedId : undefined;
   const internal = attrs?.internal === true;
+  const trackedChange = attrs?.trackedChange === true;
 
   if (!commentId && !importedId) return;
 
@@ -304,6 +306,7 @@ const pushCommentAnnotation = (run: TextRun, attrs: Record<string, unknown> | un
       commentId: commentId ?? (importedId as string),
       importedId,
       internal,
+      trackedChange,
     });
   }
 

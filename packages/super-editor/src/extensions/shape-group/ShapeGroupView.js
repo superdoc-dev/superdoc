@@ -244,6 +244,7 @@ export class ShapeGroupView {
     // Use null-coalescing to preserve null (from <a:noFill/>), but provide default for undefined
     const strokeColor = attrs.strokeColor === null ? null : (attrs.strokeColor ?? '#000000');
     const strokeWidth = attrs.strokeWidth ?? 1;
+    const lineEnds = attrs.lineEnds;
 
     // Handle gradient fills
     let fillValue = fillColor;
@@ -270,6 +271,10 @@ export class ShapeGroupView {
       line.setAttribute('y2', height.toString());
       line.setAttribute('stroke', strokeColor === null ? 'none' : strokeColor);
       line.setAttribute('stroke-width', (strokeColor === null ? 0 : strokeWidth).toString());
+      if (lineEnds && strokeColor !== null) {
+        const markerBase = `line-end-${shapeIndex}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+        this.applyLineEndsToTarget(line, lineEnds, strokeColor, strokeWidth, defs, markerBase);
+      }
       g.appendChild(line);
 
       // Add text content if present
@@ -302,6 +307,10 @@ export class ShapeGroupView {
         const svgElement = tempDiv.querySelector('svg');
 
         if (svgElement) {
+          const markerBase = lineEnds
+            ? `line-end-${shapeIndex}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`
+            : null;
+          let lineEndsApplied = false;
           // Copy all child elements from the generated SVG into our group
           Array.from(svgElement.children).forEach((child) => {
             const clonedChild = child.cloneNode(true);
@@ -362,6 +371,15 @@ export class ShapeGroupView {
               clonedChild.setAttribute('height', height.toString());
             }
 
+            if (
+              lineEnds &&
+              !lineEndsApplied &&
+              (clonedChild.tagName === 'path' || clonedChild.tagName === 'line' || clonedChild.tagName === 'polyline')
+            ) {
+              this.applyLineEndsToTarget(clonedChild, lineEnds, strokeColor, strokeWidth, defs, markerBase);
+              lineEndsApplied = true;
+            }
+
             g.appendChild(clonedChild);
           });
         }
@@ -391,6 +409,106 @@ export class ShapeGroupView {
 
   createTextElement(textContent, textAlign, width, height) {
     return createTextElement(textContent, textAlign, width, height);
+  }
+
+  /**
+   * Applies line end markers (arrowheads) to a target SVG element.
+   * @param {SVGElement} target - The SVG element to apply markers to
+   * @param {Object} lineEnds - Line ends configuration with head/tail
+   * @param {string|null} strokeColor - Stroke color, or null if no stroke
+   * @param {number} strokeWidth - Stroke width in pixels
+   * @param {SVGDefsElement} defs - The defs element to append markers to
+   * @param {string} markerBase - Base ID for generating unique marker IDs
+   */
+  applyLineEndsToTarget(target, lineEnds, strokeColor, strokeWidth, defs, markerBase) {
+    if (!lineEnds || strokeColor === null || strokeWidth <= 0) return;
+
+    if (lineEnds.tail) {
+      const id = `${markerBase}-tail`;
+      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, true, null);
+      target.setAttribute('marker-start', `url(#${id})`);
+    }
+
+    if (lineEnds.head) {
+      const id = `${markerBase}-head`;
+      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, false, null);
+      target.setAttribute('marker-end', `url(#${id})`);
+    }
+  }
+
+  /**
+   * Creates an SVG marker element for a line end (arrowhead).
+   * @param {SVGDefsElement} defs - The defs element to append the marker to
+   * @param {string} id - Unique ID for the marker
+   * @param {Object} lineEnd - Line end configuration with type, width, length
+   * @param {string} strokeColor - Color to use for the marker fill
+   * @param {number} _strokeWidth - Stroke width (currently unused, reserved for future scaling)
+   * @param {boolean} isStart - Whether this is a start marker (tail) or end marker (head)
+   * @param {Object|null} effectExtent - Effect extent for sizing, or null
+   */
+  createLineEndMarker(defs, id, lineEnd, strokeColor, _strokeWidth, isStart, effectExtent) {
+    if (defs.querySelector(`#${id}`)) return;
+
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', id);
+    marker.setAttribute('viewBox', '0 0 10 10');
+    marker.setAttribute('orient', 'auto');
+
+    const sizeScale = (value) => {
+      if (value === 'sm') return 0.75;
+      if (value === 'lg') return 1.25;
+      return 1;
+    };
+    const effectMax = effectExtent
+      ? Math.max(effectExtent.left || 0, effectExtent.right || 0, effectExtent.top || 0, effectExtent.bottom || 0)
+      : 0;
+    const useEffectExtent = Number.isFinite(effectMax) && effectMax > 0;
+    const markerWidth = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.length);
+    const markerHeight = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.width);
+    marker.setAttribute('markerUnits', useEffectExtent ? 'userSpaceOnUse' : 'strokeWidth');
+    marker.setAttribute('markerWidth', markerWidth.toString());
+    marker.setAttribute('markerHeight', markerHeight.toString());
+    marker.setAttribute('refX', isStart ? '0' : '10');
+    marker.setAttribute('refY', '5');
+
+    const shape = this.createLineEndShape(lineEnd.type || 'triangle', strokeColor, isStart);
+    marker.appendChild(shape);
+    defs.appendChild(marker);
+  }
+
+  /**
+   * Creates an SVG shape element for a line end marker.
+   * Supports diamond, oval, and triangle (default) shapes.
+   * @param {string} type - The shape type ('diamond', 'oval', or 'triangle')
+   * @param {string} strokeColor - Color to fill the shape with
+   * @param {boolean} isStart - Whether this is a start marker (affects triangle orientation)
+   * @returns {SVGElement} The created SVG shape element
+   */
+  createLineEndShape(type, strokeColor, isStart) {
+    const normalized = type.toLowerCase();
+    if (normalized === 'diamond') {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M 0 5 L 5 0 L 10 5 L 5 10 Z');
+      path.setAttribute('fill', strokeColor);
+      path.setAttribute('stroke', 'none');
+      return path;
+    }
+    if (normalized === 'oval') {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', '5');
+      circle.setAttribute('cy', '5');
+      circle.setAttribute('r', '5');
+      circle.setAttribute('fill', strokeColor);
+      circle.setAttribute('stroke', 'none');
+      return circle;
+    }
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const d = isStart ? 'M 10 0 L 0 5 L 10 10 Z' : 'M 0 0 L 10 5 L 0 10 Z';
+    path.setAttribute('d', d);
+    path.setAttribute('fill', strokeColor);
+    path.setAttribute('stroke', 'none');
+    return path;
   }
 
   createGradient(gradientData, gradientId) {

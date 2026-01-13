@@ -1,6 +1,7 @@
 import { handleVRectImport } from './handle-v-rect-import';
 import { handleShapeTextboxImport } from './handle-shape-textbox-import';
-import { handleShapeImageImport } from './handle-shape-image-import';
+import { handleShapeImageWatermarkImport } from './handle-shape-image-watermark-import';
+import { handleShapeTextWatermarkImport } from './handle-shape-text-watermark-import';
 
 /**
  * @param {Object} node
@@ -30,10 +31,18 @@ export function pictNodeTypeStrategy(node) {
       return { type: 'shapeContainer', handler: handleShapeTextboxImport };
     }
 
+    // Check for v:textpath (text watermarks)
+    // Note: Text watermarks are converted to SVG images during import
+    // so they return type: 'image' but use the text watermark handler
+    const textpath = shape.elements?.find((el) => el.name === 'v:textpath');
+    if (textpath) {
+      return { type: 'image', handler: handleShapeTextWatermarkImport };
+    }
+
     // Check for v:imagedata (image watermarks)
     const imagedata = shape.elements?.find((el) => el.name === 'v:imagedata');
     if (imagedata) {
-      return { type: 'image', handler: handleShapeImageImport };
+      return { type: 'image', handler: handleShapeImageWatermarkImport };
     }
   }
 

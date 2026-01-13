@@ -18,7 +18,7 @@
 
 <div>
   <BR />
-  <strong>SuperDoc</strong> (<a href="https://www.superdoc.dev" target="_blank">online demo</a>) is an open source document editor bringing Microsoft Word capabilities to the web with real-time collaboration, extensive formatting options, and easy integration. Self-hostable with Vanilla JS, React, Vue, and more (<a href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples" target="_blank">code examples</a>).
+  <strong>SuperDoc</strong> (<a href="https://www.superdoc.dev" target="_blank">online demo</a>) is an open source document editor bringing Microsoft Word capabilities to the web with real-time collaboration, extensive formatting options, and easy integration. Self-hostable with Vanilla JS, React, Vue, and more (<a href="https://github.com/superdoc-dev/superdoc/tree/main/examples" target="_blank">code examples</a>).
   <BR />
 </div>
 
@@ -81,7 +81,7 @@ For a list of all available properties and events, see the documentation or refe
 
 ## 📖 Documentation
 
-Visit our <a href="https://docs.superdoc.dev" target="_blank">documentation site</a> and <a href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples" target="_blank">code examples</a>. Key topics include:
+Visit our <a href="https://docs.superdoc.dev" target="_blank">documentation site</a> and <a href="https://github.com/superdoc-dev/superdoc/tree/main/examples" target="_blank">code examples</a>. Key topics include:
 
 - Installation
 - Integration guides
@@ -93,14 +93,14 @@ Visit our <a href="https://docs.superdoc.dev" target="_blank">documentation site
 
 We keep our big work-in-progress items here:
 
-- Check out our [SuperDoc roadmap](https://github.com/Harbour-Enterprises/SuperDoc/wiki/%F0%9F%8E%AF%EF%B8%8F-SuperDoc-Roadmap)
+- Check out our [SuperDoc roadmap](https://github.com/superdoc-dev/superdoc/wiki/%F0%9F%8E%AF%EF%B8%8F-SuperDoc-Roadmap)
 - We prioritize the solving of big DOCX import/export/formatting needs
 
 ## 🤝 Contribute
 
 We love contributions! Here's how you can help:
 
-1. Check our [issue tracker](https://github.com/Harbour-Enterprises/SuperDoc/issues) for open issues
+1. Check our [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for open issues
 2. Fork the repository and create a feature/bugfix branch
 3. Write clear, documented code following our style guidelines
 4. Submit a PR with detailed description of your changes
@@ -110,7 +110,7 @@ See our [Contributing Guide](CONTRIBUTING.md) for more details.
 ## 💬 Community
 
 - [Discord](https://discord.com/invite/b9UuaZRyaB) - Join our community chat
-- [GitHub Discussions](https://github.com/Harbour-Enterprises/SuperDoc/discussions) - Ask questions and share ideas
+- [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions) - Ask questions and share ideas
 - [Team email](mailto:q@superdoc.dev) - Get help from our team
 
 ## 📄 License

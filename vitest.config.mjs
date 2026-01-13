@@ -1,7 +1,14 @@
 import { defineConfig } from 'vitest/config';
 
+const testPool = process.env.VITEST_POOL ?? 'threads';
+const minWorkers = process.env.VITEST_MIN_WORKERS ?? '50%';
+const maxWorkers = process.env.VITEST_MAX_WORKERS ?? '75%';
+
 export default defineConfig({
   test: {
+    pool: testPool,
+    minWorkers,
+    maxWorkers,
     // Use package directories; Vitest will pick up each package's vite.config.js
     projects: [
       './packages/super-editor',

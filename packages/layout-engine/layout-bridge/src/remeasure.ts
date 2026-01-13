@@ -660,11 +660,17 @@ export function remeasureParagraph(
   const attrs = block.attrs as ParagraphBlockAttrs | undefined;
   const indent = attrs?.indent;
   const wordLayout = attrs?.wordLayout;
-  const indentLeft = Math.max(0, indent?.left ?? 0);
-  const indentRight = Math.max(0, indent?.right ?? 0);
+  const rawIndentLeft = indent?.left ?? 0;
+  const rawIndentRight = indent?.right ?? 0;
+  const indentLeft = Math.max(0, rawIndentLeft);
+  const indentRight = Math.max(0, rawIndentRight);
   const indentFirstLine = Math.max(0, indent?.firstLine ?? 0);
   const indentHanging = Math.max(0, indent?.hanging ?? 0);
-  const rawFirstLineOffset = Math.max(0, firstLineIndent || indentFirstLine - indentHanging);
+  const baseFirstLineOffset = firstLineIndent || indentFirstLine - indentHanging;
+  const clampedFirstLineOffset = Math.max(0, baseFirstLineOffset);
+  const hasNegativeIndent = rawIndentLeft < 0 || rawIndentRight < 0;
+  const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeIndent && baseFirstLineOffset < 0;
+  const effectiveFirstLineOffset = allowNegativeFirstLineOffset ? baseFirstLineOffset : clampedFirstLineOffset;
   const contentWidth = Math.max(1, maxWidth - indentLeft - indentRight);
   // Some producers provide `marker.textStartX` without setting top-level `textStartPx`.
   // Both values represent the same concept: where the first-line text begins after the marker/tab.
@@ -702,7 +708,7 @@ export function remeasureParagraph(
   const firstLineWidth =
     typeof effectiveTextStartPx === 'number' && effectiveTextStartPx > indentLeft && !treatAsHanging
       ? Math.max(1, maxWidth - effectiveTextStartPx - indentRight)
-      : Math.max(1, contentWidth - rawFirstLineOffset);
+      : Math.max(1, contentWidth - effectiveFirstLineOffset);
   const tabStops = buildTabStopsPx(indent as ParagraphIndent | undefined, attrs?.tabs, attrs?.tabIntervalTwips);
 
   let currentRun = 0;

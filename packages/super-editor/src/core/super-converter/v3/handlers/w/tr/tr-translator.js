@@ -25,6 +25,12 @@ const validXmlAttributes = ['w:rsidDel', 'w:rsidR', 'w:rsidRPr', 'w:rsidTr', 'w1
   (xmlName) => createAttributeHandler(xmlName),
 );
 
+const getColspan = (cell) => {
+  const rawColspan = cell?.attrs?.colspan;
+  const numericColspan = typeof rawColspan === 'string' ? parseInt(rawColspan, 10) : rawColspan;
+  return Number.isFinite(numericColspan) && numericColspan > 0 ? numericColspan : 1;
+};
+
 /**
  * Encode a w:tr element as a SuperDoc 'tableRow' node.
  * @param {import('@translator').SCEncoderConfig} [params]
@@ -32,7 +38,7 @@ const validXmlAttributes = ['w:rsidDel', 'w:rsidR', 'w:rsidRPr', 'w:rsidTr', 'w1
  * @returns {import('@translator').SCEncoderResult}
  */
 const encode = (params, encodedAttrs) => {
-  const { row } = params.extraParams;
+  const { row, tableLook } = params.extraParams;
 
   let tableRowProperties = {};
   const tPr = row.elements.find((el) => el.name === 'w:trPr');
@@ -51,10 +57,11 @@ const encode = (params, encodedAttrs) => {
   // Move some properties up a level for easier access
   encodedAttrs['rowHeight'] = twipsToPixels(tableRowProperties['rowHeight']?.value);
   encodedAttrs['cantSplit'] = tableRowProperties['cantSplit'];
+  const rowCnfStyle = tableRowProperties?.cnfStyle;
 
   // Handle borders
-  const baseBorders = params.extraParams?.rowBorders;
-  const rowTableBorders = getRowTableBorders({
+  const baseBorders = params.extraParams?.tableBorders;
+  const rowBorders = getRowBorders({
     params,
     row,
     baseBorders,
@@ -99,10 +106,10 @@ const encode = (params, encodedAttrs) => {
       path: [...(params.path || []), node],
       extraParams: {
         ...params.extraParams,
-        rowBorders: {
-          ...baseBorders,
-          ...rowTableBorders,
-        },
+        rowBorders,
+        baseTableBorders: baseBorders,
+        tableLook,
+        rowCnfStyle,
         node,
         columnIndex: startColumn,
         columnWidth,
@@ -146,27 +153,46 @@ const encode = (params, encodedAttrs) => {
  * @param {Record<string, unknown> | undefined} args.baseBorders - Processed base table borders for the table
  * @returns {Record<string, unknown> | undefined}
  */
-function getRowTableBorders({ params, row, baseBorders }) {
+function getRowBorders({ params, row, baseBorders }) {
+  const rowIndex = params?.extraParams?.rowIndex;
   const tblPrEx = row?.elements?.find?.((el) => el.name === 'w:tblPrEx');
   const tblBorders = tblPrEx?.elements?.find?.((el) => el.name === 'w:tblBorders');
+  /** @type {Record<string, unknown>} */
+  const rowBaseBorders = {};
+  if (baseBorders?.insideV) {
+    rowBaseBorders.insideV = baseBorders?.insideV;
+  }
+
+  if (baseBorders?.insideH) {
+    rowBaseBorders.insideH = baseBorders?.insideH;
+  }
 
   if (!tblBorders) {
-    return baseBorders;
+    return rowBaseBorders;
   }
 
   const rawOverrides = tblBordersTranslator.encode({ ...params, nodes: [tblBorders] }) || {};
   const overrides = processRawTableBorders(rawOverrides);
 
   if (!Object.keys(overrides).length) {
-    return baseBorders;
+    console.info(
+      '[sd-table-borders] row tblPrEx overrides empty',
+      JSON.stringify({ rowIndex, baseBorders: rowBaseBorders, rawOverrides }),
+    );
+    return rowBaseBorders;
   }
 
-  return { ...(baseBorders || {}), ...overrides };
+  const rowBorders = { ...rowBaseBorders, ...overrides };
+  console.info(
+    '[sd-table-borders] row tblPrEx overrides',
+    JSON.stringify({ rowIndex, baseBorders: rowBaseBorders, rawOverrides, overrides, rowBorders }),
+  );
+  return rowBorders;
 }
 
 /**
  * Normalize raw w:tblBorders output to match table border processing.
- * @param {Object[]} [rawBorders]
+ * @param {Object} [rawBorders]
  * @returns {Object}
  */
 function processRawTableBorders(rawBorders) {
@@ -219,7 +245,28 @@ const decode = (params, decodedAttrs) => {
     }
     return cell;
   });
-  const trimmedContent = sanitizedCells.filter((_, index) => !isPlaceholderCell(trimmedSlice[index]));
+  let trimmedContent = sanitizedCells.filter((_, index) => !isPlaceholderCell(trimmedSlice[index]));
+
+  const preferTableGrid = params.extraParams?.preferTableGrid === true;
+  const totalColumns = params.extraParams?.totalColumns;
+  if (preferTableGrid && typeof totalColumns === 'number' && Number.isFinite(totalColumns) && totalColumns > 0) {
+    const rawGridBefore = node.attrs?.tableRowProperties?.gridBefore;
+    const numericGridBefore = typeof rawGridBefore === 'string' ? parseInt(rawGridBefore, 10) : rawGridBefore;
+    const safeGridBefore = Number.isFinite(numericGridBefore) && numericGridBefore > 0 ? numericGridBefore : 0;
+    const effectiveGridBefore = leadingPlaceholders > 0 ? leadingPlaceholders : safeGridBefore;
+    const availableColumns = Math.max(totalColumns - effectiveGridBefore, 0);
+    let usedColumns = 0;
+    const constrainedCells = [];
+    for (const cell of trimmedContent) {
+      const colspan = getColspan(cell);
+      if (usedColumns + colspan > availableColumns) {
+        break;
+      }
+      constrainedCells.push(cell);
+      usedColumns += colspan;
+    }
+    trimmedContent = constrainedCells;
+  }
 
   const translateParams = {
     ...params,

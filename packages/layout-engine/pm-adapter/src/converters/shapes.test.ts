@@ -42,6 +42,23 @@ describe('shapes converter', () => {
       expect(result?.geometry.flipV).toBe(false);
     });
 
+    it('expands geometry when effectExtent is provided', () => {
+      const node: PMNode = {
+        type: 'vectorShape',
+        attrs: {
+          width: 100,
+          height: 50,
+          effectExtent: { left: 2, top: 4, right: 3, bottom: 5 },
+        },
+      };
+
+      const result = vectorShapeNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.geometry.width).toBe(105);
+      expect(result.geometry.height).toBe(59);
+      expect(result.effectExtent).toEqual({ left: 2, top: 4, right: 3, bottom: 5 });
+    });
+
     it('uses default dimensions when width/height are invalid', () => {
       const node: PMNode = {
         type: 'vectorShape',
@@ -82,6 +99,25 @@ describe('shapes converter', () => {
       expect(result.fillColor).toBe('#FF0000');
       expect(result.strokeColor).toBe('#000000');
       expect(result.strokeWidth).toBe(2);
+    });
+
+    it('passes line end markers through to drawing block', () => {
+      const node: PMNode = {
+        type: 'vectorShape',
+        attrs: {
+          width: 100,
+          height: 100,
+          lineEnds: {
+            head: { type: 'triangle', width: 'sm', length: 'lg' },
+          },
+        },
+      };
+
+      const result = vectorShapeNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.lineEnds).toEqual({
+        head: { type: 'triangle', width: 'sm', length: 'lg' },
+      });
     });
 
     it('handles wrap configuration', () => {

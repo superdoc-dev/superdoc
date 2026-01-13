@@ -416,6 +416,21 @@ describe('remeasureParagraph', () => {
       expect(firstLineChars).toBeLessThan(secondLineChars);
     });
 
+    it('expands first line width for hanging indents without negative indents', () => {
+      const maxWidth = 200;
+      const indentLeft = 40;
+      const hanging = 20;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: indentLeft, hanging },
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      const contentWidth = maxWidth - indentLeft;
+      expect(measure.lines[0].maxWidth).toBe(contentWidth + hanging);
+      expect(measure.lines[1].maxWidth).toBe(contentWidth);
+    });
+
     it('increases subsequent line widths with hanging indent', () => {
       // Hanging indent means first line has REDUCED width (negative offset from hanging)
       // Subsequent lines have MORE width (hanging indent adds to available space)
@@ -468,6 +483,18 @@ describe('remeasureParagraph', () => {
       // Should treat negative values as 0, so full width is available
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBe(5 * CHAR_WIDTH);
+    });
+
+    it('avoids widening first line when negative indents are present with hanging', () => {
+      const maxWidth = 200;
+      const block = createBlock([textRun('A'.repeat(40))], {
+        indent: { left: -20, right: -30, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, maxWidth);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect(measure.lines[0].maxWidth).toBe(maxWidth);
+      expect(measure.lines[1].maxWidth).toBe(maxWidth);
     });
 
     it('respects firstLineIndent parameter for list markers', () => {

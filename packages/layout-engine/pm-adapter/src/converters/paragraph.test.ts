@@ -665,6 +665,24 @@ describe('paragraph converters', () => {
         });
       });
 
+      it('flags empty sectPr paragraph as a section marker', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              sectPr: { type: 'element', name: 'w:sectPr', elements: [] },
+            },
+          },
+        };
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+
+        expect(blocks).toHaveLength(1);
+        const paraBlock = blocks[0] as ParagraphBlock;
+        expect(paraBlock.attrs?.sectPrMarker).toBe(true);
+      });
+
       it('should skip empty paragraph when paragraph runProperties.vanish is true', () => {
         const para: PMNode = {
           type: 'paragraph',

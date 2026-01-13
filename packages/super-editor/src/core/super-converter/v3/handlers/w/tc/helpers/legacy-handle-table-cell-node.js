@@ -11,6 +11,9 @@ export function handleTableCellNode({
   table,
   row,
   rowBorders,
+  baseTableBorders,
+  tableLook,
+  rowCnfStyle,
   columnIndex,
   columnWidth = null,
   allColumnWidths = [],
@@ -39,58 +42,34 @@ export function handleTableCellNode({
   const isFirstColumn = columnIndex === 0;
   const isLastColumn = columnIndex + colspan >= effectiveTotalColumns;
 
-  // Build cell borders based on position
-  // Table-level borders (top, bottom, left, right) only apply to outer edges
-  // insideH applies as bottom to all rows except the last
-  // insideV applies as right to all columns except the last
-  //
-  // IMPORTANT: For outer borders, val='none' is ALWAYS applied regardless of position.
-  // This is needed for border-collapse: when tblPrEx sets borders to 'none', cells need
-  // explicit 'border-X: none' to counter adjacent cells' borders.
-  const cellBorders = {};
-  if (rowBorders) {
-    // OUTER BORDERS: Apply 'none' always, position-check only for actual borders
-    if (rowBorders.top?.val === 'none') {
-      cellBorders.top = rowBorders.top;
-    } else if (isFirstRow && rowBorders.top) {
-      cellBorders.top = rowBorders.top;
-    }
-
-    if (rowBorders.bottom?.val === 'none') {
-      cellBorders.bottom = rowBorders.bottom;
-    } else if (isLastRow && rowBorders.bottom) {
-      cellBorders.bottom = rowBorders.bottom;
-    }
-
-    if (rowBorders.left?.val === 'none') {
-      cellBorders.left = rowBorders.left;
-    } else if (isFirstColumn && rowBorders.left) {
-      cellBorders.left = rowBorders.left;
-    }
-
-    if (rowBorders.right?.val === 'none') {
-      cellBorders.right = rowBorders.right;
-    } else if (isLastColumn && rowBorders.right) {
-      cellBorders.right = rowBorders.right;
-    }
-
-    // INNER BORDERS: Position-based (including for 'none' values)
-    // insideH creates horizontal lines between rows (applied as bottom border to non-last rows)
-    if (!isLastRow && rowBorders.insideH) {
-      cellBorders.bottom = rowBorders.insideH;
-    }
-    // insideV creates vertical lines between columns (applied as right border to non-last columns)
-    if (!isLastColumn && rowBorders.insideV) {
-      cellBorders.right = rowBorders.insideV;
-    }
+  attributes['borders'] = processCellBorders({
+    baseTableBorders,
+    rowBorders,
+    tableLook,
+    rowCnfStyle,
+    isFirstRow,
+    isLastRow,
+    isFirstColumn,
+    isLastColumn,
+    tableCellProperties,
+    referencedStyles,
+  });
+  const hasRowOverrideNone =
+    rowBorders &&
+    ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].some((side) => rowBorders?.[side]?.val === 'none');
+  if (hasRowOverrideNone && isFirstColumn) {
+    console.info(
+      '[sd-table-borders] cell borders',
+      JSON.stringify({
+        rowIndex,
+        columnIndex,
+        totalColumns: effectiveTotalColumns,
+        baseTableBorders,
+        rowBorders,
+        cellBorders: attributes['borders'],
+      }),
+    );
   }
-  // Always set borders to override the schema default (which adds borders to all cells)
-  // Start with position-based borders, then apply inline overrides
-  attributes['borders'] = cellBorders;
-
-  // Process inline cell borders (cell-level overrides)
-  const inlineBorders = processInlineCellBorders(tableCellProperties.borders, cellBorders);
-  if (inlineBorders) attributes['borders'] = Object.assign(attributes['borders'], inlineBorders);
 
   // Colspan
   if (colspan > 1) attributes['colspan'] = colspan;
@@ -320,6 +299,103 @@ const processInlineCellBorders = (borders, rowBorders) => {
     }
     return acc;
   }, {});
+};
+
+const processCellBorders = ({
+  baseTableBorders,
+  rowBorders,
+  tableLook,
+  rowCnfStyle,
+  isFirstRow,
+  isLastRow,
+  isFirstColumn,
+  isLastColumn,
+  tableCellProperties,
+  referencedStyles,
+}) => {
+  let cellBorders = {};
+  if (baseTableBorders) {
+    if (isFirstRow && baseTableBorders.top) {
+      cellBorders.top = baseTableBorders.top;
+    }
+    if (isLastRow && baseTableBorders.bottom) {
+      cellBorders.bottom = baseTableBorders.bottom;
+    }
+    if (isFirstColumn && baseTableBorders.left) {
+      cellBorders.left = baseTableBorders.left;
+    }
+    if (isLastColumn && baseTableBorders.right) {
+      cellBorders.right = baseTableBorders.right;
+    }
+  }
+
+  if (rowBorders) {
+    if (rowBorders.top?.val) {
+      cellBorders.top = rowBorders.top;
+    }
+
+    if (rowBorders.bottom?.val) {
+      cellBorders.bottom = rowBorders.bottom;
+    }
+
+    if (rowBorders.left?.val) {
+      const applyLeftToAll = rowBorders.left.val === 'none';
+      if (applyLeftToAll || isFirstColumn) {
+        cellBorders.left = rowBorders.left;
+      }
+    }
+
+    if (rowBorders.right?.val) {
+      const applyRightToAll = rowBorders.right.val === 'none';
+      if (applyRightToAll || isLastColumn) {
+        cellBorders.right = rowBorders.right;
+      }
+    }
+
+    // INNER BORDERS: Position-based (including for 'none' values)
+    // insideH creates horizontal lines between rows (applied as bottom border to non-last rows)
+    if (!isLastRow && rowBorders.insideH) {
+      cellBorders.bottom = rowBorders.insideH;
+    }
+    // insideV creates vertical lines between columns (applied as right border to non-last columns)
+    if (!isLastColumn && rowBorders.insideV) {
+      cellBorders.right = rowBorders.insideV;
+    }
+  }
+
+  const getStyleTableCellBorders = (styleVariant) => styleVariant?.tableCellProperties?.borders ?? null;
+
+  // Check if a conditional style flag is enabled using cascading priority: cell > row > tableLook
+  const cellCnfStyle = tableCellProperties?.cnfStyle;
+  const getFlag = (source, flag) =>
+    source && Object.prototype.hasOwnProperty.call(source, flag) ? source[flag] : undefined;
+  const isStyleEnabled = (flag) =>
+    getFlag(cellCnfStyle, flag) ?? getFlag(rowCnfStyle, flag) ?? getFlag(tableLook, flag) ?? true;
+
+  // Apply table style conditional formatting borders.
+  // Only apply the relevant edge per conditional style:
+  // - firstRow/lastRow => top/bottom
+  // - firstCol/lastCol => left/right
+  const applyStyleBorders = (styleVariant, allowedDirections) => {
+    const styleBorders = getStyleTableCellBorders(styleVariant);
+    if (!styleBorders) return;
+    const filteredBorders = allowedDirections.reduce((acc, direction) => {
+      if (styleBorders[direction]) acc[direction] = styleBorders[direction];
+      return acc;
+    }, {});
+    const styleOverrides = processInlineCellBorders(filteredBorders, cellBorders);
+    if (styleOverrides) cellBorders = Object.assign(cellBorders, styleOverrides);
+  };
+
+  if (isFirstRow && isStyleEnabled('firstRow')) applyStyleBorders(referencedStyles?.firstRow, ['top', 'bottom']);
+  if (isLastRow && isStyleEnabled('lastRow')) applyStyleBorders(referencedStyles?.lastRow, ['top', 'bottom']);
+  if (isFirstColumn && isStyleEnabled('firstColumn')) applyStyleBorders(referencedStyles?.firstCol, ['left', 'right']);
+  if (isLastColumn && isStyleEnabled('lastColumn')) applyStyleBorders(referencedStyles?.lastCol, ['left', 'right']);
+
+  // Process inline cell borders (cell-level overrides)
+  const inlineBorders = processInlineCellBorders(tableCellProperties.borders, cellBorders);
+  if (inlineBorders) cellBorders = Object.assign(cellBorders, inlineBorders);
+  return cellBorders;
 };
 
 const getTableCellVMerge = (node) => {

@@ -89,7 +89,13 @@ const comments = computed(() => {
       const isThisComment = c.commentId === props.comment.commentId;
       return isThreadedComment || isThisComment;
     })
-    .sort((a, b) => a.commentId === props.comment.commentId && a.createdTime - b.createdTime);
+    .sort((a, b) => {
+      // Parent comment (the one passed as prop) should always be first
+      if (a.commentId === props.comment.commentId) return -1;
+      if (b.commentId === props.comment.commentId) return 1;
+      // Sort remaining comments (children) by creation time
+      return a.createdTime - b.createdTime;
+    });
 });
 
 const isInternalDropdownDisabled = computed(() => {

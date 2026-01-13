@@ -132,6 +132,64 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
 }
 
 /**
+ * Return the SDT metadata that should drive container styling.
+ *
+ * Prefers the primary `sdt` when it resolves to a container type, otherwise
+ * falls back to `containerSdt` (e.g., docPart paragraphs inside a documentSection).
+ */
+export function getSdtContainerMetadata(
+  sdt?: SdtMetadata | null,
+  containerSdt?: SdtMetadata | null,
+): SdtMetadata | null {
+  if (getSdtContainerConfig(sdt)) return sdt ?? null;
+  if (getSdtContainerConfig(containerSdt)) return containerSdt ?? null;
+  return null;
+}
+
+/**
+ * Returns a stable key for a block-level SDT container, or null if unavailable.
+ *
+ * The key is used to detect consecutive fragments that belong to the same SDT.
+ */
+export function getSdtContainerKey(sdt?: SdtMetadata | null, containerSdt?: SdtMetadata | null): string | null {
+  const metadata = getSdtContainerMetadata(sdt, containerSdt);
+  if (!metadata) return null;
+
+  if (metadata.type === 'structuredContent') {
+    if (metadata.scope !== 'block') return null;
+    if (!metadata.id) {
+      return null;
+    }
+    return `structuredContent:${metadata.id}`;
+  }
+
+  if (metadata.type === 'documentSection') {
+    const sectionId = metadata.id ?? metadata.sdBlockId;
+    if (!sectionId) {
+      return null;
+    }
+    return `documentSection:${sectionId}`;
+  }
+
+  return null;
+}
+
+/**
+ * Options for SDT container boundary overrides.
+ *
+ * When multiple consecutive fragments share the same SDT container metadata,
+ * use these options to control which fragments show start/end styling.
+ */
+export type SdtBoundaryOptions = {
+  /** Override isStart - true for first fragment in SDT group */
+  isStart?: boolean;
+  /** Override isEnd - true for last fragment in SDT group */
+  isEnd?: boolean;
+  /** Optional width override for the SDT container element */
+  widthOverride?: number;
+};
+
+/**
  * Applies SDT container styling to a DOM element.
  *
  * This helper function encapsulates all logic for applying block-level SDT container
@@ -149,7 +207,7 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
  * - Container CSS class for border and background styling
  * - Data attributes for continuation detection (`data-sdt-container-start/end`)
  * - Overflow visible to allow labels to appear above content
- * - Label/tooltip element created and appended to container
+ * - Label/tooltip element created and appended to container when isStart=true
  *
  * **Label Element Structure:**
  * ```html
@@ -166,6 +224,7 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
  * @param container - The container element to style (typically a fragment div)
  * @param sdt - The primary SDT metadata from block.attrs?.sdt
  * @param containerSdt - Optional fallback SDT metadata from block.attrs?.containerSdt
+ * @param boundaryOptions - Optional overrides for start/end styling in multi-fragment containers
  *
  * @example
  * ```typescript
@@ -180,6 +239,7 @@ export function applySdtContainerStyling(
   container: HTMLElement,
   sdt: SdtMetadata | null | undefined,
   containerSdt?: SdtMetadata | null | undefined,
+  boundaryOptions?: SdtBoundaryOptions,
 ): void {
   // Try primary sdt first, fall back to containerSdt
   let config = getSdtContainerConfig(sdt);
@@ -188,17 +248,26 @@ export function applySdtContainerStyling(
   }
   if (!config) return;
 
+  const isStart = boundaryOptions?.isStart ?? config.isStart;
+  const isEnd = boundaryOptions?.isEnd ?? config.isEnd;
+
   // Apply container class and data attributes
   container.classList.add(config.className);
-  container.dataset.sdtContainerStart = String(config.isStart);
-  container.dataset.sdtContainerEnd = String(config.isEnd);
+  container.dataset.sdtContainerStart = String(isStart);
+  container.dataset.sdtContainerEnd = String(isEnd);
   container.style.overflow = 'visible'; // Allow label to show above
 
-  // Create and append label element
-  const labelEl = doc.createElement('div');
-  labelEl.className = config.labelClassName;
-  const labelText = doc.createElement('span');
-  labelText.textContent = config.labelText;
-  labelEl.appendChild(labelText);
-  container.appendChild(labelEl);
+  if (boundaryOptions?.widthOverride != null) {
+    container.style.width = `${boundaryOptions.widthOverride}px`;
+  }
+
+  // Only create label on the first fragment of a multi-fragment container
+  if (isStart) {
+    const labelEl = doc.createElement('div');
+    labelEl.className = config.labelClassName;
+    const labelText = doc.createElement('span');
+    labelText.textContent = config.labelText;
+    labelEl.appendChild(labelText);
+    container.appendChild(labelEl);
+  }
 }

@@ -20,6 +20,7 @@ test.describe('comments & tracked changes', () => {
     },
   ];
 
+  // This is now 4 tracked changes with 2 replacements , one addition and one deletion
   const documentTrackedChanges = [
     {
       author: 'SuperDoc 8083 (imported)',
@@ -38,12 +39,7 @@ test.describe('comments & tracked changes', () => {
     },
     {
       author: 'SuperDoc 8083 (imported)',
-      text: ['Deleted: ', 'rem'],
-      date: new Date(1763743800000),
-    },
-    {
-      author: 'SuperDoc 8083 (imported)',
-      text: ['Added: ', 'add'],
+      text: ['Added: ', 'add', 'Deleted: ', 'rem'],
       date: new Date(1763743800000),
     },
   ];
@@ -125,7 +121,7 @@ test.describe('comments & tracked changes', () => {
 
     const trackedChanges = page.getByRole('dialog').filter({ hasText: 'SuperDoc 8083 (imported)', visible: true });
     const trackedChangeCount = await trackedChanges.count();
-    expect(trackedChangeCount).toBe(5);
+    expect(trackedChangeCount).toBe(4);
   });
 
   test('should have correct tracked change text', async ({ page }) => {

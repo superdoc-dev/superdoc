@@ -31,9 +31,6 @@ export default function useComment(params) {
   const creatorImage = params.creatorImage;
   const createdTime = params.createdTime || Date.now();
   const importedAuthor = ref(params.importedAuthor || null);
-
-  // Original DOCX-schema comment JSON captured at import time
-  // (preserve exact comment content when re-exporting DOCX)
   const docxCommentJSON = params.docxCommentJSON || null;
 
   const commentText = ref(params.commentText || '');

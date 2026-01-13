@@ -6,12 +6,19 @@ export const resolveCommentMeta = ({ converter, importedId }) => {
 
   const resolvedCommentId = matchingImportedComment?.commentId ?? (importedId ? String(importedId) : uuidv4());
   const internal = matchingImportedComment?.internal ?? matchingImportedComment?.isInternal ?? false;
+  const parentCommentId = matchingImportedComment?.parentCommentId;
+  const trackedChangeIds = converter?.trackedChangeIdMap
+    ? new Set(Array.from(converter.trackedChangeIdMap.values()).map((id) => String(id)))
+    : null;
+  const isTrackedChangeParent =
+    parentCommentId && trackedChangeIds ? trackedChangeIds.has(String(parentCommentId)) : false;
 
   return {
     resolvedCommentId,
     importedId,
     internal,
     matchingImportedComment,
+    trackedChange: matchingImportedComment?.trackedChange === true || isTrackedChangeParent,
   };
 };
 

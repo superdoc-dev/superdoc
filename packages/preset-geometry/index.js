@@ -1,4 +1,4 @@
-var s = {
+var _ = {
   accentBorderCallout1: {
     viewBox: '0 0 100 100',
     paths: [
@@ -1945,6 +1945,10 @@ var s = {
     viewBox: '0 0 100 100',
     paths: [{ d: 'M 0 100 L 50 0 L 100 100 Z', fill: '#000000', stroke: '#000000' }],
   },
+  upArrow: {
+    viewBox: '0 0 100 100',
+    paths: [{ d: 'M 0 50 L 50 0 L 100 50 L 75 50 L 75 100 L 25 100 L 25 50 Z', fill: '#000000', stroke: '#000000' }],
+  },
   upArrowCallout: {
     viewBox: '0 0 100 100',
     paths: [
@@ -2050,63 +2054,641 @@ var s = {
     ],
   },
 };
-var M = ['fill', 'stroke', 'strokeWidth', 'fillRule', 'clipRule'],
-  d = s;
-function r(t) {
-  if (!t) return null;
-  let e = {};
+var F = new Set(['leftRightArrow', 'upDownArrow']),
+  X = {
+    leftRightArrow: `<leftRightArrow>
+    <avLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <gd name="adj1" fmla="val 50000"/>
+      <gd name="adj2" fmla="val 50000"/>
+    </avLst>
+    <gdLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <gd name="maxAdj2" fmla="*/ 50000 w ss"/>
+      <gd name="a1" fmla="pin 0 adj1 100000"/>
+      <gd name="a2" fmla="pin 0 adj2 maxAdj2"/>
+      <gd name="x2" fmla="*/ ss a2 100000"/>
+      <gd name="x3" fmla="+- r 0 x2"/>
+      <gd name="dy" fmla="*/ h a1 200000"/>
+      <gd name="y1" fmla="+- vc 0 dy"/>
+      <gd name="y2" fmla="+- vc dy 0"/>
+      <gd name="dx1" fmla="*/ y1 x2 hd2"/>
+      <gd name="x1" fmla="+- x2 0 dx1"/>
+      <gd name="x4" fmla="+- x3 dx1 0"/>
+    </gdLst>
+    <ahLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <ahXY gdRefY="adj1" minY="0" maxY="100000">
+        <pos x="x3" y="y1"/>
+      </ahXY>
+      <ahXY gdRefX="adj2" minX="0" maxX="maxAdj2">
+        <pos x="x2" y="t"/>
+      </ahXY>
+    </ahLst>
+    <cxnLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <cxn ang="0">
+        <pos x="r" y="vc"/>
+      </cxn>
+      <cxn ang="cd4">
+        <pos x="x3" y="b"/>
+      </cxn>
+      <cxn ang="cd4">
+        <pos x="x2" y="b"/>
+      </cxn>
+      <cxn ang="cd2">
+        <pos x="l" y="vc"/>
+      </cxn>
+      <cxn ang="3cd4">
+        <pos x="x2" y="t"/>
+      </cxn>
+      <cxn ang="3cd4">
+        <pos x="x3" y="t"/>
+      </cxn>
+    </cxnLst>
+    <rect l="x1" t="y1" r="x4" b="y2" xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"/>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path>
+        <moveTo>
+          <pt x="l" y="vc"/>
+        </moveTo>
+        <lnTo>
+          <pt x="x2" y="t"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x2" y="y1"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x3" y="y1"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x3" y="t"/>
+        </lnTo>
+        <lnTo>
+          <pt x="r" y="vc"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x3" y="b"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x3" y="y2"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x2" y="y2"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x2" y="b"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </leftRightArrow>`,
+    upDownArrow: `<upDownArrow>
+    <avLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <gd name="adj1" fmla="val 50000"/>
+      <gd name="adj2" fmla="val 50000"/>
+    </avLst>
+    <gdLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <gd name="maxAdj2" fmla="*/ 50000 h ss"/>
+      <gd name="a1" fmla="pin 0 adj1 100000"/>
+      <gd name="a2" fmla="pin 0 adj2 maxAdj2"/>
+      <gd name="y2" fmla="*/ ss a2 100000"/>
+      <gd name="y3" fmla="+- b 0 y2"/>
+      <gd name="dx1" fmla="*/ w a1 200000"/>
+      <gd name="x1" fmla="+- hc 0 dx1"/>
+      <gd name="x2" fmla="+- hc dx1 0"/>
+      <gd name="dy1" fmla="*/ x1 y2 wd2"/>
+      <gd name="y1" fmla="+- y2 0 dy1"/>
+      <gd name="y4" fmla="+- y3 dy1 0"/>
+    </gdLst>
+    <ahLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <ahXY gdRefX="adj1" minX="0" maxX="100000">
+        <pos x="x1" y="y3"/>
+      </ahXY>
+      <ahXY gdRefY="adj2" minY="0" maxY="maxAdj2">
+        <pos x="l" y="y2"/>
+      </ahXY>
+    </ahLst>
+    <cxnLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <cxn ang="3cd4">
+        <pos x="hc" y="t"/>
+      </cxn>
+      <cxn ang="cd2">
+        <pos x="l" y="y2"/>
+      </cxn>
+      <cxn ang="cd2">
+        <pos x="x1" y="vc"/>
+      </cxn>
+      <cxn ang="cd2">
+        <pos x="l" y="y3"/>
+      </cxn>
+      <cxn ang="cd4">
+        <pos x="hc" y="b"/>
+      </cxn>
+      <cxn ang="0">
+        <pos x="r" y="y3"/>
+      </cxn>
+      <cxn ang="0">
+        <pos x="x2" y="vc"/>
+      </cxn>
+      <cxn ang="0">
+        <pos x="r" y="y2"/>
+      </cxn>
+    </cxnLst>
+    <rect l="x1" t="y1" r="x2" b="y4" xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"/>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path>
+        <moveTo>
+          <pt x="l" y="y2"/>
+        </moveTo>
+        <lnTo>
+          <pt x="hc" y="t"/>
+        </lnTo>
+        <lnTo>
+          <pt x="r" y="y2"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x2" y="y2"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x2" y="y3"/>
+        </lnTo>
+        <lnTo>
+          <pt x="r" y="y3"/>
+        </lnTo>
+        <lnTo>
+          <pt x="hc" y="b"/>
+        </lnTo>
+        <lnTo>
+          <pt x="l" y="y3"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x1" y="y3"/>
+        </lnTo>
+        <lnTo>
+          <pt x="x1" y="y2"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </upDownArrow>`,
+  };
+function U() {
+  if (typeof DOMParser < 'u') return new DOMParser();
+  throw new Error('DOMParser is not available. In Node.js install @xmldom/xmldom and assign global.DOMParser.');
+}
+function Y(t) {
+  return t ? (t.charCodeAt(0) === 65279 ? t.slice(1) : t) : '';
+}
+var p = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+function m(t) {
+  return Number.isNaN(t) || !Number.isFinite(t) ? 0 : t;
+}
+function B(t) {
+  return typeof t == 'string' && /^-?\d+(?:\.\d+)?$/.test(t.trim());
+}
+function g(t) {
+  return (t / 6e4) * (Math.PI / 180);
+}
+function W(t) {
+  return Math.round((t * 180 * 6e4) / Math.PI);
+}
+function y(t, n) {
+  return Math.sqrt(t * t + n * n);
+}
+function q(t) {
+  let n = [];
+  if (!t || typeof t.length != 'number') return n;
+  for (let o = 0; o < t.length; o += 1) {
+    let L = typeof t.item == 'function' ? t.item(o) : t[o];
+    L && n.push(L);
+  }
+  return n;
+}
+function h(t, n, o) {
+  if (!t) return [];
+  if (typeof t.getElementsByTagNameNS == 'function') return q(t.getElementsByTagNameNS(n ?? null, o));
+  if (typeof t.getElementsByTagName == 'function') {
+    let l = q(t.getElementsByTagName(o));
+    if (l.length) return l;
+  }
+  let L = [],
+    e = [t];
+  for (; e.length; ) {
+    let l = e.pop();
+    if (!l) continue;
+    let r = l.childNodes;
+    if (!(!r || typeof r.length != 'number'))
+      for (let i = r.length - 1; i >= 0; i -= 1) {
+        let s = typeof r.item == 'function' ? r.item(i) : r[i];
+        if (!s || s.nodeType !== 1) continue;
+        let a = s,
+          f = a.localName || a.nodeName || a.tagName || '',
+          c = f.includes(':') ? f.split(':').pop() : f,
+          A = !n || !a.namespaceURI || a.namespaceURI === n;
+        c === o && A && L.push(a), e.push(a);
+      }
+  }
+  return L;
+}
+function b(t) {
+  let n = [],
+    o = t?.childNodes;
+  if (!o || typeof o.length != 'number') return n;
+  for (let L = 0; L < o.length; L += 1) {
+    let e = typeof o.item == 'function' ? o.item(L) : o[L];
+    e && e.nodeType === 1 && n.push(e);
+  }
+  return n;
+}
+function H(t, n) {
+  let o = Object.create(null),
+    L = t,
+    e = n;
   return (
-    M.forEach((l) => {
-      let L = t[l];
-      if (L !== void 0)
-        if (l === 'strokeWidth') {
-          if (typeof L == 'number') e.strokeWidth = L;
-          else if (typeof L == 'string') {
-            let o = Number(L);
-            if (Number.isFinite(o)) e.strokeWidth = o;
-          }
-        } else if (typeof L == 'string') {
-          e[l] = L;
-        }
+    (o.w = L),
+    (o.h = e),
+    (o.l = 0),
+    (o.t = 0),
+    (o.r = L),
+    (o.b = e),
+    (o.hc = L / 2),
+    (o.vc = e / 2),
+    (o.ss = Math.min(L, e)),
+    [2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 36, 40, 48, 64, 72, 96].forEach((r) => {
+      (o[`wd${r}`] = L / r), (o[`hd${r}`] = e / r);
     }),
-    Object.keys(e).length ? e : null
+    o
   );
 }
-function A(t, e) {
-  let l = t.map((o) => ({ ...o }));
-  if (!e) return l;
-  let L = (o, i) => (typeof e == 'function' ? r(e(o, i)) : Array.isArray(e) ? r(e[i]) : r(e));
-  return l.map((o, i) => {
-    let n = L(o, i);
-    return n ? { ...o, ...n } : o;
+function k(t, n) {
+  if (t == null || t === '') return 0;
+  if (typeof t == 'number') return t;
+  if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+  if (/^-?[0-9]*cd[0-9]+$/.test(t)) {
+    let L = t.split('cd'),
+      e = L[0] === '' || L[0] === '-' ? +`${L[0]}1` : Number(L[0]),
+      l = Number(L[1]);
+    return l ? (216e5 / l) * e : 0;
+  }
+  let o = n[t];
+  return typeof o == 'number' ? o : 0;
+}
+function V(t, n) {
+  let o = t.trim().split(/\s+/),
+    L = o[0],
+    e = o.slice(1).map((l) => k(l, n));
+  switch (L) {
+    case 'val':
+      return m(e[0]);
+    case '+-':
+      return m(e[0] + e[1] - e[2]);
+    case '*/':
+      return e[2] === 0 ? 0 : m((e[0] * e[1]) / e[2]);
+    case '+/':
+      return e[2] === 0 ? 0 : m((e[0] + e[1]) / e[2]);
+    case 'abs':
+      return Math.abs(e[0]);
+    case 'max':
+      return Math.max(e[0], e[1]);
+    case 'min':
+      return Math.min(e[0], e[1]);
+    case 'pin':
+      return Math.min(Math.max(e[0], e[1]), e[2]);
+    case 'mod':
+      return m(Math.hypot(...e));
+    case 'sin': {
+      let l = e[0],
+        r = g(e[1]);
+      return m(l * Math.sin(r));
+    }
+    case 'cos': {
+      let l = e[0],
+        r = g(e[1]);
+      return m(l * Math.cos(r));
+    }
+    case 'atan2':
+      return m(Math.atan2(e[1], e[0]));
+    case 'tan': {
+      let l = e[0],
+        r = g(e[1]);
+      return m(l * Math.tan(r));
+    }
+    case 'at2': {
+      let l = Math.atan2(e[1], e[0]);
+      return W(l);
+    }
+    case 'sat2': {
+      let l = e[0],
+        r = e[1],
+        i = e[2],
+        s = y(r, i);
+      return s === 0 ? 0 : m((l * i) / s);
+    }
+    case 'cat2': {
+      let l = e[0],
+        r = e[1],
+        i = e[2],
+        s = y(r, i);
+      return s === 0 ? m(l) : m((l * r) / s);
+    }
+    case '?:':
+      return e[0] >= 0 ? e[1] : e[2];
+    case 'sqrt':
+      return e[0] < 0 ? 0 : Math.sqrt(e[0]);
+    default:
+      return (
+        typeof console < 'u' &&
+          process?.env?.NODE_ENV !== 'production' &&
+          console.warn(`Unsupported formula operator "${L}"`),
+        0
+      );
+  }
+}
+function z(t, n) {
+  let o = h(t, p, 'avLst')[0];
+  if (o) {
+    let e = h(o, p, 'gd');
+    for (let l of e) {
+      let r = l.getAttribute('name'),
+        i = l.getAttribute('fmla');
+      !r || !i || (n[r] = V(i, n));
+    }
+  }
+  let L = h(t, p, 'gdLst')[0];
+  if (L) {
+    let e = h(L, p, 'gd');
+    for (let l of e) {
+      let r = l.getAttribute('name'),
+        i = l.getAttribute('fmla');
+      !r || !i || (n[r] = V(i, n));
+    }
+  }
+}
+var G = {
+  darken: 'color-mix(in srgb, currentColor 60%, black)',
+  darkenless: 'color-mix(in srgb, currentColor 80%, black)',
+  lighten: 'color-mix(in srgb, currentColor 60%, white)',
+  lightenless: 'color-mix(in srgb, currentColor 80%, white)',
+  accent: 'var(--preset-accent, currentColor)',
+  accentlight: 'color-mix(in srgb, currentColor 85%, white)',
+};
+function J(t) {
+  if (t == null) return '#000000';
+  let n = String(t).toLowerCase();
+  return n === 'norm' || n === 'auto'
+    ? '#000000'
+    : n === 'none' || n === 'false' || n === 'transparent'
+      ? 'none'
+      : n in G
+        ? G[n]
+        : /^#|^rgb|^hsl|^var\(/i.test(t)
+          ? t
+          : '#000000';
+}
+function R(t) {
+  if (t == null) return '#000000';
+  let n = t.toLowerCase();
+  return n === 'none' || n === 'false' ? 'none' : /^#|^rgb|^hsl|^var\(/i.test(t) ? t : '#000000';
+}
+function Z(t, n, o, L) {
+  let e = t.getAttribute('x'),
+    l = t.getAttribute('y'),
+    r = k(e, n),
+    i = k(l, n);
+  return o && B(e) && (r *= o), L && B(l) && (i *= L), { x: r, y: i };
+}
+function f0(t, n, o, L, e) {
+  let l = n.getAttribute('wR'),
+    r = n.getAttribute('hR'),
+    i = Math.abs(k(l, o)),
+    s = Math.abs(k(r, o));
+  L && B(l) && (i *= L), e && B(r) && (s *= e);
+  let a = k(n.getAttribute('stAng'), o),
+    f = k(n.getAttribute('swAng'), o),
+    c = ((a % 216e5) + 216e5) % 216e5,
+    A = f;
+  A <= -216e5 && (A = -216e5), A >= 216e5 && (A = 216e5);
+  let x = g(c),
+    d = 0,
+    u = 0,
+    M = 0,
+    w = 0;
+  t
+    ? ((d = t.x), (u = t.y), (M = d - i * Math.cos(x)), (w = u - s * Math.sin(x)))
+    : ((M = o.hc || 0), (w = o.vc || 0), (d = M + i * Math.cos(x)), (u = w + s * Math.sin(x)));
+  let P = Math.max(1, Math.ceil(Math.abs(A) / 108e5)),
+    C = A / P,
+    N = [],
+    T = c,
+    E = d,
+    D = u;
+  for (let O = 0; O < P; O += 1) {
+    let $ = T + C,
+      I = g($),
+      Q = M + i * Math.cos(I),
+      j = w + s * Math.sin(I),
+      s0 = Math.abs(C) > 108e5 ? 1 : 0,
+      a0 = C >= 0 ? 1 : 0;
+    N.push(`A ${i} ${s} 0 ${s0} ${a0} ${Q} ${j}`), (T = $), (E = Q), (D = j);
+  }
+  return { command: N.join(' '), startPoint: { x: d, y: u }, endPoint: { x: E, y: D } };
+}
+function e0(t, n) {
+  if (t == null) return 1;
+  let o = Number(t);
+  return !Number.isFinite(o) || o === 0 ? 1 : n / o;
+}
+function t0(t, n, o, L) {
+  let e = [],
+    l = null,
+    r = 0,
+    i = !1,
+    s = !1,
+    a = e0(t.getAttribute('w'), o),
+    f = e0(t.getAttribute('h'), L);
+  for (let c of b(t)) {
+    let A = c.localName || c.nodeName || '';
+    switch (A.includes(':') ? A.split(':').pop() : A) {
+      case 'moveTo': {
+        let d = h(c, p, 'pt')[0];
+        if (!d) break;
+        let u = Z(d, n, a, f);
+        e.push(`M ${u.x} ${u.y}`), (l = u), (r += 1);
+        break;
+      }
+      case 'lnTo': {
+        let d = h(c, p, 'pt')[0];
+        if (!d) break;
+        let u = Z(d, n, a, f);
+        e.push(`L ${u.x} ${u.y}`), (l = u);
+        break;
+      }
+      case 'quadBezTo': {
+        let d = h(c, p, 'pt');
+        if (d.length === 2) {
+          let u = Z(d[0], n, a, f),
+            M = Z(d[1], n, a, f);
+          e.push(`Q ${u.x} ${u.y} ${M.x} ${M.y}`), (l = M);
+        }
+        break;
+      }
+      case 'cubicBezTo': {
+        let d = h(c, p, 'pt');
+        if (d.length === 3) {
+          let u = Z(d[0], n, a, f),
+            M = Z(d[1], n, a, f),
+            w = Z(d[2], n, a, f);
+          e.push(`C ${u.x} ${u.y} ${M.x} ${M.y} ${w.x} ${w.y}`), (l = w);
+        }
+        break;
+      }
+      case 'arcTo': {
+        let { command: d, startPoint: u, endPoint: M } = f0(l, c, n, a, f);
+        !l && u && (e.push(`M ${u.x} ${u.y}`), (r += 1)), e.push(d), (l = M), (s = !0);
+        break;
+      }
+      case 'close':
+        e.push('Z'), (l = null), (i = !0);
+        break;
+      default:
+        break;
+    }
+  }
+  return { d: e.join(' '), moveCount: r, isClosed: i, hasArc: s };
+}
+var c0 = new Set(['pathLst', 'avLst', 'gdLst', 'ahLst', 'cxnLst', 'rect']),
+  n0 = 100,
+  o0 = { width: n0, height: n0 },
+  u0 = (t) => h(t, p, 'path').length > 0;
+function p0(t) {
+  let n = b(t);
+  return u0(t) &&
+    !n.some((e) => {
+      let l = e.localName ?? e.tagName;
+      return !c0.has(l);
+    })
+    ? [t]
+    : n;
+}
+function A0(t, n, o, L) {
+  let e = t.getAttribute('fill'),
+    l = t.getAttribute('stroke'),
+    r = l != null ? String(l).toLowerCase() : null,
+    i = t.getAttribute('strokeWidth'),
+    s = t.hasAttribute('fill'),
+    a = t.hasAttribute('stroke'),
+    f = R(l),
+    c = s ? J(e) : void 0;
+  s ||
+    (o.isClosed
+      ? a && (f === 'none' || f == null)
+        ? (c = r === 'false' ? (L === 'arc' ? 'none' : 'currentColor') : 'none')
+        : (c = '#000000')
+      : (c = 'none')),
+    !a && (c === '#000000' || c === 'none') && (f = R(null));
+  let A;
+  if ((i && (A = k(i, n)), (c === 'none' || c == null) && (f === 'none' || f == null))) return null;
+  let x,
+    d = t.getAttribute('fillRule') || t.getAttribute('fill-rule');
+  return (
+    d ? (x = d) : c !== 'none' && o.moveCount > 1 && (x = 'evenodd'),
+    c === 'currentColor' && (c = '#000000'),
+    { fill: c, stroke: f, strokeWidth: A, fillRule: x, clipRule: x }
+  );
+}
+function h0(t, n, o) {
+  let L = H(n, o);
+  z(t, L);
+  let e = h(t, p, 'pathLst')[0];
+  if (!e) return null;
+  let l = [],
+    r = t.localName ?? t.tagName ?? 'shape';
+  for (let i of h(e, p, 'path')) {
+    let s = t0(i, L, n, o);
+    if (!s || !s.d) continue;
+    let a = A0(i, L, s, r);
+    a && l.push({ d: s.d, ...a });
+  }
+  return l.length ? { name: r, viewBox: `0 0 ${n} ${o}`, paths: l } : null;
+}
+function L0(t, n = {}) {
+  let o = n.width ?? o0.width,
+    L = n.height ?? o0.height,
+    e = U(),
+    l = Y(t),
+    i = e.parseFromString(l, 'application/xml').documentElement,
+    s = [];
+  for (let a of p0(i)) {
+    if (a.nodeType !== 1) continue;
+    let f = h0(a, o, L);
+    f && s.push(f);
+  }
+  return s;
+}
+var M0 = ['fill', 'stroke', 'strokeWidth', 'fillRule', 'clipRule'],
+  r0 = _;
+function S(t) {
+  if (!t) return null;
+  let n = {};
+  return (
+    M0.forEach((o) => {
+      let L = t[o];
+      if (L !== void 0)
+        if (o === 'strokeWidth') {
+          if (typeof L == 'number') n.strokeWidth = L;
+          else if (typeof L == 'string') {
+            let e = Number(L);
+            Number.isFinite(e) && (n.strokeWidth = e);
+          }
+        } else typeof L == 'string' && (n[o] = L);
+    }),
+    Object.keys(n).length ? n : null
+  );
+}
+function l0(t, n) {
+  let o = t.map((e) => ({ ...e }));
+  if (!n) return o;
+  let L = (e, l) => (typeof n == 'function' ? S(n(e, l)) : Array.isArray(n) ? S(n[l]) : S(n));
+  return o.map((e, l) => {
+    let r = L(e, l);
+    return r ? { ...e, ...r } : e;
   });
 }
-function a() {
-  return Object.keys(d);
+function m0() {
+  return Object.keys(r0);
 }
-function f(t) {
-  let { preset: e, styleOverrides: l } = t;
-  if (!e) throw new Error('createPresetShape requires a preset name.');
-  let L = d[e];
-  if (!L) throw new Error(`Unknown preset shape: ${e}`);
-  return { preset: e, viewBox: L.viewBox, paths: A(L.paths, l) };
+function x0(t, n, o) {
+  let L = X[t];
+  if (!L) return null;
+  let e = `<presetRoot xmlns:a="${p}">${L}</presetRoot>`,
+    [l] = L0(e, { width: n, height: o });
+  return l ? { viewBox: l.viewBox, paths: l.paths } : null;
 }
-function k(t) {
-  let e = f(t),
-    l = e.paths.map((L) => {
-      let o = [`d="${L.d}"`];
+function i0(t) {
+  let { preset: n, styleOverrides: o, width: L, height: e } = t;
+  if (!n) throw new Error('createPresetShape requires a preset name.');
+  if (F.has(n) && L != null && e != null && L !== e) {
+    let i = x0(n, L, e);
+    if (i) return { preset: n, viewBox: i.viewBox, paths: l0(i.paths, o) };
+  }
+  let r = r0[n];
+  if (!r) throw new Error(`Unknown preset shape: ${n}`);
+  return { preset: n, viewBox: r.viewBox, paths: l0(r.paths, o) };
+}
+function k0(t) {
+  let n = i0(t),
+    o = n.paths.map((L) => {
+      let e = [`d="${L.d}"`];
       return (
-        L.fill !== void 0 && o.push(`fill="${L.fill}"`),
-        L.stroke !== void 0 && o.push(`stroke="${L.stroke}"`),
-        L.strokeWidth !== void 0 && o.push(`stroke-width="${L.strokeWidth}"`),
-        L.fillRule !== void 0 && o.push(`fill-rule="${L.fillRule}"`),
-        L.clipRule !== void 0 && o.push(`clip-rule="${L.clipRule}"`),
-        `  <path ${o.join(' ')} />`
+        L.fill !== void 0 && e.push(`fill="${L.fill}"`),
+        L.stroke !== void 0 && e.push(`stroke="${L.stroke}"`),
+        L.strokeWidth !== void 0 && e.push(`stroke-width="${L.strokeWidth}"`),
+        L.fillRule !== void 0 && e.push(`fill-rule="${L.fillRule}"`),
+        L.clipRule !== void 0 && e.push(`clip-rule="${L.clipRule}"`),
+        `  <path ${e.join(' ')} />`
       );
     }).join(`
 `);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${e.viewBox}" preserveAspectRatio="none">
-${l}
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n.viewBox}" preserveAspectRatio="none">
+${o}
 </svg>`;
 }
-export { f as createPresetShape, k as getPresetShapeSvg, a as listPresetNames };
+export { i0 as createPresetShape, k0 as getPresetShapeSvg, m0 as listPresetNames };
+//# sourceMappingURL=index.js.map

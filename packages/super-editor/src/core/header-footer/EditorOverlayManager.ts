@@ -94,9 +94,6 @@ export class EditorOverlayManager {
   /** Full-width border line element (MS Word style) */
   #borderLine: HTMLElement | null = null;
 
-  /** Dimming overlay element (for dimming body content during editing) */
-  #dimmingOverlay: HTMLElement | null = null;
-
   /**
    * Creates a new EditorOverlayManager instance.
    *
@@ -463,18 +460,6 @@ export class EditorOverlayManager {
         // Store this offset so the editor container can use it
         editorHost.dataset.contentOffset = String(fragmentTop);
       }
-    }
-  }
-
-  /**
-   * Hides and removes the dimming overlay.
-   * @internal Reserved for future implementation of body dimming during header/footer editing.
-   */
-  // eslint-disable-next-line no-unused-private-class-members
-  #hideDimmingOverlay(): void {
-    if (this.#dimmingOverlay) {
-      this.#dimmingOverlay.remove();
-      this.#dimmingOverlay = null;
     }
   }
 

@@ -20,6 +20,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
     return srgbClr ? '#' + srgbClr.attributes?.['val'] : '#000000';
   }),
   extractStrokeWidth: vi.fn(() => 1),
+  extractLineEnds: vi.fn(() => null),
 }));
 
 vi.mock('@core/utilities/carbonCopy.js', () => ({
@@ -213,7 +214,7 @@ describe('handleImageNode - Shape Group Support', () => {
 
     const shape = result.attrs.shapes[0];
     expect(shape.shapeType).toBe('vectorShape');
-    expect(shape.attrs).toEqual({
+    expect(shape.attrs).toMatchObject({
       kind: 'ellipse',
       x: expect.any(Number),
       y: expect.any(Number),

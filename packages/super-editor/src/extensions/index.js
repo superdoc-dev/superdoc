@@ -67,6 +67,7 @@ import { LinkedStyles } from './linked-styles/linked-styles.js';
 import { Search } from './search/index.js';
 import { NodeResizer } from './noderesizer/index.js';
 import { CustomSelection } from './custom-selection/index.js';
+import { PermissionRanges } from './permission-ranges/index.js';
 
 // Permissions
 import { PermStart } from './perm-start/index.js';
@@ -188,6 +189,7 @@ const getStarterExtensions = () => {
     ShapeGroup,
     PermStart,
     PermEnd,
+    PermissionRanges,
     PassthroughInline,
     PassthroughBlock,
   ];
@@ -260,4 +262,5 @@ export {
   ShapeGroup,
   PassthroughInline,
   PassthroughBlock,
+  PermissionRanges,
 };

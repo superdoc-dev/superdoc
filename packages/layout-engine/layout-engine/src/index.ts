@@ -1336,9 +1336,24 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           (!(paraBlock.runs[0] as { text?: string }).text || (paraBlock.runs[0] as { text?: string }).text === ''));
 
       if (isEmpty) {
+        const isSectPrMarker = paraBlock.attrs?.sectPrMarker === true;
         // Check if previous block was pageBreak and next block is sectionBreak
         const prevBlock = index > 0 ? blocks[index - 1] : null;
         const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
+
+        const nextSectionBreak = nextBlock?.kind === 'sectionBreak' ? (nextBlock as SectionBreakBlock) : null;
+        const nextBreakType =
+          nextSectionBreak?.type ?? (nextSectionBreak?.attrs?.source === 'sectPr' ? 'nextPage' : undefined);
+        const nextBreakForcesPage =
+          nextSectionBreak &&
+          (nextBreakType === 'nextPage' ||
+            nextBreakType === 'evenPage' ||
+            nextBreakType === 'oddPage' ||
+            nextSectionBreak.attrs?.requirePageBoundary === true);
+
+        if (isSectPrMarker && nextBreakForcesPage) {
+          continue;
+        }
 
         if (prevBlock?.kind === 'pageBreak' && nextBlock?.kind === 'sectionBreak') {
           continue;

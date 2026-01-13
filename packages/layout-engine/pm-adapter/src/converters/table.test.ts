@@ -302,6 +302,144 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].blocks?.[0]).toBe(imageBlock);
     });
 
+    it('converts structuredContentBlock inside table cells and applies SDT metadata', () => {
+      const node: PMNode = {
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [
+                  {
+                    type: 'structuredContentBlock',
+                    attrs: { id: 'scb-1', tag: 'cell-block', alias: 'Cell Block' },
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inside cell' }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const paragraphConverter = vi.fn(() => [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [{ text: 'Inside cell', fontFamily: 'Arial', fontSize: 12 }],
+        } as ParagraphBlock,
+      ]);
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        mockStyleContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        paragraphConverter,
+        undefined,
+        {
+          converters: {
+            paragraphToFlowBlocks: paragraphConverter,
+          },
+        },
+      ) as TableBlock;
+
+      const cellBlocks = result.rows[0].cells[0].blocks ?? [];
+      expect(cellBlocks[0]?.kind).toBe('paragraph');
+      expect((cellBlocks[0] as ParagraphBlock).attrs?.sdt).toMatchObject({
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'scb-1',
+        tag: 'cell-block',
+        alias: 'Cell Block',
+      });
+    });
+
+    it('converts nested tables inside structuredContentBlock within table cells', () => {
+      const node: PMNode = {
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [
+                  {
+                    type: 'structuredContentBlock',
+                    attrs: { id: 'scb-table', alias: 'Cell Table' },
+                    content: [{ type: 'table', content: [] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const nestedTableBlock: TableBlock = {
+        kind: 'table',
+        id: 'nested-table',
+        rows: [
+          {
+            id: 'row-1',
+            cells: [
+              {
+                id: 'cell-1',
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'p-nested',
+                  runs: [],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const tableConverter = vi.fn().mockReturnValue(nestedTableBlock);
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        mockStyleContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        undefined,
+        {
+          converters: {
+            paragraphToFlowBlocks: mockParagraphConverter,
+            tableNodeToBlock: tableConverter,
+          },
+        },
+      ) as TableBlock;
+
+      const cellBlocks = result.rows[0].cells[0].blocks ?? [];
+      const nestedTable = cellBlocks.find((block) => block.kind === 'table') as TableBlock | undefined;
+      expect(tableConverter).toHaveBeenCalled();
+      expect(nestedTable).toBe(nestedTableBlock);
+      expect(nestedTable?.attrs?.sdt).toMatchObject({
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'scb-table',
+        alias: 'Cell Table',
+      });
+    });
+
     it('handles tableHeader cell type', () => {
       const node: PMNode = {
         type: 'table',

@@ -100,7 +100,7 @@ For comprehensive documentation, visit our [SuperDocumentation](https://docs.sup
 
 We love contributions! Here's how you can help:
 
-1. Check our [issue tracker](https://github.com/Harbour-Enterprises/SuperDoc/issues) for open issues
+1. Check our [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for open issues
 2. Fork the repository and create a feature/bugfix branch
 3. Write clear, documented code following our style guidelines
 4. Submit a PR with detailed description of your changes
@@ -110,7 +110,7 @@ See our [Contributing Guide](CONTRIBUTING.md) for more details.
 ## 💬 Community
 
 - [Discord Server](https://discord.gg/FBeRDqWy) - Join our community chat
-- [GitHub Discussions](https://github.com/Harbour-Enterprises/SuperDoc/discussions) - Ask questions and share ideas
+- [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions) - Ask questions and share ideas
 - [Email Support](mailto:support@harbourshare.com) - Get help from our team
 
 ## 📄 License

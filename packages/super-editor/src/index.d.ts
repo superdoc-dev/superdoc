@@ -184,6 +184,12 @@ export declare class Editor {
   /** Get coordinates at a document position */
   coordsAtPos?: (pos: number) => { left: number; top: number } | undefined;
 
+  /** Get the DOM element for a document position */
+  getElementAtPos?: (
+    pos: number,
+    options?: { forceRebuild?: boolean; fallbackToCoords?: boolean },
+  ) => HTMLElement | null;
+
   /**
    * Command service - provides access to all editor commands.
    * @example
@@ -255,6 +261,12 @@ export declare class SuperToolbar {
 }
 
 export declare class PresentationEditor {
+  /** Get the painted DOM element for a document position (body only) */
+  getElementAtPos?: (
+    pos: number,
+    options?: { forceRebuild?: boolean; fallbackToCoords?: boolean },
+  ) => HTMLElement | null;
+
   [key: string]: any;
 }
 

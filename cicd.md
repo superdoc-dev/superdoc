@@ -239,4 +239,4 @@ pnpx semantic-release --dry-run --no-ci
 ---
 
 For contribution guidelines and development setup, see [CONTRIBUTING.md](CONTRIBUTING.md).  
-For questions about CI/CD, reach out on [Discord](https://discord.gg/wjMccuygvy) or [GitHub Discussions](https://github.com/Harbour-Enterprises/SuperDoc/discussions).
+For questions about CI/CD, reach out on [Discord](https://discord.gg/wjMccuygvy) or [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions).

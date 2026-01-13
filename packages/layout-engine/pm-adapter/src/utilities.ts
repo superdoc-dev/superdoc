@@ -19,9 +19,28 @@ import type {
   ImageRun,
   ParagraphBlock,
   Run,
+  TableBlock,
 } from '@superdoc/contracts';
 import type { PMNode, PositionMap, BlockIdGenerator } from './types.js';
 import { TWIPS_PER_INCH, PX_PER_INCH, PX_PER_PT, ATOMIC_INLINE_TYPES } from './constants.js';
+
+export type LineEnd = {
+  type?: string;
+  width?: string;
+  length?: string;
+};
+
+export type LineEnds = {
+  head?: LineEnd;
+  tail?: LineEnd;
+};
+
+export type EffectExtent = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
 
 // ============================================================================
 // Unit Conversion Utilities
@@ -806,6 +825,97 @@ export function normalizeShapeSize(value: unknown): { width?: number; height?: n
   return result;
 }
 
+/** Valid size values for line end markers (sm, med, lg) */
+const LINE_END_SIZES = new Set(['sm', 'med', 'lg']);
+
+/**
+ * Normalizes a single line end configuration from an unknown value.
+ *
+ * @param value - The value to normalize
+ * @returns A validated LineEnd object, or undefined if invalid or type is 'none'
+ */
+const normalizeLineEnd = (value: unknown): LineEnd | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  const type = typeof maybe.type === 'string' ? maybe.type : undefined;
+  if (!type || type === 'none') return undefined;
+  const width = typeof maybe.width === 'string' && LINE_END_SIZES.has(maybe.width) ? maybe.width : undefined;
+  const length = typeof maybe.length === 'string' && LINE_END_SIZES.has(maybe.length) ? maybe.length : undefined;
+  return { type, width, length };
+};
+
+/**
+ * Normalizes line end markers (arrowheads) configuration from an unknown value.
+ *
+ * Validates and extracts head and tail line end configurations.
+ * Returns undefined if input is invalid or neither head nor tail is present.
+ *
+ * @param value - Value to normalize (expected to have head/tail properties)
+ * @returns A validated LineEnds object, or undefined if invalid
+ *
+ * @example
+ * ```typescript
+ * normalizeLineEnds({ head: { type: 'triangle', width: 'sm' } });
+ * // { head: { type: 'triangle', width: 'sm' } }
+ *
+ * normalizeLineEnds({ tail: { type: 'none' } });
+ * // undefined (type 'none' is filtered out)
+ *
+ * normalizeLineEnds(null);
+ * // undefined
+ * ```
+ */
+export function normalizeLineEnds(value: unknown): LineEnds | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  const head = normalizeLineEnd(maybe.head);
+  const tail = normalizeLineEnd(maybe.tail);
+  if (!head && !tail) return undefined;
+  return { head, tail };
+}
+
+/**
+ * Normalizes effect extent values from an unknown value.
+ *
+ * Effect extents define additional space around a shape for effects like shadows
+ * or arrowheads. Negative values are clamped to 0.
+ *
+ * @param value - Value to normalize (expected to have left/top/right/bottom properties)
+ * @returns A validated EffectExtent object, or undefined if all values are null/undefined
+ *
+ * @example
+ * ```typescript
+ * normalizeEffectExtent({ left: 10, top: 5, right: 10, bottom: 5 });
+ * // { left: 10, top: 5, right: 10, bottom: 5 }
+ *
+ * normalizeEffectExtent({ left: -5, right: 10 });
+ * // { left: 0, top: 0, right: 10, bottom: 0 }
+ *
+ * normalizeEffectExtent(null);
+ * // undefined
+ * ```
+ */
+export function normalizeEffectExtent(value: unknown): EffectExtent | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  const left = coerceNumber(maybe.left);
+  const top = coerceNumber(maybe.top);
+  const right = coerceNumber(maybe.right);
+  const bottom = coerceNumber(maybe.bottom);
+
+  if (left == null && top == null && right == null && bottom == null) {
+    return undefined;
+  }
+
+  const clamp = (val: number | null | undefined) => (val != null && val > 0 ? val : 0);
+  return {
+    left: clamp(left),
+    top: clamp(top),
+    right: clamp(right),
+    bottom: clamp(bottom),
+  };
+}
+
 /**
  * Normalizes and validates shape group children from an array.
  *
@@ -1152,7 +1262,7 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
                 ...cell,
                 // Cast to expected type - hydrateBlock preserves block kinds, just hydrates image sources
                 blocks: (hydratedBlocks.length > 0 ? hydratedBlocks : cell.blocks) as
-                  | (ParagraphBlock | ImageBlock | DrawingBlock)[]
+                  | (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[]
                   | undefined,
                 paragraph: hydratedParagraph,
               };

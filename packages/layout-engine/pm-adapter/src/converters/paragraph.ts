@@ -55,7 +55,7 @@ import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { createLinkedStyleResolver, applyLinkedStyleToRun, extractRunStyleId } from '../styles/linked-run.js';
-import { ptToPx, pickNumber, isPlainObject, convertIndentTwipsToPx, twipsToPx } from '../utilities.js';
+import { ptToPx, pickNumber, isPlainObject, convertIndentTwipsToPx, twipsToPx, toBoolean } from '../utilities.js';
 import { resolveStyle } from '@superdoc/style-engine';
 
 // ============================================================================
@@ -156,6 +156,12 @@ export function isInlineImage(node: PMNode): boolean {
   return false;
 }
 
+const isNodeHidden = (node: PMNode): boolean => {
+  const attrs = (node.attrs ?? {}) as Record<string, unknown>;
+  if (toBoolean(attrs.hidden) === true) return true;
+  return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
+};
+
 /**
  * Converts an image PM node to an ImageRun for inline rendering.
  *
@@ -207,6 +213,9 @@ export function isInlineImage(node: PMNode): boolean {
  * ```
  */
 export function imageNodeToRun(node: PMNode, positions: PositionMap, activeSdt?: SdtMetadata): ImageRun | null {
+  if (isNodeHidden(node)) {
+    return null;
+  }
   const attrs = node.attrs ?? {};
 
   // Extract src (required)
@@ -885,6 +894,13 @@ export function paragraphToFlowBlocks(
 
   const linkedStyleResolver = createLinkedStyleResolver(converterContext?.linkedStyles);
   const blocks: FlowBlock[] = [];
+  const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
+  const rawParagraphProps =
+    typeof paraAttrs.paragraphProperties === 'object' && paraAttrs.paragraphProperties !== null
+      ? (paraAttrs.paragraphProperties as Record<string, unknown>)
+      : undefined;
+  const hasSectPr = Boolean(rawParagraphProps?.sectPr);
+  const isSectPrMarker = hasSectPr || paraAttrs.pageBreakSource === 'sectPr';
 
   if (hasPageBreakBefore(para)) {
     blocks.push({
@@ -911,11 +927,19 @@ export function paragraphToFlowBlocks(
       emptyRun.pmStart = paraPos.start + 1;
       emptyRun.pmEnd = paraPos.start + 1;
     }
+    let emptyParagraphAttrs = cloneParagraphAttrs(paragraphAttrs);
+    if (isSectPrMarker) {
+      if (emptyParagraphAttrs) {
+        emptyParagraphAttrs.sectPrMarker = true;
+      } else {
+        emptyParagraphAttrs = { sectPrMarker: true };
+      }
+    }
     blocks.push({
       kind: 'paragraph',
       id: baseBlockId,
       runs: [emptyRun],
-      attrs: cloneParagraphAttrs(paragraphAttrs),
+      attrs: emptyParagraphAttrs,
     });
     return blocks;
   }
@@ -1292,14 +1316,6 @@ export function paragraphToFlowBlocks(
             enableComments,
           );
         }
-        console.debug('[token-debug] paragraph-token-run', {
-          token: (tokenRun as TextRun).token,
-          fontFamily: (tokenRun as TextRun).fontFamily,
-          fontSize: (tokenRun as TextRun).fontSize,
-          inlineStyleId,
-          runStyleId: activeRunStyleId,
-          mergedMarksCount: mergedMarks.length,
-        });
         applyInlineRunProperties(tokenRun as TextRun, activeRunProperties);
         currentRuns.push(tokenRun);
       }
@@ -1309,6 +1325,9 @@ export function paragraphToFlowBlocks(
     if (node.type === 'image') {
       if (activeHidden) {
         suppressedByVanish = true;
+        return;
+      }
+      if (isNodeHidden(node)) {
         return;
       }
       const isInline = isInlineImage(node);
@@ -1372,6 +1391,9 @@ export function paragraphToFlowBlocks(
         suppressedByVanish = true;
         return;
       }
+      if (isNodeHidden(node)) {
+        return;
+      }
       const anchorParagraphId = nextId();
       flushParagraph();
       if (converters?.vectorShapeNodeToDrawingBlock) {
@@ -1386,6 +1408,9 @@ export function paragraphToFlowBlocks(
     if (node.type === 'shapeGroup') {
       if (activeHidden) {
         suppressedByVanish = true;
+        return;
+      }
+      if (isNodeHidden(node)) {
         return;
       }
       const anchorParagraphId = nextId();
@@ -1404,6 +1429,9 @@ export function paragraphToFlowBlocks(
         suppressedByVanish = true;
         return;
       }
+      if (isNodeHidden(node)) {
+        return;
+      }
       const anchorParagraphId = nextId();
       flushParagraph();
       if (converters?.shapeContainerNodeToDrawingBlock) {
@@ -1418,6 +1446,9 @@ export function paragraphToFlowBlocks(
     if (node.type === 'shapeTextbox') {
       if (activeHidden) {
         suppressedByVanish = true;
+        return;
+      }
+      if (isNodeHidden(node)) {
         return;
       }
       const anchorParagraphId = nextId();

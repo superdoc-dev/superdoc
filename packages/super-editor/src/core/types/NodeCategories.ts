@@ -79,4 +79,6 @@ export interface ShapeNodeAttributes extends BlockNodeAttributes {
   id?: string | null;
   /** Shape name/description */
   name?: string | null;
+  /** Whether the shape should be hidden */
+  hidden?: boolean;
 }

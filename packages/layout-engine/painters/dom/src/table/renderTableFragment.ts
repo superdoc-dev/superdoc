@@ -11,7 +11,7 @@ import type {
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
-import { applySdtContainerStyling } from '../utils/sdt-helpers.js';
+import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
 
@@ -30,6 +30,8 @@ export type TableRenderDependencies = {
   context: FragmentRenderContext;
   /** Lookup map for retrieving block data and measurements */
   blockLookup: BlockLookup;
+  /** Optional SDT boundary overrides for container styling */
+  sdtBoundary?: SdtBoundaryOptions;
   /** Function to render a line of paragraph content */
   renderLine: (
     block: ParagraphBlock,
@@ -115,6 +117,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     fragment,
     blockLookup,
     context,
+    sdtBoundary,
     renderLine,
     renderDrawingContent,
     applyFragmentFrame,
@@ -170,7 +173,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   applySdtDataset(container, block.attrs?.sdt);
 
   // Apply SDT container styling (document sections, structured content blocks)
-  applySdtContainerStyling(doc, container, block.attrs?.sdt);
+  applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
   // Add table-specific class for resize overlay targeting
   container.classList.add('superdoc-table-fragment');
@@ -302,6 +305,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         renderLine,
         renderDrawingContent,
         applySdtDataset,
+        tableSdt: block.attrs?.sdt ?? null,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
@@ -338,6 +342,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       renderLine,
       renderDrawingContent,
       applySdtDataset,
+      tableSdt: block.attrs?.sdt ?? null,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)

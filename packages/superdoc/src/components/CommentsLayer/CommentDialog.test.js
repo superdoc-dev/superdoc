@@ -335,4 +335,74 @@ describe('CommentDialog.vue', () => {
     expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalled();
     expect(wrapper.emitted()).not.toHaveProperty('dialog-exit');
   });
+
+  it('sorts tracked change parent first, then child comments by creation time', async () => {
+    // Simulate a tracked change with two comments on it
+    // The comments were created after the tracked change but should appear below it
+    const childComment1 = reactive({
+      uid: 'uid-child-1',
+      commentId: 'child-1',
+      parentCommentId: 'tc-parent',
+      email: 'child1@example.com',
+      commentText: '<p>First reply</p>',
+      createdTime: 1000, // Created first
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const childComment2 = reactive({
+      uid: 'uid-child-2',
+      commentId: 'child-2',
+      parentCommentId: 'tc-parent',
+      email: 'child2@example.com',
+      commentText: '<p>Second reply</p>',
+      createdTime: 2000, // Created second
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        commentId: 'tc-parent',
+        trackedChange: true,
+        trackedChangeType: 'trackDelete',
+        trackedChangeText: null,
+        deletedText: 'Tracked changes',
+        createdTime: 500, // Tracked change created first
+      },
+      // Add children in reverse order to verify sorting works
+      extraComments: [childComment2, childComment1],
+    });
+
+    const headers = wrapper.findAllComponents(CommentHeaderStub);
+    expect(headers).toHaveLength(3);
+
+    // First should be the tracked change parent
+    expect(headers[0].props('comment').commentId).toBe('tc-parent');
+    expect(headers[0].props('comment').trackedChange).toBe(true);
+
+    // Second should be child-1 (created at time 1000)
+    expect(headers[1].props('comment').commentId).toBe('child-1');
+
+    // Third should be child-2 (created at time 2000)
+    expect(headers[2].props('comment').commentId).toBe('child-2');
+  });
 });

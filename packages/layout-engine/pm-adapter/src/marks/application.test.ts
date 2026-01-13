@@ -866,7 +866,7 @@ describe('mark application', () => {
       const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
       applyMarksToRun(run, [{ type: 'commentMark', attrs: { commentId: 'c-1', internal: true } }]);
 
-      expect(run.comments).toEqual([{ commentId: 'c-1', internal: true }]);
+      expect(run.comments).toEqual([{ commentId: 'c-1', importedId: undefined, internal: true, trackedChange: false }]);
     });
 
     it('dedupes comment annotations by id/importedId', () => {
@@ -877,7 +877,12 @@ describe('mark application', () => {
       ]);
 
       expect(run.comments).toHaveLength(1);
-      expect(run.comments?.[0]).toEqual({ commentId: 'c-1', importedId: 'imp-1', internal: false });
+      expect(run.comments?.[0]).toEqual({
+        commentId: 'c-1',
+        importedId: 'imp-1',
+        internal: false,
+        trackedChange: false,
+      });
     });
 
     it('applies underline mark with default style', () => {
@@ -1655,8 +1660,18 @@ describe('mark application', () => {
       // Comments SHOULD be applied when enableComments is true
       expect(run.comments).toBeDefined();
       expect(run.comments).toHaveLength(2);
-      expect(run.comments?.[0]).toEqual({ commentId: 'c-1', internal: false });
-      expect(run.comments?.[1]).toEqual({ commentId: 'c-2', internal: true });
+      expect(run.comments?.[0]).toEqual({
+        commentId: 'c-1',
+        importedId: undefined,
+        internal: false,
+        trackedChange: false,
+      });
+      expect(run.comments?.[1]).toEqual({
+        commentId: 'c-2',
+        importedId: undefined,
+        internal: true,
+        trackedChange: false,
+      });
     });
 
     it('includes comment marks when enableComments is undefined (default true)', () => {
@@ -1668,7 +1683,12 @@ describe('mark application', () => {
 
       expect(run.comments).toBeDefined();
       expect(run.comments).toHaveLength(1);
-      expect(run.comments?.[0]).toEqual({ commentId: 'c-1', internal: false });
+      expect(run.comments?.[0]).toEqual({
+        commentId: 'c-1',
+        importedId: undefined,
+        internal: false,
+        trackedChange: false,
+      });
     });
 
     it('includes comment marks when config object is undefined', () => {
@@ -1680,7 +1700,12 @@ describe('mark application', () => {
 
       expect(run.comments).toBeDefined();
       expect(run.comments).toHaveLength(1);
-      expect(run.comments?.[0]).toEqual({ commentId: 'c-1', internal: true });
+      expect(run.comments?.[0]).toEqual({
+        commentId: 'c-1',
+        importedId: undefined,
+        internal: true,
+        trackedChange: false,
+      });
     });
 
     it('handles mixed marks with enableComments false', () => {

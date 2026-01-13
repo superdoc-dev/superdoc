@@ -145,8 +145,8 @@ export declare class Editor {
     [key: string]: any;
   });
 
-  /** ProseMirror view instance */
-  view: EditorView;
+  /** ProseMirror view instance (undefined in headless mode) */
+  view?: EditorView;
 
   /** ProseMirror schema */
   schema: Schema;
@@ -214,6 +214,9 @@ export declare class Editor {
    * }
    */
   can(): CanObject;
+
+  /** Dispatch a transaction to update editor state (use this in headless mode instead of view.dispatch). */
+  dispatch(tr: Transaction): void;
 
   /**
    * Destroy the editor instance and clean up resources.

@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Harbour-Enterprises/SuperDoc.git"
+    "url": "git+https://github.com/superdoc-dev/superdoc.git"
   },
   "keywords": [],
   "author": "gabriel@superdoc.dev",

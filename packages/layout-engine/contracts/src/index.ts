@@ -630,10 +630,29 @@ export type ShapeTextContent = {
   horizontalAlign?: 'left' | 'center' | 'right';
 };
 
+export type LineEnd = {
+  type?: string;
+  width?: string;
+  length?: string;
+};
+
+export type LineEnds = {
+  head?: LineEnd;
+  tail?: LineEnd;
+};
+
+export type EffectExtent = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
 export type VectorShapeStyle = {
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
+  lineEnds?: LineEnds;
   textContent?: ShapeTextContent;
   textAlign?: string;
 };
@@ -699,6 +718,8 @@ export type VectorShapeDrawing = DrawingBlockBase & {
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
+  lineEnds?: LineEnds;
+  effectExtent?: EffectExtent;
   textContent?: ShapeTextContent;
   textAlign?: string;
   textVerticalAlign?: 'top' | 'center' | 'bottom';

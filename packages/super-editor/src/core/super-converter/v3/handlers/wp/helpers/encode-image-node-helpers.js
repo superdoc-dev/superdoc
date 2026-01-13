@@ -1,6 +1,6 @@
 import { emuToPixels, rotToDegrees, polygonToObj } from '@converter/helpers.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
-import { extractStrokeWidth, extractStrokeColor, extractFillColor } from './vector-shape-helpers';
+import { extractStrokeWidth, extractStrokeColor, extractFillColor, extractLineEnds } from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
@@ -26,6 +26,43 @@ const normalizeTargetPath = (targetPath = '') => {
  */
 const DEFAULT_SHAPE_WIDTH = 100;
 const DEFAULT_SHAPE_HEIGHT = 100;
+
+const isDocPrHidden = (docPr) => {
+  const hidden = docPr?.attributes?.hidden;
+  if (hidden === true || hidden === 1) return true;
+  if (hidden == null) return false;
+  const normalized = String(hidden).toLowerCase();
+  return normalized === '1' || normalized === 'true';
+};
+
+/**
+ * Extracts effect extent values from a drawing element.
+ *
+ * Effect extents define additional space around a shape for effects like shadows
+ * or arrowheads. Values are converted from EMU to pixels.
+ *
+ * @param {Object} node - The drawing element node (wp:anchor or wp:inline)
+ * @returns {{ left: number, top: number, right: number, bottom: number }|null}
+ *   Effect extent object with pixel values, or null if not present or all zeros
+ */
+const extractEffectExtent = (node) => {
+  const effectExtent = node?.elements?.find((el) => el.name === 'wp:effectExtent');
+  if (!effectExtent?.attributes) return null;
+
+  const sanitizeEmuValue = (value) => {
+    if (value === null || value === undefined) return 0;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+
+  const left = emuToPixels(sanitizeEmuValue(effectExtent.attributes?.['l']));
+  const top = emuToPixels(sanitizeEmuValue(effectExtent.attributes?.['t']));
+  const right = emuToPixels(sanitizeEmuValue(effectExtent.attributes?.['r']));
+  const bottom = emuToPixels(sanitizeEmuValue(effectExtent.attributes?.['b']));
+
+  if (!left && !top && !right && !bottom) return null;
+  return { left, top, right, bottom };
+};
 
 /**
  * Encodes image XML into Editor node.
@@ -166,6 +203,7 @@ export function handleImageNode(node, params, isAnchor) {
   }
 
   const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+  const isHidden = isDocPrHidden(docPr);
 
   let anchorData = null;
   if (hRelativeFrom || alignH || vRelativeFrom || alignV) {
@@ -190,7 +228,18 @@ export function handleImageNode(node, params, isAnchor) {
       horizontal: positionHValue,
       top: positionVValue,
     };
-    return handleShapeDrawing(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap, isAnchor);
+    return handleShapeDrawing(
+      params,
+      node,
+      graphicData,
+      size,
+      padding,
+      shapeMarginOffset,
+      anchorData,
+      wrap,
+      isAnchor,
+      isHidden,
+    );
   }
 
   if (uri === GROUP_URI) {
@@ -199,7 +248,7 @@ export function handleImageNode(node, params, isAnchor) {
       horizontal: positionHValue,
       top: positionVValue,
     };
-    return handleShapeGroup(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap);
+    return handleShapeGroup(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap, isHidden);
   }
 
   const picture = graphicData?.elements.find((el) => el.name === 'pic:pic');
@@ -318,6 +367,7 @@ export function handleImageNode(node, params, isAnchor) {
     ...(wasConverted && { originalSrc: path, originalExtension: extension }),
     id: docPr?.attributes?.id || '',
     title: docPr?.attributes?.descr || 'Image',
+    ...(isHidden ? { hidden: true } : {}),
     inline: true, // Always true; wrap.type controls actual layout behavior
     padding,
     marginOffset,
@@ -369,9 +419,21 @@ export function handleImageNode(node, params, isAnchor) {
  * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} anchorData - Anchor positioning data.
  * @param {{ type: string, attrs: Object }} wrap - Wrap configuration.
  * @param {boolean} isAnchor - Whether the shape is anchored (true) or inline (false).
+ * @param {boolean} isHidden - Whether the drawing should be hidden.
  * @returns {{ type: string, attrs: Object }|null} A vectorShape or contentBlock node, or null when no content exists.
  */
-const handleShapeDrawing = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isAnchor) => {
+const handleShapeDrawing = (
+  params,
+  node,
+  graphicData,
+  size,
+  padding,
+  marginOffset,
+  anchorData,
+  wrap,
+  isAnchor,
+  isHidden,
+) => {
   const wsp = graphicData.elements.find((el) => el.name === 'wps:wsp');
   const textBox = wsp.elements.find((el) => el.name === 'wps:txbx');
   const textBoxContent = textBox?.elements?.find((el) => el.name === 'w:txbxContent');
@@ -380,23 +442,22 @@ const handleShapeDrawing = (params, node, graphicData, size, padding, marginOffs
   const prstGeom = spPr?.elements.find((el) => el.name === 'a:prstGeom');
   const shapeType = prstGeom?.attributes['prst'];
 
-  // Check if shape has gradient fill or other complex fills
-  const hasGradientFill = spPr?.elements?.find((el) => el.name === 'a:gradFill');
-
-  // For plain rectangles without text and without gradients, use the specialized contentBlock handler
-  if (shapeType === 'rect' && !textBoxContent && !hasGradientFill) {
-    return getRectangleShape(params, spPr, node, marginOffset, anchorData, wrap, isAnchor);
-  }
-
   // For all other shapes (with or without text), or shapes with gradients, use the vector shape handler
   if (shapeType) {
     const result = getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor });
+    if (result?.attrs && isHidden) {
+      result.attrs.hidden = true;
+    }
     if (result) return result;
   }
 
   // Fallback to placeholder if no shape type found
   const fallbackType = textBoxContent ? 'textbox' : 'drawing';
-  return buildShapePlaceholder(node, size, padding, marginOffset, fallbackType);
+  const placeholder = buildShapePlaceholder(node, size, padding, marginOffset, fallbackType);
+  if (placeholder?.attrs && isHidden) {
+    placeholder.attrs.hidden = true;
+  }
+  return placeholder;
 };
 
 function collectPreservedDrawingChildren(node) {
@@ -428,12 +489,17 @@ function collectPreservedDrawingChildren(node) {
  * @param {{ horizontal?: number, left?: number, top?: number }} marginOffset - Group offsets relative to its anchor (in pixels).
  * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} anchorData - Anchor positioning data.
  * @param {{ type: string, attrs: Object }} wrap - Wrap configuration.
+ * @param {boolean} isHidden - Whether the drawing should be hidden.
  * @returns {{ type: 'shapeGroup', attrs: Object }|null} A shapeGroup node representing the group, or null when no content exists.
  */
-const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap) => {
+const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isHidden) => {
   const wgp = graphicData.elements.find((el) => el.name === 'wpg:wgp');
   if (!wgp) {
-    return buildShapePlaceholder(node, size, padding, marginOffset, 'group');
+    const placeholder = buildShapePlaceholder(node, size, padding, marginOffset, 'group');
+    if (placeholder?.attrs && isHidden) {
+      placeholder.attrs.hidden = true;
+    }
+    return placeholder;
   }
 
   // Extract group properties
@@ -526,6 +592,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       const fillColor = extractFillColor(spPr, style);
       const strokeColor = extractStrokeColor(spPr, style);
       const strokeWidth = extractStrokeWidth(spPr);
+      const lineEnds = extractLineEnds(spPr);
 
       // Get shape ID and name
       const cNvPr = wsp.elements?.find((el) => el.name === 'wps:cNvPr');
@@ -560,6 +627,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
           fillColor,
           strokeColor,
           strokeWidth,
+          lineEnds,
           shapeId,
           shapeName,
           textContent,
@@ -664,6 +732,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
     type: 'shapeGroup',
     attrs: {
       ...schemaAttrs,
+      ...(isHidden ? { hidden: true } : {}),
       groupTransform,
       shapes: allShapes,
       size,
@@ -802,65 +871,6 @@ function extractTextFromTextBox(textBoxContent, bodyPr) {
     wrap,
   };
 }
-
-/**
- * Translates a rectangle shape (a:prstGeom with prst="rect") into a contentBlock node.
- *
- * @param {{ nodes: Array<Object> }} params - Parameters object containing the current nodes.
- * @param {Object} spPr - The wps:spPr shape properties element.
- * @param {Object} node - The wp:anchor or wp:inline node containing attributes.
- * @param {{ horizontal?: number, left?: number, top?: number }} marginOffset - Positioning offsets for anchored shapes (in pixels).
- * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} anchorData - Anchor positioning data.
- * @param {{ type: string, attrs: Object }} wrap - Text wrapping configuration.
- * @param {boolean} isAnchor - Whether the shape is anchored (true) or inline (false).
- * @returns {{ type: 'contentBlock', attrs: Object }} An object of type contentBlock with size, positioning, and optional background color.
- */
-const getRectangleShape = (params, spPr, node, marginOffset, anchorData, wrap, isAnchor) => {
-  const schemaAttrs = {};
-
-  const drawingNode = params.nodes?.[0];
-
-  if (drawingNode?.name === DRAWING_XML_TAG) {
-    schemaAttrs.drawingContent = drawingNode;
-  }
-
-  // Look for shape properties in spPr, not node
-  const xfrm = spPr?.elements?.find((el) => el.name === 'a:xfrm');
-  const start = xfrm?.elements?.find((el) => el.name === 'a:off');
-  const size = xfrm?.elements?.find((el) => el.name === 'a:ext');
-  const solidFill = spPr?.elements?.find((el) => el.name === 'a:solidFill');
-
-  // TODO: We should handle outline (a:ln element)
-
-  // Only create rectangleSize if we have the necessary data
-  if (start && size) {
-    const rectangleSize = {
-      top: emuToPixels(start.attributes?.['y'] || 0),
-      left: emuToPixels(start.attributes?.['x'] || 0),
-      width: emuToPixels(size.attributes?.['cx'] || 0),
-      height: emuToPixels(size.attributes?.['cy'] || 0),
-    };
-    schemaAttrs.size = rectangleSize;
-  }
-
-  const background = solidFill?.elements[0]?.attributes['val'];
-
-  if (background) {
-    schemaAttrs.background = '#' + background;
-  }
-
-  return {
-    type: 'contentBlock',
-    attrs: {
-      ...schemaAttrs,
-      marginOffset,
-      anchorData,
-      wrap,
-      isAnchor,
-      originalAttributes: node?.attributes,
-    },
-  };
-};
 
 /**
  * Builds a contentBlock placeholder for shapes that we cannot fully translate yet.
@@ -1032,6 +1042,8 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
   const fillColor = extractFillColor(spPr, style);
   const strokeColor = extractStrokeColor(spPr, style);
   const strokeWidth = extractStrokeWidth(spPr);
+  const lineEnds = extractLineEnds(spPr);
+  const effectExtent = extractEffectExtent(node);
 
   // Extract textbox content if present
   const textBox = wsp.elements?.find((el) => el.name === 'wps:txbx');
@@ -1057,6 +1069,8 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
       fillColor,
       strokeColor,
       strokeWidth,
+      lineEnds,
+      effectExtent,
       marginOffset,
       anchorData,
       wrap,

@@ -66,6 +66,21 @@ export const VectorShape = Node.create({
         },
       },
 
+      lineEnds: {
+        default: null,
+        rendered: false,
+      },
+
+      hidden: {
+        default: false,
+        rendered: false,
+      },
+
+      effectExtent: {
+        default: null,
+        rendered: false,
+      },
+
       rotation: {
         default: 0,
         renderDOM: (attrs) => {

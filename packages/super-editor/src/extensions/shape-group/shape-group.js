@@ -65,6 +65,11 @@ export const ShapeGroup = Node.create({
         },
       },
 
+      hidden: {
+        default: false,
+        rendered: false,
+      },
+
       drawingContent: {
         rendered: false,
       },

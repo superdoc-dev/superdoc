@@ -212,6 +212,43 @@ describe('createDocumentJson', () => {
     expect(horizontalRules).toHaveLength(3);
   });
 
+  it('handles self-closing latentStyles in styles.xml without dropping content', () => {
+    const docXml =
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hello world</w:t></w:r></w:p></w:body></w:document>';
+    const stylesXml =
+      '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:latentStyles w:count="1" /></w:styles>';
+
+    const docx = {
+      'word/document.xml': parseXmlToJson(docXml),
+      'word/styles.xml': parseXmlToJson(stylesXml),
+    };
+
+    const converter = {
+      headers: {},
+      footers: {},
+      headerIds: {},
+      footerIds: {},
+      telemetry: {
+        trackFileStructure: vi.fn(),
+        trackUsage: vi.fn(),
+        trackStatistic: vi.fn(),
+      },
+      docHiglightColors: new Set(),
+    };
+
+    const editor = { options: {}, emit: vi.fn() };
+
+    const result = createDocumentJson(docx, converter, editor);
+
+    expect(result).toBeTruthy();
+
+    const paragraphTexts = (result.pmDoc.content || [])
+      .filter((node) => node?.type === 'paragraph')
+      .map((paragraph) => extractParagraphText(paragraph));
+
+    expect(paragraphTexts).toContain('Hello world');
+  });
+
   it('passes GUID, identifier, and internal id to telemetry in correct order', async () => {
     const simpleDocXml =
       '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Telemetry</w:t></w:r></w:p></w:body></w:document>';

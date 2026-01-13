@@ -185,6 +185,8 @@ export type SdtBoundaryOptions = {
   isStart?: boolean;
   /** Override isEnd - true for last fragment in SDT group */
   isEnd?: boolean;
+  /** Optional width override for the SDT container element */
+  widthOverride?: number;
 };
 
 /**
@@ -254,6 +256,10 @@ export function applySdtContainerStyling(
   container.dataset.sdtContainerStart = String(isStart);
   container.dataset.sdtContainerEnd = String(isEnd);
   container.style.overflow = 'visible'; // Allow label to show above
+
+  if (boundaryOptions?.widthOverride != null) {
+    container.style.width = `${boundaryOptions.widthOverride}px`;
+  }
 
   // Only create label on the first fragment of a multi-fragment container
   if (isStart) {

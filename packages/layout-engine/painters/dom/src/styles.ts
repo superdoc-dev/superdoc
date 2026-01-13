@@ -87,6 +87,7 @@ export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => 
   // provides defense-in-depth against any remaining sub-pixel rendering
   // differences between measurement and display.
   overflow: 'visible',
+  zIndex: '10',
 });
 
 const PRINT_STYLES = `
@@ -422,6 +423,7 @@ const SDT_CONTAINER_STYLES = `
   border: 1px solid #629be7;
   position: relative;
   display: inline;
+  z-index: 10;
 }
 
 /* Hover effect for inline structured content */

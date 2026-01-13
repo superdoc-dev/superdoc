@@ -106,13 +106,27 @@ export class VectorShapeView {
     element.classList.add('sd-vector-shape');
     element.setAttribute('data-vector-shape', '');
 
-    element.style.width = `${attrs.width}px`;
-    element.style.height = `${attrs.height}px`;
+    const effectExtent = attrs.effectExtent || null;
+    const extentLeft = effectExtent?.left ?? 0;
+    const extentTop = effectExtent?.top ?? 0;
+    const extentRight = effectExtent?.right ?? 0;
+    const extentBottom = effectExtent?.bottom ?? 0;
+    const baseWidth = attrs.width ?? 0;
+    const baseHeight = attrs.height ?? 0;
+    const outerWidth = baseWidth + extentLeft + extentRight;
+    const outerHeight = baseHeight + extentTop + extentBottom;
+
+    element.style.width = `${outerWidth}px`;
+    element.style.height = `${outerHeight}px`;
 
     // Apply anchor positioning styles
     const positioningStyle = this.getPositioningStyle(attrs);
     if (positioningStyle) {
       element.style.cssText += positioningStyle;
+    }
+
+    if (effectExtent && (!element.style.position || element.style.position === 'static')) {
+      element.style.position = 'relative';
     }
 
     // Combine positioning transforms (from getPositioningStyle) with shape transforms (rotation, flip)
@@ -144,6 +158,12 @@ export class VectorShapeView {
     // Create SVG directly with proper dimensions
     const svg = this.createSVGElement(attrs);
     if (svg) {
+      if (effectExtent) {
+        svg.style.position = 'absolute';
+        svg.style.left = `${extentLeft}px`;
+        svg.style.top = `${extentTop}px`;
+      }
+      this.applyLineEnds(svg, attrs);
       element.appendChild(svg);
 
       // Add text content if present
@@ -357,6 +377,15 @@ export class VectorShapeView {
         shapeElement.setAttribute('ry', (height / 2).toString());
         break;
 
+      case 'line':
+      case 'straightConnector1':
+        shapeElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        shapeElement.setAttribute('x1', '0');
+        shapeElement.setAttribute('y1', '0');
+        shapeElement.setAttribute('x2', width.toString());
+        shapeElement.setAttribute('y2', height.toString());
+        break;
+
       default:
         // For complex shapes, fall back to preset geometry with proper viewBox
         try {
@@ -395,6 +424,115 @@ export class VectorShapeView {
 
     svg.appendChild(shapeElement);
     return svg;
+  }
+
+  /**
+   * Applies line end markers (arrowheads) to an SVG element.
+   * @param {SVGElement} svg - The SVG element to apply markers to
+   * @param {Object} attrs - Shape attributes containing lineEnds, strokeColor, strokeWidth, effectExtent
+   */
+  applyLineEnds(svg, attrs) {
+    const lineEnds = attrs.lineEnds;
+    if (!lineEnds) return;
+    if (attrs.strokeColor === null) return;
+    const strokeColor = typeof attrs.strokeColor === 'string' ? attrs.strokeColor : '#000000';
+    const strokeWidth = attrs.strokeWidth ?? 1;
+    if (strokeWidth <= 0) return;
+
+    const target = svg.querySelector('line') || svg.querySelector('path') || svg.querySelector('polyline');
+    if (!target) return;
+
+    const defs =
+      svg.querySelector('defs') ||
+      svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg', 'defs'), svg.firstChild);
+    const idBase = `line-end-${Math.random().toString(36).slice(2, 8)}-${Date.now()}`;
+
+    if (lineEnds.tail) {
+      const id = `${idBase}-tail`;
+      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, true, attrs.effectExtent);
+      target.setAttribute('marker-start', `url(#${id})`);
+    }
+
+    if (lineEnds.head) {
+      const id = `${idBase}-head`;
+      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, false, attrs.effectExtent);
+      target.setAttribute('marker-end', `url(#${id})`);
+    }
+  }
+
+  /**
+   * Creates an SVG marker element for a line end (arrowhead).
+   * @param {SVGDefsElement} defs - The defs element to append the marker to
+   * @param {string} id - Unique ID for the marker
+   * @param {Object} lineEnd - Line end configuration with type, width, length
+   * @param {string} strokeColor - Color to use for the marker fill
+   * @param {number} _strokeWidth - Stroke width (currently unused, reserved for future scaling)
+   * @param {boolean} isStart - Whether this is a start marker (tail) or end marker (head)
+   * @param {Object|null} effectExtent - Effect extent for sizing, or null
+   */
+  createLineEndMarker(defs, id, lineEnd, strokeColor, _strokeWidth, isStart, effectExtent) {
+    if (defs.querySelector(`#${id}`)) return;
+
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', id);
+    marker.setAttribute('viewBox', '0 0 10 10');
+    marker.setAttribute('orient', 'auto');
+
+    const sizeScale = (value) => {
+      if (value === 'sm') return 0.75;
+      if (value === 'lg') return 1.25;
+      return 1;
+    };
+    const effectMax = effectExtent
+      ? Math.max(effectExtent.left || 0, effectExtent.right || 0, effectExtent.top || 0, effectExtent.bottom || 0)
+      : 0;
+    const useEffectExtent = Number.isFinite(effectMax) && effectMax > 0;
+    const markerWidth = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.length);
+    const markerHeight = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.width);
+    marker.setAttribute('markerUnits', useEffectExtent ? 'userSpaceOnUse' : 'strokeWidth');
+    marker.setAttribute('markerWidth', markerWidth.toString());
+    marker.setAttribute('markerHeight', markerHeight.toString());
+    marker.setAttribute('refX', isStart ? '0' : '10');
+    marker.setAttribute('refY', '5');
+
+    const shape = this.createLineEndShape(lineEnd.type || 'triangle', strokeColor, isStart);
+    marker.appendChild(shape);
+    defs.appendChild(marker);
+  }
+
+  /**
+   * Creates an SVG shape element for a line end marker.
+   * Supports diamond, oval, and triangle (default) shapes.
+   * @param {string} type - The shape type ('diamond', 'oval', or 'triangle')
+   * @param {string} strokeColor - Color to fill the shape with
+   * @param {boolean} isStart - Whether this is a start marker (affects triangle orientation)
+   * @returns {SVGElement} The created SVG shape element
+   */
+  createLineEndShape(type, strokeColor, isStart) {
+    const normalized = type.toLowerCase();
+    if (normalized === 'diamond') {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M 0 5 L 5 0 L 10 5 L 5 10 Z');
+      path.setAttribute('fill', strokeColor);
+      path.setAttribute('stroke', 'none');
+      return path;
+    }
+    if (normalized === 'oval') {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', '5');
+      circle.setAttribute('cy', '5');
+      circle.setAttribute('r', '5');
+      circle.setAttribute('fill', strokeColor);
+      circle.setAttribute('stroke', 'none');
+      return circle;
+    }
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const d = isStart ? 'M 10 0 L 0 5 L 10 10 Z' : 'M 0 0 L 10 5 L 0 10 Z';
+    path.setAttribute('d', d);
+    path.setAttribute('fill', strokeColor);
+    path.setAttribute('stroke', 'none');
+    return path;
   }
 
   createGradient(gradientData, gradientId) {

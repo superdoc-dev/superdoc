@@ -35,6 +35,8 @@ import {
   isShapeGroupTransform,
   normalizeShapeSize,
   normalizeShapeGroupChildren,
+  normalizeLineEnds,
+  normalizeEffectExtent,
 } from './utilities.js';
 
 // ============================================================================
@@ -1523,5 +1525,122 @@ describe('shallowObjectEquals', () => {
 
   it('compares empty objects', () => {
     expect(shallowObjectEquals({}, {})).toBe(true);
+  });
+});
+
+// ============================================================================
+// Line Ends and Effect Extent Normalization Tests
+// ============================================================================
+
+describe('normalizeLineEnds', () => {
+  it('returns undefined for null/undefined', () => {
+    expect(normalizeLineEnds(null)).toBeUndefined();
+    expect(normalizeLineEnds(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for non-object values', () => {
+    expect(normalizeLineEnds('string')).toBeUndefined();
+    expect(normalizeLineEnds(42)).toBeUndefined();
+    expect(normalizeLineEnds([])).toBeUndefined();
+  });
+
+  it('returns undefined when neither head nor tail is present', () => {
+    expect(normalizeLineEnds({})).toBeUndefined();
+    expect(normalizeLineEnds({ other: 'property' })).toBeUndefined();
+  });
+
+  it('returns undefined when head/tail type is "none"', () => {
+    expect(normalizeLineEnds({ head: { type: 'none' } })).toBeUndefined();
+    expect(normalizeLineEnds({ tail: { type: 'none' } })).toBeUndefined();
+    expect(normalizeLineEnds({ head: { type: 'none' }, tail: { type: 'none' } })).toBeUndefined();
+  });
+
+  it('extracts valid head configuration', () => {
+    const result = normalizeLineEnds({ head: { type: 'triangle', width: 'sm', length: 'lg' } });
+    expect(result).toEqual({
+      head: { type: 'triangle', width: 'sm', length: 'lg' },
+    });
+  });
+
+  it('extracts valid tail configuration', () => {
+    const result = normalizeLineEnds({ tail: { type: 'arrow', width: 'med', length: 'sm' } });
+    expect(result).toEqual({
+      tail: { type: 'arrow', width: 'med', length: 'sm' },
+    });
+  });
+
+  it('extracts both head and tail', () => {
+    const result = normalizeLineEnds({
+      head: { type: 'triangle' },
+      tail: { type: 'diamond', width: 'lg' },
+    });
+    expect(result).toEqual({
+      head: { type: 'triangle' },
+      tail: { type: 'diamond', width: 'lg' },
+    });
+  });
+
+  it('filters invalid size values', () => {
+    const result = normalizeLineEnds({
+      head: { type: 'triangle', width: 'invalid', length: 'sm' },
+    });
+    expect(result).toEqual({
+      head: { type: 'triangle', length: 'sm' },
+    });
+  });
+
+  it('allows valid size values (sm, med, lg)', () => {
+    expect(normalizeLineEnds({ head: { type: 'arrow', width: 'sm' } })).toEqual({
+      head: { type: 'arrow', width: 'sm' },
+    });
+    expect(normalizeLineEnds({ head: { type: 'arrow', width: 'med' } })).toEqual({
+      head: { type: 'arrow', width: 'med' },
+    });
+    expect(normalizeLineEnds({ head: { type: 'arrow', width: 'lg' } })).toEqual({
+      head: { type: 'arrow', width: 'lg' },
+    });
+  });
+});
+
+describe('normalizeEffectExtent', () => {
+  it('returns undefined for null/undefined', () => {
+    expect(normalizeEffectExtent(null)).toBeUndefined();
+    expect(normalizeEffectExtent(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for non-object values', () => {
+    expect(normalizeEffectExtent('string')).toBeUndefined();
+    expect(normalizeEffectExtent(42)).toBeUndefined();
+    expect(normalizeEffectExtent([])).toBeUndefined();
+  });
+
+  it('returns undefined when all values are null/undefined', () => {
+    expect(normalizeEffectExtent({})).toBeUndefined();
+    expect(normalizeEffectExtent({ other: 'property' })).toBeUndefined();
+  });
+
+  it('extracts all effect extent values', () => {
+    const result = normalizeEffectExtent({ left: 10, top: 5, right: 10, bottom: 5 });
+    expect(result).toEqual({ left: 10, top: 5, right: 10, bottom: 5 });
+  });
+
+  it('handles partial extent values', () => {
+    expect(normalizeEffectExtent({ left: 10 })).toEqual({ left: 10, top: 0, right: 0, bottom: 0 });
+    expect(normalizeEffectExtent({ left: 10, right: 20 })).toEqual({ left: 10, top: 0, right: 20, bottom: 0 });
+  });
+
+  it('clamps negative values to 0', () => {
+    const result = normalizeEffectExtent({ left: -5, top: 10, right: -10, bottom: 5 });
+    expect(result).toEqual({ left: 0, top: 10, right: 0, bottom: 5 });
+  });
+
+  it('coerces string values to numbers', () => {
+    const result = normalizeEffectExtent({ left: '10', top: '5', right: '10', bottom: '5' });
+    expect(result).toEqual({ left: 10, top: 5, right: 10, bottom: 5 });
+  });
+
+  it('treats zero as a valid value (not clamped)', () => {
+    const result = normalizeEffectExtent({ left: 0, top: 0, right: 0, bottom: 10 });
+    expect(result).toEqual({ left: 0, top: 0, right: 0, bottom: 10 });
   });
 });

@@ -229,6 +229,33 @@ describe('measureBlock', () => {
       expect(measure.lines[0].maxWidth).toBe(maxWidth - textStartX);
     });
 
+    it('expands first-line width for hanging indents on non-list paragraphs', async () => {
+      const maxWidth = 400;
+      const indentLeft = 48;
+      const hanging = 24;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'hanging-indent-non-list',
+        runs: [
+          {
+            text: 'This paragraph uses a hanging indent with enough text to wrap onto multiple lines for testing.',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ],
+        attrs: {
+          indent: { left: indentLeft, hanging },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
+      expect(measure.lines.length).toBeGreaterThan(1);
+
+      const contentWidth = maxWidth - indentLeft;
+      expect(measure.lines[0].maxWidth).toBe(contentWidth + hanging);
+      expect(measure.lines[1].maxWidth).toBe(contentWidth);
+    });
+
     it('measures empty block correctly', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

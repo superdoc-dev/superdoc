@@ -20,7 +20,6 @@ import type {
   ImageDrawing,
   ParagraphAttrs,
   ParagraphBorder,
-  ParagraphBorders,
   ListItemFragment,
   ListBlock,
   ListMeasure,
@@ -140,6 +139,29 @@ type MinimalWordLayout = {
   textStartPx?: number;
   /** Array of explicit tab stop positions in pixels. */
   tabsPx?: number[];
+};
+
+type LineEnd = {
+  type?: string;
+  width?: string;
+  length?: string;
+};
+
+type LineEnds = {
+  head?: LineEnd;
+  tail?: LineEnd;
+};
+
+type EffectExtent = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
+  lineEnds?: LineEnds;
+  effectExtent?: EffectExtent;
 };
 
 /**
@@ -1724,6 +1746,9 @@ export class DomPainter {
         }
 
         this.updateFragmentElement(current.element, fragment, contextBase.section);
+        if (sdtBoundary?.widthOverride != null) {
+          current.element.style.width = `${sdtBoundary.widthOverride}px`;
+        }
         current.fragment = fragment;
         current.key = key;
         current.context = contextBase;
@@ -1870,7 +1895,7 @@ export class DomPainter {
       return this.renderDrawingFragment(fragment, context);
     }
     if (fragment.kind === 'table') {
-      return this.renderTableFragment(fragment, context);
+      return this.renderTableFragment(fragment, context, sdtBoundary);
     }
     throw new Error(`DomPainter: unsupported fragment kind ${(fragment as Fragment).kind}`);
   }
@@ -1902,7 +1927,6 @@ export class DomPainter {
       const block = lookup.block as ParagraphBlock;
       const measure = lookup.measure as ParagraphMeasure;
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
-      const alignment = (block.attrs as ParagraphAttrs | undefined)?.alignment;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment);
@@ -2207,8 +2231,6 @@ export class DomPainter {
         // Apply first-line/hanging text-indent (skip for list first lines and lines with explicit positioning)
         // When using explicit segment positioning, segments are absolutely positioned and textIndent
         // has no effect, so we skip it to avoid confusion.
-        // Also skip when left indent is negative - fragment positioning already handles that case.
-        const hasNegativeLeftIndent = paraIndentLeft != null && paraIndentLeft < 0;
         if (!fragment.continuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
           if (!hasExplicitSegmentPositioning) {
             lineEl.style.textIndent = `${firstLineOffset}px`;
@@ -2843,7 +2865,7 @@ export class DomPainter {
   }
 
   private createVectorShapeElement(
-    block: VectorShapeDrawing,
+    block: VectorShapeDrawingWithEffects,
     geometry?: DrawingGeometry,
     applyTransforms = false,
     groupScaleX = 1,
@@ -2856,7 +2878,15 @@ export class DomPainter {
     container.style.position = 'relative';
     container.style.overflow = 'hidden';
 
-    const svgMarkup = block.shapeKind ? this.tryCreatePresetSvg(block) : null;
+    const { offsetX, offsetY, innerWidth, innerHeight } = this.getEffectExtentMetrics(block);
+    const contentContainer = this.doc!.createElement('div');
+    contentContainer.style.position = 'absolute';
+    contentContainer.style.left = `${offsetX}px`;
+    contentContainer.style.top = `${offsetY}px`;
+    contentContainer.style.width = `${innerWidth}px`;
+    contentContainer.style.height = `${innerHeight}px`;
+
+    const svgMarkup = block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
     if (svgMarkup) {
       const svgElement = this.parseSafeSvg(svgMarkup);
       if (svgElement) {
@@ -2873,10 +2903,11 @@ export class DomPainter {
           }
         }
 
+        this.applyLineEnds(svgElement, block);
         if (applyTransforms && geometry) {
           this.applyVectorShapeTransforms(svgElement, geometry);
         }
-        container.appendChild(svgElement);
+        contentContainer.appendChild(svgElement);
 
         // Apply text content as an overlay div (not inside SVG to avoid viewBox scaling)
         if (block.textContent && block.textContent.parts.length > 0) {
@@ -2888,15 +2919,16 @@ export class DomPainter {
             groupScaleX,
             groupScaleY,
           );
-          container.appendChild(textDiv);
+          contentContainer.appendChild(textDiv);
         }
 
+        container.appendChild(contentContainer);
         return container;
       }
     }
 
     // Fallback rendering when no preset shape SVG is available
-    this.applyFallbackShapeStyle(container, block);
+    this.applyFallbackShapeStyle(contentContainer, block);
 
     // Apply text content to fallback rendering
     if (block.textContent && block.textContent.parts.length > 0) {
@@ -2908,12 +2940,13 @@ export class DomPainter {
         groupScaleX,
         groupScaleY,
       );
-      container.appendChild(textDiv);
+      contentContainer.appendChild(textDiv);
     }
 
     if (applyTransforms && geometry) {
-      this.applyVectorShapeTransforms(container, geometry);
+      this.applyVectorShapeTransforms(contentContainer, geometry);
     }
+    container.appendChild(contentContainer);
     return container;
   }
 
@@ -3080,7 +3113,11 @@ export class DomPainter {
     return textDiv;
   }
 
-  private tryCreatePresetSvg(block: VectorShapeDrawing): string | null {
+  private tryCreatePresetSvg(
+    block: VectorShapeDrawing,
+    widthOverride?: number,
+    heightOverride?: number,
+  ): string | null {
     try {
       // For preset shapes, we need to pass string colors only
       // Gradients and alpha will be applied after SVG is created
@@ -3095,10 +3132,10 @@ export class DomPainter {
       const strokeColor =
         block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : undefined;
 
-      // Special case: handle line shapes directly since getPresetShapeSvg doesn't support them
-      if (block.shapeKind === 'line') {
-        const width = block.geometry.width;
-        const height = block.geometry.height;
+      // Special case: handle line-like shapes directly since getPresetShapeSvg doesn't support them well
+      if (block.shapeKind === 'line' || block.shapeKind === 'straightConnector1') {
+        const width = widthOverride ?? block.geometry.width;
+        const height = heightOverride ?? block.geometry.height;
         const stroke = strokeColor ?? '#000000';
         const strokeWidth = block.strokeWidth ?? 1;
 
@@ -3114,6 +3151,8 @@ export class DomPainter {
           stroke: strokeColor,
           strokeWidth: block.strokeWidth ?? undefined,
         }),
+        width: widthOverride ?? block.geometry.width,
+        height: heightOverride ?? block.geometry.height,
       });
     } catch (error) {
       console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
@@ -3153,6 +3192,152 @@ export class DomPainter {
       });
     };
     sanitize(element);
+  }
+
+  private getEffectExtentMetrics(block: VectorShapeDrawingWithEffects): {
+    offsetX: number;
+    offsetY: number;
+    innerWidth: number;
+    innerHeight: number;
+  } {
+    const left = block.effectExtent?.left ?? 0;
+    const top = block.effectExtent?.top ?? 0;
+    const right = block.effectExtent?.right ?? 0;
+    const bottom = block.effectExtent?.bottom ?? 0;
+    const width = block.geometry.width ?? 0;
+    const height = block.geometry.height ?? 0;
+    const innerWidth = Math.max(0, width - left - right);
+    const innerHeight = Math.max(0, height - top - bottom);
+    return { offsetX: left, offsetY: top, innerWidth, innerHeight };
+  }
+
+  private applyLineEnds(svgElement: SVGElement, block: VectorShapeDrawingWithEffects): void {
+    const lineEnds = block.lineEnds;
+    if (!lineEnds) return;
+    if (block.strokeColor === null) return;
+    const strokeColor = typeof block.strokeColor === 'string' ? block.strokeColor : '#000000';
+    const strokeWidth = block.strokeWidth ?? 1;
+    if (strokeWidth <= 0) return;
+
+    const target = this.findLineEndTarget(svgElement);
+    if (!target) return;
+
+    const defs = this.ensureSvgDefs(svgElement);
+    const baseId = this.sanitizeSvgId(`sd-line-${block.id}`);
+
+    if (lineEnds.tail) {
+      const id = `${baseId}-tail`;
+      this.appendLineEndMarker(
+        defs,
+        id,
+        lineEnds.tail,
+        strokeColor,
+        strokeWidth,
+        true,
+        block.effectExtent ?? undefined,
+      );
+      target.setAttribute('marker-start', `url(#${id})`);
+    }
+
+    if (lineEnds.head) {
+      const id = `${baseId}-head`;
+      this.appendLineEndMarker(
+        defs,
+        id,
+        lineEnds.head,
+        strokeColor,
+        strokeWidth,
+        false,
+        block.effectExtent ?? undefined,
+      );
+      target.setAttribute('marker-end', `url(#${id})`);
+    }
+  }
+
+  private findLineEndTarget(svgElement: SVGElement): SVGElement | null {
+    const line = svgElement.querySelector('line');
+    if (line) return line as SVGElement;
+    const path = svgElement.querySelector('path');
+    if (path) return path as SVGElement;
+    const polyline = svgElement.querySelector('polyline');
+    return polyline as SVGElement | null;
+  }
+
+  private ensureSvgDefs(svgElement: SVGElement): SVGDefsElement {
+    const existing = svgElement.querySelector('defs');
+    if (existing) return existing as SVGDefsElement;
+    const defs = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    svgElement.insertBefore(defs, svgElement.firstChild);
+    return defs;
+  }
+
+  private appendLineEndMarker(
+    defs: SVGDefsElement,
+    id: string,
+    lineEnd: LineEnd,
+    strokeColor: string,
+    _strokeWidth: number,
+    isStart: boolean,
+    effectExtent?: EffectExtent,
+  ): void {
+    if (defs.querySelector(`#${id}`)) return;
+
+    const marker = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', id);
+    marker.setAttribute('viewBox', '0 0 10 10');
+    marker.setAttribute('orient', 'auto');
+
+    const sizeScale = (value?: string): number => {
+      if (value === 'sm') return 0.75;
+      if (value === 'lg') return 1.25;
+      return 1;
+    };
+    const effectMax = effectExtent
+      ? Math.max(effectExtent.left ?? 0, effectExtent.right ?? 0, effectExtent.top ?? 0, effectExtent.bottom ?? 0)
+      : 0;
+    const useEffectExtent = Number.isFinite(effectMax) && effectMax > 0;
+    const markerWidth = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.length);
+    const markerHeight = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.width);
+    marker.setAttribute('markerUnits', useEffectExtent ? 'userSpaceOnUse' : 'strokeWidth');
+    marker.setAttribute('markerWidth', markerWidth.toString());
+    marker.setAttribute('markerHeight', markerHeight.toString());
+    marker.setAttribute('refX', isStart ? '0' : '10');
+    marker.setAttribute('refY', '5');
+
+    const shape = this.createLineEndShape(lineEnd.type ?? 'triangle', strokeColor, isStart);
+    marker.appendChild(shape);
+    defs.appendChild(marker);
+  }
+
+  private createLineEndShape(type: string, strokeColor: string, isStart: boolean): SVGElement {
+    const normalized = type.toLowerCase();
+    if (normalized === 'diamond') {
+      const path = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M 0 5 L 5 0 L 10 5 L 5 10 Z');
+      path.setAttribute('fill', strokeColor);
+      path.setAttribute('stroke', 'none');
+      return path;
+    }
+    if (normalized === 'oval') {
+      const circle = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', '5');
+      circle.setAttribute('cy', '5');
+      circle.setAttribute('r', '5');
+      circle.setAttribute('fill', strokeColor);
+      circle.setAttribute('stroke', 'none');
+      return circle;
+    }
+
+    const path = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const d = isStart ? 'M 10 0 L 0 5 L 10 10 Z' : 'M 0 0 L 10 5 L 0 10 Z';
+    path.setAttribute('d', d);
+    path.setAttribute('fill', strokeColor);
+    path.setAttribute('stroke', 'none');
+    return path;
+  }
+
+  private sanitizeSvgId(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, '');
   }
 
   private applyVectorShapeTransforms(target: HTMLElement | SVGElement, geometry: DrawingGeometry): void {
@@ -3270,6 +3455,7 @@ export class DomPainter {
           shapeName?: string;
           textContent?: ShapeTextContent;
           textAlign?: string;
+          lineEnds?: LineEnds;
         };
       const childGeometry = {
         width: attrs.width ?? 0,
@@ -3278,7 +3464,7 @@ export class DomPainter {
         flipH: attrs.flipH ?? false,
         flipV: attrs.flipV ?? false,
       };
-      const vectorChild: VectorShapeDrawing = {
+      const vectorChild: VectorShapeDrawingWithEffects = {
         drawingKind: 'vectorShape',
         kind: 'drawing',
         id: `${attrs.shapeId ?? child.shapeType}`,
@@ -3294,6 +3480,7 @@ export class DomPainter {
         fillColor: attrs.fillColor,
         strokeColor: attrs.strokeColor,
         strokeWidth: attrs.strokeWidth,
+        lineEnds: attrs.lineEnds,
         textContent: attrs.textContent,
         textAlign: attrs.textAlign,
       };
@@ -3327,7 +3514,11 @@ export class DomPainter {
     return placeholder;
   }
 
-  private renderTableFragment(fragment: TableFragment, context: FragmentRenderContext): HTMLElement {
+  private renderTableFragment(
+    fragment: TableFragment,
+    context: FragmentRenderContext,
+    sdtBoundary?: SdtBoundaryOptions,
+  ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
@@ -3395,6 +3586,7 @@ export class DomPainter {
       fragment,
       context,
       blockLookup: this.blockLookup,
+      sdtBoundary,
       renderLine: renderLineForTableCell,
       renderDrawingContent: renderDrawingContentForTableCell,
       applyFragmentFrame: applyFragmentFrameWithSection,
@@ -5124,6 +5316,11 @@ const getFragmentSdtContainerKey = (fragment: Fragment, blockLookup: BlockLookup
     return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
   }
 
+  if (fragment.kind === 'table' && block.kind === 'table') {
+    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
+    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
+  }
+
   return null;
 };
 
@@ -5134,14 +5331,35 @@ const computeSdtBoundaries = (
   const boundaries = new Map<number, SdtBoundaryOptions>();
   const containerKeys = fragments.map((fragment) => getFragmentSdtContainerKey(fragment, blockLookup));
 
-  for (let i = 0; i < fragments.length; i += 1) {
+  let i = 0;
+  while (i < fragments.length) {
     const currentKey = containerKeys[i];
-    if (!currentKey) continue;
-    const prev = i > 0 ? containerKeys[i - 1] : null;
-    const next = i < fragments.length - 1 ? containerKeys[i + 1] : null;
-    const isStart = currentKey !== prev;
-    const isEnd = currentKey !== next;
-    boundaries.set(i, { isStart, isEnd });
+    if (!currentKey) {
+      i += 1;
+      continue;
+    }
+
+    let groupRight = fragments[i].x + fragments[i].width;
+    let j = i;
+
+    while (j + 1 < fragments.length && containerKeys[j + 1] === currentKey) {
+      j += 1;
+      const fragmentRight = fragments[j].x + fragments[j].width;
+      if (fragmentRight > groupRight) {
+        groupRight = fragmentRight;
+      }
+    }
+
+    for (let k = i; k <= j; k += 1) {
+      const fragment = fragments[k];
+      boundaries.set(k, {
+        isStart: k === i,
+        isEnd: k === j,
+        widthOverride: groupRight - fragment.x,
+      });
+    }
+
+    i = j + 1;
   }
 
   return boundaries;

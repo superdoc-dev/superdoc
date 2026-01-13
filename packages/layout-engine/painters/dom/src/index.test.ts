@@ -9139,6 +9139,147 @@ describe('applyRunDataAttributes', () => {
         expect(updatedD.dataset.sdtContainerEnd).toBe('true');
       });
 
+      it('keeps table fragments within block SDT boundaries', () => {
+        const sdtMetadata = {
+          type: 'structuredContent' as const,
+          scope: 'block' as const,
+          id: 'scb-table-1',
+          alias: 'Table Container',
+        };
+
+        const buildParagraph = (id: string, text: string, pmStart: number) => {
+          const runLength = text.length;
+          const block: FlowBlock = {
+            kind: 'paragraph',
+            id,
+            runs: [{ text, fontFamily: 'Arial', fontSize: 16, pmStart, pmEnd: pmStart + runLength }],
+            attrs: { sdt: sdtMetadata },
+          };
+
+          const measure: Measure = {
+            kind: 'paragraph',
+            lines: [
+              {
+                fromRun: 0,
+                fromChar: 0,
+                toRun: 0,
+                toChar: runLength,
+                width: 160,
+                ascent: 12,
+                descent: 4,
+                lineHeight: 20,
+              },
+            ],
+            totalHeight: 20,
+          };
+
+          return { block, measure };
+        };
+
+        const paraA = buildParagraph('sdt-para-a', 'Alpha', 0);
+        const paraB = buildParagraph('sdt-para-b', 'Bravo', 5);
+
+        const tableBlock: TableBlock = {
+          kind: 'table',
+          id: 'sdt-table',
+          attrs: { sdt: sdtMetadata },
+          rows: [
+            {
+              id: 'sdt-table-row',
+              cells: [
+                {
+                  id: 'sdt-table-cell',
+                  blocks: [
+                    {
+                      kind: 'paragraph',
+                      id: 'sdt-table-para',
+                      runs: [{ text: 'Cell', fontFamily: 'Arial', fontSize: 16 }],
+                      attrs: { sdt: sdtMetadata },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
+
+        const tableMeasure: TableMeasure = {
+          kind: 'table',
+          rows: [
+            {
+              height: 30,
+              cells: [
+                {
+                  width: 200,
+                  height: 30,
+                  blocks: [
+                    {
+                      kind: 'paragraph',
+                      lines: [
+                        {
+                          fromRun: 0,
+                          fromChar: 0,
+                          toRun: 0,
+                          toChar: 4,
+                          width: 40,
+                          ascent: 12,
+                          descent: 4,
+                          lineHeight: 20,
+                        },
+                      ],
+                      totalHeight: 20,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          columnWidths: [200],
+          totalWidth: 200,
+          totalHeight: 30,
+        };
+
+        const layout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                { kind: 'para', blockId: paraA.block.id, fromLine: 0, toLine: 1, x: 20, y: 20, width: 320 },
+                { kind: 'table', blockId: tableBlock.id, fromRow: 0, toRow: 1, x: 20, y: 40, width: 200, height: 30 },
+                { kind: 'para', blockId: paraB.block.id, fromLine: 0, toLine: 1, x: 20, y: 80, width: 320 },
+              ],
+            },
+          ],
+        };
+
+        const painter = createDomPainter({
+          blocks: [paraA.block, tableBlock, paraB.block],
+          measures: [paraA.measure, tableMeasure, paraB.measure],
+        });
+
+        painter.paint(layout, mount);
+
+        const paraAEl = mount.querySelector('[data-block-id="sdt-para-a"]') as HTMLElement;
+        const tableEl = mount.querySelector('[data-block-id="sdt-table"]') as HTMLElement;
+        const paraBEl = mount.querySelector('[data-block-id="sdt-para-b"]') as HTMLElement;
+
+        expect(paraAEl).toBeTruthy();
+        expect(tableEl).toBeTruthy();
+        expect(paraBEl).toBeTruthy();
+
+        expect(tableEl.style.width).toBe(paraAEl.style.width);
+        expect(paraAEl.dataset.sdtContainerStart).toBe('true');
+        expect(paraAEl.dataset.sdtContainerEnd).toBe('false');
+        expect(tableEl.dataset.sdtContainerStart).toBe('false');
+        expect(tableEl.dataset.sdtContainerEnd).toBe('false');
+        expect(paraBEl.dataset.sdtContainerStart).toBe('false');
+        expect(paraBEl.dataset.sdtContainerEnd).toBe('true');
+
+        expect(tableEl.classList.contains('superdoc-structured-content-block')).toBe(true);
+        expect(tableEl.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+      });
+
       it('does not add block SDT styling for inline-scoped structuredContent', () => {
         const inlineSdtBlock: FlowBlock = {
           kind: 'paragraph',

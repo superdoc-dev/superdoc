@@ -747,6 +747,27 @@ export interface VectorShapeTextInsets {
   left?: number;
 }
 
+/** Vector shape line end (arrowhead) configuration */
+export interface VectorShapeLineEnd {
+  type?: string;
+  width?: string;
+  length?: string;
+}
+
+/** Vector shape line ends */
+export interface VectorShapeLineEnds {
+  head?: VectorShapeLineEnd | null;
+  tail?: VectorShapeLineEnd | null;
+}
+
+/** Vector shape effect extent */
+export interface VectorShapeEffectExtent {
+  left?: number;
+  top?: number;
+  right?: number;
+  bottom?: number;
+}
+
 /** Vector shape node attributes */
 export interface VectorShapeAttrs extends ShapeNodeAttributes {
   /** Shape kind (rect, ellipse, etc.) */
@@ -761,6 +782,10 @@ export interface VectorShapeAttrs extends ShapeNodeAttributes {
   strokeColor?: string;
   /** Stroke width in pixels */
   strokeWidth?: number;
+  /** Line end marker configuration */
+  lineEnds?: VectorShapeLineEnds | null;
+  /** Extra bounds around the shape */
+  effectExtent?: VectorShapeEffectExtent | null;
   /** Rotation in degrees */
   rotation?: number;
   /** Horizontal flip */

@@ -12,6 +12,7 @@
     "test:superdoc": "vitest run --root ./packages/superdoc",
     "test:cov": "node scripts/test-cov.mjs",
     "type-check": "tsc -b --force tsconfig.references.json",
+    "rebuild:types": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom --filter=@superdoc/painter-pdf --filter=@superdoc/layout-bridge build",
     "validate:commands": "node scripts/validate-command-types.mjs",
     "unzip": "bash packages/super-editor/src/tests/helpers/unzip.sh",
     "dev": "pnpm --prefix packages/superdoc run dev",
@@ -41,7 +42,7 @@
     "watch": "pnpm --prefix packages/superdoc run watch:es",
     "check:all": "pnpm run format && pnpm run lint:fix && pnpm --prefix packages/super-editor run types:build && pnpm run test",
     "local:publish": "pnpm --prefix packages/superdoc version prerelease --preid=local && pnpm --prefix packages/superdoc publish --registry http://localhost:4873",
-    "update-preset-geometry": "ROOT=$(pwd) && cd ../superdoc-devtools/preset-geometry && pnpm run build && cp ./dist/index.js ./dist/index.d.ts \"$ROOT/packages/preset-geometry/\"",
+    "update-preset-geometry": "ROOT=$(pwd) && cd ../superdoc-devtools/preset-geometry && pnpm run build && cp ./dist/index.js ./dist/index.js.map ./dist/index.d.ts \"$ROOT/packages/preset-geometry/\"",
     "manual-tag": "bash scripts/manual-tag.sh",
     "manual-clean-tag": "bash scripts/manual-clean-tag.sh"
   },

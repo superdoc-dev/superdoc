@@ -268,6 +268,11 @@ export const StructuredContentCommands = Extension.create({
       updateStructuredContentById:
         (id, options = {}) =>
         ({ editor, dispatch, state, tr }) => {
+          // Validate ID is an integer (required for MS Word compatibility)
+          if (options.attrs?.id !== undefined && !isValidIntegerId(options.attrs.id)) {
+            throw new Error('Invalid structured content id - must be an integer, got: ' + options.attrs.id);
+          }
+
           const structuredContentTags = getStructuredContentTagsById(id, state);
 
           if (!structuredContentTags.length) {
@@ -429,6 +434,11 @@ export const StructuredContentCommands = Extension.create({
       updateStructuredContentByGroup:
         (group, options = {}) =>
         ({ editor, dispatch, state, tr }) => {
+          // Validate ID is an integer (required for MS Word compatibility)
+          if (options.attrs?.id !== undefined && !isValidIntegerId(options.attrs.id)) {
+            throw new Error('Invalid structured content id - must be an integer, got: ' + options.attrs.id);
+          }
+
           const structuredContentTags = getStructuredContentByGroup(group, state);
 
           if (!structuredContentTags.length) {

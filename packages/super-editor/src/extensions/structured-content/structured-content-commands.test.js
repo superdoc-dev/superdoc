@@ -165,6 +165,14 @@ describe('updateStructuredContentById', () => {
     schema = null;
   });
 
+  it('throws error when updating ID with a non-integer value', () => {
+    expect(() => {
+      editor.commands.updateStructuredContentById(INLINE_ID, {
+        attrs: { id: 'abc-123' },
+      });
+    }).toThrow('Invalid structured content id - must be an integer, got: abc-123');
+  });
+
   describe('keepTextNodeStyles option', () => {
     it('preserves marks from the first text node when keepTextNodeStyles is true', () => {
       const didUpdate = editor.commands.updateStructuredContentById(INLINE_ID, {
@@ -405,6 +413,14 @@ describe('updateStructuredContentByGroup', () => {
     editor?.destroy();
     editor = null;
     schema = null;
+  });
+
+  it('throws error when updating ID with a non-integer value', () => {
+    expect(() => {
+      editor.commands.updateStructuredContentByGroup(GROUP_NAME, {
+        attrs: { id: 'abc-123' },
+      });
+    }).toThrow('Invalid structured content id - must be an integer, got: abc-123');
   });
 
   describe('keepTextNodeStyles option', () => {

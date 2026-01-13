@@ -32,6 +32,11 @@ export default function useComment(params) {
   const createdTime = params.createdTime || Date.now();
   const importedAuthor = ref(params.importedAuthor || null);
   const docxCommentJSON = params.docxCommentJSON || null;
+  const origin = params.origin;
+  const threadingMethod = params.threadingMethod;
+  const threadingStyleOverride = params.threadingStyleOverride;
+  const threadingParentCommentId = params.threadingParentCommentId;
+  const originalXmlStructure = params.originalXmlStructure;
 
   const commentText = ref(params.commentText || '');
 
@@ -248,6 +253,11 @@ export default function useComment(params) {
       resolvedTime: resolvedTime.value,
       resolvedByEmail: resolvedByEmail.value,
       resolvedByName: resolvedByName.value,
+      origin,
+      threadingMethod,
+      threadingStyleOverride,
+      threadingParentCommentId,
+      originalXmlStructure,
     };
   };
 
@@ -278,6 +288,11 @@ export default function useComment(params) {
     resolvedByName,
     importedAuthor,
     docxCommentJSON,
+    origin,
+    threadingMethod,
+    threadingStyleOverride,
+    threadingParentCommentId,
+    originalXmlStructure,
 
     // Actions
     setText,

@@ -8,7 +8,13 @@ export * from './key-transform';
 export * from './event-types';
 
 // Comment types
-export type { Comment, CommentContent, CommentJSON } from './comments-types';
+export type {
+  Comment,
+  CommentContent,
+  CommentJSON,
+  CommentThreadingProfile,
+  CommentThreadingStyle,
+} from './comments-types';
 
 // List numbering helpers
 export * from './list-numbering';

@@ -1,4 +1,4 @@
-import { updateCommentsIdsAndExtensible, toIsoNoFractional } from './commentsExporter.js';
+import { updateCommentsExtendedXml, updateCommentsIdsAndExtensible, toIsoNoFractional } from './commentsExporter.js';
 
 describe('updateCommentsIdsAndExtensible', () => {
   const comments = [
@@ -63,5 +63,44 @@ describe('updateCommentsIdsAndExtensible', () => {
     expect(elements[0].name).toEqual('w16cex:commentExtensible');
     expect(elements[0].attributes['w16cex:durableId']).toEqual(expect.any(String));
     expect(elements[0].attributes['w16cex:dateUtc']).toEqual(toIsoNoFractional(Date.now()));
+  });
+});
+
+describe('updateCommentsExtendedXml', () => {
+  it('uses threadingParentCommentId for threaded replies when parent is tracked', () => {
+    const comments = [
+      {
+        commentId: 'parent-comment',
+        commentParaId: 'PARENT-PARA',
+        trackedChange: true,
+        resolvedTime: null,
+      },
+      {
+        commentId: 'child-comment',
+        commentParaId: 'CHILD-PARA',
+        parentCommentId: 'tracked-change-id',
+        threadingParentCommentId: 'parent-comment',
+        resolvedTime: null,
+      },
+    ];
+
+    const commentsExtendedXml = {
+      elements: [{ elements: [] }],
+    };
+
+    const profile = {
+      defaultStyle: 'commentsExtended',
+      fileSet: {
+        hasCommentsExtended: true,
+        hasCommentsExtensible: true,
+        hasCommentsIds: true,
+      },
+    };
+
+    const result = updateCommentsExtendedXml(comments, commentsExtendedXml, profile);
+    const entries = result.elements[0].elements;
+    const childEntry = entries.find((entry) => entry.attributes['w15:paraId'] === 'CHILD-PARA');
+
+    expect(childEntry.attributes['w15:paraIdParent']).toBe('PARENT-PARA');
   });
 });

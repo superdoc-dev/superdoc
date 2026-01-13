@@ -2475,20 +2475,25 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       if (comments.length) {
         const commentsXml = this.converter.schemaToXml(this.converter.convertedXml['word/comments.xml'].elements[0]);
-        const commentsExtendedXml = this.converter.schemaToXml(
-          this.converter.convertedXml['word/commentsExtended.xml'].elements[0],
-        );
-        const commentsExtensibleXml = this.converter.schemaToXml(
-          this.converter.convertedXml['word/commentsExtensible.xml'].elements[0],
-        );
-        const commentsIdsXml = this.converter.schemaToXml(
-          this.converter.convertedXml['word/commentsIds.xml'].elements[0],
-        );
-
         updatedDocs['word/comments.xml'] = String(commentsXml);
-        updatedDocs['word/commentsExtended.xml'] = String(commentsExtendedXml);
-        updatedDocs['word/commentsExtensible.xml'] = String(commentsExtensibleXml);
-        updatedDocs['word/commentsIds.xml'] = String(commentsIdsXml);
+
+        const commentsExtended = this.converter.convertedXml['word/commentsExtended.xml'];
+        if (commentsExtended?.elements?.[0]) {
+          const commentsExtendedXml = this.converter.schemaToXml(commentsExtended.elements[0]);
+          updatedDocs['word/commentsExtended.xml'] = String(commentsExtendedXml);
+        }
+
+        const commentsExtensible = this.converter.convertedXml['word/commentsExtensible.xml'];
+        if (commentsExtensible?.elements?.[0]) {
+          const commentsExtensibleXml = this.converter.schemaToXml(commentsExtensible.elements[0]);
+          updatedDocs['word/commentsExtensible.xml'] = String(commentsExtensibleXml);
+        }
+
+        const commentsIds = this.converter.convertedXml['word/commentsIds.xml'];
+        if (commentsIds?.elements?.[0]) {
+          const commentsIdsXml = this.converter.schemaToXml(commentsIds.elements[0]);
+          updatedDocs['word/commentsIds.xml'] = String(commentsIdsXml);
+        }
       }
 
       const zipper = new DocxZipper();

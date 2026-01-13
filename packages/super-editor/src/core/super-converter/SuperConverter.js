@@ -185,6 +185,7 @@ class SuperConverter {
     this.addedMedia = {};
     this.comments = [];
     this.inlineDocumentFonts = [];
+    this.commentThreadingProfile = null;
 
     // Store custom highlight colors
     this.docHiglightColors = new Set([]);
@@ -1080,7 +1081,7 @@ class SuperConverter {
       convertedXml: this.convertedXml,
       defs,
       commentsWithParaIds,
-      converter: this,
+      threadingProfile: this.commentThreadingProfile,
     });
 
     return { documentXml, relationships };

@@ -49,7 +49,7 @@ export const hydrateTableStyleAttrs = (tableNode: PMNode, context?: ConverterCon
   const styleId = typeof tableNode.attrs?.tableStyleId === 'string' ? tableNode.attrs.tableStyleId : undefined;
   if (styleId && hasTableStyleContext(context)) {
     // Cast to bypass JSDoc type mismatch - the JS function actually accepts { docx }
-    const referenced = _getReferencedTableStyles(styleId, { docx: context!.docx } as never);
+    const referenced = _getReferencedTableStyles(styleId, { docx: context!.docx } as never, tableProps?.tblLook);
     if (referenced) {
       if (!hydration.borders && referenced.borders) {
         hydration.borders = clonePlainObject(referenced.borders);

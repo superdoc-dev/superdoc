@@ -16,4 +16,8 @@ export function translator(node: unknown, params: unknown): unknown;
 /**
  * Gets referenced table styles from a style reference
  */
-export function _getReferencedTableStyles(tableStyleReference: string | null, params: unknown): TableStyles | null;
+export function _getReferencedTableStyles(
+  tableStyleReference: string | null,
+  params: unknown,
+  tblLook: unknown,
+): TableStyles | null;

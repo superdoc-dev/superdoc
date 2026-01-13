@@ -88,7 +88,8 @@ const encode = (params, encodedAttrs) => {
   const tableLook = encodedAttrs.tableProperties.tblLook;
   // Table borders can be specified in tblPr or inside a referenced style tag
   const borderProps = _processTableBorders(encodedAttrs.tableProperties.borders || {});
-  const referencedStyles = _getReferencedTableStyles(encodedAttrs.tableStyleId, params) || {};
+  const referencedStyles =
+    _getReferencedTableStyles(encodedAttrs.tableStyleId, params, encodedAttrs.tableProperties?.tblLook) || {};
 
   encodedAttrs.borders = { ...referencedStyles.borders, ...borderProps };
   encodedAttrs.tableProperties.cellMargins = referencedStyles.cellMargins = {
@@ -101,7 +102,6 @@ const encode = (params, encodedAttrs) => {
   let columnWidths = Array.isArray(encodedAttrs['grid'])
     ? encodedAttrs['grid'].map((item) => twipsToPixels(item.col))
     : [];
-
   if (!columnWidths.length) {
     const fallback = buildFallbackGridForTable({
       params,
@@ -271,14 +271,27 @@ export function _processTableBorders(rawBorders) {
  */
 
 /**
+ * Mirrors relevant attributes of `w:tblLook` as emitted by `tblLookTranslator`.
+ * @typedef {{
+ *  firstColumn?: boolean,
+ *  firstRow?: boolean,
+ *  lastColumn?: boolean,
+ *  lastRow?: boolean,
+ *  noHBand?: boolean,
+ *  noVBand?: boolean,
+ *  val?: string,
+ * }} TblLook
+ */
+
+/**
  *
  * @param {string|null} tableStyleReference
  * @param {import('@translator').SCEncoderConfig} [params]
+ * @param {TblLook} [tblLook]
  * @returns {TableStyles|null}
  */
-export function _getReferencedTableStyles(tableStyleReference, params) {
+export function _getReferencedTableStyles(tableStyleReference, params, tblLook) {
   if (!tableStyleReference) return null;
-
   const stylesToReturn = {};
 
   // Find the style tag in styles.xml
@@ -344,13 +357,25 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
     }
   }
 
+  /** @type {Map<string, keyof TblLook>} */
+  const styleTypes = new Map([
+    ['firstRow', 'firstRow'],
+    ['lastRow', 'lastRow'],
+    ['firstCol', 'firstColumn'],
+    ['lastCol', 'lastColumn'],
+  ]);
+
   const tblStylePr = styleTag.elements.filter((el) => el.name === 'w:tblStylePr');
+  /** @type {Record<string, any>} */
   let styleProps = {};
-  if (tblStylePr) {
+  if (tblStylePr.length) {
     styleProps = tblStylePr.reduce((acc, el) => {
-      acc[el.attributes['w:type']] = tblStylePrTranslator.encode({ ...params, nodes: [el] });
+      const attrKey = styleTypes.get(el.attributes['w:type']);
+      if (attrKey && tblLook?.[attrKey]) {
+        acc[el.attributes['w:type']] = tblStylePrTranslator.encode({ ...params, nodes: [el] });
+      }
       return acc;
-    }, {});
+    }, /** @type {Record<string, any>} */ ({}));
   }
 
   return {

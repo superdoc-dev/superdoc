@@ -1,3 +1,15 @@
+# [1.5.0-next.8](https://github.com/superdoc-dev/superdoc/compare/v1.5.0-next.7...v1.5.0-next.8) (2026-01-13)
+
+
+### Bug Fixes
+
+* handle table cell borders from styles ([#1722](https://github.com/superdoc-dev/superdoc/issues/1722)) ([6ef1a11](https://github.com/superdoc-dev/superdoc/commit/6ef1a1138adf23e9873a642aa63327f20724396b))
+
+
+### Features
+
+* editable ranges part 2 ([#1618](https://github.com/superdoc-dev/superdoc/issues/1618)) ([e9a5396](https://github.com/superdoc-dev/superdoc/commit/e9a539695ff12c2cb3d7cd4c972a9414b764bad1))
+
 # [1.5.0-next.7](https://github.com/superdoc-dev/superdoc/compare/v1.5.0-next.6...v1.5.0-next.7) (2026-01-12)
 
 

@@ -126,6 +126,77 @@ describe('Table commands', async () => {
     });
   });
 
+  describe('addRowAfter', async () => {
+    beforeEach(async () => {
+      await setupTestTable();
+    });
+
+    it('preserves paragraph formatting from source row', async () => {
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      // Position cursor in the last row (which has styled content)
+      const lastRowPos = tablePos + 1 + table.child(0).nodeSize;
+      const cellPos = lastRowPos + 1;
+      const textPos = cellPos + 2;
+      editor.commands.setTextSelection(textPos);
+
+      // Add row after
+      const didAdd = editor.commands.addRowAfter();
+      expect(didAdd).toBe(true);
+
+      // Check the new row
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      expect(updatedTable.childCount).toBe(3);
+
+      const newRow = updatedTable.child(2);
+
+      // Check ALL cells preserve formatting, not just the first
+      newRow.forEach((cell, _, cellIndex) => {
+        const blockNode = cell.firstChild;
+        expect(blockNode.type).toBe(templateBlockType);
+        if (templateBlockAttrs) {
+          expect(blockNode.attrs).toMatchObject(templateBlockAttrs);
+        }
+      });
+    });
+  });
+
+  describe('addRowBefore', async () => {
+    beforeEach(async () => {
+      await setupTestTable();
+    });
+
+    it('preserves paragraph formatting from source row', async () => {
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      // Position cursor in the last row (which has styled content)
+      const lastRowPos = tablePos + 1 + table.child(0).nodeSize;
+      const cellPos = lastRowPos + 1;
+      const textPos = cellPos + 2;
+      editor.commands.setTextSelection(textPos);
+
+      // Add row before
+      const didAdd = editor.commands.addRowBefore();
+      expect(didAdd).toBe(true);
+
+      // Check the new row (inserted at index 1, pushing styled row to index 2)
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      expect(updatedTable.childCount).toBe(3);
+
+      const newRow = updatedTable.child(1);
+      const firstCell = newRow.firstChild;
+      const blockNode = firstCell.firstChild;
+
+      // Should preserve block type and attrs
+      expect(blockNode.type).toBe(templateBlockType);
+      if (templateBlockAttrs) {
+        expect(blockNode.attrs).toMatchObject(templateBlockAttrs);
+      }
+    });
+  });
+
   describe('deleteCellAndTableBorders', async () => {
     let table, tablePos;
 

@@ -1,6 +1,14 @@
 // @ts-check
 import { Fragment } from 'prosemirror-model';
 import { TableMap } from 'prosemirror-tables';
+import { TextSelection } from 'prosemirror-state';
+
+/**
+ * Zero-width space used as a placeholder to carry marks in empty cells.
+ * ProseMirror marks can only attach to text nodes, so we use this invisible
+ * character to preserve formatting (bold, underline, etc.) in empty cells.
+ */
+const ZERO_WIDTH_SPACE = '\u200B';
 
 /**
  * Row template formatting
@@ -121,9 +129,16 @@ export function extractRowTemplateFormatting(cellNode, schema) {
  */
 export function buildFormattedCellBlock(schema, value, { blockType, blockAttrs, textMarks }, copyRowStyle = false) {
   const text = typeof value === 'string' ? value : value == null ? '' : String(value);
-  const marks = copyRowStyle ? textMarks || [] : [];
-  const textNode = schema.text(text, marks);
   const type = blockType || schema.nodes.paragraph;
+  const marks = copyRowStyle ? textMarks || [] : [];
+
+  if (!text) {
+    // Use zero-width space to preserve marks in empty cells when copying style
+    const content = marks.length > 0 ? schema.text(ZERO_WIDTH_SPACE, marks) : null;
+    return type.createAndFill(blockAttrs || null, content);
+  }
+
+  const textNode = schema.text(text, marks);
   return type.createAndFill(blockAttrs || null, textNode);
 }
 
@@ -188,4 +203,48 @@ export function insertRowsAtTableEnd({ tr, tablePos, tableNode, rows }) {
   const lastRowAbsEnd = tablePos + 1 + lastRowRelPos + lastRowNode.nodeSize;
   const frag = Fragment.fromArray(rows);
   tr.insert(lastRowAbsEnd, frag);
+}
+
+/**
+ * Insert a new row at a specific index, copying formatting from a source row.
+ * @param {Object} params - Insert parameters
+ * @param {import('prosemirror-state').Transaction} params.tr - Transaction to mutate
+ * @param {number} params.tablePos - Absolute position of the table
+ * @param {import('prosemirror-model').Node} params.tableNode - Table node
+ * @param {number} params.sourceRowIndex - Index of the row to copy formatting from
+ * @param {number} params.insertIndex - Index where the new row should be inserted
+ * @param {import('prosemirror-model').Schema} params.schema - Editor schema
+ * @returns {boolean} True if successful
+ */
+export function insertRowAtIndex({ tr, tablePos, tableNode, sourceRowIndex, insertIndex, schema }) {
+  const sourceRow = tableNode.child(sourceRowIndex);
+  if (!sourceRow) return false;
+
+  // Build row with formatting using existing helper
+  const newRow = buildRowFromTemplateRow({
+    schema,
+    tableNode,
+    templateRow: sourceRow,
+    values: [],
+    copyRowStyle: true,
+  });
+  if (!newRow) return false;
+
+  // Calculate insert position
+  let insertPos = tablePos + 1;
+  for (let i = 0; i < insertIndex; i++) {
+    insertPos += tableNode.child(i).nodeSize;
+  }
+
+  tr.insert(insertPos, newRow);
+
+  // Set cursor in first cell's paragraph and apply stored marks
+  const formatting = extractRowTemplateFormatting(sourceRow.firstChild, schema);
+  const cursorPos = insertPos + 3; // row start + cell start + paragraph start
+  tr.setSelection(TextSelection.create(tr.doc, cursorPos));
+  if (formatting.textMarks?.length) {
+    tr.setStoredMarks(formatting.textMarks);
+  }
+
+  return true;
 }

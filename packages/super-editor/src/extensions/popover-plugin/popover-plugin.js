@@ -127,11 +127,13 @@ class Popover {
           users: this.editor.users,
           mention: atMention,
           inserMention: (user) => {
-            const { $from } = this.state.selection;
+            // Use fresh state from the view, not the stale captured state
+            const currentState = this.editor.view.state;
+            const { $from } = currentState.selection;
             const length = atMention.length;
             const attributes = { ...user };
             const mentionNode = this.editor.schema.nodes.mention.create(attributes);
-            const tr = this.state.tr.replaceWith($from.pos - length, $from.pos, mentionNode);
+            const tr = currentState.tr.replaceWith($from.pos - length, $from.pos, mentionNode);
             this.editor.view.dispatch(tr);
             this.editor.view.focus();
           },
@@ -148,17 +150,85 @@ class Popover {
   }
 
   showPopoverAtPosition(pos) {
-    const end = this.view.coordsAtPos(pos);
+    let left = 0;
+    let top = 0;
+    let source = 'fallback';
+
+    // In presentation mode, find position using DOM elements in painterHost
+    const presentationEditor = this.editor.presentationEditor;
+    if (presentationEditor) {
+      const result = this.getViewportCoordsFromPainterHost(presentationEditor, pos);
+      if (result) {
+        left = result.left;
+        top = result.bottom;
+        source = 'painterHost DOM';
+      }
+    }
+
+    // Fallback to view.coordsAtPos for non-presentation mode
+    if (source === 'fallback') {
+      const coords = this.view.coordsAtPos(pos);
+      left = coords.left;
+      top = coords.bottom;
+    }
+
     this.popoverRect = {
       width: 0,
       height: 0,
-      top: end.bottom,
-      left: end.left,
-      bottom: end.bottom,
-      right: end.left,
+      top: top,
+      left: left,
+      bottom: top,
+      right: left,
     };
 
     this.tippyInstance.show();
+  }
+
+  /**
+   * Get viewport coordinates by finding the DOM element in the painted content.
+   * This works in presentation mode where the actual DOM is off-screen but
+   * painted elements exist in the painterHost.
+   */
+  getViewportCoordsFromPainterHost(presentationEditor, pos) {
+    // Access painterHost through the DOM - it's a private field but we can find it by class
+    const visibleHost = presentationEditor.element;
+    if (!visibleHost) return null;
+
+    // painterHost has class 'presentation-editor__pages'
+    const painterHost = visibleHost.querySelector('.presentation-editor__pages');
+    if (!painterHost) return null;
+
+    // Find all page elements
+    const pageEls = painterHost.querySelectorAll('.superdoc-page[data-page-index]');
+    if (!pageEls.length) return null;
+
+    // Search through pages for a span containing this position
+    for (const pageEl of pageEls) {
+      const spanEls = pageEl.querySelectorAll('span[data-pm-start][data-pm-end]');
+      for (const spanEl of spanEls) {
+        const pmStart = Number(spanEl.dataset.pmStart);
+        const pmEnd = Number(spanEl.dataset.pmEnd);
+
+        if (pos >= pmStart && pos <= pmEnd && spanEl.firstChild?.nodeType === Node.TEXT_NODE) {
+          const textNode = spanEl.firstChild;
+          const charIndex = Math.min(pos - pmStart, textNode.length);
+
+          const range = document.createRange();
+          range.setStart(textNode, charIndex);
+          range.setEnd(textNode, charIndex);
+
+          const rect = range.getBoundingClientRect();
+
+          return {
+            left: rect.left,
+            top: rect.top,
+            bottom: rect.bottom,
+          };
+        }
+      }
+    }
+
+    return null;
   }
 
   getMentionText(from) {

@@ -104,6 +104,7 @@ export const updateCommentsXml = (commentDefs = [], commentsXml) => {
     const paraNode = commentDef.elements[0];
     if (!paraNode.attributes) paraNode.attributes = {};
 
+    // NOTE: Per ECMA-376, w:pPr should be first child of w:p
     const elements = paraNode.elements;
     elements.unshift(COMMENT_REF);
 

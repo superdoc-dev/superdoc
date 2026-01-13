@@ -12,6 +12,8 @@ export function handleTableCellNode({
   row,
   rowBorders,
   baseTableBorders,
+  tableLook,
+  rowCnfStyle,
   columnIndex,
   columnWidth = null,
   allColumnWidths = [],
@@ -43,6 +45,8 @@ export function handleTableCellNode({
   attributes['borders'] = processCellBorders({
     baseTableBorders,
     rowBorders,
+    tableLook,
+    rowCnfStyle,
     isFirstRow,
     isLastRow,
     isFirstColumn,
@@ -50,6 +54,22 @@ export function handleTableCellNode({
     tableCellProperties,
     referencedStyles,
   });
+  const hasRowOverrideNone =
+    rowBorders &&
+    ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].some((side) => rowBorders?.[side]?.val === 'none');
+  if (hasRowOverrideNone && isFirstColumn) {
+    console.info(
+      '[sd-table-borders] cell borders',
+      JSON.stringify({
+        rowIndex,
+        columnIndex,
+        totalColumns: effectiveTotalColumns,
+        baseTableBorders,
+        rowBorders,
+        cellBorders: attributes['borders'],
+      }),
+    );
+  }
 
   // Colspan
   if (colspan > 1) attributes['colspan'] = colspan;
@@ -284,6 +304,8 @@ const processInlineCellBorders = (borders, rowBorders) => {
 const processCellBorders = ({
   baseTableBorders,
   rowBorders,
+  tableLook,
+  rowCnfStyle,
   isFirstRow,
   isLastRow,
   isFirstColumn,
@@ -317,11 +339,17 @@ const processCellBorders = ({
     }
 
     if (rowBorders.left?.val) {
-      cellBorders.left = rowBorders.left;
+      const applyLeftToAll = rowBorders.left.val === 'none';
+      if (applyLeftToAll || isFirstColumn) {
+        cellBorders.left = rowBorders.left;
+      }
     }
 
     if (rowBorders.right?.val) {
-      cellBorders.right = rowBorders.right;
+      const applyRightToAll = rowBorders.right.val === 'none';
+      if (applyRightToAll || isLastColumn) {
+        cellBorders.right = rowBorders.right;
+      }
     }
 
     // INNER BORDERS: Position-based (including for 'none' values)
@@ -336,6 +364,13 @@ const processCellBorders = ({
   }
 
   const getStyleTableCellBorders = (styleVariant) => styleVariant?.tableCellProperties?.borders ?? null;
+
+  // Check if a conditional style flag is enabled using cascading priority: cell > row > tableLook
+  const cellCnfStyle = tableCellProperties?.cnfStyle;
+  const getFlag = (source, flag) =>
+    source && Object.prototype.hasOwnProperty.call(source, flag) ? source[flag] : undefined;
+  const isStyleEnabled = (flag) =>
+    getFlag(cellCnfStyle, flag) ?? getFlag(rowCnfStyle, flag) ?? getFlag(tableLook, flag) ?? true;
 
   // Apply table style conditional formatting borders.
   // Only apply the relevant edge per conditional style:
@@ -352,10 +387,10 @@ const processCellBorders = ({
     if (styleOverrides) cellBorders = Object.assign(cellBorders, styleOverrides);
   };
 
-  if (isFirstRow) applyStyleBorders(referencedStyles?.firstRow, ['top', 'bottom']);
-  if (isLastRow) applyStyleBorders(referencedStyles?.lastRow, ['top', 'bottom']);
-  if (isFirstColumn) applyStyleBorders(referencedStyles?.firstCol, ['left', 'right']);
-  if (isLastColumn) applyStyleBorders(referencedStyles?.lastCol, ['left', 'right']);
+  if (isFirstRow && isStyleEnabled('firstRow')) applyStyleBorders(referencedStyles?.firstRow, ['top', 'bottom']);
+  if (isLastRow && isStyleEnabled('lastRow')) applyStyleBorders(referencedStyles?.lastRow, ['top', 'bottom']);
+  if (isFirstColumn && isStyleEnabled('firstColumn')) applyStyleBorders(referencedStyles?.firstCol, ['left', 'right']);
+  if (isLastColumn && isStyleEnabled('lastColumn')) applyStyleBorders(referencedStyles?.lastCol, ['left', 'right']);
 
   // Process inline cell borders (cell-level overrides)
   const inlineBorders = processInlineCellBorders(tableCellProperties.borders, cellBorders);

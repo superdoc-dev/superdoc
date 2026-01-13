@@ -57,6 +57,10 @@ export const createDocumentJson = (docx, converter, editor) => {
   const json = carbonCopy(getInitialJSON(docx));
   if (!json) return null;
 
+  if (converter) {
+    importFootnotePropertiesFromSettings(docx, converter);
+  }
+
   // Track initial document structure
   if (converter?.telemetry) {
     const files = Object.keys(docx).map((filePath) => {
@@ -370,6 +374,57 @@ const createNodeListHandler = (nodeHandlers) => {
 };
 
 /**
+ * Parse w:footnotePr element to extract footnote properties.
+ * These properties control footnote numbering format, starting number, restart behavior, and position.
+ *
+ * @param {Object} footnotePrElement The w:footnotePr XML element
+ * @returns {Object|null} Parsed footnote properties or null if none found
+ */
+function parseFootnoteProperties(footnotePrElement, source) {
+  if (!footnotePrElement) return null;
+
+  const props = { source };
+  const elements = Array.isArray(footnotePrElement.elements) ? footnotePrElement.elements : [];
+
+  elements.forEach((el) => {
+    const val = el?.attributes?.['w:val'];
+    switch (el.name) {
+      case 'w:numFmt':
+        // Numbering format: decimal, lowerRoman, upperRoman, lowerLetter, upperLetter, etc.
+        if (val) props.numFmt = val;
+        break;
+      case 'w:numStart':
+        // Starting number for footnotes
+        if (val) props.numStart = val;
+        break;
+      case 'w:numRestart':
+        // Restart behavior: continuous, eachSect, eachPage
+        if (val) props.numRestart = val;
+        break;
+      case 'w:pos':
+        // Position: pageBottom, beneathText, sectEnd, docEnd
+        if (val) props.pos = val;
+        break;
+    }
+  });
+
+  // Also preserve the original XML for complete roundtrip fidelity
+  props.originalXml = carbonCopy(footnotePrElement);
+
+  return props;
+}
+
+function importFootnotePropertiesFromSettings(docx, converter) {
+  if (!docx || !converter || converter.footnoteProperties) return;
+  const settings = docx['word/settings.xml'];
+  const settingsRoot = settings?.elements?.[0];
+  const elements = Array.isArray(settingsRoot?.elements) ? settingsRoot.elements : [];
+  const footnotePr = elements.find((el) => el?.name === 'w:footnotePr');
+  if (!footnotePr) return;
+  converter.footnoteProperties = parseFootnoteProperties(footnotePr, 'settings');
+}
+
+/**
  *
  * @param {XmlNode} node
  * @param {ParsedDocx} docx
@@ -416,6 +471,12 @@ function getDocumentStyles(node, docx, converter, editor, numbering) {
         break;
       case 'w:titlePg':
         converter.headerIds.titlePg = true;
+        break;
+      case 'w:footnotePr':
+        if (!converter.footnoteProperties) {
+          converter.footnoteProperties = parseFootnoteProperties(el, 'sectPr');
+        }
+        break;
     }
   });
 

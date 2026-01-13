@@ -1,6 +1,6 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
-import { idAttrConfig } from './attributes/index.js';
+import { idAttrConfig, customMarkFollowsAttrConfig } from './attributes/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:footnoteReference';
@@ -45,9 +45,8 @@ export const config = {
   type: NodeTranslator.translatorTypes.NODE,
   encode,
   decode,
-  attributes: [idAttrConfig],
+  attributes: [idAttrConfig, customMarkFollowsAttrConfig],
 };
 
 /** @type {import('@translator').NodeTranslator} */
 export const translator = NodeTranslator.from(config);
-

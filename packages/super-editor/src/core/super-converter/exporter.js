@@ -28,6 +28,7 @@ import { translator as sdTotalPageNumberTranslator } from '@converter/v3/handler
 import { translator as pictTranslator } from './v3/handlers/w/pict/pict-translator';
 import { translateVectorShape, translateShapeGroup } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers';
 import { translator as wTextTranslator } from '@converter/v3/handlers/w/t';
+import { translator as wFootnoteReferenceTranslator } from './v3/handlers/w/footnoteReference/footnoteReference-translator.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 
 const DEFAULT_SECTION_PROPS_TWIPS = Object.freeze({
@@ -173,6 +174,7 @@ export function exportSchemaToJson(params) {
     permStart: wPermStartTranslator,
     permEnd: wPermEndTranslator,
     commentReference: () => null,
+    footnoteReference: wFootnoteReferenceTranslator,
     shapeContainer: pictTranslator,
     shapeTextbox: pictTranslator,
     contentBlock: pictTranslator,
@@ -247,6 +249,13 @@ function translateBodyNode(params) {
     if (!hasFooter && hasDefaultFooter && !params.editor.options.isHeaderOrFooter && canExportFooterRef) {
       const defaultFooter = generateDefaultHeaderFooter('footer', params.converter.footerIds?.default);
       sectPr.elements.push(defaultFooter);
+    }
+
+    // Re-emit footnote properties if they were parsed during import
+    const hasFootnotePr = sectPr.elements?.some((n) => n.name === 'w:footnotePr');
+    const footnoteProperties = params.converter.footnoteProperties;
+    if (!hasFootnotePr && footnoteProperties?.source === 'sectPr' && footnoteProperties.originalXml) {
+      sectPr.elements.push(carbonCopy(footnoteProperties.originalXml));
     }
   }
 

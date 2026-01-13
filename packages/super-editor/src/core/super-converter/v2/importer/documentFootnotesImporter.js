@@ -1,4 +1,5 @@
 import { defaultNodeListHandler } from './docxImporter';
+import { carbonCopy } from '../../../utilities/carbonCopy.js';
 
 /**
  * Remove w:footnoteRef placeholders from converted footnote content.
@@ -61,9 +62,23 @@ export function importFootnoteData({ docx, editor, converter, nodeListHandler, n
     if (idRaw === undefined || idRaw === null) return;
     const id = String(idRaw);
     const idNumber = Number(id);
-    // Skip special footnotes by explicit type (Word uses these for separators).
-    const type = el?.attributes?.['w:type'];
-    if (type === 'separator' || type === 'continuationSeparator') return;
+    const originalXml = carbonCopy(el);
+
+    // Get the footnote type (separator, continuationSeparator, or undefined for regular)
+    const type = el?.attributes?.['w:type'] || null;
+
+    // Preserve separator/continuationSeparator footnotes as-is for roundtrip fidelity.
+    // These are special Word constructs that shouldn't be converted to SuperDoc content.
+    if (type === 'separator' || type === 'continuationSeparator') {
+      results.push({
+        id,
+        type,
+        originalXml,
+        content: [],
+      });
+      return;
+    }
+
     // Be permissive about ids: some producers emit footnotes starting at 0.
     // Only skip negative ids (Word uses -1 for separator).
     if (!Number.isFinite(idNumber) || idNumber < 0) return;
@@ -78,12 +93,15 @@ export function importFootnoteData({ docx, editor, converter, nodeListHandler, n
       numbering,
       lists,
       inlineDocumentFonts,
+      filename: 'footnotes.xml',
       path: [el],
     });
 
     const stripped = stripFootnoteMarkerNodes(converted);
     results.push({
       id,
+      type,
+      originalXml,
       content: stripped,
     });
   });

@@ -2,16 +2,16 @@ import { Node, Attribute } from '@core/index.js';
 
 const toSuperscriptDigits = (value) => {
   const map = {
-    '0': '⁰',
-    '1': '¹',
-    '2': '²',
-    '3': '³',
-    '4': '⁴',
-    '5': '⁵',
-    '6': '⁶',
-    '7': '⁷',
-    '8': '⁸',
-    '9': '⁹',
+    0: '⁰',
+    1: '¹',
+    2: '²',
+    3: '³',
+    4: '⁴',
+    5: '⁵',
+    6: '⁶',
+    7: '⁷',
+    8: '⁸',
+    9: '⁹',
   };
   return String(value ?? '')
     .split('')
@@ -104,6 +104,9 @@ export const FootnoteReference = Node.create({
   addAttributes() {
     return {
       id: {
+        default: null,
+      },
+      customMarkFollows: {
         default: null,
       },
     };

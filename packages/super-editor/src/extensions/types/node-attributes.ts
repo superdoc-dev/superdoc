@@ -1049,6 +1049,8 @@ export interface CommentReferenceAttrs extends InlineNodeAttributes {
 export interface FootnoteReferenceAttrs extends InlineNodeAttributes {
   /** Footnote id from OOXML (w:id) */
   id?: string | null;
+  /** True when a custom mark symbol follows the reference */
+  customMarkFollows?: boolean | null;
 }
 
 // ============================================

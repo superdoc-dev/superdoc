@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { pictNodeTypeStrategy } from './helpers/pict-node-type-strategy';
-import { handleShapeImageImport } from './helpers/handle-shape-image-import';
+import { handleShapeImageWatermarkImport } from './helpers/handle-shape-image-watermark-import';
 
 describe('Watermark Import Debug - User XML', () => {
   it('should import the exact user-provided watermark XML', () => {
@@ -117,7 +117,7 @@ describe('Watermark Import Debug - User XML', () => {
     console.log('Handler:', handler?.name);
 
     expect(type).toBe('image');
-    expect(handler).toBe(handleShapeImageImport);
+    expect(handler).toBe(handleShapeImageWatermarkImport);
 
     // Test import
     const importedNode = handler({

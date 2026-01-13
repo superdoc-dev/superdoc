@@ -272,9 +272,9 @@ export function handleImageNode(node, params, isAnchor) {
   //
   // Since we don't implement actual srcRect cropping, we still need cover mode for positive values.
   // Only skip cover mode when srcRect has negative values (Word already adjusted the mapping).
-  const stretch = blipFill?.elements.find((el) => el.name === 'a:stretch');
-  const fillRect = stretch?.elements.find((el) => el.name === 'a:fillRect');
-  const srcRect = blipFill?.elements.find((el) => el.name === 'a:srcRect');
+  const stretch = blipFill?.elements?.find((el) => el.name === 'a:stretch');
+  const fillRect = stretch?.elements?.find((el) => el.name === 'a:fillRect');
+  const srcRect = blipFill?.elements?.find((el) => el.name === 'a:srcRect');
   const srcRectAttrs = srcRect?.attributes || {};
 
   // Check if srcRect has negative values (indicating Word extended/adjusted the image mapping)

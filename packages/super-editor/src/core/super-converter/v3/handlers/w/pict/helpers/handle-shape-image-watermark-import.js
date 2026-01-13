@@ -11,7 +11,7 @@
  * @param {Object} options
  * @returns {Object|null}
  */
-export function handleShapeImageImport({ params, pict }) {
+export function handleShapeImageWatermarkImport({ params, pict }) {
   const shape = pict.elements?.find((el) => el.name === 'v:shape');
   if (!shape) return null;
 

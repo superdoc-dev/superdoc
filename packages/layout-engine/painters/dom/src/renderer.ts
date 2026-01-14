@@ -5116,11 +5116,6 @@ export class DomPainter {
       } else {
         delete el.dataset.pmEnd;
       }
-      if (fragment.pmStart != null && fragment.pmEnd != null) {
-        el.title = `PM ${fragment.pmStart}–${fragment.pmEnd}`;
-      } else {
-        el.removeAttribute('title');
-      }
       if (fragment.continuesFromPrev) {
         el.dataset.continuesFromPrev = 'true';
       } else {

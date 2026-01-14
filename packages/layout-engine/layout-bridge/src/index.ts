@@ -51,7 +51,7 @@ export type { HeaderFooterBatch, DigitBucket } from './layoutHeaderFooter';
 export { findWordBoundaries, findParagraphBoundaries } from './text-boundaries';
 export type { BoundaryRange } from './text-boundaries';
 export { incrementalLayout, measureCache } from './incrementalLayout';
-export type { HeaderFooterLayoutResult } from './incrementalLayout';
+export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
 // Re-export computeDisplayPageNumber from layout-engine for section-aware page numbering
 export { computeDisplayPageNumber, type DisplayPageInfo } from '@superdoc/layout-engine';
 export { remeasureParagraph } from './remeasure';

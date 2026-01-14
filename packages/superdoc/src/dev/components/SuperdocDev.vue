@@ -15,6 +15,7 @@ import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
 import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.js';
+import SidebarSearch from './sidebar/SidebarSearch.vue';
 
 // Or set worker globally outside the component.
 // pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -30,6 +31,7 @@ const title = ref('initial title');
 const currentFile = ref(null);
 const commentsPanel = ref(null);
 const showCommentsPanel = ref(true);
+const sidebarInstanceKey = ref(0);
 
 const urlParams = new URLSearchParams(window.location.search);
 const isInternal = urlParams.has('internal');
@@ -91,6 +93,8 @@ const handleNewFile = async (file) => {
   nextTick(() => {
     init();
   });
+
+  sidebarInstanceKey.value += 1;
 };
 
 /**
@@ -517,6 +521,33 @@ const closeExportMenu = () => {
   showExportMenu.value = false;
 };
 
+const sidebarOptions = [
+  {
+    id: 'off',
+    label: 'Off',
+    component: null,
+  },
+  {
+    id: 'search',
+    label: 'Search',
+    component: SidebarSearch,
+  },
+];
+const activeSidebarId = ref('off');
+const activeSidebar = computed(
+  () => sidebarOptions.find((option) => option.id === activeSidebarId.value) ?? sidebarOptions[0],
+);
+const activeSidebarComponent = computed(() => activeSidebar.value?.component ?? null);
+const activeSidebarLabel = computed(() => activeSidebar.value?.label ?? 'None');
+const showSidebarMenu = ref(false);
+const closeSidebarMenu = () => {
+  showSidebarMenu.value = false;
+};
+const setActiveSidebar = (id) => {
+  activeSidebarId.value = id;
+  closeSidebarMenu();
+};
+
 // Scroll test mode - adds content above editor to make page scrollable (for testing focus scroll bugs)
 const scrollTestMode = ref(urlParams.get('scrolltest') === '1');
 const toggleScrollTestMode = () => {
@@ -574,6 +605,26 @@ if (scrollTestMode.value) {
         </div>
         <div class="dev-app__header-actions">
           <div class="dev-app__header-buttons">
+            <div class="dev-app__dropdown" @mouseleave="closeSidebarMenu">
+              <button
+                class="dev-app__header-export-btn dev-app__dropdown-trigger"
+                :class="{ 'is-open': showSidebarMenu }"
+                @click="showSidebarMenu = !showSidebarMenu"
+              >
+                <span>Sidebar: {{ activeSidebarLabel }}</span>
+                <span class="caret">▾</span>
+              </button>
+              <div v-if="showSidebarMenu" class="dev-app__dropdown-menu">
+                <button
+                  v-for="option in sidebarOptions"
+                  :key="option.id"
+                  class="dev-app__dropdown-item"
+                  @click="setActiveSidebar(option.id)"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
             <div class="dev-app__dropdown" @mouseleave="closeExportMenu">
               <button
                 class="dev-app__header-export-btn dev-app__dropdown-trigger"
@@ -673,6 +724,15 @@ if (scrollTestMode.value) {
           </div>
         </div>
       </div>
+      <div v-if="activeSidebarComponent" class="dev-app__sidebar">
+        <div class="dev-app__sidebar-content">
+          <component
+            :is="activeSidebarComponent"
+            :key="`${activeSidebarId}-${sidebarInstanceKey}`"
+            @close="setActiveSidebar('off')"
+          />
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -748,6 +808,7 @@ if (scrollTestMode.value) {
   flex-direction: column;
   width: 100%;
   height: 100vh;
+  position: relative;
 }
 
 .dev-app__header {
@@ -761,6 +822,7 @@ if (scrollTestMode.value) {
   box-sizing: border-box;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   position: relative;
+  z-index: 120;
 }
 
 .dev-app__header::after {
@@ -1052,6 +1114,27 @@ if (scrollTestMode.value) {
   overflow: auto;
   /* Test: creates a containing block for position:fixed elements (like context menu) */
   backdrop-filter: blur(0.5px);
+}
+
+.dev-app__sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 350px;
+  max-width: 350px;
+  background: #f8fafc;
+  border-left: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: -12px 0 28px rgba(15, 23, 42, 0.2);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+}
+
+.dev-app__sidebar-content {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 16px;
 }
 
 .dev-app__view {

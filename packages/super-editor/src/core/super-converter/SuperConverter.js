@@ -11,6 +11,7 @@ import {
   prepareCommentParaIds,
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
+import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 
@@ -184,6 +185,8 @@ class SuperConverter {
 
     this.addedMedia = {};
     this.comments = [];
+    this.footnotes = [];
+    this.footnoteProperties = null;
     this.inlineDocumentFonts = [];
 
     // Store custom highlight colors
@@ -924,6 +927,7 @@ class SuperConverter {
       this.pageStyles = result.pageStyles;
       this.numbering = result.numbering;
       this.comments = result.comments;
+      this.footnotes = result.footnotes;
       this.linkedStyles = result.linkedStyles;
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
@@ -971,11 +975,24 @@ class SuperConverter {
     const exporter = new DocxExporter(this);
     const xml = exporter.schemaToXml(result);
 
+    const {
+      updatedXml: footnotesUpdatedXml,
+      relationships: footnotesRels,
+      media: footnotesMedia,
+    } = prepareFootnotesXmlForExport({
+      footnotes: this.footnotes,
+      editor,
+      converter: this,
+      convertedXml: this.convertedXml,
+    });
+    this.convertedXml = { ...this.convertedXml, ...footnotesUpdatedXml };
+
     // Update media
     await this.#exportProcessMediaFiles(
       {
         ...documentMedia,
         ...params.media,
+        ...footnotesMedia,
         ...this.media,
       },
       editor,
@@ -999,7 +1016,7 @@ class SuperConverter {
     const headFootRels = this.#exportProcessHeadersFooters({ isFinalDoc });
 
     // Update the rels table
-    this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...headFootRels]);
+    this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...footnotesRels, ...headFootRels]);
 
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);

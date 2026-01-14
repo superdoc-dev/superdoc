@@ -1426,6 +1426,12 @@ export type Page = {
   number: number;
   fragments: Fragment[];
   margins?: PageMargins;
+  /**
+   * Extra bottom space reserved on this page for footnotes (in px).
+   * Used by consumers (e.g. editors/painters) to keep footer hit regions and
+   * decoration boxes anchored to the real bottom margin while the body shrinks.
+   */
+  footnoteReserved?: number;
   numberText?: string;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';

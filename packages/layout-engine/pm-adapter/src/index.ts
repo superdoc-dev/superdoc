@@ -31,6 +31,7 @@ export type {
   PMDocumentMap,
   BatchAdapterOptions,
   FlowBlocksResult,
+  ConverterContext
 } from './types.js';
 
 // Re-export enum as value

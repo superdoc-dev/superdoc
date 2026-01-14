@@ -26,6 +26,7 @@ import { Run } from './run/index.js';
 import { Paragraph } from './paragraph/index.js';
 import { Heading } from './heading/index.js';
 import { CommentRangeStart, CommentRangeEnd, CommentReference, CommentsMark } from './comment/index.js';
+import { FootnoteReference } from './footnote/index.js';
 import { TabNode } from './tab/index.js';
 import { LineBreak, HardBreak } from './line-break/index.js';
 import { Table } from './table/index.js';
@@ -124,6 +125,7 @@ const getStarterExtensions = () => {
     CommentRangeStart,
     CommentRangeEnd,
     CommentReference,
+    FootnoteReference,
     Document,
     FontFamily,
     FontSize,
@@ -204,6 +206,7 @@ export {
   CommentRangeStart,
   CommentRangeEnd,
   CommentReference,
+  FootnoteReference,
   TabNode,
   LineBreak,
   HardBreak,

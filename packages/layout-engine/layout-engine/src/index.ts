@@ -131,6 +131,19 @@ export type LayoutOptions = {
   remeasureParagraph?: (block: ParagraphBlock, maxWidth: number, firstLineIndent?: number) => ParagraphMeasure;
   sectionMetadata?: SectionMetadata[];
   /**
+   * Extra bottom margin per page index (0-based) reserved for non-body content
+   * rendered at the bottom of the page (e.g., footnotes).
+   *
+   * When provided, the paginator will shrink the body content area on that page by
+   * increasing the effective bottom margin for that page only.
+   */
+  footnoteReservedByPageIndex?: number[];
+  /**
+   * Optional footnote metadata consumed by higher-level orchestration (e.g. layout-bridge).
+   * The core layout engine does not interpret this field directly.
+   */
+  footnotes?: unknown;
+  /**
    * Actual measured header content heights per variant type.
    * When provided, the layout engine will ensure body content starts below
    * the header content, preventing overlap when headers exceed their allocated margin space.
@@ -503,10 +516,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
       // Schedule section refs for first section (will be applied on first page creation)
       if (block.headerRefs || block.footerRefs) {
-        pendingSectionRefs = {
+        const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+        const nextSectionRefs = {
           ...(block.headerRefs && { headerRefs: block.headerRefs }),
           ...(block.footerRefs && { footerRefs: block.footerRefs }),
         };
+        pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
         layoutLog(`[Layout] First section: Scheduled pendingSectionRefs:`, pendingSectionRefs);
       }
       // Set section index for first section
@@ -589,10 +604,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
     // Schedule section refs changes (apply at next page boundary)
     if (block.headerRefs || block.footerRefs) {
-      pendingSectionRefs = {
+      const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+      const nextSectionRefs = {
         ...(block.headerRefs && { headerRefs: block.headerRefs }),
         ...(block.footerRefs && { footerRefs: block.footerRefs }),
       };
+      pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
       layoutLog(`[Layout] Compat fallback: Scheduled pendingSectionRefs:`, pendingSectionRefs);
     }
     if (block.attrs?.requirePageBoundary) {
@@ -652,6 +669,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
     footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   };
+  const normalizeRefs = (
+    refs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>,
+  ): Partial<Record<'default' | 'first' | 'even' | 'odd', string>> | undefined =>
+    refs && Object.keys(refs).length > 0 ? refs : undefined;
+  const mergeSectionRefs = (base: SectionRefs | null, next: SectionRefs | null): SectionRefs | null => {
+    if (!base && !next) return null;
+    const headerRefs = normalizeRefs(next?.headerRefs) ?? normalizeRefs(base?.headerRefs);
+    const footerRefs = normalizeRefs(next?.footerRefs) ?? normalizeRefs(base?.footerRefs);
+    if (!headerRefs && !footerRefs) return null;
+    return {
+      ...(headerRefs && { headerRefs }),
+      ...(footerRefs && { footerRefs }),
+    };
+  };
   const sectionMetadataList = options.sectionMetadata ?? [];
   const initialSectionMetadata = sectionMetadataList[0];
   if (initialSectionMetadata?.numbering?.format) {
@@ -679,7 +710,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const paginator = createPaginator({
     margins: paginatorMargins,
     getActiveTopMargin: () => activeTopMargin,
-    getActiveBottomMargin: () => activeBottomMargin,
+    getActiveBottomMargin: () => {
+      const reserves = options.footnoteReservedByPageIndex;
+      const pageIndex = Math.max(0, pageCount - 1);
+      const reserve = Array.isArray(reserves) ? reserves[pageIndex] : 0;
+      const reservePx = typeof reserve === 'number' && Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
+      return activeBottomMargin + reservePx;
+    },
     getActiveHeaderDistance: () => activeHeaderDistance,
     getActiveFooterDistance: () => activeFooterDistance,
     getActivePageSize: () => activePageSize,
@@ -752,7 +789,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
         // Apply pending section refs
         if (pendingSectionRefs) {
-          activeSectionRefs = pendingSectionRefs;
+          activeSectionRefs = mergeSectionRefs(activeSectionRefs, pendingSectionRefs);
           pendingSectionRefs = null;
         }
         // Apply pending section index
@@ -1194,10 +1231,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       // Schedule section refs (handled outside of SectionState since they're module-level vars)
       if (effectiveBlock.headerRefs || effectiveBlock.footerRefs) {
-        pendingSectionRefs = {
+        const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+        const nextSectionRefs = {
           ...(effectiveBlock.headerRefs && { headerRefs: effectiveBlock.headerRefs }),
           ...(effectiveBlock.footerRefs && { footerRefs: effectiveBlock.footerRefs }),
         };
+        pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
         layoutLog(`[Layout] After scheduleSectionBreakCompat: Scheduled pendingSectionRefs:`, pendingSectionRefs);
       }
 

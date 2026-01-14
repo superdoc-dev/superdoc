@@ -370,9 +370,9 @@ export const prepareCommentsForImport = (doc, tr, schema, converter) => {
     if (!commentNodes.includes(type.name)) return;
 
     const { resolvedCommentId, importedId, internal, matchingImportedComment, trackedChange } = resolveCommentMeta({
-        converter,
-        importedId: node.attrs['w:id'],
-      });
+      converter,
+      importedId: node.attrs['w:id'],
+    });
     const isDone = !!matchingImportedComment?.isDone;
 
     // If the node is a commentRangeStart, record it so we can place a mark once we find the end.

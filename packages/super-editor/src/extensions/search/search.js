@@ -1,12 +1,93 @@
 // @ts-nocheck
 
 import { Extension } from '@core/Extension.js';
+import { PositionTracker } from '@core/PositionTracker.js';
 import { search, SearchQuery, setSearchState, getMatchHighlights } from './prosemirror-search-patched.js';
 import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { v4 as uuidv4 } from 'uuid';
 
 const isRegExp = (value) => Object.prototype.toString.call(value) === '[object RegExp]';
+const resolveInlineTextPosition = (doc, position, direction) => {
+  const docSize = doc.content.size;
+  if (!Number.isFinite(position) || position < 0 || position > docSize) {
+    return position;
+  }
+
+  const step = direction === 'forward' ? 1 : -1;
+  let current = position;
+  let iterations = 0;
+
+  while (iterations < 8) {
+    iterations += 1;
+    const resolved = doc.resolve(current);
+    const boundaryNode = direction === 'forward' ? resolved.nodeAfter : resolved.nodeBefore;
+
+    if (!boundaryNode) break;
+    if (boundaryNode.isText) break;
+    if (!boundaryNode.isInline || boundaryNode.isAtom || boundaryNode.content.size === 0) break;
+
+    const next = current + step;
+    if (next < 0 || next > docSize) break;
+    current = next;
+
+    const adjacent = doc.resolve(current);
+    const checkNode = direction === 'forward' ? adjacent.nodeAfter : adjacent.nodeBefore;
+    if (checkNode && checkNode.isText) break;
+  }
+
+  return current;
+};
+
+const resolveSearchRange = ({ doc, from, to, expectedText, highlights }) => {
+  const docSize = doc.content.size;
+  let resolvedFrom = Math.max(0, Math.min(from, docSize));
+  let resolvedTo = Math.max(0, Math.min(to, docSize));
+
+  if (highlights) {
+    const windowStart = Math.max(0, resolvedFrom - 4);
+    const windowEnd = Math.min(docSize, resolvedTo + 4);
+    const candidates = highlights.find(windowStart, windowEnd);
+    if (candidates.length > 0) {
+      let chosen = candidates[0];
+      if (expectedText) {
+        const matching = candidates.filter(
+          (decoration) => doc.textBetween(decoration.from, decoration.to) === expectedText,
+        );
+        if (matching.length > 0) {
+          chosen = matching[0];
+        }
+      }
+      resolvedFrom = chosen.from;
+      resolvedTo = chosen.to;
+    }
+  }
+
+  const normalizedFrom = resolveInlineTextPosition(doc, resolvedFrom, 'forward');
+  const normalizedTo = resolveInlineTextPosition(doc, resolvedTo, 'backward');
+  if (Number.isFinite(normalizedFrom) && Number.isFinite(normalizedTo) && normalizedFrom <= normalizedTo) {
+    resolvedFrom = normalizedFrom;
+    resolvedTo = normalizedTo;
+  }
+
+  return { from: resolvedFrom, to: resolvedTo };
+};
+
+const getPositionTracker = (editor) => {
+  if (!editor) return null;
+  if (editor.positionTracker) return editor.positionTracker;
+  const storageTracker = editor.storage?.positionTracker?.tracker;
+  if (storageTracker) {
+    editor.positionTracker = storageTracker;
+    return storageTracker;
+  }
+  const tracker = new PositionTracker(editor);
+  if (editor.storage?.positionTracker) {
+    editor.storage.positionTracker.tracker = tracker;
+  }
+  editor.positionTracker = tracker;
+  return tracker;
+};
 
 /**
  * Search match object
@@ -133,7 +214,7 @@ export const Search = Extension.create({
       search:
         (patternInput, options = {}) =>
         /** @returns {SearchMatch[]} */
-        ({ state, dispatch }) => {
+        ({ state, dispatch, editor }) => {
           // Validate options parameter - must be an object if provided
           if (options != null && (typeof options !== 'object' || Array.isArray(options))) {
             throw new TypeError('Search options must be an object');
@@ -181,6 +262,33 @@ export const Search = Extension.create({
             id: uuidv4(),
           }));
 
+          const positionTracker = getPositionTracker(editor);
+
+          if (positionTracker?.untrackByType) {
+            positionTracker.untrackByType('search');
+          }
+
+          if (positionTracker?.trackMany && resultMatches.length > 0) {
+            const trackedIds = positionTracker.trackMany(
+              resultMatches.map((match) => ({
+                from: match.from,
+                to: match.to,
+                spec: {
+                  type: 'search',
+                  metadata: { text: match.text },
+                  inclusiveStart: false,
+                  inclusiveEnd: false,
+                },
+              })),
+            );
+
+            trackedIds.forEach((id, index) => {
+              if (id) {
+                resultMatches[index].id = id;
+              }
+            });
+          }
+
           this.storage.searchResults = resultMatches;
 
           return resultMatches;
@@ -199,7 +307,28 @@ export const Search = Extension.create({
         (match) =>
         /** @returns {boolean} */
         ({ state, dispatch, editor }) => {
-          const { from, to } = match;
+          const positionTracker = getPositionTracker(editor);
+          let { from, to } = match;
+
+          if (positionTracker?.resolve && match?.id) {
+            const resolved = positionTracker.resolve(match.id);
+            if (resolved) {
+              from = resolved.from;
+              to = resolved.to;
+            }
+          }
+
+          const doc = state.doc;
+          const highlights = getMatchHighlights(state);
+          const normalized = resolveSearchRange({
+            doc,
+            from,
+            to,
+            expectedText: match?.text ?? null,
+            highlights,
+          });
+          from = normalized.from;
+          to = normalized.to;
 
           editor.view.focus();
           const tr = state.tr.setSelection(TextSelection.create(state.doc, from, to)).scrollIntoView();

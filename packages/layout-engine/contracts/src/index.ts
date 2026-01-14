@@ -854,6 +854,8 @@ export type ImageAnchor = {
   offsetH?: number;
   offsetV?: number;
   behindDoc?: boolean;
+  padding?: BoxSpacing | undefined;
+  margin?: BoxSpacing | undefined;
 };
 
 /** Text wrapping for floating images (distances in px). */
@@ -1629,6 +1631,22 @@ export type Layout = {
    * from DOM-derived positions back to the current ProseMirror document state.
    */
   layoutEpoch?: number;
+};
+
+export type WrapTextMode = 'bothSides' | 'left' | 'right' | 'largest';
+
+export type WrapExclusion = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  wrapText: WrapTextMode;
+};
+
+export type RenderedLineInfo = {
+  el: HTMLElement;
+  top: number;
+  height: number;
 };
 
 /**

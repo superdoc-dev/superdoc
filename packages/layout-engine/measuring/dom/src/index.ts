@@ -2345,7 +2345,6 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
     return scaled;
   };
-
   // Determine actual column count from table structure
   const maxCellCount = Math.max(1, Math.max(...block.rows.map((r) => r.cells.length)));
 
@@ -2503,6 +2502,16 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         blockMeasures.push(measure);
         // Get height from different measure types
         const blockHeight = 'totalHeight' in measure ? measure.totalHeight : 'height' in measure ? measure.height : 0;
+        const isAnchoredOutOfFlow =
+          (block.kind === 'image' || block.kind === 'drawing') &&
+          (block as ImageBlock | DrawingBlock).anchor?.isAnchored === true &&
+          ((block as ImageBlock | DrawingBlock).wrap?.type ?? 'Inline') !== 'Inline';
+
+        // Anchored/floating objects inside table cells do not contribute to cell height.
+        if (isAnchoredOutOfFlow) {
+          continue;
+        }
+
         contentHeight += blockHeight;
 
         // Add paragraph spacing.after to content height for all paragraphs.

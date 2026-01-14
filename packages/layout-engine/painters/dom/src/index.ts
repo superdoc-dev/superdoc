@@ -38,6 +38,8 @@ export type { RulerOptions } from './renderer.js';
 // Re-export utility functions for testing
 export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
 
+export { applySquareWrapExclusionsToLines } from './utils/anchor-helpers';
+
 // Re-export PM position validation utilities
 export {
   assertPmPositions,

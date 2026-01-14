@@ -6,6 +6,23 @@ import { search, SearchQuery, setSearchState, getMatchHighlights } from './prose
 import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { v4 as uuidv4 } from 'uuid';
+import { SearchIndex } from './SearchIndex.js';
+
+/**
+ * Plugin key for accessing custom search highlight decorations
+ */
+export const customSearchHighlightsKey = new PluginKey('customSearchHighlights');
+
+/**
+ * Get the custom search highlight decorations from the current state.
+ * @param {import('prosemirror-state').EditorState} state - The editor state
+ * @returns {DecorationSet|null} The decoration set, or null if not available
+ */
+export const getCustomSearchDecorations = (state) => {
+  const plugin = customSearchHighlightsKey.get(state);
+  if (!plugin || !plugin.props.decorations) return null;
+  return plugin.props.decorations(state);
+};
 
 const isRegExp = (value) => Object.prototype.toString.call(value) === '[object RegExp]';
 const resolveInlineTextPosition = (doc, position, direction) => {
@@ -90,12 +107,21 @@ const getPositionTracker = (editor) => {
 };
 
 /**
+ * A document range
+ * @typedef {Object} DocRange
+ * @property {number} from - Start position in document
+ * @property {number} to - End position in document
+ */
+
+/**
  * Search match object
  * @typedef {Object} SearchMatch
- * @property {string} text - Found text
- * @property {number} from - From position
- * @property {number} to - To position
- * @property {string} id - ID of the search match
+ * @property {string} text - Found text (combined from all ranges)
+ * @property {number} from - From position (start of first range)
+ * @property {number} to - To position (end of last range)
+ * @property {string} id - ID of the search match (first tracker ID for multi-range)
+ * @property {DocRange[]} [ranges] - Array of document ranges for cross-paragraph matches
+ * @property {string[]} [trackerIds] - Array of position tracker IDs for each range
  */
 
 /**
@@ -126,6 +152,18 @@ export const Search = Extension.create({
        * @type {SearchMatch[]|null}
        */
       searchResults: [],
+      /**
+       * @private
+       * @type {boolean}
+       * Whether to apply CSS highlight classes to matches
+       */
+      highlightEnabled: true,
+      /**
+       * @private
+       * @type {SearchIndex}
+       * Lazily-built search index for cross-paragraph matching
+       */
+      searchIndex: new SearchIndex(),
     };
   },
 
@@ -133,8 +171,20 @@ export const Search = Extension.create({
     const editor = this.editor;
     const storage = this.storage;
 
+    // Plugin to invalidate search index when document changes
+    const searchIndexInvalidatorPlugin = new Plugin({
+      key: new PluginKey('searchIndexInvalidator'),
+      appendTransaction(transactions, oldState, newState) {
+        const docChanged = transactions.some((tr) => tr.docChanged);
+        if (docChanged && storage?.searchIndex) {
+          storage.searchIndex.invalidate();
+        }
+        return null;
+      },
+    });
+
     const searchHighlightWithIdPlugin = new Plugin({
-      key: new PluginKey('customSearchHighlights'),
+      key: customSearchHighlightsKey,
       props: {
         decorations(state) {
           if (!editor) return null;
@@ -142,18 +192,33 @@ export const Search = Extension.create({
           const matches = storage?.searchResults;
           if (!matches?.length) return null;
 
-          const decorations = matches.map((match) =>
-            Decoration.inline(match.from, match.to, {
-              id: `search-match-${match.id}`,
-            }),
-          );
+          const highlightEnabled = storage?.highlightEnabled !== false;
+
+          // Build decorations from all ranges in each match
+          const decorations = [];
+          for (const match of matches) {
+            // Determine decoration attributes based on highlight setting
+            const attrs = highlightEnabled
+              ? { id: `search-match-${match.id}`, class: 'ProseMirror-search-match' }
+              : { id: `search-match-${match.id}` };
+
+            if (match.ranges && match.ranges.length > 0) {
+              // Multi-range match: create decoration for each range
+              for (const range of match.ranges) {
+                decorations.push(Decoration.inline(range.from, range.to, attrs));
+              }
+            } else {
+              // Single range match (backward compatibility)
+              decorations.push(Decoration.inline(match.from, match.to, attrs));
+            }
+          }
 
           return DecorationSet.create(state.doc, decorations);
         },
       },
     });
 
-    return [search(), searchHighlightWithIdPlugin];
+    return [search(), searchIndexInvalidatorPlugin, searchHighlightWithIdPlugin];
   },
 
   addCommands() {
@@ -169,29 +234,67 @@ export const Search = Extension.create({
         () =>
         /** @returns {boolean} */
         ({ state, editor, dispatch }) => {
+          // First try our storage-based results
+          const searchResults = this.storage?.searchResults;
+          if (Array.isArray(searchResults) && searchResults.length > 0) {
+            const firstMatch = searchResults[0];
+            const from = firstMatch.ranges?.[0]?.from ?? firstMatch.from;
+            const to = firstMatch.ranges?.[0]?.to ?? firstMatch.to;
+
+            if (typeof from !== 'number' || typeof to !== 'number') {
+              return false;
+            }
+
+            editor.view.focus();
+            const tr = state.tr.setSelection(TextSelection.create(state.doc, from, to)).scrollIntoView();
+            if (dispatch) dispatch(tr);
+
+            const presentationEditor = editor.presentationEditor;
+            if (presentationEditor && typeof presentationEditor.scrollToPosition === 'function') {
+              const didScroll = presentationEditor.scrollToPosition(from, { block: 'center' });
+              if (didScroll) return true;
+            }
+
+            try {
+              const domPos = editor.view.domAtPos(from);
+              if (domPos?.node?.scrollIntoView) {
+                domPos.node.scrollIntoView(true);
+              }
+            } catch {
+              // Ignore scroll errors in test environments
+            }
+            return true;
+          }
+
+          // Fallback to prosemirror-search highlights for backward compatibility
           const highlights = getMatchHighlights(state);
           if (!highlights) return false;
 
-          // Fix: DecorationSet uses .find(), not .children
           const decorations = highlights.find();
           if (!decorations?.length) return false;
 
-          const firstMatch = decorations[0];
+          const firstDeco = decorations[0];
 
           editor.view.focus();
           const tr = state.tr
-            .setSelection(TextSelection.create(state.doc, firstMatch.from, firstMatch.to))
+            .setSelection(TextSelection.create(state.doc, firstDeco.from, firstDeco.to))
             .scrollIntoView();
           if (dispatch) dispatch(tr);
 
           const presentationEditor = editor.presentationEditor;
           if (presentationEditor && typeof presentationEditor.scrollToPosition === 'function') {
-            const didScroll = presentationEditor.scrollToPosition(firstMatch.from, { block: 'center' });
+            const didScroll = presentationEditor.scrollToPosition(firstDeco.from, { block: 'center' });
             if (didScroll) return true;
           }
 
-          const domPos = editor.view.domAtPos(firstMatch.from);
-          domPos?.node?.scrollIntoView(true);
+          try {
+            const domPos = editor.view.domAtPos(firstDeco.from);
+            if (domPos?.node?.scrollIntoView) {
+              domPos.node.scrollIntoView(true);
+            }
+          } catch {
+            // Ignore scroll errors in test environments
+          }
           return true;
         },
 
@@ -209,7 +312,12 @@ export const Search = Extension.create({
        *
        * // Search without visual highlighting
        * const silentMatches = editor.commands.search('test', { highlight: false })
-       * @note Returns array of SearchMatch objects with positions and IDs
+       *
+       * // Cross-paragraph search (works by default for plain strings)
+       * const crossParagraphMatches = editor.commands.search('end of paragraph start of next')
+       * @note Returns array of SearchMatch objects with positions and IDs.
+       *       Plain string searches are whitespace-flexible and match across paragraphs.
+       *       Regex searches match exactly as specified.
        */
       search:
         (patternInput, options = {}) =>
@@ -220,76 +328,63 @@ export const Search = Extension.create({
             throw new TypeError('Search options must be an object');
           }
 
-          // Extract and validate highlight option with nullish coalescing fallback
+          // Extract options
           const highlight = typeof options?.highlight === 'boolean' ? options.highlight : true;
-          let pattern;
+          const maxMatches = typeof options?.maxMatches === 'number' ? options.maxMatches : 1000;
+
+          // Determine if this is a regex search
+          let isRegexSearch = false;
           let caseSensitive = false;
-          let regexp = false;
-          const wholeWord = false;
+          let searchPattern = patternInput;
 
           if (isRegExp(patternInput)) {
-            const regexPattern = /** @type {RegExp} */ (patternInput);
-            regexp = true;
-            pattern = regexPattern.source;
-            caseSensitive = !regexPattern.flags.includes('i');
+            isRegexSearch = true;
+            caseSensitive = !patternInput.flags.includes('i');
+            searchPattern = patternInput;
           } else if (typeof patternInput === 'string' && /^\/(.+)\/([gimsuy]*)$/.test(patternInput)) {
             const [, body, flags] = patternInput.match(/^\/(.+)\/([gimsuy]*)$/);
-            regexp = true;
-            pattern = body;
+            isRegexSearch = true;
             caseSensitive = !flags.includes('i');
+            searchPattern = new RegExp(body, flags.includes('g') ? flags : flags + 'g');
           } else {
-            pattern = String(patternInput);
+            searchPattern = String(patternInput);
           }
 
-          const query = new SearchQuery({
-            search: pattern,
+          // Ensure search index is valid
+          const searchIndex = this.storage.searchIndex;
+          searchIndex.ensureValid(state.doc);
+
+          // Search using the index
+          const indexMatches = searchIndex.search(searchPattern, {
             caseSensitive,
-            regexp,
-            wholeWord,
+            maxMatches,
           });
-          const tr = setSearchState(state.tr, query, null, { highlight });
-          dispatch(tr);
 
-          const newState = state.apply(tr);
+          // Map matches to document positions
+          const resultMatches = [];
+          for (const indexMatch of indexMatches) {
+            const ranges = searchIndex.offsetRangeToDocRanges(indexMatch.start, indexMatch.end);
+            if (ranges.length === 0) continue;
 
-          const decoSet = getMatchHighlights(newState);
-          const matches = decoSet ? decoSet.find() : [];
+            // Get text for each range and combine
+            const matchTexts = ranges.map((r) => state.doc.textBetween(r.from, r.to));
+            const combinedText = matchTexts.join('');
 
-          const resultMatches = matches.map((d) => ({
-            from: d.from,
-            to: d.to,
-            text: newState.doc.textBetween(d.from, d.to),
-            id: uuidv4(),
-          }));
+            const match = {
+              from: ranges[0].from,
+              to: ranges[ranges.length - 1].to,
+              text: combinedText,
+              id: uuidv4(),
+              ranges: ranges,
+              trackerIds: [],
+            };
 
-          const positionTracker = getPositionTracker(editor);
-
-          if (positionTracker?.untrackByType) {
-            positionTracker.untrackByType('search');
+            resultMatches.push(match);
           }
 
-          if (positionTracker?.trackMany && resultMatches.length > 0) {
-            const trackedIds = positionTracker.trackMany(
-              resultMatches.map((match) => ({
-                from: match.from,
-                to: match.to,
-                spec: {
-                  type: 'search',
-                  metadata: { text: match.text },
-                  inclusiveStart: false,
-                  inclusiveEnd: false,
-                },
-              })),
-            );
-
-            trackedIds.forEach((id, index) => {
-              if (id) {
-                resultMatches[index].id = id;
-              }
-            });
-          }
-
+          // Store results and highlight preference (no dispatches needed - decorations come from storage)
           this.storage.searchResults = resultMatches;
+          this.storage.highlightEnabled = highlight;
 
           return resultMatches;
         },
@@ -301,25 +396,50 @@ export const Search = Extension.create({
        * @example
        * const searchResults = editor.commands.search('test string')
        * editor.commands.goToSearchResult(searchResults[3])
-       * @note Scrolls to match and selects it
+       * @note Scrolls to match and selects it. For multi-range matches (cross-paragraph),
+       *       selects the first range and scrolls to it.
        */
       goToSearchResult:
         (match) =>
         /** @returns {boolean} */
         ({ state, dispatch, editor }) => {
           const positionTracker = getPositionTracker(editor);
-          let { from, to } = match;
+          const doc = state.doc;
+          const highlights = getMatchHighlights(state);
 
-          if (positionTracker?.resolve && match?.id) {
-            const resolved = positionTracker.resolve(match.id);
-            if (resolved) {
-              from = resolved.from;
-              to = resolved.to;
+          let from, to;
+
+          // Handle multi-range matches (cross-paragraph)
+          if (match?.ranges && match.ranges.length > 0 && match?.trackerIds && match.trackerIds.length > 0) {
+            // Resolve the first tracked range for selection
+            if (positionTracker?.resolve && match.trackerIds[0]) {
+              const resolved = positionTracker.resolve(match.trackerIds[0]);
+              if (resolved) {
+                from = resolved.from;
+                to = resolved.to;
+              }
+            }
+
+            // Fallback to stored range if tracking failed
+            if (from === undefined) {
+              from = match.ranges[0].from;
+              to = match.ranges[0].to;
+            }
+          } else {
+            // Single range match (backward compatibility)
+            from = match.from;
+            to = match.to;
+
+            if (positionTracker?.resolve && match?.id) {
+              const resolved = positionTracker.resolve(match.id);
+              if (resolved) {
+                from = resolved.from;
+                to = resolved.to;
+              }
             }
           }
 
-          const doc = state.doc;
-          const highlights = getMatchHighlights(state);
+          // Normalize the range to handle transparent inline nodes
           const normalized = resolveSearchRange({
             doc,
             from,

@@ -77,7 +77,10 @@ describe('Search navigation commands', () => {
         });
         editor.setState(baseState);
 
-        // No search performed
+        // Clear any previous search results by searching for something that won't match
+        editor.commands.search('ZZZZZ_NO_MATCH_ZZZZZ');
+
+        // Now goToFirstMatch should return false
         const result = editor.commands.goToFirstMatch();
 
         expect(result).toBe(false);

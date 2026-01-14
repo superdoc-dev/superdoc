@@ -296,6 +296,98 @@ describe('handleShapeTextWatermarkImport', () => {
       expect(result.attrs.anchorData.hRelativeFrom).toBe('margin');
       expect(result.attrs.anchorData.vRelativeFrom).toBe('margin');
     });
+
+    it('should preserve margin offsets for left-aligned watermarks', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style:
+                'margin-left:50pt;margin-top:100pt;mso-position-horizontal:left;mso-position-vertical:top;mso-position-horizontal-relative:margin;mso-position-vertical-relative:margin',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'LEFT ALIGNED',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      // For left-aligned watermarks, margin offsets should be preserved
+      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(66.7, 1); // 50pt to pixels
+      expect(result.attrs.marginOffset.top).toBeCloseTo(133.3, 1); // 100pt to pixels
+      expect(result.attrs.anchorData.alignH).toBe('left');
+      expect(result.attrs.anchorData.alignV).toBe('top');
+    });
+
+    it('should preserve margin offsets for right-aligned watermarks', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style:
+                'margin-left:30pt;margin-top:60pt;mso-position-horizontal:right;mso-position-vertical:bottom;mso-position-horizontal-relative:margin;mso-position-vertical-relative:margin',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'RIGHT ALIGNED',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      // For right-aligned watermarks, margin offsets should be preserved
+      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(40, 1); // 30pt to pixels
+      expect(result.attrs.marginOffset.top).toBeCloseTo(80, 1); // 60pt to pixels
+      expect(result.attrs.anchorData.alignH).toBe('right');
+      expect(result.attrs.anchorData.alignV).toBe('bottom');
+    });
+
+    it('should preserve margin offsets for page-relative watermarks', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style:
+                'margin-left:25pt;margin-top:75pt;mso-position-horizontal:center;mso-position-vertical:center;mso-position-horizontal-relative:page;mso-position-vertical-relative:page',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'PAGE RELATIVE',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      // For page-relative watermarks, margin offsets should be preserved even if center-aligned
+      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(33.3, 1); // 25pt to pixels
+      expect(result.attrs.marginOffset.top).toBeCloseTo(100, 1); // 75pt to pixels
+      expect(result.attrs.anchorData.hRelativeFrom).toBe('page');
+      expect(result.attrs.anchorData.vRelativeFrom).toBe('page');
+      expect(result.attrs.anchorData.alignH).toBe('center');
+      expect(result.attrs.anchorData.alignV).toBe('center');
+    });
   });
 
   describe('Fill properties', () => {
@@ -781,7 +873,6 @@ describe('handleShapeTextWatermarkImport', () => {
       expect(result.attrs.vmlTextWatermark).toBe(true);
 
       // Should handle 345 degree rotation (15 degrees clockwise from horizontal)
-      // Should handle landscape watermark with 345 degree rotation
       expect(result.attrs.textWatermarkData.rotation).toBe(345);
 
       // For center-aligned watermarks, margins should be 0

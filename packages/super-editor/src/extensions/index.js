@@ -73,7 +73,6 @@ import { PermissionRanges } from './permission-ranges/index.js';
 import { PermStart } from './perm-start/index.js';
 import { PermEnd } from './perm-end/index.js';
 
-
 // Helpers
 import { trackChangesHelpers } from './track-changes/index.js';
 

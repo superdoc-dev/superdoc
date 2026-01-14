@@ -61,14 +61,27 @@ export function createGradient(gradientData, gradientId) {
 }
 
 /**
- * Creates an SVG foreignObject with formatted text content
+ * Creates an SVG foreignObject with formatted text content.
+ *
  * @param {Object} textContent - The text content with parts and formatting
+ * @param {Array<Object>} textContent.parts - Array of text parts with formatting
+ * @param {string} textContent.parts[].text - The text content
+ * @param {Object} [textContent.parts[].formatting] - Formatting options (bold, italic, color, fontSize, fontFamily)
+ * @param {'PAGE'|'NUMPAGES'} [textContent.parts[].fieldType] - Field type for dynamic content resolution
+ * @param {boolean} [textContent.parts[].isLineBreak] - Whether this part represents a line break
+ * @param {boolean} [textContent.parts[].isEmptyParagraph] - Whether this line break follows an empty paragraph
  * @param {string} textAlign - Text alignment ('left', 'center', 'right', 'r')
- * @param {number} width - Width of the text area
- * @param {number} height - Height of the text area
- * @returns {SVGForeignObjectElement} The created foreignObject element
+ * @param {number} width - Width of the text area in pixels
+ * @param {number} height - Height of the text area in pixels
+ * @param {Object} [options={}] - Additional rendering options
+ * @param {{ top: number, right: number, bottom: number, left: number }} [options.textInsets] - Text padding insets in pixels
+ * @param {'top'|'center'|'bottom'} [options.textVerticalAlign] - Vertical alignment of text content
+ * @param {number} [options.pageNumber] - Current page number for PAGE field resolution
+ * @param {number} [options.totalPages] - Total page count for NUMPAGES field resolution
+ * @returns {SVGForeignObjectElement} The created foreignObject element containing the formatted text
  */
-export function createTextElement(textContent, textAlign, width, height) {
+export function createTextElement(textContent, textAlign, width, height, options = {}) {
+  const { textInsets, textVerticalAlign, pageNumber, totalPages } = options;
   // Use foreignObject with HTML for proper text wrapping
   const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
   foreignObject.setAttribute('x', '0');
@@ -82,8 +95,19 @@ export function createTextElement(textContent, textAlign, width, height) {
   div.style.height = '100%';
   div.style.display = 'flex';
   div.style.flexDirection = 'column';
-  div.style.justifyContent = 'center'; // Vertically center the text block
-  div.style.padding = '10px';
+  const verticalAlign = textVerticalAlign || 'center';
+  if (verticalAlign === 'top') {
+    div.style.justifyContent = 'flex-start';
+  } else if (verticalAlign === 'bottom') {
+    div.style.justifyContent = 'flex-end';
+  } else {
+    div.style.justifyContent = 'center';
+  }
+  if (textInsets) {
+    div.style.padding = `${textInsets.top}px ${textInsets.right}px ${textInsets.bottom}px ${textInsets.left}px`;
+  } else {
+    div.style.padding = '10px';
+  }
   div.style.boxSizing = 'border-box';
   div.style.wordWrap = 'break-word';
   div.style.overflowWrap = 'break-word';
@@ -104,6 +128,16 @@ export function createTextElement(textContent, textAlign, width, height) {
   // Create paragraphs by splitting on line breaks
   let currentParagraph = document.createElement('div');
 
+  const resolveFieldText = (part) => {
+    if (part.fieldType === 'PAGE') {
+      return pageNumber != null ? String(pageNumber) : '1';
+    }
+    if (part.fieldType === 'NUMPAGES') {
+      return totalPages != null ? String(totalPages) : '1';
+    }
+    return part.text;
+  };
+
   // Add text content with formatting
   textContent.parts.forEach((part) => {
     if (part.isLineBreak) {
@@ -116,7 +150,7 @@ export function createTextElement(textContent, textAlign, width, height) {
       }
     } else {
       const span = document.createElement('span');
-      span.textContent = part.text;
+      span.textContent = resolveFieldText(part);
 
       // Apply formatting
       if (part.formatting) {
@@ -125,6 +159,9 @@ export function createTextElement(textContent, textAlign, width, height) {
         }
         if (part.formatting.italic) {
           span.style.fontStyle = 'italic';
+        }
+        if (part.formatting.fontFamily) {
+          span.style.fontFamily = part.formatting.fontFamily;
         }
         if (part.formatting.color) {
           span.style.color = `#${part.formatting.color}`;

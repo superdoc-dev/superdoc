@@ -2819,7 +2819,7 @@ export class DomPainter {
       transforms.push(`scale(${scale})`);
       innerWrapper.style.transform = transforms.join(' ');
 
-      innerWrapper.appendChild(this.renderDrawingContent(block, fragment));
+      innerWrapper.appendChild(this.renderDrawingContent(block, fragment, context));
       fragmentEl.appendChild(innerWrapper);
 
       return fragmentEl;
@@ -2829,7 +2829,11 @@ export class DomPainter {
     }
   }
 
-  private renderDrawingContent(block: DrawingBlock, fragment: DrawingFragment): HTMLElement {
+  private renderDrawingContent(
+    block: DrawingBlock,
+    fragment: DrawingFragment,
+    context?: FragmentRenderContext,
+  ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
@@ -2837,10 +2841,10 @@ export class DomPainter {
       return this.createDrawingImageElement(block);
     }
     if (block.drawingKind === 'vectorShape') {
-      return this.createVectorShapeElement(block, fragment.geometry, true);
+      return this.createVectorShapeElement(block, fragment.geometry, true, 1, 1, context);
     }
     if (block.drawingKind === 'shapeGroup') {
-      return this.createShapeGroupElement(block);
+      return this.createShapeGroupElement(block, context);
     }
     return this.createDrawingPlaceholder();
   }
@@ -2870,6 +2874,7 @@ export class DomPainter {
     applyTransforms = false,
     groupScaleX = 1,
     groupScaleY = 1,
+    context?: FragmentRenderContext,
   ): HTMLElement {
     const container = this.doc!.createElement('div');
     container.classList.add('superdoc-vector-shape');
@@ -2918,6 +2923,7 @@ export class DomPainter {
             block.textInsets,
             groupScaleX,
             groupScaleY,
+            context,
           );
           contentContainer.appendChild(textDiv);
         }
@@ -2939,6 +2945,7 @@ export class DomPainter {
         block.textInsets,
         groupScaleX,
         groupScaleY,
+        context,
       );
       contentContainer.appendChild(textDiv);
     }
@@ -3001,6 +3008,7 @@ export class DomPainter {
     textInsets?: { top: number; right: number; bottom: number; left: number },
     groupScaleX = 1,
     groupScaleY = 1,
+    context?: FragmentRenderContext,
   ): HTMLElement {
     const textDiv = this.doc!.createElement('div');
     textDiv.style.position = 'absolute';
@@ -3070,6 +3078,16 @@ export class DomPainter {
     // Override inherited white-space: pre from parent fragment to allow text wrapping
     currentParagraph.style.whiteSpace = 'normal';
 
+    const resolvePartText = (part: ShapeTextContent['parts'][number]) => {
+      if (part.fieldType === 'PAGE') {
+        return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
+      }
+      if (part.fieldType === 'NUMPAGES') {
+        return String(context?.totalPages ?? 1);
+      }
+      return part.text;
+    };
+
     textContent.parts.forEach((part) => {
       if (part.isLineBreak) {
         // Finish current paragraph and start a new one
@@ -3084,13 +3102,16 @@ export class DomPainter {
         }
       } else {
         const span = this.doc!.createElement('span');
-        span.textContent = part.text;
+        span.textContent = resolvePartText(part);
         if (part.formatting) {
           if (part.formatting.bold) {
             span.style.fontWeight = 'bold';
           }
           if (part.formatting.italic) {
             span.style.fontStyle = 'italic';
+          }
+          if (part.formatting.fontFamily) {
+            span.style.fontFamily = part.formatting.fontFamily;
           }
           if (part.formatting.color) {
             // Validate and normalize color format (handles both with and without # prefix)
@@ -3360,7 +3381,7 @@ export class DomPainter {
     }
   }
 
-  private createShapeGroupElement(block: ShapeGroupDrawing): HTMLElement {
+  private createShapeGroupElement(block: ShapeGroupDrawing, context?: FragmentRenderContext): HTMLElement {
     const groupEl = this.doc!.createElement('div');
     groupEl.classList.add('superdoc-shape-group');
     groupEl.style.position = 'relative';
@@ -3405,7 +3426,7 @@ export class DomPainter {
     }
 
     block.shapes.forEach((child) => {
-      const childContent = this.createGroupChildContent(child, groupScaleX, groupScaleY);
+      const childContent = this.createGroupChildContent(child, groupScaleX, groupScaleY, context);
       if (!childContent) return;
       const attrs = (child as ShapeGroupChild).attrs ?? {};
       const wrapper = this.doc!.createElement('div');
@@ -3444,6 +3465,7 @@ export class DomPainter {
     child: ShapeGroupChild,
     groupScaleX: number = 1,
     groupScaleY: number = 1,
+    context?: FragmentRenderContext,
   ): HTMLElement | null {
     // Type narrowing with explicit checks to help TypeScript distinguish union members
     if (child.shapeType === 'vectorShape' && 'fillColor' in child.attrs) {
@@ -3483,9 +3505,11 @@ export class DomPainter {
         lineEnds: attrs.lineEnds,
         textContent: attrs.textContent,
         textAlign: attrs.textAlign,
+        textVerticalAlign: attrs.textVerticalAlign,
+        textInsets: attrs.textInsets,
       };
       // Pass geometry and scale factors to ensure text overlay has correct dimensions
-      return this.createVectorShapeElement(vectorChild, childGeometry, false, groupScaleX, groupScaleY);
+      return this.createVectorShapeElement(vectorChild, childGeometry, false, groupScaleX, groupScaleY, context);
     }
     if (child.shapeType === 'image' && 'src' in child.attrs) {
       // After this check, child should be ShapeGroupImageChild
@@ -3572,11 +3596,11 @@ export class DomPainter {
         return this.createDrawingImageElement(block);
       }
       if (block.drawingKind === 'shapeGroup') {
-        return this.createShapeGroupElement(block);
+        return this.createShapeGroupElement(block, context);
       }
       if (block.drawingKind === 'vectorShape') {
         // For vectorShapes in table cells, render without geometry transforms
-        return this.createVectorShapeElement(block, block.geometry, false);
+        return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
       }
       return this.createDrawingPlaceholder();
     };

@@ -55,6 +55,7 @@ coverage
 coverage/
 **/coverage
 **/coverage/
+reports/
 
 **/src/**/*.d.ts.map
 **/src/**/*.js.map

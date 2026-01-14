@@ -150,21 +150,33 @@ export function setupInternalFieldAnnotationDragHandlers({
       if (fieldId) {
         const targetPos = event.pmPosition;
 
-        // Find the field annotation in the current document by fieldId
-        // This handles stale position data from DOM attributes after document edits
+        // Prefer the original PM start position when available to avoid ambiguity
+        const pmStart = event.data.pmStart;
         let sourceStart: number | null = null;
         let sourceEnd: number | null = null;
         let sourceNode: typeof state.doc extends { nodeAt: (p: number) => infer N } ? N : never = null;
 
-        state.doc.descendants((node, pos) => {
-          if (node.type.name === 'fieldAnnotation' && (node.attrs as { fieldId?: string }).fieldId === fieldId) {
-            sourceStart = pos;
-            sourceEnd = pos + node.nodeSize;
-            sourceNode = node;
-            return false; // Stop traversal
+        if (pmStart != null) {
+          const nodeAt = state.doc.nodeAt(pmStart);
+          if (nodeAt?.type?.name === 'fieldAnnotation') {
+            sourceStart = pmStart;
+            sourceEnd = pmStart + nodeAt.nodeSize;
+            sourceNode = nodeAt;
           }
-          return true;
-        });
+        }
+
+        // Fallback to fieldId search if PM position is missing or stale
+        if (sourceStart == null || sourceEnd == null || !sourceNode) {
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'fieldAnnotation' && (node.attrs as { fieldId?: string }).fieldId === fieldId) {
+              sourceStart = pos;
+              sourceEnd = pos + node.nodeSize;
+              sourceNode = node;
+              return false; // Stop traversal
+            }
+            return true;
+          });
+        }
 
         if (sourceStart === null || sourceEnd === null || !sourceNode) {
           return;

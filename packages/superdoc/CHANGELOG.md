@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/superdoc-dev/superdoc/compare/v1.6.0...v1.6.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* section mismatch footer numbering ([#1732](https://github.com/superdoc-dev/superdoc/issues/1732)) ([96880ba](https://github.com/superdoc-dev/superdoc/commit/96880ba779f069001d5de125c6fb703c008bcd5d))
+
 ## [1.6.1-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.6.0...v1.6.1-next.1) (2026-01-14)
 
 

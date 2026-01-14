@@ -1697,6 +1697,368 @@ describe('renderTableCell', () => {
     });
   });
 
+  describe('explicit segment positioning (SD-1472)', () => {
+    /**
+     * SD-1472: When segments have explicit x positions (from tabs), the indentation
+     * should not be double-applied. The segments are already absolutely positioned,
+     * so adding padding would shift them incorrectly, causing the first character
+     * to be lost/hidden.
+     */
+
+    const createParagraphWithExplicitPositioning = (
+      indent: { left?: number; hanging?: number; firstLine?: number; right?: number },
+      segmentX?: number,
+    ) => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-explicit-pos',
+        runs: [{ text: 'A hello world text', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { indent },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 18,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+            // When segmentX is provided, segments have explicit positioning (from tabs)
+            segments: segmentX !== undefined ? [{ x: segmentX, width: 100 }] : undefined,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      return { para, measure };
+    };
+
+    it('should not apply paddingLeft when segments have explicit x positions (prevents double indent)', () => {
+      const { para, measure } = createParagraphWithExplicitPositioning(
+        { left: 20, hanging: 30 },
+        50, // Explicit x position from tab
+      );
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 150,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-explicit-pos',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+
+      // With explicit segment positioning, textIndent should be reset to 0
+      // to prevent double-application of indentation
+      expect(lineEl.style.textIndent).toBe('0px');
+    });
+
+    it('should apply adjusted padding for first line with explicit positioning and firstLineOffset', () => {
+      const { para, measure } = createParagraphWithExplicitPositioning(
+        { left: 20, hanging: 50, firstLine: 10 }, // firstLineOffset = 10 - 50 = -40
+        30, // Explicit x position
+      );
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 150,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-adjusted-padding',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+
+      // adjustedPadding = effectiveLeftIndent (20) + firstLineOffset (-40) = -20
+      // Since -20 <= 0, no paddingLeft should be applied
+      expect(lineEl.style.paddingLeft).toBe('');
+      expect(lineEl.style.textIndent).toBe('0px');
+    });
+
+    it('should apply positive adjusted padding when effectiveLeftIndent + firstLineOffset > 0', () => {
+      const { para, measure } = createParagraphWithExplicitPositioning(
+        { left: 50, hanging: 20, firstLine: 10 }, // firstLineOffset = 10 - 20 = -10
+        30, // Explicit x position
+      );
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 150,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-positive-adjusted',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+
+      // adjustedPadding = effectiveLeftIndent (50) + firstLineOffset (-10) = 40
+      expect(lineEl.style.paddingLeft).toBe('40px');
+      expect(lineEl.style.textIndent).toBe('0px');
+    });
+
+    it('should clamp negative left indent to 0 when calculating adjusted padding', () => {
+      const { para, measure } = createParagraphWithExplicitPositioning(
+        { left: -15, hanging: 20, firstLine: 5 }, // firstLineOffset = 5 - 20 = -15
+        30, // Explicit x position
+      );
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 150,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-negative-left-clamped',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+
+      // effectiveLeftIndent = max(0, -15) = 0
+      // adjustedPadding = 0 + (-15) = -15 which is <= 0, so no padding
+      expect(lineEl.style.paddingLeft).toBe('');
+      expect(lineEl.style.textIndent).toBe('0px');
+    });
+
+    it('should apply normal indentation when segments do NOT have explicit positioning', () => {
+      const { para, measure } = createParagraphWithExplicitPositioning(
+        { left: 20, hanging: 30 },
+        undefined, // No explicit x position
+      );
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 150,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-no-explicit-pos',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+
+      // Without explicit positioning, normal indent rules apply
+      expect(lineEl.style.paddingLeft).toBe('20px');
+      expect(lineEl.style.textIndent).toBe('-30px'); // firstLine(0) - hanging(30) = -30
+    });
+
+    it('should handle suppressFirstLineIndent flag', () => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-suppress',
+        runs: [{ text: 'Suppressed indent', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          indent: { left: 20, hanging: 30, firstLine: 10 },
+          suppressFirstLineIndent: true,
+        },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 17,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 150,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-suppress-indent',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+
+      // When suppressFirstLineIndent is true, firstLineOffset should be 0
+      // So textIndent should not be applied
+      expect(lineEl.style.textIndent).toBe('');
+      expect(lineEl.style.paddingLeft).toBe('20px');
+    });
+
+    it('should not apply list indent padding when segments have explicit positioning', () => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-list-explicit',
+        runs: [{ text: 'List item with tabs', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          wordLayout: {
+            marker: {
+              markerText: '1.',
+              markerBoxWidthPx: 20,
+              gutterWidthPx: 8,
+              justification: 'left' as const,
+              run: { fontFamily: 'Arial', fontSize: 14 },
+            },
+            indentLeftPx: 40,
+          },
+        },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 19,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 0,
+            fromChar: 19,
+            toRun: 0,
+            toChar: 30,
+            width: 80,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+            // Second line (continuation) has explicit positioning
+            segments: [{ x: 40, width: 80 }],
+          },
+        ],
+        totalHeight: 40,
+        marker: { markerWidth: 20, gutterWidth: 8, indentLeft: 40 },
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 150,
+        height: 60,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-list-explicit-pos',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrapper = contentElement.firstElementChild as HTMLElement;
+
+      // Second line (continuation) should NOT have paddingLeft applied
+      // because it has explicit segment positioning
+      const secondLine = paraWrapper.children[1] as HTMLElement;
+      expect(secondLine.style.paddingLeft).toBe('');
+    });
+  });
+
   describe('hanging indent (SD-1295)', () => {
     const createMultiLineParagraph = (indent: {
       left?: number;

@@ -6,6 +6,7 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
   ImageBlock,
+  ParagraphIndent,
   SdtMetadata,
   TableBlock,
   TableFragment,
@@ -95,6 +96,28 @@ type MarkerRenderParams = {
 };
 
 /**
+ * Parameters for applying paragraph indentation within a table cell line.
+ */
+type TableCellIndentParams = {
+  /** Line element to apply indentation styles to */
+  lineEl: HTMLElement;
+  /** Line measurement data */
+  line: Line;
+  /** Paragraph indentation values */
+  indent?: ParagraphIndent;
+  /** List text indent in pixels (when list marker layout is present) */
+  indentLeftPx: number;
+  /** Whether this paragraph has list marker layout */
+  hasListMarkerLayout: boolean;
+  /** Zero-based index of the line within the paragraph */
+  lineIndex: number;
+  /** Local start line for partial rendering */
+  localStartLine: number;
+  /** Whether first-line indent should be suppressed */
+  suppressFirstLineIndent: boolean;
+};
+
+/**
  * Renders a list marker (bullet or number) for a paragraph line.
  *
  * This function creates a positioned marker element and wraps the line in a container
@@ -177,6 +200,96 @@ function renderListMarker(params: MarkerRenderParams): HTMLElement {
   lineContainer.appendChild(lineEl);
 
   return lineContainer;
+}
+
+/**
+ * Applies paragraph indentation to a rendered line inside a table cell.
+ *
+ * **SD-1472 Fix:** When segments have explicit x positions (from tab stops), the content
+ * is already absolutely positioned. Applying padding/textIndent would double-shift the text,
+ * causing the first character to be lost. This function detects explicit positioning via
+ * `segment.x !== undefined` and adjusts the indent strategy accordingly.
+ *
+ * **Mathematical Model (SD-1295):**
+ * The hanging indent effect is achieved through a combination of paddingLeft and textIndent:
+ * - `firstLineOffset = firstLine - hanging`
+ * - This offset can be positive (indent first line further right) or negative (outdent to left)
+ *
+ * **CSS Application Pattern:**
+ * - **First line (no explicit positioning):**
+ *   - `paddingLeft = left` (base left indent)
+ *   - `textIndent = firstLineOffset` (additional first-line adjustment)
+ *   - Combined effect: text starts at `left + firstLineOffset` pixels from cell edge
+ *
+ * - **First line (with explicit positioning):**
+ *   - `paddingLeft = max(0, left) + firstLineOffset` (only if positive)
+ *   - `textIndent = 0` (reset to prevent double-shift)
+ *
+ * - **Body lines (continuation lines):**
+ *   - `paddingLeft = hanging` (when hanging > 0 and no explicit positioning)
+ *   - Creates the "hanging" visual effect where body lines are indented further right
+ *
+ * **Edge Cases:**
+ * - Negative hanging: Ignored for body lines (no effect, body uses left indent only)
+ * - Negative left indent: Clamped to 0 (browsers don't support negative padding)
+ * - suppressFirstLineIndent: When true, firstLineOffset is forced to 0
+ * - Explicit segment positioning: Skips padding to avoid double-application
+ *
+ * @param params - Configuration for indent application within a table cell line.
+ */
+function applyTableCellLineIndentation(params: TableCellIndentParams): void {
+  const {
+    lineEl,
+    line,
+    indent,
+    indentLeftPx,
+    hasListMarkerLayout,
+    lineIndex,
+    localStartLine,
+    suppressFirstLineIndent,
+  } = params;
+  const paraIndentLeft = indent?.left ?? 0;
+  const paraIndentRight = indent?.right ?? 0;
+  const firstLineOffset = suppressFirstLineIndent ? 0 : (indent?.firstLine ?? 0) - (indent?.hanging ?? 0);
+  const isFirstLine = lineIndex === 0 && localStartLine === 0;
+  const hasExplicitSegmentPositioning = line.segments?.some((seg) => seg.x !== undefined) ?? false;
+
+  if (hasListMarkerLayout && indentLeftPx) {
+    // List continuation lines should use the list text indent unless tabs handle explicit positioning.
+    if (!hasExplicitSegmentPositioning) {
+      lineEl.style.paddingLeft = `${indentLeftPx}px`;
+    }
+  } else {
+    // Preserve non-list paragraph indentation that was cleared above.
+    if (hasExplicitSegmentPositioning) {
+      if (isFirstLine && firstLineOffset !== 0) {
+        const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
+        const adjustedPadding = effectiveLeftIndent + firstLineOffset;
+        if (adjustedPadding > 0) {
+          lineEl.style.paddingLeft = `${adjustedPadding}px`;
+        }
+      }
+    } else if (paraIndentLeft && paraIndentLeft > 0) {
+      lineEl.style.paddingLeft = `${paraIndentLeft}px`;
+    } else if (
+      !isFirstLine &&
+      indent?.hanging &&
+      indent.hanging > 0 &&
+      (paraIndentLeft == null || paraIndentLeft >= 0)
+    ) {
+      lineEl.style.paddingLeft = `${indent.hanging}px`;
+    }
+  }
+
+  if (paraIndentRight && paraIndentRight > 0) {
+    lineEl.style.paddingRight = `${paraIndentRight}px`;
+  }
+  if (isFirstLine && firstLineOffset && !hasExplicitSegmentPositioning) {
+    lineEl.style.textIndent = `${firstLineOffset}px`;
+  } else if (firstLineOffset && hasExplicitSegmentPositioning) {
+    // Reset textIndent when segments have explicit positioning to prevent double-shift
+    lineEl.style.textIndent = '0px';
+  }
 }
 
 /**
@@ -739,6 +852,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           markerMeasure?.indentLeft ??
           wordLayout?.indentLeftPx ??
           (block.attrs?.indent && typeof block.attrs.indent.left === 'number' ? block.attrs.indent.left : 0);
+        const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
 
         // Calculate the global line indices for this block
         const blockStartGlobal = cumulativeLineCount;
@@ -836,85 +950,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
              * - For list paragraphs: apply indent padding for continuation lines
              * - For non-list paragraphs: preserve the paragraph's own indent styling
              */
-            if (markerLayout && indentLeftPx) {
-              lineEl.style.paddingLeft = `${indentLeftPx}px`;
-            } else {
-              // Preserve non-list paragraph indentation that was cleared above
-              /**
-               * SD-1295: Hanging indent implementation for table cells.
-               *
-               * **Mathematical Model:**
-               * The hanging indent effect is achieved through a combination of paddingLeft and textIndent:
-               * - `firstLineOffset = firstLine - hanging`
-               * - This offset can be positive (indent first line further right) or negative (outdent first line to the left)
-               *
-               * **CSS Application Pattern:**
-               * - **First line:**
-               *   - `paddingLeft = left` (base left indent)
-               *   - `textIndent = firstLineOffset` (additional first-line adjustment)
-               *   - Combined effect: text starts at `left + firstLineOffset` pixels from cell edge
-               *
-               * - **Body lines (continuation lines):**
-               *   - `paddingLeft = left + hanging` (when hanging > 0)
-               *   - `textIndent` not set (defaults to 0)
-               *   - Combined effect: text starts at `left + hanging` pixels from cell edge
-               *   - This indents body lines further right, creating the "hanging" visual effect
-               *
-               * **Edge Cases:**
-               * - Negative hanging: Intentionally ignored for body lines (no effect, body uses left indent only)
-               * - Negative left indent: Clamped to 0 by CSS (browsers don't support negative padding)
-               * - Zero values: No style applied (avoids unnecessary CSS)
-               * - Partial rendering: `isFirstLine` checks both line index and rendering start position
-               *   to ensure correct treatment when rendering starts mid-paragraph
-               *
-               * **Examples:**
-               * 1. Classic hanging indent (bibliography style):
-               *    - left: 20, hanging: 30, firstLine: 0
-               *    - First line: paddingLeft=20px, textIndent=-30px → starts at -10px (outdented)
-               *    - Body lines: paddingLeft=50px → starts at 50px (indented)
-               *
-               * 2. First-line indent with hanging:
-               *    - left: 20, hanging: 30, firstLine: 10
-               *    - First line: paddingLeft=20px, textIndent=-20px → starts at 0px
-               *    - Body lines: paddingLeft=50px → starts at 50px
-               *
-               * 3. Simple first-line indent (no hanging):
-               *    - left: 20, hanging: 0, firstLine: 15
-               *    - First line: paddingLeft=20px, textIndent=15px → starts at 35px
-               *    - Body lines: paddingLeft=20px → starts at 20px
-               */
-              const indent = block.attrs?.indent;
-              if (indent) {
-                const leftIndent: number = typeof indent.left === 'number' ? indent.left : 0;
-                const hanging: number = typeof indent.hanging === 'number' ? indent.hanging : 0;
-                const firstLine: number = typeof indent.firstLine === 'number' ? indent.firstLine : 0;
-                const isFirstLine: boolean = lineIdx === 0 && localStartLine === 0;
-
-                // Calculate first-line offset: firstLine - hanging
-                // This creates the "hanging" effect where first line starts further left
-                const firstLineOffset: number = firstLine - hanging;
-
-                if (isFirstLine) {
-                  // First line: paddingLeft = left, textIndent = firstLine - hanging
-                  if (leftIndent > 0) {
-                    lineEl.style.paddingLeft = `${leftIndent}px`;
-                  }
-                  if (firstLineOffset !== 0) {
-                    lineEl.style.textIndent = `${firstLineOffset}px`;
-                  }
-                } else {
-                  // Body lines: use left indent only (hanging already accounted for on first line)
-                  if (leftIndent > 0) {
-                    lineEl.style.paddingLeft = `${leftIndent}px`;
-                  }
-                }
-
-                // Right indent applies to all lines
-                if (typeof indent.right === 'number' && indent.right > 0) {
-                  lineEl.style.paddingRight = `${indent.right}px`;
-                }
-              }
-            }
+            applyTableCellLineIndentation({
+              lineEl,
+              line,
+              indent: block.attrs?.indent,
+              indentLeftPx,
+              hasListMarkerLayout: Boolean(markerLayout),
+              lineIndex: lineIdx,
+              localStartLine,
+              suppressFirstLineIndent,
+            });
             paraWrapper.appendChild(lineEl);
           }
 

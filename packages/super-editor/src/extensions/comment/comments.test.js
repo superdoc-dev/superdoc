@@ -497,6 +497,223 @@ describe('comments plugin commands', () => {
     const result = commands.setCursorById('missing')({ state: nextState, editor });
     expect(result).toBe(false);
   });
+
+  describe('addComment', () => {
+    it('adds a comment with string content', () => {
+      const { schema, state, commands, editor } = setup();
+      const tr = state.tr;
+      const dispatch = vi.fn();
+
+      const result = commands.addComment('This needs review')({ tr, dispatch, editor });
+
+      expect(result).toBe(true);
+      expect(dispatch).toHaveBeenCalledWith(tr);
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          type: comments_module_events.ADD,
+          comment: expect.objectContaining({
+            commentText: 'This needs review',
+            creatorName: 'Another User',
+            creatorEmail: 'another.user@example.com',
+          }),
+        }),
+      );
+
+      // Get the commentId from the emitted event
+      const emitCall = editor.emit.mock.calls.find((call) => call[0] === 'commentsUpdate');
+      const commentId = emitCall[1].activeCommentId;
+      expect(commentId).toBeTypeOf('string');
+      expect(commentId).toHaveLength(36); // UUID format
+
+      const applied = state.apply(tr);
+      const mark = applied.doc.nodeAt(1).marks.find((m) => m.type === schema.marks[CommentMarkName]);
+      expect(mark.attrs.commentId).toBe(commentId);
+      expect(mark.attrs.internal).toBe(false);
+    });
+
+    it('adds a comment with options object', () => {
+      const { schema, state, commands, editor } = setup();
+      const tr = state.tr;
+      const dispatch = vi.fn();
+
+      const result = commands.addComment({
+        content: 'Please clarify this section',
+        author: 'Jane Doe',
+        authorEmail: 'jane@example.com',
+        authorImage: 'https://example.com/jane.png',
+        isInternal: true,
+      })({ tr, dispatch, editor });
+
+      expect(result).toBe(true);
+      expect(dispatch).toHaveBeenCalledWith(tr);
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          type: comments_module_events.ADD,
+          comment: expect.objectContaining({
+            commentText: 'Please clarify this section',
+            creatorName: 'Jane Doe',
+            creatorEmail: 'jane@example.com',
+            creatorImage: 'https://example.com/jane.png',
+            isInternal: true,
+          }),
+        }),
+      );
+
+      // Get the commentId from the emitted event
+      const emitCall = editor.emit.mock.calls.find((call) => call[0] === 'commentsUpdate');
+      const commentId = emitCall[1].activeCommentId;
+
+      const applied = state.apply(tr);
+      const mark = applied.doc.nodeAt(1).marks.find((m) => m.type === schema.marks[CommentMarkName]);
+      expect(mark.attrs.commentId).toBe(commentId);
+      expect(mark.attrs.internal).toBe(true);
+    });
+
+    it('returns false and warns when there is no text selection', () => {
+      const { schema, commands, editor } = setup();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Create state with cursor (no selection)
+      const paragraph = schema.nodes.paragraph.create(null, schema.text('Hello'));
+      const doc = schema.nodes.doc.create(null, [paragraph]);
+      const cursorState = EditorState.create({
+        schema,
+        doc,
+        selection: TextSelection.create(doc, 3, 3), // cursor at position 3
+      });
+
+      const tr = cursorState.tr;
+      const dispatch = vi.fn();
+
+      const result = commands.addComment('Test comment')({ tr, dispatch, editor });
+
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'addComment requires a text selection. Please select text before adding a comment.',
+      );
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(editor.emit).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('uses config user as default when author not provided', () => {
+      const { state, commands, editor } = setup();
+      const tr = state.tr;
+      const dispatch = vi.fn();
+
+      commands.addComment({ content: 'Comment without author' })({ tr, dispatch, editor });
+
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            creatorName: 'Another User',
+            creatorEmail: 'another.user@example.com',
+          }),
+        }),
+      );
+    });
+
+    it('overrides config user when author is provided', () => {
+      const { state, commands, editor } = setup();
+      const tr = state.tr;
+      const dispatch = vi.fn();
+
+      commands.addComment({
+        content: 'Comment with custom author',
+        author: 'Custom Author',
+        authorEmail: 'custom@example.com',
+      })({ tr, dispatch, editor });
+
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            creatorName: 'Custom Author',
+            creatorEmail: 'custom@example.com',
+          }),
+        }),
+      );
+    });
+
+    it('sets isInternal to false by default', () => {
+      const { schema, state, commands, editor } = setup();
+      const tr = state.tr;
+      const dispatch = vi.fn();
+
+      commands.addComment('Comment without isInternal')({ tr, dispatch, editor });
+
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            isInternal: false,
+          }),
+        }),
+      );
+
+      const applied = state.apply(tr);
+      const mark = applied.doc.nodeAt(1).marks.find((m) => m.type === schema.marks[CommentMarkName]);
+      expect(mark.attrs.internal).toBe(false);
+    });
+
+    it('adds comment with empty content', () => {
+      const { state, commands, editor } = setup();
+      const tr = state.tr;
+      const dispatch = vi.fn();
+
+      const result = commands.addComment('')({ tr, dispatch, editor });
+
+      expect(result).toBe(true);
+      expect(dispatch).toHaveBeenCalled();
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            commentText: '',
+          }),
+        }),
+      );
+    });
+
+    it('adds comment with no arguments', () => {
+      const { state, commands, editor } = setup();
+      const tr = state.tr;
+      const dispatch = vi.fn();
+
+      const result = commands.addComment()({ tr, dispatch, editor });
+
+      expect(result).toBe(true);
+      expect(dispatch).toHaveBeenCalled();
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            commentText: undefined,
+          }),
+        }),
+      );
+    });
+
+    it('includes createdTime in the comment payload', () => {
+      const { state, commands, editor } = setup();
+      const tr = state.tr;
+      const dispatch = vi.fn();
+      const beforeTime = Date.now();
+
+      commands.addComment('Timed comment')({ tr, dispatch, editor });
+
+      const afterTime = Date.now();
+      const emitCall = editor.emit.mock.calls.find((call) => call[0] === 'commentsUpdate');
+      const createdTime = emitCall[1].comment.createdTime;
+
+      expect(createdTime).toBeGreaterThanOrEqual(beforeTime);
+      expect(createdTime).toBeLessThanOrEqual(afterTime);
+    });
+  });
 });
 
 describe('comments plugin pm plugin', () => {

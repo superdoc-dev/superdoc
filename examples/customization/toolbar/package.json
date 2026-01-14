@@ -10,6 +10,6 @@
     "superdoc": "0.20.0-next.13"
   },
   "devDependencies": {
-    "vite": "^4.4.6"
+    "vite": "^7.3.1"
   }
 }

@@ -1,3 +1,11 @@
+# [1.6.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.5.0...v1.6.0-next.1) (2026-01-14)
+
+
+### Features
+
+* footnotes render ([#1686](https://github.com/superdoc-dev/superdoc/issues/1686)) ([f6c38d4](https://github.com/superdoc-dev/superdoc/commit/f6c38d4d102772984a5a63ddd327ebe204b776cf))
+* handling large footnotes, multi-column footnotes ([#1729](https://github.com/superdoc-dev/superdoc/issues/1729)) ([e4a41a3](https://github.com/superdoc-dev/superdoc/commit/e4a41a3d96db88ca59436db130f3a62440bf5577))
+
 # [1.5.0](https://github.com/superdoc-dev/superdoc/compare/v1.4.0...v1.5.0) (2026-01-13)
 
 

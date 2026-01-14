@@ -23,7 +23,7 @@ import { ExtensionService } from './ExtensionService.js';
 import { CommandService } from './CommandService.js';
 import { Attribute } from './Attribute.js';
 import { SuperConverter } from '@core/super-converter/SuperConverter.js';
-import { Commands, Editable, EditorFocus, Keymap } from './extensions/index.js';
+import { Commands, Editable, EditorFocus, Keymap, PositionTrackerExtension } from './extensions/index.js';
 import { createDocument } from './helpers/createDocument.js';
 import { isActive } from './helpers/isActive.js';
 import { trackedTransaction } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
@@ -1474,7 +1474,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #createExtensionService(): void {
     const allowedExtensions = ['extension', 'node', 'mark'];
 
-    const coreExtensions = [Editable, Commands, EditorFocus, Keymap];
+    const coreExtensions = [Editable, Commands, EditorFocus, Keymap, PositionTrackerExtension];
     const externalExtensions = this.options.externalExtensions || [];
 
     const allExtensions = [...coreExtensions, ...this.options.extensions!].filter((extension) => {

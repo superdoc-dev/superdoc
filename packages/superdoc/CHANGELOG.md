@@ -1,3 +1,49 @@
+## [1.6.1](https://github.com/superdoc-dev/superdoc/compare/v1.6.0...v1.6.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* section mismatch footer numbering ([#1732](https://github.com/superdoc-dev/superdoc/issues/1732)) ([96880ba](https://github.com/superdoc-dev/superdoc/commit/96880ba779f069001d5de125c6fb703c008bcd5d))
+
+## [1.6.1-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.6.0...v1.6.1-next.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* section mismatch footer numbering ([#1732](https://github.com/superdoc-dev/superdoc/issues/1732)) ([96880ba](https://github.com/superdoc-dev/superdoc/commit/96880ba779f069001d5de125c6fb703c008bcd5d))
+
+# [1.6.0](https://github.com/superdoc-dev/superdoc/compare/v1.5.0...v1.6.0) (2026-01-14)
+
+
+### Features
+
+* **comments:** add public addComment command with simplified API ([#1731](https://github.com/superdoc-dev/superdoc/issues/1731)) ([850ee46](https://github.com/superdoc-dev/superdoc/commit/850ee469bc2cf39e807ecb0ba96ea9043f668288))
+* footnotes render ([#1686](https://github.com/superdoc-dev/superdoc/issues/1686)) ([f6c38d4](https://github.com/superdoc-dev/superdoc/commit/f6c38d4d102772984a5a63ddd327ebe204b776cf))
+* handling large footnotes, multi-column footnotes ([#1729](https://github.com/superdoc-dev/superdoc/issues/1729)) ([e4a41a3](https://github.com/superdoc-dev/superdoc/commit/e4a41a3d96db88ca59436db130f3a62440bf5577))
+* search improvements, position tracking  ([#1730](https://github.com/superdoc-dev/superdoc/issues/1730)) ([d1b736d](https://github.com/superdoc-dev/superdoc/commit/d1b736d3b295e0ebc1454b5ce483a1174c5305f8))
+
+# [1.6.0-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.6.0-next.2...v1.6.0-next.3) (2026-01-14)
+
+
+### Features
+
+* **comments:** add public addComment command with simplified API ([#1731](https://github.com/superdoc-dev/superdoc/issues/1731)) ([850ee46](https://github.com/superdoc-dev/superdoc/commit/850ee469bc2cf39e807ecb0ba96ea9043f668288))
+
+# [1.6.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.6.0-next.1...v1.6.0-next.2) (2026-01-14)
+
+
+### Features
+
+* search improvements, position tracking  ([#1730](https://github.com/superdoc-dev/superdoc/issues/1730)) ([d1b736d](https://github.com/superdoc-dev/superdoc/commit/d1b736d3b295e0ebc1454b5ce483a1174c5305f8))
+
+# [1.6.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.5.0...v1.6.0-next.1) (2026-01-14)
+
+
+### Features
+
+* footnotes render ([#1686](https://github.com/superdoc-dev/superdoc/issues/1686)) ([f6c38d4](https://github.com/superdoc-dev/superdoc/commit/f6c38d4d102772984a5a63ddd327ebe204b776cf))
+* handling large footnotes, multi-column footnotes ([#1729](https://github.com/superdoc-dev/superdoc/issues/1729)) ([e4a41a3](https://github.com/superdoc-dev/superdoc/commit/e4a41a3d96db88ca59436db130f3a62440bf5577))
+
 # [1.5.0](https://github.com/superdoc-dev/superdoc/compare/v1.4.0...v1.5.0) (2026-01-13)
 
 

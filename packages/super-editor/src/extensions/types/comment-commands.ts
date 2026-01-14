@@ -4,7 +4,21 @@
  * @module CommentCommands
  */
 
-/** Options for insertComment command */
+/** Options for addComment command */
+export type AddCommentOptions = {
+  /** The comment content (text or HTML) */
+  content?: string;
+  /** Author name (defaults to user from editor config) */
+  author?: string;
+  /** Author email (defaults to user from editor config) */
+  authorEmail?: string;
+  /** Author image URL (defaults to user from editor config) */
+  authorImage?: string;
+  /** Whether the comment is internal/private (default: false) */
+  isInternal?: boolean;
+};
+
+/** Options for insertComment command (internal use) */
 export type InsertCommentOptions = {
   /** Unique identifier for the comment */
   commentId?: string;
@@ -64,18 +78,34 @@ export type ResolveCommentOptions = {
 
 export interface CommentCommands {
   /**
-   * Insert a comment at the current selection
-   * @param options - Comment creation options
+   * Add a comment to the current selection
+   * @param contentOrOptions - Comment content as a string, or an options object
+   * @returns True if the comment was added successfully, false otherwise
    * @example
-   * // Insert a comment with auto-generated ID
-   * editor.commands.insertComment()
+   * // Simple usage with just content
+   * editor.commands.addComment('This needs review')
    *
-   * // Insert with specific options
-   * editor.commands.insertComment({
-   *   commentId: 'comment-123',
-   *   isInternal: true,
-   *   text: '<p>Review this section</p>'
+   * // With options
+   * editor.commands.addComment({
+   *   content: 'Please clarify this section',
+   *   author: 'Jane Doe',
+   *   isInternal: true
    * })
+   *
+   * // To get the comment ID, listen to the commentsUpdate event
+   * editor.on('commentsUpdate', (event) => {
+   *   if (event.type === 'add') {
+   *     console.log('New comment ID:', event.activeCommentId)
+   *   }
+   * })
+   */
+  addComment: (contentOrOptions?: string | AddCommentOptions) => boolean;
+
+  /**
+   * @private
+   * Internal command to insert a comment mark at the current selection.
+   * Use `addComment` for the public API.
+   * @param options - Comment creation options
    */
   insertComment: (options?: InsertCommentOptions) => boolean;
 

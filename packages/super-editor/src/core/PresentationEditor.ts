@@ -362,6 +362,7 @@ type FootnotesLayoutInput = {
   gap?: number;
   topPadding?: number;
   dividerHeight?: number;
+  separatorSpacingBefore?: number;
 };
 
 type LayoutMetrics = {

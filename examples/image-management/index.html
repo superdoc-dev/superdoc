@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Management Example</title>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Image Management</h1>
+            <button id="loadButton">Upload File</button>
+            <input
+                type="file"
+                id="fileInput"
+                accept=".docx"
+                style="display: none"
+            >
+            <button id="deleteButton">Delete All Images</button>
+            <span id="imageCount"></span>
+        </header>
+        <main>
+            <div id="superdoc-toolbar"></div>
+            <div id="superdoc"></div>
+        </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>

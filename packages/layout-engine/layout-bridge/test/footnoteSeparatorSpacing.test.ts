@@ -80,7 +80,7 @@ describe('Footnote separator spacing', () => {
     const { page, pageSize, dividerHeight, topPadding, footnoteLineHeight } = await buildLayout({});
 
     const separator = page.fragments.find(
-      (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'footnote-separator-page-1',
+      (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'footnote-separator-page-1-col-0',
     );
     expect(separator).toBeTruthy();
 
@@ -100,7 +100,7 @@ describe('Footnote separator spacing', () => {
     });
 
     const separator = page.fragments.find(
-      (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'footnote-separator-page-1',
+      (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'footnote-separator-page-1-col-0',
     );
     expect(separator).toBeTruthy();
 

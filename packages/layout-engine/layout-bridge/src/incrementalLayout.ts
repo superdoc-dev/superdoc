@@ -5,6 +5,7 @@ import type {
   HeaderFooterLayout,
   SectionMetadata,
   ParagraphBlock,
+  ColumnLayout,
 } from '@superdoc/contracts';
 import {
   layoutDocument,
@@ -116,23 +117,135 @@ const findPageIndexForPos = (layout: Layout, pos: number): number | null => {
   return null;
 };
 
-const assignFootnotesToPages = (layout: Layout, refs: FootnoteReference[]): Map<number, string[]> => {
-  const result = new Map<number, string[]>();
-  const seenByPage = new Map<number, Set<string>>();
+const footnoteColumnKey = (pageIndex: number, columnIndex: number): string => `${pageIndex}:${columnIndex}`;
+
+const COLUMN_EPSILON = 0.01;
+
+type NormalizedColumns = ColumnLayout & { width: number };
+type PageColumns = NormalizedColumns & { left: number; contentWidth: number };
+
+const normalizeColumnsForFootnotes = (input: ColumnLayout | undefined, contentWidth: number): NormalizedColumns => {
+  const rawCount = Number.isFinite(input?.count) ? Math.floor(input!.count) : 1;
+  const count = Math.max(1, rawCount || 1);
+  const gap = Math.max(0, input?.gap ?? 0);
+  const totalGap = gap * (count - 1);
+  const width = (contentWidth - totalGap) / count;
+
+  if (!Number.isFinite(width) || width <= COLUMN_EPSILON) {
+    return {
+      count: 1,
+      gap: 0,
+      width: Math.max(0, contentWidth),
+    };
+  }
+
+  return { count, gap, width };
+};
+
+const resolveSectionColumnsByIndex = (options: LayoutOptions, blocks?: FlowBlock[]): Map<number, ColumnLayout> => {
+  const result = new Map<number, ColumnLayout>();
+  let activeColumns: ColumnLayout = options.columns ?? { count: 1, gap: 0 };
+
+  if (blocks && blocks.length > 0) {
+    for (const block of blocks) {
+      if (block.kind !== 'sectionBreak') continue;
+      const sectionIndexRaw = (block.attrs as { sectionIndex?: number } | undefined)?.sectionIndex;
+      const sectionIndex =
+        typeof sectionIndexRaw === 'number' && Number.isFinite(sectionIndexRaw) ? sectionIndexRaw : result.size;
+      if (block.columns) {
+        activeColumns = { count: block.columns.count, gap: block.columns.gap };
+      }
+      result.set(sectionIndex, { ...activeColumns });
+    }
+  }
+
+  if (result.size === 0) {
+    result.set(0, { ...activeColumns });
+  }
+
+  return result;
+};
+
+const resolvePageColumns = (layout: Layout, options: LayoutOptions, blocks?: FlowBlock[]): Map<number, PageColumns> => {
+  const sectionColumns = resolveSectionColumnsByIndex(options, blocks);
+  const result = new Map<number, PageColumns>();
+
+  for (let pageIndex = 0; pageIndex < layout.pages.length; pageIndex += 1) {
+    const page = layout.pages[pageIndex];
+    const pageSize = page.size ?? layout.pageSize ?? DEFAULT_PAGE_SIZE;
+    const marginLeft = normalizeMargin(
+      page.margins?.left,
+      normalizeMargin(options.margins?.left, DEFAULT_MARGINS.left),
+    );
+    const marginRight = normalizeMargin(
+      page.margins?.right,
+      normalizeMargin(options.margins?.right, DEFAULT_MARGINS.right),
+    );
+    const contentWidth = pageSize.w - (marginLeft + marginRight);
+    const sectionIndex = page.sectionIndex ?? 0;
+    const columnsConfig = sectionColumns.get(sectionIndex) ?? options.columns ?? { count: 1, gap: 0 };
+    const normalized = normalizeColumnsForFootnotes(columnsConfig, contentWidth);
+    result.set(pageIndex, { ...normalized, left: marginLeft, contentWidth });
+  }
+
+  return result;
+};
+
+const findFragmentForPos = (
+  page: Layout['pages'][number],
+  pos: number,
+): Layout['pages'][number]['fragments'][number] | null => {
+  for (const fragment of page.fragments) {
+    const pmStart = (fragment as { pmStart?: number }).pmStart;
+    const pmEnd = (fragment as { pmEnd?: number }).pmEnd;
+    if (pmStart == null || pmEnd == null) continue;
+    if (pos >= pmStart && pos <= pmEnd) {
+      return fragment;
+    }
+  }
+  return null;
+};
+
+const assignFootnotesToColumns = (
+  layout: Layout,
+  refs: FootnoteReference[],
+  pageColumns: Map<number, PageColumns>,
+): Map<number, Map<number, string[]>> => {
+  const result = new Map<number, Map<number, string[]>>();
+  const seenByColumn = new Map<string, Set<string>>();
+
   for (const ref of refs) {
     const pageIndex = findPageIndexForPos(layout, ref.pos);
     if (pageIndex == null) continue;
-    let seen = seenByPage.get(pageIndex);
+    const columns = pageColumns.get(pageIndex);
+    const page = layout.pages[pageIndex];
+    let columnIndex = 0;
+
+    if (columns && columns.count > 1 && page) {
+      const fragment = findFragmentForPos(page, ref.pos);
+      if (fragment && typeof fragment.x === 'number') {
+        const columnStride = columns.width + columns.gap;
+        const rawIndex = columnStride > 0 ? Math.floor((fragment.x - columns.left) / columnStride) : 0;
+        columnIndex = Math.max(0, Math.min(columns.count - 1, rawIndex));
+      }
+    }
+
+    const key = footnoteColumnKey(pageIndex, columnIndex);
+    let seen = seenByColumn.get(key);
     if (!seen) {
       seen = new Set();
-      seenByPage.set(pageIndex, seen);
+      seenByColumn.set(key, seen);
     }
     if (seen.has(ref.id)) continue;
     seen.add(ref.id);
-    const list = result.get(pageIndex) ?? [];
+
+    const pageMap = result.get(pageIndex) ?? new Map<number, string[]>();
+    const list = pageMap.get(columnIndex) ?? [];
     list.push(ref.id);
-    result.set(pageIndex, list);
+    pageMap.set(columnIndex, list);
+    result.set(pageIndex, pageMap);
   }
+
   return result;
 };
 
@@ -143,16 +256,30 @@ const resolveFootnoteMeasurementWidth = (options: LayoutOptions, blocks?: FlowBl
     left: normalizeMargin(options.margins?.left, DEFAULT_MARGINS.left),
   };
   let width = pageSize.w - (margins.left + margins.right);
+  let activeColumns: ColumnLayout = options.columns ?? { count: 1, gap: 0 };
+  let activePageSize = pageSize;
+  let activeMargins = { ...margins };
+
+  const resolveColumnWidth = (): number => {
+    const contentWidth = activePageSize.w - (activeMargins.left + activeMargins.right);
+    const normalized = normalizeColumnsForFootnotes(activeColumns, contentWidth);
+    return normalized.width;
+  };
+
+  width = resolveColumnWidth();
 
   if (blocks && blocks.length > 0) {
     for (const block of blocks) {
       if (block.kind !== 'sectionBreak') continue;
-      const sectionPageSize = block.pageSize ?? pageSize;
-      const sectionMargins = {
-        right: normalizeMargin(block.margins?.right, margins.right),
-        left: normalizeMargin(block.margins?.left, margins.left),
+      activePageSize = block.pageSize ?? activePageSize;
+      activeMargins = {
+        right: normalizeMargin(block.margins?.right, activeMargins.right),
+        left: normalizeMargin(block.margins?.left, activeMargins.left),
       };
-      const w = sectionPageSize.w - (sectionMargins.left + sectionMargins.right);
+      if (block.columns) {
+        activeColumns = { count: block.columns.count, gap: block.columns.gap };
+      }
+      const w = resolveColumnWidth();
       if (w > 0 && w < width) width = w;
     }
   }
@@ -206,6 +333,7 @@ type FootnoteRange =
 type FootnoteSlice = {
   id: string;
   pageIndex: number;
+  columnIndex: number;
   isContinuation: boolean;
   ranges: FootnoteRange[];
   totalHeight: number;
@@ -214,7 +342,7 @@ type FootnoteSlice = {
 type FootnoteLayoutPlan = {
   slicesByPage: Map<number, FootnoteSlice[]>;
   reserves: number[];
-  hasContinuation: boolean[];
+  hasContinuationByColumn: Map<string, boolean>;
   separatorSpacingBefore: number;
 };
 
@@ -444,6 +572,7 @@ const fitFootnoteContent = (
   inputRanges: FootnoteRange[],
   availableHeight: number,
   pageIndex: number,
+  columnIndex: number,
   isContinuation: boolean,
   measuresById: Map<string, Measure>,
   forceFirstRange: boolean,
@@ -499,6 +628,7 @@ const fitFootnoteContent = (
     slice: {
       id,
       pageIndex,
+      columnIndex,
       isContinuation,
       ranges: fittedRanges,
       totalHeight: usedHeight,
@@ -1030,16 +1160,24 @@ export async function incrementalLayout(
     if (footnoteWidth > 0) {
       const footnoteConstraints = { maxWidth: footnoteWidth, maxHeight: measurementHeight };
 
-      const measureFootnoteBlocks = async (idsByPage: Map<number, string[]>) => {
+      const collectFootnoteIdsByColumn = (idsByColumn: Map<number, Map<number, string[]>>): Set<string> => {
+        const ids = new Set<string>();
+        idsByColumn.forEach((columns) => {
+          columns.forEach((list) => {
+            list.forEach((id) => ids.add(id));
+          });
+        });
+        return ids;
+      };
+
+      const measureFootnoteBlocks = async (ids: Set<string>) => {
         const needed = new Map<string, FlowBlock>();
-        idsByPage.forEach((ids) => {
-          ids.forEach((id) => {
-            const blocks = footnotesInput.blocksById.get(id) ?? [];
-            blocks.forEach((block) => {
-              if (block?.id && !needed.has(block.id)) {
-                needed.set(block.id, block);
-              }
-            });
+        ids.forEach((id) => {
+          const blocks = footnotesInput.blocksById.get(id) ?? [];
+          blocks.forEach((block) => {
+            if (block?.id && !needed.has(block.id)) {
+              needed.set(block.id, block);
+            }
           });
         });
 
@@ -1062,21 +1200,19 @@ export async function incrementalLayout(
 
       const computeFootnoteLayoutPlan = (
         layoutForPages: Layout,
-        idsByPage: Map<number, string[]>,
+        idsByColumn: Map<number, Map<number, string[]>>,
         measuresById: Map<string, Measure>,
         baseReserves: number[] = [],
+        pageColumns: Map<number, PageColumns>,
       ): FootnoteLayoutPlan => {
         const pageCount = layoutForPages.pages.length;
         const slicesByPage = new Map<number, FootnoteSlice[]>();
         const reserves: number[] = new Array(pageCount).fill(0);
-        const hasContinuation: boolean[] = new Array(pageCount).fill(false);
+        const hasContinuationByColumn = new Map<string, boolean>();
         const rangesByFootnoteId = new Map<string, FootnoteRange[]>();
-        const cappedPages: number[] = [];
+        const cappedPages = new Set<number>();
 
-        const allIds = new Set<string>();
-        idsByPage.forEach((ids) => {
-          ids.forEach((id) => allIds.add(id));
-        });
+        const allIds = collectFootnoteIdsByColumn(idsByColumn);
         allIds.forEach((id) => {
           const blocks = footnotesInput.blocksById.get(id) ?? [];
           rangesByFootnoteId.set(id, buildFootnoteRanges(blocks, measuresById));
@@ -1090,127 +1226,158 @@ export async function incrementalLayout(
         );
         const safeSeparatorSpacingBefore = Math.max(0, separatorSpacingBefore);
 
-        let pending: Array<{ id: string; ranges: FootnoteRange[] }> = [];
+        let pendingByColumn = new Map<number, Array<{ id: string; ranges: FootnoteRange[] }>>();
 
         for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
           const baseReserve = Number.isFinite(baseReserves?.[pageIndex]) ? Math.max(0, baseReserves[pageIndex]) : 0;
           const maxReserve = computeMaxFootnoteReserve(layoutForPages, pageIndex, baseReserve);
-          let usedHeight = 0;
+          const columns = pageColumns.get(pageIndex);
+          const columnCount = Math.max(1, Math.floor(columns?.count ?? 1));
+
+          const pendingForPage = new Map<number, Array<{ id: string; ranges: FootnoteRange[] }>>();
+          pendingByColumn.forEach((entries, columnIndex) => {
+            const targetIndex = columnIndex < columnCount ? columnIndex : Math.max(0, columnCount - 1);
+            const list = pendingForPage.get(targetIndex) ?? [];
+            list.push(...entries);
+            pendingForPage.set(targetIndex, list);
+          });
+          pendingByColumn = new Map();
+
           const pageSlices: FootnoteSlice[] = [];
-          const nextPending: Array<{ id: string; ranges: FootnoteRange[] }> = [];
-          let stopPlacement = false;
+          let pageReserve = 0;
 
-          const placeFootnote = (
-            id: string,
-            ranges: FootnoteRange[],
-            isContinuation: boolean,
-          ): { placed: boolean; remaining: FootnoteRange[] } => {
-            if (!ranges || ranges.length === 0) {
-              return { placed: false, remaining: [] };
-            }
+          for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+            let usedHeight = 0;
+            const columnSlices: FootnoteSlice[] = [];
+            const nextPending: Array<{ id: string; ranges: FootnoteRange[] }> = [];
+            let stopPlacement = false;
+            const columnKey = footnoteColumnKey(pageIndex, columnIndex);
 
-            const isFirstSlice = pageSlices.length === 0;
-            const separatorBefore = isFirstSlice ? safeSeparatorSpacingBefore : 0;
-            const separatorHeight = isFirstSlice ? (isContinuation ? continuationDividerHeight : safeDividerHeight) : 0;
-            const overhead = isFirstSlice ? separatorBefore + separatorHeight + safeTopPadding : 0;
-            const gapBefore = !isFirstSlice ? safeGap : 0;
-            const availableHeight = Math.max(0, maxReserve - usedHeight - overhead - gapBefore);
-            const { slice, remainingRanges } = fitFootnoteContent(
-              id,
-              ranges,
-              availableHeight,
-              pageIndex,
-              isContinuation,
-              measuresById,
-              isFirstSlice && maxReserve > 0,
-            );
-
-            if (slice.ranges.length === 0) {
-              return { placed: false, remaining: ranges };
-            }
-
-            if (isFirstSlice) {
-              usedHeight += overhead;
-              if (isContinuation) {
-                hasContinuation[pageIndex] = true;
+            const placeFootnote = (
+              id: string,
+              ranges: FootnoteRange[],
+              isContinuation: boolean,
+            ): { placed: boolean; remaining: FootnoteRange[] } => {
+              if (!ranges || ranges.length === 0) {
+                return { placed: false, remaining: [] };
               }
-            }
-            if (gapBefore > 0) {
-              usedHeight += gapBefore;
-            }
 
-            usedHeight += slice.totalHeight;
-            pageSlices.push(slice);
-            return { placed: true, remaining: remainingRanges };
-          };
+              const isFirstSlice = columnSlices.length === 0;
+              const separatorBefore = isFirstSlice ? safeSeparatorSpacingBefore : 0;
+              const separatorHeight = isFirstSlice
+                ? isContinuation
+                  ? continuationDividerHeight
+                  : safeDividerHeight
+                : 0;
+              const overhead = isFirstSlice ? separatorBefore + separatorHeight + safeTopPadding : 0;
+              const gapBefore = !isFirstSlice ? safeGap : 0;
+              const availableHeight = Math.max(0, maxReserve - usedHeight - overhead - gapBefore);
+              const { slice, remainingRanges } = fitFootnoteContent(
+                id,
+                ranges,
+                availableHeight,
+                pageIndex,
+                columnIndex,
+                isContinuation,
+                measuresById,
+                isFirstSlice && maxReserve > 0,
+              );
 
-          for (const entry of pending) {
-            if (stopPlacement) {
-              nextPending.push(entry);
-              continue;
-            }
-            if (!entry.ranges || entry.ranges.length === 0) continue;
-            const result = placeFootnote(entry.id, entry.ranges, true);
-            if (!result.placed) {
-              nextPending.push(entry);
-              stopPlacement = true;
-              continue;
-            }
-            if (result.remaining.length > 0) {
-              nextPending.push({ id: entry.id, ranges: result.remaining });
-            }
-          }
+              if (slice.ranges.length === 0) {
+                return { placed: false, remaining: ranges };
+              }
 
-          if (!stopPlacement) {
-            const ids = idsByPage.get(pageIndex) ?? [];
-            for (let idIndex = 0; idIndex < ids.length; idIndex += 1) {
-              const id = ids[idIndex];
-              const ranges = rangesByFootnoteId.get(id) ?? [];
-              if (ranges.length === 0) continue;
-              const result = placeFootnote(id, ranges, false);
-              if (!result.placed) {
-                nextPending.push({ id, ranges });
-                for (let remainingIndex = idIndex + 1; remainingIndex < ids.length; remainingIndex += 1) {
-                  const remainingId = ids[remainingIndex];
-                  const remainingRanges = rangesByFootnoteId.get(remainingId) ?? [];
-                  nextPending.push({ id: remainingId, ranges: remainingRanges });
+              if (isFirstSlice) {
+                usedHeight += overhead;
+                if (isContinuation) {
+                  hasContinuationByColumn.set(columnKey, true);
                 }
+              }
+              if (gapBefore > 0) {
+                usedHeight += gapBefore;
+              }
+
+              usedHeight += slice.totalHeight;
+              columnSlices.push(slice);
+              return { placed: true, remaining: remainingRanges };
+            };
+
+            const pending = pendingForPage.get(columnIndex) ?? [];
+            for (const entry of pending) {
+              if (stopPlacement) {
+                nextPending.push(entry);
+                continue;
+              }
+              if (!entry.ranges || entry.ranges.length === 0) continue;
+              const result = placeFootnote(entry.id, entry.ranges, true);
+              if (!result.placed) {
+                nextPending.push(entry);
                 stopPlacement = true;
-                break;
+                continue;
               }
               if (result.remaining.length > 0) {
-                nextPending.push({ id, ranges: result.remaining });
+                nextPending.push({ id: entry.id, ranges: result.remaining });
               }
             }
-          }
 
-          pending = nextPending;
+            if (!stopPlacement) {
+              const ids = idsByColumn.get(pageIndex)?.get(columnIndex) ?? [];
+              for (let idIndex = 0; idIndex < ids.length; idIndex += 1) {
+                const id = ids[idIndex];
+                const ranges = rangesByFootnoteId.get(id) ?? [];
+                if (ranges.length === 0) continue;
+                const result = placeFootnote(id, ranges, false);
+                if (!result.placed) {
+                  nextPending.push({ id, ranges });
+                  for (let remainingIndex = idIndex + 1; remainingIndex < ids.length; remainingIndex += 1) {
+                    const remainingId = ids[remainingIndex];
+                    const remainingRanges = rangesByFootnoteId.get(remainingId) ?? [];
+                    nextPending.push({ id: remainingId, ranges: remainingRanges });
+                  }
+                  stopPlacement = true;
+                  break;
+                }
+                if (result.remaining.length > 0) {
+                  nextPending.push({ id, ranges: result.remaining });
+                }
+              }
+            }
+
+            if (columnSlices.length > 0) {
+              const rawReserve = Math.max(0, Math.ceil(usedHeight));
+              const cappedReserve = Math.min(rawReserve, maxReserve);
+              if (cappedReserve < rawReserve) {
+                cappedPages.add(pageIndex);
+              }
+              pageReserve = Math.max(pageReserve, cappedReserve);
+              pageSlices.push(...columnSlices);
+            }
+
+            if (nextPending.length > 0) {
+              pendingByColumn.set(columnIndex, nextPending);
+            }
+          }
 
           if (pageSlices.length > 0) {
             slicesByPage.set(pageIndex, pageSlices);
-            const rawReserve = Math.max(0, Math.ceil(usedHeight));
-            const cappedReserve = Math.min(rawReserve, maxReserve);
-            if (cappedReserve < rawReserve) {
-              cappedPages.push(pageIndex);
-            }
-            reserves[pageIndex] = cappedReserve;
-          } else {
-            reserves[pageIndex] = 0;
           }
+          reserves[pageIndex] = pageReserve;
         }
 
-        if (cappedPages.length > 0) {
+        if (cappedPages.size > 0) {
           console.warn('[layout] Footnote reserve capped to preserve body area', {
-            pages: cappedPages,
+            pages: Array.from(cappedPages),
           });
         }
-        if (pending.length > 0) {
+        if (pendingByColumn.size > 0) {
+          const pendingIds = new Set<string>();
+          pendingByColumn.forEach((entries) => entries.forEach((entry) => pendingIds.add(entry.id)));
           console.warn('[layout] Footnote content truncated: extends beyond document pages', {
-            ids: pending.map((entry) => entry.id),
+            ids: Array.from(pendingIds),
           });
         }
 
-        return { slicesByPage, reserves, hasContinuation, separatorSpacingBefore: safeSeparatorSpacingBefore };
+        return { slicesByPage, reserves, hasContinuationByColumn, separatorSpacingBefore: safeSeparatorSpacingBefore };
       };
 
       const injectFragments = (
@@ -1219,6 +1386,7 @@ export async function incrementalLayout(
         measuresById: Map<string, Measure>,
         reservesByPageIndex: number[],
         blockById: Map<string, FlowBlock>,
+        pageColumns: Map<number, PageColumns>,
       ) => {
         const decorativeBlocks: FlowBlock[] = [];
         const decorativeMeasures: Measure[] = [];
@@ -1231,190 +1399,230 @@ export async function incrementalLayout(
           if (!page.margins) continue;
 
           const pageSize = page.size ?? layoutForPages.pageSize;
-          const pageContentWidth = pageSize.w - ((page.margins.left ?? 0) + (page.margins.right ?? 0));
-          const contentWidth = Math.min(pageContentWidth, footnoteWidth);
-          if (!Number.isFinite(contentWidth) || contentWidth <= 0) continue;
+          const marginLeft = normalizeMargin(
+            page.margins.left,
+            normalizeMargin(options.margins?.left, DEFAULT_MARGINS.left),
+          );
+          const marginRight = normalizeMargin(
+            page.margins.right,
+            normalizeMargin(options.margins?.right, DEFAULT_MARGINS.right),
+          );
+          const pageContentWidth = pageSize.w - (marginLeft + marginRight);
+          const fallbackColumns = normalizeColumnsForFootnotes(
+            options.columns ?? { count: 1, gap: 0 },
+            pageContentWidth,
+          );
+          const columns = pageColumns.get(pageIndex) ?? {
+            ...fallbackColumns,
+            left: marginLeft,
+            contentWidth: pageContentWidth,
+          };
           const bandTopY = pageSize.h - (page.margins.bottom ?? 0);
-          const x = page.margins.left ?? 0;
 
-          // Optional visible separator line (Word-like). Uses a 1px filled rect.
-          let cursorY = bandTopY + Math.max(0, plan.separatorSpacingBefore);
-          const separatorHeight = plan.hasContinuation[pageIndex] ? continuationDividerHeight : safeDividerHeight;
-          const separatorWidth = plan.hasContinuation[pageIndex]
-            ? Math.max(0, contentWidth * continuationDividerWidthFactor)
-            : contentWidth;
-          if (separatorHeight > 0 && separatorWidth > 0) {
-            const separatorId = plan.hasContinuation[pageIndex]
-              ? `footnote-continuation-separator-page-${page.number}`
-              : `footnote-separator-page-${page.number}`;
-            decorativeBlocks.push({
-              kind: 'drawing',
-              id: separatorId,
-              drawingKind: 'vectorShape',
-              geometry: { width: separatorWidth, height: separatorHeight },
-              shapeKind: 'rect',
-              fillColor: '#000000',
-              strokeColor: null,
-              strokeWidth: 0,
-            });
-            decorativeMeasures.push({
-              kind: 'drawing',
-              drawingKind: 'vectorShape',
-              width: separatorWidth,
-              height: separatorHeight,
-              scale: 1,
-              naturalWidth: separatorWidth,
-              naturalHeight: separatorHeight,
-              geometry: { width: separatorWidth, height: separatorHeight },
-            });
-            page.fragments.push({
-              kind: 'drawing',
-              blockId: separatorId,
-              drawingKind: 'vectorShape',
-              x,
-              y: cursorY,
-              width: separatorWidth,
-              height: separatorHeight,
-              geometry: { width: separatorWidth, height: separatorHeight },
-              scale: 1,
-            });
-            cursorY += separatorHeight;
-          }
-          cursorY += safeTopPadding;
+          const slicesByColumn = new Map<number, FootnoteSlice[]>();
+          slices.forEach((slice) => {
+            const columnIndex = Number.isFinite(slice.columnIndex) ? slice.columnIndex : 0;
+            const list = slicesByColumn.get(columnIndex) ?? [];
+            list.push(slice);
+            slicesByColumn.set(columnIndex, list);
+          });
 
-          slices.forEach((slice, sliceIndex) => {
-            slice.ranges.forEach((range) => {
-              if (range.kind === 'paragraph') {
-                const measure = measuresById.get(range.blockId);
-                if (!measure || measure.kind !== 'paragraph') return;
-                const marker = measure.marker;
-                page.fragments.push({
-                  kind: 'para',
-                  blockId: range.blockId,
-                  fromLine: range.fromLine,
-                  toLine: range.toLine,
-                  x,
-                  y: cursorY,
-                  width: contentWidth,
-                  continuesFromPrev: range.fromLine > 0,
-                  continuesOnNext: range.toLine < range.totalLines,
-                  ...(marker?.markerWidth != null ? { markerWidth: marker.markerWidth } : {}),
-                  ...(marker?.markerTextWidth != null ? { markerTextWidth: marker.markerTextWidth } : {}),
-                  ...(marker?.gutterWidth != null ? { markerGutter: marker.gutterWidth } : {}),
-                });
-                cursorY += getRangeRenderHeight(range);
-                return;
-              }
+          slicesByColumn.forEach((columnSlices, rawColumnIndex) => {
+            if (columnSlices.length === 0) return;
+            const columnIndex = Math.max(0, Math.min(columns.count - 1, rawColumnIndex));
+            const columnStride = columns.width + columns.gap;
+            const columnX = columns.left + columnIndex * columnStride;
+            const contentWidth = Math.min(columns.width, footnoteWidth);
+            if (!Number.isFinite(contentWidth) || contentWidth <= 0) return;
 
-              if (range.kind === 'list-item') {
-                const measure = measuresById.get(range.blockId);
-                const block = blockById.get(range.blockId);
-                if (!measure || measure.kind !== 'list') return;
-                if (!block || block.kind !== 'list') return;
-                const itemMeasure = measure.items.find((entry) => entry.itemId === range.itemId);
-                if (!itemMeasure) return;
-                const indentLeft = Number.isFinite(itemMeasure.indentLeft) ? itemMeasure.indentLeft : 0;
-                const markerWidth = Number.isFinite(itemMeasure.markerWidth) ? itemMeasure.markerWidth : 0;
-                const itemWidth = Math.max(0, contentWidth - indentLeft - markerWidth);
-                page.fragments.push({
-                  kind: 'list-item',
-                  blockId: range.blockId,
-                  itemId: range.itemId,
-                  fromLine: range.fromLine,
-                  toLine: range.toLine,
-                  x: x + indentLeft + markerWidth,
-                  y: cursorY,
-                  width: itemWidth,
-                  markerWidth,
-                  continuesFromPrev: range.fromLine > 0,
-                  continuesOnNext: range.toLine < range.totalLines,
-                });
-                cursorY += getRangeRenderHeight(range);
-                return;
-              }
+            const columnKey = footnoteColumnKey(pageIndex, columnIndex);
+            const isContinuation = plan.hasContinuationByColumn.get(columnKey) ?? false;
 
-              if (range.kind === 'table') {
-                const measure = measuresById.get(range.blockId);
-                const block = blockById.get(range.blockId);
-                if (!measure || measure.kind !== 'table') return;
-                if (!block || block.kind !== 'table') return;
-                const tableWidthRaw = Math.max(0, measure.totalWidth ?? 0);
-                let tableWidth = Math.min(contentWidth, tableWidthRaw);
-                let tableX = x;
-                const justification =
-                  typeof block.attrs?.justification === 'string' ? block.attrs.justification : undefined;
-                if (justification === 'center') {
-                  tableX = x + Math.max(0, (contentWidth - tableWidth) / 2);
-                } else if (justification === 'right' || justification === 'end') {
-                  tableX = x + Math.max(0, contentWidth - tableWidth);
-                } else {
-                  const indentValue = (block.attrs?.tableIndent as { width?: unknown } | undefined)?.width;
-                  const indent = typeof indentValue === 'number' && Number.isFinite(indentValue) ? indentValue : 0;
-                  tableX += indent;
-                  tableWidth = Math.max(0, tableWidth - indent);
-                }
-                page.fragments.push({
-                  kind: 'table',
-                  blockId: range.blockId,
-                  fromRow: 0,
-                  toRow: block.rows.length,
-                  x: tableX,
-                  y: cursorY,
-                  width: tableWidth,
-                  height: Math.max(0, measure.totalHeight ?? 0),
-                });
-                cursorY += getRangeRenderHeight(range);
-                return;
-              }
-
-              if (range.kind === 'image') {
-                const measure = measuresById.get(range.blockId);
-                if (!measure || measure.kind !== 'image') return;
-                page.fragments.push({
-                  kind: 'image',
-                  blockId: range.blockId,
-                  x,
-                  y: cursorY,
-                  width: Math.min(contentWidth, Math.max(0, measure.width ?? 0)),
-                  height: Math.max(0, measure.height ?? 0),
-                });
-                cursorY += getRangeRenderHeight(range);
-                return;
-              }
-
-              if (range.kind === 'drawing') {
-                const measure = measuresById.get(range.blockId);
-                const block = blockById.get(range.blockId);
-                if (!measure || measure.kind !== 'drawing') return;
-                if (!block || block.kind !== 'drawing') return;
-                page.fragments.push({
-                  kind: 'drawing',
-                  blockId: range.blockId,
-                  drawingKind: block.drawingKind,
-                  x,
-                  y: cursorY,
-                  width: Math.min(contentWidth, Math.max(0, measure.width ?? 0)),
-                  height: Math.max(0, measure.height ?? 0),
-                  geometry: measure.geometry,
-                  scale: measure.scale,
-                });
-                cursorY += getRangeRenderHeight(range);
-              }
-            });
-
-            if (sliceIndex < slices.length - 1) {
-              cursorY += safeGap;
+            // Optional visible separator line (Word-like). Uses a 1px filled rect.
+            let cursorY = bandTopY + Math.max(0, plan.separatorSpacingBefore);
+            const separatorHeight = isContinuation ? continuationDividerHeight : safeDividerHeight;
+            const separatorWidth = isContinuation
+              ? Math.max(0, contentWidth * continuationDividerWidthFactor)
+              : contentWidth;
+            if (separatorHeight > 0 && separatorWidth > 0) {
+              const separatorId = isContinuation
+                ? `footnote-continuation-separator-page-${page.number}-col-${columnIndex}`
+                : `footnote-separator-page-${page.number}-col-${columnIndex}`;
+              decorativeBlocks.push({
+                kind: 'drawing',
+                id: separatorId,
+                drawingKind: 'vectorShape',
+                geometry: { width: separatorWidth, height: separatorHeight },
+                shapeKind: 'rect',
+                fillColor: '#000000',
+                strokeColor: null,
+                strokeWidth: 0,
+              });
+              decorativeMeasures.push({
+                kind: 'drawing',
+                drawingKind: 'vectorShape',
+                width: separatorWidth,
+                height: separatorHeight,
+                scale: 1,
+                naturalWidth: separatorWidth,
+                naturalHeight: separatorHeight,
+                geometry: { width: separatorWidth, height: separatorHeight },
+              });
+              page.fragments.push({
+                kind: 'drawing',
+                blockId: separatorId,
+                drawingKind: 'vectorShape',
+                x: columnX,
+                y: cursorY,
+                width: separatorWidth,
+                height: separatorHeight,
+                geometry: { width: separatorWidth, height: separatorHeight },
+                scale: 1,
+              });
+              cursorY += separatorHeight;
             }
+            cursorY += safeTopPadding;
+
+            columnSlices.forEach((slice, sliceIndex) => {
+              slice.ranges.forEach((range) => {
+                if (range.kind === 'paragraph') {
+                  const measure = measuresById.get(range.blockId);
+                  if (!measure || measure.kind !== 'paragraph') return;
+                  const marker = measure.marker;
+                  page.fragments.push({
+                    kind: 'para',
+                    blockId: range.blockId,
+                    fromLine: range.fromLine,
+                    toLine: range.toLine,
+                    x: columnX,
+                    y: cursorY,
+                    width: contentWidth,
+                    continuesFromPrev: range.fromLine > 0,
+                    continuesOnNext: range.toLine < range.totalLines,
+                    ...(marker?.markerWidth != null ? { markerWidth: marker.markerWidth } : {}),
+                    ...(marker?.markerTextWidth != null ? { markerTextWidth: marker.markerTextWidth } : {}),
+                    ...(marker?.gutterWidth != null ? { markerGutter: marker.gutterWidth } : {}),
+                  });
+                  cursorY += getRangeRenderHeight(range);
+                  return;
+                }
+
+                if (range.kind === 'list-item') {
+                  const measure = measuresById.get(range.blockId);
+                  const block = blockById.get(range.blockId);
+                  if (!measure || measure.kind !== 'list') return;
+                  if (!block || block.kind !== 'list') return;
+                  const itemMeasure = measure.items.find((entry) => entry.itemId === range.itemId);
+                  if (!itemMeasure) return;
+                  const indentLeft = Number.isFinite(itemMeasure.indentLeft) ? itemMeasure.indentLeft : 0;
+                  const markerWidth = Number.isFinite(itemMeasure.markerWidth) ? itemMeasure.markerWidth : 0;
+                  const itemWidth = Math.max(0, contentWidth - indentLeft - markerWidth);
+                  page.fragments.push({
+                    kind: 'list-item',
+                    blockId: range.blockId,
+                    itemId: range.itemId,
+                    fromLine: range.fromLine,
+                    toLine: range.toLine,
+                    x: columnX + indentLeft + markerWidth,
+                    y: cursorY,
+                    width: itemWidth,
+                    markerWidth,
+                    continuesFromPrev: range.fromLine > 0,
+                    continuesOnNext: range.toLine < range.totalLines,
+                  });
+                  cursorY += getRangeRenderHeight(range);
+                  return;
+                }
+
+                if (range.kind === 'table') {
+                  const measure = measuresById.get(range.blockId);
+                  const block = blockById.get(range.blockId);
+                  if (!measure || measure.kind !== 'table') return;
+                  if (!block || block.kind !== 'table') return;
+                  const tableWidthRaw = Math.max(0, measure.totalWidth ?? 0);
+                  let tableWidth = Math.min(contentWidth, tableWidthRaw);
+                  let tableX = columnX;
+                  const justification =
+                    typeof block.attrs?.justification === 'string' ? block.attrs.justification : undefined;
+                  if (justification === 'center') {
+                    tableX = columnX + Math.max(0, (contentWidth - tableWidth) / 2);
+                  } else if (justification === 'right' || justification === 'end') {
+                    tableX = columnX + Math.max(0, contentWidth - tableWidth);
+                  } else {
+                    const indentValue = (block.attrs?.tableIndent as { width?: unknown } | undefined)?.width;
+                    const indent = typeof indentValue === 'number' && Number.isFinite(indentValue) ? indentValue : 0;
+                    tableX += indent;
+                    tableWidth = Math.max(0, tableWidth - indent);
+                  }
+                  page.fragments.push({
+                    kind: 'table',
+                    blockId: range.blockId,
+                    fromRow: 0,
+                    toRow: block.rows.length,
+                    x: tableX,
+                    y: cursorY,
+                    width: tableWidth,
+                    height: Math.max(0, measure.totalHeight ?? 0),
+                  });
+                  cursorY += getRangeRenderHeight(range);
+                  return;
+                }
+
+                if (range.kind === 'image') {
+                  const measure = measuresById.get(range.blockId);
+                  if (!measure || measure.kind !== 'image') return;
+                  page.fragments.push({
+                    kind: 'image',
+                    blockId: range.blockId,
+                    x: columnX,
+                    y: cursorY,
+                    width: Math.min(contentWidth, Math.max(0, measure.width ?? 0)),
+                    height: Math.max(0, measure.height ?? 0),
+                  });
+                  cursorY += getRangeRenderHeight(range);
+                  return;
+                }
+
+                if (range.kind === 'drawing') {
+                  const measure = measuresById.get(range.blockId);
+                  const block = blockById.get(range.blockId);
+                  if (!measure || measure.kind !== 'drawing') return;
+                  if (!block || block.kind !== 'drawing') return;
+                  page.fragments.push({
+                    kind: 'drawing',
+                    blockId: range.blockId,
+                    drawingKind: block.drawingKind,
+                    x: columnX,
+                    y: cursorY,
+                    width: Math.min(contentWidth, Math.max(0, measure.width ?? 0)),
+                    height: Math.max(0, measure.height ?? 0),
+                    geometry: measure.geometry,
+                    scale: measure.scale,
+                  });
+                  cursorY += getRangeRenderHeight(range);
+                }
+              });
+
+              if (sliceIndex < columnSlices.length - 1) {
+                cursorY += safeGap;
+              }
+            });
           });
         }
 
         return { decorativeBlocks, decorativeMeasures };
       };
 
+      const resolveFootnoteAssignments = (layoutForPages: Layout) => {
+        const columns = resolvePageColumns(layoutForPages, options, currentBlocks);
+        const idsByColumn = assignFootnotesToColumns(layoutForPages, footnotesInput.refs, columns);
+        return { columns, idsByColumn };
+      };
+
       // Pass 1: assign + reserve from current layout.
-      let idsByPage = assignFootnotesToPages(layout, footnotesInput.refs);
-      let { measuresById } = await measureFootnoteBlocks(idsByPage);
-      let plan = computeFootnoteLayoutPlan(layout, idsByPage, measuresById);
+      let { columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout);
+      let { measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn));
+      let plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, [], pageColumns);
       let reserves = plan.reserves;
 
       // If any reserves, relayout once, then re-assign and inject.
@@ -1429,9 +1637,9 @@ export async function incrementalLayout(
         });
 
         // Pass 2: recompute assignment and reserves for the updated pagination.
-        idsByPage = assignFootnotesToPages(layout, footnotesInput.refs);
-        ({ measuresById } = await measureFootnoteBlocks(idsByPage));
-        plan = computeFootnoteLayoutPlan(layout, idsByPage, measuresById, reserves);
+        ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
+        ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
+        plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
         reserves = plan.reserves;
 
         // Apply final reserves (best-effort second relayout) then inject fragments.
@@ -1443,9 +1651,17 @@ export async function incrementalLayout(
           remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
             remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         });
-        let finalIdsByPage = assignFootnotesToPages(layout, footnotesInput.refs);
-        let { blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(finalIdsByPage);
-        let finalPlan = computeFootnoteLayoutPlan(layout, finalIdsByPage, finalMeasuresById, reserves);
+        let { columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout);
+        let { blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
+          collectFootnoteIdsByColumn(finalIdsByColumn),
+        );
+        let finalPlan = computeFootnoteLayoutPlan(
+          layout,
+          finalIdsByColumn,
+          finalMeasuresById,
+          reserves,
+          finalPageColumns,
+        );
         const finalReserves = finalPlan.reserves;
         let reservesAppliedToLayout = reserves;
         const reservesDiffer =
@@ -1462,15 +1678,30 @@ export async function incrementalLayout(
               remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
           });
           reservesAppliedToLayout = finalReserves;
-          finalIdsByPage = assignFootnotesToPages(layout, footnotesInput.refs);
-          ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(finalIdsByPage));
-          finalPlan = computeFootnoteLayoutPlan(layout, finalIdsByPage, finalMeasuresById, reservesAppliedToLayout);
+          ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
+          ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
+            collectFootnoteIdsByColumn(finalIdsByColumn),
+          ));
+          finalPlan = computeFootnoteLayoutPlan(
+            layout,
+            finalIdsByColumn,
+            finalMeasuresById,
+            reservesAppliedToLayout,
+            finalPageColumns,
+          );
         }
         const blockById = new Map<string, FlowBlock>();
         finalBlocks.forEach((block) => {
           blockById.set(block.id, block);
         });
-        const injected = injectFragments(layout, finalPlan, finalMeasuresById, reservesAppliedToLayout, blockById);
+        const injected = injectFragments(
+          layout,
+          finalPlan,
+          finalMeasuresById,
+          reservesAppliedToLayout,
+          blockById,
+          finalPageColumns,
+        );
 
         const alignedBlocks: FlowBlock[] = [];
         const alignedMeasures: Measure[] = [];

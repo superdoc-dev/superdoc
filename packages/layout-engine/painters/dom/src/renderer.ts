@@ -2747,7 +2747,7 @@ export class DomPainter {
         // Convert VML gain to CSS contrast
         // VML gain is a hex string like "19661f" - higher = more contrast
         if (block.gain && typeof block.gain === 'string' && block.gain.endsWith('f')) {
-          const contrast = Math.max(0, parseInt(block.gain) / 65536);
+          const contrast = Math.max(0, parseInt(block.gain) / 65536) * (2 / 3); // 2/3 factor based on visual comparison.
           if (contrast > 0) {
             filters.push(`contrast(${contrast})`);
           }
@@ -2756,7 +2756,7 @@ export class DomPainter {
         // Convert VML blacklevel (brightness) to CSS brightness
         // VML blacklevel is a hex string like "22938f" - lower = less brightness
         if (block.blacklevel && typeof block.blacklevel === 'string' && block.blacklevel.endsWith('f')) {
-          const brightness = Math.max(0, 1 + parseInt(block.blacklevel) / 327 / 100) + 0.5; // 0.5 factor added based on visual comparison.
+          const brightness = Math.max(0, 1 + parseInt(block.blacklevel) / 327 / 100) * 1.3; // 1.3 factor added based on visual comparison.
           if (brightness > 0) {
             filters.push(`brightness(${brightness})`);
           }

@@ -969,7 +969,13 @@ const handleMarginClick = (event) => {
   if (event.ctrlKey && isMacOS()) {
     return;
   }
-  if (event.target.classList.contains('ProseMirror')) return;
+  const target = event.target;
+  if (target?.classList?.contains('ProseMirror')) return;
+
+  // Causes issues with node selection.
+  if (target?.closest?.('.presentation-editor, .superdoc-layout')) {
+    return;
+  }
 
   onMarginClickCursorChange(event, activeEditor.value);
 };

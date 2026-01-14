@@ -303,6 +303,10 @@ export class PresentationEditor extends EventEmitter {
   #lastClickTime = 0;
   #lastClickPosition: { x: number; y: number } = { x: 0, y: 0 };
   #lastSelectedImageBlockId: string | null = null;
+  #lastSelectedFieldAnnotation: {
+    element: HTMLElement;
+    pmStart: number;
+  } | null = null;
 
   // Drag selection state
   #dragAnchor: number | null = null;
@@ -4320,6 +4324,53 @@ export class PresentationEditor extends EventEmitter {
     this.#selectionSync.requestRender(options);
   }
 
+  #clearSelectedFieldAnnotationClass() {
+    if (this.#lastSelectedFieldAnnotation?.element?.classList?.contains('ProseMirror-selectednode')) {
+      this.#lastSelectedFieldAnnotation.element.classList.remove('ProseMirror-selectednode');
+    }
+    this.#lastSelectedFieldAnnotation = null;
+  }
+
+  #setSelectedFieldAnnotationClass(element: HTMLElement, pmStart: number) {
+    if (this.#lastSelectedFieldAnnotation?.element && this.#lastSelectedFieldAnnotation.element !== element) {
+      this.#lastSelectedFieldAnnotation.element.classList.remove('ProseMirror-selectednode');
+    }
+    element.classList.add('ProseMirror-selectednode');
+    this.#lastSelectedFieldAnnotation = { element, pmStart };
+  }
+
+  #syncSelectedFieldAnnotationClass(selection: Selection | null | undefined) {
+    if (!selection || !(selection instanceof NodeSelection)) {
+      this.#clearSelectedFieldAnnotationClass();
+      return;
+    }
+
+    const node = selection.node;
+    if (!node || node.type?.name !== 'fieldAnnotation') {
+      this.#clearSelectedFieldAnnotationClass();
+      return;
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedFieldAnnotationClass();
+      return;
+    }
+
+    const pmStart = selection.from;
+    if (this.#lastSelectedFieldAnnotation?.pmStart === pmStart && this.#lastSelectedFieldAnnotation.element) {
+      return;
+    }
+
+    const selector = `.annotation[data-pm-start="${pmStart}"]`;
+    const element = this.#painterHost.querySelector(selector) as HTMLElement | null;
+    if (!element) {
+      this.#clearSelectedFieldAnnotationClass();
+      return;
+    }
+
+    this.#setSelectedFieldAnnotationClass(element, pmStart);
+  }
+
   /**
    * Updates the visual cursor/selection overlay to match the current editor selection.
    *
@@ -4350,6 +4401,7 @@ export class PresentationEditor extends EventEmitter {
     // In header/footer mode, the ProseMirror editor handles its own caret
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
+      this.#clearSelectedFieldAnnotationClass();
       return;
     }
 
@@ -4361,6 +4413,7 @@ export class PresentationEditor extends EventEmitter {
     // In viewing mode, don't render caret or selection highlights
     if (this.#isViewLocked()) {
       try {
+        this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         // DOM manipulation can fail if element is detached or in invalid state
@@ -4377,6 +4430,7 @@ export class PresentationEditor extends EventEmitter {
 
     if (!selection) {
       try {
+        this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -4398,6 +4452,8 @@ export class PresentationEditor extends EventEmitter {
       // Avoid rendering a "best effort" caret/selection that would drift.
       return;
     }
+
+    this.#syncSelectedFieldAnnotationClass(selection);
 
     // Ensure selection endpoints remain mounted under virtualization so DOM-first
     // caret/selection rendering stays available during cross-page selection.
@@ -4446,7 +4502,9 @@ export class PresentationEditor extends EventEmitter {
 
     try {
       this.#localSelectionLayer.innerHTML = '';
-      if (domRects.length > 0) {
+      const isFieldAnnotationSelection =
+        selection instanceof NodeSelection && selection.node?.type?.name === 'fieldAnnotation';
+      if (domRects.length > 0 && !isFieldAnnotationSelection) {
         renderSelectionRects({
           localSelectionLayer: this.#localSelectionLayer,
           rects: domRects,

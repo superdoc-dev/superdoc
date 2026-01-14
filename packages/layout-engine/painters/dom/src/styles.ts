@@ -492,8 +492,22 @@ const SDT_CONTAINER_STYLES = `
 const FIELD_ANNOTATION_STYLES = `
 /* Field annotation draggable styles */
 .superdoc-layout .annotation[data-draggable="true"] {
-  user-select: none;
-  -webkit-user-select: none;
+  user-select: text;
+}
+
+.superdoc-layout .annotation::selection,
+.superdoc-layout .annotation *::selection {
+  background: transparent;
+}
+  
+.superdoc-layout .annotation::-moz-selection,
+.superdoc-layout .annotation *::-moz-selection  {
+  background: transparent;
+}
+
+.superdoc-layout .annotation,
+.superdoc-layout .annotation * {
+  caret-color: transparent;
 }
 
 .superdoc-layout .annotation[data-draggable="true"]:hover {

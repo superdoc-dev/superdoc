@@ -1,3 +1,10 @@
+# [1.7.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.1...v1.7.0-next.2) (2026-01-14)
+
+
+### Reverts
+
+* Revert "chore(release): 1.7.0-next.1 [skip ci]" ([3e0afa8](https://github.com/superdoc-dev/superdoc/commit/3e0afa8b5237520a44315cf6ddc635de58f6f6a6))
+
 ## [1.6.2-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.6.2-next.1...v1.6.2-next.2) (2026-01-14)
 
 

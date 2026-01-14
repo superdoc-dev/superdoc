@@ -1,3 +1,10 @@
+# [1.6.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.6.0-next.1...v1.6.0-next.2) (2026-01-14)
+
+
+### Features
+
+* search improvements, position tracking  ([#1730](https://github.com/superdoc-dev/superdoc/issues/1730)) ([d1b736d](https://github.com/superdoc-dev/superdoc/commit/d1b736d3b295e0ebc1454b5ce483a1174c5305f8))
+
 # [1.6.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.5.0...v1.6.0-next.1) (2026-01-14)
 
 

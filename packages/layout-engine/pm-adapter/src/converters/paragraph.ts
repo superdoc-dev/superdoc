@@ -414,9 +414,12 @@ export function fieldAnnotationNodeToRun(
 }
 
 /**
- * Helper to check if a run is a text run (not a tab).
+ * Helper to check if a run is a text run.
  */
-const isTextRun = (run: Run): run is TextRun => (run as { kind?: string }).kind !== 'tab';
+const isTextRun = (run: Run): run is TextRun => {
+  const kind = (run as { kind?: string }).kind;
+  return (kind === undefined || kind === 'text') && 'text' in run;
+};
 
 /**
  * Checks if two text runs have compatible data attributes for merging.

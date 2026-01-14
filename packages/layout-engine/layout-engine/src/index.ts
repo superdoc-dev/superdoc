@@ -516,10 +516,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
       // Schedule section refs for first section (will be applied on first page creation)
       if (block.headerRefs || block.footerRefs) {
-        pendingSectionRefs = {
+        const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+        const nextSectionRefs = {
           ...(block.headerRefs && { headerRefs: block.headerRefs }),
           ...(block.footerRefs && { footerRefs: block.footerRefs }),
         };
+        pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
         layoutLog(`[Layout] First section: Scheduled pendingSectionRefs:`, pendingSectionRefs);
       }
       // Set section index for first section
@@ -602,10 +604,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
     // Schedule section refs changes (apply at next page boundary)
     if (block.headerRefs || block.footerRefs) {
-      pendingSectionRefs = {
+      const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+      const nextSectionRefs = {
         ...(block.headerRefs && { headerRefs: block.headerRefs }),
         ...(block.footerRefs && { footerRefs: block.footerRefs }),
       };
+      pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
       layoutLog(`[Layout] Compat fallback: Scheduled pendingSectionRefs:`, pendingSectionRefs);
     }
     if (block.attrs?.requirePageBoundary) {
@@ -664,6 +668,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   type SectionRefs = {
     headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
     footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
+  };
+  const normalizeRefs = (
+    refs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>,
+  ): Partial<Record<'default' | 'first' | 'even' | 'odd', string>> | undefined =>
+    refs && Object.keys(refs).length > 0 ? refs : undefined;
+  const mergeSectionRefs = (base: SectionRefs | null, next: SectionRefs | null): SectionRefs | null => {
+    if (!base && !next) return null;
+    const headerRefs = normalizeRefs(next?.headerRefs) ?? normalizeRefs(base?.headerRefs);
+    const footerRefs = normalizeRefs(next?.footerRefs) ?? normalizeRefs(base?.footerRefs);
+    if (!headerRefs && !footerRefs) return null;
+    return {
+      ...(headerRefs && { headerRefs }),
+      ...(footerRefs && { footerRefs }),
+    };
   };
   const sectionMetadataList = options.sectionMetadata ?? [];
   const initialSectionMetadata = sectionMetadataList[0];
@@ -771,7 +789,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
         // Apply pending section refs
         if (pendingSectionRefs) {
-          activeSectionRefs = pendingSectionRefs;
+          activeSectionRefs = mergeSectionRefs(activeSectionRefs, pendingSectionRefs);
           pendingSectionRefs = null;
         }
         // Apply pending section index
@@ -1213,10 +1231,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       // Schedule section refs (handled outside of SectionState since they're module-level vars)
       if (effectiveBlock.headerRefs || effectiveBlock.footerRefs) {
-        pendingSectionRefs = {
+        const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+        const nextSectionRefs = {
           ...(effectiveBlock.headerRefs && { headerRefs: effectiveBlock.headerRefs }),
           ...(effectiveBlock.footerRefs && { footerRefs: effectiveBlock.footerRefs }),
         };
+        pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
         layoutLog(`[Layout] After scheduleSectionBreakCompat: Scheduled pendingSectionRefs:`, pendingSectionRefs);
       }
 

@@ -15,6 +15,7 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
   SectionBreakBlock,
+  SectionVerticalAlign,
   TableBlock,
   TableMeasure,
   TableFragment,
@@ -426,10 +427,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeOrientation: 'portrait' | 'landscape' | null = null;
   let pendingOrientation: 'portrait' | 'landscape' | null = null;
 
-  // Track active and pending vertical alignment for sections
-  type VerticalAlign = 'top' | 'center' | 'bottom' | 'both';
-  let activeVAlign: VerticalAlign | null = null;
-  let pendingVAlign: VerticalAlign | null = null;
+  // Track active and pending vertical alignment for sections.
+  // - activeVAlign: current alignment for pages being created (null = default 'top')
+  // - pendingVAlign: scheduled alignment for next page boundary
+  //   - undefined = no pending change (keep activeVAlign as-is)
+  //   - null = reset to default 'top'
+  //   - 'center'/'bottom'/'both' = change to that alignment
+  let activeVAlign: SectionVerticalAlign | null = null;
+  let pendingVAlign: SectionVerticalAlign | null | undefined = undefined;
 
   // Create floating-object manager for anchored image tracking
   const paginatorMargins = { left: activeLeftMargin, right: activeRightMargin };
@@ -651,6 +656,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // Set vertical alignment from active section state
     if (activeVAlign && activeVAlign !== 'top') {
       page.vAlign = activeVAlign;
+      // Store base margins for vAlign centering (Word centers within base margins,
+      // not inflated margins that account for header/footer height)
+      page.baseMargins = {
+        top: activeSectionBaseTopMargin,
+        bottom: activeSectionBaseBottomMargin,
+      };
     }
     return page;
   };
@@ -698,6 +709,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       ...(initialSectionMetadata.headerRefs && { headerRefs: initialSectionMetadata.headerRefs }),
       ...(initialSectionMetadata.footerRefs && { footerRefs: initialSectionMetadata.footerRefs }),
     };
+  }
+  // Initialize vertical alignment from first section metadata (for page 1)
+  if (initialSectionMetadata?.vAlign) {
+    activeVAlign = initialSectionMetadata.vAlign;
   }
   // Section index tracking for multi-section page numbering and header/footer selection
   let activeSectionIndex: number = initialSectionMetadata?.sectionIndex ?? 0;
@@ -797,10 +812,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           activeSectionIndex = pendingSectionIndex;
           pendingSectionIndex = null;
         }
-        // Apply pending vertical alignment
-        if (pendingVAlign !== null) {
+        // Apply pending vertical alignment (undefined = no change, null = reset to default)
+        if (pendingVAlign !== undefined) {
           activeVAlign = pendingVAlign;
-          pendingVAlign = null;
+          pendingVAlign = undefined;
         }
         // Apply pending section base margins
         if (pendingSectionBaseTopMargin !== null) {
@@ -1216,17 +1231,19 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
-      // Handle vAlign from section break (not part of SectionState, handled separately)
-      if (effectiveBlock.vAlign) {
-        const isFirstSection = effectiveBlock.attrs?.isFirstSection && states.length === 0;
-        if (isFirstSection) {
-          // First section: apply immediately
-          activeVAlign = effectiveBlock.vAlign;
-          pendingVAlign = null;
-        } else {
-          // Non-first section: schedule for next page
-          pendingVAlign = effectiveBlock.vAlign;
-        }
+      // Handle vAlign from section break (not part of SectionState, handled separately).
+      // vAlign is a per-section property that does NOT inherit between sections.
+      // When not specified, OOXML defaults to 'top' (represented as null here).
+      // We must always process this for every section break to prevent stale values.
+      const sectionVAlign = effectiveBlock.vAlign ?? null;
+      const isFirstSectionForVAlign = effectiveBlock.attrs?.isFirstSection && states.length === 0;
+      if (isFirstSectionForVAlign) {
+        // First section: apply immediately
+        activeVAlign = sectionVAlign;
+        pendingVAlign = undefined; // Clear any pending (undefined = no pending change)
+      } else {
+        // Non-first section: schedule for next page
+        pendingVAlign = sectionVAlign;
       }
 
       // Schedule section refs (handled outside of SectionState since they're module-level vars)
@@ -1638,13 +1655,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Post-process pages with vertical alignment (center, bottom, both)
   // For each page, calculate content bounds and apply Y offset to all fragments
   for (const page of pages) {
-    if (!page.vAlign || page.vAlign === 'top') continue;
-    if (page.fragments.length === 0) continue;
+    if (!page.vAlign || page.vAlign === 'top') {
+      continue;
+    }
+    if (page.fragments.length === 0) {
+      continue;
+    }
 
-    // Get page dimensions
+    // Get page dimensions. For vAlign centering, use BASE margins (not inflated margins)
+    // to match Word's behavior where headers/footers don't affect vertical alignment.
     const pageSizeForPage = page.size ?? pageSize;
-    const contentTop = page.margins?.top ?? margins.top;
-    const contentBottom = pageSizeForPage.h - (page.margins?.bottom ?? margins.bottom);
+    const baseTop = page.baseMargins?.top ?? page.margins?.top ?? margins.top;
+    const baseBottom = page.baseMargins?.bottom ?? page.margins?.bottom ?? margins.bottom;
+    const contentTop = baseTop;
+    const contentBottom = pageSizeForPage.h - baseBottom;
     const contentHeight = contentBottom - contentTop;
 
     // Calculate the actual content bounds (min and max Y of all fragments)

@@ -21,6 +21,8 @@ export type TestSectionProps = {
   pageSize?: { w: number; h: number };
   columns?: { count: number; gap: number };
   margins?: { header?: number; footer?: number };
+  /** Vertical alignment of content within the section's pages */
+  vAlign?: 'top' | 'center' | 'bottom' | 'both';
 };
 
 /**
@@ -166,6 +168,17 @@ function createSectPrElements(sectionProps: TestSectionProps): Array<Record<stri
       attributes: {
         'w:num': sectionProps.columns.count.toString(),
         'w:space': pixelsToTwips(sectionProps.columns.gap).toString(),
+      },
+    });
+  }
+
+  // Add w:vAlign element (vertical alignment)
+  if (sectionProps.vAlign) {
+    elements.push({
+      type: 'element',
+      name: 'w:vAlign',
+      attributes: {
+        'w:val': sectionProps.vAlign,
       },
     });
   }
@@ -326,6 +339,10 @@ export function createSectionBreak(props: TestSectionProps): SectionBreakBlock {
       header: props.margins.header,
       footer: props.margins.footer,
     };
+  }
+
+  if (props.vAlign) {
+    block.vAlign = props.vAlign;
   }
 
   return block;

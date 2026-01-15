@@ -1,0 +1,15 @@
+{
+  "name": "preloader-superdoc-example",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "superdoc": "0.20.0-next.13"
+  },
+  "devDependencies": {
+    "vite": "^4.4.6"
+  }
+}

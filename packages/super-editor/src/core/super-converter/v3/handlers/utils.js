@@ -307,7 +307,7 @@ export function encodePropertiesByKey(xmlName, sdName, translator, params, node,
     const items = elements.map((el) => translator.encode({ ...params, nodes: [el] })).filter(Boolean);
     if (items.length > 0) {
       result[sdName] = items.reduce((acc, item) => {
-        if (item[keyAttr]) {
+        if (item[keyAttr] != null) {
           acc[item[keyAttr]] = item;
         }
         return acc;

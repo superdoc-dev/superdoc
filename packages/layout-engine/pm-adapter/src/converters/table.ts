@@ -29,7 +29,6 @@ import type {
   HyperlinkConfig,
   ThemeColorPalette,
   ConverterContext,
-  ListCounterContext,
   TableNodeToBlockOptions,
   NestedConverters,
 } from '../types.js';
@@ -51,7 +50,6 @@ type ParagraphConverter = (
   defaultFont: string,
   defaultSize: number,
   styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
   trackedChanges?: TrackedChangesConfig,
   bookmarks?: Map<string, number>,
   hyperlinkConfig?: HyperlinkConfig,
@@ -65,7 +63,6 @@ type TableParserDependencies = {
   defaultFont: string;
   defaultSize: number;
   styleContext: StyleContext;
-  listCounterContext?: ListCounterContext;
   trackedChanges?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig?: HyperlinkConfig;
@@ -269,7 +266,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.defaultFont,
         context.defaultSize,
         context.styleContext,
-        listCounterContext,
         context.trackedChanges,
         context.bookmarks,
         context.hyperlinkConfig,
@@ -699,7 +695,6 @@ export function tableNodeToBlock(
     defaultFont: string,
     defaultSize: number,
     styleContext: StyleContext,
-    listCounterContext?: ListCounterContext,
     trackedChanges?: TrackedChangesConfig,
     bookmarks?: Map<string, number>,
     hyperlinkConfig?: HyperlinkConfig,
@@ -723,7 +718,6 @@ export function tableNodeToBlock(
     bookmarks,
     hyperlinkConfig,
     themeColors,
-    listCounterContext: options?.listCounterContext,
     paragraphToFlowBlocks: paragraphConverter,
     converterContext,
     converters: options?.converters,
@@ -906,7 +900,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -927,7 +920,7 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     undefined, // themeColors
     converters?.paragraphToFlowBlocks,
     converterContext,
-    { listCounterContext, converters },
+    { converters },
   );
   if (tableBlock) {
     blocks.push(tableBlock);

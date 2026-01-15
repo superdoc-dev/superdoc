@@ -61,7 +61,7 @@ vi.mock('../tracked-changes.js', () => ({
 }));
 
 vi.mock('../attributes/paragraph-styles.js', () => ({
-  hydrateParagraphStyleAttrs: vi.fn(),
+  resolveParagraphProperties: vi.fn(),
   hydrateCharacterStyleAttrs: vi.fn(),
   hydrateMarkerStyleAttrs: vi.fn(),
 }));

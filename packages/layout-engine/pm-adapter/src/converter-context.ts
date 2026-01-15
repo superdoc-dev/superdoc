@@ -9,6 +9,7 @@
  */
 
 import type { ParagraphSpacing } from '@superdoc/contracts';
+import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 
 export type ConverterNumberingContext = {
   definitions?: Record<string, unknown>;
@@ -35,6 +36,8 @@ export type ConverterContext = {
   docx?: Record<string, unknown>;
   numbering?: ConverterNumberingContext;
   linkedStyles?: ConverterLinkedStyle[];
+  translatedNumbering: NumberingProperties;
+  translatedLinkedStyles: StylesDocumentProperties;
   /**
    * Optional mapping from OOXML footnote id -> display number.
    * Display numbers are assigned in order of first appearance in the document (1-based),

@@ -27,13 +27,11 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     converters,
   } = context;
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
   const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
 
@@ -50,7 +48,6 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         defaultFont,
         defaultSize,
         styleContext,
-        { getListCounter, incrementListCounter, resetListCounter },
         trackedChangesConfig,
         bookmarks,
         hyperlinkConfig,

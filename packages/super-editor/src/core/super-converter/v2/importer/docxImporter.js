@@ -144,12 +144,18 @@ export const createDocumentJson = (docx, converter, editor) => {
     const numbering = getNumberingDefinitions(docx);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
+
+    const translatedLinkedStyles = translateStyleDefinitions(docx);
+    const translatedNumbering = translateNumberingDefinitions(docx);
+
     let parsedContent = nodeListHandler.handler({
       nodes: content,
       nodeListHandler,
       docx,
       converter,
       numbering,
+      translatedNumbering,
+      translatedLinkedStyles,
       editor,
       inlineDocumentFonts,
       lists,
@@ -176,7 +182,7 @@ export const createDocumentJson = (docx, converter, editor) => {
     return {
       pmDoc: result,
       savedTagsToRestore: node,
-      pageStyles: getDocumentStyles(node, docx, converter, editor, numbering),
+      pageStyles: getDocumentStyles(node, docx, converter, editor, numbering, translatedNumbering, translatedLinkedStyles),
       comments,
       footnotes,
       inlineDocumentFonts,
@@ -266,6 +272,8 @@ const createNodeListHandler = (nodeHandlers) => {
     insideTrackChange,
     converter,
     numbering,
+    translatedNumbering,
+    translatedLinkedStyles,
     editor,
     filename,
     parentStyleId,
@@ -299,6 +307,8 @@ const createNodeListHandler = (nodeHandlers) => {
                 insideTrackChange,
                 converter,
                 numbering,
+                translatedNumbering,
+                translatedLinkedStyles,
                 editor,
                 filename,
                 parentStyleId,
@@ -419,7 +429,7 @@ function importFootnotePropertiesFromSettings(docx, converter) {
  * @param {Editor} editor instance.
  * @returns {Object} The document styles object
  */
-function getDocumentStyles(node, docx, converter, editor, numbering) {
+function getDocumentStyles(node, docx, converter, editor, numbering, translatedNumbering, translatedLinkedStyles) {
   const sectPr = node.elements?.find((n) => n.name === 'w:sectPr');
   const styles = {};
 
@@ -468,7 +478,7 @@ function getDocumentStyles(node, docx, converter, editor, numbering) {
   });
 
   // Import headers and footers. Stores them in converter.headers and converter.footers
-  importHeadersFooters(docx, converter, editor, numbering);
+  importHeadersFooters(docx, converter, editor, numbering, translatedNumbering, translatedLinkedStyles);
   styles.alternateHeaders = isAlternatingHeadersOddEven(docx);
   return styles;
 }
@@ -623,12 +633,11 @@ export function addDefaultStylesIfMissing(styles) {
  * @param {Object} converter The converter instance
  * @param {Editor} mainEditor The editor instance
  */
-const importHeadersFooters = (docx, converter, mainEditor) => {
+const importHeadersFooters = (docx, converter, mainEditor, numbering, translatedNumbering, translatedLinkedStyles) => {
   const rels = docx['word/_rels/document.xml.rels'];
   const relationships = rels?.elements.find((el) => el.name === 'Relationships');
   const { elements } = relationships || { elements: [] };
 
-  const numbering = getNumberingDefinitions(docx);
   const headerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
   const footerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
   const headers = elements.filter((el) => el.attributes['Type'] === headerType);
@@ -662,6 +671,8 @@ const importHeadersFooters = (docx, converter, mainEditor) => {
       docx,
       converter,
       numbering,
+      translatedNumbering,
+      translatedLinkedStyles,
       editor,
       filename: currentFileName,
       path: [],

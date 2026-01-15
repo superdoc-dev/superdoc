@@ -20,15 +20,9 @@ export {
 
 // Spacing and indent
 export {
-  spacingPxToPt,
-  indentPxToPt,
-  spacingPtToPx,
-  indentPtToPx,
   normalizeAlignment,
   normalizeParagraphSpacing,
   normalizeLineRule,
-  normalizePxIndent,
-  normalizeParagraphIndent,
 } from './spacing-indent.js';
 
 // Tab stops
@@ -40,13 +34,5 @@ export { mirrorIndentForRtl, ensureBidiIndentPx, DEFAULT_BIDI_INDENT_PX } from '
 // Paragraph attributes
 export {
   computeParagraphAttrs,
-  mergeParagraphAttrs,
-  convertListParagraphAttrs,
-  cloneParagraphAttrs,
-  buildStyleNodeFromAttrs,
-  resolveParagraphBooleanAttr,
-  hasPageBreakBefore,
-  normalizeListRenderingAttrs,
-  buildNumberingPath,
-  computeWordLayoutForParagraph,
+  deepClone,
 } from './paragraph.js';

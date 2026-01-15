@@ -31,7 +31,6 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
     bookmarks,
     hyperlinkConfig,
     converters,
-    listCounterContext,
     trackedChangesConfig,
   } = context;
   const docPartGallery = getDocPartGallery(node);
@@ -67,7 +66,6 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
           defaultFont,
           defaultSize,
           styleContext,
-          listCounterContext,
           trackedChangesConfig,
           bookmarks,
           hyperlinkConfig,

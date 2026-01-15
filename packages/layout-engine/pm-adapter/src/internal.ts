@@ -58,7 +58,6 @@ import type {
   PositionMap,
   NodeHandlerContext,
   NodeHandler,
-  ListCounterContext,
   PMDocumentMap,
   BatchAdapterOptions,
   ThemeColorPalette,
@@ -223,7 +222,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     defaultFont: string,
     defaultSize: number,
     context: StyleContext,
-    listCounterContext?: ListCounterContext,
     trackedChanges?: TrackedChangesConfig,
     bookmarks?: Map<string, number>,
     hyperlinkConfig?: HyperlinkConfig,
@@ -237,7 +235,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
       defaultFont,
       defaultSize,
       context,
-      listCounterContext,
       trackedChanges,
       bookmarks,
       hyperlinkConfig,
@@ -273,7 +270,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
       paragraphConverter,
       converterCtx ?? converterContext,
       {
-        listCounterContext: { getListCounter, incrementListCounter, resetListCounter },
         converters: {
           paragraphToFlowBlocks: paragraphConverter,
           imageNodeToBlock,
@@ -295,7 +291,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     defaultSize,
     styleContext,
     converterContext,
-    listCounterContext: { getListCounter, incrementListCounter, resetListCounter },
     trackedChangesConfig,
     hyperlinkConfig,
     enableComments,
@@ -445,7 +440,6 @@ function paragraphToFlowBlocks(
   defaultFont: string,
   defaultSize: number,
   styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
   trackedChanges?: TrackedChangesConfig,
   bookmarks?: Map<string, number>,
   hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
@@ -460,7 +454,6 @@ function paragraphToFlowBlocks(
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     trackedChanges,
     bookmarks,
     hyperlinkConfig,
@@ -499,7 +492,6 @@ function paragraphToFlowBlocks(
           paragraphToFlowBlocks,
           converterCtx ?? converterContext,
           {
-            listCounterContext,
             converters: {
               // Type assertion needed due to signature mismatch between actual function and type definition
               paragraphToFlowBlocks: paragraphToFlowBlocksImpl as unknown as ParagraphToFlowBlocksConverter,

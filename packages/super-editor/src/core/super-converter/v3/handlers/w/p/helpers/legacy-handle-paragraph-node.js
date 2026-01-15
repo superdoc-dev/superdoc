@@ -38,13 +38,10 @@ export const handleParagraphNode = (params) => {
   }
 
   // Resolve paragraph properties according to styles hierarchy
-  const insideTable = (params.path || []).some((ancestor) => ancestor.name === 'w:tc');
   const tableStyleId = getTableStyleId(params.path || []);
   const resolvedParagraphProperties = resolveParagraphProperties(
     params,
     inlineParagraphProperties,
-    insideTable,
-    false,
     tableStyleId,
   );
 

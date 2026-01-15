@@ -5,7 +5,7 @@
  */
 
 import type { PMNode } from '../types.js';
-import type { ParagraphProperties } from './types.js';
+import type { ParagraphProperties, SectionVerticalAlign } from './types.js';
 
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;
@@ -46,7 +46,6 @@ type SectionType = 'continuous' | 'nextPage' | 'evenPage' | 'oddPage';
 type Orientation = 'portrait' | 'landscape';
 type HeaderRefType = Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
 type NumberingFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
-type VerticalAlign = 'top' | 'center' | 'bottom' | 'both';
 
 interface SectionElement {
   name: string;
@@ -262,7 +261,7 @@ function extractColumns(elements: SectionElement[]): { count: number; gap: numbe
  * // Returns: undefined
  * ```
  */
-function extractVerticalAlign(elements: SectionElement[]): VerticalAlign | undefined {
+function extractVerticalAlign(elements: SectionElement[]): SectionVerticalAlign | undefined {
   const vAlign = elements.find((el) => el?.name === 'w:vAlign');
   if (!vAlign?.attributes) return undefined;
 
@@ -292,7 +291,7 @@ export function extractSectionData(para: PMNode): {
   headerRefs?: HeaderRefType;
   footerRefs?: HeaderRefType;
   numbering?: { format?: NumberingFormat; start?: number };
-  vAlign?: VerticalAlign;
+  vAlign?: SectionVerticalAlign;
 } | null {
   const attrs = (para.attrs ?? {}) as Record<string, unknown>;
 

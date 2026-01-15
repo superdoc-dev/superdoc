@@ -910,6 +910,18 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     };
   }
 
+  /**
+   * Find the first text run with a valid font size to use as fallback for line breaks.
+   * This ensures leading line breaks (before any text) use the correct font size for height calculation.
+   */
+  const firstTextRunWithSize = block.runs.find(
+    (run): run is TextRun => 'text' in run && 'fontSize' in run && typeof run.fontSize === 'number',
+  );
+  /** Fallback font size for empty lines or leading line breaks. */
+  const fallbackFontSize = firstTextRunWithSize?.fontSize ?? 12;
+  /** Fallback font info for accurate typography metrics on leading line breaks. */
+  const fallbackFontInfo = firstTextRunWithSize ? getFontInfoFromRun(firstTextRunWithSize) : undefined;
+
   let currentLine: {
     fromRun: number;
     fromChar: number;
@@ -935,7 +947,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     return baseWidth;
   };
 
-  let lastFontSize = 12;
+  let lastFontSize = fallbackFontSize;
+  /** Tracks whether we've encountered a text run yet; used to apply fallback font info to leading line breaks. */
+  let hasSeenTextRun = false;
   let tabStopCursor = 0;
   let pendingTabAlignment: { target: number; val: TabStop['val'] } | null = null;
   let pendingRunSpacing = 0;
@@ -1151,12 +1165,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         lines.push(completedLine);
         currentLine = null;
       } else {
-        const textRunWithSize = block.runs.find(
-          (r): r is TextRun =>
-            r.kind !== 'tab' && r.kind !== 'lineBreak' && r.kind !== 'break' && !('src' in r) && 'fontSize' in r,
-        );
-        const fallbackSize = textRunWithSize?.fontSize ?? 12;
-        const metrics = calculateTypographyMetrics(fallbackSize, spacing);
+        const metrics = calculateTypographyMetrics(fallbackFontSize, spacing, fallbackFontInfo);
         const emptyLine: Line = {
           fromRun: runIndex,
           fromChar: 0,
@@ -1178,6 +1187,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
     // Handle explicit line breaks (e.g., DOCX <w:br/>)
     if (isLineBreakRun(run)) {
+      // For leading line breaks (before any text), use fallback font info for accurate height calculation
+      const lineBreakFontInfo = hasSeenTextRun ? undefined : fallbackFontInfo;
       if (currentLine) {
         const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
         const completedLine: Line = {
@@ -1189,7 +1200,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       } else {
         // Line break at the start of paragraph (no currentLine yet):
         // Create an empty line to represent the leading line break
-        const metrics = calculateTypographyMetrics(lastFontSize, spacing);
+        const metrics = calculateTypographyMetrics(lastFontSize, spacing, lineBreakFontInfo);
         const emptyLine: Line = {
           fromRun: runIndex,
           fromChar: 0,
@@ -1218,6 +1229,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         toChar: 0,
         width: 0,
         maxFontSize: lastFontSize,
+        maxFontInfo: lineBreakFontInfo,
         maxWidth: nextLineMaxWidth,
         segments: [],
         spaceCount: 0,
@@ -1607,6 +1619,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
     // Handle text runs
     lastFontSize = run.fontSize;
+    hasSeenTextRun = true;
     const { font } = buildFontString(run);
     const tabSegments = run.text.split('\t');
 
@@ -2464,7 +2477,6 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
     return scaled;
   };
-
   // Determine actual column count from table structure
   const maxCellCount = Math.max(1, Math.max(...block.rows.map((r) => r.cells.length)));
 
@@ -2622,6 +2634,16 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         blockMeasures.push(measure);
         // Get height from different measure types
         const blockHeight = 'totalHeight' in measure ? measure.totalHeight : 'height' in measure ? measure.height : 0;
+        const isAnchoredOutOfFlow =
+          (block.kind === 'image' || block.kind === 'drawing') &&
+          (block as ImageBlock | DrawingBlock).anchor?.isAnchored === true &&
+          ((block as ImageBlock | DrawingBlock).wrap?.type ?? 'Inline') !== 'Inline';
+
+        // Anchored/floating objects inside table cells do not contribute to cell height.
+        if (isAnchoredOutOfFlow) {
+          continue;
+        }
+
         contentHeight += blockHeight;
 
         // Add paragraph spacing.after to content height for all paragraphs.

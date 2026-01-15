@@ -1,3 +1,19 @@
+# [1.7.0-next.5](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.4...v1.7.0-next.5) (2026-01-15)
+
+
+### Bug Fixes
+
+* guarding against component init when ref is null ([#1746](https://github.com/superdoc-dev/superdoc/issues/1746)) ([253eeea](https://github.com/superdoc-dev/superdoc/commit/253eeeab9a28d5c2b771385d0d812e501f20ac55))
+* respect keepLines and contextual spacing in page break calculations ([#1747](https://github.com/superdoc-dev/superdoc/issues/1747)) ([189c054](https://github.com/superdoc-dev/superdoc/commit/189c05453bcdff0688a84f81a014462d12aceeb8))
+
+# [1.7.0-next.4](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.3...v1.7.0-next.4) (2026-01-15)
+
+
+### Bug Fixes
+
+* anchor images in table cells ([#1742](https://github.com/superdoc-dev/superdoc/issues/1742)) ([f77e7bd](https://github.com/superdoc-dev/superdoc/commit/f77e7bd538fc013d7de0bfc66c1c4880761c61b7))
+* vertical align bug in sections ([#1745](https://github.com/superdoc-dev/superdoc/issues/1745)) ([b53fb6a](https://github.com/superdoc-dev/superdoc/commit/b53fb6a4a54ceaba7283b688e75279b07f3fc051))
+
 # [1.7.0-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.2...v1.7.0-next.3) (2026-01-14)
 
 

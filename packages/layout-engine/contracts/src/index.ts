@@ -840,6 +840,8 @@ export type SectionMetadata = {
   numbering?: SectionNumbering;
   /** Whether first page has a different header/footer (w:titlePg in OOXML) */
   titlePg?: boolean;
+  /** Vertical alignment of content within this section's pages */
+  vAlign?: SectionVerticalAlign;
 };
 
 export type PageBreakBlock = {
@@ -864,6 +866,8 @@ export type ImageAnchor = {
   offsetH?: number;
   offsetV?: number;
   behindDoc?: boolean;
+  padding?: BoxSpacing | undefined;
+  margin?: BoxSpacing | undefined;
 };
 
 /** Text wrapping for floating images (distances in px). */
@@ -1465,6 +1469,12 @@ export type Page = {
    */
   vAlign?: SectionVerticalAlign;
   /**
+   * Base section margins before header/footer inflation.
+   * Used for vAlign centering calculations to match Word's behavior
+   * where headers/footers don't affect vertical alignment.
+   */
+  baseMargins?: { top: number; bottom: number };
+  /**
    * Index of the section this page belongs to.
    * Used for section-aware page numbering and header/footer selection.
    * Sections are 0-indexed, matching the sectionIndex in SectionMetadata.
@@ -1649,6 +1659,22 @@ export type Layout = {
    * from DOM-derived positions back to the current ProseMirror document state.
    */
   layoutEpoch?: number;
+};
+
+export type WrapTextMode = 'bothSides' | 'left' | 'right' | 'largest';
+
+export type WrapExclusion = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  wrapText: WrapTextMode;
+};
+
+export type RenderedLineInfo = {
+  el: HTMLElement;
+  top: number;
+  height: number;
 };
 
 /**

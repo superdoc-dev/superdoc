@@ -86,6 +86,8 @@ type ParagraphBlockAttrs = {
   };
   /** Float alignment (left, right, center) */
   floatAlignment?: unknown;
+  /** Keep all lines of the paragraph on the same page */
+  keepLines?: boolean;
 };
 
 const spacingDebugLog = (..._args: unknown[]): void => {
@@ -462,6 +464,8 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     if (!spacingExplicit.before) spacingBefore = 0;
     if (!spacingExplicit.after) spacingAfter = 0;
   }
+  /** Original spacing before value, preserved for blank page calculations where no trailing collapse occurs. */
+  const baseSpacingBefore = spacingBefore;
   let appliedSpacingBefore = spacingBefore === 0;
   let lastState: PageState | null = null;
   if (spacingDebugEnabled) {
@@ -608,6 +612,33 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       if (prevTrailing > 0) {
         state.cursorY -= prevTrailing;
         state.trailingSpacing = 0;
+      }
+    }
+
+    /**
+     * Keep Lines Together (OOXML w:keepLines)
+     *
+     * When keepLines is enabled, all lines of the paragraph should stay on the same page.
+     * If the paragraph doesn't fit in the remaining space but WOULD fit on a blank page,
+     * advance to the next page/column before laying out any lines.
+     *
+     * This check only runs when starting from line 0 (not when continuing after a page break).
+     * We use baseSpacingBefore for the blank page check because on a new page there's no
+     * previous trailing spacing to collapse with.
+     */
+    const keepLines = attrs?.keepLines === true;
+    if (keepLines && fromLine === 0) {
+      const prevTrailing = state.trailingSpacing ?? 0;
+      const neededSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
+      const pageContentHeight = state.contentBottom - state.topMargin;
+      const fullHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
+      const fitsOnBlankPage = fullHeight + baseSpacingBefore <= pageContentHeight;
+      const remainingHeightAfterSpacing = state.contentBottom - (state.cursorY + neededSpacingBefore);
+      if (fitsOnBlankPage && state.page.fragments.length > 0 && fullHeight > remainingHeightAfterSpacing) {
+        state = advanceColumn(state);
+        spacingBefore = baseSpacingBefore;
+        appliedSpacingBefore = spacingBefore === 0;
+        continue;
       }
     }
 

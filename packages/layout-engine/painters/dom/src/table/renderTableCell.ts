@@ -1,20 +1,26 @@
 import type {
   CellBorders,
   DrawingBlock,
+  DrawingMeasure,
   Fragment,
   Line,
   ParagraphBlock,
   ParagraphMeasure,
   ImageBlock,
+  ImageMeasure,
   ParagraphIndent,
   SdtMetadata,
   TableBlock,
   TableFragment,
   TableMeasure,
+  WrapTextMode,
+  WrapExclusion,
+  RenderedLineInfo,
 } from '@superdoc/contracts';
 import { applyCellBorders } from './border-utils.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../renderer.js';
+import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import {
@@ -698,6 +704,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Append content to cell (content is now a child, not a sibling)
     cellEl.appendChild(content);
 
+    // Establish a local stacking context so anchored objects can reliably layer above/below text.
+    // (Needed for negative z-index behindDoc behavior.)
+    content.style.zIndex = '0';
+
     // Calculate total lines across all blocks for proper global index mapping
     const blockLineCounts: number[] = [];
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
@@ -713,6 +723,13 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Determine global line range to render
     const globalFromLine = fromLine ?? 0;
     const globalToLine = toLine === -1 || toLine === undefined ? totalLines : toLine;
+
+    const contentWidthPx = Math.max(0, cellMeasure.width - paddingLeft - paddingRight);
+    const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
+    const paragraphTopById = new Map<string, number>();
+    let flowCursorY = 0;
+    const anchoredBlocks: Array<{ block: ImageBlock | DrawingBlock; measure: ImageMeasure | DrawingMeasure }> = [];
+    const renderedLines: RenderedLineInfo[] = [];
 
     let cumulativeLineCount = 0; // Track cumulative line count across blocks
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
@@ -738,11 +755,17 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         });
         tableWrapper.appendChild(tableEl);
         content.appendChild(tableWrapper);
+        flowCursorY += tableMeasure.totalHeight;
         // Tables don't contribute to line count (they have their own internal line tracking)
         continue;
       }
 
       if (blockMeasure.kind === 'image' && block?.kind === 'image') {
+        if (block.anchor?.isAnchored) {
+          anchoredBlocks.push({ block, measure: blockMeasure as ImageMeasure });
+          continue;
+        }
+
         const imageWrapper = doc.createElement('div');
         imageWrapper.style.position = 'relative';
         imageWrapper.style.width = `${blockMeasure.width}px`;
@@ -768,10 +791,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
         imageWrapper.appendChild(imgEl);
         content.appendChild(imageWrapper);
+        flowCursorY += blockMeasure.height;
         continue;
       }
 
       if (blockMeasure.kind === 'drawing' && block?.kind === 'drawing') {
+        if (block.anchor?.isAnchored) {
+          anchoredBlocks.push({ block, measure: blockMeasure as DrawingMeasure });
+          continue;
+        }
+
         const drawingWrapper = doc.createElement('div');
         drawingWrapper.style.position = 'relative';
         drawingWrapper.style.width = `${blockMeasure.width}px`;
@@ -821,6 +850,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
         drawingWrapper.appendChild(drawingInner);
         content.appendChild(drawingWrapper);
+        flowCursorY += blockMeasure.height;
         continue;
       }
 
@@ -829,6 +859,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const lines = paragraphMeasure.lines;
         const blockLineCount = lines?.length || 0;
 
+        paragraphTopById.set(block.id, flowCursorY);
         /**
          * Extract Word layout information from paragraph attributes.
          * This contains computed marker positioning and indent details from the word-layout engine.
@@ -902,6 +933,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         for (let lineIdx = localStartLine; lineIdx < localEndLine && lineIdx < lines.length; lineIdx++) {
           const line = lines[lineIdx];
           const isLastLine = lineIdx === lines.length - 1;
+          const lineTop = flowCursorY + renderedHeight;
 
           /**
            * Render line without extra paragraph padding to enable explicit marker/text offset control.
@@ -943,6 +975,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
               markerMeasure,
               indentLeftPx,
             });
+            renderedLines.push({ el: lineContainer, top: lineTop, height: line.lineHeight });
             paraWrapper.appendChild(lineContainer);
           } else {
             /**
@@ -960,6 +993,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
               localStartLine,
               suppressFirstLineIndent,
             });
+            renderedLines.push({ el: lineEl, top: lineTop, height: line.lineHeight });
             paraWrapper.appendChild(lineEl);
           }
 
@@ -978,12 +1012,15 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           paraWrapper.style.height = `${renderedHeight}px`;
         }
 
+        flowCursorY += renderedHeight;
+
         // Apply paragraph spacing.after as margin-bottom for all paragraphs.
         // Word applies spacing.after even to the last paragraph in a cell, creating space at the bottom.
         if (renderedEntireBlock) {
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {
             paraWrapper.style.marginBottom = `${spacingAfter}px`;
+            flowCursorY += spacingAfter;
           }
         }
 
@@ -992,6 +1029,140 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       // Unsupported block types are skipped (no line count contribution)
       // TODO: Handle other block types (list) if needed
     }
+
+    // Handle anchor elements
+    const verticalAlign = cell?.attrs?.verticalAlign;
+    const remainingSpace = contentHeightPx - flowCursorY;
+    const alignmentOffsetY =
+      verticalAlign === 'center'
+        ? Math.max(0, remainingSpace / 2)
+        : verticalAlign === 'bottom'
+          ? Math.max(0, remainingSpace)
+          : 0;
+
+    const wrapExclusions: WrapExclusion[] = [];
+    for (const entry of anchoredBlocks) {
+      const anchoredBlock = entry.block;
+      const anchoredMeasure = entry.measure;
+      const anchor = anchoredBlock.anchor;
+      if (!anchor || !anchor.isAnchored) {
+        continue;
+      }
+
+      const objectWidth = anchoredMeasure.width;
+      const objectHeight = anchoredMeasure.height;
+
+      const left = anchor.offsetH ?? 0;
+      const top = anchor.offsetV ?? 0;
+
+      const behindDoc =
+        anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);
+      const zIndex =
+        anchoredBlock.kind === 'drawing' && typeof anchoredBlock.zIndex === 'number'
+          ? anchoredBlock.zIndex
+          : behindDoc
+            ? -1
+            : 1;
+
+      const wrap = anchoredBlock.wrap;
+      if (!behindDoc && wrap?.type === 'Square') {
+        const wrapText = (wrap.wrapText ?? 'bothSides') as WrapTextMode;
+        const distLeft = anchoredBlock.padding?.left ?? 0;
+        const distRight = anchoredBlock.padding?.right ?? 0;
+        const distTop = anchoredBlock.padding?.top ?? 0;
+        const distBottom = anchoredBlock.padding?.bottom ?? 0;
+        wrapExclusions.push({
+          left: left - distLeft,
+          right: left + objectWidth + distRight,
+          top: top - distTop,
+          bottom: top + objectHeight + distBottom,
+          wrapText,
+        });
+      }
+
+      if (anchoredBlock.kind === 'image') {
+        const imageWrapper = doc.createElement('div');
+        imageWrapper.style.position = 'absolute';
+        imageWrapper.style.left = `${left}px`;
+        imageWrapper.style.top = `${top}px`;
+        imageWrapper.style.width = `${objectWidth}px`;
+        imageWrapper.style.height = `${objectHeight}px`;
+        imageWrapper.style.maxWidth = '100%';
+        imageWrapper.style.boxSizing = 'border-box';
+        imageWrapper.style.zIndex = String(zIndex);
+        applySdtDataset(imageWrapper, anchoredBlock.attrs?.sdt);
+
+        const imgEl = doc.createElement('img');
+        imgEl.classList.add('superdoc-table-image');
+        if (anchoredBlock.src) {
+          imgEl.src = anchoredBlock.src;
+        }
+        imgEl.alt = anchoredBlock.alt ?? '';
+        imgEl.style.width = '100%';
+        imgEl.style.height = '100%';
+        imgEl.style.objectFit = anchoredBlock.objectFit ?? 'contain';
+        if (anchoredBlock.objectFit === 'cover') {
+          imgEl.style.objectPosition = 'left top';
+        }
+        imgEl.style.display = 'block';
+        imageWrapper.appendChild(imgEl);
+        content.appendChild(imageWrapper);
+      } else {
+        const drawingWrapper = doc.createElement('div');
+        drawingWrapper.style.position = 'absolute';
+        drawingWrapper.style.left = `${left}px`;
+        drawingWrapper.style.top = `${top}px`;
+        drawingWrapper.style.width = `${objectWidth}px`;
+        drawingWrapper.style.height = `${objectHeight}px`;
+        drawingWrapper.style.maxWidth = '100%';
+        drawingWrapper.style.boxSizing = 'border-box';
+        drawingWrapper.style.zIndex = String(zIndex);
+        applySdtDataset(drawingWrapper, anchoredBlock.attrs as SdtMetadata | undefined);
+
+        const drawingInner = doc.createElement('div');
+        drawingInner.classList.add('superdoc-table-drawing');
+        drawingInner.style.width = '100%';
+        drawingInner.style.height = '100%';
+        drawingInner.style.display = 'flex';
+        drawingInner.style.alignItems = 'center';
+        drawingInner.style.justifyContent = 'center';
+        drawingInner.style.overflow = 'hidden';
+
+        if (anchoredBlock.drawingKind === 'image' && 'src' in anchoredBlock && anchoredBlock.src) {
+          const img = doc.createElement('img');
+          img.classList.add('superdoc-drawing-image');
+          img.src = anchoredBlock.src;
+          img.alt = anchoredBlock.alt ?? '';
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = anchoredBlock.objectFit ?? 'contain';
+          if (anchoredBlock.objectFit === 'cover') {
+            img.style.objectPosition = 'left top';
+          }
+          drawingInner.appendChild(img);
+        } else if (renderDrawingContent) {
+          const drawingContent = renderDrawingContent(anchoredBlock as DrawingBlock);
+          drawingContent.style.width = '100%';
+          drawingContent.style.height = '100%';
+          drawingInner.appendChild(drawingContent);
+        } else {
+          const placeholder = doc.createElement('div');
+          placeholder.style.width = '100%';
+          placeholder.style.height = '100%';
+          placeholder.style.background =
+            'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
+          placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
+          drawingInner.appendChild(placeholder);
+        }
+
+        drawingWrapper.appendChild(drawingInner);
+        content.appendChild(drawingWrapper);
+      }
+    }
+
+    // Apply wrapSquare exclusions after all blocks are rendered and anchored positions are known.
+    // This keeps anchored objects out-of-flow while preventing text overlap in table cells.
+    applySquareWrapExclusionsToLines(renderedLines, wrapExclusions, contentWidthPx, alignmentOffsetY);
   }
 
   return { cellElement: cellEl };

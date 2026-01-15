@@ -1115,3 +1115,182 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     });
   });
 });
+
+describe('layoutParagraphBlock - keepLines', () => {
+  it('advances to next page when keepLines is true and paragraph does not fit', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'test-block',
+      runs: [{ text: 'Test', fontFamily: 'Arial', fontSize: 12 }],
+      attrs: {
+        keepLines: true,
+      },
+    };
+
+    // 3 lines of 50px each = 150px total height
+    const measure = makeMeasure([
+      { width: 100, lineHeight: 50, maxWidth: 200 },
+      { width: 100, lineHeight: 50, maxWidth: 200 },
+      { width: 100, lineHeight: 50, maxWidth: 200 },
+    ]);
+
+    const pageState = makePageState();
+    // cursorY=50, contentBottom=750, so available = 700
+    // But we'll set cursorY high so only 100px remains (not enough for 150px)
+    pageState.cursorY = 650;
+    pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
+
+    const advanceColumn = vi.fn((state: PageState) => ({
+      ...state,
+      cursorY: 50, // Reset to top of new page
+      page: { number: 2, fragments: [] },
+    }));
+
+    const ctx: ParagraphLayoutContext = {
+      block,
+      measure,
+      columnWidth: 200,
+      ensurePage: vi.fn(() => pageState),
+      advanceColumn,
+      columnX: vi.fn(() => 50),
+      floatManager: makeFloatManager(),
+    };
+
+    layoutParagraphBlock(ctx);
+
+    // Should have advanced to next page because paragraph (150px) > remaining (100px)
+    // but fits on blank page (150px < 700px)
+    expect(advanceColumn).toHaveBeenCalled();
+  });
+
+  it('does not advance when keepLines is true but paragraph fits on current page', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'test-block',
+      runs: [{ text: 'Test', fontFamily: 'Arial', fontSize: 12 }],
+      attrs: {
+        keepLines: true,
+      },
+    };
+
+    // 3 lines of 50px each = 150px total height
+    const measure = makeMeasure([
+      { width: 100, lineHeight: 50, maxWidth: 200 },
+      { width: 100, lineHeight: 50, maxWidth: 200 },
+      { width: 100, lineHeight: 50, maxWidth: 200 },
+    ]);
+
+    const pageState = makePageState();
+    // cursorY=50, contentBottom=750, available = 700px - enough for 150px
+    pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
+
+    const advanceColumn = vi.fn((state: PageState) => state);
+
+    const ctx: ParagraphLayoutContext = {
+      block,
+      measure,
+      columnWidth: 200,
+      ensurePage: vi.fn(() => pageState),
+      advanceColumn,
+      columnX: vi.fn(() => 50),
+      floatManager: makeFloatManager(),
+    };
+
+    layoutParagraphBlock(ctx);
+
+    // Should NOT advance - paragraph fits
+    expect(advanceColumn).not.toHaveBeenCalled();
+  });
+
+  it('does not advance when keepLines is true but paragraph would not fit on blank page either', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'test-block',
+      runs: [{ text: 'Test', fontFamily: 'Arial', fontSize: 12 }],
+      attrs: {
+        keepLines: true,
+      },
+    };
+
+    // 20 lines of 50px each = 1000px total height (exceeds page content area)
+    const measure = makeMeasure(
+      Array(20)
+        .fill(null)
+        .map(() => ({ width: 100, lineHeight: 50, maxWidth: 200 })),
+    );
+
+    const pageState = makePageState();
+    // contentBottom - topMargin = 750 - 50 = 700px page content height
+    // Paragraph is 1000px, won't fit on blank page
+    pageState.cursorY = 650; // Only 100px remaining
+    pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
+
+    const advanceColumn = vi.fn((state: PageState) => state);
+
+    const ctx: ParagraphLayoutContext = {
+      block,
+      measure,
+      columnWidth: 200,
+      ensurePage: vi.fn(() => pageState),
+      advanceColumn,
+      columnX: vi.fn(() => 50),
+      floatManager: makeFloatManager(),
+    };
+
+    layoutParagraphBlock(ctx);
+
+    // Should NOT advance - paragraph won't fit on blank page anyway
+    expect(advanceColumn).not.toHaveBeenCalled();
+  });
+
+  it('uses baseSpacingBefore (not collapsed) for blank page fit check', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'test-block',
+      runs: [{ text: 'Test', fontFamily: 'Arial', fontSize: 12 }],
+      attrs: {
+        keepLines: true,
+        spacing: { before: 50 }, // 50px spacing before
+      },
+    };
+
+    // 3 lines of 200px each = 600px, plus 50px spacing = 650px
+    // Page content is 700px, so it fits on blank page
+    const measure = makeMeasure([
+      { width: 100, lineHeight: 200, maxWidth: 200 },
+      { width: 100, lineHeight: 200, maxWidth: 200 },
+      { width: 100, lineHeight: 200, maxWidth: 200 },
+    ]);
+
+    const pageState = makePageState();
+    // Current page has trailing spacing of 40px
+    // Collapsed spacing = max(50-40, 0) = 10px (less space needed on current page)
+    // But blank page needs full 50px spacing
+    pageState.trailingSpacing = 40;
+    pageState.cursorY = 100; // 650px remaining on current page
+    pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
+
+    const advanceColumn = vi.fn((state: PageState) => ({
+      ...state,
+      cursorY: 50,
+      trailingSpacing: 0,
+      page: { number: 2, fragments: [] },
+    }));
+
+    const ctx: ParagraphLayoutContext = {
+      block,
+      measure,
+      columnWidth: 200,
+      ensurePage: vi.fn(() => pageState),
+      advanceColumn,
+      columnX: vi.fn(() => 50),
+      floatManager: makeFloatManager(),
+    };
+
+    layoutParagraphBlock(ctx);
+
+    // Paragraph (600px) + collapsed spacing (10px) = 610px fits in 650px remaining
+    // So it should NOT advance (it fits on current page)
+    expect(advanceColumn).not.toHaveBeenCalled();
+  });
+});

@@ -136,6 +136,18 @@ function applyTableIndent(x: number, width: number, indent: number): { x: number
 }
 
 /**
+ * Safely retrieve table cell spacing (in pixels) from table attributes.
+ *
+ * Cell spacing is only applied when borderCollapse is 'separate'. Negative values
+ * are treated as zero to avoid layout issues.
+ */
+function getTableCellSpacing(attrs?: TableBlock['attrs']): number {
+  if (!attrs || attrs.borderCollapse !== 'separate') return 0;
+  const spacing = typeof attrs.cellSpacing === 'number' ? attrs.cellSpacing : 0;
+  return spacing > 0 ? spacing : 0;
+}
+
+/**
  * Resolve the table fragment frame within a column based on justification.
  *
  * When justification is center or right/end, the table is aligned within the
@@ -301,16 +313,29 @@ function calculateFragmentHeight(
   fragment: Pick<TableFragment, 'fromRow' | 'toRow' | 'repeatHeaderCount'>,
   measure: TableMeasure,
   _headerCount: number,
+  cellSpacing: number,
+  includeTopSpacing: boolean,
 ): number {
   let height = 0;
 
-  // Add header height if continuation with repeated headers
-  if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
-    height += sumRowHeights(measure.rows, 0, fragment.repeatHeaderCount);
+  const headerRows = fragment.repeatHeaderCount ?? 0;
+  if (headerRows > 0) {
+    height += sumRowHeights(measure.rows, 0, headerRows);
   }
 
-  // Add body row heights (fromRow to toRow, exclusive)
-  height += sumRowHeights(measure.rows, fragment.fromRow, fragment.toRow);
+  const bodyHeight = sumRowHeights(measure.rows, fragment.fromRow, fragment.toRow);
+  height += bodyHeight;
+
+  if (cellSpacing > 0) {
+    const bodyRows = Math.max(0, fragment.toRow - fragment.fromRow);
+    const totalRows = headerRows + bodyRows;
+    if (totalRows > 0) {
+      height += cellSpacing * totalRows;
+      if (includeTopSpacing) {
+        height += cellSpacing;
+      }
+    }
+  }
 
   return height;
 }
@@ -878,23 +903,26 @@ function findSplitPoint(
   availableHeight: number,
   fullPageHeight?: number,
   _pendingPartialRow?: PartialRowInfo | null,
+  cellSpacing = 0,
+  isContinuation = false,
 ): SplitPointResult {
-  let accumulatedHeight = 0;
+  let accumulatedHeight = isContinuation ? 0 : cellSpacing;
   let lastFitRow = startRow; // Last row that fit completely
 
   for (let i = startRow; i < block.rows.length; i++) {
     const row = block.rows[i];
     const rowMeasure = measure.rows[i];
     const rowHeight = rowMeasure?.height || 0;
+    const rowHeightWithSpacing = rowHeight + cellSpacing;
     let cantSplit = row.attrs?.tableRowProperties?.cantSplit === true;
     if (rowMeasure && hasExplicitRowHeightSlack(row, rowMeasure) && (!fullPageHeight || rowHeight <= fullPageHeight)) {
       cantSplit = true;
     }
 
     // Check if this row fits completely
-    if (accumulatedHeight + rowHeight <= availableHeight) {
+    if (accumulatedHeight + rowHeightWithSpacing <= availableHeight) {
       // Row fits completely
-      accumulatedHeight += rowHeight;
+      accumulatedHeight += rowHeightWithSpacing;
       lastFitRow = i + 1; // Next row index (exclusive)
     } else {
       // Row doesn't fit completely
@@ -1051,6 +1079,7 @@ export function layoutTableBlock({
   // 2. Count header rows
   const headerCount = countHeaderRows(block);
   const headerHeight = headerCount > 0 ? sumRowHeights(measure.rows, 0, headerCount) : 0;
+  const cellSpacing = getTableCellSpacing(block.attrs);
 
   // 3. Initialize state
   let state = ensurePage();
@@ -1254,7 +1283,16 @@ export function layoutTableBlock({
 
     // Normal row processing
     const bodyStartRow = currentRow;
-    const { endRow, partialRow } = findSplitPoint(block, measure, bodyStartRow, availableForBody, fullPageHeight);
+    const { endRow, partialRow } = findSplitPoint(
+      block,
+      measure,
+      bodyStartRow,
+      availableForBody,
+      fullPageHeight,
+      undefined,
+      cellSpacing,
+      isTableContinuation,
+    );
 
     // If no rows fit and page has content, advance
     if (endRow === bodyStartRow && partialRow === null && state.page.fragments.length > 0) {
@@ -1267,7 +1305,15 @@ export function layoutTableBlock({
     if (endRow === bodyStartRow && partialRow === null) {
       const forcedPartialRow = computePartialRow(bodyStartRow, block.rows[bodyStartRow], measure, availableForBody);
       const forcedEndRow = bodyStartRow + 1;
-      const fragmentHeight = forcedPartialRow.partialHeight + (repeatHeaderCount > 0 ? headerHeight : 0);
+      const repeatedHeaderHeight = repeatHeaderCount > 0 ? headerHeight : 0;
+      let spacingContribution = 0;
+      if (cellSpacing > 0) {
+        const topSpacing = !isTableContinuation ? cellSpacing : 0;
+        const headerSpacing = (repeatHeaderCount ?? 0) * cellSpacing;
+        const partialSpacing = forcedPartialRow.isLastPart ? cellSpacing : 0;
+        spacingContribution = topSpacing + headerSpacing + partialSpacing;
+      }
+      const fragmentHeight = forcedPartialRow.partialHeight + repeatedHeaderHeight + spacingContribution;
 
       const baseX = columnX(state.columnIndex);
       const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
@@ -1297,16 +1343,31 @@ export function layoutTableBlock({
       continue;
     }
 
+    const includeTopSpacing = !isTableContinuation;
+
     // Calculate fragment height
     let fragmentHeight: number;
     if (partialRow) {
-      const fullRowsHeight = sumRowHeights(measure.rows, bodyStartRow, endRow - 1);
-      fragmentHeight = fullRowsHeight + partialRow.partialHeight + (repeatHeaderCount > 0 ? headerHeight : 0);
+      const fullRowsHeight = sumRowHeights(measure.rows, bodyStartRow, Math.max(bodyStartRow, endRow - 1));
+      const repeatedHeaderHeight = repeatHeaderCount > 0 ? headerHeight : 0;
+      const totalHeaderRows = repeatHeaderCount ?? 0;
+      const fullBodyRows = Math.max(0, endRow - bodyStartRow - 1);
+      let spacingContribution = 0;
+      if (cellSpacing > 0) {
+        const topSpacing = includeTopSpacing ? cellSpacing : 0;
+        const headerSpacing = totalHeaderRows * cellSpacing;
+        const bodySpacing = fullBodyRows * cellSpacing;
+        const partialSpacing = partialRow.isLastPart ? cellSpacing : 0;
+        spacingContribution = topSpacing + headerSpacing + bodySpacing + partialSpacing;
+      }
+      fragmentHeight = repeatedHeaderHeight + fullRowsHeight + partialRow.partialHeight + spacingContribution;
     } else {
       fragmentHeight = calculateFragmentHeight(
         { fromRow: bodyStartRow, toRow: endRow, repeatHeaderCount },
         measure,
         headerCount,
+        cellSpacing,
+        includeTopSpacing,
       );
     }
 

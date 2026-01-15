@@ -2276,6 +2276,11 @@ function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
 
+  const tableSpacing =
+    block.attrs?.borderCollapse === 'separate' && typeof block.attrs?.cellSpacing === 'number'
+      ? Math.max(0, block.attrs.cellSpacing)
+      : 0;
+
   // Resolve percentage or explicit pixel table width
   const resolvedTableWidth = resolveTableWidth(block.attrs, maxWidth);
 
@@ -2585,8 +2590,11 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
     rows[i].height = Math.max(0, rowHeights[i]);
   }
 
-  const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0);
-  const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
+  const totalHeight =
+    rowHeights.reduce((sum, h) => sum + h, 0) + (tableSpacing > 0 ? tableSpacing * (block.rows.length + 1) : 0);
+  const totalWidth =
+    columnWidths.reduce((a, b) => a + b, 0) +
+    (tableSpacing > 0 ? tableSpacing * (Math.max(0, columnWidths.length) + 1) : 0);
   return {
     kind: 'table',
     rows,

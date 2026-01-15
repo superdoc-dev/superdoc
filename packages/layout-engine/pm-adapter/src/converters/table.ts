@@ -102,6 +102,53 @@ const isTableCellNode = (node: PMNode): boolean =>
   node.type === 'tableHeader' ||
   node.type === 'table_header';
 
+/**
+ * Normalizes OOXML table cell spacing measurements to pixels.
+ *
+ * Table cell spacing (w:tblCellSpacing) may be stored as either:
+ * - A numeric pixel value (when edited inside SuperDoc)
+ * - A DOCX measurement object ({ w: "15", type: "dxa" })
+ *
+ * The OOXML spec allows the following measurement types:
+ * - dxa: Twentieths of a point (twips) — convert to px
+ * - nil: Explicitly disables spacing — treat as 0
+ * - auto/pct: Relative values — unsupported without layout context
+ *
+ * @param value Raw tableCellSpacing attribute from the PM node
+ * @returns Pixel value suitable for layout-engine border-spacing, or undefined
+ */
+const normalizeTableCellSpacing = (value: unknown): number | undefined => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (!value || typeof value !== 'object') return undefined;
+
+  const measurement = value as Record<string, unknown>;
+  const raw =
+    typeof measurement.value === 'number'
+      ? measurement.value
+      : typeof measurement.w === 'number'
+        ? measurement.w
+        : typeof measurement.w === 'string'
+          ? Number(measurement.w)
+          : undefined;
+
+  if (!Number.isFinite(raw)) return undefined;
+
+  const type = typeof measurement.type === 'string' ? measurement.type : 'dxa';
+  switch (type) {
+    case 'dxa':
+      return twipsToPx(raw as number) * 2;
+    case 'nil':
+      return 0;
+    case 'auto':
+    case 'pct':
+    default:
+      return undefined;
+  }
+};
+
 type NormalizedRowHeight =
   | {
       value: number;
@@ -771,8 +818,9 @@ export function tableNodeToBlock(
     tableAttrs.borderCollapse = node.attrs.borderCollapse;
   }
 
-  if (node.attrs?.tableCellSpacing) {
-    tableAttrs.cellSpacing = node.attrs.tableCellSpacing;
+  const tableCellSpacing = normalizeTableCellSpacing(node.attrs?.tableCellSpacing);
+  if (tableCellSpacing !== undefined) {
+    tableAttrs.cellSpacing = tableCellSpacing;
   }
 
   if (node.attrs?.justification) {

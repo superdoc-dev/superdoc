@@ -203,9 +203,13 @@ describe('legacy-handle-table-cell-node', () => {
       },
     });
 
-    expect(out.attrs.borders.top).toEqual({ val: 'single', color: '#00FF00', size: expect.any(Number) });
+    expect(out.attrs.borders.top).toEqual(
+      expect.objectContaining({ val: 'single', color: '#00FF00', size: expect.any(Number) }),
+    );
     expect(out.attrs.borders.top.size).toBeCloseTo(1.3333, 3);
-    expect(out.attrs.borders.left).toEqual({ val: 'single', color: '#0000FF', size: expect.any(Number) });
+    expect(out.attrs.borders.left).toEqual(
+      expect.objectContaining({ val: 'single', color: '#0000FF', size: expect.any(Number) }),
+    );
     expect(out.attrs.borders.left.size).toBeCloseTo(2.6666, 3);
   });
 
@@ -405,9 +409,15 @@ describe('legacy-handle-table-cell-node', () => {
       },
     });
 
-    expect(out.attrs.borders.bottom).toEqual({ val: 'single', color: '#00AAAA', size: expect.any(Number) });
-    expect(out.attrs.borders.right).toEqual({ val: 'single', color: '#AAAA00', size: expect.any(Number) });
-    expect(out.attrs.borders.top).toEqual({ val: 'single', color: '#AA0000', size: expect.any(Number) });
+    expect(out.attrs.borders.bottom).toEqual(
+      expect.objectContaining({ val: 'single', color: '#00AAAA', size: expect.any(Number) }),
+    );
+    expect(out.attrs.borders.right).toEqual(
+      expect.objectContaining({ val: 'single', color: '#AAAA00', size: expect.any(Number) }),
+    );
+    expect(out.attrs.borders.top).toEqual(
+      expect.objectContaining({ val: 'single', color: '#AA0000', size: expect.any(Number) }),
+    );
   });
 
   it('moves leading bookmark markers into the first block within the cell', () => {

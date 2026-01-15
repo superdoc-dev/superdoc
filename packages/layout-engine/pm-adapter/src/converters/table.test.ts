@@ -981,7 +981,7 @@ describe('table converter', () => {
       expect(result.attrs?.borderCollapse).toBe('collapse');
     });
 
-    it('includes tableCellSpacing', () => {
+    it('includes numeric tableCellSpacing', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1015,6 +1015,45 @@ describe('table converter', () => {
       ) as TableBlock;
 
       expect(result.attrs?.cellSpacing).toBe(5);
+    });
+
+    it('converts OOXML tableCellSpacing measurements to pixels', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableCellSpacing: {
+            w: '15',
+            type: 'dxa',
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        mockStyleContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.attrs?.cellSpacing).toBeCloseTo(2, 3);
     });
 
     it('converts column widths from twips to pixels', () => {

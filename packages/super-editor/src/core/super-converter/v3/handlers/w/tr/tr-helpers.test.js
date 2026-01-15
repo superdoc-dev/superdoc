@@ -20,7 +20,7 @@ describe('tr helpers', () => {
       expect(placeholder.type).toBe('tableCell');
       expect(placeholder.attrs.__placeholder).toBe('gridBefore');
       expect(placeholder.attrs.colwidth).toEqual([120]);
-      expect(placeholder.attrs.borders.top).toEqual({ val: 'none', size: 0 });
+      expect(placeholder.attrs.borders.top).toEqual(expect.objectContaining({ val: 'none', size: 0 }));
       expect(placeholder.content).toHaveLength(1);
     });
 

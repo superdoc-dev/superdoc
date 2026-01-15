@@ -286,7 +286,8 @@ const processInlineCellBorders = (borders, rowBorders) => {
       const color = borderAttrs['color'];
       let size = borderAttrs['size'];
       if (size) size = eighthPointsToPixels(size);
-      acc[direction] = { color, size, val: borderAttrs['val'] };
+      const attrs = { color, size, val: borderAttrs['val'] };
+      acc[direction] = attrs;
       return acc;
     }
     if (borderAttrs && borderAttrs['val'] === 'none') {

@@ -58,6 +58,8 @@ type TableRowRenderDependencies = {
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Table-level SDT metadata for suppressing duplicate container styling in cells */
   tableSdt?: SdtMetadata | null;
+  /** Cell spacing in pixels (applies to both horizontal and vertical gaps) */
+  cellSpacing?: number;
   /**
    * If true, this row is the first body row of a continuation fragment.
    * MS Word draws borders at split points to visually close the table on each page,
@@ -132,6 +134,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     continuesFromPrev,
     continuesOnNext,
     partialRow,
+    cellSpacing = 0,
   } = deps;
 
   /**
@@ -158,9 +161,12 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
    * ```
    */
   const calculateXPosition = (gridColumnStart: number): number => {
-    let x = 0;
+    let x = cellSpacing > 0 ? cellSpacing : 0;
     for (let i = 0; i < gridColumnStart && i < columnWidths.length; i++) {
       x += columnWidths[i];
+      if (cellSpacing > 0) {
+        x += cellSpacing;
+      }
     }
     return x;
   };
@@ -193,6 +199,9 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     let totalHeight = 0;
     for (let i = 0; i < rowSpan && startRowIndex + i < allRowHeights.length; i++) {
       totalHeight += allRowHeights[startRowIndex + i];
+    }
+    if (cellSpacing > 0) {
+      totalHeight += cellSpacing * Math.max(0, rowSpan - 1);
     }
     return totalHeight;
   };

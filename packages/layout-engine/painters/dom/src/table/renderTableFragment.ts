@@ -12,6 +12,7 @@ import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import { createTableBorderOverlay } from './border-utils.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
 
@@ -48,6 +49,12 @@ export type TableRenderDependencies = {
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Function to apply CSS styles to an element */
   applyStyles: ApplyStylesFn;
+};
+
+const getTableCellSpacing = (attrs?: TableBlock['attrs']): number => {
+  if (!attrs || attrs.borderCollapse !== 'separate') return 0;
+  const spacing = typeof attrs.cellSpacing === 'number' ? attrs.cellSpacing : 0;
+  return spacing > 0 ? spacing : 0;
 };
 
 /**
@@ -161,6 +168,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const block = lookup.block as TableBlock;
   const measure = lookup.measure as TableMeasure;
   const tableBorders = block.attrs?.borders;
+  const cellSpacing = getTableCellSpacing(block.attrs);
   // Note: We don't use createTableBorderOverlay because we implement single-owner
   // border model where cells handle all borders (including outer table borders)
   // to prevent double borders when rendering with absolutely-positioned divs.
@@ -170,6 +178,13 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   applyStyles(container, fragmentStyles);
   applyFragmentFrame(container, fragment);
   container.style.height = `${fragment.height}px`;
+  if (cellSpacing > 0) {
+    container.style.paddingTop = `${cellSpacing}px`;
+    container.style.paddingBottom = `${cellSpacing}px`;
+    container.style.paddingLeft = `${cellSpacing}px`;
+    container.style.paddingRight = `${cellSpacing}px`;
+    container.style.boxSizing = 'content-box';
+  }
   applySdtDataset(container, block.attrs?.sdt);
 
   // Apply SDT container styling (document sections, structured content blocks)
@@ -193,7 +208,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
     // For each row, determine which grid columns have cell boundaries
     // A boundary exists at column X if there's a cell that ENDS at column X (gridColumnStart + colSpan = X)
-    let rowY = 0;
+    let rowY = cellSpacing;
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
       const rowMeasure = measure.rows[rowIndex];
       if (!rowMeasure) continue;
@@ -238,6 +253,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       }
 
       rowY += rowMeasure.height;
+      if (cellSpacing > 0) {
+        rowY += cellSpacing;
+      }
     }
 
     const metadata = {
@@ -266,11 +284,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     container.setAttribute('data-sd-block-id', block.id);
   }
 
-  const borderCollapse = block.attrs?.borderCollapse || 'collapse';
-  if (borderCollapse === 'separate' && block.attrs?.cellSpacing) {
-    container.style.borderSpacing = `${block.attrs.cellSpacing}px`;
-  }
-
   // Pre-calculate all row heights for rowspan calculations
   // IMPORTANT: If this fragment has a partial row, we need to use the partial height
   // for that row, not the full measured height. This ensures rowspan cells that
@@ -283,7 +296,14 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     return r?.height ?? 0;
   });
 
-  let y = 0;
+  let y = fragment.continuesFromPrev ? 0 : cellSpacing;
+
+  const advanceRowPosition = (rowHeight: number, addSpacing: boolean): void => {
+    y += rowHeight;
+    if (cellSpacing > 0 && addSpacing) {
+      y += cellSpacing;
+    }
+  };
 
   // If this is a continuation fragment with repeated headers, render headers first
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
@@ -309,8 +329,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
+        cellSpacing,
       });
-      y += rowMeasure.height;
+      advanceRowPosition(rowMeasure.height, true);
     }
   }
 
@@ -349,8 +370,17 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       continuesOnNext: isLastRenderedBodyRow && fragment.continuesOnNext === true,
       // Pass partial row data for mid-row splits
       partialRow: partialRowData,
+      cellSpacing,
     });
-    y += actualRowHeight;
+    const addSpacingAfterRow = !isPartialRow || partialRowData?.isLastPart === true;
+    advanceRowPosition(actualRowHeight, addSpacingAfterRow);
+  }
+
+  if (cellSpacing > 0 && tableBorders) {
+    const overlay = createTableBorderOverlay(doc, fragment, tableBorders);
+    if (overlay) {
+      container.appendChild(overlay);
+    }
   }
 
   return container;

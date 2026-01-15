@@ -197,7 +197,7 @@ class SuperConverter {
     this.xml = params?.xml;
     this.declaration = null;
 
-    // List defs
+    // List defs (deprecated)
     this.numbering = {};
 
     // Translated numbering definitions
@@ -222,7 +222,7 @@ class SuperConverter {
     this.importedBodyHasFooterRef = false;
     this.headerFooterModified = false;
 
-    // Linked Styles
+    // Linked Styles (deprecated)
     this.linkedStyles = [];
 
     // Translated linked styles

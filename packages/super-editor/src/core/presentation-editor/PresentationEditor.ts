@@ -2774,6 +2774,8 @@ export class PresentationEditor extends EventEmitter {
               numbering: converter.numbering,
               linkedStyles: converter.linkedStyles,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
+              translatedLinkedStyles: converter.translatedLinkedStyles,
+              translatedNumbering: converter.translatedNumbering,
             }
           : undefined;
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);

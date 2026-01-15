@@ -840,6 +840,8 @@ export type SectionMetadata = {
   numbering?: SectionNumbering;
   /** Whether first page has a different header/footer (w:titlePg in OOXML) */
   titlePg?: boolean;
+  /** Vertical alignment of content within this section's pages */
+  vAlign?: SectionVerticalAlign;
 };
 
 export type PageBreakBlock = {
@@ -1454,6 +1456,12 @@ export type Page = {
    * Used for post-layout adjustment of fragment Y positions.
    */
   vAlign?: SectionVerticalAlign;
+  /**
+   * Base section margins before header/footer inflation.
+   * Used for vAlign centering calculations to match Word's behavior
+   * where headers/footers don't affect vertical alignment.
+   */
+  baseMargins?: { top: number; bottom: number };
   /**
    * Index of the section this page belongs to.
    * Used for section-aware page numbering and header/footer selection.

@@ -1230,11 +1230,12 @@ describe('layoutDocument', () => {
         margins: {},
       };
 
-      // Use nextPage to force p2 to start on page 2
+      // Use nextPage to force p3 to start on page 2, preserving 2-column layout
       const forceBreak: FlowBlock = {
         kind: 'sectionBreak',
         id: 'sb-force',
         type: 'nextPage',
+        columns: { count: 2, gap: 48 }, // Must explicitly specify columns per OOXML spec
         margins: {},
       };
 

@@ -1552,6 +1552,27 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
+      /**
+       * Contextual spacing suppression for spacingAfter.
+       * Per OOXML spec: when current paragraph has contextualSpacing=true and
+       * the next paragraph has the same styleId, suppress current's spacingAfter.
+       */
+      let overrideSpacingAfter: number | undefined;
+      const curStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs.styleId : undefined;
+      const curContextualSpacing = asBoolean(paraBlock.attrs?.contextualSpacing);
+      if (curContextualSpacing && curStyleId) {
+        const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
+        if (nextBlock?.kind === 'paragraph') {
+          const nextStyleId =
+            typeof (nextBlock as ParagraphBlock).attrs?.styleId === 'string'
+              ? (nextBlock as ParagraphBlock).attrs?.styleId
+              : undefined;
+          if (nextStyleId === curStyleId) {
+            overrideSpacingAfter = 0;
+          }
+        }
+      }
+
       layoutParagraphBlock(
         {
           block,
@@ -1562,6 +1583,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           columnX,
           floatManager,
           remeasureParagraph: options.remeasureParagraph,
+          overrideSpacingAfter,
         },
         anchorsForPara
           ? {

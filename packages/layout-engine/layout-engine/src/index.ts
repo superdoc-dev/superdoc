@@ -201,6 +201,20 @@ const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter portrait in px
 const DEFAULT_MARGINS: Margins = { top: 72, right: 72, bottom: 72, left: 72 };
 
 const COLUMN_EPSILON = 0.0001;
+
+/**
+ * Safely converts OOXML boolean-like values to actual booleans.
+ * OOXML can encode booleans as true, 1, '1', 'true', or 'on'.
+ */
+const asBoolean = (value: unknown): boolean => {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    const normalized = value.toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'on';
+  }
+  return false;
+};
+
 // List constants sourced from shared/common
 
 // Context types moved to modular layouters
@@ -1452,7 +1466,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             const prevTrailing =
               Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
             const currentStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs?.styleId : undefined;
-            const currentContextualSpacing = paraBlock.attrs?.contextualSpacing === true;
+            const currentContextualSpacing = asBoolean(paraBlock.attrs?.contextualSpacing);
             /** True if contextual spacing applies between previous paragraph and current. */
             const contextualSpacingApplies =
               currentContextualSpacing && currentStyleId && state.lastParagraphStyleId === currentStyleId;
@@ -1471,7 +1485,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             const nextSpacingBefore = nextIsParagraph ? getParagraphSpacingBefore(nextBlock) : 0;
             const nextStyleId =
               nextIsParagraph && typeof nextBlock.attrs?.styleId === 'string' ? nextBlock.attrs?.styleId : undefined;
-            const nextContextualSpacing = nextIsParagraph && nextBlock.attrs?.contextualSpacing === true;
+            const nextContextualSpacing = nextIsParagraph && asBoolean(nextBlock.attrs?.contextualSpacing);
 
             /**
              * Inter-paragraph spacing with contextual spacing support.

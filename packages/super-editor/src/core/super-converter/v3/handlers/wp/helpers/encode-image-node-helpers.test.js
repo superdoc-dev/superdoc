@@ -3,11 +3,15 @@ import { handleImageNode, getVectorShape } from './encode-image-node-helpers.js'
 import { emuToPixels, polygonToObj, rotToDegrees } from '@converter/helpers.js';
 import { extractFillColor, extractStrokeColor, extractStrokeWidth, extractLineEnds } from './vector-shape-helpers.js';
 
-vi.mock('@converter/helpers.js', () => ({
-  emuToPixels: vi.fn(),
-  polygonToObj: vi.fn(),
-  rotToDegrees: vi.fn(),
-}));
+vi.mock('@converter/helpers.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    emuToPixels: vi.fn(),
+    polygonToObj: vi.fn(),
+    rotToDegrees: vi.fn(),
+  };
+});
 
 vi.mock('./vector-shape-helpers.js', () => ({
   extractFillColor: vi.fn(),

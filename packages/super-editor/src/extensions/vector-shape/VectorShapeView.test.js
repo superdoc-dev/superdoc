@@ -712,7 +712,12 @@ describe('VectorShapeView', () => {
         htmlAttributes: {},
       });
 
-      expect(svgUtils.createTextElement).toHaveBeenCalledWith(nodeWithText.attrs.textContent, 'center', 200, 100);
+      expect(svgUtils.createTextElement).toHaveBeenCalledWith(nodeWithText.attrs.textContent, 'center', 200, 100, {
+        pageNumber: undefined,
+        textInsets: undefined,
+        textVerticalAlign: undefined,
+        totalPages: undefined,
+      });
     });
 
     it('does not render text when textContent is missing', () => {

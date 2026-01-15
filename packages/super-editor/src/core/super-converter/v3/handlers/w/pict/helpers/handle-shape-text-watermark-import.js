@@ -168,9 +168,9 @@ export function handleShapeTextWatermarkImport({ pict }) {
         height: svgResult.svgHeight,
       },
       marginOffset: {
-        horizontal: convertToPixels(position.marginLeft),
-        // For center-aligned watermarks relative to margin, Word's margin-top value
-        // is not suitable for browser rendering. Set to 0 to let center alignment work.
+        // For center-aligned watermarks relative to margin, Word's margin values
+        // are not suitable for browser rendering. Set to 0 to let center alignment work.
+        horizontal: hPosition === 'center' && hRelativeTo === 'margin' ? 0 : convertToPixels(position.marginLeft),
         top: vPosition === 'center' && vRelativeTo === 'margin' ? 0 : convertToPixels(position.marginTop),
       },
       // Store text watermark specific data for export
@@ -307,14 +307,15 @@ function generateTextWatermarkSVG({ text, width, height, rotation, fill, textSty
   const rotatedHeight = sanitizedWidth * sin + sanitizedHeight * cos;
 
   // Use larger dimensions to ensure rotated text isn't clipped
-  const svgWidth = Math.max(sanitizedWidth, rotatedWidth);
-  const svgHeight = Math.max(sanitizedHeight, rotatedHeight);
+  // Add 10% padding to account for font rendering extending beyond calculated bounds
+  const svgWidth = Math.max(sanitizedWidth, rotatedWidth) * 1.1;
+  const svgHeight = Math.max(sanitizedHeight, rotatedHeight) * 1.1;
 
   // Center the rotation in the larger SVG canvas
   const centerX = svgWidth / 2;
   const centerY = svgHeight / 2;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" style="overflow: visible;">
   <text
     x="${centerX}"
     y="${centerY}"
@@ -322,7 +323,6 @@ function generateTextWatermarkSVG({ text, width, height, rotation, fill, textSty
     dominant-baseline="middle"
     font-family="${fontFamily}"
     font-size="${sanitizedFontSize}px"
-    font-weight="bold"
     fill="${color}"
     opacity="${opacity}"
     transform="rotate(${sanitizedRotation} ${centerX} ${centerY})">${escapeXml(text)}</text>

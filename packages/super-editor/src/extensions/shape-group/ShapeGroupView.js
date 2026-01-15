@@ -279,7 +279,14 @@ export class ShapeGroupView {
 
       // Add text content if present
       if (attrs.textContent && attrs.textContent.parts) {
-        const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height);
+        const pageNumber = this.editor?.options?.currentPageNumber;
+        const totalPages = this.editor?.options?.totalPageCount;
+        const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
+          textVerticalAlign: attrs.textVerticalAlign,
+          textInsets: attrs.textInsets,
+          pageNumber,
+          totalPages,
+        });
         if (textGroup) {
           g.appendChild(textGroup);
         }
@@ -398,7 +405,14 @@ export class ShapeGroupView {
 
     // Add text content if present
     if (attrs.textContent && attrs.textContent.parts) {
-      const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height);
+      const pageNumber = this.editor?.options?.currentPageNumber;
+      const totalPages = this.editor?.options?.totalPageCount;
+      const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
+        textVerticalAlign: attrs.textVerticalAlign,
+        textInsets: attrs.textInsets,
+        pageNumber,
+        totalPages,
+      });
       if (textGroup) {
         g.appendChild(textGroup);
       }
@@ -407,8 +421,8 @@ export class ShapeGroupView {
     return g;
   }
 
-  createTextElement(textContent, textAlign, width, height) {
-    return createTextElement(textContent, textAlign, width, height);
+  createTextElement(textContent, textAlign, width, height, options) {
+    return createTextElement(textContent, textAlign, width, height, options);
   }
 
   /**

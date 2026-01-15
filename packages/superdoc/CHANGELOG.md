@@ -1,3 +1,24 @@
+# [1.7.0-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.2...v1.7.0-next.3) (2026-01-14)
+
+
+### Bug Fixes
+
+* correct indentation for table cells with explicit tab positioning ([#1743](https://github.com/superdoc-dev/superdoc/issues/1743)) ([1fd6b74](https://github.com/superdoc-dev/superdoc/commit/1fd6b74a95c0eae8b1b23c27e7046ae529c95fc3))
+
+# [1.7.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.1...v1.7.0-next.2) (2026-01-14)
+
+
+### Reverts
+
+* Revert "chore(release): 1.7.0-next.1 [skip ci]" ([3e0afa8](https://github.com/superdoc-dev/superdoc/commit/3e0afa8b5237520a44315cf6ddc635de58f6f6a6))
+
+## [1.6.2-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.6.2-next.1...v1.6.2-next.2) (2026-01-14)
+
+
+### Bug Fixes
+
+* bug watermarks render darker than they should [SD-1469] ([#1737](https://github.com/superdoc-dev/superdoc/issues/1737)) ([7ce423d](https://github.com/superdoc-dev/superdoc/commit/7ce423d445366c0e400b4143bec3cdd9d8b28e88))
+
 ## [1.6.2-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.6.1...v1.6.2-next.1) (2026-01-14)
 
 

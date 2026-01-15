@@ -154,7 +154,6 @@ const encode = (params, encodedAttrs) => {
  * @returns {Record<string, unknown> | undefined}
  */
 function getRowBorders({ params, row, baseBorders }) {
-  const rowIndex = params?.extraParams?.rowIndex;
   const tblPrEx = row?.elements?.find?.((el) => el.name === 'w:tblPrEx');
   const tblBorders = tblPrEx?.elements?.find?.((el) => el.name === 'w:tblBorders');
   /** @type {Record<string, unknown>} */
@@ -175,18 +174,10 @@ function getRowBorders({ params, row, baseBorders }) {
   const overrides = processRawTableBorders(rawOverrides);
 
   if (!Object.keys(overrides).length) {
-    console.info(
-      '[sd-table-borders] row tblPrEx overrides empty',
-      JSON.stringify({ rowIndex, baseBorders: rowBaseBorders, rawOverrides }),
-    );
     return rowBaseBorders;
   }
 
   const rowBorders = { ...rowBaseBorders, ...overrides };
-  console.info(
-    '[sd-table-borders] row tblPrEx overrides',
-    JSON.stringify({ rowIndex, baseBorders: rowBaseBorders, rawOverrides, overrides, rowBorders }),
-  );
   return rowBorders;
 }
 

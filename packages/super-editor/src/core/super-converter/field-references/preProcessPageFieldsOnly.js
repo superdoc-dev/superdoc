@@ -4,6 +4,10 @@
 import { preProcessPageInstruction } from './fld-preprocessors/page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './fld-preprocessors/num-pages-preprocessor.js';
 
+const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
+
+const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
+
 /**
  * Pre-processes nodes to convert PAGE and NUMPAGES field codes for header/footer rendering.
  *
@@ -23,6 +27,12 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
 
   while (i < nodes.length) {
     const node = nodes[i];
+
+    if (shouldSkipFieldProcessing(node)) {
+      processedNodes.push(node);
+      i++;
+      continue;
+    }
 
     // Check if this node starts a field (has fldChar with begin)
     const fldCharEl = node.elements?.find((el) => el.name === 'w:fldChar');

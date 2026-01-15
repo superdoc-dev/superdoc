@@ -1387,12 +1387,30 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // Measure text width
       const textWidth = displayText ? ctx.measureText(displayText).width : 0;
 
+      const annotationHorizontalPadding = run.highlighted === false ? 0 : FIELD_ANNOTATION_PILL_PADDING;
+      const annotationVerticalPadding = run.highlighted === false ? 0 : FIELD_ANNOTATION_VERTICAL_PADDING;
+
       // Add pill styling overhead: border (2px each side) + padding (2px each side) = 8px total
-      const annotationWidth = textWidth + FIELD_ANNOTATION_PILL_PADDING;
+      const annotationWidth = textWidth + annotationHorizontalPadding;
 
       // Calculate height including pill styling
-      const annotationHeight =
-        annotationFontSize * FIELD_ANNOTATION_LINE_HEIGHT_MULTIPLIER + FIELD_ANNOTATION_VERTICAL_PADDING;
+      let annotationHeight = annotationFontSize * FIELD_ANNOTATION_LINE_HEIGHT_MULTIPLIER + annotationVerticalPadding;
+
+      // Signature images are capped to 28px in the renderer; reflect that in measurement.
+      if (run.variant === 'signature' && run.imageSrc) {
+        const signatureHeight = 28 + annotationVerticalPadding;
+        annotationHeight = Math.max(annotationHeight, signatureHeight);
+      }
+
+      // Image annotations use explicit size when provided.
+      if (run.variant === 'image' && run.imageSrc && run.size?.height) {
+        const imageHeight = run.size.height + annotationVerticalPadding;
+        annotationHeight = Math.max(annotationHeight, imageHeight);
+      }
+
+      if (run.variant === 'html' && run.size?.height) {
+        annotationHeight = Math.max(annotationHeight, run.size.height);
+      }
 
       // If a tab alignment is pending, apply it
       let annotationStartX: number | undefined;
@@ -1648,7 +1666,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               trimTrailingWrapSpaces(currentLine);
               const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
               const lineBase = currentLine;
-              const completedLine: Line = { ...lineBase, ...metrics };
+              const completedLine: Line = {
+                ...lineBase,
+                ...metrics,
+              };
               addBarTabsToLine(completedLine);
               lines.push(completedLine);
               tabStopCursor = 0;
@@ -1728,7 +1749,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             trimTrailingWrapSpaces(currentLine);
             const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
             const lineBase = currentLine;
-            const completedLine: Line = { ...lineBase, ...metrics };
+            const completedLine: Line = {
+              ...lineBase,
+              ...metrics,
+            };
             addBarTabsToLine(completedLine);
             lines.push(completedLine);
             tabStopCursor = 0;
@@ -1792,7 +1816,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 trimTrailingWrapSpaces(currentLine);
                 const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
                 const lineBase = currentLine;
-                const completedLine: Line = { ...lineBase, ...metrics };
+                const completedLine: Line = {
+                  ...lineBase,
+                  ...metrics,
+                };
                 addBarTabsToLine(completedLine);
                 lines.push(completedLine);
                 tabStopCursor = 0;

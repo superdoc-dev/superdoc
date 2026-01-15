@@ -54,23 +54,6 @@ export function handleTableCellNode({
     tableCellProperties,
     referencedStyles,
   });
-  const hasRowOverrideNone =
-    rowBorders &&
-    ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].some((side) => rowBorders?.[side]?.val === 'none');
-  if (hasRowOverrideNone && isFirstColumn) {
-    console.info(
-      '[sd-table-borders] cell borders',
-      JSON.stringify({
-        rowIndex,
-        columnIndex,
-        totalColumns: effectiveTotalColumns,
-        baseTableBorders,
-        rowBorders,
-        cellBorders: attributes['borders'],
-      }),
-    );
-  }
-
   // Colspan
   if (colspan > 1) attributes['colspan'] = colspan;
 

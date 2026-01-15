@@ -168,7 +168,14 @@ export class VectorShapeView {
 
       // Add text content if present
       if (attrs.textContent && attrs.textContent.parts) {
-        const textElement = this.createTextElement(attrs.textContent, attrs.textAlign, attrs.width, attrs.height);
+        const pageNumber = this.editor?.options?.currentPageNumber;
+        const totalPages = this.editor?.options?.totalPageCount;
+        const textElement = this.createTextElement(attrs.textContent, attrs.textAlign, attrs.width, attrs.height, {
+          textVerticalAlign: attrs.textVerticalAlign,
+          textInsets: attrs.textInsets,
+          pageNumber,
+          totalPages,
+        });
         if (textElement) {
           svg.appendChild(textElement);
         }
@@ -574,8 +581,8 @@ export class VectorShapeView {
     applyAlphaToSVG(svg, alphaData);
   }
 
-  createTextElement(textContent, textAlign, width, height) {
-    return createTextElement(textContent, textAlign, width, height);
+  createTextElement(textContent, textAlign, width, height, options) {
+    return createTextElement(textContent, textAlign, width, height, options);
   }
 
   buildView() {

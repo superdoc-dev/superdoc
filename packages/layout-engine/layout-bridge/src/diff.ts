@@ -20,6 +20,7 @@ import type {
   DropCapDescriptor,
   ParagraphFrame,
 } from '@superdoc/contracts';
+import { fieldAnnotationKey } from './field-annotation-key.js';
 import { hasTrackedChange, resolveTrackedChangesEnabled } from './tracked-changes-utils.js';
 
 /**
@@ -406,6 +407,7 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
         ('src' in runB || runB.kind === 'lineBreak' || runB.kind === 'break' || runB.kind === 'fieldAnnotation'
           ? ''
           : runB.text) ||
+      fieldAnnotationKey(runA) !== fieldAnnotationKey(runB) ||
       ('bold' in runA ? runA.bold : false) !== ('bold' in runB ? runB.bold : false) ||
       ('italic' in runA ? runA.italic : false) !== ('italic' in runB ? runB.italic : false) ||
       ('color' in runA ? runA.color : undefined) !== ('color' in runB ? runB.color : undefined) ||

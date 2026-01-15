@@ -203,6 +203,9 @@ export function createTextElement(
         if (part.formatting.italic) {
           span.style.fontStyle = 'italic';
         }
+        if (part.formatting.fontFamily) {
+          span.style.fontFamily = part.formatting.fontFamily;
+        }
         if (part.formatting.color) {
           // Validate and normalize color format (handles both with and without # prefix)
           const validatedColor = validateHexColor(part.formatting.color);

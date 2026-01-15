@@ -610,12 +610,15 @@ export type TextFormatting = {
   italic?: boolean;
   color?: string;
   fontSize?: number;
+  fontFamily?: string;
 };
 
 /** A single text part with optional formatting. */
 export type TextPart = {
   text: string;
   formatting?: TextFormatting;
+  /** Optional field token (e.g., PAGE/NUMPAGES) resolved at render time. */
+  fieldType?: 'PAGE' | 'NUMPAGES';
   /** Indicates this part represents a line break between paragraphs. */
   isLineBreak?: boolean;
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
@@ -655,6 +658,13 @@ export type VectorShapeStyle = {
   lineEnds?: LineEnds;
   textContent?: ShapeTextContent;
   textAlign?: string;
+  textVerticalAlign?: 'top' | 'center' | 'bottom';
+  textInsets?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
 };
 
 export type ShapeGroupTransform = {

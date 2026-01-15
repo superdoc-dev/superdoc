@@ -851,6 +851,125 @@ describe('VectorShapeView', () => {
     });
   });
 
+  describe('customPath rendering', () => {
+    it('renders customPath shape with SVG path element', () => {
+      const customPathNode = {
+        attrs: {
+          kind: 'customPath',
+          width: 100,
+          height: 50,
+          fillColor: '#000000',
+          customPath: 'M 0 0 L 100 0 L 100 50 L 0 50 Z',
+          customPathViewBox: { width: 100, height: 50 },
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: customPathNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const svg = view.dom.querySelector('svg');
+      expect(svg).toBeDefined();
+      expect(svg.getAttribute('viewBox')).toBe('0 0 100 50');
+      expect(svg.getAttribute('preserveAspectRatio')).toBe('none');
+
+      const path = svg.querySelector('path');
+      expect(path).toBeDefined();
+      expect(path.getAttribute('d')).toBe('M 0 0 L 100 0 L 100 50 L 0 50 Z');
+    });
+
+    it('renders customPath without viewBox when not provided', () => {
+      const customPathNode = {
+        attrs: {
+          kind: 'customPath',
+          width: 100,
+          height: 50,
+          fillColor: '#000000',
+          customPath: 'M 0 0 L 100 0 L 100 50 L 0 50 Z',
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: customPathNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const svg = view.dom.querySelector('svg');
+      const path = svg.querySelector('path');
+      expect(path).toBeDefined();
+      expect(path.getAttribute('d')).toBe('M 0 0 L 100 0 L 100 50 L 0 50 Z');
+    });
+
+    it('falls back to rect when customPath data is missing', () => {
+      const customPathNode = {
+        attrs: {
+          kind: 'customPath',
+          width: 100,
+          height: 50,
+          fillColor: '#ff0000',
+          customPath: null,
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: customPathNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const svg = view.dom.querySelector('svg');
+      const rect = svg.querySelector('rect');
+      expect(rect).toBeDefined();
+      expect(rect.getAttribute('width')).toBe('100');
+      expect(rect.getAttribute('height')).toBe('50');
+    });
+
+    it('applies fill and stroke colors to customPath', () => {
+      const customPathNode = {
+        attrs: {
+          kind: 'customPath',
+          width: 100,
+          height: 50,
+          fillColor: '#ff0000',
+          strokeColor: '#000000',
+          strokeWidth: 2,
+          customPath: 'M 0 0 L 100 0 L 100 50 L 0 50 Z',
+          customPathViewBox: { width: 100, height: 50 },
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: customPathNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const path = view.dom.querySelector('svg path');
+      expect(path.getAttribute('fill')).toBe('#ff0000');
+      expect(path.getAttribute('stroke')).toBe('#000000');
+      expect(path.getAttribute('stroke-width')).toBe('2');
+    });
+  });
+
   describe('roundRect rendering', () => {
     it('renders roundRect with appropriate corner radius', () => {
       const roundRectNode = {

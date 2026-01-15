@@ -944,6 +944,214 @@ describe('handleImageNode', () => {
   });
 });
 
+describe('handleImageNode - custom geometry shapes', () => {
+  const shapeUri = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    emuToPixels.mockImplementation((emu) => (emu ? parseInt(emu, 10) / 1000 : 0));
+    rotToDegrees.mockImplementation((rot) => (rot ? parseInt(rot, 10) / 60000 : 0));
+    extractFillColor.mockReturnValue('#000000');
+    extractStrokeColor.mockReturnValue('#000000');
+    extractStrokeWidth.mockReturnValue(1);
+    extractLineEnds.mockReturnValue(null);
+  });
+
+  const makeParams = () => ({
+    filename: 'document.xml',
+    docx: {
+      'word/_rels/document.xml.rels': { elements: [] },
+    },
+    nodes: [{ name: 'w:drawing', elements: [] }],
+  });
+
+  /**
+   * Creates an OOXML custom geometry shape node with specified path commands.
+   * Custom geometry (a:custGeom) is used for signature lines and freeform shapes.
+   */
+  const makeCustomGeomNode = ({ pathCommands = [], pathWidth = 1000, pathHeight = 500 } = {}) => ({
+    attributes: {},
+    elements: [
+      { name: 'wp:extent', attributes: { cx: '100000', cy: '50000' } },
+      {
+        name: 'a:graphic',
+        elements: [
+          {
+            name: 'a:graphicData',
+            attributes: { uri: shapeUri },
+            elements: [
+              {
+                name: 'wps:wsp',
+                elements: [
+                  {
+                    name: 'wps:spPr',
+                    elements: [
+                      {
+                        name: 'a:custGeom',
+                        elements: [
+                          {
+                            name: 'a:pathLst',
+                            elements: [
+                              {
+                                name: 'a:path',
+                                attributes: { w: String(pathWidth), h: String(pathHeight) },
+                                elements: pathCommands,
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        name: 'a:xfrm',
+                        attributes: {},
+                        elements: [],
+                      },
+                    ],
+                  },
+                  { name: 'wps:style', elements: [] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('handles custom geometry with moveTo and lineTo commands (simple rectangle)', () => {
+    // A simple rectangle path: M 0 0 L 1000 0 L 1000 500 L 0 500 L 0 0 Z
+    const pathCommands = [
+      { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '1000', y: '0' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '1000', y: '500' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '500' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+      { name: 'a:close' },
+    ];
+
+    const node = makeCustomGeomNode({ pathCommands });
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.type).toBe('vectorShape');
+    // Simple rectangle should be detected and use 'rect' kind
+    expect(result.attrs.kind).toBe('rect');
+  });
+
+  it('handles custom geometry with complex path (non-rectangle)', () => {
+    // A triangle path: M 500 0 L 1000 500 L 0 500 Z
+    const pathCommands = [
+      { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '500', y: '0' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '1000', y: '500' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '500' } }] },
+      { name: 'a:close' },
+    ];
+
+    const node = makeCustomGeomNode({ pathCommands });
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.type).toBe('vectorShape');
+    // Triangle should use customPath kind
+    expect(result.attrs.kind).toBe('customPath');
+    expect(result.attrs.customPath).toContain('M 500 0');
+    expect(result.attrs.customPath).toContain('L 1000 500');
+    expect(result.attrs.customPath).toContain('Z');
+    expect(result.attrs.customPathViewBox).toEqual({ width: 1000, height: 500 });
+  });
+
+  it('handles custom geometry with cubic bezier curves', () => {
+    // Path with cubic bezier: M 0 0 C 100 100 200 100 300 0
+    const pathCommands = [
+      { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+      {
+        name: 'a:cubicBezTo',
+        elements: [
+          { name: 'a:pt', attributes: { x: '100', y: '100' } },
+          { name: 'a:pt', attributes: { x: '200', y: '100' } },
+          { name: 'a:pt', attributes: { x: '300', y: '0' } },
+        ],
+      },
+      { name: 'a:close' },
+    ];
+
+    const node = makeCustomGeomNode({ pathCommands, pathWidth: 300, pathHeight: 100 });
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.type).toBe('vectorShape');
+    expect(result.attrs.kind).toBe('customPath');
+    expect(result.attrs.customPath).toContain('C 100 100 200 100 300 0');
+  });
+
+  it('handles custom geometry with quadratic bezier curves', () => {
+    // Path with quadratic bezier: M 0 0 Q 150 100 300 0
+    const pathCommands = [
+      { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+      {
+        name: 'a:quadBezTo',
+        elements: [
+          { name: 'a:pt', attributes: { x: '150', y: '100' } },
+          { name: 'a:pt', attributes: { x: '300', y: '0' } },
+        ],
+      },
+      { name: 'a:close' },
+    ];
+
+    const node = makeCustomGeomNode({ pathCommands, pathWidth: 300, pathHeight: 100 });
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.type).toBe('vectorShape');
+    expect(result.attrs.kind).toBe('customPath');
+    expect(result.attrs.customPath).toContain('Q 150 100 300 0');
+  });
+
+  it('returns null for custom geometry with empty path', () => {
+    const node = makeCustomGeomNode({ pathCommands: [] });
+    const result = handleImageNode(node, makeParams(), false);
+
+    // Empty path should fall back to placeholder
+    expect(result.type).toBe('contentBlock');
+  });
+
+  it('extracts fill and stroke colors for custom geometry shapes', () => {
+    extractFillColor.mockReturnValue('#ff0000');
+    extractStrokeColor.mockReturnValue('#0000ff');
+    extractStrokeWidth.mockReturnValue(2);
+
+    const pathCommands = [
+      { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '100', y: '100' } }] },
+      { name: 'a:close' },
+    ];
+
+    const node = makeCustomGeomNode({ pathCommands, pathWidth: 100, pathHeight: 100 });
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result.attrs.fillColor).toBe('#ff0000');
+    expect(result.attrs.strokeColor).toBe('#0000ff');
+    expect(result.attrs.strokeWidth).toBe(2);
+  });
+
+  it('uses wp:extent dimensions for custom geometry shape size', () => {
+    const pathCommands = [
+      { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '5000', y: '0' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '5000', y: '2500' } }] },
+      { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '2500' } }] },
+      { name: 'a:close' },
+    ];
+
+    const node = makeCustomGeomNode({ pathCommands, pathWidth: 5000, pathHeight: 2500 });
+    const result = handleImageNode(node, makeParams(), false);
+
+    // wp:extent has cx='100000' cy='50000', emuToPixels divides by 1000
+    expect(result.attrs.width).toBe(100);
+    expect(result.attrs.height).toBe(50);
+  });
+});
+
 describe('getVectorShape', () => {
   beforeEach(() => {
     vi.clearAllMocks();

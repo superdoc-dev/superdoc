@@ -1746,7 +1746,16 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           const isRunStart = charPosInRun === 0 && segmentIndex === 0 && wordIndex === 0;
 
           if (!currentLine) {
-            // Start a new line with just the space
+            // About to start a new line. For wrapped lines (lines.length > 0), skip leading spaces.
+            // This matches Word's behavior: leading whitespace at line start is collapsed.
+            // Only apply to body lines (not the first line of the paragraph).
+            if (lines.length > 0) {
+              // Skip this leading space - just advance charPosInRun and continue
+              charPosInRun = spaceEndChar;
+              continue;
+            }
+
+            // Start a new line with just the space (only for first line of paragraph)
             currentLine = {
               fromRun: runIndex,
               fromChar: spaceStartChar,
@@ -1782,19 +1791,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               lastAppliedTabAlign = null;
               activeTabGroup = null;
 
-              // Body line, so use bodyContentWidth for hanging indent
-              currentLine = {
-                fromRun: runIndex,
-                fromChar: spaceStartChar,
-                toRun: runIndex,
-                toChar: spaceEndChar,
-                width: singleSpaceWidth,
-                maxFontSize: run.fontSize,
-                maxFontInfo: getFontInfoFromRun(run),
-                maxWidth: getEffectiveWidth(bodyContentWidth),
-                segments: [{ runIndex, fromChar: spaceStartChar, toChar: spaceEndChar, width: singleSpaceWidth }],
-                spaceCount: 1,
-              };
+              // Body line - skip the leading space that caused the wrap.
+              // In Word, leading whitespace at wrapped line boundaries is collapsed.
+              // Don't create a new line with just a space - let the next non-space content start the line.
+              currentLine = null;
+              charPosInRun = spaceEndChar;
+              continue;
             } else {
               // Space fits - add it to current line
               currentLine.toRun = runIndex;

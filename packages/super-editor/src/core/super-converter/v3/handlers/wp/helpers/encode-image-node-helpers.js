@@ -16,6 +16,145 @@ const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingS
 const GROUP_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
 
 /**
+ * Parses an OOXML custom geometry (a:custGeom) element and converts it to SVG path data.
+ *
+ * OOXML custom geometry uses path commands like a:moveTo, a:lnTo, a:cubicBezTo, etc.
+ * This function converts these to standard SVG path syntax (M, L, C, Q, A, Z).
+ *
+ * @param {Object} custGeom - The a:custGeom element from OOXML
+ * @returns {{ pathData: string, viewBox: { width: number, height: number } } | null}
+ *   Object with SVG path string and viewBox dimensions, or null if parsing fails
+ */
+const parseCustomGeometry = (custGeom) => {
+  if (!custGeom?.elements) return null;
+
+  const pathLst = custGeom.elements.find((el) => el.name === 'a:pathLst');
+  if (!pathLst?.elements) return null;
+
+  // Get the first path (most custom geometries have a single path)
+  const path = pathLst.elements.find((el) => el.name === 'a:path');
+  if (!path?.elements) return null;
+
+  // Extract path dimensions for viewBox
+  const pathWidth = parseInt(path.attributes?.w, 10) || 0;
+  const pathHeight = parseInt(path.attributes?.h, 10) || 0;
+
+  // Convert OOXML path commands to SVG path data
+  const svgCommands = [];
+
+  for (const cmd of path.elements) {
+    switch (cmd.name) {
+      case 'a:moveTo': {
+        const pt = cmd.elements?.find((el) => el.name === 'a:pt');
+        if (pt?.attributes) {
+          const x = parseInt(pt.attributes.x, 10) || 0;
+          const y = parseInt(pt.attributes.y, 10) || 0;
+          svgCommands.push(`M ${x} ${y}`);
+        }
+        break;
+      }
+      case 'a:lnTo': {
+        const pt = cmd.elements?.find((el) => el.name === 'a:pt');
+        if (pt?.attributes) {
+          const x = parseInt(pt.attributes.x, 10) || 0;
+          const y = parseInt(pt.attributes.y, 10) || 0;
+          svgCommands.push(`L ${x} ${y}`);
+        }
+        break;
+      }
+      case 'a:cubicBezTo': {
+        // Cubic bezier: needs 3 control points
+        const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
+        if (pts.length === 3) {
+          const x1 = parseInt(pts[0].attributes?.x, 10) || 0;
+          const y1 = parseInt(pts[0].attributes?.y, 10) || 0;
+          const x2 = parseInt(pts[1].attributes?.x, 10) || 0;
+          const y2 = parseInt(pts[1].attributes?.y, 10) || 0;
+          const x = parseInt(pts[2].attributes?.x, 10) || 0;
+          const y = parseInt(pts[2].attributes?.y, 10) || 0;
+          svgCommands.push(`C ${x1} ${y1} ${x2} ${y2} ${x} ${y}`);
+        }
+        break;
+      }
+      case 'a:quadBezTo': {
+        // Quadratic bezier: needs 2 control points
+        const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
+        if (pts.length === 2) {
+          const x1 = parseInt(pts[0].attributes?.x, 10) || 0;
+          const y1 = parseInt(pts[0].attributes?.y, 10) || 0;
+          const x = parseInt(pts[1].attributes?.x, 10) || 0;
+          const y = parseInt(pts[1].attributes?.y, 10) || 0;
+          svgCommands.push(`Q ${x1} ${y1} ${x} ${y}`);
+        }
+        break;
+      }
+      case 'a:arcTo': {
+        // Arc command - convert to SVG arc
+        // OOXML uses wR (width radius), hR (height radius), stAng (start angle), swAng (sweep angle)
+        const wR = parseInt(cmd.attributes?.wR, 10) || 0;
+        const hR = parseInt(cmd.attributes?.hR, 10) || 0;
+        // stAng and swAng are in 60000ths of a degree
+        const stAng = (parseInt(cmd.attributes?.stAng, 10) || 0) / 60000;
+        const swAng = (parseInt(cmd.attributes?.swAng, 10) || 0) / 60000;
+
+        // Simplified arc handling - for full arcs, use ellipse approximation
+        // For partial arcs, calculate the endpoint
+        const largeArcFlag = Math.abs(swAng) > 180 ? 1 : 0;
+        const sweepFlag = swAng > 0 ? 1 : 0;
+
+        // Calculate end point based on angles (approximate)
+        const endAngle = ((stAng + swAng) * Math.PI) / 180;
+        const endX = Math.round(wR * Math.cos(endAngle));
+        const endY = Math.round(hR * Math.sin(endAngle));
+
+        svgCommands.push(`A ${wR} ${hR} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`);
+        break;
+      }
+      case 'a:close':
+        svgCommands.push('Z');
+        break;
+      default:
+        // Skip unknown commands
+        break;
+    }
+  }
+
+  if (svgCommands.length === 0) return null;
+
+  return {
+    pathData: svgCommands.join(' '),
+    viewBox: { width: pathWidth, height: pathHeight },
+  };
+};
+
+/**
+ * Detects if a custom geometry is a simple filled rectangle.
+ * Many signature lines use custom geometry to draw simple rectangles.
+ *
+ * @param {Object} custGeom - The a:custGeom element
+ * @returns {boolean} True if the geometry is a simple rectangle
+ */
+const isSimpleRectangle = (custGeom) => {
+  const parsed = parseCustomGeometry(custGeom);
+  if (!parsed) return false;
+
+  // A simple rectangle would be: M, L, L, L, L, Z (or M, L, L, L, Z with close returning to start)
+  // Normalize the path to check for rectangular pattern
+  const { pathData } = parsed;
+  const commands = pathData.match(/[MLCQAZ]/g) || [];
+
+  // Rectangle patterns: M L L L L Z or M L L L Z
+  if (commands.length >= 5 && commands.length <= 6) {
+    const hasMove = commands[0] === 'M';
+    const hasClose = commands[commands.length - 1] === 'Z';
+    const allLines = commands.slice(1, -1).every((c) => c === 'L');
+    return hasMove && hasClose && allLines;
+  }
+
+  return false;
+};
+
+/**
  * Normalize a relationship target to a relative media path.
  * Strips leading slashes and collapses duplicated "word/" prefixes so lookups
  * match the media keys we store (e.g., "word/media/image.png").
@@ -450,9 +589,30 @@ const handleShapeDrawing = (
   const prstGeom = spPr?.elements.find((el) => el.name === 'a:prstGeom');
   const shapeType = prstGeom?.attributes['prst'];
 
-  // For all other shapes (with or without text), or shapes with gradients, use the vector shape handler
+  // For preset geometry shapes, use the vector shape handler
   if (shapeType) {
     const result = getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor });
+    if (result?.attrs && isHidden) {
+      result.attrs.hidden = true;
+    }
+    if (result) return result;
+  }
+
+  // Handle custom geometry shapes (a:custGeom)
+  // These are path-based shapes commonly used for signature lines and custom drawings
+  const custGeom = spPr?.elements.find((el) => el.name === 'a:custGeom');
+  if (custGeom) {
+    const result = getVectorShapeWithCustomGeometry({
+      params,
+      node,
+      graphicData,
+      size,
+      marginOffset,
+      anchorData,
+      wrap,
+      isAnchor,
+      custGeom,
+    });
     if (result?.attrs && isHidden) {
       result.attrs.hidden = true;
     }
@@ -956,13 +1116,25 @@ const buildShapePlaceholder = (node, size, padding, marginOffset, shapeType) => 
     }
   }
 
+  // Store marginOffset for proper absolute positioning of anchored placeholders
+  // The contentBlock extension checks attrs.marginOffset for applying position styles
   if (marginOffset) {
-    const offsetData = {};
     const horizontal = Number.isFinite(marginOffset.horizontal)
       ? marginOffset.horizontal
       : Number.isFinite(marginOffset.left)
         ? marginOffset.left
         : undefined;
+
+    // Set marginOffset attr for contentBlock positioning logic
+    if (Number.isFinite(horizontal) || Number.isFinite(marginOffset.top)) {
+      attrs.marginOffset = {
+        ...(Number.isFinite(horizontal) ? { horizontal } : {}),
+        ...(Number.isFinite(marginOffset.top) ? { top: marginOffset.top } : {}),
+      };
+    }
+
+    // Also store as data attributes for debugging/CSS fallback
+    const offsetData = {};
     if (Number.isFinite(horizontal)) offsetData['data-offset-x'] = horizontal;
     if (Number.isFinite(marginOffset.top)) offsetData['data-offset-y'] = marginOffset.top;
     if (Object.keys(offsetData).length) {
@@ -971,6 +1143,11 @@ const buildShapePlaceholder = (node, size, padding, marginOffset, shapeType) => 
         ...offsetData,
       };
     }
+  }
+
+  // Store original OOXML attributes for z-index and other positioning info
+  if (node?.attributes) {
+    attrs.originalAttributes = node.attributes;
   }
 
   return {
@@ -1074,6 +1251,134 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
   const height = size?.height ?? DEFAULT_SHAPE_HEIGHT;
 
   // Extract transformations from a:xfrm (rotation and flips are still valid)
+  const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
+  const rotation = xfrm?.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0;
+  const flipH = xfrm?.attributes?.['flipH'] === '1';
+  const flipV = xfrm?.attributes?.['flipV'] === '1';
+
+  // Extract colors
+  const style = wsp.elements?.find((el) => el.name === 'wps:style');
+  const fillColor = extractFillColor(spPr, style);
+  const strokeColor = extractStrokeColor(spPr, style);
+  const strokeWidth = extractStrokeWidth(spPr);
+  const lineEnds = extractLineEnds(spPr);
+  const effectExtent = extractEffectExtent(node);
+
+  // Extract textbox content if present
+  const textBox = wsp.elements?.find((el) => el.name === 'wps:txbx');
+  const textBoxContent = textBox?.elements?.find((el) => el.name === 'w:txbxContent');
+  const bodyPr = wsp.elements?.find((el) => el.name === 'wps:bodyPr');
+  let textContent = null;
+  let textAlign = 'left';
+
+  if (textBoxContent) {
+    textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
+    textAlign = textContent?.horizontalAlign || 'left';
+  }
+
+  return {
+    type: 'vectorShape',
+    attrs: {
+      ...schemaAttrs,
+      width,
+      height,
+      rotation,
+      flipH,
+      flipV,
+      fillColor,
+      strokeColor,
+      strokeWidth,
+      lineEnds,
+      effectExtent,
+      marginOffset,
+      anchorData,
+      wrap,
+      isAnchor,
+      textContent,
+      textAlign,
+      textVerticalAlign: textContent?.verticalAlign,
+      textInsets: textContent?.insets,
+      originalAttributes: node?.attributes,
+    },
+  };
+}
+
+/**
+ * Extracts vector shape data from OOXML custom geometry shapes (a:custGeom).
+ *
+ * This handles path-based shapes that don't use preset geometry, commonly used for:
+ * - Signature lines (filled rectangles)
+ * - Custom freeform shapes
+ * - Complex drawn elements
+ *
+ * The function parses the custom geometry path commands and converts them to SVG path syntax.
+ * For simple rectangles, it can detect and treat them as 'rect' kind for optimization.
+ *
+ * @param {Object} options - Configuration object
+ * @param {{ nodes: Array<Object> }} options.params - Translator params containing the drawing node context
+ * @param {Object} options.node - The anchor/inline node (wp:anchor or wp:inline)
+ * @param {Object} options.graphicData - The a:graphicData node containing wps:wsp shape elements
+ * @param {{ width?: number, height?: number }} options.size - Shape size from wp:extent (in pixels)
+ * @param {{ horizontal?: number, left?: number, top?: number }} options.marginOffset - Positioning offsets
+ * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} options.anchorData - Anchor positioning
+ * @param {{ type: string, attrs: Object }} options.wrap - Text wrapping configuration
+ * @param {boolean} options.isAnchor - Whether the shape is anchored (true) or inline (false)
+ * @param {Object} options.custGeom - The a:custGeom element containing path definitions
+ *
+ * @returns {{ type: 'vectorShape', attrs: Object }|null} A vectorShape node, or null if parsing fails
+ */
+function getVectorShapeWithCustomGeometry({
+  params,
+  node,
+  graphicData,
+  size,
+  marginOffset,
+  anchorData,
+  wrap,
+  isAnchor,
+  custGeom,
+}) {
+  const schemaAttrs = {};
+
+  const drawingNode = params.nodes?.[0];
+  if (drawingNode?.name === 'w:drawing') {
+    schemaAttrs.drawingContent = drawingNode;
+  }
+
+  const wsp = graphicData.elements?.find((el) => el.name === 'wps:wsp');
+  if (!wsp) {
+    return null;
+  }
+
+  const spPr = wsp.elements?.find((el) => el.name === 'wps:spPr');
+  if (!spPr) {
+    return null;
+  }
+
+  // Parse the custom geometry into SVG path data
+  const customPath = parseCustomGeometry(custGeom);
+  if (!customPath) {
+    return null;
+  }
+
+  // Determine if this is a simple rectangle (optimization for signature lines)
+  // Simple rectangles can use 'rect' kind for better rendering
+  const isRect = isSimpleRectangle(custGeom);
+
+  // Set the shape kind based on geometry type
+  if (isRect) {
+    schemaAttrs.kind = 'rect';
+  } else {
+    schemaAttrs.kind = 'customPath';
+    schemaAttrs.customPath = customPath.pathData;
+    schemaAttrs.customPathViewBox = customPath.viewBox;
+  }
+
+  // Use wp:extent for dimensions (final displayed size from anchor)
+  const width = size?.width ?? DEFAULT_SHAPE_WIDTH;
+  const height = size?.height ?? DEFAULT_SHAPE_HEIGHT;
+
+  // Extract transformations from a:xfrm
   const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
   const rotation = xfrm?.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0;
   const flipH = xfrm?.attributes?.['flipH'] === '1';

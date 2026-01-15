@@ -104,6 +104,157 @@ describe('calculateTabLayout', () => {
   });
 });
 
+describe('calculateTabLayout - soft wrap handling', () => {
+  it('resets currentX to wrappedLineStartX when text exceeds paragraph width', () => {
+    const paragraphId = 'para-soft-wrap';
+    const spans = [
+      makeSpan('text', 'Label', null, 's1'), // 50px
+      makeSpan('tab', null, `${paragraphId}-tab-0`, 't1'),
+      // Tab fills to near paragraph width
+      makeSpan('text', 'NextLine', null, 's2'), // 80px - would overflow
+    ];
+
+    const request = {
+      spans,
+      tabStops: [{ pos: 250, val: 'start', leader: 'none' }], // Tab stop near right margin
+      paragraphWidth: 300,
+      defaultTabDistance: 48,
+      defaultLineLength: 300,
+      paragraphId,
+      revision: 1,
+      indentWidth: 20,
+      indents: { left: 20, right: 0, firstLine: 0, hanging: 0 },
+    };
+
+    const result = calculateTabLayout(request, measure);
+    // currentX starts at indentWidth=20, text adds 50px, so currentX=70
+    // Tab to stop at 250: width = 250 - 70 = 180
+    expect(result.tabs[`${paragraphId}-tab-0`].width).toBe(180);
+  });
+
+  it('calculates effectiveTextIndent correctly with firstLine only', () => {
+    const paragraphId = 'para-first-line';
+    const spans = [
+      makeSpan('text', 'Label', null, 's1'), // 50px
+      makeSpan('tab', null, `${paragraphId}-tab-0`, 't1'),
+    ];
+
+    // With firstLine=30 and no hanging:
+    // effectiveTextIndent = 30
+    // wrappedLineStartX = indentWidth - effectiveTextIndent = 50 - 30 = 20
+    // currentX starts at indentWidth=50, text adds 50px, so currentX=100
+    // Tab stop at 100 is already reached, so goes to next at 148
+    // Tab width = 148 - 100 = 48 (default tab distance)
+    // But actually calculateTabWidth uses different logic for alignment
+    const request = {
+      spans,
+      tabStops: [{ pos: 200, val: 'start', leader: 'none' }], // Tab stop further out
+      paragraphWidth: 800,
+      defaultTabDistance: 48,
+      defaultLineLength: 816,
+      paragraphId,
+      revision: 1,
+      indentWidth: 50, // margin-left + text-indent
+      indents: { left: 20, right: 0, firstLine: 30, hanging: 0 },
+    };
+
+    const result = calculateTabLayout(request, measure);
+    // currentX = 50 + 50 = 100, tab to 200 = 100
+    expect(result.tabs[`${paragraphId}-tab-0`].width).toBe(100);
+  });
+
+  it('calculates effectiveTextIndent correctly with hanging indent', () => {
+    const paragraphId = 'para-hanging';
+    const spans = [
+      makeSpan('text', 'Label', null, 's1'), // 50px
+      makeSpan('lineBreak', null, null, 'br1'),
+      makeSpan('text', 'Label', null, 's2'), // 50px
+      makeSpan('tab', null, `${paragraphId}-tab-0`, 't1'),
+    ];
+
+    // With hanging=30 and no firstLine:
+    // effectiveTextIndent = -30
+    // wrappedLineStartX = indentWidth - effectiveTextIndent = 0 - (-30) = 30
+    const request = {
+      spans,
+      tabStops: [{ pos: 100, val: 'start', leader: 'none' }],
+      paragraphWidth: 800,
+      defaultTabDistance: 48,
+      defaultLineLength: 816,
+      paragraphId,
+      revision: 1,
+      indentWidth: 0, // First line starts at 0 (negative text-indent)
+      indents: { left: 30, right: 0, firstLine: 0, hanging: 30 },
+    };
+
+    const result = calculateTabLayout(request, measure);
+    // After break, currentX = wrappedLineStartX = 30
+    // Tab at 100, currentX = 30 + 50 (text) = 80, so tab width = 100 - 80 = 20
+    expect(result.tabs[`${paragraphId}-tab-0`].width).toBe(20);
+  });
+
+  it('calculates effectiveTextIndent correctly with firstLine and hanging', () => {
+    const paragraphId = 'para-both';
+    const spans = [
+      makeSpan('text', 'Label', null, 's1'), // 50px
+      makeSpan('lineBreak', null, null, 'br1'),
+      makeSpan('text', 'Label', null, 's2'), // 50px
+      makeSpan('tab', null, `${paragraphId}-tab-0`, 't1'),
+    ];
+
+    // With firstLine=20 and hanging=50:
+    // effectiveTextIndent = 20 - 50 = -30
+    // wrappedLineStartX = indentWidth - effectiveTextIndent = 0 - (-30) = 30
+    const request = {
+      spans,
+      tabStops: [{ pos: 100, val: 'start', leader: 'none' }],
+      paragraphWidth: 800,
+      defaultTabDistance: 48,
+      defaultLineLength: 816,
+      paragraphId,
+      revision: 1,
+      indentWidth: 0,
+      indents: { left: 50, right: 0, firstLine: 20, hanging: 50 },
+    };
+
+    const result = calculateTabLayout(request, measure);
+    // After break, currentX = wrappedLineStartX = 30
+    // Tab at 100, currentX = 30 + 50 (text) = 80, so tab width = 100 - 80 = 20
+    expect(result.tabs[`${paragraphId}-tab-0`].width).toBe(20);
+  });
+
+  it('resets currentX to wrappedLineStartX after tab fills to paragraph width', () => {
+    const paragraphId = 'para-tab-wrap';
+    const spans = [
+      makeSpan('text', 'By:', null, 's1'), // 30px
+      makeSpan('tab', null, `${paragraphId}-tab-0`, 't1'), // Will fill to ~300px
+      makeSpan('text', 'Name:', null, 's2'), // 50px - starts new line
+      makeSpan('tab', null, `${paragraphId}-tab-1`, 't2'),
+    ];
+
+    const request = {
+      spans,
+      tabStops: [{ pos: 295, val: 'start', leader: 'none' }], // Near right margin
+      paragraphWidth: 300,
+      defaultTabDistance: 48,
+      defaultLineLength: 300,
+      paragraphId,
+      revision: 1,
+      indentWidth: 20,
+      indents: { left: 20, right: 0, firstLine: 0, hanging: 0 },
+    };
+
+    const result = calculateTabLayout(request, measure);
+    // First tab: currentX = 20 + 30 = 50, tab to 295 = 245px
+    // After tab, currentX = 295, which is >= 300 - 5 (softWrapThreshold)
+    // So currentX resets to wrappedLineStartX = 20
+    // Second text "Name:" (50px) fits on new line, currentX = 20 + 50 = 70
+    // Second tab to 295 = 225px
+    expect(result.tabs[`${paragraphId}-tab-0`].width).toBe(245);
+    expect(result.tabs[`${paragraphId}-tab-1`].width).toBe(225);
+  });
+});
+
 describe('applyLayoutResult', () => {
   it('decorates tab nodes nested inside run nodes', () => {
     const tabNode = createNode('tab', [], { nodeSize: 1 });

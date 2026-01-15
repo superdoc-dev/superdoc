@@ -393,6 +393,33 @@ export class VectorShapeView {
         shapeElement.setAttribute('y2', height.toString());
         break;
 
+      case 'customPath': {
+        // Handle custom geometry paths (a:custGeom from OOXML)
+        // These are SVG path strings parsed from OOXML path commands
+        const customPath = attrs.customPath;
+        const viewBox = attrs.customPathViewBox;
+
+        if (customPath) {
+          shapeElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          shapeElement.setAttribute('d', customPath);
+
+          // If we have viewBox dimensions, set up proper scaling
+          if (viewBox && viewBox.width && viewBox.height) {
+            svg.setAttribute('viewBox', `0 0 ${viewBox.width} ${viewBox.height}`);
+            // Use 'none' to allow non-uniform scaling to match Word's behavior
+            svg.setAttribute('preserveAspectRatio', 'none');
+          }
+        } else {
+          // Fallback to a simple rect if no custom path data
+          shapeElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          shapeElement.setAttribute('x', '0');
+          shapeElement.setAttribute('y', '0');
+          shapeElement.setAttribute('width', width.toString());
+          shapeElement.setAttribute('height', height.toString());
+        }
+        break;
+      }
+
       default:
         // For complex shapes, fall back to preset geometry with proper viewBox
         try {

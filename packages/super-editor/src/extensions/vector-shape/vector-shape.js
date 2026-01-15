@@ -26,6 +26,18 @@ export const VectorShape = Node.create({
         },
       },
 
+      // SVG path data for custom geometry shapes (a:custGeom)
+      customPath: {
+        default: null,
+        rendered: false,
+      },
+
+      // ViewBox dimensions for custom path scaling
+      customPathViewBox: {
+        default: null,
+        rendered: false,
+      },
+
       width: {
         default: 100,
         renderDOM: (attrs) => {

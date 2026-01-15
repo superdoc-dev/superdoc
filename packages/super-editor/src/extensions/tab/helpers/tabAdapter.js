@@ -143,7 +143,27 @@ export function calculateTabLayout(request, measurement, view) {
   } = request;
 
   const tabs = {};
-  const leftIndentPx = request.indents?.left ?? 0;
+
+  // Calculate the effective text-indent (CSS text-indent only applies to first line).
+  // We need this to determine where wrapped lines start (margin-left without text-indent).
+  // This mirrors the CSS encoding logic in styles.js:
+  // - If firstLine and no hanging: text-indent = firstLine
+  // - If firstLine and hanging: text-indent = firstLine - hanging
+  // - If no firstLine but hanging: text-indent = -hanging
+  let effectiveTextIndent = 0;
+  const { firstLine, hanging, left: leftIndent } = request.indents || {};
+  if (firstLine != null && !hanging) {
+    effectiveTextIndent = firstLine;
+  } else if (firstLine != null && hanging != null) {
+    effectiveTextIndent = firstLine - hanging;
+  } else if (firstLine == null && hanging != null) {
+    effectiveTextIndent = -hanging;
+  }
+
+  // wrappedLineStartX is where text starts on wrapped lines (no text-indent).
+  // Since indentWidth = margin-left + text-indent (first line position),
+  // wrapped lines start at indentWidth - effectiveTextIndent.
+  const wrappedLineStartX = indentWidth - effectiveTextIndent;
   let currentX = indentWidth;
 
   const measureText = (span) => {
@@ -157,13 +177,29 @@ export function calculateTabLayout(request, measurement, view) {
   // Precompute tab heights once
   const tabHeight = paragraphNode ? calcTabHeight(paragraphNode) : undefined;
 
+  // Threshold for detecting when content has reached the end of a line.
+  // When currentX is within this many pixels of paragraphWidth, we consider
+  // the line "full" and subsequent content will wrap to the next line.
+  const softWrapThreshold = 5;
+
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i];
     if (span.type === 'text') {
-      currentX += measureText(span);
+      // Check if text would cause a soft wrap (content exceeds paragraph width).
+      // In Word, when text cannot fit on the current line, it wraps to the next line
+      // starting at the wrapped line position (margin-left without text-indent).
+      // This handles the By:/Name:/Title: signature pattern.
+      const textWidth = measureText(span);
+      const wouldWrap = currentX + textWidth > paragraphWidth + softWrapThreshold;
+
+      if (wouldWrap) {
+        // Text wraps to new line - reset to wrapped line start position
+        currentX = wrappedLineStartX;
+      }
+      currentX += textWidth;
     } else if (span.type === 'lineBreak' || span.type === 'hardBreak') {
-      // Reset horizontal position to left indent for the new line
-      currentX = leftIndentPx;
+      // Reset horizontal position to wrapped line start for the new line
+      currentX = wrappedLineStartX;
     } else if (span.type === 'tab') {
       const followingText = collectFollowingText(spans, i + 1);
 
@@ -209,6 +245,14 @@ export function calculateTabLayout(request, measurement, view) {
         tabStopPosUsed: result.tabStopPosUsed,
       };
       currentX += result.width;
+
+      // Handle soft line wrap after tab: if the tab extends to or near the paragraph width,
+      // any content following this tab will wrap to a new line starting at wrapped line position.
+      // This matches Word's behavior for signature blocks where tabs fill to the right margin.
+      const tabWouldWrap = currentX >= paragraphWidth - softWrapThreshold;
+      if (tabWouldWrap) {
+        currentX = wrappedLineStartX;
+      }
     }
   }
 

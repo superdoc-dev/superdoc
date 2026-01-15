@@ -3327,4 +3327,174 @@ describe('requirePageBoundary edge cases', () => {
       expect(headerFrag.y).toBe(0);
     });
   });
+
+  describe('keepNext with contextual spacing', () => {
+    it('accounts for contextual spacing when calculating if keepNext pair fits', () => {
+      // Create two same-style paragraphs with contextual spacing
+      const heading: FlowBlock = {
+        kind: 'paragraph',
+        id: 'heading',
+        runs: [{ text: 'Heading', fontFamily: 'Arial', fontSize: 24 }],
+        attrs: {
+          keepNext: true,
+          styleId: 'Heading1',
+          contextualSpacing: true,
+          spacing: { after: 20 },
+        },
+      };
+      const body: FlowBlock = {
+        kind: 'paragraph',
+        id: 'body',
+        runs: [{ text: 'Body text', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          styleId: 'Heading1', // Same style - contextual spacing applies
+          contextualSpacing: true,
+          spacing: { before: 20 },
+        },
+      };
+
+      // Heights: heading 40px, body 20px
+      // With contextual spacing: no gap between them (both have contextualSpacing + same style)
+      // Without contextual spacing: max(20, 20) = 20px gap
+      const headingMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(40)],
+        totalHeight: 40,
+      };
+      const bodyMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // Page: 150px content area, tight fit scenario
+      // With contextual spacing: 40 + 0 + 20 = 60px needed
+      // Without contextual spacing: 40 + 20 + 20 = 80px needed
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 150 },
+        margins: { top: 30, right: 30, bottom: 60, left: 30 }, // 60px content height
+      };
+
+      const layout = layoutDocument([heading, body], [headingMeasure, bodyMeasure], options);
+
+      // Both should fit on first page due to contextual spacing
+      expect(layout.pages).toHaveLength(1);
+      expect(pageContainsBlock(layout.pages[0], 'heading')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'body')).toBe(true);
+    });
+
+    it('advances page when keepNext pair does not fit even with contextual spacing', () => {
+      // Previous paragraph to fill most of the page
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal' },
+      };
+      const heading: FlowBlock = {
+        kind: 'paragraph',
+        id: 'heading',
+        runs: [{ text: 'Heading', fontFamily: 'Arial', fontSize: 24 }],
+        attrs: {
+          keepNext: true,
+          styleId: 'Heading1',
+          contextualSpacing: true,
+          spacing: { after: 20 },
+        },
+      };
+      const body: FlowBlock = {
+        kind: 'paragraph',
+        id: 'body',
+        runs: [{ text: 'Body', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          styleId: 'Heading1',
+          contextualSpacing: true,
+          spacing: { before: 20 },
+        },
+      };
+
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(100)], // Takes most of the space
+        totalHeight: 100,
+      };
+      const headingMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(40)],
+        totalHeight: 40,
+      };
+      const bodyMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // 120px content, filler takes 100px, only 20px left
+      // heading (40) + body (20) = 60px needed, won't fit
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 180 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 120px content
+      };
+
+      const layout = layoutDocument([filler, heading, body], [fillerMeasure, headingMeasure, bodyMeasure], options);
+
+      // Filler on page 1, heading+body pushed to page 2
+      expect(layout.pages.length).toBeGreaterThanOrEqual(2);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'heading')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'body')).toBe(true);
+    });
+
+    it('suppresses inter-paragraph spacing when current paragraph has contextualSpacing', () => {
+      // Test that current paragraph's spacingAfter is suppressed when it has contextualSpacing
+      const current: FlowBlock = {
+        kind: 'paragraph',
+        id: 'current',
+        runs: [{ text: 'Current', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          keepNext: true,
+          styleId: 'TestStyle',
+          contextualSpacing: true, // Current has it
+          spacing: { after: 50 }, // Large spacing after
+        },
+      };
+      const next: FlowBlock = {
+        kind: 'paragraph',
+        id: 'next',
+        runs: [{ text: 'Next', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          styleId: 'TestStyle', // Same style
+          // Note: next does NOT have contextualSpacing
+          spacing: { before: 10 },
+        },
+      };
+
+      const currentMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(30)],
+        totalHeight: 30,
+      };
+      const nextMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // If contextual spacing works: gap = max(0, 10) = 10px (current's after suppressed)
+      // Total = 30 + 10 + 20 = 60px
+      // If broken: gap = max(50, 10) = 50px
+      // Total = 30 + 50 + 20 = 100px
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 130 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 70px content
+      };
+
+      const layout = layoutDocument([current, next], [currentMeasure, nextMeasure], options);
+
+      // Should fit on one page (60px < 70px)
+      expect(layout.pages).toHaveLength(1);
+      expect(pageContainsBlock(layout.pages[0], 'current')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'next')).toBe(true);
+    });
+  });
 });

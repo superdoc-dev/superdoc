@@ -533,8 +533,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         next.activeRightMargin = rightMargin;
         next.pendingRightMargin = rightMargin;
       }
+      // Update columns - if section has columns, use them; if undefined, reset to single column.
+      // In OOXML, absence of <w:cols> means single column (default).
       if (block.columns) {
         next.activeColumns = { count: block.columns.count, gap: block.columns.gap };
+        next.pendingColumns = null;
+      } else {
+        // No columns specified = reset to single column (OOXML default)
+        next.activeColumns = { count: 1, gap: 0 };
         next.pendingColumns = null;
       }
       // Schedule section refs for first section (will be applied on first page creation)
@@ -608,9 +614,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.pageSize) next.pendingPageSize = { w: block.pageSize.w, h: block.pageSize.h };
     if (block.orientation) next.pendingOrientation = block.orientation;
     const sectionType = block.type ?? 'continuous';
+    // Check if columns are changing: either explicitly to a different config,
+    // or implicitly resetting to single column (undefined = single column in OOXML)
     const isColumnsChanging =
-      !!block.columns &&
-      (block.columns.count !== next.activeColumns.count || block.columns.gap !== next.activeColumns.gap);
+      (block.columns &&
+        (block.columns.count !== next.activeColumns.count || block.columns.gap !== next.activeColumns.gap)) ||
+      (!block.columns && next.activeColumns.count > 1);
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
     const metadataIndex = typeof sectionIndexRaw === 'number' ? sectionIndexRaw : Number(sectionIndexRaw ?? NaN);
@@ -635,26 +644,32 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
       layoutLog(`[Layout] Compat fallback: Scheduled pendingSectionRefs:`, pendingSectionRefs);
     }
+    // Helper to get column config: use block.columns if defined, otherwise reset to single column (OOXML default)
+    const getColumnConfig = () =>
+      block.columns ? { count: block.columns.count, gap: block.columns.gap } : { count: 1, gap: 0 };
+
     if (block.attrs?.requirePageBoundary) {
-      if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: true, forceMidPageRegion: false }, state: next };
     }
     if (sectionType === 'nextPage') {
-      if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: true, forceMidPageRegion: false }, state: next };
     }
     if (sectionType === 'evenPage') {
-      if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: true, forceMidPageRegion: false, requiredParity: 'even' }, state: next };
     }
     if (sectionType === 'oddPage') {
-      if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: true, forceMidPageRegion: false, requiredParity: 'odd' }, state: next };
     }
     if (isColumnsChanging) {
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: false, forceMidPageRegion: true }, state: next };
     }
-    if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+    // For continuous section breaks, schedule column change for next page boundary
+    next.pendingColumns = getColumnConfig();
     return { decision: { forcePageBreak: false, forceMidPageRegion: false }, state: next };
   };
 
@@ -1312,32 +1327,21 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
-      // Handle mid-page region changes
-      if (breakInfo.forceMidPageRegion && block.columns) {
+      // Handle mid-page region changes (column layout changes within a page)
+      // Uses pendingColumns from scheduleSectionBreak which handles both:
+      // - Explicit column changes (block.columns defined with different config)
+      // - Implicit reset to single column (block.columns undefined per OOXML spec)
+      if (breakInfo.forceMidPageRegion && updatedState.pendingColumns) {
         let state = paginator.ensurePage();
         const columnIndexBefore = state.columnIndex;
+        const newColumns = updatedState.pendingColumns;
 
-        // Validate and normalize column count to ensure it's a positive integer
-        const rawCount = block.columns.count;
-        const validatedCount =
-          typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0
-            ? Math.max(1, Math.floor(rawCount))
-            : 1;
-
-        // Validate and normalize gap to ensure it's non-negative
-        const rawGap = block.columns.gap;
-        const validatedGap =
-          typeof rawGap === 'number' && Number.isFinite(rawGap) && rawGap >= 0 ? Math.max(0, rawGap) : 0;
-
-        const newColumns = { count: validatedCount, gap: validatedGap };
-
-        // If we reduce column count and are currently in a column that won't exist
-        // in the new layout, start a fresh page to avoid overwriting earlier columns.
+        // If reducing column count and currently in a column that won't exist
+        // in the new layout, start a fresh page to avoid overwriting earlier columns
         if (columnIndexBefore >= newColumns.count) {
           state = paginator.startNewPage();
         }
 
-        // Start a new mid-page region with the new column configuration
         startMidPageRegion(state, newColumns);
       }
 

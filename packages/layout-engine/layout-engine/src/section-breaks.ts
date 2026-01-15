@@ -28,6 +28,44 @@ export type BreakDecision = {
   requiredParity?: 'even' | 'odd';
 };
 
+/** Default single-column configuration per OOXML spec (absence of w:cols element) */
+const SINGLE_COLUMN_DEFAULT: Readonly<{ count: number; gap: number }> = { count: 1, gap: 0 };
+
+/**
+ * Get the column configuration for a section break.
+ * Returns the explicit column config if defined, otherwise returns single-column default.
+ * Per OOXML spec, absence of <w:cols> element means single column layout.
+ *
+ * @param blockColumns - The columns property from the section break block (may be undefined)
+ * @returns Column configuration with count and gap
+ */
+function getColumnConfig(blockColumns: { count: number; gap: number } | undefined): { count: number; gap: number } {
+  return blockColumns ? { count: blockColumns.count, gap: blockColumns.gap } : { ...SINGLE_COLUMN_DEFAULT };
+}
+
+/**
+ * Detect if columns are changing between the current active state and a new section.
+ * Returns true if:
+ * - Section explicitly defines different columns than current, OR
+ * - Section has no columns defined (reset to single column) and current has multi-column
+ *
+ * @param blockColumns - The columns property from the section break block (may be undefined)
+ * @param activeColumns - The current active column configuration
+ * @returns True if column layout is changing
+ */
+function isColumnConfigChanging(
+  blockColumns: { count: number; gap: number } | undefined,
+  activeColumns: { count: number; gap: number },
+): boolean {
+  if (blockColumns) {
+    // Explicit column change
+    return blockColumns.count !== activeColumns.count || blockColumns.gap !== activeColumns.gap;
+  }
+  // No columns specified = reset to single column (OOXML default)
+  // This is a change only if currently in multi-column layout
+  return activeColumns.count > 1;
+}
+
 /**
  * Schedule section break effects by updating pending/active state and returning a break decision.
  *
@@ -38,6 +76,9 @@ export type BreakDecision = {
  *
  * The function handles special cases like the first section (applied immediately to active state)
  * and accounts for header content height to prevent header/body overlap.
+ *
+ * Column handling follows OOXML spec: absence of <w:cols> element means single column layout.
+ * When a section break has no columns defined, it resets to single column (not inherited from previous).
  *
  * @param block - The section break block with margin/page/column settings
  * @param state - Current section state containing active and pending layout properties
@@ -144,10 +185,9 @@ export function scheduleSectionBreak(
       next.activeRightMargin = rightMargin;
       next.pendingRightMargin = rightMargin;
     }
-    if (block.columns) {
-      next.activeColumns = { count: block.columns.count, gap: block.columns.gap };
-      next.pendingColumns = null;
-    }
+    // Set columns for first section: use explicit config or default to single column (OOXML default)
+    next.activeColumns = getColumnConfig(block.columns);
+    next.pendingColumns = null;
     return { decision: { forcePageBreak: false, forceMidPageRegion: false }, state: next };
   }
 
@@ -210,39 +250,29 @@ export function scheduleSectionBreak(
   // Determine section type
   const sectionType = block.type ?? 'continuous';
 
-  // Detect column changes
-  const isColumnsChanging =
-    !!block.columns &&
-    (block.columns.count !== next.activeColumns.count || block.columns.gap !== next.activeColumns.gap);
+  // Detect column changes (explicit or implicit reset to single column)
+  const isColumnsChanging = isColumnConfigChanging(block.columns, next.activeColumns);
 
   // Word behavior parity override: require page boundary mid-page when necessary
   if (block.attrs?.requirePageBoundary) {
-    if (block.columns) {
-      next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
-    }
+    next.pendingColumns = getColumnConfig(block.columns);
     return { decision: { forcePageBreak: true, forceMidPageRegion: false }, state: next };
   }
 
   switch (sectionType) {
     case 'nextPage': {
-      if (block.columns) {
-        next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
-      }
+      next.pendingColumns = getColumnConfig(block.columns);
       return { decision: { forcePageBreak: true, forceMidPageRegion: false }, state: next };
     }
     case 'evenPage': {
-      if (block.columns) {
-        next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
-      }
+      next.pendingColumns = getColumnConfig(block.columns);
       return {
         decision: { forcePageBreak: true, forceMidPageRegion: false, requiredParity: 'even' },
         state: next,
       };
     }
     case 'oddPage': {
-      if (block.columns) {
-        next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
-      }
+      next.pendingColumns = getColumnConfig(block.columns);
       return {
         decision: { forcePageBreak: true, forceMidPageRegion: false, requiredParity: 'odd' },
         state: next,
@@ -251,22 +281,28 @@ export function scheduleSectionBreak(
     case 'continuous':
     default: {
       if (isColumnsChanging) {
-        // Change columns mid-page
+        // Mid-page column change: set pendingColumns and signal forceMidPageRegion
+        next.pendingColumns = getColumnConfig(block.columns);
         return { decision: { forcePageBreak: false, forceMidPageRegion: true }, state: next };
       }
-      if (block.columns) {
-        next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
-      }
+      // No column change, but still schedule column config for next page boundary
+      next.pendingColumns = getColumnConfig(block.columns);
       return { decision: { forcePageBreak: false, forceMidPageRegion: false }, state: next };
     }
   }
 }
 
 /**
- * Apply pending margins/pageSize/columns/orientation to active values at a page boundary and clear pending.
+ * Apply pending section state to active state at a page boundary.
+ * Transfers all pending values (margins, page size, columns, orientation) to their
+ * active counterparts and clears the pending values.
+ *
+ * @param state - Current section state with pending values to apply
+ * @returns New section state with pending values applied to active and pending cleared
  */
 export function applyPendingToActive(state: SectionState): SectionState {
   const next: SectionState = { ...state };
+
   if (next.pendingTopMargin != null) {
     next.activeTopMargin = next.pendingTopMargin;
   }

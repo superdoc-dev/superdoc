@@ -1205,6 +1205,7 @@ export type ParagraphAttrs = {
   tabIntervalTwips?: number;
   keepNext?: boolean;
   keepLines?: boolean;
+  pageBreakBefore?: boolean;
   trackedChangesMode?: TrackedChangesMode;
   trackedChangesEnabled?: boolean;
   /** Marks an empty paragraph that only exists to carry section properties. */

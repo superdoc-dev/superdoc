@@ -34,6 +34,7 @@ vi.mock('./converters/index.js', () => ({
 
 vi.mock('./sdt/index.js', () => ({
   handleTableOfContentsNode: vi.fn(),
+  handleIndexNode: vi.fn(),
   handleStructuredContentBlockNode: vi.fn(),
   handleDocumentSectionNode: vi.fn(),
   handleDocumentPartObjectNode: vi.fn(),

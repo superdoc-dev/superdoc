@@ -3667,10 +3667,8 @@ describe('computeParagraphAttrs - indent priority cascade', () => {
       // Note: firstLine/hanging mutual exclusivity - when attrs.indent has neither,
       // textIndent's hanging applies and should clear paragraphProperties' firstLine
       expect(result?.indent?.hanging).toBeCloseTo(twipsToPx(360));
-      // firstLine from paragraphProperties is still present because attrs.indent
-      // doesn't have firstLine to trigger the mutual exclusivity handler
-      // The style engine merges all sources and firstLine comes through
-      expect(result?.indent?.firstLine).toBeCloseTo(twipsToPx(720));
+      // firstLine from paragraphProperties is cleared because higher-priority hanging is present
+      expect(result?.indent?.firstLine).toBeUndefined();
     });
   });
 

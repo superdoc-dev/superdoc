@@ -23,6 +23,8 @@ import { translator as wPermStartTranslator } from './v3/handlers/w/perm-start/i
 import { translator as wPermEndTranslator } from './v3/handlers/w/perm-end/index.js';
 import { translator as sdPageReferenceTranslator } from '@converter/v3/handlers/sd/pageReference';
 import { translator as sdTableOfContentsTranslator } from '@converter/v3/handlers/sd/tableOfContents';
+import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index';
+import { translator as sdIndexEntryTranslator } from '@converter/v3/handlers/sd/indexEntry';
 import { translator as sdAutoPageNumberTranslator } from '@converter/v3/handlers/sd/autoPageNumber';
 import { translator as sdTotalPageNumberTranslator } from '@converter/v3/handlers/sd/totalPageNumber';
 import { translator as pictTranslator } from './v3/handlers/w/pict/pict-translator';
@@ -188,6 +190,8 @@ export function exportSchemaToJson(params) {
     'total-page-number': sdTotalPageNumberTranslator,
     pageReference: sdPageReferenceTranslator,
     tableOfContents: sdTableOfContentsTranslator,
+    index: sdIndexTranslator,
+    indexEntry: sdIndexEntryTranslator,
     passthroughBlock: translatePassthroughNode,
     passthroughInline: translatePassthroughNode,
   };

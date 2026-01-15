@@ -337,6 +337,24 @@ describe('analysis', () => {
       expect(result.paragraphs[0]).toEqual({ index: 1, node: para2 });
       expect(result.totalCount).toBe(2);
     });
+
+    it('should include paragraphs inside index nodes', () => {
+      const para1 = { type: 'paragraph', content: [] };
+      const para2 = { type: 'paragraph', content: [] };
+      const para3 = { type: 'paragraph', content: [] };
+
+      vi.mocked(breaksModule.hasSectPr).mockImplementation((node) => node === para2);
+
+      const doc: PMNode = {
+        type: 'doc',
+        content: [para1, { type: 'index', content: [para2, para3] }],
+      };
+
+      const result = findParagraphsWithSectPr(doc);
+
+      expect(result.paragraphs).toEqual([{ index: 1, node: para2 }]);
+      expect(result.totalCount).toBe(3);
+    });
   });
 
   // ==================== buildSectionRangesFromParagraphs Tests ====================

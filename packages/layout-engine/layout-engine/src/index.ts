@@ -40,6 +40,7 @@ import { collectAnchoredDrawings, collectAnchoredTables, collectPreRegisteredAnc
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty } from './layout-utils.js';
+import { balancePageColumns } from './column-balancing.js';
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -1800,6 +1801,93 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (yOffset > 0) {
       for (const fragment of page.fragments) {
         fragment.y += yOffset;
+      }
+    }
+  }
+
+  // Apply column balancing to pages with multi-column layout.
+  // This redistributes fragments to achieve balanced column heights, matching Word's behavior.
+  if (activeColumns.count > 1) {
+    const contentWidth = pageSize.w - (activeLeftMargin + activeRightMargin);
+    const normalizedCols = normalizeColumns(activeColumns, contentWidth);
+
+    // Build measure map for fragment height calculation during balancing
+    const measureMap = new Map<string, { kind: string; lines?: Array<{ lineHeight: number }>; height?: number }>();
+    // Build blockId -> sectionIndex map to filter fragments by section
+    const blockSectionMap = new Map<string, number>();
+    blocks.forEach((block, idx) => {
+      const measure = measures[idx];
+      if (measure) {
+        measureMap.set(block.id, measure as { kind: string; lines?: Array<{ lineHeight: number }>; height?: number });
+      }
+      // Track section index for each block (for filtering during balancing)
+      // Not all block types have attrs, so access it safely
+      const blockWithAttrs = block as { attrs?: { sectionIndex?: number } };
+      const sectionIdx = blockWithAttrs.attrs?.sectionIndex;
+      if (typeof sectionIdx === 'number') {
+        blockSectionMap.set(block.id, sectionIdx);
+      }
+    });
+
+    for (const page of pages) {
+      // Balance the last page (section ends at document end).
+      // TODO: Track section boundaries and balance at each continuous section break.
+      if (page === pages[pages.length - 1] && page.fragments.length > 0) {
+        // Skip balancing if fragments are already in multiple columns (e.g., explicit column breaks).
+        // Balancing should only apply when all content flows naturally in column 0.
+        const uniqueXPositions = new Set(page.fragments.map((f) => Math.round(f.x)));
+        const hasExplicitColumnStructure = uniqueXPositions.size > 1;
+
+        if (hasExplicitColumnStructure) {
+          continue;
+        }
+
+        // Skip balancing if fragments have different widths (indicating different column configs
+        // from multiple sections). Balancing would incorrectly apply the final section's width to all.
+        const uniqueWidths = new Set(page.fragments.map((f) => Math.round(f.width)));
+        const hasMixedColumnWidths = uniqueWidths.size > 1;
+
+        if (hasMixedColumnWidths) {
+          continue;
+        }
+
+        // Check if page has content from multiple sections.
+        // If so, only balance fragments from the final multi-column section.
+        const fragmentSections = new Set<number>();
+        for (const f of page.fragments) {
+          const section = blockSectionMap.get(f.blockId);
+          if (section !== undefined) {
+            fragmentSections.add(section);
+          }
+        }
+
+        // Only balance fragments from the final section when there are mixed sections
+        const hasMixedSections = fragmentSections.size > 1;
+        const fragmentsToBalance = hasMixedSections
+          ? page.fragments.filter((f) => {
+              const fragSection = blockSectionMap.get(f.blockId);
+              return fragSection === activeSectionIndex;
+            })
+          : page.fragments;
+
+        if (fragmentsToBalance.length > 0) {
+          balancePageColumns(
+            fragmentsToBalance as {
+              x: number;
+              y: number;
+              width: number;
+              kind: string;
+              blockId: string;
+              fromLine?: number;
+              toLine?: number;
+              height?: number;
+            }[],
+            normalizedCols,
+            { left: activeLeftMargin },
+            activeTopMargin,
+            measureMap,
+          );
+        }
       }
     }
   }

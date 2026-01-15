@@ -2154,6 +2154,125 @@ describe('layoutDocument', () => {
       expect(layout.columns).toBeDefined();
     });
   });
+
+  describe('column balancing safeguards', () => {
+    /**
+     * Tests for the column balancing safeguards that prevent incorrect redistribution
+     * of fragments when pages contain mixed content from different column configurations.
+     */
+
+    it('skips balancing when fragments have explicit column structure from column breaks', () => {
+      // When fragments are already in multiple columns (different X positions),
+      // balancing should be skipped to preserve explicit column break positioning.
+      const toTwoColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-1',
+        type: 'continuous',
+        columns: { count: 2, gap: 48 },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        toTwoColumns,
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+      ];
+
+      const measures: Measure[] = [
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+        { kind: 'columnBreak' },
+        makeMeasure([40]),
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+
+      const p1 = page.fragments.find((f) => f.blockId === 'p1');
+      const p2 = page.fragments.find((f) => f.blockId === 'p2');
+
+      // p1 should be in column 0, p2 in column 1 (after column break)
+      // Balancing should NOT have redistributed them
+      expect(p1?.x).toBe(options.margins!.left);
+      expect(p2?.x).toBeGreaterThan(p1!.x);
+    });
+
+    it('skips balancing when fragments have different widths from multiple sections', () => {
+      // When fragments have different widths (indicating different column configs),
+      // balancing should be skipped to preserve section-specific widths.
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        columns: { count: 1, gap: 0 },
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'para-single', runs: [] },
+        {
+          kind: 'sectionBreak',
+          id: 'section-2col',
+          type: 'continuous',
+          columns: { count: 2, gap: 48 },
+          margins: {},
+        } as SectionBreakBlock,
+        { kind: 'paragraph', id: 'para-2col', runs: [] },
+      ];
+
+      const measures: Measure[] = [makeMeasure([20]), { kind: 'sectionBreak' }, makeMeasure([20])];
+
+      const layout = layoutDocument(blocks, measures, options);
+
+      const singleColFragment = layout.pages.flatMap((p) => p.fragments).find((f) => f.blockId === 'para-single');
+      const twoColFragment = layout.pages.flatMap((p) => p.fragments).find((f) => f.blockId === 'para-2col');
+
+      // Single column fragment should keep its original width (468 = 612 - 72 - 72)
+      expect(singleColFragment?.width).toBeCloseTo(468, 0);
+
+      // Two column fragment should have column width (210 = (468 - 48) / 2)
+      expect(twoColFragment?.width).toBeCloseTo(210, 0);
+
+      // Balancing should NOT have made them the same width
+      expect(singleColFragment?.width).not.toBeCloseTo(twoColFragment!.width, 0);
+    });
+
+    it('applies balancing when all fragments have same column configuration', () => {
+      // When all fragments have the same width (same column config),
+      // balancing should redistribute them across columns.
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        columns: { count: 2, gap: 48 },
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'paragraph', id: 'p3', runs: [] },
+        { kind: 'paragraph', id: 'p4', runs: [] },
+      ];
+
+      const measures: Measure[] = [makeMeasure([40]), makeMeasure([40]), makeMeasure([40]), makeMeasure([40])];
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+
+      // All fragments should have the same column width
+      const columnWidth = (468 - 48) / 2; // 210
+      for (const f of page.fragments) {
+        expect(f.width).toBeCloseTo(columnWidth, 0);
+      }
+
+      // Fragments should be distributed across columns (different X positions)
+      const uniqueXPositions = new Set(page.fragments.map((f) => Math.round(f.x)));
+      expect(uniqueXPositions.size).toBe(2);
+    });
+  });
 });
 
 describe('layoutHeaderFooter', () => {

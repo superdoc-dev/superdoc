@@ -25,6 +25,7 @@ import { tabNodeEntityHandler } from './tabImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
+import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
@@ -225,6 +226,8 @@ export const defaultNodeListHandler = () => {
     footnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
     tableOfContentsHandlerEntity,
+    indexHandlerEntity,
+    indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
     pageReferenceEntity,

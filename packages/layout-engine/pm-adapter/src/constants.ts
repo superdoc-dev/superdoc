@@ -123,6 +123,8 @@ export const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = {
  * - image: Inline images
  * - hardBreak, lineBreak: Line breaks
  * - page-number, total-page-number: Document tokens
+ * - indexEntry: Index entry field markers (see index-entry.js)
+ * - tab: Tab stops (see tab.js)
  * - passthroughInline: Passthrough content like FORMCHECKBOX (see passthrough.js)
  * - bookmarkEnd: Bookmark end markers (see bookmark-end.js)
  *
@@ -135,6 +137,8 @@ export const ATOMIC_INLINE_TYPES = new Set([
   'lineBreak',
   'page-number',
   'total-page-number',
+  'indexEntry',
+  'tab',
   'footnoteReference',
   'passthroughInline',
   'bookmarkEnd',

@@ -74,15 +74,36 @@ export function findParagraphsWithSectPr(doc: PMNode): {
 } {
   const paragraphs: Array<{ index: number; node: PMNode }> = [];
   let paragraphIndex = 0;
+  const getNodeChildren = (node: PMNode): PMNode[] => {
+    if (Array.isArray(node.content)) return node.content;
+    const content = node.content as { forEach?: (cb: (child: PMNode) => void) => void } | undefined;
+    if (content && typeof content.forEach === 'function') {
+      const children: PMNode[] = [];
+      content.forEach((child) => {
+        children.push(child);
+      });
+      return children;
+    }
+    return [];
+  };
+
+  const visitNode = (node: PMNode): void => {
+    if (node.type === 'paragraph') {
+      if (hasSectPr(node)) {
+        paragraphs.push({ index: paragraphIndex, node });
+      }
+      paragraphIndex++;
+      return;
+    }
+
+    if (node.type === 'index') {
+      getNodeChildren(node).forEach(visitNode);
+    }
+  };
 
   if (doc.content) {
     for (const node of doc.content) {
-      if (node.type === 'paragraph') {
-        if (hasSectPr(node)) {
-          paragraphs.push({ index: paragraphIndex, node });
-        }
-        paragraphIndex++;
-      }
+      visitNode(node);
     }
   }
 

@@ -43,6 +43,7 @@ import {
 } from './converters/index.js';
 import {
   handleTableOfContentsNode,
+  handleIndexNode,
   handleStructuredContentBlockNode,
   handleDocumentSectionNode,
   handleDocumentPartObjectNode,
@@ -80,6 +81,7 @@ const DEFAULT_DECIMAL_SEPARATOR = '.';
 export const nodeHandlers: Record<string, NodeHandler> = {
   paragraph: handleParagraphNode,
   tableOfContents: handleTableOfContentsNode,
+  index: handleIndexNode,
   structuredContentBlock: handleStructuredContentBlockNode,
   documentSection: handleDocumentSectionNode,
   table: handleTableNode,

@@ -41,6 +41,7 @@ import {
   normalizeParagraphSpacing,
   normalizeParagraphIndent,
   normalizePxIndent,
+  normalizeOoxmlTabs,
 } from '../attributes/index.js';
 import { hydrateParagraphStyleAttrs, hydrateCharacterStyleAttrs } from '../attributes/paragraph-styles.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
@@ -1018,6 +1019,13 @@ export function paragraphToFlowBlocks(
     converterContext,
     paragraphHydration,
   );
+  if (paragraphAttrs && (!Array.isArray(paragraphAttrs.tabs) || paragraphAttrs.tabs.length === 0)) {
+    const rawTabs = para.attrs?.tabs ?? para.attrs?.tabStops ?? paragraphProps.tabStops ?? paragraphProps.tabs;
+    const normalizedTabs = normalizeOoxmlTabs(rawTabs);
+    if (normalizedTabs && normalizedTabs.length > 0) {
+      paragraphAttrs.tabs = normalizedTabs;
+    }
+  }
 
   if (paragraphAttrs?.spacing) {
     const spacing = { ...(paragraphAttrs.spacing as Record<string, unknown>) };

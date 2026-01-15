@@ -44,9 +44,11 @@ import { ShapeTextbox } from './shape-textbox/index.js';
 import { ContentBlock } from './content-block/index.js';
 import { BlockNode } from './block-node/index.js';
 import { TableOfContents } from './table-of-contents/index.js';
+import { DocumentIndex } from './document-index/index.js';
 import { VectorShape } from './vector-shape/index.js';
 import { ShapeGroup } from './shape-group/index.js';
 import { PassthroughBlock, PassthroughInline } from '@extensions/passthrough/index.js';
+import { IndexEntry } from './index-entry/index.js';
 
 // Marks extensions
 import { TextStyle } from './text-style/text-style.js';
@@ -140,6 +142,7 @@ const getStarterExtensions = () => {
     Strike,
     TabNode,
     TableOfContents,
+    DocumentIndex,
     Text,
     TextAlign,
     TextStyle,
@@ -173,6 +176,7 @@ const getStarterExtensions = () => {
     PageNumber,
     TotalPageCount,
     PageReference,
+    IndexEntry,
     ShapeContainer,
     ShapeTextbox,
     ContentBlock,
@@ -226,6 +230,8 @@ export {
   TableRow,
   TableCell,
   TableHeader,
+  DocumentIndex,
+  IndexEntry,
   Placeholder,
   DropCursor,
   BlockNode,

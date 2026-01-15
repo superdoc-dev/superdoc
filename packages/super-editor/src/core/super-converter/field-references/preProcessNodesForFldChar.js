@@ -10,7 +10,7 @@ const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has
 /**
  * @typedef {object} FldCharProcessResult
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
- * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string}}> | null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
+ * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string, instructionTokens?: Array<{type: string, text?: string}>}}>| null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
  * @property {boolean | null} unpairedEnd - If a field 'end' was found without a matching 'begin'.
  */
 
@@ -45,7 +45,12 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       const collectedNodes = collectedNodesStack.pop().filter((n) => n !== null);
       const rawCollectedNodes = rawCollectedNodesStack.pop().filter((n) => n !== null);
       const currentField = currentFieldStack.pop();
-      const combinedResult = _processCombinedNodesForFldChar(collectedNodes, currentField.instrText.trim(), docx);
+      const combinedResult = _processCombinedNodesForFldChar(
+        collectedNodes,
+        currentField.instrText.trim(),
+        docx,
+        currentField.instructionTokens,
+      );
       const outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.
@@ -79,19 +84,50 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     const fldType = fldCharEl?.attributes?.['w:fldCharType'];
     const instrTextEl = node.elements?.find((el) => el.name === 'w:instrText');
 
+    if (node.name === 'w:fldSimple') {
+      const instr = node.attributes?.['w:instr'];
+      if (typeof instr === 'string') {
+        const instructionType = instr.trim().split(' ')[0];
+        const instructionPreProcessor = getInstructionPreProcessor(instructionType);
+        if (instructionPreProcessor) {
+          const processed = instructionPreProcessor(node.elements ?? [], instr, docx, null);
+          if (collecting) {
+            collectedNodesStack[collectedNodesStack.length - 1].push(...processed);
+            rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...processed);
+          } else {
+            processedNodes.push(...processed);
+          }
+          continue;
+        }
+      }
+    }
+
     if (fldType === 'begin') {
       collectedNodesStack.push([]);
       rawCollectedNodesStack.push([rawNode]);
-      currentFieldStack.push({ instrText: '' });
+      currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false });
       continue;
     }
 
-    // If collecting, aggregate instruction text.
-    if (instrTextEl && collecting && currentFieldStack.length > 0) {
-      rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
-      currentFieldStack[currentFieldStack.length - 1].instrText += (instrTextEl.elements?.[0]?.text || '') + ' ';
-      // We can ignore the 'fldChar' nodes
-      continue;
+    // If collecting and still in instruction run, aggregate instruction tokens/text.
+    if (collecting && currentFieldStack.length > 0) {
+      const currentField = currentFieldStack[currentFieldStack.length - 1];
+      if (!currentField.afterSeparate) {
+        const instructionTokens = extractInstructionTokensFromNode(node);
+        if (instructionTokens.length > 0) {
+          rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+          currentField.instructionTokens.push(...instructionTokens);
+          const instrTextValue = instrTextEl?.elements?.[0]?.text;
+          if (instrTextValue != null) {
+            currentField.instrText += `${instrTextValue} `;
+          }
+          if (instructionTokens.some((token) => token.type === 'tab')) {
+            currentField.instrText += '\t';
+          }
+          // We can ignore instruction nodes
+          continue;
+        }
+      }
     }
 
     if (fldType === 'end') {
@@ -103,6 +139,10 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     } else if (fldType === 'separate') {
       if (collecting) {
         rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+        const currentField = currentFieldStack[currentFieldStack.length - 1];
+        if (currentField) {
+          currentField.afterSeparate = true;
+        }
       }
       // We can ignore the 'fldChar' nodes
       continue;
@@ -168,11 +208,57 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
  * @param {import('../v2/docxHelper').ParsedDocx} [docx] - The docx object.
  * @returns {OpenXmlNode[]} The processed nodes.
  */
-const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx) => {
+const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, instructionTokens) => {
   const instructionType = instrText.trim().split(' ')[0];
   const instructionPreProcessor = getInstructionPreProcessor(instructionType);
   if (instructionPreProcessor) {
-    return { nodes: instructionPreProcessor(nodesToCombine, instrText, docx), handled: true };
+    return { nodes: instructionPreProcessor(nodesToCombine, instrText, docx, instructionTokens), handled: true };
   }
   return { nodes: nodesToCombine, handled: false };
+};
+
+/**
+ * @typedef {Object} InstructionToken
+ * @property {'text' | 'tab'} type - The token type
+ * @property {string} [text] - The text content (only present for 'text' type)
+ */
+
+/**
+ * Extracts instruction tokens from an OOXML run node.
+ *
+ * This function parses a run node to identify instruction-related elements:
+ * - w:instrText elements become 'text' tokens with their content
+ * - w:tab elements become 'tab' tokens (important for INDEX fields with tab separators)
+ *
+ * @param {OpenXmlNode} node - The OOXML node to extract tokens from
+ * @returns {InstructionToken[]} Array of instruction tokens found in the node
+ *
+ * @example
+ * // Node with instruction text
+ * extractInstructionTokensFromNode({
+ *   elements: [{ name: 'w:instrText', elements: [{ text: 'INDEX \\e "' }] }]
+ * });
+ * // Returns: [{ type: 'text', text: 'INDEX \\e "' }]
+ *
+ * @example
+ * // Node with tab
+ * extractInstructionTokensFromNode({
+ *   elements: [{ name: 'w:tab' }]
+ * });
+ * // Returns: [{ type: 'tab' }]
+ */
+const extractInstructionTokensFromNode = (node) => {
+  const elements = Array.isArray(node?.elements) ? node.elements : [];
+  /** @type {InstructionToken[]} */
+  const tokens = [];
+  elements.forEach((el) => {
+    if (el?.name === 'w:instrText') {
+      const text = (el.elements || []).map((child) => (typeof child?.text === 'string' ? child.text : '')).join('');
+      tokens.push({ type: 'text', text });
+    }
+    if (el?.name === 'w:tab') {
+      tokens.push({ type: 'tab' });
+    }
+  });
+  return tokens;
 };

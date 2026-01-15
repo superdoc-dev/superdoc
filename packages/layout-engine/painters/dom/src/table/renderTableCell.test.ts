@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderTableCell } from './renderTableCell.js';
-import type { ParagraphBlock, ParagraphMeasure, TableCell, TableCellMeasure, ImageBlock } from '@superdoc/contracts';
+import type {
+  ParagraphBlock,
+  ParagraphMeasure,
+  TableCell,
+  TableCellMeasure,
+  ImageBlock,
+  DrawingBlock,
+  DrawingMeasure,
+} from '@superdoc/contracts';
 
 describe('renderTableCell', () => {
   let doc: Document;
@@ -160,6 +168,288 @@ describe('renderTableCell', () => {
     const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
     expect(imgEl).toBeTruthy();
     expect(imgEl?.parentElement?.style.height).toBe('40px');
+  });
+
+  it('absolutely positions anchored image blocks inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-anchored',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor' },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        paragraphMeasure,
+        {
+          kind: 'image' as const,
+          width: 20,
+          height: 10,
+        },
+      ],
+      width: 80,
+      height: 30,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-anchored-image',
+      blocks: [para, anchoredImage],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl).toBeTruthy();
+    expect(imgEl?.parentElement?.style.position).toBe('absolute');
+    expect(imgEl?.parentElement?.style.left).toBe('10px');
+    expect(imgEl?.parentElement?.style.top).toBe('5px');
+  });
+
+  it('absolutely positions anchored drawing blocks inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const anchoredDrawing: DrawingBlock = {
+      kind: 'drawing',
+      id: 'shape-anchored',
+      drawingKind: 'vectorShape',
+      geometry: { width: 10, height: 10 },
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 12, vRelativeFrom: 'paragraph', offsetV: 7 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor' },
+    };
+
+    const drawingMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 30,
+      height: 15,
+      scale: 1,
+      naturalWidth: 30,
+      naturalHeight: 15,
+      geometry: { width: 10, height: 10 },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [paragraphMeasure, drawingMeasure],
+      width: 80,
+      height: 40,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-anchored-drawing',
+      blocks: [para, anchoredDrawing],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      renderDrawingContent: () => doc.createElement('div'),
+    });
+
+    const drawingWrapper = cellElement.querySelector('div.superdoc-table-drawing')?.parentElement as HTMLElement | null;
+    expect(drawingWrapper).toBeTruthy();
+    expect(drawingWrapper?.style.position).toBe('absolute');
+    expect(drawingWrapper?.style.left).toBe('12px');
+    expect(drawingWrapper?.style.top).toBe('7px');
+  });
+
+  it('pushes text away from wrapSquare anchored images in table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-wrap',
+      runs: [{ text: 'Wrapped text', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-wrap',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 0 },
+      wrap: { type: 'Square', wrapText: 'bothSides' },
+      attrs: { anchorParagraphId: 'para-wrap' },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        paragraphMeasure,
+        {
+          kind: 'image' as const,
+          width: 20,
+          height: 10,
+        },
+      ],
+      width: 80,
+      height: 30,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-wrap',
+      blocks: [para, anchoredImage],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      renderLine: (_block, _line, _ctx, lineIndex) => {
+        const el = doc.createElement('div');
+        el.id = `line-${lineIndex}`;
+        return el;
+      },
+    });
+
+    const lineEl = cellElement.querySelector('#line-0') as HTMLElement | null;
+    expect(lineEl).toBeTruthy();
+
+    // contentWidthPx = 80 - 4 - 4 = 72. Excluded segment is [0, 20], so largest available interval is [20, 72].
+    expect(lineEl?.style.marginLeft).toBe('20px');
+    expect(lineEl?.style.marginRight).toBe('0px');
+  });
+
+  it('pushes text away from wrapSquare anchored drawings in table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-wrap-drawing',
+      runs: [{ text: 'Wrapped text', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const anchoredDrawing: DrawingBlock = {
+      kind: 'drawing',
+      id: 'shape-wrap',
+      drawingKind: 'vectorShape',
+      geometry: { width: 10, height: 10 },
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 0 },
+      wrap: { type: 'Square', wrapText: 'bothSides' },
+      attrs: { anchorParagraphId: 'para-wrap-drawing' },
+    };
+
+    const drawingMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 20,
+      height: 10,
+      scale: 1,
+      naturalWidth: 20,
+      naturalHeight: 10,
+      geometry: { width: 10, height: 10 },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [paragraphMeasure, drawingMeasure],
+      width: 80,
+      height: 30,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-wrap-drawing',
+      blocks: [para, anchoredDrawing],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      renderLine: (_block, _line, _ctx, lineIndex) => {
+        const el = doc.createElement('div');
+        el.id = `line-${lineIndex}`;
+        return el;
+      },
+    });
+
+    const lineEl = cellElement.querySelector('#line-0') as HTMLElement | null;
+    expect(lineEl).toBeTruthy();
+    expect(lineEl?.style.marginLeft).toBe('20px');
+    expect(lineEl?.style.marginRight).toBe('0px');
+  });
+
+  it('does not apply wrapSquare margins when line already has padding', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-wrap-padding',
+      runs: [{ text: 'Wrapped text', fontFamily: 'Arial', fontSize: 16 }],
+      attrs: { indent: { left: 10 } },
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-wrap-padding',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 0 },
+      wrap: { type: 'Square', wrapText: 'bothSides' },
+      attrs: { anchorParagraphId: 'para-wrap-padding' },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        paragraphMeasure,
+        {
+          kind: 'image' as const,
+          width: 20,
+          height: 10,
+        },
+      ],
+      width: 80,
+      height: 30,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-wrap-padding',
+      blocks: [para, anchoredImage],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      renderLine: (_block, _line, _ctx, lineIndex) => {
+        const el = doc.createElement('div');
+        el.id = `line-${lineIndex}`;
+        return el;
+      },
+    });
+
+    const lineEl = cellElement.querySelector('#line-0') as HTMLElement | null;
+    expect(lineEl).toBeTruthy();
+    expect(lineEl?.style.paddingLeft).toBe('10px');
+    expect(lineEl?.style.marginLeft).toBe('');
+    expect(lineEl?.style.width).toBe('');
   });
 
   describe('spacing.after margin-bottom rendering', () => {
@@ -736,7 +1026,7 @@ describe('renderTableCell', () => {
       const lineContainer = paraWrapper.firstElementChild as HTMLElement;
       const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
 
-      expect(markerEl.style.fontFamily).toBe('Times New Roman, sans-serif');
+      expect(markerEl.style.fontFamily).toBe('"Times New Roman", sans-serif');
       expect(markerEl.style.fontSize).toBe('18px');
       expect(markerEl.style.fontWeight).toBe('bold');
       expect(markerEl.style.fontStyle).toBe('italic');

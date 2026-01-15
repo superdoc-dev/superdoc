@@ -3392,8 +3392,8 @@ export class DomPainter {
     let contentContainer: HTMLElement = groupEl;
 
     // Calculate scale factors for counter-scaling text
-    let groupScaleX = 1;
-    let groupScaleY = 1;
+    const groupScaleX = 1;
+    const groupScaleY = 1;
 
     if (groupTransform) {
       const inner = this.doc!.createElement('div');
@@ -3409,13 +3409,6 @@ export class DomPainter {
       const offsetY = groupTransform.childY ?? 0;
       if (offsetX || offsetY) {
         transforms.push(`translate(${-offsetX}px, ${-offsetY}px)`);
-      }
-      const targetWidth = groupTransform.width ?? block.geometry.width ?? childWidth;
-      const targetHeight = groupTransform.height ?? block.geometry.height ?? childHeight;
-      groupScaleX = childWidth ? targetWidth / childWidth : 1;
-      groupScaleY = childHeight ? targetHeight / childHeight : 1;
-      if (groupScaleX !== 1 || groupScaleY !== 1) {
-        transforms.push(`scale(${groupScaleX}, ${groupScaleY})`);
       }
       if (transforms.length > 0) {
         inner.style.transformOrigin = 'top left';

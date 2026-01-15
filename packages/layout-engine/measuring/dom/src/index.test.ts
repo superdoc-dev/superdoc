@@ -4452,6 +4452,52 @@ describe('measureBlock', () => {
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
+    it('should not include anchored images in table cell height', async () => {
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-anchored-image',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: {},
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+                  },
+                  {
+                    kind: 'image',
+                    id: 'img-0',
+                    src: 'data:image/png;base64,AAA',
+                    anchor: { isAnchored: true, vRelativeFrom: 'paragraph', offsetV: 5 },
+                    wrap: { type: 'None' },
+                    attrs: { anchorParagraphId: 'para-0' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 1000);
+      expect(measure.kind).toBe('table');
+      const cellMeasure = measure.rows[0].cells[0];
+      const paraMeasure = cellMeasure.blocks[0];
+
+      expect(paraMeasure.kind).toBe('paragraph');
+      const paraHeight = paraMeasure.kind === 'paragraph' ? paraMeasure.totalHeight : 0;
+
+      // Anchored image is out-of-flow: it should not increase cell height.
+      const expectedCellHeight = paraHeight + 4; // default top+bottom padding
+      expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+
     it('should handle type safety for spacing.after', async () => {
       const table: FlowBlock = {
         kind: 'table',

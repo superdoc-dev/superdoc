@@ -1,3 +1,10 @@
+# [1.7.0-next.6](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.5...v1.7.0-next.6) (2026-01-15)
+
+
+### Bug Fixes
+
+* empty line heights ([#1748](https://github.com/superdoc-dev/superdoc/issues/1748)) ([31ce45c](https://github.com/superdoc-dev/superdoc/commit/31ce45c9fbcc7c7e630f48a877791ea94a63c960))
+
 # [1.7.0-next.5](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.4...v1.7.0-next.5) (2026-01-15)
 
 

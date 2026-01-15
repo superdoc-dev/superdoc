@@ -2747,7 +2747,7 @@ export class DomPainter {
         // Convert VML gain to CSS contrast
         // VML gain is a hex string like "19661f" - higher = more contrast
         if (block.gain && typeof block.gain === 'string' && block.gain.endsWith('f')) {
-          const contrast = Math.max(0, parseInt(block.gain) / 65536);
+          const contrast = Math.max(0, parseInt(block.gain) / 65536) * (2 / 3); // 2/3 factor based on visual comparison.
           if (contrast > 0) {
             filters.push(`contrast(${contrast})`);
           }
@@ -2756,7 +2756,7 @@ export class DomPainter {
         // Convert VML blacklevel (brightness) to CSS brightness
         // VML blacklevel is a hex string like "22938f" - lower = less brightness
         if (block.blacklevel && typeof block.blacklevel === 'string' && block.blacklevel.endsWith('f')) {
-          const brightness = Math.max(0, 1 + parseInt(block.blacklevel) / 327 / 100) + 0.5; // 0.5 factor added based on visual comparison.
+          const brightness = Math.max(0, 1 + parseInt(block.blacklevel) / 327 / 100) * 1.3; // 1.3 factor added based on visual comparison.
           if (brightness > 0) {
             filters.push(`brightness(${brightness})`);
           }
@@ -2819,7 +2819,7 @@ export class DomPainter {
       transforms.push(`scale(${scale})`);
       innerWrapper.style.transform = transforms.join(' ');
 
-      innerWrapper.appendChild(this.renderDrawingContent(block, fragment));
+      innerWrapper.appendChild(this.renderDrawingContent(block, fragment, context));
       fragmentEl.appendChild(innerWrapper);
 
       return fragmentEl;
@@ -2829,7 +2829,11 @@ export class DomPainter {
     }
   }
 
-  private renderDrawingContent(block: DrawingBlock, fragment: DrawingFragment): HTMLElement {
+  private renderDrawingContent(
+    block: DrawingBlock,
+    fragment: DrawingFragment,
+    context?: FragmentRenderContext,
+  ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
@@ -2837,10 +2841,10 @@ export class DomPainter {
       return this.createDrawingImageElement(block);
     }
     if (block.drawingKind === 'vectorShape') {
-      return this.createVectorShapeElement(block, fragment.geometry, true);
+      return this.createVectorShapeElement(block, fragment.geometry, true, 1, 1, context);
     }
     if (block.drawingKind === 'shapeGroup') {
-      return this.createShapeGroupElement(block);
+      return this.createShapeGroupElement(block, context);
     }
     return this.createDrawingPlaceholder();
   }
@@ -2870,6 +2874,7 @@ export class DomPainter {
     applyTransforms = false,
     groupScaleX = 1,
     groupScaleY = 1,
+    context?: FragmentRenderContext,
   ): HTMLElement {
     const container = this.doc!.createElement('div');
     container.classList.add('superdoc-vector-shape');
@@ -2918,6 +2923,7 @@ export class DomPainter {
             block.textInsets,
             groupScaleX,
             groupScaleY,
+            context,
           );
           contentContainer.appendChild(textDiv);
         }
@@ -2939,6 +2945,7 @@ export class DomPainter {
         block.textInsets,
         groupScaleX,
         groupScaleY,
+        context,
       );
       contentContainer.appendChild(textDiv);
     }
@@ -3001,6 +3008,7 @@ export class DomPainter {
     textInsets?: { top: number; right: number; bottom: number; left: number },
     groupScaleX = 1,
     groupScaleY = 1,
+    context?: FragmentRenderContext,
   ): HTMLElement {
     const textDiv = this.doc!.createElement('div');
     textDiv.style.position = 'absolute';
@@ -3070,6 +3078,16 @@ export class DomPainter {
     // Override inherited white-space: pre from parent fragment to allow text wrapping
     currentParagraph.style.whiteSpace = 'normal';
 
+    const resolvePartText = (part: ShapeTextContent['parts'][number]) => {
+      if (part.fieldType === 'PAGE') {
+        return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
+      }
+      if (part.fieldType === 'NUMPAGES') {
+        return String(context?.totalPages ?? 1);
+      }
+      return part.text;
+    };
+
     textContent.parts.forEach((part) => {
       if (part.isLineBreak) {
         // Finish current paragraph and start a new one
@@ -3084,13 +3102,16 @@ export class DomPainter {
         }
       } else {
         const span = this.doc!.createElement('span');
-        span.textContent = part.text;
+        span.textContent = resolvePartText(part);
         if (part.formatting) {
           if (part.formatting.bold) {
             span.style.fontWeight = 'bold';
           }
           if (part.formatting.italic) {
             span.style.fontStyle = 'italic';
+          }
+          if (part.formatting.fontFamily) {
+            span.style.fontFamily = part.formatting.fontFamily;
           }
           if (part.formatting.color) {
             // Validate and normalize color format (handles both with and without # prefix)
@@ -3360,7 +3381,7 @@ export class DomPainter {
     }
   }
 
-  private createShapeGroupElement(block: ShapeGroupDrawing): HTMLElement {
+  private createShapeGroupElement(block: ShapeGroupDrawing, context?: FragmentRenderContext): HTMLElement {
     const groupEl = this.doc!.createElement('div');
     groupEl.classList.add('superdoc-shape-group');
     groupEl.style.position = 'relative';
@@ -3371,8 +3392,8 @@ export class DomPainter {
     let contentContainer: HTMLElement = groupEl;
 
     // Calculate scale factors for counter-scaling text
-    let groupScaleX = 1;
-    let groupScaleY = 1;
+    const groupScaleX = 1;
+    const groupScaleY = 1;
 
     if (groupTransform) {
       const inner = this.doc!.createElement('div');
@@ -3389,13 +3410,6 @@ export class DomPainter {
       if (offsetX || offsetY) {
         transforms.push(`translate(${-offsetX}px, ${-offsetY}px)`);
       }
-      const targetWidth = groupTransform.width ?? block.geometry.width ?? childWidth;
-      const targetHeight = groupTransform.height ?? block.geometry.height ?? childHeight;
-      groupScaleX = childWidth ? targetWidth / childWidth : 1;
-      groupScaleY = childHeight ? targetHeight / childHeight : 1;
-      if (groupScaleX !== 1 || groupScaleY !== 1) {
-        transforms.push(`scale(${groupScaleX}, ${groupScaleY})`);
-      }
       if (transforms.length > 0) {
         inner.style.transformOrigin = 'top left';
         inner.style.transform = transforms.join(' ');
@@ -3405,7 +3419,7 @@ export class DomPainter {
     }
 
     block.shapes.forEach((child) => {
-      const childContent = this.createGroupChildContent(child, groupScaleX, groupScaleY);
+      const childContent = this.createGroupChildContent(child, groupScaleX, groupScaleY, context);
       if (!childContent) return;
       const attrs = (child as ShapeGroupChild).attrs ?? {};
       const wrapper = this.doc!.createElement('div');
@@ -3444,6 +3458,7 @@ export class DomPainter {
     child: ShapeGroupChild,
     groupScaleX: number = 1,
     groupScaleY: number = 1,
+    context?: FragmentRenderContext,
   ): HTMLElement | null {
     // Type narrowing with explicit checks to help TypeScript distinguish union members
     if (child.shapeType === 'vectorShape' && 'fillColor' in child.attrs) {
@@ -3483,9 +3498,11 @@ export class DomPainter {
         lineEnds: attrs.lineEnds,
         textContent: attrs.textContent,
         textAlign: attrs.textAlign,
+        textVerticalAlign: attrs.textVerticalAlign,
+        textInsets: attrs.textInsets,
       };
       // Pass geometry and scale factors to ensure text overlay has correct dimensions
-      return this.createVectorShapeElement(vectorChild, childGeometry, false, groupScaleX, groupScaleY);
+      return this.createVectorShapeElement(vectorChild, childGeometry, false, groupScaleX, groupScaleY, context);
     }
     if (child.shapeType === 'image' && 'src' in child.attrs) {
       // After this check, child should be ShapeGroupImageChild
@@ -3572,11 +3589,11 @@ export class DomPainter {
         return this.createDrawingImageElement(block);
       }
       if (block.drawingKind === 'shapeGroup') {
-        return this.createShapeGroupElement(block);
+        return this.createShapeGroupElement(block, context);
       }
       if (block.drawingKind === 'vectorShape') {
         // For vectorShapes in table cells, render without geometry transforms
-        return this.createVectorShapeElement(block, block.geometry, false);
+        return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
       }
       return this.createDrawingPlaceholder();
     };
@@ -4178,12 +4195,18 @@ export class DomPainter {
     // Apply explicit size if present
     if (run.size) {
       if (run.size.width) {
-        annotation.style.width = `${run.size.width}px`;
-        annotation.style.display = 'inline-block';
-        annotation.style.overflow = 'hidden';
+        const requiresImage = run.variant === 'image' || run.variant === 'signature';
+        if (!requiresImage || run.imageSrc) {
+          annotation.style.width = `${run.size.width}px`;
+          annotation.style.display = 'inline-block';
+          annotation.style.overflow = 'hidden';
+        }
       }
-      if (run.size.height) {
-        annotation.style.height = `${run.size.height}px`;
+      if (run.size.height && run.variant !== 'html') {
+        const requiresImage = run.variant === 'image' || run.variant === 'signature';
+        if (!requiresImage || run.imageSrc) {
+          annotation.style.height = `${run.size.height}px`;
+        }
       }
     }
 
@@ -4253,6 +4276,9 @@ export class DomPainter {
           content.appendChild(img);
           annotation.style.display = 'inline-block';
           content.style.display = 'inline-block';
+          // Prevent line-height inheritance from the line container from breaking image layout.
+          annotation.style.lineHeight = 'normal';
+          content.style.lineHeight = 'normal';
         } else {
           content.textContent = run.displayLabel || (run.variant === 'signature' ? 'Signature' : '');
         }
@@ -4282,11 +4308,13 @@ export class DomPainter {
 
       case 'html': {
         if (run.rawHtml && typeof run.rawHtml === 'string') {
-          // Note: For security, HTML content should be sanitized before rendering
-          // In headless/layout mode, we just render the displayLabel for safety
-          content.textContent = run.displayLabel;
+          // Note: rawHtml is expected to be sanitized upstream.
+          content.innerHTML = run.rawHtml.trim();
           annotation.style.display = 'inline-block';
           content.style.display = 'inline-block';
+          // Prevent line-height inheritance from the line container from affecting HTML layout.
+          annotation.style.lineHeight = 'normal';
+          content.style.lineHeight = 'normal';
         } else {
           content.textContent = run.displayLabel;
         }
@@ -5116,11 +5144,6 @@ export class DomPainter {
       } else {
         delete el.dataset.pmEnd;
       }
-      if (fragment.pmStart != null && fragment.pmEnd != null) {
-        el.title = `PM ${fragment.pmStart}–${fragment.pmEnd}`;
-      } else {
-        el.removeAttribute('title');
-      }
       if (fragment.continuesFromPrev) {
         el.dataset.continuesFromPrev = 'true';
       } else {
@@ -5577,6 +5600,35 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         if (run.kind === 'tab') {
           // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           return [run.text ?? '', 'tab'].join(',');
+        }
+
+        // Handle FieldAnnotationRun
+        if (run.kind === 'fieldAnnotation') {
+          const size = run.size ? `${run.size.width ?? ''}x${run.size.height ?? ''}` : '';
+          const highlighted = run.highlighted !== false ? 1 : 0;
+          return [
+            'field',
+            run.variant ?? '',
+            run.displayLabel ?? '',
+            run.fieldColor ?? '',
+            run.borderColor ?? '',
+            highlighted,
+            run.hidden ? 1 : 0,
+            run.visibility ?? '',
+            run.imageSrc ?? '',
+            run.linkUrl ?? '',
+            run.rawHtml ?? '',
+            size,
+            run.fontFamily ?? '',
+            run.fontSize ?? '',
+            run.textColor ?? '',
+            run.textHighlight ?? '',
+            run.bold ? 1 : 0,
+            run.italic ? 1 : 0,
+            run.underline ? 1 : 0,
+            run.fieldId ?? '',
+            run.fieldType ?? '',
+          ].join(',');
         }
 
         // Handle TextRun (kind is 'text' or undefined)

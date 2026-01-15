@@ -1,3 +1,156 @@
+# [1.7.0-next.7](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.6...v1.7.0-next.7) (2026-01-15)
+
+
+### Bug Fixes
+
+* annotation issues ([#1752](https://github.com/superdoc-dev/superdoc/issues/1752)) ([9b13ce0](https://github.com/superdoc-dev/superdoc/commit/9b13ce0141f9f526bdaa6cfc5ea18616290b0688))
+* handle fldSimple syntax for page number fields ([#1755](https://github.com/superdoc-dev/superdoc/issues/1755)) ([8325783](https://github.com/superdoc-dev/superdoc/commit/83257837cc3123e6696a8fd231e96a4b31411c1b))
+* try different yaml format for label ([0484c89](https://github.com/superdoc-dev/superdoc/commit/0484c8982241a21ba39b3c202f01eae90a4d7ee3))
+
+# [1.7.0-next.6](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.5...v1.7.0-next.6) (2026-01-15)
+
+
+### Bug Fixes
+
+* empty line heights ([#1748](https://github.com/superdoc-dev/superdoc/issues/1748)) ([31ce45c](https://github.com/superdoc-dev/superdoc/commit/31ce45c9fbcc7c7e630f48a877791ea94a63c960))
+
+# [1.7.0-next.5](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.4...v1.7.0-next.5) (2026-01-15)
+
+
+### Bug Fixes
+
+* guarding against component init when ref is null ([#1746](https://github.com/superdoc-dev/superdoc/issues/1746)) ([253eeea](https://github.com/superdoc-dev/superdoc/commit/253eeeab9a28d5c2b771385d0d812e501f20ac55))
+* respect keepLines and contextual spacing in page break calculations ([#1747](https://github.com/superdoc-dev/superdoc/issues/1747)) ([189c054](https://github.com/superdoc-dev/superdoc/commit/189c05453bcdff0688a84f81a014462d12aceeb8))
+
+# [1.7.0-next.4](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.3...v1.7.0-next.4) (2026-01-15)
+
+
+### Bug Fixes
+
+* anchor images in table cells ([#1742](https://github.com/superdoc-dev/superdoc/issues/1742)) ([f77e7bd](https://github.com/superdoc-dev/superdoc/commit/f77e7bd538fc013d7de0bfc66c1c4880761c61b7))
+* vertical align bug in sections ([#1745](https://github.com/superdoc-dev/superdoc/issues/1745)) ([b53fb6a](https://github.com/superdoc-dev/superdoc/commit/b53fb6a4a54ceaba7283b688e75279b07f3fc051))
+
+# [1.7.0-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.2...v1.7.0-next.3) (2026-01-14)
+
+
+### Bug Fixes
+
+* correct indentation for table cells with explicit tab positioning ([#1743](https://github.com/superdoc-dev/superdoc/issues/1743)) ([1fd6b74](https://github.com/superdoc-dev/superdoc/commit/1fd6b74a95c0eae8b1b23c27e7046ae529c95fc3))
+
+# [1.7.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.1...v1.7.0-next.2) (2026-01-14)
+
+
+### Reverts
+
+* Revert "chore(release): 1.7.0-next.1 [skip ci]" ([3e0afa8](https://github.com/superdoc-dev/superdoc/commit/3e0afa8b5237520a44315cf6ddc635de58f6f6a6))
+
+## [1.6.2-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.6.2-next.1...v1.6.2-next.2) (2026-01-14)
+
+
+### Bug Fixes
+
+* bug watermarks render darker than they should [SD-1469] ([#1737](https://github.com/superdoc-dev/superdoc/issues/1737)) ([7ce423d](https://github.com/superdoc-dev/superdoc/commit/7ce423d445366c0e400b4143bec3cdd9d8b28e88))
+
+## [1.6.2-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.6.1...v1.6.2-next.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* add dispatch method type and mark view as optional for headless mode ([#1728](https://github.com/superdoc-dev/superdoc/issues/1728)) ([45195d7](https://github.com/superdoc-dev/superdoc/commit/45195d78b4eb5b7b879ce4837393ce83f03ba595))
+* add type declaration for Editor.loadXmlData and Editor.open ([#1727](https://github.com/superdoc-dev/superdoc/issues/1727)) ([ae452a9](https://github.com/superdoc-dev/superdoc/commit/ae452a98409e6c34c9d08b1ba12e2c21e0f9f0ab))
+
+## [1.6.1](https://github.com/superdoc-dev/superdoc/compare/v1.6.0...v1.6.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* section mismatch footer numbering ([#1732](https://github.com/superdoc-dev/superdoc/issues/1732)) ([96880ba](https://github.com/superdoc-dev/superdoc/commit/96880ba779f069001d5de125c6fb703c008bcd5d))
+
+## [1.6.1-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.6.0...v1.6.1-next.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* section mismatch footer numbering ([#1732](https://github.com/superdoc-dev/superdoc/issues/1732)) ([96880ba](https://github.com/superdoc-dev/superdoc/commit/96880ba779f069001d5de125c6fb703c008bcd5d))
+
+# [1.6.0](https://github.com/superdoc-dev/superdoc/compare/v1.5.0...v1.6.0) (2026-01-14)
+
+
+### Features
+
+* **comments:** add public addComment command with simplified API ([#1731](https://github.com/superdoc-dev/superdoc/issues/1731)) ([850ee46](https://github.com/superdoc-dev/superdoc/commit/850ee469bc2cf39e807ecb0ba96ea9043f668288))
+* footnotes render ([#1686](https://github.com/superdoc-dev/superdoc/issues/1686)) ([f6c38d4](https://github.com/superdoc-dev/superdoc/commit/f6c38d4d102772984a5a63ddd327ebe204b776cf))
+* handling large footnotes, multi-column footnotes ([#1729](https://github.com/superdoc-dev/superdoc/issues/1729)) ([e4a41a3](https://github.com/superdoc-dev/superdoc/commit/e4a41a3d96db88ca59436db130f3a62440bf5577))
+* search improvements, position tracking  ([#1730](https://github.com/superdoc-dev/superdoc/issues/1730)) ([d1b736d](https://github.com/superdoc-dev/superdoc/commit/d1b736d3b295e0ebc1454b5ce483a1174c5305f8))
+
+# [1.6.0-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.6.0-next.2...v1.6.0-next.3) (2026-01-14)
+
+
+### Features
+
+* **comments:** add public addComment command with simplified API ([#1731](https://github.com/superdoc-dev/superdoc/issues/1731)) ([850ee46](https://github.com/superdoc-dev/superdoc/commit/850ee469bc2cf39e807ecb0ba96ea9043f668288))
+
+# [1.6.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.6.0-next.1...v1.6.0-next.2) (2026-01-14)
+
+
+### Features
+
+* search improvements, position tracking  ([#1730](https://github.com/superdoc-dev/superdoc/issues/1730)) ([d1b736d](https://github.com/superdoc-dev/superdoc/commit/d1b736d3b295e0ebc1454b5ce483a1174c5305f8))
+
+# [1.6.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.5.0...v1.6.0-next.1) (2026-01-14)
+
+
+### Features
+
+* footnotes render ([#1686](https://github.com/superdoc-dev/superdoc/issues/1686)) ([f6c38d4](https://github.com/superdoc-dev/superdoc/commit/f6c38d4d102772984a5a63ddd327ebe204b776cf))
+* handling large footnotes, multi-column footnotes ([#1729](https://github.com/superdoc-dev/superdoc/issues/1729)) ([e4a41a3](https://github.com/superdoc-dev/superdoc/commit/e4a41a3d96db88ca59436db130f3a62440bf5577))
+
+# [1.5.0](https://github.com/superdoc-dev/superdoc/compare/v1.4.0...v1.5.0) (2026-01-13)
+
+
+### Bug Fixes
+
+* add missing DrawingML namespaces ([#1719](https://github.com/superdoc-dev/superdoc/issues/1719)) ([9bfd977](https://github.com/superdoc-dev/superdoc/commit/9bfd977837fa2c6137eed3149794292580ddb2ac))
+* adding table to sdt ([#1709](https://github.com/superdoc-dev/superdoc/issues/1709)) ([260b987](https://github.com/superdoc-dev/superdoc/commit/260b987e1a20ff3405f41b16d02ef936db023578))
+* annotation events in layout engine ([#1685](https://github.com/superdoc-dev/superdoc/issues/1685)) ([db24ff8](https://github.com/superdoc-dev/superdoc/commit/db24ff80afb9c048899060e3121e6b4d3e2edfac))
+* **comments:** improve comments on tracked changes imported from google docs and word [SD-1033] ([#1631](https://github.com/superdoc-dev/superdoc/issues/1631)) ([1d8873a](https://github.com/superdoc-dev/superdoc/commit/1d8873ae372a65d16c5f46c4dee9980e8159c6e2))
+* deleting tracked change in suggestion to match word ([#1710](https://github.com/superdoc-dev/superdoc/issues/1710)) ([d6e780f](https://github.com/superdoc-dev/superdoc/commit/d6e780f8fc753cb6cd94d4317f482c997b9bc9a5))
+* editor type ([#1702](https://github.com/superdoc-dev/superdoc/issues/1702)) ([902e745](https://github.com/superdoc-dev/superdoc/commit/902e7456c3b8ac957d19c0b7d65fd3451ce48bd6))
+* handle table cell borders from styles ([#1722](https://github.com/superdoc-dev/superdoc/issues/1722)) ([6ef1a11](https://github.com/superdoc-dev/superdoc/commit/6ef1a1138adf23e9873a642aa63327f20724396b))
+* latent styles crash ([#1711](https://github.com/superdoc-dev/superdoc/issues/1711)) ([f96bced](https://github.com/superdoc-dev/superdoc/commit/f96bced48f6b3932fd3573ed612d2d815c701efd))
+* new lines in sdts rendering incorrectly ([#1705](https://github.com/superdoc-dev/superdoc/issues/1705)) ([777bc33](https://github.com/superdoc-dev/superdoc/commit/777bc333fd55a64079be6fe4f620397d310ad979))
+* propagate SDT metadata to nested tables in cells ([#1704](https://github.com/superdoc-dev/superdoc/issues/1704)) ([b5b74a1](https://github.com/superdoc-dev/superdoc/commit/b5b74a1fca8d65c98c5d85363a90897271fe3efa))
+* remove pm position on hover ([#1726](https://github.com/superdoc-dev/superdoc/issues/1726)) ([8bdacc3](https://github.com/superdoc-dev/superdoc/commit/8bdacc326dc5883533ec155e7e2b2794a19278de))
+* sectPr handling of next page ([#1701](https://github.com/superdoc-dev/superdoc/issues/1701)) ([7c96ae5](https://github.com/superdoc-dev/superdoc/commit/7c96ae50da6dfa1bfc95d8aa6bf2dd2335700a88))
+* shapes ([#1708](https://github.com/superdoc-dev/superdoc/issues/1708)) ([c1dd983](https://github.com/superdoc-dev/superdoc/commit/c1dd9832bf86a77e57d258eb09782f3e3a4f3b11))
+* some block sdts with nesting not displaying ([#1703](https://github.com/superdoc-dev/superdoc/issues/1703)) ([e09d9d8](https://github.com/superdoc-dev/superdoc/commit/e09d9d8fabb004645ad54fa13bbe4fbc2bc6e1c7))
+* table grid import/export ([#1712](https://github.com/superdoc-dev/superdoc/issues/1712)) ([efe09fa](https://github.com/superdoc-dev/superdoc/commit/efe09faf426f142b0371e0ff221decd488b7b295))
+
+
+### Features
+
+* add getElementAtPos utility fn ([#1706](https://github.com/superdoc-dev/superdoc/issues/1706)) ([0e34762](https://github.com/superdoc-dev/superdoc/commit/0e34762e6cd2cc67b06d897c46bd6276714ff132))
+* editable ranges part 2 ([#1618](https://github.com/superdoc-dev/superdoc/issues/1618)) ([e9a5396](https://github.com/superdoc-dev/superdoc/commit/e9a539695ff12c2cb3d7cd4c972a9414b764bad1))
+
+# [1.5.0-next.9](https://github.com/superdoc-dev/superdoc/compare/v1.5.0-next.8...v1.5.0-next.9) (2026-01-13)
+
+
+### Bug Fixes
+
+* remove pm position on hover ([#1726](https://github.com/superdoc-dev/superdoc/issues/1726)) ([8bdacc3](https://github.com/superdoc-dev/superdoc/commit/8bdacc326dc5883533ec155e7e2b2794a19278de))
+
+# [1.5.0-next.8](https://github.com/superdoc-dev/superdoc/compare/v1.5.0-next.7...v1.5.0-next.8) (2026-01-13)
+
+
+### Bug Fixes
+
+* handle table cell borders from styles ([#1722](https://github.com/superdoc-dev/superdoc/issues/1722)) ([6ef1a11](https://github.com/superdoc-dev/superdoc/commit/6ef1a1138adf23e9873a642aa63327f20724396b))
+
+
+### Features
+
+* editable ranges part 2 ([#1618](https://github.com/superdoc-dev/superdoc/issues/1618)) ([e9a5396](https://github.com/superdoc-dev/superdoc/commit/e9a539695ff12c2cb3d7cd4c972a9414b764bad1))
+
 # [1.5.0-next.7](https://github.com/superdoc-dev/superdoc/compare/v1.5.0-next.6...v1.5.0-next.7) (2026-01-12)
 
 

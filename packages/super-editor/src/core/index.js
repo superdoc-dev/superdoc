@@ -4,6 +4,7 @@ export * from './Schema.js';
 export * from './Attribute.js';
 export * from './CommandService.js';
 export * from './Extension.js';
+export * from './PositionTracker.js';
 export * from './super-converter/SuperConverter.js';
 export * from './OxmlNode.js';
 export * from './errors/index.js';

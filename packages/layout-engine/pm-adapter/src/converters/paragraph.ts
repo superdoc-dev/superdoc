@@ -55,8 +55,22 @@ import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { createLinkedStyleResolver, applyLinkedStyleToRun, extractRunStyleId } from '../styles/linked-run.js';
-import { ptToPx, pickNumber, isPlainObject, convertIndentTwipsToPx, twipsToPx, toBoolean } from '../utilities.js';
+import {
+  ptToPx,
+  pickNumber,
+  isPlainObject,
+  convertIndentTwipsToPx,
+  twipsToPx,
+  toBoolean,
+  asOoxmlElement,
+  findOoxmlChild,
+  getOoxmlAttribute,
+  parseOoxmlNumber,
+  type OoxmlElement,
+} from '../utilities.js';
 import { resolveStyle } from '@superdoc/style-engine';
+import { resolveDocxFontFamily } from '@superdoc/style-engine/ooxml';
+import { SuperConverter } from '@superdoc/super-editor/converter/internal/SuperConverter.js';
 
 // ============================================================================
 // Constants
@@ -400,9 +414,12 @@ export function fieldAnnotationNodeToRun(
 }
 
 /**
- * Helper to check if a run is a text run (not a tab).
+ * Helper to check if a run is a text run.
  */
-const isTextRun = (run: Run): run is TextRun => (run as { kind?: string }).kind !== 'tab';
+const isTextRun = (run: Run): run is TextRun => {
+  const kind = (run as { kind?: string }).kind;
+  return (kind === undefined || kind === 'text') && 'text' in run;
+};
 
 /**
  * Checks if two text runs have compatible data attributes for merging.
@@ -616,6 +633,161 @@ const extractFirstTextRunFont = (para: PMNode): { fontSizePx?: number; fontFamil
 
   const font = findFirstTextFont(para.content);
   return font;
+};
+
+/**
+ * Resolves a font family value to a CSS-compatible font family string.
+ *
+ * Handles both simple string font families and complex OOXML font family objects
+ * that may include theme fonts, different scripts (ascii, hAnsi, eastAsia, cs).
+ *
+ * @param fontFamily - The font family value (string or OOXML font family object)
+ * @param docx - Optional docx context for theme font resolution
+ * @returns Resolved CSS font family string, or undefined if resolution fails
+ *
+ * @example
+ * ```typescript
+ * resolveRunFontFamily('Arial'); // 'Arial'
+ * resolveRunFontFamily({ ascii: 'Calibri', hAnsi: 'Calibri' }, docx); // 'Calibri'
+ * ```
+ */
+const resolveRunFontFamily = (fontFamily: unknown, docx?: Record<string, unknown>): string | undefined => {
+  if (typeof fontFamily === 'string' && fontFamily.trim().length > 0) {
+    return fontFamily;
+  }
+  if (!fontFamily || typeof fontFamily !== 'object') return undefined;
+  const toCssFontFamily = (
+    SuperConverter as { toCssFontFamily?: (fontName: string, docx?: Record<string, unknown>) => string }
+  ).toCssFontFamily;
+  const resolved = resolveDocxFontFamily(fontFamily as Record<string, unknown>, docx ?? null, toCssFontFamily);
+  return resolved ?? undefined;
+};
+
+/**
+ * Parses a font size value to pixels.
+ *
+ * Handles multiple input formats:
+ * - Raw number: interpreted as half-points (OOXML format)
+ * - String ending in 'pt': interpreted as points
+ * - String ending in 'px': returned as-is
+ * - String without suffix: interpreted as half-points
+ *
+ * @param fontSize - The font size value to parse
+ * @returns Font size in pixels, or undefined if parsing fails
+ *
+ * @example
+ * ```typescript
+ * parseRunFontSizePx(24); // 16 (24 half-points = 12pt = 16px)
+ * parseRunFontSizePx('12pt'); // 16
+ * parseRunFontSizePx('16px'); // 16
+ * ```
+ */
+const parseRunFontSizePx = (fontSize: unknown): number | undefined => {
+  if (typeof fontSize === 'number' && Number.isFinite(fontSize)) {
+    return ptToPx(fontSize / HALF_POINTS_PER_POINT) ?? undefined;
+  }
+  if (typeof fontSize === 'string') {
+    const numeric = Number.parseFloat(fontSize);
+    if (!Number.isFinite(numeric)) return undefined;
+    if (fontSize.endsWith('pt')) {
+      return ptToPx(numeric);
+    }
+    if (fontSize.endsWith('px')) {
+      return numeric;
+    }
+    return ptToPx(numeric / HALF_POINTS_PER_POINT) ?? undefined;
+  }
+  return undefined;
+};
+
+/**
+ * Extracts run properties from paragraph mark (w:pPr/w:rPr) in OOXML.
+ *
+ * The paragraph mark in Word has its own run properties that apply to empty
+ * paragraphs or the paragraph mark character itself. This function extracts
+ * font size and font family from these properties.
+ *
+ * @param paragraphProps - The paragraph properties object
+ * @returns Extracted run properties (fontSize, fontFamily), or undefined if none found
+ *
+ * @example
+ * ```typescript
+ * extractParagraphMarkRunProps({
+ *   runProperties: { fontSize: 24 }
+ * }); // { fontSize: 24 }
+ * ```
+ */
+const extractParagraphMarkRunProps = (paragraphProps: Record<string, unknown>): Record<string, unknown> | undefined => {
+  const directRunProps = paragraphProps.runProperties;
+  const directRunPropsElement = asOoxmlElement(directRunProps);
+  if (directRunProps && isPlainObject(directRunProps) && !directRunPropsElement) {
+    return directRunProps as Record<string, unknown>;
+  }
+
+  const element = asOoxmlElement(paragraphProps);
+  const pPr = element ? (element.name === 'w:pPr' ? element : findOoxmlChild(element, 'w:pPr')) : undefined;
+  const rPr = directRunPropsElement?.name === 'w:rPr' ? directRunPropsElement : findOoxmlChild(pPr, 'w:rPr');
+  if (!rPr) return undefined;
+
+  const runProps: Record<string, unknown> = {};
+  const sz =
+    parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:sz'), 'w:val')) ??
+    parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:szCs'), 'w:val'));
+  if (sz != null) {
+    runProps.fontSize = sz;
+  }
+
+  const rFonts = findOoxmlChild(rPr, 'w:rFonts');
+  if (rFonts) {
+    const fontFamily: Record<string, unknown> = {};
+    const keys = ['ascii', 'hAnsi', 'eastAsia', 'cs', 'val', 'asciiTheme', 'hAnsiTheme', 'eastAsiaTheme', 'cstheme'];
+    for (const key of keys) {
+      const value = getOoxmlAttribute(rFonts, `w:${key}`);
+      if (value != null) {
+        fontFamily[key] = value;
+      }
+    }
+    if (Object.keys(fontFamily).length > 0) {
+      runProps.fontFamily = fontFamily;
+    }
+  }
+
+  return Object.keys(runProps).length > 0 ? runProps : undefined;
+};
+
+/**
+ * Applies paragraph mark run properties to an empty paragraph's text run.
+ *
+ * In Word, empty paragraphs inherit their appearance from the paragraph mark's
+ * run properties (w:pPr/w:rPr). This function applies those properties to ensure
+ * empty paragraphs render with the correct font size and family.
+ *
+ * @param run - The text run to apply properties to
+ * @param paragraphProps - The paragraph properties containing run properties
+ * @param converterContext - Optional converter context for font resolution
+ *
+ * @example
+ * ```typescript
+ * const run: TextRun = { text: '' };
+ * applyParagraphMarkRunProps(run, paragraphProps, context);
+ * // run.fontSize and run.fontFamily may now be set
+ * ```
+ */
+const applyParagraphMarkRunProps = (
+  run: TextRun,
+  paragraphProps: Record<string, unknown>,
+  converterContext?: ConverterContext,
+): void => {
+  const runProps = extractParagraphMarkRunProps(paragraphProps);
+  if (!runProps) return;
+  const fontSizePx = parseRunFontSizePx(runProps.fontSize);
+  if (fontSizePx != null) {
+    run.fontSize = fontSizePx;
+  }
+  const fontFamily = resolveRunFontFamily(runProps.fontFamily, converterContext?.docx);
+  if (fontFamily) {
+    run.fontFamily = fontFamily;
+  }
 };
 
 const applyBaseRunDefaults = (
@@ -927,6 +1099,8 @@ export function paragraphToFlowBlocks(
       emptyRun.pmStart = paraPos.start + 1;
       emptyRun.pmEnd = paraPos.start + 1;
     }
+    applyBaseRunDefaults(emptyRun, baseRunDefaults, defaultFont, defaultSize);
+    applyParagraphMarkRunProps(emptyRun, paragraphProps, converterContext);
     let emptyParagraphAttrs = cloneParagraphAttrs(paragraphAttrs);
     if (isSectPrMarker) {
       if (emptyParagraphAttrs) {
@@ -948,6 +1122,33 @@ export function paragraphToFlowBlocks(
   let partIndex = 0;
   let tabOrdinal = 0;
   let suppressedByVanish = false;
+
+  const toSuperscriptDigits = (value: unknown): string => {
+    const map: Record<string, string> = {
+      '0': '⁰',
+      '1': '¹',
+      '2': '²',
+      '3': '³',
+      '4': '⁴',
+      '5': '⁵',
+      '6': '⁶',
+      '7': '⁷',
+      '8': '⁸',
+      '9': '⁹',
+    };
+    return String(value ?? '')
+      .split('')
+      .map((ch) => map[ch] ?? ch)
+      .join('');
+  };
+
+  const resolveFootnoteDisplayNumber = (id: unknown): unknown => {
+    const key = id == null ? null : String(id);
+    if (!key) return null;
+    const mapping = converterContext?.footnoteNumberById;
+    const mapped = mapping && typeof mapping === 'object' ? (mapping as Record<string, number>)[key] : undefined;
+    return typeof mapped === 'number' && Number.isFinite(mapped) && mapped > 0 ? mapped : null;
+  };
 
   const nextId = () => (partIndex === 0 ? baseBlockId : `${baseBlockId}-${partIndex}`);
   const attachAnchorParagraphId = <T extends FlowBlock>(block: T, anchorParagraphId: string): T => {
@@ -1007,10 +1208,43 @@ export function paragraphToFlowBlocks(
     activeRunProperties?: Record<string, unknown> | null,
     activeHidden = false,
   ) => {
+    if (node.type === 'footnoteReference') {
+      const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
+      const refPos = positions.get(node);
+      const id = (node.attrs as Record<string, unknown> | undefined)?.id;
+      const displayId = resolveFootnoteDisplayNumber(id) ?? id ?? '*';
+      const displayText = toSuperscriptDigits(displayId);
+
+      const run = textNodeToRun(
+        { type: 'text', text: displayText } as PMNode,
+        positions,
+        defaultFont,
+        defaultSize,
+        [], // marks applied after linked styles/base defaults
+        activeSdt,
+        hyperlinkConfig,
+        themeColors,
+      );
+      const inlineStyleId = getInlineStyleId(mergedMarks);
+      applyRunStyles(run, inlineStyleId, activeRunStyleId);
+      applyBaseRunDefaults(run, baseRunDefaults, defaultFont, defaultSize);
+      applyMarksToRun(run, mergedMarks, hyperlinkConfig, themeColors);
+
+      // Copy PM positions from the parent footnoteReference node
+      if (refPos) {
+        run.pmStart = refPos.start;
+        run.pmEnd = refPos.end;
+      }
+
+      currentRuns.push(run);
+      return;
+    }
+
     if (activeHidden && node.type !== 'run') {
       suppressedByVanish = true;
       return;
     }
+
     if (node.type === 'text' && node.text) {
       // Apply styles in correct priority order:
       // 1. Create run with defaults (lowest priority) - textNodeToRun with empty marks

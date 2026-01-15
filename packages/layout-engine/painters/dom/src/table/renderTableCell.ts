@@ -1,19 +1,26 @@
 import type {
   CellBorders,
   DrawingBlock,
+  DrawingMeasure,
   Fragment,
   Line,
   ParagraphBlock,
   ParagraphMeasure,
   ImageBlock,
+  ImageMeasure,
+  ParagraphIndent,
   SdtMetadata,
   TableBlock,
   TableFragment,
   TableMeasure,
+  WrapTextMode,
+  WrapExclusion,
+  RenderedLineInfo,
 } from '@superdoc/contracts';
 import { applyCellBorders } from './border-utils.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../renderer.js';
+import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import {
@@ -92,6 +99,28 @@ type MarkerRenderParams = {
   markerMeasure: ParagraphMeasure['marker'];
   /** Left indent in pixels */
   indentLeftPx: number;
+};
+
+/**
+ * Parameters for applying paragraph indentation within a table cell line.
+ */
+type TableCellIndentParams = {
+  /** Line element to apply indentation styles to */
+  lineEl: HTMLElement;
+  /** Line measurement data */
+  line: Line;
+  /** Paragraph indentation values */
+  indent?: ParagraphIndent;
+  /** List text indent in pixels (when list marker layout is present) */
+  indentLeftPx: number;
+  /** Whether this paragraph has list marker layout */
+  hasListMarkerLayout: boolean;
+  /** Zero-based index of the line within the paragraph */
+  lineIndex: number;
+  /** Local start line for partial rendering */
+  localStartLine: number;
+  /** Whether first-line indent should be suppressed */
+  suppressFirstLineIndent: boolean;
 };
 
 /**
@@ -177,6 +206,96 @@ function renderListMarker(params: MarkerRenderParams): HTMLElement {
   lineContainer.appendChild(lineEl);
 
   return lineContainer;
+}
+
+/**
+ * Applies paragraph indentation to a rendered line inside a table cell.
+ *
+ * **SD-1472 Fix:** When segments have explicit x positions (from tab stops), the content
+ * is already absolutely positioned. Applying padding/textIndent would double-shift the text,
+ * causing the first character to be lost. This function detects explicit positioning via
+ * `segment.x !== undefined` and adjusts the indent strategy accordingly.
+ *
+ * **Mathematical Model (SD-1295):**
+ * The hanging indent effect is achieved through a combination of paddingLeft and textIndent:
+ * - `firstLineOffset = firstLine - hanging`
+ * - This offset can be positive (indent first line further right) or negative (outdent to left)
+ *
+ * **CSS Application Pattern:**
+ * - **First line (no explicit positioning):**
+ *   - `paddingLeft = left` (base left indent)
+ *   - `textIndent = firstLineOffset` (additional first-line adjustment)
+ *   - Combined effect: text starts at `left + firstLineOffset` pixels from cell edge
+ *
+ * - **First line (with explicit positioning):**
+ *   - `paddingLeft = max(0, left) + firstLineOffset` (only if positive)
+ *   - `textIndent = 0` (reset to prevent double-shift)
+ *
+ * - **Body lines (continuation lines):**
+ *   - `paddingLeft = hanging` (when hanging > 0 and no explicit positioning)
+ *   - Creates the "hanging" visual effect where body lines are indented further right
+ *
+ * **Edge Cases:**
+ * - Negative hanging: Ignored for body lines (no effect, body uses left indent only)
+ * - Negative left indent: Clamped to 0 (browsers don't support negative padding)
+ * - suppressFirstLineIndent: When true, firstLineOffset is forced to 0
+ * - Explicit segment positioning: Skips padding to avoid double-application
+ *
+ * @param params - Configuration for indent application within a table cell line.
+ */
+function applyTableCellLineIndentation(params: TableCellIndentParams): void {
+  const {
+    lineEl,
+    line,
+    indent,
+    indentLeftPx,
+    hasListMarkerLayout,
+    lineIndex,
+    localStartLine,
+    suppressFirstLineIndent,
+  } = params;
+  const paraIndentLeft = indent?.left ?? 0;
+  const paraIndentRight = indent?.right ?? 0;
+  const firstLineOffset = suppressFirstLineIndent ? 0 : (indent?.firstLine ?? 0) - (indent?.hanging ?? 0);
+  const isFirstLine = lineIndex === 0 && localStartLine === 0;
+  const hasExplicitSegmentPositioning = line.segments?.some((seg) => seg.x !== undefined) ?? false;
+
+  if (hasListMarkerLayout && indentLeftPx) {
+    // List continuation lines should use the list text indent unless tabs handle explicit positioning.
+    if (!hasExplicitSegmentPositioning) {
+      lineEl.style.paddingLeft = `${indentLeftPx}px`;
+    }
+  } else {
+    // Preserve non-list paragraph indentation that was cleared above.
+    if (hasExplicitSegmentPositioning) {
+      if (isFirstLine && firstLineOffset !== 0) {
+        const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
+        const adjustedPadding = effectiveLeftIndent + firstLineOffset;
+        if (adjustedPadding > 0) {
+          lineEl.style.paddingLeft = `${adjustedPadding}px`;
+        }
+      }
+    } else if (paraIndentLeft && paraIndentLeft > 0) {
+      lineEl.style.paddingLeft = `${paraIndentLeft}px`;
+    } else if (
+      !isFirstLine &&
+      indent?.hanging &&
+      indent.hanging > 0 &&
+      (paraIndentLeft == null || paraIndentLeft >= 0)
+    ) {
+      lineEl.style.paddingLeft = `${indent.hanging}px`;
+    }
+  }
+
+  if (paraIndentRight && paraIndentRight > 0) {
+    lineEl.style.paddingRight = `${paraIndentRight}px`;
+  }
+  if (isFirstLine && firstLineOffset && !hasExplicitSegmentPositioning) {
+    lineEl.style.textIndent = `${firstLineOffset}px`;
+  } else if (firstLineOffset && hasExplicitSegmentPositioning) {
+    // Reset textIndent when segments have explicit positioning to prevent double-shift
+    lineEl.style.textIndent = '0px';
+  }
 }
 
 /**
@@ -585,6 +704,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Append content to cell (content is now a child, not a sibling)
     cellEl.appendChild(content);
 
+    // Establish a local stacking context so anchored objects can reliably layer above/below text.
+    // (Needed for negative z-index behindDoc behavior.)
+    content.style.zIndex = '0';
+
     // Calculate total lines across all blocks for proper global index mapping
     const blockLineCounts: number[] = [];
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
@@ -600,6 +723,13 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Determine global line range to render
     const globalFromLine = fromLine ?? 0;
     const globalToLine = toLine === -1 || toLine === undefined ? totalLines : toLine;
+
+    const contentWidthPx = Math.max(0, cellMeasure.width - paddingLeft - paddingRight);
+    const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
+    const paragraphTopById = new Map<string, number>();
+    let flowCursorY = 0;
+    const anchoredBlocks: Array<{ block: ImageBlock | DrawingBlock; measure: ImageMeasure | DrawingMeasure }> = [];
+    const renderedLines: RenderedLineInfo[] = [];
 
     let cumulativeLineCount = 0; // Track cumulative line count across blocks
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
@@ -625,11 +755,17 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         });
         tableWrapper.appendChild(tableEl);
         content.appendChild(tableWrapper);
+        flowCursorY += tableMeasure.totalHeight;
         // Tables don't contribute to line count (they have their own internal line tracking)
         continue;
       }
 
       if (blockMeasure.kind === 'image' && block?.kind === 'image') {
+        if (block.anchor?.isAnchored) {
+          anchoredBlocks.push({ block, measure: blockMeasure as ImageMeasure });
+          continue;
+        }
+
         const imageWrapper = doc.createElement('div');
         imageWrapper.style.position = 'relative';
         imageWrapper.style.width = `${blockMeasure.width}px`;
@@ -655,10 +791,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
         imageWrapper.appendChild(imgEl);
         content.appendChild(imageWrapper);
+        flowCursorY += blockMeasure.height;
         continue;
       }
 
       if (blockMeasure.kind === 'drawing' && block?.kind === 'drawing') {
+        if (block.anchor?.isAnchored) {
+          anchoredBlocks.push({ block, measure: blockMeasure as DrawingMeasure });
+          continue;
+        }
+
         const drawingWrapper = doc.createElement('div');
         drawingWrapper.style.position = 'relative';
         drawingWrapper.style.width = `${blockMeasure.width}px`;
@@ -708,6 +850,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
         drawingWrapper.appendChild(drawingInner);
         content.appendChild(drawingWrapper);
+        flowCursorY += blockMeasure.height;
         continue;
       }
 
@@ -716,6 +859,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const lines = paragraphMeasure.lines;
         const blockLineCount = lines?.length || 0;
 
+        paragraphTopById.set(block.id, flowCursorY);
         /**
          * Extract Word layout information from paragraph attributes.
          * This contains computed marker positioning and indent details from the word-layout engine.
@@ -739,6 +883,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           markerMeasure?.indentLeft ??
           wordLayout?.indentLeftPx ??
           (block.attrs?.indent && typeof block.attrs.indent.left === 'number' ? block.attrs.indent.left : 0);
+        const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
 
         // Calculate the global line indices for this block
         const blockStartGlobal = cumulativeLineCount;
@@ -788,6 +933,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         for (let lineIdx = localStartLine; lineIdx < localEndLine && lineIdx < lines.length; lineIdx++) {
           const line = lines[lineIdx];
           const isLastLine = lineIdx === lines.length - 1;
+          const lineTop = flowCursorY + renderedHeight;
 
           /**
            * Render line without extra paragraph padding to enable explicit marker/text offset control.
@@ -829,6 +975,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
               markerMeasure,
               indentLeftPx,
             });
+            renderedLines.push({ el: lineContainer, top: lineTop, height: line.lineHeight });
             paraWrapper.appendChild(lineContainer);
           } else {
             /**
@@ -836,85 +983,17 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
              * - For list paragraphs: apply indent padding for continuation lines
              * - For non-list paragraphs: preserve the paragraph's own indent styling
              */
-            if (markerLayout && indentLeftPx) {
-              lineEl.style.paddingLeft = `${indentLeftPx}px`;
-            } else {
-              // Preserve non-list paragraph indentation that was cleared above
-              /**
-               * SD-1295: Hanging indent implementation for table cells.
-               *
-               * **Mathematical Model:**
-               * The hanging indent effect is achieved through a combination of paddingLeft and textIndent:
-               * - `firstLineOffset = firstLine - hanging`
-               * - This offset can be positive (indent first line further right) or negative (outdent first line to the left)
-               *
-               * **CSS Application Pattern:**
-               * - **First line:**
-               *   - `paddingLeft = left` (base left indent)
-               *   - `textIndent = firstLineOffset` (additional first-line adjustment)
-               *   - Combined effect: text starts at `left + firstLineOffset` pixels from cell edge
-               *
-               * - **Body lines (continuation lines):**
-               *   - `paddingLeft = left + hanging` (when hanging > 0)
-               *   - `textIndent` not set (defaults to 0)
-               *   - Combined effect: text starts at `left + hanging` pixels from cell edge
-               *   - This indents body lines further right, creating the "hanging" visual effect
-               *
-               * **Edge Cases:**
-               * - Negative hanging: Intentionally ignored for body lines (no effect, body uses left indent only)
-               * - Negative left indent: Clamped to 0 by CSS (browsers don't support negative padding)
-               * - Zero values: No style applied (avoids unnecessary CSS)
-               * - Partial rendering: `isFirstLine` checks both line index and rendering start position
-               *   to ensure correct treatment when rendering starts mid-paragraph
-               *
-               * **Examples:**
-               * 1. Classic hanging indent (bibliography style):
-               *    - left: 20, hanging: 30, firstLine: 0
-               *    - First line: paddingLeft=20px, textIndent=-30px → starts at -10px (outdented)
-               *    - Body lines: paddingLeft=50px → starts at 50px (indented)
-               *
-               * 2. First-line indent with hanging:
-               *    - left: 20, hanging: 30, firstLine: 10
-               *    - First line: paddingLeft=20px, textIndent=-20px → starts at 0px
-               *    - Body lines: paddingLeft=50px → starts at 50px
-               *
-               * 3. Simple first-line indent (no hanging):
-               *    - left: 20, hanging: 0, firstLine: 15
-               *    - First line: paddingLeft=20px, textIndent=15px → starts at 35px
-               *    - Body lines: paddingLeft=20px → starts at 20px
-               */
-              const indent = block.attrs?.indent;
-              if (indent) {
-                const leftIndent: number = typeof indent.left === 'number' ? indent.left : 0;
-                const hanging: number = typeof indent.hanging === 'number' ? indent.hanging : 0;
-                const firstLine: number = typeof indent.firstLine === 'number' ? indent.firstLine : 0;
-                const isFirstLine: boolean = lineIdx === 0 && localStartLine === 0;
-
-                // Calculate first-line offset: firstLine - hanging
-                // This creates the "hanging" effect where first line starts further left
-                const firstLineOffset: number = firstLine - hanging;
-
-                if (isFirstLine) {
-                  // First line: paddingLeft = left, textIndent = firstLine - hanging
-                  if (leftIndent > 0) {
-                    lineEl.style.paddingLeft = `${leftIndent}px`;
-                  }
-                  if (firstLineOffset !== 0) {
-                    lineEl.style.textIndent = `${firstLineOffset}px`;
-                  }
-                } else {
-                  // Body lines: use left indent only (hanging already accounted for on first line)
-                  if (leftIndent > 0) {
-                    lineEl.style.paddingLeft = `${leftIndent}px`;
-                  }
-                }
-
-                // Right indent applies to all lines
-                if (typeof indent.right === 'number' && indent.right > 0) {
-                  lineEl.style.paddingRight = `${indent.right}px`;
-                }
-              }
-            }
+            applyTableCellLineIndentation({
+              lineEl,
+              line,
+              indent: block.attrs?.indent,
+              indentLeftPx,
+              hasListMarkerLayout: Boolean(markerLayout),
+              lineIndex: lineIdx,
+              localStartLine,
+              suppressFirstLineIndent,
+            });
+            renderedLines.push({ el: lineEl, top: lineTop, height: line.lineHeight });
             paraWrapper.appendChild(lineEl);
           }
 
@@ -933,12 +1012,15 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           paraWrapper.style.height = `${renderedHeight}px`;
         }
 
+        flowCursorY += renderedHeight;
+
         // Apply paragraph spacing.after as margin-bottom for all paragraphs.
         // Word applies spacing.after even to the last paragraph in a cell, creating space at the bottom.
         if (renderedEntireBlock) {
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {
             paraWrapper.style.marginBottom = `${spacingAfter}px`;
+            flowCursorY += spacingAfter;
           }
         }
 
@@ -947,6 +1029,140 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       // Unsupported block types are skipped (no line count contribution)
       // TODO: Handle other block types (list) if needed
     }
+
+    // Handle anchor elements
+    const verticalAlign = cell?.attrs?.verticalAlign;
+    const remainingSpace = contentHeightPx - flowCursorY;
+    const alignmentOffsetY =
+      verticalAlign === 'center'
+        ? Math.max(0, remainingSpace / 2)
+        : verticalAlign === 'bottom'
+          ? Math.max(0, remainingSpace)
+          : 0;
+
+    const wrapExclusions: WrapExclusion[] = [];
+    for (const entry of anchoredBlocks) {
+      const anchoredBlock = entry.block;
+      const anchoredMeasure = entry.measure;
+      const anchor = anchoredBlock.anchor;
+      if (!anchor || !anchor.isAnchored) {
+        continue;
+      }
+
+      const objectWidth = anchoredMeasure.width;
+      const objectHeight = anchoredMeasure.height;
+
+      const left = anchor.offsetH ?? 0;
+      const top = anchor.offsetV ?? 0;
+
+      const behindDoc =
+        anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);
+      const zIndex =
+        anchoredBlock.kind === 'drawing' && typeof anchoredBlock.zIndex === 'number'
+          ? anchoredBlock.zIndex
+          : behindDoc
+            ? -1
+            : 1;
+
+      const wrap = anchoredBlock.wrap;
+      if (!behindDoc && wrap?.type === 'Square') {
+        const wrapText = (wrap.wrapText ?? 'bothSides') as WrapTextMode;
+        const distLeft = anchoredBlock.padding?.left ?? 0;
+        const distRight = anchoredBlock.padding?.right ?? 0;
+        const distTop = anchoredBlock.padding?.top ?? 0;
+        const distBottom = anchoredBlock.padding?.bottom ?? 0;
+        wrapExclusions.push({
+          left: left - distLeft,
+          right: left + objectWidth + distRight,
+          top: top - distTop,
+          bottom: top + objectHeight + distBottom,
+          wrapText,
+        });
+      }
+
+      if (anchoredBlock.kind === 'image') {
+        const imageWrapper = doc.createElement('div');
+        imageWrapper.style.position = 'absolute';
+        imageWrapper.style.left = `${left}px`;
+        imageWrapper.style.top = `${top}px`;
+        imageWrapper.style.width = `${objectWidth}px`;
+        imageWrapper.style.height = `${objectHeight}px`;
+        imageWrapper.style.maxWidth = '100%';
+        imageWrapper.style.boxSizing = 'border-box';
+        imageWrapper.style.zIndex = String(zIndex);
+        applySdtDataset(imageWrapper, anchoredBlock.attrs?.sdt);
+
+        const imgEl = doc.createElement('img');
+        imgEl.classList.add('superdoc-table-image');
+        if (anchoredBlock.src) {
+          imgEl.src = anchoredBlock.src;
+        }
+        imgEl.alt = anchoredBlock.alt ?? '';
+        imgEl.style.width = '100%';
+        imgEl.style.height = '100%';
+        imgEl.style.objectFit = anchoredBlock.objectFit ?? 'contain';
+        if (anchoredBlock.objectFit === 'cover') {
+          imgEl.style.objectPosition = 'left top';
+        }
+        imgEl.style.display = 'block';
+        imageWrapper.appendChild(imgEl);
+        content.appendChild(imageWrapper);
+      } else {
+        const drawingWrapper = doc.createElement('div');
+        drawingWrapper.style.position = 'absolute';
+        drawingWrapper.style.left = `${left}px`;
+        drawingWrapper.style.top = `${top}px`;
+        drawingWrapper.style.width = `${objectWidth}px`;
+        drawingWrapper.style.height = `${objectHeight}px`;
+        drawingWrapper.style.maxWidth = '100%';
+        drawingWrapper.style.boxSizing = 'border-box';
+        drawingWrapper.style.zIndex = String(zIndex);
+        applySdtDataset(drawingWrapper, anchoredBlock.attrs as SdtMetadata | undefined);
+
+        const drawingInner = doc.createElement('div');
+        drawingInner.classList.add('superdoc-table-drawing');
+        drawingInner.style.width = '100%';
+        drawingInner.style.height = '100%';
+        drawingInner.style.display = 'flex';
+        drawingInner.style.alignItems = 'center';
+        drawingInner.style.justifyContent = 'center';
+        drawingInner.style.overflow = 'hidden';
+
+        if (anchoredBlock.drawingKind === 'image' && 'src' in anchoredBlock && anchoredBlock.src) {
+          const img = doc.createElement('img');
+          img.classList.add('superdoc-drawing-image');
+          img.src = anchoredBlock.src;
+          img.alt = anchoredBlock.alt ?? '';
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = anchoredBlock.objectFit ?? 'contain';
+          if (anchoredBlock.objectFit === 'cover') {
+            img.style.objectPosition = 'left top';
+          }
+          drawingInner.appendChild(img);
+        } else if (renderDrawingContent) {
+          const drawingContent = renderDrawingContent(anchoredBlock as DrawingBlock);
+          drawingContent.style.width = '100%';
+          drawingContent.style.height = '100%';
+          drawingInner.appendChild(drawingContent);
+        } else {
+          const placeholder = doc.createElement('div');
+          placeholder.style.width = '100%';
+          placeholder.style.height = '100%';
+          placeholder.style.background =
+            'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
+          placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
+          drawingInner.appendChild(placeholder);
+        }
+
+        drawingWrapper.appendChild(drawingInner);
+        content.appendChild(drawingWrapper);
+      }
+    }
+
+    // Apply wrapSquare exclusions after all blocks are rendered and anchored positions are known.
+    // This keeps anchored objects out-of-flow while preventing text overlap in table cells.
+    applySquareWrapExclusionsToLines(renderedLines, wrapExclusions, contentWidthPx, alignmentOffsetY);
   }
 
   return { cellElement: cellEl };

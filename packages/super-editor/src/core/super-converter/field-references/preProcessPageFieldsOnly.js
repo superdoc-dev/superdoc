@@ -4,6 +4,10 @@
 import { preProcessPageInstruction } from './fld-preprocessors/page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './fld-preprocessors/num-pages-preprocessor.js';
 
+const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
+
+const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
+
 /**
  * Pre-processes nodes to convert PAGE and NUMPAGES field codes for header/footer rendering.
  *
@@ -24,9 +28,42 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
   while (i < nodes.length) {
     const node = nodes[i];
 
+    if (shouldSkipFieldProcessing(node)) {
+      processedNodes.push(node);
+      i++;
+      continue;
+    }
+
     // Check if this node starts a field (has fldChar with begin)
     const fldCharEl = node.elements?.find((el) => el.name === 'w:fldChar');
     const fldType = fldCharEl?.attributes?.['w:fldCharType'];
+
+    // Check if this node IS a fldSimple (simple field syntax)
+    // fldSimple has the instruction in an attribute, not nested elements
+    if (node.name === 'w:fldSimple') {
+      const instrAttr = node.attributes?.['w:instr'] || '';
+      const fieldType = instrAttr.trim().split(/\s+/)[0];
+
+      if (fieldType === 'PAGE' || fieldType === 'NUMPAGES') {
+        const preprocessor = fieldType === 'PAGE' ? preProcessPageInstruction : preProcessNumPagesInstruction;
+
+        // Extract rPr from child elements (content nodes inside fldSimple)
+        const contentNodes = node.elements || [];
+        let fieldRunRPr = null;
+        for (const child of contentNodes) {
+          const rPr = child.elements?.find((el) => el.name === 'w:rPr');
+          if (rPr) {
+            fieldRunRPr = rPr;
+            break;
+          }
+        }
+
+        const processedField = preprocessor(contentNodes, instrAttr.trim(), fieldRunRPr);
+        processedNodes.push(...processedField);
+        i++;
+        continue;
+      }
+    }
 
     if (fldType === 'begin') {
       // Scan ahead to find the field type and end marker

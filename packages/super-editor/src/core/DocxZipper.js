@@ -143,6 +143,9 @@ class DocxZipper {
     );
 
     const hasFile = (filename) => {
+      if (updatedDocs && Object.prototype.hasOwnProperty.call(updatedDocs, filename)) {
+        return true;
+      }
       if (!docx?.files) return false;
       if (!fromJson) return Boolean(docx.files[filename]);
       if (Array.isArray(docx.files)) return docx.files.some((file) => file.name === filename);
@@ -167,6 +170,16 @@ class DocxZipper {
     if (hasFile('word/commentsExtensible.xml')) {
       const commentsExtendedDef = `<Override PartName="/word/commentsExtensible.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtensible+xml" />`;
       if (!hasCommentsExtensible) typesString += commentsExtendedDef;
+    }
+
+    // Update for footnotes
+    const hasFootnotes = types.elements?.some(
+      (el) => el.name === 'Override' && el.attributes.PartName === '/word/footnotes.xml',
+    );
+
+    if (hasFile('word/footnotes.xml')) {
+      const footnotesDef = `<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml" />`;
+      if (!hasFootnotes) typesString += footnotesDef;
     }
 
     const partNames = new Set(additionalPartNames);

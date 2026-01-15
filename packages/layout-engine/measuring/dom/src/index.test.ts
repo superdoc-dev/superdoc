@@ -274,6 +274,8 @@ describe('measureBlock', () => {
 
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBeGreaterThanOrEqual(0);
+      expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(16);
+      expect(measure.lines[0].lineHeight).toBeLessThan(16 * 1.15);
       expect(measure.totalHeight).toBeGreaterThan(0);
     });
 
@@ -376,6 +378,27 @@ describe('measureBlock', () => {
       expect(measure.lines[0].width).toBe(0);
       expect(measure.lines[1].width).toBe(0);
       expect(measure.lines[2].width).toBeGreaterThan(0);
+    });
+
+    it('uses the first text run font size for leading lineBreak height', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          { kind: 'lineBreak' },
+          {
+            text: 'Heading text',
+            fontFamily: 'Arial',
+            fontSize: 24,
+          },
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 500));
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].lineHeight).toBeCloseTo(measure.lines[1].lineHeight, 3);
     });
   });
 
@@ -814,7 +837,7 @@ describe('measureBlock', () => {
       expect(measure.lines[0].lineHeight).toBeCloseTo(42 * singleLineHeight, 1);
     });
 
-    it('uses minimum line height for very small fonts', async () => {
+    it('does not clamp line height for very small fonts', async () => {
       const smallFontSize = 8; // Very small font
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -829,9 +852,9 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      // MIN_SINGLE_LINE_PX is 16px (12pt), which should be used instead of 8 * 1.15 = 9.2px
-      const minLineHeight = 16; // (12 * 96) / 72
-      expect(measure.lines[0].lineHeight).toBeCloseTo(minLineHeight, 1);
+      const expectedLineHeight = smallFontSize * 1.15; // 8 * 1.15 = 9.2px
+      expect(measure.lines[0].lineHeight).toBeCloseTo(expectedLineHeight, 1);
+      expect(measure.lines[0].lineHeight).toBeLessThan(16);
     });
 
     it('uses 1.15 multiplier for normal fonts', async () => {
@@ -902,7 +925,7 @@ describe('measureBlock', () => {
     });
 
     it('ensures line height is never smaller than glyph bounds to prevent clipping', async () => {
-      // This test verifies the clamp: Math.max(fontSize * 1.15, ascent + descent, MIN_SINGLE_LINE_PX)
+      // This test verifies the clamp: Math.max(fontSize * 1.15, ascent + descent)
       // For any font, line height must be >= ascent + descent to prevent glyph overlap
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -4449,6 +4472,52 @@ describe('measureBlock', () => {
 
       // Cell height should just be paragraph height + padding (no spacing.after)
       const expectedCellHeight = paraHeight + 4;
+      expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+
+    it('should not include anchored images in table cell height', async () => {
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-anchored-image',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: {},
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+                  },
+                  {
+                    kind: 'image',
+                    id: 'img-0',
+                    src: 'data:image/png;base64,AAA',
+                    anchor: { isAnchored: true, vRelativeFrom: 'paragraph', offsetV: 5 },
+                    wrap: { type: 'None' },
+                    attrs: { anchorParagraphId: 'para-0' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 1000);
+      expect(measure.kind).toBe('table');
+      const cellMeasure = measure.rows[0].cells[0];
+      const paraMeasure = cellMeasure.blocks[0];
+
+      expect(paraMeasure.kind).toBe('paragraph');
+      const paraHeight = paraMeasure.kind === 'paragraph' ? paraMeasure.totalHeight : 0;
+
+      // Anchored image is out-of-flow: it should not increase cell height.
+      const expectedCellHeight = paraHeight + 4; // default top+bottom padding
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 

@@ -36,6 +36,12 @@ export type ConverterContext = {
   numbering?: ConverterNumberingContext;
   linkedStyles?: ConverterLinkedStyle[];
   /**
+   * Optional mapping from OOXML footnote id -> display number.
+   * Display numbers are assigned in order of first appearance in the document (1-based),
+   * matching Word's visible numbering behavior even when ids are non-contiguous or start at 0.
+   */
+  footnoteNumberById?: Record<string, number>;
+  /**
    * Paragraph properties inherited from the containing table's style.
    * Per OOXML spec, table styles can define pPr that applies to all
    * paragraphs within the table. This is set by the table converter

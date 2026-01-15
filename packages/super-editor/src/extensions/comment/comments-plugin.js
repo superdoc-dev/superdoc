@@ -26,6 +26,109 @@ export const CommentsPlugin = Extension.create({
 
   addCommands() {
     return {
+      /**
+       * Add a comment to the current selection
+       * @category Command
+       * @param {string|Object} contentOrOptions - Comment content as a string, or an options object
+       * @param {string} [contentOrOptions.content] - The comment content (text or HTML)
+       * @param {string} [contentOrOptions.author] - Author name (defaults to user from editor config)
+       * @param {string} [contentOrOptions.authorEmail] - Author email (defaults to user from editor config)
+       * @param {string} [contentOrOptions.authorImage] - Author image URL (defaults to user from editor config)
+       * @param {boolean} [contentOrOptions.isInternal=false] - Whether the comment is internal/private
+       * @returns {boolean} True if the comment was added successfully, false otherwise
+       * @example
+       * // Simple usage with just content
+       * editor.commands.addComment('This needs review')
+       *
+       * // With options
+       * editor.commands.addComment({
+       *   content: 'Please clarify this section',
+       *   author: 'Jane Doe',
+       *   isInternal: true
+       * })
+       *
+       * // To get the comment ID, listen to the commentsUpdate event
+       * editor.on('commentsUpdate', (event) => {
+       *   if (event.type === 'add') {
+       *     console.log('New comment ID:', event.activeCommentId)
+       *   }
+       * })
+       */
+      addComment:
+        (contentOrOptions) =>
+        ({ tr, dispatch, editor }) => {
+          // Validate that there is a text selection
+          const { selection } = tr;
+          const { $from, $to } = selection;
+
+          if ($from.pos === $to.pos) {
+            console.warn('addComment requires a text selection. Please select text before adding a comment.');
+            return false;
+          }
+
+          // Handle string or options object
+          let content, author, authorEmail, authorImage, isInternal;
+
+          if (typeof contentOrOptions === 'string') {
+            content = contentOrOptions;
+          } else if (contentOrOptions && typeof contentOrOptions === 'object') {
+            content = contentOrOptions.content;
+            author = contentOrOptions.author;
+            authorEmail = contentOrOptions.authorEmail;
+            authorImage = contentOrOptions.authorImage;
+            isInternal = contentOrOptions.isInternal;
+          }
+
+          // Generate a unique comment ID
+          const commentId = uuidv4();
+          const resolvedInternal = isInternal ?? false;
+
+          // Get user defaults from editor config
+          const configUser = editor.options?.user || {};
+
+          // Add the comment mark to the selection
+          tr.setMeta(CommentsPluginKey, { event: 'add' });
+          tr.addMark(
+            $from.pos,
+            $to.pos,
+            editor.schema.marks[CommentMarkName].create({
+              commentId,
+              internal: resolvedInternal,
+            }),
+          );
+
+          if (dispatch) dispatch(tr);
+
+          // Build and emit the comment payload
+          const commentPayload = normalizeCommentEventPayload({
+            conversation: {
+              commentId,
+              isInternal: resolvedInternal,
+              commentText: content,
+              creatorName: author ?? configUser.name,
+              creatorEmail: authorEmail ?? configUser.email,
+              creatorImage: authorImage ?? configUser.image,
+              createdTime: Date.now(),
+            },
+            editorOptions: editor.options,
+            fallbackCommentId: commentId,
+            fallbackInternal: resolvedInternal,
+          });
+
+          editor.emit('commentsUpdate', {
+            type: comments_module_events.ADD,
+            comment: commentPayload,
+            activeCommentId: commentId,
+          });
+
+          return true;
+        },
+
+      /**
+       * @private
+       * Internal command to insert a comment mark at the current selection.
+       * Use `addComment` for the public API.
+       */
       insertComment:
         (conversation = {}) =>
         ({ tr, dispatch }) => {

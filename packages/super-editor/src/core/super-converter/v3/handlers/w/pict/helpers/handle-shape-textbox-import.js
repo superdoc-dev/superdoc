@@ -1,6 +1,10 @@
 import { parseInlineStyles } from './parse-inline-styles';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter';
+import {
+  collectTextBoxParagraphs,
+  preProcessTextBoxContent,
+} from '@converter/v3/handlers/wp/helpers/textbox-content-helpers.js';
 
 /**
  * @param {Object} options
@@ -38,9 +42,10 @@ export function handleShapeTextboxImport({ params, pict }) {
   }
 
   const textboxContent = textbox?.elements?.find((el) => el.name === 'w:txbxContent');
-  const textboxContentElems = textboxContent?.elements || [];
+  const processedContent = preProcessTextBoxContent(textboxContent, params);
+  const textboxParagraphs = collectTextBoxParagraphs(processedContent?.elements || []);
 
-  const content = textboxContentElems.map((elem) =>
+  const content = textboxParagraphs.map((elem) =>
     handleParagraphNode({
       nodes: [elem],
       docx: params.docx,

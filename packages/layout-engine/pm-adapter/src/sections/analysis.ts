@@ -171,7 +171,9 @@ export function buildSectionRangesFromParagraphs(
  * @param options - Adapter options containing sectionMetadata array
  */
 export function publishSectionMetadata(sectionRanges: SectionRange[], options?: AdapterOptions) {
-  if (!options?.sectionMetadata) return;
+  if (!options?.sectionMetadata) {
+    return;
+  }
   options.sectionMetadata.length = 0;
   sectionRanges.forEach((section) => {
     options.sectionMetadata?.push({
@@ -180,6 +182,7 @@ export function publishSectionMetadata(sectionRanges: SectionRange[], options?: 
       footerRefs: section.footerRefs,
       numbering: section.numbering,
       titlePg: section.titlePg,
+      vAlign: section.vAlign,
     });
   });
 }

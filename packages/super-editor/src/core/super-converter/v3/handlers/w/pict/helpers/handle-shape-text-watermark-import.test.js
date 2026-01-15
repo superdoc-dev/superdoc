@@ -177,8 +177,9 @@ describe('handleShapeTextWatermarkImport', () => {
 
       const result = handleShapeTextWatermarkImport({ params: {}, pict });
 
-      expect(result.attrs.size.width).toBeCloseTo(642.4, 1); // 481.8pt to pixels
-      expect(result.attrs.size.height).toBeCloseTo(110.4, 1); // 82.8pt to pixels
+      // Dimensions include 10% padding to prevent text clipping
+      expect(result.attrs.size.width).toBeCloseTo(642.4 * 1.1, 1); // 481.8pt to pixels * 1.1
+      expect(result.attrs.size.height).toBeCloseTo(110.4 * 1.1, 1); // 82.8pt to pixels * 1.1
     });
 
     it('should parse rotation from style', () => {
@@ -231,9 +232,9 @@ describe('handleShapeTextWatermarkImport', () => {
 
       const result = handleShapeTextWatermarkImport({ params: {}, pict });
 
-      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(0.067, 2);
-      // For center-aligned watermarks relative to margin, margin-top is set to 0
-      // to let center alignment work properly in the browser
+      // For center-aligned watermarks relative to margin, both horizontal and vertical
+      // margin offsets are set to 0 to let center alignment work properly in the browser
+      expect(result.attrs.marginOffset.horizontal).toBe(0);
       expect(result.attrs.marginOffset.top).toBe(0);
     });
 
@@ -294,6 +295,98 @@ describe('handleShapeTextWatermarkImport', () => {
       expect(result.attrs.anchorData.alignV).toBe('center');
       expect(result.attrs.anchorData.hRelativeFrom).toBe('margin');
       expect(result.attrs.anchorData.vRelativeFrom).toBe('margin');
+    });
+
+    it('should preserve margin offsets for left-aligned watermarks', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style:
+                'margin-left:50pt;margin-top:100pt;mso-position-horizontal:left;mso-position-vertical:top;mso-position-horizontal-relative:margin;mso-position-vertical-relative:margin',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'LEFT ALIGNED',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      // For left-aligned watermarks, margin offsets should be preserved
+      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(66.7, 1); // 50pt to pixels
+      expect(result.attrs.marginOffset.top).toBeCloseTo(133.3, 1); // 100pt to pixels
+      expect(result.attrs.anchorData.alignH).toBe('left');
+      expect(result.attrs.anchorData.alignV).toBe('top');
+    });
+
+    it('should preserve margin offsets for right-aligned watermarks', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style:
+                'margin-left:30pt;margin-top:60pt;mso-position-horizontal:right;mso-position-vertical:bottom;mso-position-horizontal-relative:margin;mso-position-vertical-relative:margin',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'RIGHT ALIGNED',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      // For right-aligned watermarks, margin offsets should be preserved
+      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(40, 1); // 30pt to pixels
+      expect(result.attrs.marginOffset.top).toBeCloseTo(80, 1); // 60pt to pixels
+      expect(result.attrs.anchorData.alignH).toBe('right');
+      expect(result.attrs.anchorData.alignV).toBe('bottom');
+    });
+
+    it('should preserve margin offsets for page-relative watermarks', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style:
+                'margin-left:25pt;margin-top:75pt;mso-position-horizontal:center;mso-position-vertical:center;mso-position-horizontal-relative:page;mso-position-vertical-relative:page',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'PAGE RELATIVE',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      // For page-relative watermarks, margin offsets should be preserved even if center-aligned
+      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(33.3, 1); // 25pt to pixels
+      expect(result.attrs.marginOffset.top).toBeCloseTo(100, 1); // 75pt to pixels
+      expect(result.attrs.anchorData.hRelativeFrom).toBe('page');
+      expect(result.attrs.anchorData.vRelativeFrom).toBe('page');
+      expect(result.attrs.anchorData.alignH).toBe('center');
+      expect(result.attrs.anchorData.alignV).toBe('center');
     });
   });
 
@@ -718,6 +811,85 @@ describe('handleShapeTextWatermarkImport', () => {
   });
 
   describe('Edge cases', () => {
+    it('should handle landscape watermark with 345 degree rotation', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              id: 'PowerPlusWaterMarkObject',
+              'o:spid': 'shape_0',
+              adj: '10800',
+              fillcolor: 'red',
+              stroked: 'f',
+              'o:allowincell': 'f',
+              style:
+                'position:absolute;margin-left:123.3pt;margin-top:191.5pt;width:481.8pt;height:84.65pt;mso-wrap-style:none;v-text-anchor:middle;rotation:345;mso-position-horizontal:center;mso-position-horizontal-relative:margin;mso-position-vertical:center;mso-position-vertical-relative:margin',
+              type: '_x0000_t136',
+            },
+            elements: [
+              {
+                name: 'v:path',
+                attributes: {
+                  textpathok: 't',
+                },
+              },
+              {
+                name: 'v:textpath',
+                attributes: {
+                  on: 't',
+                  fitshape: 't',
+                  string: 'DRAFT MARK',
+                  style: 'font-family:"LM Mono Prop Light 10";font-size:1pt',
+                  trim: 't',
+                },
+              },
+              {
+                name: 'v:fill',
+                attributes: {
+                  'o:detectmouseclick': 't',
+                  type: 'solid',
+                  color2: 'aqua',
+                  opacity: '0.5',
+                },
+              },
+              {
+                name: 'v:stroke',
+                attributes: {
+                  color: '#3465a4',
+                  joinstyle: 'round',
+                  endcap: 'flat',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      expect(result).toBeDefined();
+      expect(result.type).toBe('image');
+      expect(result.attrs.vmlTextWatermark).toBe(true);
+
+      // Should handle 345 degree rotation (15 degrees clockwise from horizontal)
+      expect(result.attrs.textWatermarkData.rotation).toBe(345);
+
+      // For center-aligned watermarks, margins should be 0
+      expect(result.attrs.marginOffset.horizontal).toBe(0);
+      expect(result.attrs.marginOffset.top).toBe(0);
+
+      // Verify rotated bounding box is calculated correctly with 10% padding
+      // Original: 481.8pt × 84.65pt ≈ 642.4px × 112.9px
+      // With 345° rotation, bbox should be larger to prevent clipping
+      // Plus 10% padding for font rendering
+      expect(result.attrs.size.width).toBeGreaterThan(642 * 1.1);
+      expect(result.attrs.size.height).toBeGreaterThan(112 * 1.1);
+
+      // SVG should be generated
+      expect(result.attrs.src).toContain('data:image/svg+xml');
+    });
+
     it('should handle missing optional elements gracefully', () => {
       const pict = {
         elements: [
@@ -998,8 +1170,9 @@ describe('handleShapeTextWatermarkImport', () => {
       const result = handleShapeTextWatermarkImport({ params: {}, pict });
 
       // Dimensions should be clamped to reasonable maximums
-      expect(result.attrs.size.width).toBeLessThanOrEqual(10000);
-      expect(result.attrs.size.height).toBeLessThanOrEqual(10000);
+      // With 10% padding, max 10000 becomes 11000
+      expect(result.attrs.size.width).toBeLessThanOrEqual(11000);
+      expect(result.attrs.size.height).toBeLessThanOrEqual(11000);
     });
 
     it('should escape XML special characters in watermark text', () => {

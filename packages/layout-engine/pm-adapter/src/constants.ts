@@ -135,6 +135,7 @@ export const ATOMIC_INLINE_TYPES = new Set([
   'lineBreak',
   'page-number',
   'total-page-number',
+  'footnoteReference',
   'passthroughInline',
   'bookmarkEnd',
 ]);

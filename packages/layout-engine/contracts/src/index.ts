@@ -610,12 +610,15 @@ export type TextFormatting = {
   italic?: boolean;
   color?: string;
   fontSize?: number;
+  fontFamily?: string;
 };
 
 /** A single text part with optional formatting. */
 export type TextPart = {
   text: string;
   formatting?: TextFormatting;
+  /** Optional field token (e.g., PAGE/NUMPAGES) resolved at render time. */
+  fieldType?: 'PAGE' | 'NUMPAGES';
   /** Indicates this part represents a line break between paragraphs. */
   isLineBreak?: boolean;
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
@@ -655,6 +658,13 @@ export type VectorShapeStyle = {
   lineEnds?: LineEnds;
   textContent?: ShapeTextContent;
   textAlign?: string;
+  textVerticalAlign?: 'top' | 'center' | 'bottom';
+  textInsets?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
 };
 
 export type ShapeGroupTransform = {
@@ -830,6 +840,8 @@ export type SectionMetadata = {
   numbering?: SectionNumbering;
   /** Whether first page has a different header/footer (w:titlePg in OOXML) */
   titlePg?: boolean;
+  /** Vertical alignment of content within this section's pages */
+  vAlign?: SectionVerticalAlign;
 };
 
 export type PageBreakBlock = {
@@ -854,6 +866,8 @@ export type ImageAnchor = {
   offsetH?: number;
   offsetV?: number;
   behindDoc?: boolean;
+  padding?: BoxSpacing | undefined;
+  margin?: BoxSpacing | undefined;
 };
 
 /** Text wrapping for floating images (distances in px). */
@@ -1158,6 +1172,16 @@ export type ParagraphAttrs = {
   styleId?: string;
   alignment?: 'left' | 'center' | 'right' | 'justify' | 'both';
   spacing?: ParagraphSpacing;
+  /**
+   * Indicates which spacing properties were explicitly set on the paragraph.
+   * Used to preserve Word behavior for empty paragraphs when spacing only comes
+   * from docDefaults or styles.
+   */
+  spacingExplicit?: {
+    before?: boolean;
+    after?: boolean;
+    line?: boolean;
+  };
   contextualSpacing?: boolean;
   indent?: ParagraphIndent;
   /** Word quirk: justified paragraphs ignore first-line indent. Set by pm-adapter. */
@@ -1426,6 +1450,12 @@ export type Page = {
   number: number;
   fragments: Fragment[];
   margins?: PageMargins;
+  /**
+   * Extra bottom space reserved on this page for footnotes (in px).
+   * Used by consumers (e.g. editors/painters) to keep footer hit regions and
+   * decoration boxes anchored to the real bottom margin while the body shrinks.
+   */
+  footnoteReserved?: number;
   numberText?: string;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
@@ -1438,6 +1468,12 @@ export type Page = {
    * Used for post-layout adjustment of fragment Y positions.
    */
   vAlign?: SectionVerticalAlign;
+  /**
+   * Base section margins before header/footer inflation.
+   * Used for vAlign centering calculations to match Word's behavior
+   * where headers/footers don't affect vertical alignment.
+   */
+  baseMargins?: { top: number; bottom: number };
   /**
    * Index of the section this page belongs to.
    * Used for section-aware page numbering and header/footer selection.
@@ -1623,6 +1659,22 @@ export type Layout = {
    * from DOM-derived positions back to the current ProseMirror document state.
    */
   layoutEpoch?: number;
+};
+
+export type WrapTextMode = 'bothSides' | 'left' | 'right' | 'largest';
+
+export type WrapExclusion = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  wrapText: WrapTextMode;
+};
+
+export type RenderedLineInfo = {
+  el: HTMLElement;
+  top: number;
+  height: number;
 };
 
 /**

@@ -24,6 +24,7 @@ import {
   commentRangeStartTranslator as w_commentRangeStart_translator,
   commentRangeEndTranslator as w_commentRangeEnd_translator,
 } from './w/commentRange/comment-range-translator.js';
+import { translator as w_footnoteReference_translator } from './w/footnoteReference/footnoteReference-translator.js';
 import { translator as w_contextualSpacing } from './w/contextualSpacing/contextualSpacing-translator.js';
 import { translator as w_cs } from './w/cs/cs-translator.js';
 import { translator as w_del_translator } from './w/del/del-translator.js';
@@ -188,6 +189,7 @@ const translatorList = Array.from(
     w_em_translator,
     w_emboss_translator,
     w_end_translator,
+    w_footnoteReference_translator,
     w_fitText_translator,
     w_framePr_translator,
     w_gridAfter_translator,

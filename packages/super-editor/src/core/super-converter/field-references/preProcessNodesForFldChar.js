@@ -3,6 +3,10 @@
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+
+const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
+
+const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
 /**
  * @typedef {object} FldCharProcessResult
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
@@ -58,11 +62,22 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   };
 
   for (const node of nodes) {
+    const rawNode = carbonCopy(node);
+    collecting = collectedNodesStack.length > 0;
+
+    if (shouldSkipFieldProcessing(node)) {
+      if (collecting) {
+        collectedNodesStack[collectedNodesStack.length - 1].push(node);
+        rawCollectedNodesStack[collectedNodesStack.length - 1].push(rawNode);
+      } else {
+        processedNodes.push(node);
+      }
+      continue;
+    }
+
     const fldCharEl = node.elements?.find((el) => el.name === 'w:fldChar');
     const fldType = fldCharEl?.attributes?.['w:fldCharType'];
     const instrTextEl = node.elements?.find((el) => el.name === 'w:instrText');
-    const rawNode = carbonCopy(node);
-    collecting = collectedNodesStack.length > 0;
 
     if (fldType === 'begin') {
       collectedNodesStack.push([]);

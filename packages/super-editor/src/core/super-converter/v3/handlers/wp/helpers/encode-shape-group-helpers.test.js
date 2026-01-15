@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode } from './encode-image-node-helpers.js';
-vi.mock('@converter/helpers.js', () => ({
-  emuToPixels: vi.fn((emu) => emu / 9525),
-  rotToDegrees: vi.fn((rot) => rot / 60000),
-  polygonToObj: vi.fn(),
-  carbonCopy: vi.fn((obj) => JSON.parse(JSON.stringify(obj))),
-}));
+vi.mock('@converter/helpers.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    emuToPixels: vi.fn((emu) => emu / 9525),
+    rotToDegrees: vi.fn((rot) => rot / 60000),
+    polygonToObj: vi.fn(),
+    carbonCopy: vi.fn((obj) => JSON.parse(JSON.stringify(obj))),
+  };
+});
 
 vi.mock('./vector-shape-helpers.js', () => ({
   extractFillColor: vi.fn((spPr) => {

@@ -23,7 +23,7 @@ import { ExtensionService } from './ExtensionService.js';
 import { CommandService } from './CommandService.js';
 import { Attribute } from './Attribute.js';
 import { SuperConverter } from '@core/super-converter/SuperConverter.js';
-import { Commands, Editable, EditorFocus, Keymap } from './extensions/index.js';
+import { Commands, Editable, EditorFocus, Keymap, PositionTrackerExtension } from './extensions/index.js';
 import { createDocument } from './helpers/createDocument.js';
 import { isActive } from './helpers/isActive.js';
 import { trackedTransaction } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
@@ -1474,7 +1474,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #createExtensionService(): void {
     const allowedExtensions = ['extension', 'node', 'mark'];
 
-    const coreExtensions = [Editable, Commands, EditorFocus, Keymap];
+    const coreExtensions = [Editable, Commands, EditorFocus, Keymap, PositionTrackerExtension];
     const externalExtensions = this.options.externalExtensions || [];
 
     const allExtensions = [...coreExtensions, ...this.options.extensions!].filter((extension) => {
@@ -2443,6 +2443,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
         : null;
 
       const rels = this.converter.schemaToXml(this.converter.convertedXml['word/_rels/document.xml.rels'].elements[0]);
+      const footnotesData = this.converter.convertedXml['word/footnotes.xml'];
+      const footnotesXml = footnotesData?.elements?.[0] ? this.converter.schemaToXml(footnotesData.elements[0]) : null;
+      const footnotesRelsData = this.converter.convertedXml['word/_rels/footnotes.xml.rels'];
+      const footnotesRelsXml = footnotesRelsData?.elements?.[0]
+        ? this.converter.schemaToXml(footnotesRelsData.elements[0])
+        : null;
 
       const media = this.converter.addedMedia;
 
@@ -2471,6 +2477,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       if (hasCustomSettings) {
         updatedDocs['word/settings.xml'] = String(customSettings);
+      }
+
+      if (footnotesXml) {
+        updatedDocs['word/footnotes.xml'] = String(footnotesXml);
+      }
+
+      if (footnotesRelsXml) {
+        updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
       }
 
       if (comments.length) {

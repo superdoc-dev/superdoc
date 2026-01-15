@@ -124,6 +124,31 @@ export interface EditorCommands {
 }
 
 // ============================================
+// DATA TYPES
+// ============================================
+
+/** Binary data source (works in both browser and Node.js - Buffer extends Uint8Array) */
+export type BinaryData = ArrayBuffer | ArrayBufferView;
+
+export interface DocxFileEntry {
+  name: string;
+  content: string;
+}
+
+export interface OpenOptions {
+  mode?: 'docx' | 'text' | 'html';
+  html?: string;
+  markdown?: string;
+  json?: object | null;
+  isCommentsEnabled?: boolean;
+  suppressDefaultDocxStyles?: boolean;
+  documentMode?: 'editing' | 'viewing' | 'suggesting';
+  content?: unknown;
+  mediaFiles?: Record<string, unknown>;
+  fonts?: Record<string, unknown>;
+}
+
+// ============================================
 // EDITOR CLASS
 // ============================================
 
@@ -145,8 +170,25 @@ export declare class Editor {
     [key: string]: any;
   });
 
-  /** ProseMirror view instance */
-  view: EditorView;
+  /** Load and parse a DOCX file into XML data for headless processing. */
+  static loadXmlData(
+    fileSource: File | Blob | BinaryData,
+    isNode?: boolean,
+  ): Promise<[DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>] | undefined>;
+
+  /** Open a document with smart defaults. */
+  static open(
+    source?: string | File | Blob | BinaryData,
+    config?: Partial<{
+      element?: HTMLElement;
+      selector?: string;
+      [key: string]: any;
+    }> &
+      OpenOptions,
+  ): Promise<Editor>;
+
+  /** ProseMirror view instance (undefined in headless mode) */
+  view?: EditorView;
 
   /** ProseMirror schema */
   schema: Schema;
@@ -214,6 +256,9 @@ export declare class Editor {
    * }
    */
   can(): CanObject;
+
+  /** Dispatch a transaction to update editor state (use this in headless mode instead of view.dispatch). */
+  dispatch(tr: Transaction): void;
 
   /**
    * Destroy the editor instance and clean up resources.

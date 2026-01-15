@@ -15,6 +15,7 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
   SectionBreakBlock,
+  SectionVerticalAlign,
   TableBlock,
   TableMeasure,
   TableFragment,
@@ -38,6 +39,7 @@ import { layoutTableBlock, createAnchoredTableFragment } from './layout-table.js
 import { collectAnchoredDrawings, collectAnchoredTables, collectPreRegisteredAnchors } from './anchors.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
+import { shouldSuppressSpacingForEmpty } from './layout-utils.js';
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -78,6 +80,7 @@ function hasHeight(fragment: Fragment): fragment is ImageFragment | DrawingFragm
 function getParagraphSpacingBefore(block: ParagraphBlock): number {
   const spacing = block.attrs?.spacing as Record<string, unknown> | undefined;
   const value = spacing?.before ?? spacing?.lineSpaceBefore;
+  if (shouldSuppressSpacingForEmpty(block, 'before')) return 0;
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
@@ -90,6 +93,7 @@ function getParagraphSpacingBefore(block: ParagraphBlock): number {
 function getParagraphSpacingAfter(block: ParagraphBlock): number {
   const spacing = block.attrs?.spacing as Record<string, unknown> | undefined;
   const value = spacing?.after ?? spacing?.lineSpaceAfter;
+  if (shouldSuppressSpacingForEmpty(block, 'after')) return 0;
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
@@ -130,6 +134,19 @@ export type LayoutOptions = {
   columns?: ColumnLayout;
   remeasureParagraph?: (block: ParagraphBlock, maxWidth: number, firstLineIndent?: number) => ParagraphMeasure;
   sectionMetadata?: SectionMetadata[];
+  /**
+   * Extra bottom margin per page index (0-based) reserved for non-body content
+   * rendered at the bottom of the page (e.g., footnotes).
+   *
+   * When provided, the paginator will shrink the body content area on that page by
+   * increasing the effective bottom margin for that page only.
+   */
+  footnoteReservedByPageIndex?: number[];
+  /**
+   * Optional footnote metadata consumed by higher-level orchestration (e.g. layout-bridge).
+   * The core layout engine does not interpret this field directly.
+   */
+  footnotes?: unknown;
   /**
    * Actual measured header content heights per variant type.
    * When provided, the layout engine will ensure body content starts below
@@ -187,6 +204,20 @@ const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter portrait in px
 const DEFAULT_MARGINS: Margins = { top: 72, right: 72, bottom: 72, left: 72 };
 
 const COLUMN_EPSILON = 0.0001;
+
+/**
+ * Safely converts OOXML boolean-like values to actual booleans.
+ * OOXML can encode booleans as true, 1, '1', 'true', or 'on'.
+ */
+const asBoolean = (value: unknown): boolean => {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    const normalized = value.toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'on';
+  }
+  return false;
+};
+
 // List constants sourced from shared/common
 
 // Context types moved to modular layouters
@@ -413,10 +444,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeOrientation: 'portrait' | 'landscape' | null = null;
   let pendingOrientation: 'portrait' | 'landscape' | null = null;
 
-  // Track active and pending vertical alignment for sections
-  type VerticalAlign = 'top' | 'center' | 'bottom' | 'both';
-  let activeVAlign: VerticalAlign | null = null;
-  let pendingVAlign: VerticalAlign | null = null;
+  // Track active and pending vertical alignment for sections.
+  // - activeVAlign: current alignment for pages being created (null = default 'top')
+  // - pendingVAlign: scheduled alignment for next page boundary
+  //   - undefined = no pending change (keep activeVAlign as-is)
+  //   - null = reset to default 'top'
+  //   - 'center'/'bottom'/'both' = change to that alignment
+  let activeVAlign: SectionVerticalAlign | null = null;
+  let pendingVAlign: SectionVerticalAlign | null | undefined = undefined;
 
   // Create floating-object manager for anchored image tracking
   const paginatorMargins = { left: activeLeftMargin, right: activeRightMargin };
@@ -503,10 +538,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
       // Schedule section refs for first section (will be applied on first page creation)
       if (block.headerRefs || block.footerRefs) {
-        pendingSectionRefs = {
+        const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+        const nextSectionRefs = {
           ...(block.headerRefs && { headerRefs: block.headerRefs }),
           ...(block.footerRefs && { footerRefs: block.footerRefs }),
         };
+        pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
         layoutLog(`[Layout] First section: Scheduled pendingSectionRefs:`, pendingSectionRefs);
       }
       // Set section index for first section
@@ -589,10 +626,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
     // Schedule section refs changes (apply at next page boundary)
     if (block.headerRefs || block.footerRefs) {
-      pendingSectionRefs = {
+      const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+      const nextSectionRefs = {
         ...(block.headerRefs && { headerRefs: block.headerRefs }),
         ...(block.footerRefs && { footerRefs: block.footerRefs }),
       };
+      pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
       layoutLog(`[Layout] Compat fallback: Scheduled pendingSectionRefs:`, pendingSectionRefs);
     }
     if (block.attrs?.requirePageBoundary) {
@@ -634,6 +673,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // Set vertical alignment from active section state
     if (activeVAlign && activeVAlign !== 'top') {
       page.vAlign = activeVAlign;
+      // Store base margins for vAlign centering (Word centers within base margins,
+      // not inflated margins that account for header/footer height)
+      page.baseMargins = {
+        top: activeSectionBaseTopMargin,
+        bottom: activeSectionBaseBottomMargin,
+      };
     }
     return page;
   };
@@ -652,6 +697,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
     footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   };
+  const normalizeRefs = (
+    refs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>,
+  ): Partial<Record<'default' | 'first' | 'even' | 'odd', string>> | undefined =>
+    refs && Object.keys(refs).length > 0 ? refs : undefined;
+  const mergeSectionRefs = (base: SectionRefs | null, next: SectionRefs | null): SectionRefs | null => {
+    if (!base && !next) return null;
+    const headerRefs = normalizeRefs(next?.headerRefs) ?? normalizeRefs(base?.headerRefs);
+    const footerRefs = normalizeRefs(next?.footerRefs) ?? normalizeRefs(base?.footerRefs);
+    if (!headerRefs && !footerRefs) return null;
+    return {
+      ...(headerRefs && { headerRefs }),
+      ...(footerRefs && { footerRefs }),
+    };
+  };
   const sectionMetadataList = options.sectionMetadata ?? [];
   const initialSectionMetadata = sectionMetadataList[0];
   if (initialSectionMetadata?.numbering?.format) {
@@ -668,6 +727,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       ...(initialSectionMetadata.footerRefs && { footerRefs: initialSectionMetadata.footerRefs }),
     };
   }
+  // Initialize vertical alignment from first section metadata (for page 1)
+  if (initialSectionMetadata?.vAlign) {
+    activeVAlign = initialSectionMetadata.vAlign;
+  }
   // Section index tracking for multi-section page numbering and header/footer selection
   let activeSectionIndex: number = initialSectionMetadata?.sectionIndex ?? 0;
   let pendingSectionIndex: number | null = null;
@@ -679,7 +742,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const paginator = createPaginator({
     margins: paginatorMargins,
     getActiveTopMargin: () => activeTopMargin,
-    getActiveBottomMargin: () => activeBottomMargin,
+    getActiveBottomMargin: () => {
+      const reserves = options.footnoteReservedByPageIndex;
+      const pageIndex = Math.max(0, pageCount - 1);
+      const reserve = Array.isArray(reserves) ? reserves[pageIndex] : 0;
+      const reservePx = typeof reserve === 'number' && Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
+      return activeBottomMargin + reservePx;
+    },
     getActiveHeaderDistance: () => activeHeaderDistance,
     getActiveFooterDistance: () => activeFooterDistance,
     getActivePageSize: () => activePageSize,
@@ -752,7 +821,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
         // Apply pending section refs
         if (pendingSectionRefs) {
-          activeSectionRefs = pendingSectionRefs;
+          activeSectionRefs = mergeSectionRefs(activeSectionRefs, pendingSectionRefs);
           pendingSectionRefs = null;
         }
         // Apply pending section index
@@ -760,10 +829,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           activeSectionIndex = pendingSectionIndex;
           pendingSectionIndex = null;
         }
-        // Apply pending vertical alignment
-        if (pendingVAlign !== null) {
+        // Apply pending vertical alignment (undefined = no change, null = reset to default)
+        if (pendingVAlign !== undefined) {
           activeVAlign = pendingVAlign;
-          pendingVAlign = null;
+          pendingVAlign = undefined;
         }
         // Apply pending section base margins
         if (pendingSectionBaseTopMargin !== null) {
@@ -1179,25 +1248,29 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
-      // Handle vAlign from section break (not part of SectionState, handled separately)
-      if (effectiveBlock.vAlign) {
-        const isFirstSection = effectiveBlock.attrs?.isFirstSection && states.length === 0;
-        if (isFirstSection) {
-          // First section: apply immediately
-          activeVAlign = effectiveBlock.vAlign;
-          pendingVAlign = null;
-        } else {
-          // Non-first section: schedule for next page
-          pendingVAlign = effectiveBlock.vAlign;
-        }
+      // Handle vAlign from section break (not part of SectionState, handled separately).
+      // vAlign is a per-section property that does NOT inherit between sections.
+      // When not specified, OOXML defaults to 'top' (represented as null here).
+      // We must always process this for every section break to prevent stale values.
+      const sectionVAlign = effectiveBlock.vAlign ?? null;
+      const isFirstSectionForVAlign = effectiveBlock.attrs?.isFirstSection && states.length === 0;
+      if (isFirstSectionForVAlign) {
+        // First section: apply immediately
+        activeVAlign = sectionVAlign;
+        pendingVAlign = undefined; // Clear any pending (undefined = no pending change)
+      } else {
+        // Non-first section: schedule for next page
+        pendingVAlign = sectionVAlign;
       }
 
       // Schedule section refs (handled outside of SectionState since they're module-level vars)
       if (effectiveBlock.headerRefs || effectiveBlock.footerRefs) {
-        pendingSectionRefs = {
+        const baseSectionRefs = pendingSectionRefs ?? activeSectionRefs;
+        const nextSectionRefs = {
           ...(effectiveBlock.headerRefs && { headerRefs: effectiveBlock.headerRefs }),
           ...(effectiveBlock.footerRefs && { footerRefs: effectiveBlock.footerRefs }),
         };
+        pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
         layoutLog(`[Layout] After scheduleSectionBreakCompat: Scheduled pendingSectionRefs:`, pendingSectionRefs);
       }
 
@@ -1378,7 +1451,30 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           if (!shouldSkipAnchoredTable) {
             let state = paginator.ensurePage();
             const availableHeight = state.contentBottom - state.cursorY;
+
+            /**
+             * Contextual Spacing for keepNext Page Break Decisions
+             *
+             * Per OOXML spec, contextualSpacing suppresses spacing between adjacent paragraphs
+             * of the same style. This affects page break calculations in two ways:
+             * 1. Spacing before current paragraph may be suppressed (vs previous paragraph)
+             * 2. Spacing between current and next paragraph may be suppressed
+             *
+             * We must account for this when calculating whether the current paragraph
+             * and the start of the next paragraph fit on the current page.
+             */
+            const spacingBefore = getParagraphSpacingBefore(paraBlock);
             const spacingAfter = getParagraphSpacingAfter(paraBlock);
+            /** Trailing spacing from previous paragraph (validated to be finite and positive). */
+            const prevTrailing =
+              Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
+            const currentStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs?.styleId : undefined;
+            const currentContextualSpacing = asBoolean(paraBlock.attrs?.contextualSpacing);
+            /** True if contextual spacing applies between previous paragraph and current. */
+            const contextualSpacingApplies =
+              currentContextualSpacing && currentStyleId && state.lastParagraphStyleId === currentStyleId;
+            /** Effective spacing before current, accounting for contextual spacing and trailing collapse. */
+            const effectiveSpacingBefore = contextualSpacingApplies ? 0 : Math.max(spacingBefore - prevTrailing, 0);
             const currentHeight = getMeasureHeight(paraBlock, measure);
             const nextHeight = getMeasureHeight(nextBlock, nextMeasure);
 
@@ -1390,6 +1486,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
              * Only paragraph blocks have configurable spacing-before values.
              */
             const nextSpacingBefore = nextIsParagraph ? getParagraphSpacingBefore(nextBlock) : 0;
+            const nextStyleId =
+              nextIsParagraph && typeof nextBlock.attrs?.styleId === 'string' ? nextBlock.attrs?.styleId : undefined;
+            const nextContextualSpacing = nextIsParagraph && asBoolean(nextBlock.attrs?.contextualSpacing);
+
+            /**
+             * Inter-paragraph spacing with contextual spacing support.
+             * Per OOXML: contextualSpacing suppresses a paragraph's spacing when adjacent to same-style paragraph.
+             * - current's spacingAfter is suppressed if current has contextualSpacing and next is same style
+             * - next's spacingBefore is suppressed if next has contextualSpacing and current is same style
+             */
+            const sameStyleAsNext = currentStyleId && nextStyleId && nextStyleId === currentStyleId;
+            const effectiveSpacingAfter = currentContextualSpacing && sameStyleAsNext ? 0 : spacingAfter;
+            const effectiveNextSpacingBefore = nextContextualSpacing && sameStyleAsNext ? 0 : nextSpacingBefore;
+            /** Gap between current and next paragraph, with contextual spacing applied. */
+            const interParagraphSpacing = nextIsParagraph
+              ? Math.max(effectiveSpacingAfter, effectiveNextSpacingBefore)
+              : effectiveSpacingAfter;
 
             /**
              * Height of the first line of the next block.
@@ -1410,13 +1523,24 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
               return nextHeight;
             })();
 
-            // For keepNext, we only need enough space for the next block to start (heading + first line), not the full next block.
-            // This prevents excessive page breaks while still honoring the keepNext constraint.
+            /**
+             * Combined height needed to keep current paragraph with the start of next.
+             * For keepNext, we only need enough space for the next block to start (heading + first line),
+             * not the full next block. This prevents excessive page breaks while still honoring keepNext.
+             */
             const combinedHeight = nextIsParagraph
-              ? currentHeight + Math.max(spacingAfter, nextSpacingBefore) + nextFirstLineHeight
-              : currentHeight + spacingAfter + nextHeight;
+              ? effectiveSpacingBefore + currentHeight + interParagraphSpacing + nextFirstLineHeight
+              : effectiveSpacingBefore + currentHeight + spacingAfter + nextHeight;
 
-            if (combinedHeight > availableHeight && state.page.fragments.length > 0) {
+            /**
+             * Available height adjusted for contextual spacing.
+             * When contextual spacing applies, the previous paragraph's trailing spacing is reclaimed
+             * since it won't be rendered as a gap.
+             */
+            const effectiveAvailableHeight = contextualSpacingApplies
+              ? availableHeight + prevTrailing
+              : availableHeight;
+            if (combinedHeight > effectiveAvailableHeight && state.page.fragments.length > 0) {
               state = paginator.advanceColumn(state);
             }
           }
@@ -1599,13 +1723,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Post-process pages with vertical alignment (center, bottom, both)
   // For each page, calculate content bounds and apply Y offset to all fragments
   for (const page of pages) {
-    if (!page.vAlign || page.vAlign === 'top') continue;
-    if (page.fragments.length === 0) continue;
+    if (!page.vAlign || page.vAlign === 'top') {
+      continue;
+    }
+    if (page.fragments.length === 0) {
+      continue;
+    }
 
-    // Get page dimensions
+    // Get page dimensions. For vAlign centering, use BASE margins (not inflated margins)
+    // to match Word's behavior where headers/footers don't affect vertical alignment.
     const pageSizeForPage = page.size ?? pageSize;
-    const contentTop = page.margins?.top ?? margins.top;
-    const contentBottom = pageSizeForPage.h - (page.margins?.bottom ?? margins.bottom);
+    const baseTop = page.baseMargins?.top ?? page.margins?.top ?? margins.top;
+    const baseBottom = page.baseMargins?.bottom ?? page.margins?.bottom ?? margins.bottom;
+    const contentTop = baseTop;
+    const contentBottom = pageSizeForPage.h - baseBottom;
     const contentHeight = contentBottom - contentTop;
 
     // Calculate the actual content bounds (min and max Y of all fragments)

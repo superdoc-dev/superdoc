@@ -2,6 +2,14 @@ import { emuToPixels, rotToDegrees, polygonToObj } from '@converter/helpers.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { extractStrokeWidth, extractStrokeColor, extractFillColor, extractLineEnds } from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
+import {
+  collectTextBoxParagraphs,
+  preProcessTextBoxContent,
+  resolveParagraphPropertiesForTextBox,
+  extractRunFormatting,
+  extractParagraphAlignment,
+  extractBodyPrProperties,
+} from './textbox-content-helpers.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -607,7 +615,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
 
       if (textBoxContent) {
         // Extract text from all paragraphs in the textbox
-        textContent = extractTextFromTextBox(textBoxContent, bodyPr);
+        textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
       }
 
       // Extract horizontal alignment from text content (defaults to 'left' if not specified)
@@ -756,64 +764,127 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
  *
  * @param {Object} textBoxContent - The w:txbxContent element containing paragraphs and text runs
  * @param {Object} bodyPr - The wps:bodyPr element containing text box properties (vertical alignment, insets, wrap mode)
- * @returns {{ parts: Array<{ text: string, formatting: Object, isLineBreak?: boolean }>, horizontalAlign: string, verticalAlign: string, insets: { top: number, right: number, bottom: number, left: number }, wrap: string }|null} Text content with formatting information and line break markers, or null if no text found
+ * @param {{ docx?: Object, filename?: string }} params - Translator params for field preprocessing
+ * @returns {{
+ *   parts: Array<{
+ *     text: string,
+ *     formatting?: { bold?: boolean, italic?: boolean, color?: string, fontSize?: number, fontFamily?: string },
+ *     fieldType?: 'PAGE' | 'NUMPAGES',
+ *     isLineBreak?: boolean,
+ *     isEmptyParagraph?: boolean
+ *   }>,
+ *   horizontalAlign: string,
+ *   verticalAlign: string,
+ *   insets: { top: number, right: number, bottom: number, left: number },
+ *   wrap: string
+ * }|null} Text content with formatting information and line break markers, or null if no text found
  */
-function extractTextFromTextBox(textBoxContent, bodyPr) {
+function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   if (!textBoxContent || !textBoxContent.elements) return null;
 
-  const paragraphs = textBoxContent.elements.filter((el) => el.name === 'w:p');
+  const processedContent = preProcessTextBoxContent(textBoxContent, params);
+  const paragraphs = collectTextBoxParagraphs(processedContent?.elements || []);
   const textParts = [];
-  let horizontalAlign = null; // Extract from first paragraph with alignment
+  let horizontalAlign = null;
 
-  paragraphs.forEach((paragraph, paragraphIndex) => {
-    // Extract paragraph alignment (w:jc) if not already found
-    if (!horizontalAlign) {
-      const pPr = paragraph.elements?.find((el) => el.name === 'w:pPr');
-      const jc = pPr?.elements?.find((el) => el.name === 'w:jc');
-      if (jc) {
-        const jcVal = jc.attributes?.['val'] || jc.attributes?.['w:val'];
-        // Map Word alignment values to our format
-        if (jcVal === 'left' || jcVal === 'start') horizontalAlign = 'left';
-        else if (jcVal === 'right' || jcVal === 'end') horizontalAlign = 'right';
-        else if (jcVal === 'center') horizontalAlign = 'center';
+  /**
+   * Appends a field part (PAGE or NUMPAGES) to textParts with formatting.
+   * @param {'PAGE' | 'NUMPAGES'} fieldType - The field type
+   * @param {Object} node - The field node element
+   * @param {Object} paragraphProperties - Resolved paragraph properties
+   */
+  const appendFieldPart = (fieldType, node, paragraphProperties) => {
+    const rPr = node?.elements?.find((el) => el.name === 'w:rPr');
+    const formatting = extractRunFormatting(rPr, paragraphProperties, params);
+    textParts.push({ text: '', formatting, fieldType });
+  };
+
+  /**
+   * Processes a single run element and extracts text parts.
+   * @param {Object} run - The w:r run element
+   * @param {Object} paragraphProperties - Resolved paragraph properties
+   * @returns {boolean} True if the run contained any text content
+   */
+  const handleRun = (run, paragraphProperties) => {
+    if (!run?.elements) return false;
+    const rPr = run.elements.find((el) => el.name === 'w:rPr');
+    const formatting = extractRunFormatting(rPr, paragraphProperties, params);
+    let hasText = false;
+
+    run.elements.forEach((el) => {
+      if (el.name === 'w:t' || el.name === 'w:delText') {
+        const textNode = el.elements?.find((n) => n.type === 'text');
+        if (textNode) {
+          hasText = true;
+          const cleanedText =
+            typeof textNode.text === 'string' ? textNode.text.replace(/\[\[sdspace\]\]/g, ' ') : textNode.text;
+          textParts.push({ text: cleanedText, formatting });
+        }
+      } else if (el.name === 'w:tab') {
+        hasText = true;
+        textParts.push({ text: '\t', formatting });
+      } else if (el.name === 'w:br') {
+        hasText = true;
+        textParts.push({ text: '\n', formatting: {}, isLineBreak: true });
+      } else if (el.name === 'sd:autoPageNumber') {
+        hasText = true;
+        appendFieldPart('PAGE', el, paragraphProperties);
+      } else if (el.name === 'sd:totalPageNumber') {
+        hasText = true;
+        appendFieldPart('NUMPAGES', el, paragraphProperties);
       }
+    });
+
+    return hasText;
+  };
+
+  /**
+   * Recursively processes paragraph elements including nested hyperlinks.
+   * @param {Object} el - The element to process
+   * @param {Object} paragraphProperties - Resolved paragraph properties
+   * @returns {boolean} True if any text content was found
+   */
+  const handleParagraphElement = (el, paragraphProperties) => {
+    if (!el) return false;
+
+    if (el.name === 'w:r') {
+      return handleRun(el, paragraphProperties);
+    }
+    if (el.name === 'sd:autoPageNumber') {
+      appendFieldPart('PAGE', el, paragraphProperties);
+      return true;
+    }
+    if (el.name === 'sd:totalPageNumber') {
+      appendFieldPart('NUMPAGES', el, paragraphProperties);
+      return true;
+    }
+    if ((el.name === 'w:hyperlink' || el.name === 'sd:pageReference') && Array.isArray(el.elements)) {
+      let hasText = false;
+      el.elements.forEach((child) => {
+        if (handleParagraphElement(child, paragraphProperties)) {
+          hasText = true;
+        }
+      });
+      return hasText;
+    }
+    return false;
+  };
+
+  // Process each paragraph
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const paragraphProperties = resolveParagraphPropertiesForTextBox(paragraph, params);
+
+    // Extract horizontal alignment from first paragraph that has it
+    if (!horizontalAlign) {
+      horizontalAlign = extractParagraphAlignment(paragraph);
     }
 
-    const runs = paragraph.elements?.filter((el) => el.name === 'w:r') || [];
     let paragraphHasText = false;
+    const elements = paragraph.elements || [];
 
-    runs.forEach((run) => {
-      const textEl = run.elements?.find((el) => el.name === 'w:t');
-      if (textEl && textEl.elements) {
-        const text = textEl.elements.find((el) => el.type === 'text');
-        if (text) {
-          paragraphHasText = true;
-          // Replace temporary sdspace placeholders with real spaces
-          const cleanedText = typeof text.text === 'string' ? text.text.replace(/\[\[sdspace\]\]/g, ' ') : text.text;
-          // Extract formatting from run properties
-          const rPr = run.elements?.find((el) => el.name === 'w:rPr');
-          const formatting = {};
-
-          if (rPr) {
-            const bold = rPr.elements?.find((el) => el.name === 'w:b');
-            const italic = rPr.elements?.find((el) => el.name === 'w:i');
-            const color = rPr.elements?.find((el) => el.name === 'w:color');
-            const sz = rPr.elements?.find((el) => el.name === 'w:sz');
-
-            if (bold) formatting.bold = true;
-            if (italic) formatting.italic = true;
-            if (color) formatting.color = color.attributes?.['val'] || color.attributes?.['w:val'];
-            if (sz) {
-              const szVal = sz.attributes?.['val'] || sz.attributes?.['w:val'];
-              formatting.fontSize = parseInt(szVal, 10) / 2; // half-points to points
-            }
-          }
-
-          textParts.push({
-            text: cleanedText,
-            formatting,
-          });
-        }
+    elements.forEach((el) => {
+      if (handleParagraphElement(el, paragraphProperties)) {
+        paragraphHasText = true;
       }
     });
 
@@ -824,48 +895,19 @@ function extractTextFromTextBox(textBoxContent, bodyPr) {
         text: '\n',
         formatting: {},
         isLineBreak: true,
-        isEmptyParagraph: !paragraphHasText, // Mark empty paragraphs for extra spacing
+        isEmptyParagraph: !paragraphHasText,
       });
     }
   });
 
   if (textParts.length === 0) return null;
 
-  // Extract bodyPr attributes for text alignment and insets
-  const bodyPrAttrs = bodyPr?.attributes || {};
-
-  // Extract vertical alignment from anchor attribute (t=top, ctr=center, b=bottom)
-  let verticalAlign = 'center'; // Default to center
-  const anchorAttr = bodyPrAttrs['anchor'];
-  if (anchorAttr === 't') verticalAlign = 'top';
-  else if (anchorAttr === 'ctr') verticalAlign = 'center';
-  else if (anchorAttr === 'b') verticalAlign = 'bottom';
-
-  // Extract text insets from bodyPr (in EMUs, need to convert to pixels)
-  // Default insets in OOXML: left/right = 91440 EMU (~9.6px), top/bottom = 45720 EMU (~4.8px)
-  // Conversion formula: pixels = emu * 96 / 914400
-  const EMU_TO_PX = 96 / 914400;
-  const DEFAULT_HORIZONTAL_INSET_EMU = 91440;
-  const DEFAULT_VERTICAL_INSET_EMU = 45720;
-
-  const lIns = bodyPrAttrs['lIns'] != null ? parseFloat(bodyPrAttrs['lIns']) : DEFAULT_HORIZONTAL_INSET_EMU;
-  const tIns = bodyPrAttrs['tIns'] != null ? parseFloat(bodyPrAttrs['tIns']) : DEFAULT_VERTICAL_INSET_EMU;
-  const rIns = bodyPrAttrs['rIns'] != null ? parseFloat(bodyPrAttrs['rIns']) : DEFAULT_HORIZONTAL_INSET_EMU;
-  const bIns = bodyPrAttrs['bIns'] != null ? parseFloat(bodyPrAttrs['bIns']) : DEFAULT_VERTICAL_INSET_EMU;
-
-  const insets = {
-    top: tIns * EMU_TO_PX,
-    right: rIns * EMU_TO_PX,
-    bottom: bIns * EMU_TO_PX,
-    left: lIns * EMU_TO_PX,
-  };
-
-  // Extract wrap mode (default to 'square' if not specified)
-  const wrap = bodyPrAttrs['wrap'] || 'square';
+  // Extract body properties (vertical alignment, insets, wrap mode)
+  const { verticalAlign, insets, wrap } = extractBodyPrProperties(bodyPr);
 
   return {
     parts: textParts,
-    horizontalAlign: horizontalAlign || 'left', // Default to left if not specified
+    horizontalAlign: horizontalAlign || 'left',
     verticalAlign,
     insets,
     wrap,
@@ -1053,7 +1095,7 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
   let textAlign = 'left';
 
   if (textBoxContent) {
-    textContent = extractTextFromTextBox(textBoxContent, bodyPr);
+    textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
     textAlign = textContent?.horizontalAlign || 'left';
   }
 

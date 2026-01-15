@@ -13,6 +13,7 @@
  * - ascent ≈ fontSize * 0.8 (baseline to top)
  * - descent ≈ fontSize * 0.2 (baseline to bottom)
  * - lineHeight = fontSize * 1.15 (Word 2007+ "single" line spacing)
+ * - empty paragraphs use fontSize as the base line height
  *
  * These are documented heuristics; we can swap in precise font metrics later
  * if needed via libraries like opentype.js.
@@ -285,7 +286,6 @@ function measureText(
  * - fontInfo is not provided (empty paragraphs)
  * - Browser doesn't support actualBoundingBox* metrics (legacy browsers)
  */
-const MIN_SINGLE_LINE_PX = (12 * 96) / 72; // 240 twips = 12pt
 
 /**
  * Word 2007+ default line spacing multiplier for "single" line spacing.
@@ -318,7 +318,8 @@ const WORD_SINGLE_LINE_SPACING_MULTIPLIER = 1.15;
  * **Line Height Calculation:**
  * Uses Word 2007+'s default "single" line spacing of fontSize × 1.15 as the base.
  * This base is then modified by paragraph spacing rules (lineRule: auto/exact/atLeast).
- * A minimum of MIN_SINGLE_LINE_PX (16px = 12pt) is enforced to prevent illegible text.
+ * A minimum line height clamp is intentionally NOT enforced to match Word's behavior
+ * for small font sizes and empty paragraphs.
  *
  * The 1.15 multiplier provides consistent spacing that matches Word's behavior and
  * accounts for the line gap that Canvas TextMetrics doesn't expose directly.
@@ -373,7 +374,60 @@ function calculateTypographyMetrics(
   // For 12pt (16px) font: 16 * 1.15 = 18.4px - matches Word exactly.
   // Also clamp to actual glyph bounds (ascent + descent) to prevent overlap/clipping
   // for fonts with unusually tall glyphs that exceed the 1.15 multiplier.
-  const baseLineHeight = Math.max(fontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER, ascent + descent, MIN_SINGLE_LINE_PX);
+  const baseLineHeight = Math.max(fontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER, ascent + descent);
+  const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
+
+  return {
+    ascent,
+    descent,
+    lineHeight,
+  };
+}
+
+/**
+ * Calculates typography metrics for empty paragraphs.
+ *
+ * Empty paragraphs in Word use the font size as the base line height rather than
+ * the standard 1.15x multiplier used for paragraphs with content. This matches
+ * Word's behavior where empty paragraphs appear shorter than their populated counterparts.
+ *
+ * @param fontSize - The font size in pixels
+ * @param spacing - Optional paragraph spacing configuration (may override line height)
+ * @param fontInfo - Optional font information for precise metric calculation
+ * @returns Object containing ascent, descent, and lineHeight in pixels
+ *
+ * @example
+ * ```typescript
+ * // Empty paragraph with 12pt font
+ * calculateEmptyParagraphMetrics(16); // { ascent: 12.8, descent: 3.2, lineHeight: 16 }
+ *
+ * // Compare to regular text which would use 16 * 1.15 = 18.4 for lineHeight
+ * ```
+ */
+function calculateEmptyParagraphMetrics(
+  fontSize: number,
+  spacing?: ParagraphSpacing,
+  fontInfo?: FontInfo,
+): {
+  ascent: number;
+  descent: number;
+  lineHeight: number;
+} {
+  let ascent: number;
+  let descent: number;
+
+  if (fontInfo) {
+    const ctx = getCanvasContext();
+    const metrics = getFontMetrics(ctx, fontInfo, measurementConfig.mode, measurementConfig.fonts);
+    ascent = roundValue(metrics.ascent);
+    descent = roundValue(metrics.descent);
+  } else {
+    ascent = roundValue(fontSize * 0.8);
+    descent = roundValue(fontSize * 0.2);
+  }
+
+  // Word treats empty paragraphs as a single font-sized line unless line spacing is explicitly set.
+  const baseLineHeight = Math.max(fontSize, ascent + descent);
   const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
 
   return {
@@ -430,6 +484,21 @@ function isImageRun(run: Run): run is ImageRun {
 function isLineBreakRun(run: Run): run is LineBreakRun {
   return run.kind === 'lineBreak';
 }
+
+/**
+ * Type guard to check if a run is an empty text run.
+ *
+ * An empty text run is a text run (no kind or kind === 'text') with an empty string.
+ * This is used to identify empty paragraph placeholders that need special handling
+ * for line height calculations.
+ *
+ * @param run - The run to check
+ * @returns True if the run is a text run with empty text
+ */
+const isEmptyTextRun = (run: Run): run is TextRun => {
+  if (run.kind && run.kind !== 'text') return false;
+  return typeof (run as TextRun).text === 'string' && (run as TextRun).text.length === 0;
+};
 
 /**
  * Type guard to check if a run is a field annotation run
@@ -798,8 +867,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     }
   }
 
-  if (block.runs.length === 0) {
-    const metrics = calculateTypographyMetrics(12, spacing);
+  const emptyParagraphRun =
+    block.runs.length === 1 && isEmptyTextRun(block.runs[0] as Run) ? (block.runs[0] as TextRun) : null;
+  if (emptyParagraphRun) {
+    const fontSize = emptyParagraphRun.fontSize ?? 12;
+    const metrics = calculateEmptyParagraphMetrics(fontSize, spacing, getFontInfoFromRun(emptyParagraphRun));
     const emptyLine: Line = {
       fromRun: 0,
       fromChar: 0,
@@ -817,6 +889,38 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       totalHeight: metrics.lineHeight,
     };
   }
+
+  if (block.runs.length === 0) {
+    const metrics = calculateEmptyParagraphMetrics(12, spacing);
+    const emptyLine: Line = {
+      fromRun: 0,
+      fromChar: 0,
+      toRun: 0,
+      toChar: 0,
+      width: 0,
+      ...metrics,
+    };
+    addBarTabsToLine(emptyLine);
+    lines.push(emptyLine);
+
+    return {
+      kind: 'paragraph',
+      lines,
+      totalHeight: metrics.lineHeight,
+    };
+  }
+
+  /**
+   * Find the first text run with a valid font size to use as fallback for line breaks.
+   * This ensures leading line breaks (before any text) use the correct font size for height calculation.
+   */
+  const firstTextRunWithSize = block.runs.find(
+    (run): run is TextRun => 'text' in run && 'fontSize' in run && typeof run.fontSize === 'number',
+  );
+  /** Fallback font size for empty lines or leading line breaks. */
+  const fallbackFontSize = firstTextRunWithSize?.fontSize ?? 12;
+  /** Fallback font info for accurate typography metrics on leading line breaks. */
+  const fallbackFontInfo = firstTextRunWithSize ? getFontInfoFromRun(firstTextRunWithSize) : undefined;
 
   let currentLine: {
     fromRun: number;
@@ -843,7 +947,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     return baseWidth;
   };
 
-  let lastFontSize = 12;
+  let lastFontSize = fallbackFontSize;
+  /** Tracks whether we've encountered a text run yet; used to apply fallback font info to leading line breaks. */
+  let hasSeenTextRun = false;
   let tabStopCursor = 0;
   let pendingTabAlignment: { target: number; val: TabStop['val'] } | null = null;
   let pendingRunSpacing = 0;
@@ -1059,12 +1165,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         lines.push(completedLine);
         currentLine = null;
       } else {
-        const textRunWithSize = block.runs.find(
-          (r): r is TextRun =>
-            r.kind !== 'tab' && r.kind !== 'lineBreak' && r.kind !== 'break' && !('src' in r) && 'fontSize' in r,
-        );
-        const fallbackSize = textRunWithSize?.fontSize ?? 12;
-        const metrics = calculateTypographyMetrics(fallbackSize, spacing);
+        const metrics = calculateTypographyMetrics(fallbackFontSize, spacing, fallbackFontInfo);
         const emptyLine: Line = {
           fromRun: runIndex,
           fromChar: 0,
@@ -1086,6 +1187,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
     // Handle explicit line breaks (e.g., DOCX <w:br/>)
     if (isLineBreakRun(run)) {
+      // For leading line breaks (before any text), use fallback font info for accurate height calculation
+      const lineBreakFontInfo = hasSeenTextRun ? undefined : fallbackFontInfo;
       if (currentLine) {
         const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
         const completedLine: Line = {
@@ -1097,7 +1200,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       } else {
         // Line break at the start of paragraph (no currentLine yet):
         // Create an empty line to represent the leading line break
-        const metrics = calculateTypographyMetrics(lastFontSize, spacing);
+        const metrics = calculateTypographyMetrics(lastFontSize, spacing, lineBreakFontInfo);
         const emptyLine: Line = {
           fromRun: runIndex,
           fromChar: 0,
@@ -1126,6 +1229,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         toChar: 0,
         width: 0,
         maxFontSize: lastFontSize,
+        maxFontInfo: lineBreakFontInfo,
         maxWidth: nextLineMaxWidth,
         segments: [],
         spaceCount: 0,
@@ -1387,12 +1491,30 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // Measure text width
       const textWidth = displayText ? ctx.measureText(displayText).width : 0;
 
+      const annotationHorizontalPadding = run.highlighted === false ? 0 : FIELD_ANNOTATION_PILL_PADDING;
+      const annotationVerticalPadding = run.highlighted === false ? 0 : FIELD_ANNOTATION_VERTICAL_PADDING;
+
       // Add pill styling overhead: border (2px each side) + padding (2px each side) = 8px total
-      const annotationWidth = textWidth + FIELD_ANNOTATION_PILL_PADDING;
+      const annotationWidth = textWidth + annotationHorizontalPadding;
 
       // Calculate height including pill styling
-      const annotationHeight =
-        annotationFontSize * FIELD_ANNOTATION_LINE_HEIGHT_MULTIPLIER + FIELD_ANNOTATION_VERTICAL_PADDING;
+      let annotationHeight = annotationFontSize * FIELD_ANNOTATION_LINE_HEIGHT_MULTIPLIER + annotationVerticalPadding;
+
+      // Signature images are capped to 28px in the renderer; reflect that in measurement.
+      if (run.variant === 'signature' && run.imageSrc) {
+        const signatureHeight = 28 + annotationVerticalPadding;
+        annotationHeight = Math.max(annotationHeight, signatureHeight);
+      }
+
+      // Image annotations use explicit size when provided.
+      if (run.variant === 'image' && run.imageSrc && run.size?.height) {
+        const imageHeight = run.size.height + annotationVerticalPadding;
+        annotationHeight = Math.max(annotationHeight, imageHeight);
+      }
+
+      if (run.variant === 'html' && run.size?.height) {
+        annotationHeight = Math.max(annotationHeight, run.size.height);
+      }
 
       // If a tab alignment is pending, apply it
       let annotationStartX: number | undefined;
@@ -1497,6 +1619,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
     // Handle text runs
     lastFontSize = run.fontSize;
+    hasSeenTextRun = true;
     const { font } = buildFontString(run);
     const tabSegments = run.text.split('\t');
 
@@ -1648,7 +1771,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               trimTrailingWrapSpaces(currentLine);
               const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
               const lineBase = currentLine;
-              const completedLine: Line = { ...lineBase, ...metrics };
+              const completedLine: Line = {
+                ...lineBase,
+                ...metrics,
+              };
               addBarTabsToLine(completedLine);
               lines.push(completedLine);
               tabStopCursor = 0;
@@ -1728,7 +1854,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             trimTrailingWrapSpaces(currentLine);
             const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
             const lineBase = currentLine;
-            const completedLine: Line = { ...lineBase, ...metrics };
+            const completedLine: Line = {
+              ...lineBase,
+              ...metrics,
+            };
             addBarTabsToLine(completedLine);
             lines.push(completedLine);
             tabStopCursor = 0;
@@ -1792,7 +1921,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 trimTrailingWrapSpaces(currentLine);
                 const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
                 const lineBase = currentLine;
-                const completedLine: Line = { ...lineBase, ...metrics };
+                const completedLine: Line = {
+                  ...lineBase,
+                  ...metrics,
+                };
                 addBarTabsToLine(completedLine);
                 lines.push(completedLine);
                 tabStopCursor = 0;
@@ -2345,7 +2477,6 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
     return scaled;
   };
-
   // Determine actual column count from table structure
   const maxCellCount = Math.max(1, Math.max(...block.rows.map((r) => r.cells.length)));
 
@@ -2503,6 +2634,16 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         blockMeasures.push(measure);
         // Get height from different measure types
         const blockHeight = 'totalHeight' in measure ? measure.totalHeight : 'height' in measure ? measure.height : 0;
+        const isAnchoredOutOfFlow =
+          (block.kind === 'image' || block.kind === 'drawing') &&
+          (block as ImageBlock | DrawingBlock).anchor?.isAnchored === true &&
+          ((block as ImageBlock | DrawingBlock).wrap?.type ?? 'Inline') !== 'Inline';
+
+        // Anchored/floating objects inside table cells do not contribute to cell height.
+        if (isAnchoredOutOfFlow) {
+          continue;
+        }
+
         contentHeight += blockHeight;
 
         // Add paragraph spacing.after to content height for all paragraphs.

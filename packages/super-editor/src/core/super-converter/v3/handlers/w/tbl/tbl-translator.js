@@ -6,6 +6,7 @@ import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/i
 import { translator as trTranslator } from '../tr';
 import { translator as tblPrTranslator } from '../tblPr';
 import { translator as tblGridTranslator } from '../tblGrid';
+import { translator as tblStylePrTranslator } from '@converter/v3/handlers/w/tblStylePr';
 import { buildFallbackGridForTable } from '@core/super-converter/helpers/tableFallbackHelpers.js';
 
 /** @type {import('@translator').XmlNodeName} */
@@ -83,6 +84,8 @@ const encode = (params, encodedAttrs) => {
       };
     }
   }
+
+  const tableLook = encodedAttrs.tableProperties.tblLook;
   // Table borders can be specified in tblPr or inside a referenced style tag
   const borderProps = _processTableBorders(encodedAttrs.tableProperties.borders || {});
   const referencedStyles = _getReferencedTableStyles(encodedAttrs.tableStyleId, params) || {};
@@ -124,7 +127,8 @@ const encode = (params, encodedAttrs) => {
       extraParams: {
         row,
         table: node,
-        rowBorders: encodedAttrs.borders,
+        tableBorders: encodedAttrs.borders,
+        tableLook,
         columnWidths,
         activeRowSpans: activeRowSpans.slice(),
         rowIndex,
@@ -340,7 +344,19 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
     }
   }
 
-  return stylesToReturn;
+  const tblStylePr = styleTag.elements.filter((el) => el.name === 'w:tblStylePr');
+  let styleProps = {};
+  if (tblStylePr) {
+    styleProps = tblStylePr.reduce((acc, el) => {
+      acc[el.attributes['w:type']] = tblStylePrTranslator.encode({ ...params, nodes: [el] });
+      return acc;
+    }, {});
+  }
+
+  return {
+    ...stylesToReturn,
+    ...styleProps,
+  };
 }
 
 /**

@@ -334,6 +334,14 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 }
 /* Presentation Editor Remote Cursors - end */
 
+/* Footnotes */
+.sd-footnote-ref {
+  font-size: 0.75em;
+  line-height: 1;
+  vertical-align: super;
+  user-select: none;
+}
+
 /* Image placeholder */
 .ProseMirror placeholder {
   display: inline;

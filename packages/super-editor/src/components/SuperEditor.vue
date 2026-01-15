@@ -763,6 +763,9 @@ const initializeData = async () => {
 const getExtensions = () => getStarterExtensions();
 
 const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } = {}) => {
+  // component may have unmounted during async init
+  if (!editorElem.value) return;
+
   const { editorCtor, ...editorOptions } = props.options || {};
   const EditorCtor = editorCtor ?? Editor;
   clearSelectedImage();

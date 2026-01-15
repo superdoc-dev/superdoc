@@ -38,6 +38,7 @@ import { layoutTableBlock, createAnchoredTableFragment } from './layout-table.js
 import { collectAnchoredDrawings, collectAnchoredTables, collectPreRegisteredAnchors } from './anchors.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
+import { shouldSuppressSpacingForEmpty } from './layout-utils.js';
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -78,6 +79,7 @@ function hasHeight(fragment: Fragment): fragment is ImageFragment | DrawingFragm
 function getParagraphSpacingBefore(block: ParagraphBlock): number {
   const spacing = block.attrs?.spacing as Record<string, unknown> | undefined;
   const value = spacing?.before ?? spacing?.lineSpaceBefore;
+  if (shouldSuppressSpacingForEmpty(block, 'before')) return 0;
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
@@ -90,6 +92,7 @@ function getParagraphSpacingBefore(block: ParagraphBlock): number {
 function getParagraphSpacingAfter(block: ParagraphBlock): number {
   const spacing = block.attrs?.spacing as Record<string, unknown> | undefined;
   const value = spacing?.after ?? spacing?.lineSpaceAfter;
+  if (shouldSuppressSpacingForEmpty(block, 'after')) return 0;
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 

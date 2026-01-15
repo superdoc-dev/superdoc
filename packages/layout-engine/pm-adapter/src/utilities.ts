@@ -1601,6 +1601,149 @@ export function normalizeTextInsets(
  */
 export const OOXML_Z_INDEX_BASE = 251658240;
 
+// ============================================================================
+// OOXML Element Utilities
+// ============================================================================
+
+/**
+ * Represents an OOXML XML element structure.
+ *
+ * Used for parsing and traversing OOXML document elements that come from
+ * parsed XML structures (e.g., from xml-js or similar parsers).
+ *
+ * @example
+ * ```typescript
+ * const element: OoxmlElement = {
+ *   name: 'w:p',
+ *   attributes: { 'w:rsidR': '00A77B3E' },
+ *   elements: [
+ *     { name: 'w:pPr', elements: [...] },
+ *     { name: 'w:r', elements: [...] }
+ *   ]
+ * };
+ * ```
+ */
+export type OoxmlElement = {
+  /** The element name (e.g., 'w:p', 'w:r', 'w:spacing') */
+  name?: string;
+  /** Element attributes as key-value pairs */
+  attributes?: Record<string, unknown>;
+  /** Child elements */
+  elements?: OoxmlElement[];
+};
+
+/**
+ * Safely converts an unknown value to an OoxmlElement if it has the expected structure.
+ *
+ * Validates that the value is a non-null object with at least one of the
+ * expected OoxmlElement properties (name, attributes, or elements).
+ *
+ * @param value - The value to convert
+ * @returns The value as an OoxmlElement, or undefined if invalid
+ *
+ * @example
+ * ```typescript
+ * asOoxmlElement({ name: 'w:p' }); // { name: 'w:p' }
+ * asOoxmlElement({ elements: [] }); // { elements: [] }
+ * asOoxmlElement(null); // undefined
+ * asOoxmlElement('string'); // undefined
+ * asOoxmlElement({}); // undefined (no recognized properties)
+ * ```
+ */
+export const asOoxmlElement = (value: unknown): OoxmlElement | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const element = value as OoxmlElement;
+  if (element.name == null && element.attributes == null && element.elements == null) return undefined;
+  return element;
+};
+
+/**
+ * Finds a direct child element by name within an OOXML element.
+ *
+ * Searches only immediate children, not nested descendants.
+ *
+ * @param parent - The parent element to search within
+ * @param name - The element name to find (e.g., 'w:pPr', 'w:spacing')
+ * @returns The first matching child element, or undefined if not found
+ *
+ * @example
+ * ```typescript
+ * const pPr = findOoxmlChild(paragraph, 'w:pPr');
+ * const spacing = findOoxmlChild(pPr, 'w:spacing');
+ * ```
+ */
+export const findOoxmlChild = (parent: OoxmlElement | undefined, name: string): OoxmlElement | undefined => {
+  return parent?.elements?.find((child) => child?.name === name);
+};
+
+/**
+ * Gets an attribute value from an OOXML element, handling both prefixed and unprefixed keys.
+ *
+ * OOXML attributes may be stored with or without the 'w:' namespace prefix.
+ * This function checks both variants to ensure robust attribute retrieval.
+ *
+ * @param element - The element to get the attribute from
+ * @param key - The attribute key (can be with or without 'w:' prefix)
+ * @returns The attribute value, or undefined if not found
+ *
+ * @example
+ * ```typescript
+ * // Element: { attributes: { 'w:before': '240' } }
+ * getOoxmlAttribute(element, 'w:before'); // '240'
+ * getOoxmlAttribute(element, 'before'); // '240'
+ *
+ * // Element: { attributes: { 'before': '240' } }
+ * getOoxmlAttribute(element, 'w:before'); // '240'
+ * ```
+ */
+export const getOoxmlAttribute = (element: OoxmlElement | undefined, key: string): unknown => {
+  if (!element?.attributes) return undefined;
+  const attrs = element.attributes as Record<string, unknown>;
+  return attrs[key] ?? attrs[key.startsWith('w:') ? key.slice(2) : `w:${key}`];
+};
+
+/**
+ * Parses a value as an integer number, handling both number and string inputs.
+ *
+ * Used for parsing OOXML attribute values which may be stored as strings.
+ *
+ * @param value - The value to parse (number, string, or other)
+ * @returns The parsed integer, or undefined if parsing fails or value is null/undefined
+ *
+ * @example
+ * ```typescript
+ * parseOoxmlNumber(240); // 240
+ * parseOoxmlNumber('240'); // 240
+ * parseOoxmlNumber('invalid'); // undefined
+ * parseOoxmlNumber(null); // undefined
+ * ```
+ */
+export const parseOoxmlNumber = (value: unknown): number | undefined => {
+  if (value == null) return undefined;
+  const num = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+  return Number.isFinite(num) ? num : undefined;
+};
+
+/**
+ * Checks if an object has its own property (not inherited).
+ *
+ * Uses Object.prototype.hasOwnProperty.call for safety with objects
+ * that may have a null prototype or override hasOwnProperty.
+ *
+ * @param obj - The object to check
+ * @param key - The property key to check for
+ * @returns True if the object has its own property with the given key
+ *
+ * @example
+ * ```typescript
+ * hasOwnProperty({ a: 1 }, 'a'); // true
+ * hasOwnProperty({ a: 1 }, 'b'); // false
+ * hasOwnProperty({ a: 1 }, 'toString'); // false (inherited)
+ * ```
+ */
+export const hasOwnProperty = (obj: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(obj, key);
+
 /**
  * Normalizes z-index from OOXML relativeHeight value.
  *

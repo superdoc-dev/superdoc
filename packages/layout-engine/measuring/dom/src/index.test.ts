@@ -274,6 +274,8 @@ describe('measureBlock', () => {
 
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBeGreaterThanOrEqual(0);
+      expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(16);
+      expect(measure.lines[0].lineHeight).toBeLessThan(16 * 1.15);
       expect(measure.totalHeight).toBeGreaterThan(0);
     });
 
@@ -814,7 +816,7 @@ describe('measureBlock', () => {
       expect(measure.lines[0].lineHeight).toBeCloseTo(42 * singleLineHeight, 1);
     });
 
-    it('uses minimum line height for very small fonts', async () => {
+    it('does not clamp line height for very small fonts', async () => {
       const smallFontSize = 8; // Very small font
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -829,9 +831,9 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      // MIN_SINGLE_LINE_PX is 16px (12pt), which should be used instead of 8 * 1.15 = 9.2px
-      const minLineHeight = 16; // (12 * 96) / 72
-      expect(measure.lines[0].lineHeight).toBeCloseTo(minLineHeight, 1);
+      const expectedLineHeight = smallFontSize * 1.15; // 8 * 1.15 = 9.2px
+      expect(measure.lines[0].lineHeight).toBeCloseTo(expectedLineHeight, 1);
+      expect(measure.lines[0].lineHeight).toBeLessThan(16);
     });
 
     it('uses 1.15 multiplier for normal fonts', async () => {
@@ -902,7 +904,7 @@ describe('measureBlock', () => {
     });
 
     it('ensures line height is never smaller than glyph bounds to prevent clipping', async () => {
-      // This test verifies the clamp: Math.max(fontSize * 1.15, ascent + descent, MIN_SINGLE_LINE_PX)
+      // This test verifies the clamp: Math.max(fontSize * 1.15, ascent + descent)
       // For any font, line height must be >= ascent + descent to prevent glyph overlap
       const block: FlowBlock = {
         kind: 'paragraph',

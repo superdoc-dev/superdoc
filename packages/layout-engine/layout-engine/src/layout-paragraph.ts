@@ -13,7 +13,13 @@ import type {
   DrawingMeasure,
   DrawingFragment,
 } from '@superdoc/contracts';
-import { computeFragmentPmRange, normalizeLines, sliceLines, extractBlockPmRange } from './layout-utils.js';
+import {
+  computeFragmentPmRange,
+  normalizeLines,
+  sliceLines,
+  extractBlockPmRange,
+  isEmptyTextParagraph,
+} from './layout-utils.js';
 import { computeAnchorX } from './floating-objects.js';
 
 const spacingDebugEnabled = false;
@@ -59,6 +65,12 @@ type ParagraphSpacingAttrs = {
 type ParagraphBlockAttrs = {
   /** Spacing configuration for the paragraph */
   spacing?: ParagraphSpacingAttrs;
+  /** Tracks which spacing properties were explicitly set on the paragraph */
+  spacingExplicit?: {
+    before?: boolean;
+    after?: boolean;
+    line?: boolean;
+  };
   /** Style identifier for the paragraph */
   styleId?: string;
   /** Whether to suppress spacing between same-style paragraphs */
@@ -440,10 +452,16 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   let fromLine = 0;
   const attrs = getParagraphAttrs(block);
   const spacing = attrs?.spacing ?? {};
+  const spacingExplicit = attrs?.spacingExplicit;
   const styleId = asString(attrs?.styleId);
   const contextualSpacing = asBoolean(attrs?.contextualSpacing);
   let spacingBefore = Math.max(0, Number(spacing.before ?? spacing.lineSpaceBefore ?? 0));
-  const spacingAfter = Math.max(0, Number(spacing.after ?? spacing.lineSpaceAfter ?? 0));
+  let spacingAfter = Math.max(0, Number(spacing.after ?? spacing.lineSpaceAfter ?? 0));
+  const emptyTextParagraph = isEmptyTextParagraph(block);
+  if (emptyTextParagraph && spacingExplicit) {
+    if (!spacingExplicit.before) spacingBefore = 0;
+    if (!spacingExplicit.after) spacingAfter = 0;
+  }
   let appliedSpacingBefore = spacingBefore === 0;
   let lastState: PageState | null = null;
   if (spacingDebugEnabled) {

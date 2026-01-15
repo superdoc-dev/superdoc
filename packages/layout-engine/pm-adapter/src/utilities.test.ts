@@ -1644,3 +1644,155 @@ describe('normalizeEffectExtent', () => {
     expect(result).toEqual({ left: 0, top: 0, right: 0, bottom: 10 });
   });
 });
+
+// ============================================================================
+// OOXML Utilities Tests
+// ============================================================================
+
+import {
+  asOoxmlElement,
+  findOoxmlChild,
+  getOoxmlAttribute,
+  parseOoxmlNumber,
+  hasOwnProperty,
+  type OoxmlElement,
+} from './utilities.js';
+
+describe('OOXML Utilities', () => {
+  describe('asOoxmlElement', () => {
+    it('returns undefined for null/undefined', () => {
+      expect(asOoxmlElement(null)).toBeUndefined();
+      expect(asOoxmlElement(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined for non-objects', () => {
+      expect(asOoxmlElement('string')).toBeUndefined();
+      expect(asOoxmlElement(42)).toBeUndefined();
+    });
+
+    it('returns undefined for empty objects', () => {
+      expect(asOoxmlElement({})).toBeUndefined();
+    });
+
+    it('returns element with name property', () => {
+      const element = { name: 'w:p' };
+      expect(asOoxmlElement(element)).toBe(element);
+    });
+
+    it('returns element with attributes property', () => {
+      const element = { attributes: { 'w:val': '240' } };
+      expect(asOoxmlElement(element)).toBe(element);
+    });
+
+    it('returns element with elements property', () => {
+      const element = { elements: [] };
+      expect(asOoxmlElement(element)).toBe(element);
+    });
+
+    it('returns full OOXML element', () => {
+      const element: OoxmlElement = {
+        name: 'w:pPr',
+        attributes: { 'w:rsidR': '00A77B3E' },
+        elements: [{ name: 'w:spacing', attributes: { 'w:before': '240' } }],
+      };
+      expect(asOoxmlElement(element)).toBe(element);
+    });
+  });
+
+  describe('findOoxmlChild', () => {
+    it('returns undefined for undefined parent', () => {
+      expect(findOoxmlChild(undefined, 'w:spacing')).toBeUndefined();
+    });
+
+    it('returns undefined for parent without elements', () => {
+      expect(findOoxmlChild({ name: 'w:pPr' }, 'w:spacing')).toBeUndefined();
+    });
+
+    it('returns undefined when child not found', () => {
+      const parent: OoxmlElement = {
+        name: 'w:pPr',
+        elements: [{ name: 'w:jc' }],
+      };
+      expect(findOoxmlChild(parent, 'w:spacing')).toBeUndefined();
+    });
+
+    it('finds child element by name', () => {
+      const spacingEl: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
+      const parent: OoxmlElement = {
+        name: 'w:pPr',
+        elements: [{ name: 'w:jc' }, spacingEl, { name: 'w:ind' }],
+      };
+      expect(findOoxmlChild(parent, 'w:spacing')).toBe(spacingEl);
+    });
+  });
+
+  describe('getOoxmlAttribute', () => {
+    it('returns undefined for undefined element', () => {
+      expect(getOoxmlAttribute(undefined, 'w:before')).toBeUndefined();
+    });
+
+    it('returns undefined for element without attributes', () => {
+      expect(getOoxmlAttribute({ name: 'w:spacing' }, 'w:before')).toBeUndefined();
+    });
+
+    it('gets attribute with w: prefix', () => {
+      const element: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
+      expect(getOoxmlAttribute(element, 'w:before')).toBe('240');
+    });
+
+    it('gets attribute without prefix when prefixed key requested', () => {
+      const element: OoxmlElement = { name: 'w:spacing', attributes: { before: '240' } };
+      expect(getOoxmlAttribute(element, 'w:before')).toBe('240');
+    });
+
+    it('gets attribute with prefix when unprefixed key requested', () => {
+      const element: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
+      expect(getOoxmlAttribute(element, 'before')).toBe('240');
+    });
+  });
+
+  describe('parseOoxmlNumber', () => {
+    it('returns undefined for null/undefined', () => {
+      expect(parseOoxmlNumber(null)).toBeUndefined();
+      expect(parseOoxmlNumber(undefined)).toBeUndefined();
+    });
+
+    it('returns number for number input', () => {
+      expect(parseOoxmlNumber(240)).toBe(240);
+      expect(parseOoxmlNumber(0)).toBe(0);
+      expect(parseOoxmlNumber(-100)).toBe(-100);
+    });
+
+    it('parses string to integer', () => {
+      expect(parseOoxmlNumber('240')).toBe(240);
+      expect(parseOoxmlNumber('0')).toBe(0);
+      expect(parseOoxmlNumber('-100')).toBe(-100);
+    });
+
+    it('returns undefined for non-numeric strings', () => {
+      expect(parseOoxmlNumber('abc')).toBeUndefined();
+      expect(parseOoxmlNumber('')).toBeUndefined();
+    });
+
+    it('returns undefined for non-finite results', () => {
+      expect(parseOoxmlNumber(NaN)).toBeUndefined();
+      expect(parseOoxmlNumber(Infinity)).toBeUndefined();
+    });
+  });
+
+  describe('hasOwnProperty', () => {
+    it('returns true for own properties', () => {
+      expect(hasOwnProperty({ a: 1 }, 'a')).toBe(true);
+      expect(hasOwnProperty({ a: undefined }, 'a')).toBe(true);
+    });
+
+    it('returns false for missing properties', () => {
+      expect(hasOwnProperty({ a: 1 }, 'b')).toBe(false);
+    });
+
+    it('returns false for inherited properties', () => {
+      expect(hasOwnProperty({ a: 1 }, 'toString')).toBe(false);
+      expect(hasOwnProperty({ a: 1 }, 'hasOwnProperty')).toBe(false);
+    });
+  });
+});

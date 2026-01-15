@@ -13,6 +13,7 @@
  * - ascent ≈ fontSize * 0.8 (baseline to top)
  * - descent ≈ fontSize * 0.2 (baseline to bottom)
  * - lineHeight = fontSize * 1.15 (Word 2007+ "single" line spacing)
+ * - empty paragraphs use fontSize as the base line height
  *
  * These are documented heuristics; we can swap in precise font metrics later
  * if needed via libraries like opentype.js.
@@ -285,7 +286,6 @@ function measureText(
  * - fontInfo is not provided (empty paragraphs)
  * - Browser doesn't support actualBoundingBox* metrics (legacy browsers)
  */
-const MIN_SINGLE_LINE_PX = (12 * 96) / 72; // 240 twips = 12pt
 
 /**
  * Word 2007+ default line spacing multiplier for "single" line spacing.
@@ -318,7 +318,8 @@ const WORD_SINGLE_LINE_SPACING_MULTIPLIER = 1.15;
  * **Line Height Calculation:**
  * Uses Word 2007+'s default "single" line spacing of fontSize × 1.15 as the base.
  * This base is then modified by paragraph spacing rules (lineRule: auto/exact/atLeast).
- * A minimum of MIN_SINGLE_LINE_PX (16px = 12pt) is enforced to prevent illegible text.
+ * A minimum line height clamp is intentionally NOT enforced to match Word's behavior
+ * for small font sizes and empty paragraphs.
  *
  * The 1.15 multiplier provides consistent spacing that matches Word's behavior and
  * accounts for the line gap that Canvas TextMetrics doesn't expose directly.
@@ -373,7 +374,60 @@ function calculateTypographyMetrics(
   // For 12pt (16px) font: 16 * 1.15 = 18.4px - matches Word exactly.
   // Also clamp to actual glyph bounds (ascent + descent) to prevent overlap/clipping
   // for fonts with unusually tall glyphs that exceed the 1.15 multiplier.
-  const baseLineHeight = Math.max(fontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER, ascent + descent, MIN_SINGLE_LINE_PX);
+  const baseLineHeight = Math.max(fontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER, ascent + descent);
+  const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
+
+  return {
+    ascent,
+    descent,
+    lineHeight,
+  };
+}
+
+/**
+ * Calculates typography metrics for empty paragraphs.
+ *
+ * Empty paragraphs in Word use the font size as the base line height rather than
+ * the standard 1.15x multiplier used for paragraphs with content. This matches
+ * Word's behavior where empty paragraphs appear shorter than their populated counterparts.
+ *
+ * @param fontSize - The font size in pixels
+ * @param spacing - Optional paragraph spacing configuration (may override line height)
+ * @param fontInfo - Optional font information for precise metric calculation
+ * @returns Object containing ascent, descent, and lineHeight in pixels
+ *
+ * @example
+ * ```typescript
+ * // Empty paragraph with 12pt font
+ * calculateEmptyParagraphMetrics(16); // { ascent: 12.8, descent: 3.2, lineHeight: 16 }
+ *
+ * // Compare to regular text which would use 16 * 1.15 = 18.4 for lineHeight
+ * ```
+ */
+function calculateEmptyParagraphMetrics(
+  fontSize: number,
+  spacing?: ParagraphSpacing,
+  fontInfo?: FontInfo,
+): {
+  ascent: number;
+  descent: number;
+  lineHeight: number;
+} {
+  let ascent: number;
+  let descent: number;
+
+  if (fontInfo) {
+    const ctx = getCanvasContext();
+    const metrics = getFontMetrics(ctx, fontInfo, measurementConfig.mode, measurementConfig.fonts);
+    ascent = roundValue(metrics.ascent);
+    descent = roundValue(metrics.descent);
+  } else {
+    ascent = roundValue(fontSize * 0.8);
+    descent = roundValue(fontSize * 0.2);
+  }
+
+  // Word treats empty paragraphs as a single font-sized line unless line spacing is explicitly set.
+  const baseLineHeight = Math.max(fontSize, ascent + descent);
   const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
 
   return {
@@ -430,6 +484,21 @@ function isImageRun(run: Run): run is ImageRun {
 function isLineBreakRun(run: Run): run is LineBreakRun {
   return run.kind === 'lineBreak';
 }
+
+/**
+ * Type guard to check if a run is an empty text run.
+ *
+ * An empty text run is a text run (no kind or kind === 'text') with an empty string.
+ * This is used to identify empty paragraph placeholders that need special handling
+ * for line height calculations.
+ *
+ * @param run - The run to check
+ * @returns True if the run is a text run with empty text
+ */
+const isEmptyTextRun = (run: Run): run is TextRun => {
+  if (run.kind && run.kind !== 'text') return false;
+  return typeof (run as TextRun).text === 'string' && (run as TextRun).text.length === 0;
+};
 
 /**
  * Type guard to check if a run is a field annotation run
@@ -798,8 +867,31 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     }
   }
 
+  const emptyParagraphRun =
+    block.runs.length === 1 && isEmptyTextRun(block.runs[0] as Run) ? (block.runs[0] as TextRun) : null;
+  if (emptyParagraphRun) {
+    const fontSize = emptyParagraphRun.fontSize ?? 12;
+    const metrics = calculateEmptyParagraphMetrics(fontSize, spacing, getFontInfoFromRun(emptyParagraphRun));
+    const emptyLine: Line = {
+      fromRun: 0,
+      fromChar: 0,
+      toRun: 0,
+      toChar: 0,
+      width: 0,
+      ...metrics,
+    };
+    addBarTabsToLine(emptyLine);
+    lines.push(emptyLine);
+
+    return {
+      kind: 'paragraph',
+      lines,
+      totalHeight: metrics.lineHeight,
+    };
+  }
+
   if (block.runs.length === 0) {
-    const metrics = calculateTypographyMetrics(12, spacing);
+    const metrics = calculateEmptyParagraphMetrics(12, spacing);
     const emptyLine: Line = {
       fromRun: 0,
       fromChar: 0,

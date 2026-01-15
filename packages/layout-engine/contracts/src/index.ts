@@ -1168,6 +1168,16 @@ export type ParagraphAttrs = {
   styleId?: string;
   alignment?: 'left' | 'center' | 'right' | 'justify' | 'both';
   spacing?: ParagraphSpacing;
+  /**
+   * Indicates which spacing properties were explicitly set on the paragraph.
+   * Used to preserve Word behavior for empty paragraphs when spacing only comes
+   * from docDefaults or styles.
+   */
+  spacingExplicit?: {
+    before?: boolean;
+    after?: boolean;
+    line?: boolean;
+  };
   contextualSpacing?: boolean;
   indent?: ParagraphIndent;
   /** Word quirk: justified paragraphs ignore first-line indent. Set by pm-adapter. */

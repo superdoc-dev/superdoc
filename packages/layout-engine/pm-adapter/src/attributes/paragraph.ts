@@ -28,7 +28,18 @@ import type {
 } from '@superdoc/word-layout';
 import { computeWordParagraphLayout } from '@superdoc/word-layout';
 import { Engines } from '@superdoc/contracts';
-import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
+import {
+  pickNumber,
+  twipsToPx,
+  isFiniteNumber,
+  ptToPx,
+  asOoxmlElement,
+  findOoxmlChild,
+  getOoxmlAttribute,
+  parseOoxmlNumber,
+  hasOwnProperty,
+  type OoxmlElement,
+} from '../utilities.js';
 import {
   normalizeAlignment,
   normalizeParagraphSpacing,
@@ -74,33 +85,128 @@ export const isValidNumberingId = (numId: number | string | null | undefined): b
   return numId != null && numId !== 0 && numId !== '0';
 };
 
-type OoxmlElement = {
-  name?: string;
-  attributes?: Record<string, unknown>;
-  elements?: OoxmlElement[];
+/**
+ * Tracks which paragraph spacing properties were explicitly set.
+ *
+ * Used to distinguish between explicit spacing values and those inherited
+ * from docDefaults/styles, which affects empty paragraph rendering behavior.
+ */
+type SpacingExplicit = {
+  /** Whether 'before' spacing was explicitly set */
+  before?: boolean;
+  /** Whether 'after' spacing was explicitly set */
+  after?: boolean;
+  /** Whether 'line' spacing was explicitly set */
+  line?: boolean;
 };
 
-const asOoxmlElement = (value: unknown): OoxmlElement | undefined => {
-  if (!value || typeof value !== 'object') return undefined;
-  const element = value as OoxmlElement;
-  if (element.name == null && element.attributes == null && element.elements == null) return undefined;
-  return element;
+/**
+ * Extracts which spacing properties are explicitly set from a plain object.
+ *
+ * Checks for the presence of spacing-related property keys to determine
+ * if spacing values were explicitly specified vs inherited.
+ *
+ * @param value - The spacing object to analyze
+ * @returns Object indicating which spacing properties are explicit
+ *
+ * @example
+ * ```typescript
+ * extractSpacingExplicitFromObject({ before: 240 }); // { before: true }
+ * extractSpacingExplicitFromObject({ line: 360 }); // { line: true }
+ * extractSpacingExplicitFromObject({}); // {}
+ * ```
+ */
+const extractSpacingExplicitFromObject = (value: unknown): SpacingExplicit => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const obj = value as Record<string, unknown>;
+  const explicit: SpacingExplicit = {};
+  if (
+    hasOwnProperty(obj, 'before') ||
+    hasOwnProperty(obj, 'lineSpaceBefore') ||
+    hasOwnProperty(obj, 'beforeAutospacing') ||
+    hasOwnProperty(obj, 'beforeAutoSpacing')
+  ) {
+    explicit.before = true;
+  }
+  if (
+    hasOwnProperty(obj, 'after') ||
+    hasOwnProperty(obj, 'lineSpaceAfter') ||
+    hasOwnProperty(obj, 'afterAutospacing') ||
+    hasOwnProperty(obj, 'afterAutoSpacing')
+  ) {
+    explicit.after = true;
+  }
+  if (hasOwnProperty(obj, 'line') || hasOwnProperty(obj, 'lineRule')) {
+    explicit.line = true;
+  }
+  return explicit;
 };
 
-const findChild = (parent: OoxmlElement | undefined, name: string): OoxmlElement | undefined => {
-  return parent?.elements?.find((child) => child?.name === name);
+/**
+ * Extracts which spacing properties are explicitly set from OOXML paragraph properties.
+ *
+ * Parses the OOXML structure to find w:spacing element attributes and determines
+ * which spacing values were explicitly specified in the document.
+ *
+ * @param value - The OOXML paragraph properties element
+ * @returns Object indicating which spacing properties are explicit
+ *
+ * @example
+ * ```typescript
+ * // For XML: <w:pPr><w:spacing w:before="240"/></w:pPr>
+ * extractSpacingExplicitFromOoxml(pPrElement); // { before: true }
+ * ```
+ */
+const extractSpacingExplicitFromOoxml = (value: unknown): SpacingExplicit => {
+  const element = asOoxmlElement(value);
+  if (!element) return {};
+  const pPr = element.name === 'w:pPr' ? element : findOoxmlChild(element, 'w:pPr');
+  const spacingEl = findOoxmlChild(pPr, 'w:spacing');
+  if (!spacingEl) return {};
+  const explicit: SpacingExplicit = {};
+  if (
+    getOoxmlAttribute(spacingEl, 'w:before') != null ||
+    getOoxmlAttribute(spacingEl, 'w:beforeAutospacing') != null ||
+    getOoxmlAttribute(spacingEl, 'w:beforeAutoSpacing') != null
+  ) {
+    explicit.before = true;
+  }
+  if (
+    getOoxmlAttribute(spacingEl, 'w:after') != null ||
+    getOoxmlAttribute(spacingEl, 'w:afterAutospacing') != null ||
+    getOoxmlAttribute(spacingEl, 'w:afterAutoSpacing') != null
+  ) {
+    explicit.after = true;
+  }
+  if (getOoxmlAttribute(spacingEl, 'w:line') != null || getOoxmlAttribute(spacingEl, 'w:lineRule') != null) {
+    explicit.line = true;
+  }
+  return explicit;
 };
 
-const getAttribute = (element: OoxmlElement | undefined, key: string): unknown => {
-  if (!element?.attributes) return undefined;
-  const attrs = element.attributes as Record<string, unknown>;
-  return attrs[key] ?? attrs[key.startsWith('w:') ? key.slice(2) : `w:${key}`];
-};
-
-const parseNumberAttr = (value: unknown): number | undefined => {
-  if (value == null) return undefined;
-  const num = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
-  return Number.isFinite(num) ? num : undefined;
+/**
+ * Merges multiple SpacingExplicit objects into one.
+ *
+ * If any source has a property set to true, the result will have that property as true.
+ * This allows tracking explicit settings across multiple sources (paragraphProps, attrs, OOXML).
+ *
+ * @param sources - The SpacingExplicit objects to merge
+ * @returns Merged SpacingExplicit with all explicit flags combined
+ *
+ * @example
+ * ```typescript
+ * mergeSpacingExplicit({ before: true }, { after: true });
+ * // { before: true, after: true }
+ * ```
+ */
+const mergeSpacingExplicit = (...sources: SpacingExplicit[]): SpacingExplicit => {
+  const merged: SpacingExplicit = {};
+  for (const source of sources) {
+    if (source.before) merged.before = true;
+    if (source.after) merged.after = true;
+    if (source.line) merged.line = true;
+  }
+  return merged;
 };
 
 /**
@@ -198,13 +304,13 @@ const normalizeJustification = (value?: unknown): WordListJustification | undefi
 };
 
 const extractIndentFromLevel = (lvl: OoxmlElement | undefined): ParagraphIndent | undefined => {
-  const pPr = findChild(lvl, 'w:pPr');
-  const ind = findChild(pPr, 'w:ind');
+  const pPr = findOoxmlChild(lvl, 'w:pPr');
+  const ind = findOoxmlChild(pPr, 'w:ind');
   if (!ind) return undefined;
-  const left = parseNumberAttr(getAttribute(ind, 'w:left'));
-  const right = parseNumberAttr(getAttribute(ind, 'w:right'));
-  const firstLine = parseNumberAttr(getAttribute(ind, 'w:firstLine'));
-  const hanging = parseNumberAttr(getAttribute(ind, 'w:hanging'));
+  const left = parseOoxmlNumber(getOoxmlAttribute(ind, 'w:left'));
+  const right = parseOoxmlNumber(getOoxmlAttribute(ind, 'w:right'));
+  const firstLine = parseOoxmlNumber(getOoxmlAttribute(ind, 'w:firstLine'));
+  const hanging = parseOoxmlNumber(getOoxmlAttribute(ind, 'w:hanging'));
   const indent: ParagraphIndent = {};
   if (left != null) indent.left = left;
   if (right != null) indent.right = right;
@@ -222,39 +328,42 @@ const normalizeColor = (value?: unknown): string | undefined => {
 };
 
 const extractMarkerRun = (lvl: OoxmlElement | undefined): ResolvedRunProperties | undefined => {
-  const rPr = findChild(lvl, 'w:rPr');
+  const rPr = findOoxmlChild(lvl, 'w:rPr');
   if (!rPr) return undefined;
 
   const run: Partial<ResolvedRunProperties> = {};
-  const rFonts = findChild(rPr, 'w:rFonts');
-  const font = getAttribute(rFonts, 'w:ascii') ?? getAttribute(rFonts, 'w:hAnsi') ?? getAttribute(rFonts, 'w:eastAsia');
+  const rFonts = findOoxmlChild(rPr, 'w:rFonts');
+  const font =
+    getOoxmlAttribute(rFonts, 'w:ascii') ??
+    getOoxmlAttribute(rFonts, 'w:hAnsi') ??
+    getOoxmlAttribute(rFonts, 'w:eastAsia');
   if (typeof font === 'string' && font.trim()) {
     run.fontFamily = font;
   }
 
   const sz =
-    parseNumberAttr(getAttribute(findChild(rPr, 'w:sz'), 'w:val')) ??
-    parseNumberAttr(getAttribute(findChild(rPr, 'w:szCs'), 'w:val'));
+    parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:sz'), 'w:val')) ??
+    parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:szCs'), 'w:val'));
   if (sz != null) {
     run.fontSize = sz / 2; // w:sz is in half-points
   }
 
-  const color = normalizeColor(getAttribute(findChild(rPr, 'w:color'), 'w:val'));
+  const color = normalizeColor(getOoxmlAttribute(findOoxmlChild(rPr, 'w:color'), 'w:val'));
   if (color) run.color = color;
 
-  const boldEl = findChild(rPr, 'w:b');
+  const boldEl = findOoxmlChild(rPr, 'w:b');
   if (boldEl) {
-    const boldVal = getAttribute(boldEl, 'w:val');
+    const boldVal = getOoxmlAttribute(boldEl, 'w:val');
     if (boldVal == null || isTruthy(boldVal)) run.bold = true;
   }
 
-  const italicEl = findChild(rPr, 'w:i');
+  const italicEl = findOoxmlChild(rPr, 'w:i');
   if (italicEl) {
-    const italicVal = getAttribute(italicEl, 'w:val');
+    const italicVal = getOoxmlAttribute(italicEl, 'w:val');
     if (italicVal == null || isTruthy(italicVal)) run.italic = true;
   }
 
-  const spacingTwips = parseNumberAttr(getAttribute(findChild(rPr, 'w:spacing'), 'w:val'));
+  const spacingTwips = parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:spacing'), 'w:val'));
   if (spacingTwips != null && Number.isFinite(spacingTwips)) {
     run.letterSpacing = twipsToPx(spacingTwips);
   }
@@ -264,12 +373,12 @@ const extractMarkerRun = (lvl: OoxmlElement | undefined): ResolvedRunProperties 
 
 const findNumFmtElement = (lvl: OoxmlElement | undefined): OoxmlElement | undefined => {
   if (!lvl) return undefined;
-  const direct = findChild(lvl, 'w:numFmt');
+  const direct = findOoxmlChild(lvl, 'w:numFmt');
   if (direct) return direct;
-  const alternate = findChild(lvl, 'mc:AlternateContent');
-  const choice = findChild(alternate, 'mc:Choice');
+  const alternate = findOoxmlChild(lvl, 'mc:AlternateContent');
+  const choice = findOoxmlChild(alternate, 'mc:Choice');
   if (choice) {
-    return findChild(choice, 'w:numFmt');
+    return findOoxmlChild(choice, 'w:numFmt');
   }
   return undefined;
 };
@@ -290,7 +399,7 @@ const resolveNumberingFromContext = (
     return undefined;
   }
 
-  const abstractId = getAttribute(findChild(numDef, 'w:abstractNumId'), 'w:val');
+  const abstractId = getOoxmlAttribute(findOoxmlChild(numDef, 'w:abstractNumId'), 'w:val');
   if (abstractId == null) {
     return undefined;
   }
@@ -301,31 +410,31 @@ const resolveNumberingFromContext = (
   }
 
   let levelDef = abstract.elements?.find(
-    (el) => el?.name === 'w:lvl' && parseNumberAttr(el.attributes?.['w:ilvl']) === ilvl,
+    (el) => el?.name === 'w:lvl' && parseOoxmlNumber(el.attributes?.['w:ilvl']) === ilvl,
   );
 
   const override = numDef.elements?.find(
-    (el) => el?.name === 'w:lvlOverride' && parseNumberAttr(el.attributes?.['w:ilvl']) === ilvl,
+    (el) => el?.name === 'w:lvlOverride' && parseOoxmlNumber(el.attributes?.['w:ilvl']) === ilvl,
   );
-  const overrideLvl = findChild(override, 'w:lvl');
+  const overrideLvl = findOoxmlChild(override, 'w:lvl');
   if (overrideLvl) {
     levelDef = overrideLvl;
   }
-  const startOverride = parseNumberAttr(getAttribute(findChild(override, 'w:startOverride'), 'w:val'));
+  const startOverride = parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(override, 'w:startOverride'), 'w:val'));
 
   if (!levelDef) {
     return undefined;
   }
 
   const numFmtEl = findNumFmtElement(levelDef);
-  const lvlText = getAttribute(findChild(levelDef, 'w:lvlText'), 'w:val') as string | undefined;
-  const start = startOverride ?? parseNumberAttr(getAttribute(findChild(levelDef, 'w:start'), 'w:val'));
-  const suffix = normalizeSuffix(getAttribute(findChild(levelDef, 'w:suff'), 'w:val'));
-  const lvlJc = normalizeJustification(getAttribute(findChild(levelDef, 'w:lvlJc'), 'w:val'));
+  const lvlText = getOoxmlAttribute(findOoxmlChild(levelDef, 'w:lvlText'), 'w:val') as string | undefined;
+  const start = startOverride ?? parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(levelDef, 'w:start'), 'w:val'));
+  const suffix = normalizeSuffix(getOoxmlAttribute(findOoxmlChild(levelDef, 'w:suff'), 'w:val'));
+  const lvlJc = normalizeJustification(getOoxmlAttribute(findOoxmlChild(levelDef, 'w:lvlJc'), 'w:val'));
   const indent = extractIndentFromLevel(levelDef);
   const markerRun = extractMarkerRun(levelDef);
 
-  const numFmt = normalizeNumFmt(getAttribute(numFmtEl, 'w:val'));
+  const numFmt = normalizeNumFmt(getOoxmlAttribute(numFmtEl, 'w:val'));
 
   return {
     format: numFmt,
@@ -460,6 +569,7 @@ export const cloneParagraphAttrs = (attrs?: ParagraphAttrs): ParagraphAttrs | un
   if (!attrs) return undefined;
   const clone: ParagraphAttrs = { ...attrs };
   if (attrs.spacing) clone.spacing = { ...attrs.spacing };
+  if (attrs.spacingExplicit) clone.spacingExplicit = { ...attrs.spacingExplicit };
   if (attrs.indent) clone.indent = { ...attrs.indent };
   if (attrs.borders) {
     const borderClone: ParagraphAttrs['borders'] = {};
@@ -1047,6 +1157,11 @@ export const computeParagraphAttrs = (
   // defaults for unspecified fields (e.g., before/after from docDefaults).
   const mergedSpacing = mergeSpacingSources(hydrated?.spacing, paragraphProps.spacing, attrs.spacing);
   const normalizedSpacing = normalizeParagraphSpacing(mergedSpacing);
+  const spacingExplicit = mergeSpacingExplicit(
+    extractSpacingExplicitFromObject(paragraphProps.spacing),
+    extractSpacingExplicitFromObject(attrs.spacing),
+    extractSpacingExplicitFromOoxml(paragraphProps),
+  );
   const normalizeIndentObject = (value: unknown): ParagraphIndent | undefined => {
     if (!value || typeof value !== 'object') return;
     return normalizePxIndent(value) ?? convertIndentTwipsToPx(value);
@@ -1296,6 +1411,7 @@ export const computeParagraphAttrs = (
       (paragraphAttrs.spacing as Record<string, unknown>).afterAutospacing = normalizedSpacing.afterAutospacing;
     }
   }
+  paragraphAttrs.spacingExplicit = spacingExplicit;
   /**
    * Extract contextualSpacing from multiple sources with fallback chain.
    *

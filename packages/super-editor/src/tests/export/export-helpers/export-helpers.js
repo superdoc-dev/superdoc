@@ -100,6 +100,7 @@ export const getExportedResult = async (name, comments = []) => {
     isFinalDoc: false,
     pageStyles: editor.converter.pageStyles,
     comments,
+    commentsExportType: 'external',
     exportedComments: [],
     exportedCommentDefs: commentDefinitions,
     editor,

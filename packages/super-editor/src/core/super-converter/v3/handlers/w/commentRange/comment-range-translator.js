@@ -28,8 +28,11 @@ const decode = (params) => {
 
   const commentNodeId = node.attrs['w:id'];
 
+  // Use String() for consistent comparison since commentNodeId comes from XML (string)
+  // while commentId/importedId may be UUID strings or numeric IDs
+  const nodeIdStr = String(commentNodeId);
   const originalComment = comments.find((comment) => {
-    return comment.commentId == commentNodeId;
+    return String(comment.commentId) === nodeIdStr || String(comment.importedId) === nodeIdStr;
   });
   if (!originalComment) return;
 

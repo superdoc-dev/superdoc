@@ -357,3 +357,106 @@ describe('Resolved comments round-trip', () => {
     }
   });
 });
+
+describe('Nested comments export', () => {
+  const filename = 'nested-comments.docx';
+  let docx;
+  let media;
+  let mediaFiles;
+  let fonts;
+
+  beforeAll(async () => {
+    ({ docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(filename));
+  });
+
+  /**
+   * Find all commentRangeStart and commentRangeEnd elements in order of appearance.
+   * Returns array of { type: 'start'|'end', id: string } in document order.
+   */
+  const findCommentRangeEventsInOrder = (documentXml) => {
+    const events = [];
+
+    const traverse = (elements) => {
+      if (!Array.isArray(elements)) return;
+      for (const el of elements) {
+        if (el.name === 'w:commentRangeStart') {
+          events.push({ type: 'start', id: el.attributes?.['w:id'] });
+        }
+        if (el.name === 'w:commentRangeEnd') {
+          events.push({ type: 'end', id: el.attributes?.['w:id'] });
+        }
+        if (el.elements) traverse(el.elements);
+      }
+    };
+
+    traverse(documentXml?.elements || []);
+    return events;
+  };
+
+  it('exports nested comment ranges with correct structure (outer wraps inner)', async () => {
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      // Verify we have multiple comments (nested structure)
+      expect(editor.converter.comments.length).toBeGreaterThanOrEqual(2);
+
+      // Export without explicitly passing comments - should use converter.comments
+      await editor.exportDocx({
+        commentsType: 'external',
+      });
+
+      const exportedXml = editor.converter.convertedXml;
+      const documentXml = exportedXml['word/document.xml'];
+
+      // Get comment range events in document order
+      const events = findCommentRangeEventsInOrder(documentXml);
+
+      // Verify we have start and end events for all comments
+      const starts = events.filter((e) => e.type === 'start');
+      const ends = events.filter((e) => e.type === 'end');
+      expect(starts.length).toBeGreaterThanOrEqual(2);
+      expect(ends.length).toBe(starts.length);
+
+      // For proper nesting, if comment A starts before comment B,
+      // then comment B must end before comment A (stack-like behavior).
+      // This means: starts[0].id should equal ends[ends.length - 1].id
+      // (the first to start should be the last to end)
+      const firstStartId = starts[0].id;
+      const lastEndId = ends[ends.length - 1].id;
+      expect(firstStartId).toBe(lastEndId);
+
+      // Verify all IDs have both start and end
+      const startIds = new Set(starts.map((e) => e.id));
+      const endIds = new Set(ends.map((e) => e.id));
+      expect(startIds).toEqual(endIds);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('preserves nested comments through round-trip without explicit comments array', async () => {
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      const originalCommentCount = editor.converter.comments.length;
+
+      // Export without passing comments - relies on fallback to converter.comments
+      await editor.exportDocx({
+        commentsType: 'external',
+      });
+
+      const exportedXml = carbonCopy(editor.converter.convertedXml);
+
+      // Verify comments.xml has all comments
+      const commentsXml = exportedXml['word/comments.xml'];
+      const exportedComments = commentsXml?.elements?.[0]?.elements ?? [];
+      expect(exportedComments.length).toBe(originalCommentCount);
+
+      // Re-import and verify comments are preserved
+      const reimportedComments = importCommentData({ docx: exportedXml }) ?? [];
+      expect(reimportedComments.length).toBe(originalCommentCount);
+    } finally {
+      editor.destroy();
+    }
+  });
+});

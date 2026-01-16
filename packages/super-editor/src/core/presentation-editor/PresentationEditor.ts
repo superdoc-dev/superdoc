@@ -1046,6 +1046,7 @@ export class PresentationEditor extends EventEmitter {
     const modeChanged = this.#documentMode !== mode;
     this.#documentMode = mode;
     this.#editor.setDocumentMode(mode);
+    this.#headerFooterSession?.setDocumentMode(mode);
     this.#syncDocumentModeClass();
     this.#syncHiddenEditorA11yAttributes();
     const trackedChangesChanged = this.#syncTrackedChangesPreferences();

@@ -246,7 +246,14 @@ export const TrackChanges = Extension.create({
       insertTrackedChange:
         (options = {}) =>
         ({ state, dispatch, editor }) => {
-          const { from = state.selection.from, to = state.selection.to, text = '', user, comment } = options;
+          const {
+            from = state.selection.from,
+            to = state.selection.to,
+            text = '',
+            user,
+            comment,
+            addToHistory = true,
+          } = options;
 
           // Validate bounds to prevent RangeError
           const docSize = state.doc.content.size;
@@ -346,6 +353,10 @@ export const TrackChanges = Extension.create({
           });
           tr.setMeta(CommentsPluginKey, { type: 'force' });
           tr.setMeta('skipTrackChanges', true);
+
+          if (!addToHistory) {
+            tr.setMeta('addToHistory', false);
+          }
 
           dispatch(tr);
 

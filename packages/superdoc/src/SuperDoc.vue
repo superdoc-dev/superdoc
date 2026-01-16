@@ -225,6 +225,8 @@ const onEditorReady = ({ editor, presentationEditor }) => {
 
   // Subscribe to layout pipeline telemetry
   presentationEditor.onTelemetry((telemetryPayload) => {
+    // guard against null ref
+    if (!proxy.$superdoc) return;
     proxy.$superdoc.captureLayoutPipelineEvent(telemetryPayload);
   });
 

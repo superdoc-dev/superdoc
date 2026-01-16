@@ -6,7 +6,6 @@ import { nextTick, onMounted, onBeforeUnmount, provide, ref, shallowRef, compute
 import { SuperDoc } from '@superdoc/index.js';
 import { DOCX, PDF, HTML } from '@superdoc/common';
 import { getFileObject } from '@superdoc/common';
-import { createPdfPainter } from '@superdoc/painter-pdf';
 import BasicUpload from '@superdoc/common/components/BasicUpload.vue';
 import SuperdocLogo from './superdoc-logo.webp?url';
 import { fieldAnnotationHelpers } from '@superdoc/super-editor';
@@ -425,47 +424,6 @@ const getActiveDocumentEntry = () => {
   return documents[0] ?? null;
 };
 
-const exportPdf = async () => {
-  if (!useLayoutEngine.value) return;
-  console.debug('Exporting PDF with layout-engine painter');
-  const docEntry = getActiveDocumentEntry();
-  if (!docEntry) {
-    console.warn('[superdoc-dev] No active document available for PDF export');
-    return;
-  }
-
-  const presentationEditor = docEntry.getPresentationEditor?.();
-  if (!presentationEditor || typeof presentationEditor.getLayoutSnapshot !== 'function') {
-    console.warn('[superdoc-dev] PresentationEditor is not ready for PDF export');
-    return;
-  }
-
-  const snapshot = presentationEditor.getLayoutSnapshot();
-  const layout = snapshot?.layout;
-  const { blocks, measures } = snapshot ?? {};
-  if (!layout || !Array.isArray(blocks) || !Array.isArray(measures) || !blocks.length || !measures.length) {
-    console.warn('[superdoc-dev] Layout snapshot is unavailable for PDF export');
-    return;
-  }
-
-  if (blocks.length !== measures.length) {
-    console.warn('[superdoc-dev] Layout snapshot is out of sync (blocks/measures mismatch)');
-    return;
-  }
-
-  try {
-    const painter = createPdfPainter({
-      blocks,
-      measures,
-    });
-    const pdfBlob = await painter.render(layout);
-    downloadBlob(pdfBlob, `${title.value || 'document'}.pdf`);
-    console.debug('PDF export completed');
-  } catch (error) {
-    console.error('[superdoc-dev] Failed to export PDF', error);
-  }
-};
-
 const onEditorCreate = ({ editor }) => {
   activeEditor.value = editor;
   window.editor = editor;
@@ -679,16 +637,6 @@ if (scrollTestMode.value) {
                   "
                 >
                   Export Docx Blob
-                </button>
-                <button
-                  class="dev-app__dropdown-item"
-                  v-if="useLayoutEngine"
-                  @click="
-                    exportPdf();
-                    closeExportMenu();
-                  "
-                >
-                  Export PDF
                 </button>
               </div>
             </div>

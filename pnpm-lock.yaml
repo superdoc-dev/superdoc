@@ -597,19 +597,6 @@ importers:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0)(postcss@8.5.6))(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/layout-engine/painters/pdf:
-    dependencies:
-      '@superdoc/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      '@superdoc/font-utils':
-        specifier: workspace:*
-        version: link:../../../../shared/font-utils
-    devDependencies:
-      vitest:
-        specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0)(postcss@8.5.6))(tsx@4.21.0)(yaml@2.8.2)
-
   packages/layout-engine/pm-adapter:
     dependencies:
       '@superdoc/common':
@@ -898,9 +885,6 @@ importers:
       '@superdoc/common':
         specifier: workspace:*
         version: link:../../shared/common
-      '@superdoc/painter-pdf':
-        specifier: workspace:*
-        version: link:../layout-engine/painters/pdf
       '@superdoc/super-editor':
         specifier: workspace:*
         version: link:../super-editor

@@ -75,7 +75,6 @@
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",
     "@superdoc/common": "workspace:*",
-    "@superdoc/painter-pdf": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",

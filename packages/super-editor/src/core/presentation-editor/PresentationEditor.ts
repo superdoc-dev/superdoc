@@ -61,10 +61,9 @@ import {
   createExternalFieldAnnotationDropHandler,
   setupInternalFieldAnnotationDragHandlers,
 } from './input/FieldAnnotationDragDrop.js';
-import { initHeaderFooterRegistry as initHeaderFooterRegistryFromHelper } from '../header-footer/HeaderFooterRegistryInit.js';
+import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
-import { layoutPerRIdHeaderFooters as layoutPerRIdHeaderFootersFromHelper } from '../header-footer/HeaderFooterPerRidLayout.js';
 import { toFlowBlocks, ConverterContext } from '@superdoc/pm-adapter';
 import {
   incrementalLayout,
@@ -107,12 +106,7 @@ import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/ind
 // Collaboration cursor imports
 import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
-import {
-  HeaderFooterEditorManager,
-  HeaderFooterLayoutAdapter,
-  type HeaderFooterDescriptor,
-} from '../header-footer/HeaderFooterRegistry.js';
-import { EditorOverlayManager } from '../header-footer/EditorOverlayManager.js';
+import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 
 // Types
@@ -297,30 +291,14 @@ export class PresentationEditor extends EventEmitter {
   #trackedChangesMode: TrackedChangesMode = 'review';
   #trackedChangesEnabled = true;
   #trackedChangesOverrides: TrackedChangesOverrides | undefined;
-  #headerFooterManager: HeaderFooterEditorManager | null = null;
-  #headerFooterAdapter: HeaderFooterLayoutAdapter | null = null;
-  #headerFooterIdentifier: HeaderFooterIdentifier | null = null;
-  #multiSectionIdentifier: MultiSectionHeaderFooterIdentifier | null = null;
-  #headerLayoutResults: HeaderFooterLayoutResult[] | null = null;
-  #footerLayoutResults: HeaderFooterLayoutResult[] | null = null;
-  // Per-rId layout results for multi-section support
-  #headerLayoutsByRId: Map<string, HeaderFooterLayoutResult> = new Map();
-  #footerLayoutsByRId: Map<string, HeaderFooterLayoutResult> = new Map();
-  #headerDecorationProvider: PageDecorationProvider | undefined;
-  #footerDecorationProvider: PageDecorationProvider | undefined;
-  #headerFooterManagerCleanups: Array<() => void> = [];
-  #headerRegions: Map<number, HeaderFooterRegion> = new Map();
-  #footerRegions: Map<number, HeaderFooterRegion> = new Map();
-  #session: HeaderFooterSession = { mode: 'body' };
-  #activeHeaderFooterEditor: Editor | null = null;
-  #overlayManager: EditorOverlayManager | null = null;
+  // Header/footer session management
+  #headerFooterSession: HeaderFooterSessionManager | null = null;
   #hoverOverlay: HTMLElement | null = null;
   #hoverTooltip: HTMLElement | null = null;
   #modeBanner: HTMLElement | null = null;
   #ariaLiveRegion: HTMLElement | null = null;
   #a11ySelectionAnnounceTimeout: number | null = null;
   #a11yLastAnnouncedSelectionKey: string | null = null;
-  #hoverRegion: HeaderFooterRegion | null = null;
   #clickCount = 0;
   #lastClickTime = 0;
   #lastClickPosition: { x: number; y: number } = { x: 0, y: 0 };
@@ -536,6 +514,24 @@ export class PresentationEditor extends EventEmitter {
     });
     this.#visibleHost.appendChild(this.#modeBanner);
 
+    // Initialize header/footer session manager
+    this.#headerFooterSession = new HeaderFooterSessionManager({
+      painterHost: this.#painterHost,
+      visibleHost: this.#visibleHost,
+      selectionOverlay: this.#selectionOverlay,
+      editor: null as unknown as Editor, // Set after editor is created
+      isDebug: this.#options.isDebug,
+      initBudgetMs: HEADER_FOOTER_INIT_BUDGET_MS,
+      defaultPageSize: DEFAULT_PAGE_SIZE,
+      defaultMargins: DEFAULT_MARGINS,
+    });
+    this.#headerFooterSession.setHoverElements({
+      hoverOverlay: this.#hoverOverlay,
+      hoverTooltip: this.#hoverTooltip,
+      modeBanner: this.#modeBanner,
+    });
+    this.#headerFooterSession.setDocumentMode(this.#documentMode);
+
     this.#ariaLiveRegion = doc.createElement('div');
     this.#ariaLiveRegion.className = 'presentation-editor__aria-live';
     this.#ariaLiveRegion.setAttribute('role', 'status');
@@ -584,7 +580,7 @@ export class PresentationEditor extends EventEmitter {
         this.setContextMenuDisabled(this.#options.disableContextMenu);
       }
 
-      this.#initHeaderFooterRegistry();
+      this.#setupHeaderFooterSession();
       this.#applyZoom();
       this.#setupEditorListeners();
       this.#setupPointerHandlers();
@@ -886,10 +882,12 @@ export class PresentationEditor extends EventEmitter {
    * ```
    */
   getActiveEditor(): Editor {
-    if (this.#session.mode === 'body' || !this.#activeHeaderFooterEditor) {
+    const session = this.#headerFooterSession?.session;
+    const activeHfEditor = this.#headerFooterSession?.activeEditor;
+    if (!session || session.mode === 'body' || !activeHfEditor) {
       return this.#editor;
     }
-    return this.#activeHeaderFooterEditor;
+    return activeHfEditor;
   }
 
   /**
@@ -1256,8 +1254,9 @@ export class PresentationEditor extends EventEmitter {
     const scrollTop = this.#visibleHost.scrollTop ?? 0;
 
     let usedDomRects = false;
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
     const layoutRectSource = () => {
-      if (this.#session.mode !== 'body') {
+      if (sessionMode !== 'body') {
         return this.#computeHeaderFooterSelectionRects(start, end);
       }
       const domRects = this.#computeSelectionRectsFromDom(start, end);
@@ -1307,7 +1306,7 @@ export class PresentationEditor extends EventEmitter {
     // Fix Issue #1: Get actual header/footer page height instead of hardcoded 1
     // When in header/footer mode, we need to use the real page height from the layout context
     // to correctly map coordinates for selection highlighting
-    const pageHeight = this.#session.mode === 'body' ? this.#getBodyPageHeight() : this.#getHeaderFooterPageHeight();
+    const pageHeight = sessionMode === 'body' ? this.#getBodyPageHeight() : this.#getHeaderFooterPageHeight();
     const pageGap = this.#layoutState.layout?.pageGap ?? 0;
     const finalRects = rawRects
       .map((rect: LayoutRect, idx: number, allRects: LayoutRect[]) => {
@@ -1609,7 +1608,8 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    if (this.#session.mode !== 'body') {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
       const context = this.#getHeaderFooterContext();
       if (!context) {
         return null;
@@ -1869,7 +1869,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // In header/footer mode, use header/footer layout coordinates
-    if (this.#session.mode !== 'body') {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
       const context = this.#getHeaderFooterContext();
       if (!context) {
         console.warn('[PresentationEditor] Header/footer context not available for coordsAtPos');
@@ -1938,7 +1939,8 @@ export class PresentationEditor extends EventEmitter {
   ): HTMLElement | null {
     if (!Number.isFinite(pos)) return null;
     if (!this.#painterHost) return null;
-    if (this.#session.mode !== 'body') return null;
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') return null;
 
     if (options.forceRebuild || this.#domPositionIndex.size === 0) {
       this.#rebuildDomPositionIndex();
@@ -1992,8 +1994,9 @@ export class PresentationEditor extends EventEmitter {
     // Use a DOM marker + scrollIntoView so the browser finds the correct scroll container
     // (window, parent overflow container, etc.) without us guessing.
     const layout = this.#layoutState.layout;
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
 
-    if (layout && this.#session.mode === 'body') {
+    if (layout && sessionMode === 'body') {
       let pageIndex: number | null = null;
       for (let idx = 0; idx < layout.pages.length; idx++) {
         const page = layout.pages[idx];
@@ -2197,26 +2200,11 @@ export class PresentationEditor extends EventEmitter {
       PresentationEditor.#instances.delete(this.#options.documentId);
     }
 
-    this.#headerFooterManagerCleanups.forEach((fn) => safeCleanup(fn, 'Header/footer'));
-    this.#headerFooterManagerCleanups = [];
+    // Clean up header/footer session manager
     safeCleanup(() => {
-      this.#headerFooterAdapter?.clear();
-      this.#headerFooterAdapter = null;
-    }, 'Header/footer adapter');
-    safeCleanup(() => {
-      this.#headerFooterManager?.destroy();
-      this.#headerFooterManager = null;
-    }, 'Header/footer manager');
-    this.#headerFooterIdentifier = null;
-    this.#multiSectionIdentifier = null;
-    this.#headerLayoutResults = null;
-    this.#footerLayoutResults = null;
-    this.#headerLayoutsByRId.clear();
-    this.#footerLayoutsByRId.clear();
-    this.#headerDecorationProvider = undefined;
-    this.#footerDecorationProvider = undefined;
-    this.#session = { mode: 'body' };
-    this.#activeHeaderFooterEditor = null;
+      this.#headerFooterSession?.destroy();
+      this.#headerFooterSession = null;
+    }, 'Header/footer session manager');
 
     this.#domPainter = null;
     this.#pageGeometryHelper = null;
@@ -2329,8 +2317,8 @@ export class PresentationEditor extends EventEmitter {
       sectionId: string;
       content: unknown;
     }) => {
-      this.#headerFooterAdapter?.invalidate(payload.sectionId);
-      this.#headerFooterManager?.refresh();
+      this.#headerFooterSession?.adapter?.invalidate(payload.sectionId);
+      this.#headerFooterSession?.manager?.refresh();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     };
@@ -2516,46 +2504,68 @@ export class PresentationEditor extends EventEmitter {
     this.#inputBridge.bind();
   }
 
-  #initHeaderFooterRegistry() {
-    const optionsMedia = (this.#options as { mediaFiles?: Record<string, unknown> })?.mediaFiles;
-    const storageMedia = (this.#editor as Editor & { storage?: { image?: { media?: Record<string, unknown> } } })
-      .storage?.image?.media;
-    const converter = (this.#editor as Editor & { converter?: unknown }).converter;
-    const mediaFiles = optionsMedia ?? storageMedia;
+  /**
+   * Set up the header/footer session manager with dependencies and callbacks.
+   */
+  #setupHeaderFooterSession() {
+    if (!this.#headerFooterSession) return;
 
-    const result = initHeaderFooterRegistryFromHelper({
-      painterHost: this.#painterHost,
-      visibleHost: this.#visibleHost,
-      selectionOverlay: this.#selectionOverlay,
-      editor: this.#editor,
-      converter,
-      mediaFiles,
-      isDebug: Boolean(this.#options.isDebug),
-      initBudgetMs: HEADER_FOOTER_INIT_BUDGET_MS,
-      resetSession: () => {
-        this.#headerFooterManagerCleanups = [];
-        this.#session = { mode: 'body' };
-        this.#activeHeaderFooterEditor = null;
-        this.#inputBridge?.notifyTargetChanged();
-      },
-      requestRerender: () => {
+    // Update the editor reference (was set to null during construction)
+    this.#headerFooterSession.setEditor(this.#editor);
+
+    // Set up dependencies
+    this.#headerFooterSession.setDependencies({
+      getLayoutOptions: () => this.#layoutOptions,
+      getPageElement: (pageIndex) => this.#getPageElement(pageIndex),
+      scrollPageIntoView: (pageIndex) => this.#scrollPageIntoView(pageIndex),
+      waitForPageMount: (pageIndex, options) => this.#waitForPageMount(pageIndex, options),
+      convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
+      isViewLocked: () => this.#isViewLocked(),
+      getBodyPageHeight: () => this.#getBodyPageHeight(),
+      notifyInputBridgeTargetChanged: () => this.#inputBridge?.notifyTargetChanged(),
+      scheduleRerender: () => this.#scheduleRerender(),
+      setPendingDocChange: () => {
         this.#pendingDocChange = true;
-        this.#scheduleRerender();
       },
-      exitHeaderFooterMode: () => {
-        this.#exitHeaderFooterMode();
-      },
-      previousCleanups: this.#headerFooterManagerCleanups,
-      previousAdapter: this.#headerFooterAdapter,
-      previousManager: this.#headerFooterManager,
-      previousOverlayManager: this.#overlayManager,
     });
 
-    this.#overlayManager = result.overlayManager;
-    this.#headerFooterIdentifier = result.headerFooterIdentifier;
-    this.#headerFooterManager = result.headerFooterManager;
-    this.#headerFooterAdapter = result.headerFooterAdapter;
-    this.#headerFooterManagerCleanups = result.cleanups;
+    // Set up callbacks
+    this.#headerFooterSession.setCallbacks({
+      onModeChanged: (session) => {
+        this.emit('headerFooterModeChanged', {
+          mode: session.mode,
+          kind: session.kind,
+          headerId: session.headerId,
+          sectionType: session.sectionType,
+          pageIndex: session.pageIndex,
+          pageNumber: session.pageNumber,
+        });
+        this.#updateAwarenessSession();
+      },
+      onEditingContext: (data) => {
+        this.emit('headerFooterEditingContext', data);
+        this.#announce(
+          data.kind === 'body'
+            ? 'Exited header/footer edit mode.'
+            : `Editing ${data.kind === 'header' ? 'Header' : 'Footer'} (${data.sectionType ?? 'default'})`,
+        );
+      },
+      onEditBlocked: (reason) => {
+        this.emit('headerFooterEditBlocked', { reason });
+      },
+      onError: (data) => {
+        this.emit('error', data);
+      },
+      onAnnounce: (message) => {
+        this.#announce(message);
+      },
+      onUpdateAwarenessSession: () => {
+        this.#updateAwarenessSession();
+      },
+    });
+
+    // Initialize the registry
+    this.#headerFooterSession.initialize();
   }
 
   #handlePointerDown = (event: PointerEvent) => {
@@ -2695,9 +2705,10 @@ export class PresentationEditor extends EventEmitter {
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
     // Exit header/footer mode if clicking outside the current region
-    if (this.#session.mode !== 'body') {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
       // Check if click is inside the active editor host element (more reliable than coordinate hit testing)
-      const activeEditorHost = this.#overlayManager?.getActiveEditorHost?.();
+      const activeEditorHost = this.#headerFooterSession?.overlayManager?.getActiveEditorHost?.();
       const clickedInsideEditorHost =
         activeEditorHost && (activeEditorHost.contains(event.target as Node) || activeEditorHost === event.target);
 
@@ -3026,7 +3037,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     let handledByDepth = false;
-    if (this.#session.mode === 'body') {
+    const sessionModeForDepth = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionModeForDepth === 'body') {
       // For double/triple clicks, use the stored dragAnchor from the first click
       // to avoid position drift from slight mouse movement between clicks
       const selectionPos = clickDepth >= 2 && this.#dragAnchor !== null ? this.#dragAnchor : hit.pos;
@@ -3557,7 +3569,8 @@ export class PresentationEditor extends EventEmitter {
       return; // Skip header/footer hover logic during drag
     }
 
-    if (this.#session.mode !== 'body') {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
       this.#clearHoverRegion();
       return;
     }
@@ -3570,15 +3583,16 @@ export class PresentationEditor extends EventEmitter {
       this.#clearHoverRegion();
       return;
     }
+    const currentHover = this.#headerFooterSession?.hoverRegion;
     if (
-      this.#hoverRegion &&
-      this.#hoverRegion.kind === region.kind &&
-      this.#hoverRegion.pageIndex === region.pageIndex &&
-      this.#hoverRegion.sectionType === region.sectionType
+      currentHover &&
+      currentHover.kind === region.kind &&
+      currentHover.pageIndex === region.pageIndex &&
+      currentHover.sectionType === region.sectionType
     ) {
       return;
     }
-    this.#hoverRegion = region;
+    this.#headerFooterSession?.renderHover(region);
     this.#renderHoverRegion(region);
   };
 
@@ -3685,7 +3699,8 @@ export class PresentationEditor extends EventEmitter {
       this.#dragUsedPageNotMountedFallback = false;
       return;
     }
-    if (this.#session.mode !== 'body' || this.#isViewLocked()) {
+    const sessionModeForDrag = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionModeForDrag !== 'body' || this.#isViewLocked()) {
       this.#dragLastPointer = null;
       this.#dragLastRawHit = null;
       this.#dragUsedPageNotMountedFallback = false;
@@ -3827,21 +3842,23 @@ export class PresentationEditor extends EventEmitter {
 
       // Check if header/footer exists, create if not
       const descriptor = this.#resolveDescriptorForRegion(region);
-      if (!descriptor && this.#headerFooterManager) {
+      const hfManager = this.#headerFooterSession?.manager;
+      if (!descriptor && hfManager) {
         // No header/footer exists - create a default one
         this.#createDefaultHeaderFooter(region);
         // Refresh the manager to pick up the new descriptor
-        this.#headerFooterManager.refresh();
+        hfManager.refresh();
       }
 
       this.#activateHeaderFooterRegion(region);
-    } else if (this.#session.mode !== 'body') {
+    } else if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
       this.#exitHeaderFooterMode();
     }
   };
 
   #handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape' && this.#session.mode !== 'body') {
+    const sessionModeForKey = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (event.key === 'Escape' && sessionModeForKey !== 'body') {
       event.preventDefault();
       this.#exitHeaderFooterMode();
       return;
@@ -4048,14 +4065,19 @@ export class PresentationEditor extends EventEmitter {
       // Build multi-section identifier from section metadata for section-aware header/footer selection
       // Pass converter's headerIds/footerIds as fallbacks for dynamically created headers/footers
       const converter = (this.#editor as EditorWithConverter).converter;
-      this.#multiSectionIdentifier = buildMultiSectionIdentifier(sectionMetadata, converter?.pageStyles, {
+      const multiSectionId = buildMultiSectionIdentifier(sectionMetadata, converter?.pageStyles, {
         headerIds: converter?.headerIds,
         footerIds: converter?.footerIds,
       });
+      if (this.#headerFooterSession) {
+        this.#headerFooterSession.multiSectionIdentifier = multiSectionId;
+      }
       const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocks);
       this.#layoutState = { blocks, measures, layout, bookmarks, anchorMap };
-      this.#headerLayoutResults = headerLayouts ?? null;
-      this.#footerLayoutResults = footerLayouts ?? null;
+      if (this.#headerFooterSession) {
+        this.#headerFooterSession.headerLayoutResults = headerLayouts ?? null;
+        this.#headerFooterSession.footerLayoutResults = footerLayouts ?? null;
+      }
 
       // Initialize or update PageGeometryHelper when layout changes
       if (this.#layoutState.layout) {
@@ -4077,7 +4099,10 @@ export class PresentationEditor extends EventEmitter {
 
       const painter = this.#ensurePainter(blocks, measures);
       if (typeof painter.setProviders === 'function') {
-        painter.setProviders(this.#headerDecorationProvider, this.#footerDecorationProvider);
+        painter.setProviders(
+          this.#headerFooterSession?.headerDecorationProvider,
+          this.#headerFooterSession?.footerDecorationProvider,
+        );
       }
 
       // Extract header/footer blocks and measures from layout results
@@ -4090,9 +4115,12 @@ export class PresentationEditor extends EventEmitter {
         }
       }
       // Also include per-rId header blocks for multi-section support
-      for (const rIdResult of this.#headerLayoutsByRId.values()) {
-        headerBlocks.push(...rIdResult.blocks);
-        headerMeasures.push(...rIdResult.measures);
+      const headerLayoutsByRId = this.#headerFooterSession?.headerLayoutsByRId;
+      if (headerLayoutsByRId) {
+        for (const rIdResult of headerLayoutsByRId.values()) {
+          headerBlocks.push(...rIdResult.blocks);
+          headerMeasures.push(...rIdResult.measures);
+        }
       }
 
       const footerBlocks: FlowBlock[] = [];
@@ -4104,9 +4132,12 @@ export class PresentationEditor extends EventEmitter {
         }
       }
       // Also include per-rId footer blocks for multi-section support
-      for (const rIdResult of this.#footerLayoutsByRId.values()) {
-        footerBlocks.push(...rIdResult.blocks);
-        footerMeasures.push(...rIdResult.measures);
+      const footerLayoutsByRId = this.#headerFooterSession?.footerLayoutsByRId;
+      if (footerLayoutsByRId) {
+        for (const rIdResult of footerLayoutsByRId.values()) {
+          footerBlocks.push(...rIdResult.blocks);
+          footerMeasures.push(...rIdResult.measures);
+        }
       }
 
       // Merge any extra lookup blocks (e.g., footnotes injected into page fragments)
@@ -4194,8 +4225,8 @@ export class PresentationEditor extends EventEmitter {
         layoutMode: this.#layoutOptions.layoutMode ?? 'vertical',
         virtualization: this.#layoutOptions.virtualization,
         pageStyles: this.#layoutOptions.pageStyles,
-        headerProvider: this.#headerDecorationProvider,
-        footerProvider: this.#footerDecorationProvider,
+        headerProvider: this.#headerFooterSession?.headerDecorationProvider,
+        footerProvider: this.#headerFooterSession?.footerDecorationProvider,
         ruler: this.#layoutOptions.ruler,
         pageGap: this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap(),
       });
@@ -4316,7 +4347,8 @@ export class PresentationEditor extends EventEmitter {
    */
   #updateSelection() {
     // In header/footer mode, the ProseMirror editor handles its own caret
-    if (this.#session.mode !== 'body') {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
       return;
     }
 
@@ -4442,7 +4474,8 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    if (this.#session.mode !== 'body') {
+    const sessionModeForPerm = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionModeForPerm !== 'body') {
       overlay.innerHTML = '';
       return;
     }
@@ -4711,14 +4744,15 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #buildHeaderFooterInput() {
-    if (!this.#headerFooterAdapter) {
+    const adapter = this.#headerFooterSession?.adapter;
+    if (!adapter) {
       return null;
     }
-    const headerBlocks = this.#headerFooterAdapter.getBatch('header');
-    const footerBlocks = this.#headerFooterAdapter.getBatch('footer');
+    const headerBlocks = adapter.getBatch('header');
+    const footerBlocks = adapter.getBatch('footer');
     // Also get all blocks by rId for multi-section support
-    const headerBlocksByRId = this.#headerFooterAdapter.getBlocksByRId('header');
-    const footerBlocksByRId = this.#headerFooterAdapter.getBlocksByRId('footer');
+    const headerBlocksByRId = adapter.getBlocksByRId('header');
+    const footerBlocksByRId = adapter.getBlocksByRId('footer');
     if (!headerBlocks && !footerBlocks && !headerBlocksByRId && !footerBlocksByRId) {
       return null;
     }
@@ -4851,16 +4885,17 @@ export class PresentationEditor extends EventEmitter {
     layout: Layout,
     sectionMetadata: SectionMetadata[],
   ): Promise<void> {
-    return await layoutPerRIdHeaderFootersFromHelper(headerFooterInput, layout, sectionMetadata, {
-      headerLayoutsByRId: this.#headerLayoutsByRId,
-      footerLayoutsByRId: this.#footerLayoutsByRId,
-    });
+    if (this.#headerFooterSession) {
+      await this.#headerFooterSession.layoutPerRId(headerFooterInput, layout, sectionMetadata);
+    }
   }
 
   #updateDecorationProviders(layout: Layout) {
-    this.#headerDecorationProvider = this.#createDecorationProvider('header', layout);
-    this.#footerDecorationProvider = this.#createDecorationProvider('footer', layout);
-    this.#rebuildHeaderFooterRegions(layout);
+    if (this.#headerFooterSession) {
+      this.#headerFooterSession.headerDecorationProvider = this.#createDecorationProvider('header', layout);
+      this.#headerFooterSession.footerDecorationProvider = this.#createDecorationProvider('footer', layout);
+      this.#headerFooterSession.rebuildRegions(layout);
+    }
   }
 
   /**
@@ -4917,16 +4952,20 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #createDecorationProvider(kind: 'header' | 'footer', layout: Layout): PageDecorationProvider | undefined {
-    const results = kind === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
-    const layoutsByRId = kind === 'header' ? this.#headerLayoutsByRId : this.#footerLayoutsByRId;
+    const results =
+      kind === 'header'
+        ? this.#headerFooterSession?.headerLayoutResults
+        : this.#headerFooterSession?.footerLayoutResults;
+    const layoutsByRId =
+      kind === 'header' ? this.#headerFooterSession?.headerLayoutsByRId : this.#headerFooterSession?.footerLayoutsByRId;
 
-    if ((!results || results.length === 0) && layoutsByRId.size === 0) {
+    if ((!results || results.length === 0) && (!layoutsByRId || layoutsByRId.size === 0)) {
       return undefined;
     }
 
-    const multiSectionId = this.#multiSectionIdentifier;
+    const multiSectionId = this.#headerFooterSession?.multiSectionIdentifier;
     const legacyIdentifier =
-      this.#headerFooterIdentifier ??
+      this.#headerFooterSession?.headerFooterIdentifier ??
       extractIdentifierFromConverter((this.#editor as Editor & { converter?: unknown }).converter);
 
     const sectionFirstPageNumbers = new Map<number, number>();
@@ -5071,7 +5110,7 @@ export class PresentationEditor extends EventEmitter {
       // Use helper to compute metrics with type safety and consistent logic
       const rawLayoutHeight = variant.layout.height ?? 0;
       const metrics = this.#computeHeaderFooterMetrics(kind, rawLayoutHeight, box, pageHeight, margins.footer ?? 0);
-      const fallbackId = this.#headerFooterManager?.getVariantId(kind, headerFooterType);
+      const fallbackId = this.#headerFooterSession?.manager?.getVariantId(kind, headerFooterType);
       const finalHeaderId = sectionRId ?? fallbackId ?? undefined;
 
       // Normalize fragments to start at y=0 if minY is negative
@@ -5216,8 +5255,8 @@ export class PresentationEditor extends EventEmitter {
       typeof firstPageInSection === 'number' ? page.number - firstPageInSection + 1 : page.number;
 
     // Get titlePg and alternateHeaders settings from identifiers
-    const multiSectionId = this.#multiSectionIdentifier;
-    const legacyIdentifier = this.#headerFooterIdentifier;
+    const multiSectionId = this.#headerFooterSession?.multiSectionIdentifier;
+    const legacyIdentifier = this.#headerFooterSession?.headerFooterIdentifier;
 
     let titlePgEnabled = false;
     let alternateHeaders = false;
@@ -5244,61 +5283,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #rebuildHeaderFooterRegions(layout: Layout) {
-    this.#headerRegions.clear();
-    this.#footerRegions.clear();
-    const pageHeight = layout.pageSize?.h ?? this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-    if (pageHeight <= 0) return;
-
-    // Build section first page numbers map (same logic as in #createDecorationProvider)
-    const sectionFirstPageNumbers = new Map<number, number>();
-    for (const p of layout.pages) {
-      const idx = p.sectionIndex ?? 0;
-      if (!sectionFirstPageNumbers.has(idx)) {
-        sectionFirstPageNumbers.set(idx, p.number);
-      }
-    }
-
-    layout.pages.forEach((page, pageIndex) => {
-      const margins = page.margins ?? this.#layoutOptions.margins ?? DEFAULT_MARGINS;
-      const actualPageHeight = page.size?.h ?? pageHeight;
-
-      // Try to get payload from decoration provider (may be null if no content exists)
-      const headerPayload = this.#headerDecorationProvider?.(page.number, margins, page);
-
-      // Always create a hit region for headers - use payload's hitRegion or compute fallback
-      const headerBox = this.#computeDecorationBox('header', margins, actualPageHeight);
-      this.#headerRegions.set(pageIndex, {
-        kind: 'header',
-        headerId: headerPayload?.headerId,
-        sectionType:
-          headerPayload?.sectionType ?? this.#computeExpectedSectionType('header', page, sectionFirstPageNumbers),
-        pageIndex,
-        pageNumber: page.number,
-        localX: headerPayload?.hitRegion?.x ?? headerBox.x,
-        localY: headerPayload?.hitRegion?.y ?? headerBox.offset,
-        width: headerPayload?.hitRegion?.width ?? headerBox.width,
-        height: headerPayload?.hitRegion?.height ?? headerBox.height,
-      });
-
-      // Same for footer - always create a hit region
-      const footerPayload = this.#footerDecorationProvider?.(page.number, margins, page);
-      const footerBoxMargins = this.#stripFootnoteReserveFromBottomMargin(margins, page);
-      const footerBox = this.#computeDecorationBox('footer', footerBoxMargins, actualPageHeight);
-      this.#footerRegions.set(pageIndex, {
-        kind: 'footer',
-        headerId: footerPayload?.headerId,
-        sectionType:
-          footerPayload?.sectionType ?? this.#computeExpectedSectionType('footer', page, sectionFirstPageNumbers),
-        pageIndex,
-        pageNumber: page.number,
-        localX: footerPayload?.hitRegion?.x ?? footerBox.x,
-        localY: footerPayload?.hitRegion?.y ?? footerBox.offset,
-        width: footerPayload?.hitRegion?.width ?? footerBox.width,
-        height: footerPayload?.hitRegion?.height ?? footerBox.height,
-        contentHeight: footerPayload?.contentHeight,
-        minY: footerPayload?.minY,
-      });
-    });
+    // Delegate to session manager which handles region building
+    this.#headerFooterSession?.rebuildRegions(layout);
   }
 
   #hitTestHeaderFooterRegion(x: number, y: number): HeaderFooterRegion | null {
@@ -5310,11 +5296,11 @@ export class PresentationEditor extends EventEmitter {
     const pageIndex = Math.max(0, Math.floor(y / (pageHeight + pageGap)));
     const pageLocalY = y - pageIndex * (pageHeight + pageGap);
 
-    const headerRegion = this.#headerRegions.get(pageIndex);
+    const headerRegion = this.#headerFooterSession?.headerRegions?.get(pageIndex);
     if (headerRegion && this.#pointInRegion(headerRegion, x, pageLocalY)) {
       return headerRegion;
     }
-    const footerRegion = this.#footerRegions.get(pageIndex);
+    const footerRegion = this.#headerFooterSession?.footerRegions?.get(pageIndex);
     if (footerRegion && this.#pointInRegion(footerRegion, x, pageLocalY)) {
       return footerRegion;
     }
@@ -5328,245 +5314,13 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #activateHeaderFooterRegion(region: HeaderFooterRegion) {
-    const permission = this.#validateHeaderFooterEditPermission();
-    if (!permission.allowed) {
-      this.#emitHeaderFooterEditBlocked(permission.reason ?? 'restricted');
-      return;
-    }
-    void this.#enterHeaderFooterMode(region);
-  }
-
-  async #enterHeaderFooterMode(region: HeaderFooterRegion) {
-    try {
-      if (!this.#headerFooterManager || !this.#overlayManager) {
-        // Clear hover on early exit to prevent stale hover state
-        this.#clearHoverRegion();
-        return;
-      }
-
-      const descriptor = this.#resolveDescriptorForRegion(region);
-      if (!descriptor) {
-        console.warn('[PresentationEditor] No descriptor found for region:', region);
-        // Clear hover on validation failure to prevent stale hover state
-        this.#clearHoverRegion();
-        return;
-      }
-      if (!descriptor.id) {
-        console.warn('[PresentationEditor] Descriptor missing id:', descriptor);
-        // Clear hover on validation failure to prevent stale hover state
-        this.#clearHoverRegion();
-        return;
-      }
-
-      // Virtualized pages may not be mounted - scroll into view if needed
-      let pageElement = this.#getPageElement(region.pageIndex);
-      if (!pageElement) {
-        try {
-          this.#scrollPageIntoView(region.pageIndex);
-          const mounted = await this.#waitForPageMount(region.pageIndex, { timeout: 2000 });
-          if (!mounted) {
-            console.error('[PresentationEditor] Failed to mount page for header/footer editing');
-            this.#clearHoverRegion();
-            this.emit('error', {
-              error: new Error('Failed to mount page for editing'),
-              context: 'enterHeaderFooterMode',
-            });
-            return;
-          }
-          pageElement = this.#getPageElement(region.pageIndex);
-        } catch (scrollError) {
-          console.error('[PresentationEditor] Error mounting page:', scrollError);
-          this.#clearHoverRegion();
-          this.emit('error', {
-            error: scrollError,
-            context: 'enterHeaderFooterMode.pageMount',
-          });
-          return;
-        }
-      }
-
-      if (!pageElement) {
-        console.error('[PresentationEditor] Page element not found after mount attempt');
-        this.#clearHoverRegion();
-        this.emit('error', {
-          error: new Error('Page element not found after mount'),
-          context: 'enterHeaderFooterMode',
-        });
-        return;
-      }
-
-      const { success, editorHost, reason } = this.#overlayManager.showEditingOverlay(
-        pageElement,
-        region,
-        this.#layoutOptions.zoom ?? 1,
-      );
-      if (!success || !editorHost) {
-        console.error('[PresentationEditor] Failed to create editor host:', reason);
-        this.#clearHoverRegion();
-        this.emit('error', {
-          error: new Error(`Failed to create editor host: ${reason}`),
-          context: 'enterHeaderFooterMode.showOverlay',
-        });
-        return;
-      }
-
-      const layout = this.#layoutState.layout;
-      let editor;
-      try {
-        editor = await this.#headerFooterManager.ensureEditor(descriptor, {
-          editorHost,
-          availableWidth: region.width,
-          availableHeight: region.height,
-          currentPageNumber: region.pageNumber,
-          totalPageCount: layout?.pages?.length ?? 1,
-        });
-      } catch (editorError) {
-        console.error('[PresentationEditor] Error creating editor:', editorError);
-        // Clean up overlay on error
-        this.#overlayManager.hideEditingOverlay();
-        this.#clearHoverRegion();
-        this.emit('error', {
-          error: editorError,
-          context: 'enterHeaderFooterMode.ensureEditor',
-        });
-        return;
-      }
-
-      if (!editor) {
-        console.warn('[PresentationEditor] Failed to ensure editor for descriptor:', descriptor);
-        // Clean up overlay if editor creation failed
-        this.#overlayManager.hideEditingOverlay();
-        this.#clearHoverRegion();
-        this.emit('error', {
-          error: new Error('Failed to create editor instance'),
-          context: 'enterHeaderFooterMode.ensureEditor',
-        });
-        return;
-      }
-
-      // For footers, apply positioning adjustments to match static rendering.
-      // Only adjust for negative minY (content with elements above y=0).
-      // Note: Bottom-alignment (footerYOffset) is handled by the shape's own CSS
-      // positioning in ProseMirror, so we don't apply container-level transforms for that.
-      if (region.kind === 'footer') {
-        const editorContainer = editorHost.firstElementChild;
-        if (editorContainer instanceof HTMLElement) {
-          editorContainer.style.overflow = 'visible';
-
-          // Only compensate for negative minY (content extending above y=0)
-          if (region.minY != null && region.minY < 0) {
-            const shiftDown = Math.abs(region.minY);
-            editorContainer.style.transform = `translateY(${shiftDown}px)`;
-          } else {
-            // Clear any leftover transform from previous sessions to avoid misalignment
-            editorContainer.style.transform = '';
-          }
-        }
-      }
-
-      try {
-        editor.setEditable(true);
-        editor.setOptions({ documentMode: 'editing' });
-
-        // Move caret to end of content (better UX than starting at position 0)
-        try {
-          const doc = editor.state?.doc;
-          if (doc) {
-            const endPos = doc.content.size - 1; // Position at end of content
-            const pos = Math.max(1, endPos);
-            editor.commands?.setTextSelection?.({ from: pos, to: pos });
-          }
-        } catch (cursorError) {
-          // Non-critical error, log but continue
-          console.warn('[PresentationEditor] Could not set cursor to end:', cursorError);
-        }
-      } catch (editableError) {
-        console.error('[PresentationEditor] Error setting editor editable:', editableError);
-        // Clean up on error
-        this.#overlayManager.hideEditingOverlay();
-        this.#clearHoverRegion();
-        this.emit('error', {
-          error: editableError,
-          context: 'enterHeaderFooterMode.setEditable',
-        });
-        return;
-      }
-
-      // Hide layout selection overlay so only the ProseMirror caret is visible
-      this.#overlayManager.hideSelectionOverlay();
-
-      this.#activeHeaderFooterEditor = editor;
-
-      this.#session = {
-        mode: region.kind,
-        kind: region.kind,
-        headerId: descriptor.id,
-        sectionType: descriptor.variant ?? region.sectionType ?? null,
-        pageIndex: region.pageIndex,
-        pageNumber: region.pageNumber,
-      };
-
-      this.#clearHoverRegion();
-
-      try {
-        editor.view?.focus();
-      } catch (focusError) {
-        // Non-critical error, log but continue
-        console.warn('[PresentationEditor] Could not focus editor:', focusError);
-      }
-
-      this.#emitHeaderFooterModeChanged();
-      this.#emitHeaderFooterEditingContext(editor);
-      this.#inputBridge?.notifyTargetChanged();
-    } catch (error) {
-      // Catch any unexpected errors and clean up
-      console.error('[PresentationEditor] Unexpected error in enterHeaderFooterMode:', error);
-
-      // Attempt cleanup
-      try {
-        this.#overlayManager?.hideEditingOverlay();
-        this.#overlayManager?.showSelectionOverlay();
-        this.#clearHoverRegion();
-        this.#activeHeaderFooterEditor = null;
-        this.#session = { mode: 'body' };
-      } catch (cleanupError) {
-        console.error('[PresentationEditor] Error during cleanup:', cleanupError);
-      }
-
-      // Emit error event
-      this.emit('error', {
-        error,
-        context: 'enterHeaderFooterMode',
-      });
-    }
+    // Delegate to session manager
+    this.#headerFooterSession?.activateRegion(region);
   }
 
   #exitHeaderFooterMode() {
-    if (this.#session.mode === 'body') return;
-
-    // Capture headerId before clearing session - needed for cache invalidation
-    const editedHeaderId = this.#session.headerId;
-
-    if (this.#activeHeaderFooterEditor) {
-      this.#activeHeaderFooterEditor.setEditable(false);
-      this.#activeHeaderFooterEditor.setOptions({ documentMode: 'viewing' });
-    }
-
-    this.#overlayManager?.hideEditingOverlay();
-    this.#overlayManager?.showSelectionOverlay();
-
-    this.#activeHeaderFooterEditor = null;
-    this.#session = { mode: 'body' };
-
-    this.#emitHeaderFooterModeChanged();
-    this.#emitHeaderFooterEditingContext(this.#editor);
-    this.#inputBridge?.notifyTargetChanged();
-
-    // Invalidate layout cache and trigger re-render to show updated header/footer content
-    if (editedHeaderId) {
-      this.#headerFooterAdapter?.invalidate(editedHeaderId);
-    }
-    this.#headerFooterManager?.refresh();
+    // Delegate to session manager
+    this.#headerFooterSession?.exitMode();
     this.#pendingDocChange = true;
     this.#scheduleRerender();
 
@@ -5574,36 +5328,40 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #getActiveDomTarget(): HTMLElement | null {
-    if (this.#session.mode !== 'body') {
-      return this.#activeHeaderFooterEditor?.view?.dom ?? this.#editor.view?.dom ?? null;
+    const session = this.#headerFooterSession?.session;
+    if (session && session.mode !== 'body') {
+      const activeEditor = this.#headerFooterSession?.activeEditor;
+      return activeEditor?.view?.dom ?? this.#editor.view?.dom ?? null;
     }
     return this.#editor.view?.dom ?? null;
   }
 
   #emitHeaderFooterModeChanged() {
+    const session = this.#headerFooterSession?.session ?? { mode: 'body' as const };
     this.emit('headerFooterModeChanged', {
-      mode: this.#session.mode,
-      kind: this.#session.kind,
-      headerId: this.#session.headerId,
-      sectionType: this.#session.sectionType,
-      pageIndex: this.#session.pageIndex,
-      pageNumber: this.#session.pageNumber,
+      mode: session.mode,
+      kind: session.kind,
+      headerId: session.headerId,
+      sectionType: session.sectionType,
+      pageIndex: session.pageIndex,
+      pageNumber: session.pageNumber,
     });
     this.#updateAwarenessSession();
     this.#updateModeBanner();
   }
 
   #emitHeaderFooterEditingContext(editor: Editor) {
+    const session = this.#headerFooterSession?.session ?? { mode: 'body' as const };
     this.emit('headerFooterEditingContext', {
-      kind: this.#session.mode,
+      kind: session.mode,
       editor,
-      headerId: this.#session.headerId,
-      sectionType: this.#session.sectionType,
+      headerId: session.headerId,
+      sectionType: session.sectionType,
     });
     this.#announce(
-      this.#session.mode === 'body'
+      session.mode === 'body'
         ? 'Exited header/footer edit mode.'
-        : `Editing ${this.#session.kind === 'header' ? 'Header' : 'Footer'} (${this.#session.sectionType ?? 'default'})`,
+        : `Editing ${session.kind === 'header' ? 'Header' : 'Footer'} (${session.sectionType ?? 'default'})`,
     );
   }
 
@@ -5616,27 +5374,29 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    if (this.#session.mode === 'body') {
+    const session = this.#headerFooterSession?.session;
+    if (!session || session.mode === 'body') {
       awareness.setLocalStateField('layoutSession', null);
       return;
     }
     awareness.setLocalStateField('layoutSession', {
-      kind: this.#session.kind,
-      headerId: this.#session.headerId ?? null,
-      pageNumber: this.#session.pageNumber ?? null,
+      kind: session.kind,
+      headerId: session.headerId ?? null,
+      pageNumber: session.pageNumber ?? null,
     });
   }
 
   #updateModeBanner() {
     if (!this.#modeBanner) return;
-    if (this.#session.mode === 'body') {
+    const session = this.#headerFooterSession?.session;
+    if (!session || session.mode === 'body') {
       this.#modeBanner.style.display = 'none';
       this.#modeBanner.textContent = '';
       return;
     }
-    const title = this.#session.kind === 'header' ? 'Header' : 'Footer';
-    const variant = this.#session.sectionType ?? 'default';
-    const page = this.#session.pageNumber != null ? `Page ${this.#session.pageNumber}` : '';
+    const title = session.kind === 'header' ? 'Header' : 'Footer';
+    const variant = session.sectionType ?? 'default';
+    const page = session.pageNumber != null ? `Page ${session.pageNumber}` : '';
     this.#modeBanner.textContent = `Editing ${title} (${variant}) ${page} – Press Esc to return`;
     this.#modeBanner.style.display = 'block';
   }
@@ -5652,10 +5412,11 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #scheduleA11ySelectionAnnouncement(options?: { immediate?: boolean }) {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
     this.#a11ySelectionAnnounceTimeout = scheduleA11ySelectionAnnouncementFromHelper(
       {
         ariaLiveRegion: this.#ariaLiveRegion,
-        sessionMode: this.#session.mode,
+        sessionMode,
         isDragging: this.#isDragging,
         visibleHost: this.#visibleHost,
         currentTimeout: this.#a11ySelectionAnnounceTimeout,
@@ -5670,7 +5431,8 @@ export class PresentationEditor extends EventEmitter {
 
   #announceSelectionNow(): void {
     if (!this.#ariaLiveRegion) return;
-    if (this.#session.mode !== 'body') return;
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') return;
     const announcement = computeA11ySelectionAnnouncementFromHelper(this.getActiveEditor().state);
     if (!announcement) return;
 
@@ -5696,17 +5458,18 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #resolveDescriptorForRegion(region: HeaderFooterRegion): HeaderFooterDescriptor | null {
-    if (!this.#headerFooterManager) return null;
+    const manager = this.#headerFooterSession?.manager;
+    if (!manager) return null;
     if (region.headerId) {
-      const descriptor = this.#headerFooterManager.getDescriptorById(region.headerId);
+      const descriptor = manager.getDescriptorById(region.headerId);
       if (descriptor) return descriptor;
     }
     if (region.sectionType) {
-      const descriptors = this.#headerFooterManager.getDescriptors(region.kind);
+      const descriptors = manager.getDescriptors(region.kind);
       const match = descriptors.find((entry) => entry.variant === region.sectionType);
       if (match) return match;
     }
-    const descriptors = this.#headerFooterManager.getDescriptors(region.kind);
+    const descriptors = manager.getDescriptors(region.kind);
     if (!descriptors.length) {
       console.warn('[PresentationEditor] No descriptor found for region:', region);
       return null;
@@ -5750,7 +5513,9 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // Update legacy identifier for getHeaderFooterType() fallback path
-    this.#headerFooterIdentifier = extractIdentifierFromConverter(converter);
+    if (this.#headerFooterSession) {
+      this.#headerFooterSession.headerFooterIdentifier = extractIdentifierFromConverter(converter);
+    }
   }
 
   /**
@@ -6117,7 +5882,7 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #clearHoverRegion() {
-    this.#hoverRegion = null;
+    this.#headerFooterSession?.clearHover();
     if (this.#hoverOverlay) {
       this.#hoverOverlay.style.display = 'none';
     }
@@ -6127,42 +5892,7 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #getHeaderFooterContext(): HeaderFooterLayoutContext | null {
-    if (this.#session.mode === 'body') return null;
-    if (!this.#headerFooterManager) return null;
-    const pageIndex = this.#session.pageIndex;
-    if (pageIndex == null) return null;
-    const regionMap = this.#session.mode === 'header' ? this.#headerRegions : this.#footerRegions;
-    const region = regionMap.get(pageIndex);
-    if (!region) {
-      console.warn('[PresentationEditor] Header/footer region not found for pageIndex:', pageIndex);
-      return null;
-    }
-    const results = this.#session.mode === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
-    if (!results || results.length === 0) {
-      console.warn('[PresentationEditor] Header/footer layout results not available');
-      return null;
-    }
-    const variant = results.find((entry) => entry.type === this.#session.sectionType) ?? results[0] ?? null;
-    if (!variant) {
-      console.warn('[PresentationEditor] Header/footer variant not found for sectionType:', this.#session.sectionType);
-      return null;
-    }
-    const pageWidth = Math.max(1, region.width);
-    const pageHeight = Math.max(1, variant.layout.height ?? region.height ?? 1);
-    const layoutLike: Layout = {
-      pageSize: { w: pageWidth, h: pageHeight },
-      pages: variant.layout.pages.map((page: Page) => ({
-        number: page.number,
-        numberText: page.numberText,
-        fragments: page.fragments,
-      })),
-    };
-    return {
-      layout: layoutLike,
-      blocks: variant.blocks,
-      measures: variant.measures,
-      region,
-    };
+    return this.#headerFooterSession?.getContext() ?? null;
   }
 
   #computeHeaderFooterSelectionRects(from: number, to: number): LayoutRect[] {
@@ -6170,9 +5900,10 @@ export class PresentationEditor extends EventEmitter {
     const bodyLayout = this.#layoutState.layout;
     if (!context) {
       // Warn when header/footer context is unavailable to aid debugging
+      const session = this.#headerFooterSession?.session;
       console.warn('[PresentationEditor] Header/footer context unavailable for selection rects', {
-        mode: this.#session.mode,
-        pageIndex: this.#session.pageIndex,
+        mode: session?.mode,
+        pageIndex: session?.pageIndex,
       });
       return [];
     }
@@ -6584,8 +6315,9 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #getCurrentPageIndex(): number {
-    if (this.#session.mode !== 'body') {
-      return this.#session.pageIndex ?? 0;
+    const session = this.#headerFooterSession?.session;
+    if (session && session.mode !== 'body') {
+      return session.pageIndex ?? 0;
     }
     const layout = this.#layoutState.layout;
     const selection = this.#editor.state?.selection;
@@ -6627,7 +6359,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #findRegionForPage(kind: 'header' | 'footer', pageIndex: number): HeaderFooterRegion | null {
-    const map = kind === 'header' ? this.#headerRegions : this.#footerRegions;
+    const map = kind === 'header' ? this.#headerFooterSession?.headerRegions : this.#headerFooterSession?.footerRegions;
+    if (!map) return null;
     return map.get(pageIndex) ?? map.values().next().value ?? null;
   }
 

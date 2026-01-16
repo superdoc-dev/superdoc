@@ -270,10 +270,10 @@ export class SearchIndex {
    * @returns {string} Regex pattern string
    */
   static toFlexiblePattern(searchString) {
-    // Split by whitespace, escape each part, rejoin with \s+
-    const parts = searchString.split(/\s+/).filter((part) => part.length > 0);
+    // Split by whitespace (including non-breaking spaces), escape each part, rejoin with flexible whitespace pattern
+    const parts = searchString.split(/[\s\u00a0]+/).filter((part) => part.length > 0);
     if (parts.length === 0) return '';
-    return parts.map((part) => SearchIndex.escapeRegex(part)).join('\\s+');
+    return parts.map((part) => SearchIndex.escapeRegex(part)).join('[\\s\\u00a0]+');
   }
 
   /**

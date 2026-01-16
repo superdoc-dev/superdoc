@@ -2044,6 +2044,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Get document identifier (async - may generate hash)
+   */
+  async getDocumentIdentifier(): Promise<string | null> {
+    return (await this.converter?.getDocumentIdentifier()) || null;
+  }
+
+  /**
    * Get permanent document GUID (sync - only for modified documents)
    */
   getDocumentGuid(): string | null {

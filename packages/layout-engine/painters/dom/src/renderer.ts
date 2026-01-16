@@ -3959,6 +3959,8 @@ export class DomPainter {
       if (commentHighlight.hasNestedComments) {
         const borderColor = `${COMMENT_EXTERNAL_COLOR}99`; // Semi-transparent for subtlety
         (elem as HTMLElement).style.boxShadow = `inset 1px 0 0 ${borderColor}, inset -1px 0 0 ${borderColor}`;
+      } else {
+        (elem as HTMLElement).style.boxShadow = '';
       }
     }
     // We still need to preserve the comment ids

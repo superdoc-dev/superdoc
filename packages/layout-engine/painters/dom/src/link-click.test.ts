@@ -109,6 +109,7 @@ describe('DomPainter - Link Rendering', () => {
             target: '_blank',
             rel: 'noopener noreferrer',
             tooltip: 'Example tooltip',
+            version: 2,
           },
         },
       ],

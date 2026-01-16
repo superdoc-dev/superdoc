@@ -338,12 +338,13 @@ export const CommentsPlugin = Extension.create({
             const newActiveThreadId = meta.activeThreadId;
 
             // Emit commentsUpdate event when active comment changes (e.g., from comment bubble click)
+            // Defer emission to after transaction completes to avoid dispatching during apply()
             if (previousActiveThreadId !== newActiveThreadId) {
               const update = {
                 type: comments_module_events.SELECTED,
                 activeCommentId: newActiveThreadId ? newActiveThreadId : null,
               };
-              editor.emit('commentsUpdate', update);
+              setTimeout(() => editor.emit('commentsUpdate', update), 0);
             }
 
             pluginState.activeThreadId = newActiveThreadId;

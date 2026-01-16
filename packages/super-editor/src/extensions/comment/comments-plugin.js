@@ -309,6 +309,12 @@ export const CommentsPlugin = Extension.create({
 
     if (editor.options.isHeadless) return [];
 
+    // Read custom highlight colors from editor options, with defaults
+    const highlightColors = editor.options.commentsHighlightColors || {};
+    const externalColor = highlightColors.external || '#B1124B';
+    const internalColor = highlightColors.internal || '#078383';
+    const resolvedColor = highlightColors.resolved || '#808080';
+
     const commentsPlugin = new Plugin({
       key: CommentsPluginKey,
 
@@ -316,8 +322,9 @@ export const CommentsPlugin = Extension.create({
         init() {
           return {
             activeThreadId: null,
-            externalColor: '#B1124B',
-            internalColor: '#078383',
+            externalColor,
+            internalColor,
+            resolvedColor,
             decorations: DecorationSet.empty,
             allCommentPositions: {},
             allCommentIds: [],

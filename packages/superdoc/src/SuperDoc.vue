@@ -446,6 +446,7 @@ const editorOptions = (doc) => {
     isInternal: proxy.$superdoc.config.isInternal,
     annotations: proxy.$superdoc.config.annotations,
     isCommentsEnabled: Boolean(commentsModuleConfig.value),
+    commentsHighlightColors: commentsModuleConfig.value?.highlightColors || null,
     isAiEnabled: proxy.$superdoc.config.modules?.ai,
     slashMenuConfig: proxy.$superdoc.config.modules?.slashMenu,
     editorCtor: useLayoutEngine ? PresentationEditor : undefined,

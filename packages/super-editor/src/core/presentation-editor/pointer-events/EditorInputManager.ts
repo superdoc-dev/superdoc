@@ -203,6 +203,7 @@ export class EditorInputManager {
   #boundHandlePointerUp: ((e: PointerEvent) => void) | null = null;
   #boundHandlePointerLeave: (() => void) | null = null;
   #boundHandleDoubleClick: ((e: MouseEvent) => void) | null = null;
+  #boundHandleClick: ((e: MouseEvent) => void) | null = null;
   #boundHandleKeyDown: ((e: KeyboardEvent) => void) | null = null;
   #boundHandleFocusIn: ((e: FocusEvent) => void) | null = null;
 
@@ -248,6 +249,7 @@ export class EditorInputManager {
     this.#boundHandlePointerUp = this.#handlePointerUp.bind(this);
     this.#boundHandlePointerLeave = this.#handlePointerLeave.bind(this);
     this.#boundHandleDoubleClick = this.#handleDoubleClick.bind(this);
+    this.#boundHandleClick = this.#handleClick.bind(this);
     this.#boundHandleKeyDown = this.#handleKeyDown.bind(this);
     this.#boundHandleFocusIn = this.#handleFocusIn.bind(this);
 
@@ -257,6 +259,7 @@ export class EditorInputManager {
     viewportHost.addEventListener('pointerup', this.#boundHandlePointerUp);
     viewportHost.addEventListener('pointerleave', this.#boundHandlePointerLeave);
     viewportHost.addEventListener('dblclick', this.#boundHandleDoubleClick);
+    viewportHost.addEventListener('click', this.#boundHandleClick);
 
     // Keyboard events on container
     const container = viewportHost.closest('.presentation-editor') as HTMLElement | null;
@@ -292,6 +295,9 @@ export class EditorInputManager {
     if (this.#boundHandleDoubleClick) {
       viewportHost.removeEventListener('dblclick', this.#boundHandleDoubleClick);
     }
+    if (this.#boundHandleClick) {
+      viewportHost.removeEventListener('click', this.#boundHandleClick);
+    }
     if (this.#boundHandleKeyDown) {
       const container = viewportHost.closest('.presentation-editor') as HTMLElement | null;
       if (container) {
@@ -308,6 +314,7 @@ export class EditorInputManager {
     this.#boundHandlePointerUp = null;
     this.#boundHandlePointerLeave = null;
     this.#boundHandleDoubleClick = null;
+    this.#boundHandleClick = null;
     this.#boundHandleKeyDown = null;
     this.#boundHandleFocusIn = null;
   }
@@ -488,6 +495,33 @@ export class EditorInputManager {
   // Event Handlers
   // ==========================================================================
 
+  /**
+   * Handle click events - specifically for link navigation prevention.
+   *
+   * Link handling is split between pointerdown and click:
+   * - pointerdown: dispatches superdoc-link-click event (for popover/UI response)
+   * - click: prevents default navigation (preventDefault only works on click, not pointerdown)
+   *
+   * This also handles keyboard activation (Enter/Space) which triggers click but not pointerdown.
+   */
+  #handleClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+
+    const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;
+    if (linkEl) {
+      // Prevent browser navigation - this is the only place it can be reliably prevented
+      event.preventDefault();
+
+      // For keyboard activation (Enter/Space), dispatch the custom event
+      // Mouse clicks already dispatched the event on pointerdown
+      // We detect keyboard by checking if this wasn't preceded by a recent pointerdown
+      if (!(event as PointerEvent).pointerId && event.detail === 0) {
+        // detail === 0 indicates keyboard activation, not mouse click
+        this.#handleLinkClick(event, linkEl);
+      }
+    }
+  }
+
   #handlePointerDown(event: PointerEvent): void {
     if (!this.#deps) return;
 
@@ -504,7 +538,8 @@ export class EditorInputManager {
     // Skip ruler handle clicks
     if (target?.closest?.('.superdoc-ruler-handle') != null) return;
 
-    // Handle link clicks
+    // Handle link clicks - dispatch custom event on pointerdown for immediate UI response
+    // Navigation prevention happens in #handleClick (on 'click' event)
     const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;
     if (linkEl) {
       this.#handleLinkClick(event, linkEl);
@@ -840,7 +875,7 @@ export class EditorInputManager {
   // Handler Helpers
   // ==========================================================================
 
-  #handleLinkClick(event: PointerEvent, linkEl: HTMLAnchorElement): void {
+  #handleLinkClick(event: MouseEvent, linkEl: HTMLAnchorElement): void {
     const href = linkEl.getAttribute('href') ?? '';
     const isAnchorLink = href.startsWith('#') && href.length > 1;
     const isTocLink = linkEl.closest('.superdoc-toc-entry') !== null;

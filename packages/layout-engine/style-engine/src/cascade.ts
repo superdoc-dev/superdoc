@@ -10,7 +10,7 @@
  * - layout-engine's style resolution (for rendering)
  */
 
-import { ParagraphProperties, RunProperties } from "./ooxml";
+import { ParagraphProperties, RunProperties } from './ooxml/types';
 
 export type PropertyObject = ParagraphProperties | RunProperties;
 
@@ -129,7 +129,7 @@ function isObject(item: unknown): item is PropertyObject {
  * @param isNormalDefault - Whether Normal style has w:default="1".
  * @returns Ordered array [first, second] for the cascade.
  */
-export function orderDefaultsAndNormal<T extends PropertyObject> (
+export function orderDefaultsAndNormal<T extends PropertyObject>(
   defaultProps: T,
   normalProps: T,
   isNormalDefault: boolean,
@@ -183,7 +183,7 @@ export function combineIndentProperties(indentChain: ParagraphProperties[]): Par
           delete target.firstLine;
         }
         return source.hanging;
-      }
+      },
     },
   });
 }

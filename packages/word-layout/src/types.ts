@@ -54,14 +54,13 @@ export type ResolvedRunProperties = {
 };
 
 export type NumberingProperties = {
-  numId: string | number;
-  ilvl: number;
+  numId?: number;
+  ilvl?: number;
 };
-
 
 export type ResolvedParagraphProperties = {
   styleId?: string;
-  alignment?: WordListJustification | 'justify';
+  alignment?: 'left' | 'center' | 'right' | 'justify';
   indent?: ParagraphIndent;
   spacing?: ParagraphSpacing;
   tabs?: TabStop[];
@@ -69,7 +68,6 @@ export type ResolvedParagraphProperties = {
   decimalSeparator?: string;
   numberingProperties?: NumberingProperties | null;
 };
-
 
 export type WordLayoutMeasurementAdapter = {
   measureText?: (text: string, fontCss: string, options?: { letterSpacing?: number }) => number;
@@ -81,7 +79,7 @@ export type ListRenderingAttrs = {
   path: number[];
   numberingType: string;
   suffix: 'tab' | 'space' | 'nothing';
-}
+};
 
 export type WordParagraphLayoutInput = {
   paragraph: ResolvedParagraphProperties;
@@ -91,9 +89,6 @@ export type WordParagraphLayoutInput = {
 
 export type WordListMarkerLayout = {
   markerText: string;
-  markerBoxWidthPx: number;
-  markerX: number;
-  textStartX: number;
   gutterWidthPx?: number;
   justification: WordListJustification;
   suffix: WordListSuffix;
@@ -114,4 +109,3 @@ export type WordParagraphLayoutOutput = {
    */
   firstLineIndentMode?: boolean;
 };
-

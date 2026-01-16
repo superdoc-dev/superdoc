@@ -2017,7 +2017,6 @@ export class DomPainter {
       const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
       const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
-
       // Pre-calculate actual marker+tab inline width for list first lines.
       // The measurer uses textStartPx to calculate line.maxWidth, but the painter renders
       // marker+tab as inline elements that may consume MORE space than textStartPx indicates.
@@ -2044,7 +2043,14 @@ export class DomPainter {
         // Calculate tab width using same logic as marker rendering section
         const suffix = wordLayout.marker.suffix ?? 'tab';
         if (suffix === 'tab') {
-          listTabWidth = computeTabWidth(currentPos, markerJustification, wordLayout.tabsPx, paraIndent?.hanging, paraIndent?.firstLine, paraIndentLeft);
+          listTabWidth = computeTabWidth(
+            currentPos,
+            markerJustification,
+            wordLayout.tabsPx,
+            paraIndent?.hanging,
+            paraIndent?.firstLine,
+            paraIndentLeft,
+          );
         } else if (suffix === 'space') {
           listTabWidth = 4;
         }
@@ -2095,7 +2101,11 @@ export class DomPainter {
         // List first lines handle indentation via marker positioning and tab stops,
         // not CSS padding/text-indent. This matches Word's rendering model.
         const isListFirstLine =
-          index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && fragment.markerTextWidth && wordLayout?.marker;
+          index === 0 &&
+          !fragment.continuesFromPrev &&
+          fragment.markerWidth &&
+          fragment.markerTextWidth &&
+          wordLayout?.marker;
 
         /**
          * Determines if this line contains segments with explicit X positioning (typically from tabs).
@@ -2188,7 +2198,6 @@ export class DomPainter {
         }
 
         if (isListFirstLine) {
-
           const marker = wordLayout.marker!;
           lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`; // HERE CONTROLS WHERE TAB STARTS - I think this will vary with justification
 
@@ -2214,13 +2223,12 @@ export class DomPainter {
             markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
           } else if (markerJustification === 'center') {
             markerContainer.style.position = 'absolute';
-            markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth!/2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
-            lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth!/2 + 'px';
+            markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+            lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
           }
 
           // Apply marker run styling with font fallback chain
-          markerEl.style.fontFamily =
-            toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
+          markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
           markerEl.style.fontSize = `${marker.run.fontSize}px`;
           markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
           markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
@@ -5765,17 +5773,14 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
   });
 };
 
-const applyParagraphBlockStyles = (
-  element: HTMLElement,
-  attrs?: ParagraphAttrs,
-): void => {
+const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
   if (!attrs) return;
   if (attrs.styleId) {
     element.setAttribute('styleid', attrs.styleId);
   }
   if (attrs.alignment) {
     // Avoid native CSS justify: DomPainter applies justify via per-line word-spacing.
-    element.style.textAlign = attrs.alignment === 'justify' || attrs.alignment === 'both' ? 'left' : attrs.alignment;
+    element.style.textAlign = attrs.alignment === 'justify' ? 'left' : attrs.alignment;
   }
   if ((attrs as Record<string, unknown>).dropCap) {
     element.classList.add('sd-editor-dropcap');
@@ -6093,7 +6098,14 @@ const resolveRunText = (run: Run, context: FragmentRenderContext): string => {
   return run.text ?? '';
 };
 
-const computeTabWidth = (currentPos: number, justification: string, tabs: number[] | undefined, hangingIndent: number | undefined, firstLineIndent: number | undefined, leftIndent: number): number => {
+const computeTabWidth = (
+  currentPos: number,
+  justification: string,
+  tabs: number[] | undefined,
+  hangingIndent: number | undefined,
+  firstLineIndent: number | undefined,
+  leftIndent: number,
+): number => {
   const nextDefaultTabStop = currentPos + DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
   let tabWidth: number;
   if ((justification ?? 'left') === 'left') {
@@ -6135,7 +6147,7 @@ const computeTabWidth = (currentPos: number, justification: string, tabs: number
       tabWidth = hangingIndent ?? 0;
     }
   } else {
-      tabWidth = nextDefaultTabStop - currentPos;
+    tabWidth = nextDefaultTabStop - currentPos;
   }
   return tabWidth;
-}
+};

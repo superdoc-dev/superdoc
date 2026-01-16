@@ -219,11 +219,11 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Also includes backgroundColor for auto text color resolution
   const cellConverterContext: ConverterContext | undefined =
     tableStyleParagraphProps || cellBackgroundColor
-      ? {
+      ? ({
           ...context.converterContext,
           ...(tableStyleParagraphProps && { tableStyleParagraphProps }),
           ...(cellBackgroundColor && { backgroundColor: cellBackgroundColor }),
-        }
+        } as ConverterContext)
       : context.converterContext;
 
   const paragraphToFlowBlocks = context.converters?.paragraphToFlowBlocks ?? context.paragraphToFlowBlocks;

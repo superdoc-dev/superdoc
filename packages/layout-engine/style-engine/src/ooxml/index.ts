@@ -16,17 +16,11 @@ import type { ParagraphProperties, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';
 import type { StylesDocumentProperties } from './styles-types.ts';
 
-export {
-  combineIndentProperties,
-  combineProperties,
-  combineRunProperties,
-  orderDefaultsAndNormal,
-};
+export { combineIndentProperties, combineProperties, combineRunProperties, orderDefaultsAndNormal };
 export type { PropertyObject };
 export type * from './types.ts';
 export type * from './numbering-types.ts';
 export type * from './styles-types.ts';
-
 
 export interface OoxmlResolverParams {
   translatedNumbering: NumberingProperties | null | undefined;
@@ -48,7 +42,7 @@ export function resolveRunProperties(
   }
   // Getting properties from style
   const paragraphStyleId = resolvedPpr?.styleId as string | undefined;
-  const paragraphStyleProps = resolveStyleChain("runProperties", params, paragraphStyleId);
+  const paragraphStyleProps = resolveStyleChain('runProperties', params, paragraphStyleId) as RunProperties;
 
   // Getting default properties and normal style properties
   const defaultProps = params.translatedLinkedStyles.docDefaults.runProperties ?? {};
@@ -59,7 +53,9 @@ export function resolveRunProperties(
   // Get run properties from direct character style, unless it's inside a TOC paragraph style
   let runStyleProps = {} as RunProperties;
   if (!paragraphStyleId?.startsWith('TOC')) {
-    runStyleProps = (inlineRpr?.styleId ? resolveStyleChain("runProperties", params, inlineRpr.styleId as string) : {}) as RunProperties;
+    runStyleProps = (
+      inlineRpr?.styleId ? resolveStyleChain('runProperties', params, inlineRpr.styleId as string) : {}
+    ) as RunProperties;
   }
 
   const defaultsChain = orderDefaultsAndNormal(defaultProps, normalProps, isNormalDefault);
@@ -70,12 +66,7 @@ export function resolveRunProperties(
     const numId = resolvedPpr?.numberingProperties?.numId;
     let numberingProps: RunProperties = {} as RunProperties;
     if (numId != null && numId !== 0) {
-      numberingProps = getNumberingProperties(
-        "runProperties",
-        params,
-        numberingProperties?.ilvl ?? 0,
-        numId,
-      );
+      numberingProps = getNumberingProperties('runProperties', params, numberingProperties?.ilvl ?? 0, numId);
     }
 
     if (!numberingDefinedInline) {
@@ -118,9 +109,9 @@ export function resolveParagraphProperties(
 
   // Properties from styles
   let styleId = inlineProps.styleId as string | undefined;
-  let styleProps = (inlineProps.styleId
-    ? resolveStyleChain("paragraphProperties", params, inlineProps.styleId)
-    : {}) as ParagraphProperties;
+  let styleProps = (
+    inlineProps.styleId ? resolveStyleChain('paragraphProperties', params, inlineProps.styleId) : {}
+  ) as ParagraphProperties;
 
   // Properties from numbering
   let numberingProps = {} as ParagraphProperties;
@@ -131,11 +122,11 @@ export function resolveParagraphProperties(
   const isList = numId != null && numId !== 0;
   if (isList) {
     const ilvlNum = ilvl != null ? (ilvl as number) : 0;
-    numberingProps = getNumberingProperties("paragraphProperties", params, ilvlNum, numId);
+    numberingProps = getNumberingProperties('paragraphProperties', params, ilvlNum, numId);
     if (numberingProps.styleId) {
       // If numbering level defines a style, replace styleProps with that style
       styleId = numberingProps.styleId as string;
-      styleProps = resolveStyleChain("paragraphProperties", params, styleId);
+      styleProps = resolveStyleChain('paragraphProperties', params, styleId);
       inlineProps.styleId = styleId;
       const inlineNumProps = inlineProps.numberingProperties;
       if (
@@ -150,7 +141,9 @@ export function resolveParagraphProperties(
   }
 
   // Table properties
-  const tableProps = (tableStyleId ? resolveStyleChain("paragraphProperties", params, tableStyleId) : {}) as ParagraphProperties;
+  const tableProps = (
+    tableStyleId ? resolveStyleChain('paragraphProperties', params, tableStyleId) : {}
+  ) as ParagraphProperties;
 
   // Resolve property chain - regular properties are treated differently from indentation
   //   Chain for regular properties
@@ -165,7 +158,7 @@ export function resolveParagraphProperties(
       indentChain = [...defaultsChain, styleProps, numberingProps, inlineProps];
     } else {
       // Otherwise, styleProps should override numberingProps for indentation but it should not follow the based-on chain
-      styleProps = resolveStyleChain("paragraphProperties", params, styleId, false);
+      styleProps = resolveStyleChain('paragraphProperties', params, styleId, false);
       indentChain = [...defaultsChain, numberingProps, styleProps, inlineProps];
     }
   } else {
@@ -180,8 +173,8 @@ export function resolveParagraphProperties(
           return [...(target.tabStops as unknown[]), ...(source.tabStops as unknown[])];
         }
         return source.tabStops;
-      }
-    }
+      },
+    },
   });
   const finalIndent = combineIndentProperties(indentChain);
   finalProps.indent = finalIndent.indent;
@@ -195,15 +188,13 @@ export function resolveStyleChain<T extends PropertyObject>(
   styleId: string | undefined,
   followBasedOnChain = true,
 ): T {
-
   if (!styleId) return {} as T;
 
-  const styleDef = params.translatedLinkedStyles.styles[styleId];
+  const styleDef = params.translatedLinkedStyles?.styles?.[styleId];
   if (!styleDef) return {} as T;
 
   const styleProps = (styleDef[propertyType as keyof typeof styleDef] ?? {}) as T;
   const basedOn = styleDef.basedOn;
-
 
   let styleChain: T[] = [styleProps];
   const seenStyles = new Set<string>();
@@ -213,7 +204,7 @@ export function resolveStyleChain<T extends PropertyObject>(
       break;
     }
     seenStyles.add(basedOn as string);
-    const basedOnStyleDef = params.translatedLinkedStyles.styles[nextBasedOn];
+    const basedOnStyleDef = params.translatedLinkedStyles?.styles?.[nextBasedOn];
     const basedOnProps = basedOnStyleDef?.[propertyType as keyof typeof basedOnStyleDef] as T;
 
     if (basedOnProps && Object.keys(basedOnProps).length) {
@@ -224,7 +215,6 @@ export function resolveStyleChain<T extends PropertyObject>(
   styleChain = styleChain.reverse();
   return combineProperties(styleChain);
 }
-
 
 export function getNumberingProperties<T extends PropertyObject>(
   propertyType: 'paragraphProperties' | 'runProperties',
@@ -258,17 +248,11 @@ export function getNumberingProperties<T extends PropertyObject>(
   const numStyleLinkId = listDefinitionForThisNumId.styleLink;
 
   if (numStyleLinkId && tries < 1) {
-    const styleDef = params.translatedLinkedStyles.styles[numStyleLinkId];
+    const styleDef = params.translatedLinkedStyles?.styles?.[numStyleLinkId];
     const styleProps = styleDef?.paragraphProperties;
     const numIdFromStyle = styleProps?.numberingProperties?.numId;
     if (numIdFromStyle) {
-      return getNumberingProperties(
-        propertyType,
-        params,
-        ilvl,
-        numIdFromStyle,
-        tries + 1,
-      );
+      return getNumberingProperties(propertyType, params, ilvl, numIdFromStyle, tries + 1);
     }
   }
 

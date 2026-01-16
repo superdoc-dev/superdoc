@@ -52,9 +52,8 @@ const MAX_AUTO_LINE_MULTIPLIER = 10;
  * normalizeAlignment('CENTER'); // undefined (case-sensitive)
  * ```
  */
-type NormalizedParagraphAlignment = Exclude<ParagraphAttrs['alignment'], 'both'>;
 
-export const normalizeAlignment = (value: unknown): NormalizedParagraphAlignment => {
+export const normalizeAlignment = (value: unknown): ParagraphAttrs['alignment'] => {
   switch (value) {
     case 'center':
     case 'right':
@@ -154,4 +153,3 @@ export const normalizeLineRule = (value: unknown): ParagraphSpacing['lineRule'] 
   }
   return undefined;
 };
-

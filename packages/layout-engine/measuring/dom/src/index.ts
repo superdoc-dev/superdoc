@@ -2299,7 +2299,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         : LIST_MARKER_GAP;
 
     // Marker box should match Word's box width when provided; otherwise fall back to glyph + gap.
-    const markerBoxWidth = Math.max(wordLayout.marker.markerBoxWidthPx ?? 0, glyphWidth + LIST_MARKER_GAP);
+    const markerBoxWidth = Math.max(0, glyphWidth + LIST_MARKER_GAP);
 
     markerInfo = {
       markerWidth: markerBoxWidth,
@@ -2971,7 +2971,7 @@ async function measureListBlock(block: ListBlock, constraints: MeasureConstraint
       };
       const { font: markerFont } = buildFontString(markerFontRun);
       markerTextWidth = marker.markerText ? measureText(marker.markerText, markerFont, ctx) : 0;
-      markerWidth = marker.markerBoxWidthPx;
+      markerWidth = 0;
       indentLeft = (wordLayout as WordParagraphLayoutOutput).indentLeftPx ?? 0;
     } else {
       // Fallback: legacy behavior for backwards compatibility

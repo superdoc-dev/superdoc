@@ -14,25 +14,25 @@ import type {
   ParagraphFrame,
 } from '@superdoc/contracts';
 import type { PMNode } from '../types.js';
-import type {
-  ResolvedRunProperties,
-} from '@superdoc/word-layout';
+import type { ResolvedRunProperties } from '@superdoc/word-layout';
 import { computeWordParagraphLayout } from '@superdoc/word-layout';
 import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
-import {
-  normalizeAlignment,
-  normalizeParagraphSpacing,
-} from './spacing-indent.js';
+import { normalizeAlignment, normalizeParagraphSpacing } from './spacing-indent.js';
 import { normalizeOoxmlTabs } from './tabs.js';
 import { normalizeParagraphBorders, normalizeParagraphShading } from './borders.js';
 import type { ConverterContext } from '../converter-context.js';
 
-import { resolveParagraphProperties, resolveRunProperties, resolveDocxFontFamily, type ParagraphFrameProperties, type ParagraphProperties, type RunProperties } from '@superdoc/style-engine/ooxml';
-
+import {
+  resolveParagraphProperties,
+  resolveRunProperties,
+  resolveDocxFontFamily,
+  type ParagraphFrameProperties,
+  type ParagraphProperties,
+  type RunProperties,
+} from '@superdoc/style-engine/ooxml';
 
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch
-
 
 const normalizeColor = (value?: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -41,7 +41,6 @@ const normalizeColor = (value?: unknown): string | undefined => {
   const upper = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
   return `#${upper.toUpperCase()}`;
 };
-
 
 export const deepClone = <T>(obj: T): T => {
   if (obj === null || typeof obj !== 'object') {
@@ -58,7 +57,6 @@ export const deepClone = <T>(obj: T): T => {
   }
   return clone as T;
 };
-
 
 /**
  * Convert indent from twips to pixels.
@@ -83,7 +81,6 @@ const normalizeIndentTwipsToPx = (indent?: ParagraphIndent | null): ParagraphInd
   if (hanging != null) result.hanging = twipsToPx(hanging);
   return Object.keys(result).length > 0 ? result : undefined;
 };
-
 
 export const normalizeFramePr = (value: ParagraphFrameProperties | undefined): ParagraphFrame | undefined => {
   if (!value) return undefined;
@@ -110,10 +107,14 @@ export const normalizeFramePr = (value: ParagraphFrameProperties | undefined): P
   if (value.vAnchor) {
     frame.vAnchor = value.vAnchor;
   }
-  return Object.keys(frame).length > 0 ? frame as ParagraphFrame : undefined;
-}
+  return Object.keys(frame).length > 0 ? (frame as ParagraphFrame) : undefined;
+};
 
-export const normalizeDropCap = (framePr: ParagraphFrameProperties | undefined, para: PMNode, converterContext?: ConverterContext): DropCapDescriptor | undefined => {
+export const normalizeDropCap = (
+  framePr: ParagraphFrameProperties | undefined,
+  para: PMNode,
+  converterContext?: ConverterContext,
+): DropCapDescriptor | undefined => {
   if (!framePr) return undefined;
 
   // Keep the legacy dropCap flag for backward compatibility
@@ -135,13 +136,16 @@ export const normalizeDropCap = (framePr: ParagraphFrameProperties | undefined, 
 
     // Map wrap value to the expected types
     if (framePr.wrap) {
-      descriptor.wrap = (framePr.wrap === 'auto' ? undefined : framePr.wrap) as 'around' | 'notBeside' | 'none' | 'tight';
-
+      descriptor.wrap = (framePr.wrap === 'auto' ? undefined : framePr.wrap) as
+        | 'around'
+        | 'notBeside'
+        | 'none'
+        | 'tight';
     }
 
     return descriptor;
   }
-}
+};
 
 /**
  * Default drop cap font size in pixels.
@@ -174,7 +178,9 @@ const extractDropCapRunFromParagraph = (para: PMNode, converterContext?: Convert
   if (!firstRun || !Array.isArray(firstRun.content)) {
     return null;
   }
-  const textNode = firstRun.content.find((node) => node?.type === 'text' && typeof node.text === 'string' && node.text.length > 0);
+  const textNode = firstRun.content.find(
+    (node) => node?.type === 'text' && typeof node.text === 'string' && node.text.length > 0,
+  );
   if (!textNode || !textNode.text) {
     return null;
   }
@@ -188,8 +194,12 @@ const extractDropCapRunFromParagraph = (para: PMNode, converterContext?: Convert
     resolvedRunProperties = runProperties as RunProperties;
   }
 
-  const runAttrs = computeRunAttrs(resolvedRunProperties, converterContext, DEFAULT_DROP_CAP_FONT_SIZE_PX, DEFAULT_DROP_CAP_FONT_FAMILY);
-
+  const runAttrs = computeRunAttrs(
+    resolvedRunProperties,
+    converterContext,
+    DEFAULT_DROP_CAP_FONT_SIZE_PX,
+    DEFAULT_DROP_CAP_FONT_FAMILY,
+  );
 
   // Build the drop cap run
   const dropCapRun: DropCapRun = {
@@ -212,7 +222,7 @@ const extractDropCapRunFromParagraph = (para: PMNode, converterContext?: Convert
 export const computeParagraphAttrs = (
   para: PMNode,
   converterContext?: ConverterContext,
-): { paragraphAttrs: ParagraphAttrs, resolvedParagraphProperties: ParagraphProperties } => {
+): { paragraphAttrs: ParagraphAttrs; resolvedParagraphProperties: ParagraphProperties } => {
   const attrs = para.attrs ?? {};
   const paragraphProperties = (attrs.paragraphProperties ?? {}) as ParagraphProperties;
   let resolvedParagraphProperties;
@@ -233,26 +243,32 @@ export const computeParagraphAttrs = (
   const normalizedFramePr = normalizeFramePr(resolvedParagraphProperties.framePr);
   const floatAlignment = normalizedFramePr?.xAlign;
   const dropCapDescriptor = normalizeDropCap(resolvedParagraphProperties.framePr, para, converterContext);
-  const normalizedListRendering = attrs.listRendering;
+  const normalizedListRendering = attrs.listRendering as {
+    markerText: string;
+    justification: 'left' | 'center' | 'right';
+    path: number[];
+    numberingType: string;
+    suffix: 'tab' | 'space' | 'nothing';
+  };
 
   const paragraphAttrs: ParagraphAttrs = {
-      styleId: resolvedParagraphProperties.styleId,
-      alignment: normalizedAlignment,
-      spacing: normalizedSpacing,
-      contextualSpacing: resolvedParagraphProperties.contextualSpacing,
-      indent: normalizedIndent,
-      dropCapDescriptor: dropCapDescriptor,
-      frame: normalizedFramePr,
-      numberingProperties: resolvedParagraphProperties.numberingProperties as Record<string, unknown>,
-      borders: normalizedBorders,
-      shading: normalizedShading,
-      tabs: normalizedTabStops,
-      decimalSeparator: paragraphDecimalSeparator,
-      tabIntervalTwips,
-      keepNext: resolvedParagraphProperties.keepNext,
-      keepLines: resolvedParagraphProperties.keepLines,
-      floatAlignment: floatAlignment,
-      pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
+    styleId: resolvedParagraphProperties.styleId,
+    alignment: normalizedAlignment,
+    spacing: normalizedSpacing,
+    contextualSpacing: resolvedParagraphProperties.contextualSpacing,
+    indent: normalizedIndent,
+    dropCapDescriptor: dropCapDescriptor,
+    frame: normalizedFramePr,
+    numberingProperties: resolvedParagraphProperties.numberingProperties,
+    borders: normalizedBorders,
+    shading: normalizedShading,
+    tabs: normalizedTabStops,
+    decimalSeparator: paragraphDecimalSeparator,
+    tabIntervalTwips,
+    keepNext: resolvedParagraphProperties.keepNext,
+    keepLines: resolvedParagraphProperties.keepLines,
+    floatAlignment: floatAlignment,
+    pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
   };
 
   if (resolvedParagraphProperties.numberingProperties && normalizedListRendering) {
@@ -274,21 +290,26 @@ export const computeParagraphAttrs = (
 };
 
 export const computeRunAttrs = (
-  runProps: RunProperties, converterContext?: ConverterContext, defaultFontSizePx = 12, defaultFontFamily = 'Times New Roman',
+  runProps: RunProperties,
+  converterContext?: ConverterContext,
+  defaultFontSizePx = 12,
+  defaultFontFamily = 'Times New Roman',
 ): ResolvedRunProperties => {
   let fontFamily;
   if (converterContext) {
-    fontFamily = resolveDocxFontFamily(runProps.fontFamily as Record<string, unknown>, converterContext.docx) || defaultFontFamily;
+    fontFamily =
+      resolveDocxFontFamily(runProps.fontFamily as Record<string, unknown>, converterContext.docx) || defaultFontFamily;
   } else {
-    fontFamily = runProps.fontFamily?.ascii || runProps.fontFamily?.hAnsi || runProps.fontFamily?.eastAsia || defaultFontFamily;
+    fontFamily =
+      runProps.fontFamily?.ascii || runProps.fontFamily?.hAnsi || runProps.fontFamily?.eastAsia || defaultFontFamily;
   }
   return {
     fontFamily: toCssFontFamily(fontFamily)!,
     fontSize: runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx,
     bold: runProps.bold,
     italic: runProps.italic,
-    underline: runProps.underline && {  
-      style: runProps.underline!['w:val'] as 'single' | 'double' | 'dotted' | 'dashed' | 'wavy' || 'single',
+    underline: runProps.underline && {
+      style: (runProps.underline!['w:val'] as 'single' | 'double' | 'dotted' | 'dashed' | 'wavy') || 'single',
       color: runProps.underline!['w:color'] || undefined,
     },
     strike: runProps.strike,
@@ -298,6 +319,5 @@ export const computeRunAttrs = (
     allCaps: runProps?.textTransform === 'uppercase',
     letterSpacing: runProps.letterSpacing ? twipsToPx(runProps.letterSpacing) : undefined,
     lang: runProps.lang?.val || undefined,
-  }
+  };
 };
-

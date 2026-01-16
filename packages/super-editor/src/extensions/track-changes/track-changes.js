@@ -248,6 +248,13 @@ export const TrackChanges = Extension.create({
         ({ state, dispatch, editor }) => {
           const { from = state.selection.from, to = state.selection.to, text = '', user, comment } = options;
 
+          // Validate bounds to prevent RangeError
+          const docSize = state.doc.content.size;
+          if (from < 0 || to > docSize || from > to) {
+            console.warn('insertTrackedChange: invalid range', { from, to, docSize });
+            return false;
+          }
+
           // Check if there's actually a change to make
           const originalText = state.doc.textBetween(from, to, '', '');
           if (originalText === text) {
@@ -259,6 +266,11 @@ export const TrackChanges = Extension.create({
           }
 
           const resolvedUser = user ?? editor?.options?.user ?? {};
+
+          // Warn if user info is missing - marks will have undefined author
+          if (!resolvedUser.name && !resolvedUser.email) {
+            console.warn('insertTrackedChange: no user name/email provided, track change will have undefined author');
+          }
           const date = new Date().toISOString();
           const tr = state.tr;
 

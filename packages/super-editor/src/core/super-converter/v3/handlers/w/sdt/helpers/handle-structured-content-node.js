@@ -35,6 +35,17 @@ export function handleStructuredContentNode(params) {
   const isBlockNode = paragraph || table;
   const sdtContentType = isBlockNode ? 'structuredContentBlock' : 'structuredContent';
 
+  if (isBlockNode) {
+    const permStart = translatedContent.find((node) => node.type === 'permStart');
+    const permEnd = translatedContent.find((node) => node.type === 'permEnd');
+    if (permStart) {
+      permStart.type = 'permStartBlock';
+    }
+    if (permEnd) {
+      permEnd.type = 'permEndBlock';
+    }
+  }
+
   let result = {
     type: sdtContentType,
     content: translatedContent,

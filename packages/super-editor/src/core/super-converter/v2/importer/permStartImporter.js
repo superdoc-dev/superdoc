@@ -1,10 +1,11 @@
 import { generateV2HandlerEntity } from '@core/super-converter/v3/handlers/utils';
-import { translator } from '../../v3/handlers/w/perm-start/index.js';
+import { translatorInline, translatorBlock } from '../../v3/handlers/w/perm-start/index.js';
 
 /**
  * @type {import("./docxImporter").NodeHandlerEntry}
  */
-export const permStartHandlerEntity = generateV2HandlerEntity('permStartHandler', translator);
+export const permStartHandlerEntity = generateV2HandlerEntity('permStartHandler', translatorInline);
+export const permStartBlockHandlerEntity = generateV2HandlerEntity('permStartBlockHandler', translatorBlock);
 
 /**
  * Convenience wrapper for tests and legacy call sites to invoke the perm start node handler directly.
@@ -12,3 +13,9 @@ export const permStartHandlerEntity = generateV2HandlerEntity('permStartHandler'
  * @returns {{ nodes: any[], consumed: number }}
  */
 export const handlePermStartNode = (params) => permStartHandlerEntity.handler(params);
+/**
+ * Convenience wrapper for tests and legacy call sites to invoke the perm start block node handler directly.
+ * @param {import('./docxImporter').NodeHandlerParams} params
+ * @returns {{ nodes: any[], consumed: number }}
+ */
+export const handlePermStartBlockNode = (params) => permStartBlockHandlerEntity.handler(params);

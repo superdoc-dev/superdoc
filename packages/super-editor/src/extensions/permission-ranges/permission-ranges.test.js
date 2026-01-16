@@ -46,6 +46,22 @@ const docWithUserSpecificPermission = {
   ],
 };
 
+const docWithBlockPermissionRange = {
+  type: 'doc',
+  content: [
+    { type: 'permStartBlock', attrs: { id: 'b1', edGrp: 'everyone' } },
+    {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Block editable section. ' }],
+    },
+    { type: 'permEndBlock', attrs: { id: 'b1', edGrp: 'everyone' } },
+    {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Locked block section.' }],
+    },
+  ],
+};
+
 const findTextPos = (doc, searchText) => {
   let found = null;
   doc.descendants((node, pos) => {
@@ -120,6 +136,25 @@ describe('PermissionRanges extension', () => {
 
     const editablePos = findTextPos(instance.state.doc, 'Editable');
     expect(editablePos).toBeGreaterThan(0);
+    instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, editablePos)));
+    const allowedTr = instance.state.tr.insertText('Y', editablePos, editablePos);
+    instance.view.dispatch(allowedTr);
+    expect(instance.state.doc.textBetween(editablePos, editablePos + 2)).toContain('Y');
+  });
+
+  it('honors block-level permission nodes', () => {
+    const instance = createEditor(docWithBlockPermissionRange);
+    const storedRanges = instance.storage.permissionRanges?.ranges ?? [];
+    expect(storedRanges.length).toBeGreaterThan(0);
+    expect(instance.isEditable).toBe(true);
+
+    const lockedPos = findTextPos(instance.state.doc, 'Locked');
+    instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, lockedPos)));
+    const lockedTr = instance.state.tr.insertText('X', lockedPos, lockedPos);
+    instance.view.dispatch(lockedTr);
+    expect(instance.state.doc.textBetween(lockedPos, lockedPos + 1)).not.toContain('X');
+
+    const editablePos = findTextPos(instance.state.doc, 'Block editable');
     instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, editablePos)));
     const allowedTr = instance.state.tr.insertText('Y', editablePos, editablePos);
     instance.view.dispatch(allowedTr);

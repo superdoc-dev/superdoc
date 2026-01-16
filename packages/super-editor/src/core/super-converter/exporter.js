@@ -19,8 +19,14 @@ import {
   commentRangeStartTranslator as wCommentRangeStartTranslator,
   commentRangeEndTranslator as wCommentRangeEndTranslator,
 } from './v3/handlers/w/commentRange/index.js';
-import { translator as wPermStartTranslator } from './v3/handlers/w/perm-start/index.js';
-import { translator as wPermEndTranslator } from './v3/handlers/w/perm-end/index.js';
+import {
+  translatorInline as wPermStartTranslatorInline,
+  translatorBlock as wPermStartTranslatorBlock,
+} from './v3/handlers/w/perm-start/index.js';
+import {
+  translatorInline as wPermEndTranslatorInline,
+  translatorBlock as wPermEndTranslatorBlock,
+} from './v3/handlers/w/perm-end/index.js';
 import { translator as sdPageReferenceTranslator } from '@converter/v3/handlers/sd/pageReference';
 import { translator as sdTableOfContentsTranslator } from '@converter/v3/handlers/sd/tableOfContents';
 import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index';
@@ -173,8 +179,10 @@ export function exportSchemaToJson(params) {
     hardBreak: wBrNodeTranslator,
     commentRangeStart: wCommentRangeStartTranslator,
     commentRangeEnd: wCommentRangeEndTranslator,
-    permStart: wPermStartTranslator,
-    permEnd: wPermEndTranslator,
+    permStart: wPermStartTranslatorInline,
+    permStartBlock: wPermStartTranslatorBlock,
+    permEnd: wPermEndTranslatorInline,
+    permEndBlock: wPermEndTranslatorBlock,
     commentReference: () => null,
     footnoteReference: wFootnoteReferenceTranslator,
     shapeContainer: pictTranslator,

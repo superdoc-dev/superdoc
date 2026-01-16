@@ -34,3 +34,38 @@ export const PermEnd = Node.create({
     };
   },
 });
+
+/**
+ * Configuration options for PermEndBlock
+ * @typedef {Object} PermEndOptions
+ * @category Options
+ */
+
+/**
+ * @module PermEndBlock
+ * @sidebarTitle PermEndBlock
+ * @snippetPath /snippets/extensions/perm-end-block.mdx
+ */
+export const PermEndBlock = Node.create({
+  name: 'permEndBlock',
+  group: 'block',
+  inline: false,
+
+  renderDOM() {
+    return ['span', { style: 'display: none;' }];
+  },
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+      },
+      edGrp: {
+        default: null,
+      },
+      displacedByCustomXml: {
+        default: null,
+      },
+    };
+  },
+});

@@ -30,8 +30,8 @@ import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
 import { commentRangeStartHandlerEntity, commentRangeEndHandlerEntity } from './commentRangeImporter.js';
-import { permStartHandlerEntity } from './permStartImporter.js';
-import { permEndHandlerEntity } from './permEndImporter.js';
+import { permStartHandlerEntity, permStartBlockHandlerEntity } from './permStartImporter.js';
+import { permEndHandlerEntity, permEndBlockHandlerEntity } from './permEndImporter.js';
 import bookmarkStartAttrConfigs from '@converter/v3/handlers/w/bookmark-start/attributes/index.js';
 import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attributes/index.js';
 
@@ -191,8 +191,11 @@ export const createDocumentJson = (docx, converter, editor) => {
       path: [],
     });
 
+    console.log('[debug] parsedContent', parsedContent);
     // Safety: drop any inline-only nodes that accidentally landed at the doc root
     parsedContent = filterOutRootInlineNodes(parsedContent);
+    // Change permStart and permEnd to permStartBlock and permEndBlock if needed based on their parents
+    // for ()
     collapseWhitespaceNextToInlinePassthrough(parsedContent);
 
     const result = {
@@ -254,7 +257,9 @@ export const defaultNodeListHandler = () => {
     autoTotalPageCountEntity,
     pageReferenceEntity,
     permStartHandlerEntity,
+    permStartBlockHandlerEntity,
     permEndHandlerEntity,
+    permEndBlockHandlerEntity,
     passthroughNodeHandlerEntity,
   ];
 
@@ -318,6 +323,7 @@ const createNodeListHandler = (nodeHandlers) => {
 
     const processedElements = [];
 
+    console.log('[debug] filteredElements', filteredElements);
     try {
       for (let index = 0; index < filteredElements.length; index++) {
         try {
@@ -326,11 +332,12 @@ const createNodeListHandler = (nodeHandlers) => {
             continue;
           }
 
+          console.log('[debug] nodesToHandle', nodesToHandle);
           const { nodes, consumed, unhandled } = nodeHandlers.reduce(
             (res, handler) => {
               if (res.consumed > 0) return res;
 
-              return handler.handler({
+              const newNodes = handler.handler({
                 nodes: nodesToHandle,
                 docx,
                 nodeListHandler: { handler: nodeListHandlerFn, handlerEntities: nodeHandlers },
@@ -345,6 +352,7 @@ const createNodeListHandler = (nodeHandlers) => {
                 path,
                 extraParams,
               });
+              return newNodes;
             },
             { nodes: [], consumed: 0 },
           );
@@ -393,6 +401,8 @@ const createNodeListHandler = (nodeHandlers) => {
               }
             });
           }
+
+          console.log('[debug] processedElements', processedElements);
         } catch (error) {
           console.debug('Import error', error);
           editor?.emit('exception', { error, editor });
@@ -406,6 +416,8 @@ const createNodeListHandler = (nodeHandlers) => {
           });
         }
       }
+
+      // Find permStart and permEnd and change their types if needed based on their parents
 
       return processedElements;
     } catch (error) {

@@ -5,8 +5,13 @@ import validXmlAttributes from './attributes/index.js';
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:permEnd';
 
-/** @type {import('@translator').SuperDocNodeOrKeyName} */
-const SD_NODE_NAME = 'permEnd';
+const shouldBeBlock = (parent) => {
+  const acceptsBlockOnly = ['w:body'];
+  return parent?.name && acceptsBlockOnly.includes(parent?.name);
+};
+
+const BLOCK_NODE_NAME = 'permEndBlock';
+const INLINE_NODE_NAME = 'permEnd';
 
 /**
  * Encode a <w:permEnd> node as a SuperDoc permEnd node.
@@ -15,8 +20,11 @@ const SD_NODE_NAME = 'permEnd';
  * @returns {import('@translator').SCEncoderResult}
  */
 const encode = (params, encodedAttrs = {}) => {
+  const parent = params?.path?.[params?.path?.length - 1];
+
+  const nodeName = shouldBeBlock(parent) ? BLOCK_NODE_NAME : INLINE_NODE_NAME;
   return {
-    type: 'permEnd',
+    type: nodeName,
     attrs: encodedAttrs,
   };
 };
@@ -41,9 +49,19 @@ const decode = (params, decodedAttrs = {}) => {
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */
-export const config = {
+export const configInline = {
   xmlName: XML_NODE_NAME,
-  sdNodeOrKeyName: SD_NODE_NAME,
+  sdNodeOrKeyName: INLINE_NODE_NAME,
+  type: NodeTranslator.translatorTypes.NODE,
+  encode,
+  decode,
+  attributes: validXmlAttributes,
+};
+
+/** @type {import('@translator').NodeTranslatorConfig} */
+export const configBlock = {
+  xmlName: XML_NODE_NAME,
+  sdNodeOrKeyName: BLOCK_NODE_NAME,
   type: NodeTranslator.translatorTypes.NODE,
   encode,
   decode,
@@ -54,4 +72,9 @@ export const config = {
  * The NodeTranslator instance for the <w:permEnd> element.
  * @type {import('@translator').NodeTranslator}
  */
-export const translator = NodeTranslator.from(config);
+export const translatorInline = NodeTranslator.from(configInline);
+/**
+ * The NodeTranslator instance for the <w:permEndBlock> element.
+ * @type {import('@translator').NodeTranslator}
+ */
+export const translatorBlock = NodeTranslator.from(configBlock);

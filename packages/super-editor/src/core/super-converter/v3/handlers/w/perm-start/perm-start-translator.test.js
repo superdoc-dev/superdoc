@@ -5,7 +5,7 @@ import { NodeTranslator } from '@translator';
 describe('w:permStart translator', () => {
   it('exposes correct config', () => {
     expect(config.xmlName).toBe('w:permStart');
-    expect(config.sdNodeOrKeyName).toBe('permStart');
+    expect(config.sdNodeOrKeyName).toEqual(['permStart', 'permStartBlock']);
     expect(config.type).toBe(NodeTranslator.translatorTypes.NODE);
     expect(config.attributes).toHaveLength(5);
   });
@@ -24,6 +24,7 @@ describe('w:permStart translator', () => {
           },
         },
       ],
+      path: [{ name: 'w:p' }],
     };
 
     const result = translator.encode(params);
@@ -50,6 +51,7 @@ describe('w:permStart translator', () => {
           },
         },
       ],
+      path: [{ name: 'w:p' }],
     };
 
     const result = translator.encode(params);
@@ -60,6 +62,40 @@ describe('w:permStart translator', () => {
         id: '9',
       },
     });
+  });
+
+  it('creates block nodes for block-only parents', () => {
+    const params = {
+      nodes: [
+        {
+          name: 'w:permStart',
+          attributes: {
+            'w:id': '7',
+          },
+        },
+      ],
+      path: [{ name: 'w:body' }],
+    };
+
+    const result = translator.encode(params);
+    expect(result.type).toBe('permStartBlock');
+  });
+
+  it('defaults to inline when parent context is not provided', () => {
+    const params = {
+      nodes: [
+        {
+          name: 'w:permStart',
+          attributes: {
+            'w:id': '21',
+          },
+        },
+      ],
+      path: [],
+    };
+
+    const result = translator.encode(params);
+    expect(result.type).toBe('permStart');
   });
 
   it('decodes SuperDoc to OOXML', () => {

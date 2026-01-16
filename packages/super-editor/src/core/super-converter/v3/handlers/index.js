@@ -80,8 +80,14 @@ import { translator as w_pBdr_translator } from './w/pBdr/pBdr-translator.js';
 import { translator as w_position_translator } from './w/position/position-translator.js';
 import { translator as w_pPr_translator } from './w/pPr/pPr-translator.js';
 import { translator as w_pStyle_translator } from './w/pStyle/pStyle-translator.js';
-import { translator as w_permEnd_translator } from './w/perm-end/perm-end-translator.js';
-import { translator as w_permStart_translator } from './w/perm-start/perm-start-translator.js';
+import {
+  translatorInline as w_permEnd_translatorInline,
+  translatorBlock as w_permEnd_translatorBlock,
+} from './w/perm-end/perm-end-translator.js';
+import {
+  translatorInline as w_permStart_translatorInline,
+  translatorBlock as w_permStart_translatorBlock,
+} from './w/perm-start/perm-start-translator.js';
 import { translator as w_r_translator } from './w/r/r-translator.js';
 import { translator as w_rFonts_translator } from './w/rFonts/rFonts-translator.js';
 import { translator as w_rPr_translator } from './w/rpr/rpr-translator.js';
@@ -236,8 +242,10 @@ const translatorList = Array.from(
     w_position_translator,
     w_pPr_translator,
     w_pStyle_translator,
-    w_permStart_translator,
-    w_permEnd_translator,
+    w_permStart_translatorInline,
+    w_permStart_translatorBlock,
+    w_permEnd_translatorInline,
+    w_permEnd_translatorBlock,
     w_r_translator,
     w_rFonts_translator,
     w_rPr_translator,

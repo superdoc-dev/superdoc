@@ -155,7 +155,6 @@ const init = async () => {
     rulerContainer: '#ruler-container',
     annotations: true,
     isInternal,
-    telemetry: false,
     // disableContextMenu: true,
     // format: 'docx',
     // html: '<p>Hello world</p>',

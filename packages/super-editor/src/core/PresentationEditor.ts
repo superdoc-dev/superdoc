@@ -453,29 +453,6 @@ const DEFAULT_STALE_TIMEOUT_MS = 5 * 60 * 1000;
 const GLOBAL_PERFORMANCE: Performance | undefined = typeof performance !== 'undefined' ? performance : undefined;
 
 /**
- * Telemetry payload for remote cursor render events.
- * Provides performance metrics for monitoring collaboration cursor rendering.
- */
-export type RemoteCursorsRenderPayload = {
-  /** Total number of collaborators with cursors */
-  collaboratorCount: number;
-  /** Number of cursors actually rendered (after maxVisible limit) */
-  visibleCount: number;
-  /** Time taken to render all cursors in milliseconds */
-  renderTimeMs: number;
-};
-
-/**
- * Telemetry payload for layout updates.
- */
-export type LayoutUpdatePayload = {
-  layout: Layout;
-  blocks: FlowBlock[];
-  measures: Measure[];
-  metrics: LayoutMetrics;
-};
-
-/**
  * Event payload emitted when an image is selected in the editor.
  */
 export type ImageSelectedEvent = {
@@ -524,15 +501,6 @@ interface PotentiallyMockedFunction {
   /** Property present on mocked functions in test environments */
   mock?: unknown;
 }
-
-/**
- * Discriminated union for all telemetry events.
- * Use TypeScript's type narrowing to handle each event type safely.
- */
-export type TelemetryEvent =
-  | { type: 'layout'; data: LayoutUpdatePayload }
-  | { type: 'error'; data: LayoutError }
-  | { type: 'remoteCursorsRender'; data: RemoteCursorsRenderPayload };
 
 /**
  * PresentationEditor bootstraps the classic Editor instance in a hidden container
@@ -605,7 +573,6 @@ export class PresentationEditor extends EventEmitter {
   #layoutErrorState: 'healthy' | 'degraded' | 'failed' = 'healthy';
   #errorBanner: HTMLElement | null = null;
   #errorBannerMessage: HTMLElement | null = null;
-  #telemetryEmitter: ((event: TelemetryEvent) => void) | null = null;
   #renderScheduled = false;
   #pendingDocChange = false;
   #pendingMapping: Mapping | null = null;
@@ -1481,31 +1448,6 @@ export class PresentationEditor extends EventEmitter {
   onLayoutError(handler: (error: LayoutError) => void) {
     this.on('layoutError', handler);
     return () => this.off('layoutError', handler);
-  }
-
-  /**
-   * Attach a telemetry listener to capture layout events/errors.
-   * Uses type-safe discriminated union for event handling.
-   *
-   * @param handler - Callback function receiving telemetry events
-   * @returns Unsubscribe function to remove the handler
-   *
-   * @example
-   * ```typescript
-   * const unsubscribe = editor.onTelemetry((event) => {
-   *   if (event.type === 'remoteCursorsRender') {
-   *     console.log(`Rendered ${event.data.visibleCount} cursors in ${event.data.renderTimeMs}ms`);
-   *   }
-   * });
-   * ```
-   */
-  onTelemetry(handler: (event: TelemetryEvent) => void) {
-    this.#telemetryEmitter = handler;
-    return () => {
-      if (this.#telemetryEmitter === handler) {
-        this.#telemetryEmitter = null;
-      }
-    };
   }
 
   /**
@@ -2935,9 +2877,6 @@ export class PresentationEditor extends EventEmitter {
     if (!this.#remoteCursorDirty) return;
     this.#remoteCursorDirty = false;
 
-    // Track render start time for telemetry
-    const startTime = performance.now();
-
     // Normalize awareness states to PM positions
     this.#remoteCursorState = normalizeAwarenessStatesFromHelper({
       provider: this.#options.collaborationProvider ?? null,
@@ -2954,21 +2893,6 @@ export class PresentationEditor extends EventEmitter {
     this.emit('remoteCursorsUpdate', {
       cursors: Array.from(this.#remoteCursorState.values()),
     });
-
-    // Optional telemetry for monitoring performance
-    if (this.#telemetryEmitter) {
-      const renderTime = performance.now() - startTime;
-      const maxVisible = this.#layoutOptions.presence?.maxVisible ?? 20;
-      const visibleCount = Math.min(this.#remoteCursorState.size, maxVisible);
-      this.#telemetryEmitter({
-        type: 'remoteCursorsRender',
-        data: {
-          collaboratorCount: this.#remoteCursorState.size,
-          visibleCount,
-          renderTimeMs: renderTime,
-        },
-      });
-    }
   }
 
   /**
@@ -4770,9 +4694,6 @@ export class PresentationEditor extends EventEmitter {
         }
       }
 
-      if (this.#telemetryEmitter && metrics) {
-        this.#telemetryEmitter({ type: 'layout', data: { layout, blocks, measures, metrics } });
-      }
       this.#selectionSync.requestRender({ immediate: true });
 
       // Trigger cursor re-rendering on layout changes without re-normalizing awareness
@@ -7246,9 +7167,6 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.emit('layoutError', this.#layoutError);
-    if (this.#telemetryEmitter) {
-      this.#telemetryEmitter({ type: 'error', data: this.#layoutError });
-    }
     this.#showLayoutErrorBanner(error);
   }
 

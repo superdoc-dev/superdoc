@@ -396,7 +396,6 @@ export function processOutputMarks(marks = []) {
 function translateMark(mark) {
   const xmlMark = SuperConverter.markTypes.find((m) => m.type === mark.type);
   if (!xmlMark) {
-    // TODO: Telemetry
     return {};
   }
 

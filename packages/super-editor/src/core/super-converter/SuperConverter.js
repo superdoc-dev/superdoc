@@ -228,8 +228,6 @@ class SuperConverter {
     this.tagsNotInSchema = ['w:body'];
     this.savedTagsToRestore = [];
 
-    // Initialize telemetry
-    this.telemetry = params?.telemetry || null;
     this.documentInternalId = null;
 
     // Uploaded file
@@ -665,7 +663,7 @@ class SuperConverter {
   }
 
   /**
-   * Generate document hash for telemetry (async, lazy)
+   * Generate document hash (async, lazy)
    */
   async #generateDocumentHash() {
     if (!this.fileSource) return `HASH-${Date.now()}`;

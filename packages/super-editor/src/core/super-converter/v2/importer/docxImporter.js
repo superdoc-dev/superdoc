@@ -113,43 +113,6 @@ export const createDocumentJson = (docx, converter, editor) => {
     converter.commentThreadingProfile = detectCommentThreadingProfile(docx);
   }
 
-  // Track initial document structure
-  if (converter?.telemetry) {
-    const files = Object.keys(docx).map((filePath) => {
-      const parts = filePath.split('/');
-      return {
-        filePath,
-        fileDepth: parts.length,
-        fileType: filePath.split('.').pop(),
-      };
-    });
-
-    const trackStructure = (documentIdentifier = null) =>
-      converter.telemetry.trackFileStructure(
-        {
-          totalFiles: files.length,
-          maxDepth: Math.max(...files.map((f) => f.fileDepth)),
-          totalNodes: 0,
-          files,
-        },
-        converter.fileSource,
-        converter.documentGuid ?? converter.documentId ?? null,
-        documentIdentifier ?? converter.documentId ?? null,
-        converter.documentInternalId,
-      );
-
-    try {
-      const identifierResult = converter.getDocumentIdentifier?.();
-      if (identifierResult && typeof identifierResult.then === 'function') {
-        identifierResult.then(trackStructure).catch(() => trackStructure());
-      } else {
-        trackStructure(identifierResult);
-      }
-    } catch {
-      trackStructure();
-    }
-  }
-
   const nodeListHandler = defaultNodeListHandler();
   const bodyNode = json.elements[0].elements.find((el) => el.name === 'w:body');
 
@@ -204,14 +167,6 @@ export const createDocumentJson = (docx, converter, editor) => {
         ...(bodySectPr ? { bodySectPr } : {}),
       },
     };
-
-    // Not empty document
-    if (result.content.length > 1) {
-      converter?.telemetry?.trackUsage('document_import', {
-        documentType: 'docx',
-        timestamp: new Date().toISOString(),
-      });
-    }
 
     return {
       pmDoc: result,
@@ -358,20 +313,8 @@ const createNodeListHandler = (nodeHandlers) => {
           );
           if (unhandled) {
             if (!context.elementName) continue;
-
-            converter?.telemetry?.trackStatistic('unknown', context);
             continue;
           } else {
-            converter?.telemetry?.trackStatistic('node', context);
-
-            // Use Telemetry to track list item attributes
-            if (context.type === 'orderedList' || context.type === 'bulletList') {
-              context.content.forEach((item) => {
-                const innerItemContext = getSafeElementContext([item], 0, item, `/word/${filename || 'document.xml'}`);
-                converter?.telemetry?.trackStatistic('attributes', innerItemContext);
-              });
-            }
-
             const hasHighlightMark = nodes[0]?.marks?.find((mark) => mark.type === 'highlight');
             if (hasHighlightMark) {
               converter?.docHiglightColors.add(hasHighlightMark.attrs.color.toUpperCase());
@@ -396,14 +339,6 @@ const createNodeListHandler = (nodeHandlers) => {
         } catch (error) {
           console.debug('Import error', error);
           editor?.emit('exception', { error, editor });
-
-          converter?.telemetry?.trackStatistic('error', {
-            type: 'processing_error',
-            message: error.message,
-            name: error.name,
-            stack: error.stack,
-            fileName: `/word/${filename || 'document.xml'}`,
-          });
         }
       }
 
@@ -411,15 +346,6 @@ const createNodeListHandler = (nodeHandlers) => {
     } catch (error) {
       console.debug('Error during import', error);
       editor?.emit('exception', { error, editor });
-
-      // Track only catastrophic handler failures
-      converter?.telemetry?.trackStatistic('error', {
-        type: 'fatal_error',
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-        fileName: `/word/${filename || 'document.xml'}`,
-      });
 
       throw error;
     }

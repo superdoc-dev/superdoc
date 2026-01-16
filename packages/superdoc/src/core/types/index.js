@@ -6,14 +6,6 @@
  */
 
 /**
- * @typedef {Object} TelemetryConfig Telemetry configuration
- * @property {boolean} [enabled=true] Whether telemetry is enabled
- * @property {string} [licenseKey] The licence key for telemetry
- * @property {string} [endpoint] The endpoint for telemetry
- * @property {string} [superdocVersion] The version of the superdoc
- */
-
-/**
  * @typedef {Object} Document
  * @property {string} [id] The ID of the document
  * @property {string} type The type of the document
@@ -129,7 +121,6 @@
  *   Example (custom font):
  *     uiDisplayFallbackFont: '"Inter", Arial, sans-serif'
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
- * @property {TelemetryConfig} [telemetry] Telemetry configuration
  * @property {Object} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
  * @property {Object} [layoutEngineOptions.trackedChanges] Optional override for paginated track-changes rendering (e.g., `{ mode: 'final' }` to force final view or `{ enabled: false }` to strip metadata entirely)
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created

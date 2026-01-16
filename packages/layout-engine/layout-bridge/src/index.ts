@@ -61,8 +61,7 @@ export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParag
 export type { TextIndentCalculationParams } from './list-indent-utils';
 export { LayoutVersionManager } from './layout-version-manager';
 export type { VersionedLayoutState, LayoutVersionMetrics } from './layout-version-manager';
-export { LayoutVersionLogger, LayoutVersionMetricsCollector, globalLayoutVersionMetrics } from './instrumentation';
-export type { LayoutVersionTelemetry } from './instrumentation';
+export { LayoutVersionLogger } from './instrumentation';
 
 // Font Metrics Cache
 export { FontMetricsCache } from './font-metrics-cache';
@@ -236,42 +235,6 @@ type AtomicFragment = DrawingFragment | ImageFragment;
 const isAtomicFragment = (fragment: Fragment): fragment is AtomicFragment => {
   return fragment.kind === 'drawing' || fragment.kind === 'image';
 };
-
-/**
- * Click mapping telemetry for tracking DOM vs geometry mapping usage.
- * Exposed for performance monitoring and optimization decisions.
- */
-export interface ClickMappingTelemetry {
-  /** Total click mappings attempted */
-  total: number;
-  /** Successful DOM-based mappings */
-  domSuccess: number;
-  /** Successful geometry-based mappings */
-  geometrySuccess: number;
-  /** Failed mappings (returned null) */
-  failed: number;
-}
-
-/**
- * Global click mapping telemetry instance.
- * Reset this periodically to avoid unbounded growth.
- */
-export const clickMappingTelemetry: ClickMappingTelemetry = {
-  total: 0,
-  domSuccess: 0,
-  geometrySuccess: 0,
-  failed: 0,
-};
-
-/**
- * Resets click mapping telemetry counters.
- */
-export function resetClickMappingTelemetry(): void {
-  clickMappingTelemetry.total = 0;
-  clickMappingTelemetry.domSuccess = 0;
-  clickMappingTelemetry.geometrySuccess = 0;
-  clickMappingTelemetry.failed = 0;
-}
 
 const logClickStage = (_level: 'log' | 'warn' | 'error', _stage: string, _payload: Record<string, unknown>) => {
   // No-op in production. Enable for debugging click-to-position mapping.
@@ -827,7 +790,6 @@ export function clickToPosition(
   clientY?: number,
   geometryHelper?: import('./page-geometry-helper').PageGeometryHelper,
 ): PositionHit | null {
-  clickMappingTelemetry.total++;
   const layoutEpoch = layout.layoutEpoch ?? 0;
 
   logClickStage('log', 'entry', {
@@ -849,7 +811,6 @@ export function clickToPosition(
         clientX,
         clientY,
       });
-      clickMappingTelemetry.domSuccess++;
       // DOM mapping succeeded - we need to construct a PositionHit with metadata
       // Find the block containing this position to get blockId
       let blockId = '';
@@ -1047,7 +1008,6 @@ export function clickToPosition(
       }
 
       const column = determineColumn(layout, fragment.x);
-      clickMappingTelemetry.geometrySuccess++;
       logPositionDebug({
         origin: 'geometry',
         pos,
@@ -1084,14 +1044,11 @@ export function clickToPosition(
       const pmRange = getAtomicPmRange(fragment, block);
       const pos = pmRange.pmStart ?? pmRange.pmEnd ?? null;
       if (pos == null) {
-        clickMappingTelemetry.failed++;
         logClickStage('warn', 'atomic-without-range', {
           fragmentId: fragment.blockId,
         });
         return null;
       }
-
-      clickMappingTelemetry.geometrySuccess++;
 
       logClickStage('log', 'success', {
         blockId: fragment.blockId,
@@ -1152,7 +1109,6 @@ export function clickToPosition(
       const pos = mapPointToPm(cellBlock, line, localX, isRTL, availableWidth, alignmentOverride);
 
       if (pos != null) {
-        clickMappingTelemetry.geometrySuccess++;
         logClickStage('log', 'success', {
           blockId: tableHit.fragment.blockId,
           pos,
@@ -1176,7 +1132,6 @@ export function clickToPosition(
     // Fallback: return first position in the cell if line/position mapping fails
     const firstRun = cellBlock.runs?.[0];
     if (firstRun && firstRun.pmStart != null) {
-      clickMappingTelemetry.geometrySuccess++;
       logClickStage('log', 'success', {
         blockId: tableHit.fragment.blockId,
         pos: firstRun.pmStart,
@@ -1211,14 +1166,11 @@ export function clickToPosition(
     const pmRange = getAtomicPmRange(fragment, block);
     const pos = pmRange.pmStart ?? pmRange.pmEnd ?? null;
     if (pos == null) {
-      clickMappingTelemetry.failed++;
       logClickStage('warn', 'atomic-without-range', {
         fragmentId: fragment.blockId,
       });
       return null;
     }
-
-    clickMappingTelemetry.geometrySuccess++;
 
     logClickStage('log', 'success', {
       blockId: fragment.blockId,
@@ -1238,8 +1190,6 @@ export function clickToPosition(
       lineIndex: -1,
     };
   }
-
-  clickMappingTelemetry.failed++;
 
   logClickStage('warn', 'no-fragment', {
     pageIndex: pageHit.pageIndex,

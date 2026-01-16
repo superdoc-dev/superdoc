@@ -207,7 +207,6 @@ const onEditorCreate = ({ editor }) => {
 
 /**
  * Handle editor-ready event from SuperEditor
- * Subscribes to PresentationEditor telemetry to capture layout metrics/errors
  * @param {Object} payload
  * @param {Editor} payload.editor - The Editor instance
  * @param {PresentationEditor} payload.presentationEditor - The PresentationEditor wrapper
@@ -222,11 +221,6 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     doc.setPresentationEditor(presentationEditor);
   }
   presentationEditor.setContextMenuDisabled?.(proxy.$superdoc.config.disableContextMenu);
-
-  // Subscribe to layout pipeline telemetry
-  presentationEditor.onTelemetry((telemetryPayload) => {
-    proxy.$superdoc.captureLayoutPipelineEvent(telemetryPayload);
-  });
 
   // Listen for fresh comment positions from the layout engine.
   // PresentationEditor emits this after every layout with PM positions collected
@@ -475,7 +469,6 @@ const editorOptions = (doc) => {
     collaborationProvider: doc.provider || null,
     isNewFile: doc.isNewFile || false,
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
-    telemetry: proxy.$superdoc.telemetry,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
     disableContextMenu: proxy.$superdoc.config.disableContextMenu,

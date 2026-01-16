@@ -13,7 +13,7 @@ Key impacts:
 * A new **layout engine** is now the default rendering system  
 * **Pagination, lists, and paragraph formatting were reimplemented**  
 * Several **extensions, commands, and configuration options were removed**  
-* **Selection, comments, telemetry, and tracked-changes behavior changed**
+* **Selection, comments, and tracked-changes behavior changed**
 
 Most applications will require **explicit migration work**.
 

@@ -2,14 +2,7 @@ import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
-import type {
-  EditorHelpers,
-  ExtensionStorage,
-  ProseMirrorJSON,
-  PageStyles,
-  TelemetryData,
-  Toolbar,
-} from './types/EditorTypes.js';
+import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
 import type { ChainableCommandObject, CanObject, EditorCommands } from './types/ChainedCommands.js';
 import type { EditorEventMap, FontsResolvedPayload, Comment } from './types/EditorEvents.js';
 import type { SchemaSummaryJSON } from './types/EditorSchema.js';
@@ -304,9 +297,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     onFontsResolved: null,
     // async (file) => url;
     handleImageUpload: null,
-
-    // telemetry
-    telemetry: null,
 
     // Docx xml updated by User
     customUpdatedFiles: {},
@@ -1506,7 +1496,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media: this.options.mediaFiles,
         fonts: this.options.fonts,
         debug: true,
-        telemetry: this.options.telemetry,
         fileSource: this.options.fileSource,
         documentId: this.options.documentId,
         mockWindow: this.options.mockWindow ?? null,
@@ -1822,8 +1811,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     });
 
     this.createNodeViews();
-
-    (this.options.telemetry as TelemetryData | null)?.trackUsage?.('editor_initialized', {});
   }
 
   /**
@@ -2057,13 +2044,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get document identifier for telemetry (async - may generate hash)
-   */
-  async getDocumentIdentifier(): Promise<string | null> {
-    return (await this.converter?.getDocumentIdentifier()) || null;
-  }
-
-  /**
    * Get permanent document GUID (sync - only for modified documents)
    */
   getDocumentGuid(): string | null {
@@ -2075,23 +2055,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   isDocumentModified(): boolean {
     return this.converter?.documentModified || false;
-  }
-
-  /**
-   * Get telemetry data (async because of lazy hash generation)
-   */
-  async getTelemetryData(): Promise<{
-    documentId: string | null;
-    isModified: boolean;
-    isPermanentId: boolean;
-    version: string | null;
-  }> {
-    return {
-      documentId: await this.getDocumentIdentifier(),
-      isModified: this.isDocumentModified(),
-      isPermanentId: !!this.converter?.documentGuid,
-      version: this.converter?.getSuperdocVersion(),
-    };
   }
 
   /**
@@ -2531,11 +2494,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media,
         fonts: this.options.fonts,
         isHeadless: this.options.isHeadless,
-      });
-
-      (this.options.telemetry as TelemetryData | null)?.trackUsage?.('document_export', {
-        documentType: 'docx',
-        timestamp: new Date().toISOString(),
       });
 
       return result;

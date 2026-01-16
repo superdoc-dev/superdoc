@@ -121,7 +121,6 @@ export const parseAnnotationMarks = (content = {}) => {
   const rPr = run?.elements?.find((el) => el.name === 'w:rPr');
   if (!rPr) return {};
 
-  // TODO: Telemetry
   const unknownMarks = [];
   const marks = parseMarks(rPr, unknownMarks) || [];
 

@@ -16,7 +16,6 @@ describe('Shape Group Round-trip', () => {
       headerIds: {},
       footers: {},
       footerIds: {},
-      telemetry: null,
     };
     const editor = {
       options: {},
@@ -75,7 +74,6 @@ describe('Shape Group Round-trip', () => {
       headerIds: {},
       footers: {},
       footerIds: {},
-      telemetry: null,
     };
     const editor = {
       options: {},

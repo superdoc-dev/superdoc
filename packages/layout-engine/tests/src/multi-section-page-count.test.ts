@@ -62,11 +62,6 @@ async function docxToPMJson(docxPath: string): Promise<PMNode> {
 
   // Convert to PM JSON
   const converter = {
-    telemetry: {
-      trackFileStructure: () => {},
-      trackUsage: () => {},
-      trackStatistic: () => {},
-    },
     docHiglightColors: new Set(),
   };
 

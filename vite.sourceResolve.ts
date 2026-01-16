@@ -3,6 +3,7 @@ import path from 'path';
 const sourceResolve = {
   conditions: ['source'],
   alias: [
+    { find: '@shared', replacement: path.resolve(__dirname, 'shared') },
     { find: '@core', replacement: path.resolve(__dirname, 'packages/super-editor/src/core') },
     { find: '@extensions', replacement: path.resolve(__dirname, 'packages/super-editor/src/extensions') },
     { find: '@features', replacement: path.resolve(__dirname, 'packages/super-editor/src/features') },

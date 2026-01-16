@@ -21,6 +21,7 @@ export {
   orderDefaultsAndNormal,
   combineIndentProperties,
   createFirstLineIndentHandler,
+  createHangingIndentHandler,
   isValidFontSize,
   INLINE_OVERRIDE_PROPERTIES,
   DEFAULT_FONT_SIZE_HALF_POINTS,

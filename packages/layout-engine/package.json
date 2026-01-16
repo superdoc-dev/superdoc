@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Layout engine POC - manages layout, pagination, and rendering for SuperDoc",
   "scripts": {
-    "build": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/geometry-utils --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom --filter=@superdoc/painter-pdf build",
-    "test": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/geometry-utils --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom --filter=@superdoc/painter-pdf test"
+    "build": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/geometry-utils --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom build",
+    "test": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/geometry-utils --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom test"
   }
 }

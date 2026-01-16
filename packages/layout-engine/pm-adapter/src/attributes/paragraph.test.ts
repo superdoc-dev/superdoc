@@ -3667,10 +3667,8 @@ describe('computeParagraphAttrs - indent priority cascade', () => {
       // Note: firstLine/hanging mutual exclusivity - when attrs.indent has neither,
       // textIndent's hanging applies and should clear paragraphProperties' firstLine
       expect(result?.indent?.hanging).toBeCloseTo(twipsToPx(360));
-      // firstLine from paragraphProperties is still present because attrs.indent
-      // doesn't have firstLine to trigger the mutual exclusivity handler
-      // The style engine merges all sources and firstLine comes through
-      expect(result?.indent?.firstLine).toBeCloseTo(twipsToPx(720));
+      // firstLine from paragraphProperties is cleared because higher-priority hanging is present
+      expect(result?.indent?.firstLine).toBeUndefined();
     });
   });
 
@@ -3752,9 +3750,9 @@ describe('computeParagraphAttrs - indent priority cascade', () => {
       // firstLine should be present
       expect(result?.indent?.firstLine).toBe(24);
       // hanging from style should be cleared by mutual exclusivity handler
-      // Note: The actual behavior depends on style resolution - hanging may still show as 0
-      // after the mutual exclusivity handler runs but indentPtToPx preserves it
-      expect(result?.indent?.hanging).toBeDefined(); // hanging=0 is preserved
+      // Per OOXML, firstLine and hanging are mutually exclusive - when firstLine is set,
+      // hanging should be completely removed (undefined), not just set to 0.
+      expect(result?.indent?.hanging).toBeUndefined();
     });
   });
 
@@ -3841,9 +3839,9 @@ describe('computeParagraphAttrs - indent priority cascade', () => {
 
       // firstLine from attrs should win
       expect(result?.indent?.firstLine).toBe(24);
-      // hanging may be 0 (cleared but preserved) or undefined depending on internal processing
-      // The key is that firstLine takes precedence
-      expect(result?.indent?.hanging).toBeDefined(); // hanging=0 is preserved by indentPtToPx
+      // Per OOXML, firstLine and hanging are mutually exclusive - when firstLine is explicitly set,
+      // hanging should be completely removed (undefined), not just set to 0.
+      expect(result?.indent?.hanging).toBeUndefined();
       // left should still be inherited
       expect(result?.indent?.left).toBeCloseTo(twipsToPx(720));
     });

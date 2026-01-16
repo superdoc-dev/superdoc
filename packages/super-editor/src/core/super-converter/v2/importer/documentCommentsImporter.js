@@ -17,6 +17,16 @@ export function importCommentData({ docx, editor, converter }) {
   const comments = docx['word/comments.xml'];
   if (!comments) return;
 
+  const commentThreadingProfile = converter?.commentThreadingProfile || {
+    defaultStyle: docx['word/commentsExtended.xml'] ? 'commentsExtended' : 'range-based',
+    mixed: false,
+    fileSet: {
+      hasCommentsExtended: !!docx['word/commentsExtended.xml'],
+      hasCommentsExtensible: !!docx['word/commentsExtensible.xml'],
+      hasCommentsIds: !!docx['word/commentsIds.xml'],
+    },
+  };
+
   const { elements } = comments;
   if (!elements || !elements.length) return;
 
@@ -53,9 +63,7 @@ export function importCommentData({ docx, editor, converter }) {
     const lastElement = parsedElements[parsedElements.length - 1];
     const paraId = lastElement?.attrs?.['w14:paraId'];
 
-    // Determine threading method based on whether commentsExtended.xml exists
-    const commentsExtended = docx['word/commentsExtended.xml'];
-    const threadingMethod = commentsExtended ? 'commentsExtended' : 'range-based';
+    const threadingMethod = commentThreadingProfile.defaultStyle;
 
     return {
       commentId: internalId || uuidv4(),
@@ -74,15 +82,30 @@ export function importCommentData({ docx, editor, converter }) {
       isDone: false,
       origin: converter?.documentOrigin || 'word',
       threadingMethod,
+      threadingStyleOverride: undefined,
       originalXmlStructure: {
-        hasCommentsExtended: !!commentsExtended,
-        hasCommentsExtensible: !!docx['word/commentsExtensible.xml'],
-        hasCommentsIds: !!docx['word/commentsIds.xml'],
+        ...commentThreadingProfile.fileSet,
       },
     };
   });
 
-  const extendedComments = generateCommentsWithExtendedData({ docx, comments: extractedComments, converter });
+  const extendedComments = generateCommentsWithExtendedData({
+    docx,
+    comments: extractedComments,
+    converter,
+    threadingProfile: commentThreadingProfile,
+  });
+
+  if (converter) {
+    const hasOverride = extendedComments.some(
+      (comment) =>
+        comment.threadingStyleOverride && comment.threadingStyleOverride !== commentThreadingProfile.defaultStyle,
+    );
+    converter.commentThreadingProfile = {
+      ...commentThreadingProfile,
+      mixed: hasOverride || commentThreadingProfile.mixed,
+    };
+  }
   return extendedComments;
 }
 
@@ -96,12 +119,23 @@ export function importCommentData({ docx, editor, converter }) {
  * @param {SuperConverter} param0.converter The super converter instance
  * @returns {Array} The comments with extended details
  */
-const generateCommentsWithExtendedData = ({ docx, comments, converter }) => {
+const generateCommentsWithExtendedData = ({ docx, comments, converter, threadingProfile }) => {
   if (!comments?.length) return [];
 
   const rangeData = extractCommentRangesFromDocument(docx, converter);
   const { commentsInTrackedChanges } = rangeData;
   const trackedChangeParentMap = detectThreadingFromTrackedChanges(comments, commentsInTrackedChanges);
+  const rangeThreadedComments = detectThreadingFromRanges(comments, {
+    ...rangeData,
+    commentsInTrackedChanges: new Map(),
+  });
+  const commentIdSet = new Set(comments.map((comment) => comment.commentId));
+  const rangeParentMap = new Map();
+  rangeThreadedComments.forEach((comment) => {
+    if (comment.parentCommentId && commentIdSet.has(comment.parentCommentId)) {
+      rangeParentMap.set(comment.commentId, comment.parentCommentId);
+    }
+  });
 
   const commentsExtended = docx['word/commentsExtended.xml'];
   if (!commentsExtended) {
@@ -126,6 +160,8 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter }) => {
 
     let isDone = comment.isDone ?? false;
     let parentCommentId = undefined;
+    let threadingParentCommentId = undefined;
+    let threadingStyleOverride = undefined;
 
     const trackedChangeParent = trackedChangeParentMap.get(comment.importedId);
     const isInsideTrackedChange = trackedChangeParent?.isTrackedChangeParent;
@@ -134,13 +170,21 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter }) => {
       const details = getExtendedDetails(extendedDef);
       isDone = details.isDone ?? false;
 
-      if (!isInsideTrackedChange && details.paraIdParent) {
+      if (details.paraIdParent) {
         const parentComment = comments.find(
           (c) =>
             c.paraId === details.paraIdParent ||
             c.elements?.some((el) => el.attrs?.['w14:paraId'] === details.paraIdParent),
         );
-        parentCommentId = parentComment?.commentId;
+        const rangeParent = rangeParentMap.get(comment.commentId);
+        if (parentComment?.trackedChange && rangeParent) {
+          threadingParentCommentId = rangeParent;
+        } else {
+          threadingParentCommentId = parentComment?.commentId;
+        }
+        if (!isInsideTrackedChange) {
+          parentCommentId = threadingParentCommentId;
+        }
       }
     }
 
@@ -148,10 +192,19 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter }) => {
       parentCommentId = trackedChangeParent.trackedChangeId;
     }
 
+    if (!parentCommentId && rangeParentMap.has(comment.commentId)) {
+      parentCommentId = rangeParentMap.get(comment.commentId);
+      if (threadingProfile?.defaultStyle === 'commentsExtended') {
+        threadingStyleOverride = 'range-based';
+      }
+    }
+
     return {
       ...comment,
       isDone,
       parentCommentId,
+      threadingStyleOverride,
+      threadingParentCommentId,
     };
   });
 };

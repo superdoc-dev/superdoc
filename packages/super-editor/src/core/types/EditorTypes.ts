@@ -78,14 +78,6 @@ export interface PageStyles {
 }
 
 /**
- * Telemetry data configuration
- */
-export interface TelemetryData {
-  trackUsage?: (event: string, data?: Record<string, unknown>) => void;
-  [key: string]: unknown;
-}
-
-/**
  * Toolbar configuration
  */
 export interface Toolbar {

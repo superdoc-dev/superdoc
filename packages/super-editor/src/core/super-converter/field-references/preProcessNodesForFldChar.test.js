@@ -90,6 +90,35 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('captures w:tab tokens in INDEX instructions', () => {
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'INDEX \\e "' }] }],
+      },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:tab', elements: [] },
+          { name: 'w:instrText', elements: [{ type: 'text', text: '"' }] },
+        ],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Entry' }] }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:index');
+    expect(processedNodes[0].attributes.instructionTokens).toEqual([
+      { type: 'text', text: 'INDEX \\e "' },
+      { type: 'tab' },
+      { type: 'text', text: '"' },
+    ]);
+  });
+
   it('should handle unpaired begin', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
@@ -108,7 +137,14 @@ describe('preProcessNodesForFldChar', () => {
     expect(unpairedBegin).toEqual([
       {
         nodes: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
-        fieldInfo: { instrText: 'HYPERLINK "http://example.com"   ' },
+        fieldInfo: {
+          instrText: 'HYPERLINK "http://example.com"   ',
+          instructionTokens: [
+            { type: 'text', text: 'HYPERLINK "http://example.com"' },
+            { type: 'text', text: ' ' },
+          ],
+          afterSeparate: true,
+        },
       },
     ]);
     expect(processedNodes).toEqual([
@@ -148,5 +184,20 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
     expect(processedNodes).toEqual(nodes);
+  });
+
+  it('processes fldSimple XE fields into indexEntry nodes', () => {
+    const nodes = [
+      {
+        name: 'w:fldSimple',
+        attributes: { 'w:instr': 'XE "Term"' },
+        elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'hidden' }] }] }],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:indexEntry');
+    expect(processedNodes[0].attributes.instruction).toBe('XE "Term"');
   });
 });

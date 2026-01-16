@@ -247,6 +247,15 @@ describe('Comment origin detection and round trip', () => {
         if (editor.converter.comments.length > 1) {
           editor.converter.comments[0].origin = 'word';
           editor.converter.comments[1].origin = 'google-docs';
+          editor.converter.commentThreadingProfile = {
+            defaultStyle: 'commentsExtended',
+            mixed: true,
+            fileSet: {
+              hasCommentsExtended: true,
+              hasCommentsExtensible: true,
+              hasCommentsIds: true,
+            },
+          };
 
           const commentsForExport = editor.converter.comments.map((comment) => ({
             ...comment,

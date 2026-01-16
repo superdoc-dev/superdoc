@@ -268,6 +268,65 @@ describe('importCommentData extended metadata', () => {
 
     expect(child.parentCommentId).toBe('parent-comment');
   });
+
+  it('preserves comment threading parent when comment is inside a tracked change', () => {
+    const docx = buildDocx({
+      comments: [
+        {
+          id: 1,
+          paraId: 'parent-para',
+          internalId: 'parent-comment',
+        },
+        {
+          id: 2,
+          paraId: 'tracked-para',
+          internalId: 'tracked-comment',
+          trackedChange: 'true',
+        },
+        {
+          id: 3,
+          paraId: 'child-para',
+          internalId: 'child-comment',
+        },
+      ],
+      extended: [
+        { paraId: 'parent-para', done: '0' },
+        { paraId: 'tracked-para', done: '0' },
+        { paraId: 'child-para', done: '0', parent: 'tracked-para' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Parent' }] }],
+            },
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': 'tc-1', 'w:author': 'Author', 'w:date': '2024-01-01T00:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '3' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Child' }] }],
+                },
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '3' } },
+              ],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    const child = comments.find((comment) => comment.commentId === 'child-comment');
+
+    expect(child.parentCommentId).toBe('tc-1');
+    expect(child.threadingParentCommentId).toBe('parent-comment');
+  });
 });
 
 describe('Google Docs threading (missing commentsExtended.xml)', () => {

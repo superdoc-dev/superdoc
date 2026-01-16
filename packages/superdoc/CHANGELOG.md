@@ -1,3 +1,67 @@
+# [1.8.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.7.0...v1.8.0-next.1) (2026-01-16)
+
+
+### Features
+
+* add insertTrackedChange programmatic shortcut ([#1761](https://github.com/superdoc-dev/superdoc/issues/1761)) ([cd0628e](https://github.com/superdoc-dev/superdoc/commit/cd0628e82c2a15de41895c3e073d2d516a88532c))
+
+# [1.7.0](https://github.com/superdoc-dev/superdoc/compare/v1.6.1...v1.7.0) (2026-01-16)
+
+
+### Bug Fixes
+
+* add column balancing and INDEX field support ([#1753](https://github.com/superdoc-dev/superdoc/issues/1753)) ([b2a6f6b](https://github.com/superdoc-dev/superdoc/commit/b2a6f6b931c505751f54ff0fe6cc1b8f7071fbbf))
+* add dispatch method type and mark view as optional for headless mode ([#1728](https://github.com/superdoc-dev/superdoc/issues/1728)) ([45195d7](https://github.com/superdoc-dev/superdoc/commit/45195d78b4eb5b7b879ce4837393ce83f03ba595))
+* add type declaration for Editor.loadXmlData and Editor.open ([#1727](https://github.com/superdoc-dev/superdoc/issues/1727)) ([ae452a9](https://github.com/superdoc-dev/superdoc/commit/ae452a98409e6c34c9d08b1ba12e2c21e0f9f0ab))
+* anchor images in table cells ([#1742](https://github.com/superdoc-dev/superdoc/issues/1742)) ([f77e7bd](https://github.com/superdoc-dev/superdoc/commit/f77e7bd538fc013d7de0bfc66c1c4880761c61b7))
+* annotation issues ([#1752](https://github.com/superdoc-dev/superdoc/issues/1752)) ([9b13ce0](https://github.com/superdoc-dev/superdoc/commit/9b13ce0141f9f526bdaa6cfc5ea18616290b0688))
+* bug watermarks render darker than they should [SD-1469] ([#1737](https://github.com/superdoc-dev/superdoc/issues/1737)) ([7ce423d](https://github.com/superdoc-dev/superdoc/commit/7ce423d445366c0e400b4143bec3cdd9d8b28e88))
+* **comments:** create dynamic comment export system based on document origin type ([#1733](https://github.com/superdoc-dev/superdoc/issues/1733)) ([b55fddf](https://github.com/superdoc-dev/superdoc/commit/b55fddf429549f462e1b61747c89e2ab85ad4d45)), closes [#1618](https://github.com/superdoc-dev/superdoc/issues/1618)
+* correct indentation for table cells with explicit tab positioning ([#1743](https://github.com/superdoc-dev/superdoc/issues/1743)) ([1fd6b74](https://github.com/superdoc-dev/superdoc/commit/1fd6b74a95c0eae8b1b23c27e7046ae529c95fc3))
+* empty line heights ([#1748](https://github.com/superdoc-dev/superdoc/issues/1748)) ([31ce45c](https://github.com/superdoc-dev/superdoc/commit/31ce45c9fbcc7c7e630f48a877791ea94a63c960))
+* guarding against component init when ref is null ([#1746](https://github.com/superdoc-dev/superdoc/issues/1746)) ([253eeea](https://github.com/superdoc-dev/superdoc/commit/253eeeab9a28d5c2b771385d0d812e501f20ac55))
+* handle fldSimple syntax for page number fields ([#1755](https://github.com/superdoc-dev/superdoc/issues/1755)) ([8325783](https://github.com/superdoc-dev/superdoc/commit/83257837cc3123e6696a8fd231e96a4b31411c1b))
+* keepNext rules for paragraphs ([#1758](https://github.com/superdoc-dev/superdoc/issues/1758)) ([7862892](https://github.com/superdoc-dev/superdoc/commit/7862892c85235fdf67bafe562070f0780888b356))
+* respect keepLines and contextual spacing in page break calculations ([#1747](https://github.com/superdoc-dev/superdoc/issues/1747)) ([189c054](https://github.com/superdoc-dev/superdoc/commit/189c05453bcdff0688a84f81a014462d12aceeb8))
+* try different yaml format for label ([0484c89](https://github.com/superdoc-dev/superdoc/commit/0484c8982241a21ba39b3c202f01eae90a4d7ee3))
+* vector text box with content rendering ([#1741](https://github.com/superdoc-dev/superdoc/issues/1741)) ([b14e88e](https://github.com/superdoc-dev/superdoc/commit/b14e88e873455f93eac2005443f1782df9d29ce0))
+* vertical align bug in sections ([#1745](https://github.com/superdoc-dev/superdoc/issues/1745)) ([b53fb6a](https://github.com/superdoc-dev/superdoc/commit/b53fb6a4a54ceaba7283b688e75279b07f3fc051))
+
+
+### Features
+
+* annotation rendering ([#1738](https://github.com/superdoc-dev/superdoc/issues/1738)) ([317b1c4](https://github.com/superdoc-dev/superdoc/commit/317b1c4239f6eb1e52446f1745915e9da138b5a1))
+
+# [1.7.0-next.10](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.9...v1.7.0-next.10) (2026-01-16)
+
+
+### Bug Fixes
+
+* keepNext rules for paragraphs ([#1758](https://github.com/superdoc-dev/superdoc/issues/1758)) ([7862892](https://github.com/superdoc-dev/superdoc/commit/7862892c85235fdf67bafe562070f0780888b356))
+
+# [1.7.0-next.9](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.8...v1.7.0-next.9) (2026-01-16)
+
+
+### Bug Fixes
+
+* **comments:** create dynamic comment export system based on document origin type ([#1733](https://github.com/superdoc-dev/superdoc/issues/1733)) ([b55fddf](https://github.com/superdoc-dev/superdoc/commit/b55fddf429549f462e1b61747c89e2ab85ad4d45)), closes [#1618](https://github.com/superdoc-dev/superdoc/issues/1618)
+
+# [1.7.0-next.8](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.7...v1.7.0-next.8) (2026-01-15)
+
+
+### Bug Fixes
+
+* add column balancing and INDEX field support ([#1753](https://github.com/superdoc-dev/superdoc/issues/1753)) ([b2a6f6b](https://github.com/superdoc-dev/superdoc/commit/b2a6f6b931c505751f54ff0fe6cc1b8f7071fbbf))
+
+# [1.7.0-next.7](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.6...v1.7.0-next.7) (2026-01-15)
+
+
+### Bug Fixes
+
+* annotation issues ([#1752](https://github.com/superdoc-dev/superdoc/issues/1752)) ([9b13ce0](https://github.com/superdoc-dev/superdoc/commit/9b13ce0141f9f526bdaa6cfc5ea18616290b0688))
+* handle fldSimple syntax for page number fields ([#1755](https://github.com/superdoc-dev/superdoc/issues/1755)) ([8325783](https://github.com/superdoc-dev/superdoc/commit/83257837cc3123e6696a8fd231e96a4b31411c1b))
+* try different yaml format for label ([0484c89](https://github.com/superdoc-dev/superdoc/commit/0484c8982241a21ba39b3c202f01eae90a4d7ee3))
+
 # [1.7.0-next.6](https://github.com/superdoc-dev/superdoc/compare/v1.7.0-next.5...v1.7.0-next.6) (2026-01-15)
 
 

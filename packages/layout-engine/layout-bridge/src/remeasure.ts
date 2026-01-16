@@ -2,6 +2,7 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
   Line,
+  LineSegment,
   Run,
   TextRun,
   TabStop,
@@ -24,6 +25,7 @@ type ParagraphBlockAttrs = {
   indent?: { left?: number; right?: number; firstLine?: number; hanging?: number };
   tabs?: TabStop[];
   tabIntervalTwips?: number;
+  decimalSeparator?: string;
   wordLayout?: WordParagraphLayoutOutput;
   numberingProperties?: unknown;
 };
@@ -297,7 +299,64 @@ const WIDTH_FUDGE_PX = 0.5;
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
 
-type TabStopPx = { pos: number; val: TabStop['val']; leader?: TabStop['leader'] };
+/**
+ * Sanitizes an indent value to ensure it's a valid non-negative finite number.
+ *
+ * Handles edge cases where indent values may be undefined, NaN, Infinity, or negative
+ * from malformed document data or style cascade issues. Negative values are clamped
+ * to 0 to prevent widening the content area beyond maxWidth.
+ *
+ * @param value - The indent value to sanitize (may be undefined, non-finite, or negative)
+ * @returns The original value if it's a positive finite number, otherwise 0
+ */
+const sanitizeIndent = (value: number | undefined): number =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+
+/**
+ * Sanitizes the decimal separator to ensure it's a valid value for decimal tab alignment.
+ *
+ * OOXML documents may specify locale-specific decimal separators. This function
+ * normalizes the value to either ',' (comma) or '.' (period, the default).
+ *
+ * @param value - The decimal separator value from document attributes
+ * @returns ',' if the value is a comma, otherwise '.' (default)
+ */
+const sanitizeDecimalSeparator = (value: unknown): string => (value === ',' ? ',' : '.');
+
+/**
+ * Safely extracts the width property from a run that may have an optional width.
+ *
+ * Used for non-text runs (images, breaks) that may have pre-calculated widths.
+ *
+ * @param run - The run to extract width from
+ * @returns The width value if present and numeric, otherwise 0
+ */
+const getRunWidth = (run: Run): number => {
+  const width = (run as { width?: number }).width;
+  return typeof width === 'number' ? width : 0;
+};
+
+/**
+ * Checks if a break run is a line break (as opposed to page/column break).
+ *
+ * @param run - The run to check
+ * @returns True if the run is a line break
+ */
+const isLineBreakRun = (run: Run): boolean =>
+  run.kind === 'lineBreak' || (run.kind === 'break' && (run as { breakType?: string }).breakType === 'line');
+
+/**
+ * Tab stop position and alignment info in pixels.
+ * Converted from twips for rendering calculations.
+ */
+type TabStopPx = {
+  /** Position in pixels from left margin */
+  pos: number;
+  /** Alignment type: 'start' (left), 'end' (right), 'center', or 'decimal' */
+  val: TabStop['val'];
+  /** Optional leader character style (dots, dashes, etc.) */
+  leader?: TabStop['leader'];
+};
 
 /**
  * Type definition for minimal marker run formatting properties.
@@ -383,10 +442,10 @@ const markerFontString = (run?: MarkerRun): string => {
  */
 const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabIntervalTwips?: number): TabStopPx[] => {
   const paragraphIndentTwips = {
-    left: pxToTwips(Math.max(0, indent?.left ?? 0)),
-    right: pxToTwips(Math.max(0, indent?.right ?? 0)),
-    firstLine: pxToTwips(Math.max(0, indent?.firstLine ?? 0)),
-    hanging: pxToTwips(Math.max(0, indent?.hanging ?? 0)),
+    left: pxToTwips(sanitizeIndent(indent?.left)),
+    right: pxToTwips(sanitizeIndent(indent?.right)),
+    firstLine: pxToTwips(sanitizeIndent(indent?.firstLine)),
+    hanging: pxToTwips(sanitizeIndent(indent?.hanging)),
   };
 
   const stops = Engines.computeTabStops({
@@ -434,6 +493,7 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
  * @returns Object containing:
  *   - target: The X position in pixels where the tab should advance to
  *   - nextIndex: The array index to start searching from for the next tab (startIndex + consumed stops)
+ *   - stop: The resolved explicit tab stop (if any) including alignment/leader metadata
  *
  * @example
  * ```typescript
@@ -451,13 +511,13 @@ const getNextTabStopPx = (
   currentX: number,
   tabStops: TabStopPx[],
   startIndex: number,
-): { target: number; nextIndex: number } => {
+): { target: number; nextIndex: number; stop?: TabStopPx } => {
   let index = startIndex;
   while (index < tabStops.length && tabStops[index].pos <= currentX + TAB_EPSILON) {
     index += 1;
   }
   if (index < tabStops.length) {
-    return { target: tabStops[index].pos, nextIndex: index + 1 };
+    return { target: tabStops[index].pos, nextIndex: index + 1, stop: tabStops[index] };
   }
   // default tab advance if we've exhausted explicit stops
   return { target: currentX + twipsToPx(DEFAULT_TAB_INTERVAL_TWIPS), nextIndex: index };
@@ -509,6 +569,346 @@ function measureRunSliceWidth(run: Run, fromChar: number, toChar: number): numbe
   const metrics = context.measureText(text);
   return metrics.width;
 }
+
+/**
+ * Measurement summary for an aligned tab group contained within a single line.
+ * Used to right/center/decimal align the grouped content to a tab stop.
+ */
+type TabAlignmentGroupMeasure = {
+  /** Total width of all content in the tab group (in pixels) */
+  totalWidth: number;
+  /** Width of content before the decimal point (for decimal alignment) */
+  beforeDecimalWidth?: number;
+};
+
+/**
+ * Scan result for an aligned tab group across runs while reflowing text.
+ * Provides width info plus where to resume line-breaking after the group.
+ */
+type TabAlignmentGroupScan = {
+  /** Total width of all content in the tab group (in pixels) */
+  totalWidth: number;
+  /** Width of content before the decimal point (for decimal alignment) */
+  beforeDecimalWidth?: number;
+  /** Index of the last run included in this group */
+  endRun: number;
+  /** Character offset within the last run */
+  endChar: number;
+  /** Run index to resume scanning from after this group */
+  resumeRun: number;
+  /** Character offset to resume from within the resume run */
+  resumeChar: number;
+};
+
+/**
+ * Scans forward from a run/char position until the next tab or line break to
+ * measure the width of the aligned tab group and capture resume positions.
+ *
+ * This function is used during line breaking to handle right, center, and decimal
+ * tab alignments. It scans ahead to find all content that belongs to the tab group
+ * (everything between this tab and the next tab or line break) and measures its
+ * total width.
+ *
+ * For decimal tabs, it also tracks the position of the decimal separator to enable
+ * alignment on that character.
+ *
+ * @param runs - Array of runs in the paragraph
+ * @param startRunIndex - Index of the run to start scanning from
+ * @param startChar - Character offset within the starting run
+ * @param decimalSeparator - The decimal separator character ('.' or ',')
+ * @returns Scan result with width measurements and resume positions
+ */
+const scanTabAlignmentGroup = (
+  runs: Run[],
+  startRunIndex: number,
+  startChar: number,
+  decimalSeparator: string,
+): TabAlignmentGroupScan => {
+  let totalWidth = 0;
+  let beforeDecimalWidth: number | undefined;
+  let foundDecimal = false;
+  let endRun = startRunIndex;
+  let endChar = startChar;
+
+  for (let r = startRunIndex; r < runs.length; r += 1) {
+    const run = runs[r];
+    if (!run) continue;
+    if (run.kind === 'tab') {
+      return { totalWidth, beforeDecimalWidth, endRun, endChar, resumeRun: r, resumeChar: 0 };
+    }
+    if (isLineBreakRun(run)) {
+      return { totalWidth, beforeDecimalWidth, endRun, endChar, resumeRun: r, resumeChar: 0 };
+    }
+
+    const text = runText(run);
+    if (!text) {
+      const runWidth = getRunWidth(run);
+      if (runWidth > 0) {
+        totalWidth += runWidth;
+        endRun = r;
+        endChar = 1;
+      }
+      continue;
+    }
+
+    const sliceStart = r === startRunIndex ? startChar : 0;
+    if (sliceStart >= text.length) continue;
+    const tabIndex = text.indexOf('\t', sliceStart);
+    const effectiveEnd = tabIndex >= 0 ? tabIndex : text.length;
+
+    if (effectiveEnd > sliceStart) {
+      const sliceWidth = measureRunSliceWidth(run, sliceStart, effectiveEnd);
+      if (!foundDecimal) {
+        const decimalIndex = text.slice(sliceStart, effectiveEnd).indexOf(decimalSeparator);
+        if (decimalIndex >= 0) {
+          foundDecimal = true;
+          const beforeWidth = decimalIndex > 0 ? measureRunSliceWidth(run, sliceStart, sliceStart + decimalIndex) : 0;
+          beforeDecimalWidth = totalWidth + beforeWidth;
+        }
+      }
+      totalWidth += sliceWidth;
+      endRun = r;
+      endChar = effectiveEnd;
+    }
+
+    if (tabIndex >= 0) {
+      return { totalWidth, beforeDecimalWidth, endRun, endChar, resumeRun: r, resumeChar: tabIndex };
+    }
+  }
+
+  return { totalWidth, beforeDecimalWidth, endRun, endChar, resumeRun: runs.length, resumeChar: 0 };
+};
+
+/**
+ * Measures the width of the aligned tab group within the current line bounds.
+ *
+ * Similar to scanTabAlignmentGroup, but constrained to content that has already
+ * been placed on a specific line. Used during the tab layout pass to calculate
+ * positioning for right, center, and decimal aligned tabs.
+ *
+ * @param runs - Array of runs in the paragraph
+ * @param line - The line containing the tab group
+ * @param startRunIndex - Index of the run to start measuring from
+ * @param startChar - Character offset within the starting run
+ * @param decimalSeparator - The decimal separator character ('.' or ',')
+ * @returns Measurement result with total and before-decimal widths
+ */
+const measureTabAlignmentGroupInLine = (
+  runs: Run[],
+  line: Line,
+  startRunIndex: number,
+  startChar: number,
+  decimalSeparator: string,
+): TabAlignmentGroupMeasure => {
+  let totalWidth = 0;
+  let beforeDecimalWidth: number | undefined;
+  let foundDecimal = false;
+
+  for (let r = startRunIndex; r <= line.toRun; r += 1) {
+    const run = runs[r];
+    if (!run) continue;
+    if (run.kind === 'tab') break;
+    if (isLineBreakRun(run)) break;
+
+    const text = runText(run);
+    if (!text) {
+      totalWidth += getRunWidth(run);
+      continue;
+    }
+
+    const sliceStart = r === startRunIndex ? startChar : 0;
+    const sliceEnd = r === line.toRun ? line.toChar : text.length;
+    if (sliceStart >= sliceEnd) continue;
+    const slice = text.slice(sliceStart, sliceEnd);
+    const tabIndex = slice.indexOf('\t');
+    const effectiveSlice = tabIndex >= 0 ? slice.slice(0, tabIndex) : slice;
+    const effectiveSliceEnd = tabIndex >= 0 ? sliceStart + tabIndex : sliceEnd;
+
+    if (effectiveSlice.length > 0) {
+      const sliceWidth = measureRunSliceWidth(run, sliceStart, effectiveSliceEnd);
+      totalWidth += sliceWidth;
+      if (!foundDecimal) {
+        const decimalIndex = effectiveSlice.indexOf(decimalSeparator);
+        if (decimalIndex >= 0) {
+          foundDecimal = true;
+          const beforeWidth = decimalIndex > 0 ? measureRunSliceWidth(run, sliceStart, sliceStart + decimalIndex) : 0;
+          beforeDecimalWidth = totalWidth - sliceWidth + beforeWidth;
+        }
+      }
+    }
+
+    if (tabIndex >= 0) {
+      break;
+    }
+  }
+
+  return { totalWidth, beforeDecimalWidth };
+};
+
+/**
+ * Applies tab stop layout to all lines, calculating segment positions and tab leaders.
+ *
+ * This is a post-processing pass that runs after initial line breaking. It handles:
+ * - Right-aligned tabs: Content is positioned to end at the tab stop
+ * - Center-aligned tabs: Content is centered on the tab stop
+ * - Decimal-aligned tabs: Content is aligned on the decimal separator
+ * - Tab leaders: Fills the space before aligned content with dots, dashes, etc.
+ *
+ * The function mutates the line objects to add:
+ * - `segments`: Array of positioned text segments with explicit x coordinates
+ * - `leaders`: Array of leader fill regions
+ * - Updated `width` values
+ *
+ * @param lines - Array of lines to process
+ * @param runs - Array of runs in the paragraph
+ * @param tabStops - Array of tab stop positions and types (in pixels)
+ * @param decimalSeparator - The decimal separator character for decimal tabs
+ * @param indentLeft - Left indent value (in pixels)
+ * @param rawFirstLineOffset - First line indent offset (may be negative for hanging)
+ */
+const applyTabLayoutToLines = (
+  lines: Line[],
+  runs: Run[],
+  tabStops: TabStopPx[],
+  decimalSeparator: string,
+  indentLeft: number,
+  rawFirstLineOffset: number,
+): void => {
+  lines.forEach((line, lineIndex) => {
+    let cursorX = 0;
+    let lineWidth = 0;
+    let tabStopCursor = 0;
+    let pendingTabAlignStartX: number | null = null;
+    const segments: NonNullable<Line['segments']> = [];
+    const leaders: NonNullable<Line['leaders']> = [];
+    const effectiveIndent = lineIndex === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+    const maxAbsWidth =
+      typeof line.maxWidth === 'number' && Number.isFinite(line.maxWidth)
+        ? line.maxWidth + effectiveIndent
+        : Number.POSITIVE_INFINITY;
+
+    /**
+     * Processes a tab character, calculating position and handling alignment.
+     */
+    const applyTab = (startRunIndex: number, startChar: number, run?: Run): void => {
+      const originX = cursorX;
+      const absCurrentX = cursorX + effectiveIndent;
+      const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+      tabStopCursor = nextIndex;
+      const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
+      const relativeTarget = clampedTarget - effectiveIndent;
+      lineWidth = Math.max(lineWidth, relativeTarget);
+
+      // Add leader if specified
+      if (stop?.leader && stop.leader !== 'none') {
+        const from = Math.min(originX, relativeTarget);
+        const to = Math.max(originX, relativeTarget);
+        leaders.push({ from, to, style: stop.leader });
+      }
+
+      // Handle alignment types
+      const stopVal = stop?.val ?? 'start';
+      if (stopVal === 'end' || stopVal === 'center' || stopVal === 'decimal') {
+        const groupMeasure = measureTabAlignmentGroupInLine(runs, line, startRunIndex, startChar, decimalSeparator);
+        if (groupMeasure.totalWidth > 0) {
+          let groupStartX: number;
+          if (stopVal === 'end') {
+            groupStartX = Math.max(0, relativeTarget - groupMeasure.totalWidth);
+          } else if (stopVal === 'center') {
+            groupStartX = Math.max(0, relativeTarget - groupMeasure.totalWidth / 2);
+          } else {
+            const beforeDecimal = groupMeasure.beforeDecimalWidth ?? groupMeasure.totalWidth;
+            groupStartX = Math.max(0, relativeTarget - beforeDecimal);
+          }
+          pendingTabAlignStartX = groupStartX;
+        } else {
+          cursorX = Math.max(cursorX, relativeTarget);
+        }
+      } else {
+        cursorX = Math.max(cursorX, relativeTarget);
+      }
+
+      // Set tab run width for rendering
+      if (run && run.kind === 'tab') {
+        (run as { width?: number }).width = Math.max(0, relativeTarget - originX);
+      }
+    };
+
+    for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
+      const run = runs[runIndex];
+      if (!run) continue;
+      if (run.kind === 'tab') {
+        applyTab(runIndex + 1, 0, run);
+        continue;
+      }
+
+      const text = runText(run);
+      if (!text) {
+        cursorX += getRunWidth(run);
+        lineWidth = Math.max(lineWidth, cursorX);
+        continue;
+      }
+
+      const sliceStart = runIndex === line.fromRun ? line.fromChar : 0;
+      const sliceEnd = runIndex === line.toRun ? line.toChar : text.length;
+      if (sliceStart >= sliceEnd) continue;
+
+      let segmentStart = sliceStart;
+      for (let i = sliceStart; i < sliceEnd; i += 1) {
+        if (text[i] !== '\t') continue;
+        if (i > segmentStart) {
+          const segmentWidth = measureRunSliceWidth(run, segmentStart, i);
+          const segment: LineSegment = {
+            runIndex,
+            fromChar: segmentStart,
+            toChar: i,
+            width: segmentWidth,
+          };
+          if (pendingTabAlignStartX != null) {
+            segment.x = pendingTabAlignStartX;
+            cursorX = pendingTabAlignStartX + segmentWidth;
+            pendingTabAlignStartX = null;
+          } else {
+            cursorX += segmentWidth;
+          }
+          lineWidth = Math.max(lineWidth, cursorX);
+          segments.push(segment);
+        }
+        applyTab(runIndex, i + 1);
+        segmentStart = i + 1;
+      }
+
+      if (segmentStart < sliceEnd) {
+        const segmentWidth = measureRunSliceWidth(run, segmentStart, sliceEnd);
+        const segment: LineSegment = {
+          runIndex,
+          fromChar: segmentStart,
+          toChar: sliceEnd,
+          width: segmentWidth,
+        };
+        if (pendingTabAlignStartX != null) {
+          segment.x = pendingTabAlignStartX;
+          cursorX = pendingTabAlignStartX + segmentWidth;
+          pendingTabAlignStartX = null;
+        } else {
+          cursorX += segmentWidth;
+        }
+        lineWidth = Math.max(lineWidth, cursorX);
+        segments.push(segment);
+      }
+    }
+
+    if (segments.length > 0) {
+      line.segments = segments;
+    }
+    if (leaders.length > 0) {
+      line.leaders = leaders;
+    }
+    if (lineWidth > 0) {
+      line.width = Math.max(line.width, lineWidth);
+    }
+  });
+};
 
 /**
  * Calculates the line height for a range of runs based on maximum font size.
@@ -660,13 +1060,16 @@ export function remeasureParagraph(
   const attrs = block.attrs as ParagraphBlockAttrs | undefined;
   const indent = attrs?.indent;
   const wordLayout = attrs?.wordLayout;
-  const rawIndentLeft = indent?.left ?? 0;
-  const rawIndentRight = indent?.right ?? 0;
+  // Keep raw values for hasNegativeIndent check (negative indents disable certain optimizations)
+  const rawIndentLeft = typeof indent?.left === 'number' && Number.isFinite(indent.left) ? indent.left : 0;
+  const rawIndentRight = typeof indent?.right === 'number' && Number.isFinite(indent.right) ? indent.right : 0;
+  // Clamp to 0 for actual layout calculations (negative indents shouldn't widen content area)
   const indentLeft = Math.max(0, rawIndentLeft);
   const indentRight = Math.max(0, rawIndentRight);
   const indentFirstLine = Math.max(0, indent?.firstLine ?? 0);
   const indentHanging = Math.max(0, indent?.hanging ?? 0);
   const baseFirstLineOffset = firstLineIndent || indentFirstLine - indentHanging;
+  const rawFirstLineOffset = baseFirstLineOffset;
   const clampedFirstLineOffset = Math.max(0, baseFirstLineOffset);
   const hasNegativeIndent = rawIndentLeft < 0 || rawIndentRight < 0;
   const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeIndent && baseFirstLineOffset < 0;
@@ -710,6 +1113,7 @@ export function remeasureParagraph(
       ? Math.max(1, maxWidth - effectiveTextStartPx - indentRight)
       : Math.max(1, contentWidth - effectiveFirstLineOffset);
   const tabStops = buildTabStopsPx(indent as ParagraphIndent | undefined, attrs?.tabs, attrs?.tabIntervalTwips);
+  const decimalSeparator = sanitizeDecimalSeparator(attrs?.decimalSeparator);
 
   let currentRun = 0;
   let currentChar = 0;
@@ -718,6 +1122,7 @@ export function remeasureParagraph(
     const isFirstLine = lines.length === 0;
     // For first line, reduce available width by textStart/first-line offset (e.g., for in-flow list markers)
     const effectiveMaxWidth = Math.max(1, isFirstLine ? firstLineWidth : contentWidth);
+    const effectiveIndent = isFirstLine ? indentLeft + rawFirstLineOffset : indentLeft;
     const startRun = currentRun;
     const startChar = currentChar;
     let width = 0;
@@ -731,14 +1136,52 @@ export function remeasureParagraph(
     let endChar = currentChar;
     let tabStopCursor = 0;
     let didBreakInThisLine = false;
+    let resumeRun = -1;
+    let resumeChar = 0;
 
     for (let r = currentRun; r < runs.length; r += 1) {
       const run = runs[r];
       if (run.kind === 'tab') {
-        const { target, nextIndex } = getNextTabStopPx(width, tabStops, tabStopCursor);
-        const tabAdvance = Math.max(0, target - width);
+        const absCurrentX = width + effectiveIndent;
+        const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+        const maxAbsWidth = effectiveMaxWidth + effectiveIndent;
+        const clampedTarget = Math.min(target, maxAbsWidth);
+        const tabAdvance = Math.max(0, clampedTarget - absCurrentX);
         width += tabAdvance;
         tabStopCursor = nextIndex;
+        if (stop && (stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal')) {
+          const group = scanTabAlignmentGroup(runs, r + 1, 0, decimalSeparator);
+          if (group.totalWidth > 0) {
+            const relativeTarget = clampedTarget - effectiveIndent;
+            let groupStartX: number;
+            if (stop.val === 'end') {
+              groupStartX = Math.max(0, relativeTarget - group.totalWidth);
+            } else if (stop.val === 'center') {
+              groupStartX = Math.max(0, relativeTarget - group.totalWidth / 2);
+            } else {
+              const beforeDecimal = group.beforeDecimalWidth ?? group.totalWidth;
+              groupStartX = Math.max(0, relativeTarget - beforeDecimal);
+            }
+            const rightEdge = stop.val === 'end' ? relativeTarget : groupStartX + group.totalWidth;
+            width = Math.max(width, rightEdge);
+            endRun = group.endRun;
+            endChar = group.endChar;
+            lastBreakRun = group.endRun;
+            lastBreakChar = group.endChar;
+            widthAtLastBreak = width;
+
+            if (group.resumeRun >= runs.length) {
+              didBreakInThisLine = true;
+              break;
+            }
+            if (group.resumeRun > r) {
+              resumeRun = group.resumeRun;
+              resumeChar = group.resumeChar;
+              r = resumeRun - 1;
+              continue;
+            }
+          }
+        }
         endRun = r;
         endChar = 1; // tab is treated as a single character
         lastBreakRun = r;
@@ -747,8 +1190,64 @@ export function remeasureParagraph(
         continue;
       }
       const text = runText(run);
-      const start = r === currentRun ? currentChar : 0;
+      const start = r === currentRun ? currentChar : r === resumeRun ? resumeChar : 0;
+      if (r === resumeRun) {
+        resumeRun = -1;
+      }
       for (let c = start; c < text.length; c += 1) {
+        const ch = text[c];
+        if (ch === '\t') {
+          const absCurrentX = width + effectiveIndent;
+          const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+          const maxAbsWidth = effectiveMaxWidth + effectiveIndent;
+          const clampedTarget = Math.min(target, maxAbsWidth);
+          const tabAdvance = Math.max(0, clampedTarget - absCurrentX);
+          width += tabAdvance;
+          tabStopCursor = nextIndex;
+          if (stop && (stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal')) {
+            const group = scanTabAlignmentGroup(runs, r, c + 1, decimalSeparator);
+            if (group.totalWidth > 0) {
+              const relativeTarget = clampedTarget - effectiveIndent;
+              let groupStartX: number;
+              if (stop.val === 'end') {
+                groupStartX = Math.max(0, relativeTarget - group.totalWidth);
+              } else if (stop.val === 'center') {
+                groupStartX = Math.max(0, relativeTarget - group.totalWidth / 2);
+              } else {
+                const beforeDecimal = group.beforeDecimalWidth ?? group.totalWidth;
+                groupStartX = Math.max(0, relativeTarget - beforeDecimal);
+              }
+              const rightEdge = stop.val === 'end' ? relativeTarget : groupStartX + group.totalWidth;
+              width = Math.max(width, rightEdge);
+              endRun = group.endRun;
+              endChar = group.endChar;
+              lastBreakRun = group.endRun;
+              lastBreakChar = group.endChar;
+              widthAtLastBreak = width;
+
+              if (group.resumeRun >= runs.length) {
+                didBreakInThisLine = true;
+                break;
+              }
+              if (group.resumeRun > r) {
+                resumeRun = group.resumeRun;
+                resumeChar = group.resumeChar;
+                r = resumeRun - 1;
+                break;
+              }
+              if (group.resumeRun === r) {
+                c = group.resumeChar - 1;
+                continue;
+              }
+            }
+          }
+          endRun = r;
+          endChar = c + 1;
+          lastBreakRun = r;
+          lastBreakChar = c + 1;
+          widthAtLastBreak = width;
+          continue;
+        }
         const w = measureRunSliceWidth(run, c, c + 1);
         if (width + w > effectiveMaxWidth - WIDTH_FUDGE_PX && width > 0) {
           // Break line
@@ -766,7 +1265,6 @@ export function remeasureParagraph(
         width += w;
         endRun = r;
         endChar = c + 1;
-        const ch = text[c];
         if (ch === ' ' || ch === '\t' || ch === '-') {
           lastBreakRun = r;
           lastBreakChar = c + 1;
@@ -805,6 +1303,14 @@ export function remeasureParagraph(
       currentRun += 1;
       currentChar = 0;
     }
+  }
+
+  const hasTabRun = runs.some((run) => run?.kind === 'tab');
+  const hasTextTab = runs.some(
+    (run) => run?.kind === 'text' && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\t'),
+  );
+  if (hasTabRun || hasTextTab) {
+    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, rawFirstLineOffset);
   }
 
   const totalHeight = lines.reduce((s, l) => s + l.lineHeight, 0);

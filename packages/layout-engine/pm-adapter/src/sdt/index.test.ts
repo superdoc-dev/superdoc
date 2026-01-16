@@ -108,6 +108,8 @@ describe('sdt module exports', () => {
         'applyTocMetadata',
         'processTocChildren',
         'handleTableOfContentsNode',
+        // Document Index
+        'handleIndexNode',
         // Structured Content Block
         'handleStructuredContentBlockNode',
         // Document Section

@@ -299,6 +299,25 @@ export function createFirstLineIndentHandler(): SpecialHandler {
 }
 
 /**
+ * Creates a special handler for hanging indent that removes firstLine when hanging is set.
+ *
+ * Per OOXML, when a higher priority source defines hanging, it should
+ * remove firstLine from the final result (they are mutually exclusive).
+ *
+ * @returns A SpecialHandler function that processes hanging indent values and
+ *   removes conflicting firstLine values from the target object
+ */
+export function createHangingIndentHandler(): SpecialHandler {
+  return (target: PropertyObject, source: PropertyObject): unknown => {
+    // If a higher priority source defines hanging, remove firstLine from the final result
+    if (target.firstLine != null && source.hanging != null) {
+      delete target.firstLine;
+    }
+    return source.hanging;
+  };
+}
+
+/**
  * Combines indent properties with special handling for firstLine/hanging mutual exclusivity.
  *
  * @param indentChain - Ordered list of indent property objects (or objects with indent property).
@@ -311,6 +330,7 @@ export function combineIndentProperties(indentChain: PropertyObject[]): Property
   return combineProperties(indentOnly, {
     specialHandling: {
       firstLine: createFirstLineIndentHandler(),
+      hanging: createHangingIndentHandler(),
     },
   });
 }

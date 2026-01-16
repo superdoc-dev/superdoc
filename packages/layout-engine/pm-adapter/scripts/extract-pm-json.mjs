@@ -87,11 +87,6 @@ async function extractPMJson() {
 
   // Convert to PM JSON
   const converter = {
-    telemetry: {
-      trackFileStructure: () => {},
-      trackUsage: () => {},
-      trackStatistic: () => {},
-    },
     docHiglightColors: new Set(),
   };
 

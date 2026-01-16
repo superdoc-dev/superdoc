@@ -38,6 +38,33 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
     const fldCharEl = node.elements?.find((el) => el.name === 'w:fldChar');
     const fldType = fldCharEl?.attributes?.['w:fldCharType'];
 
+    // Check if this node IS a fldSimple (simple field syntax)
+    // fldSimple has the instruction in an attribute, not nested elements
+    if (node.name === 'w:fldSimple') {
+      const instrAttr = node.attributes?.['w:instr'] || '';
+      const fieldType = instrAttr.trim().split(/\s+/)[0];
+
+      if (fieldType === 'PAGE' || fieldType === 'NUMPAGES') {
+        const preprocessor = fieldType === 'PAGE' ? preProcessPageInstruction : preProcessNumPagesInstruction;
+
+        // Extract rPr from child elements (content nodes inside fldSimple)
+        const contentNodes = node.elements || [];
+        let fieldRunRPr = null;
+        for (const child of contentNodes) {
+          const rPr = child.elements?.find((el) => el.name === 'w:rPr');
+          if (rPr) {
+            fieldRunRPr = rPr;
+            break;
+          }
+        }
+
+        const processedField = preprocessor(contentNodes, instrAttr.trim(), fieldRunRPr);
+        processedNodes.push(...processedField);
+        i++;
+        continue;
+      }
+    }
+
     if (fldType === 'begin') {
       // Scan ahead to find the field type and end marker
       const fieldInfo = scanFieldSequence(nodes, i);

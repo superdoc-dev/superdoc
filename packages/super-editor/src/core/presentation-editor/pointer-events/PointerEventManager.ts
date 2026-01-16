@@ -1,0 +1,1399 @@
+/**
+ * PointerEventManager - Handles pointer/input events for PresentationEditor.
+ *
+ * This manager encapsulates all pointer event handling including:
+ * - Pointer down/move/up handlers
+ * - Drag selection state machine
+ * - Cell selection for tables
+ * - Multi-click detection (double/triple click)
+ * - Link click handling
+ * - Image selection
+ */
+
+import { Selection, TextSelection, NodeSelection } from 'prosemirror-state';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { CellSelection } from 'prosemirror-tables';
+import type { Editor } from '../../Editor.js';
+import type { Layout, FlowBlock, Measure } from '@superdoc/contracts';
+import type { CellAnchorState, PendingMarginClick, HeaderFooterRegion } from '../types.js';
+import type { PositionHit, PageGeometryHelper, TableHitResult } from '@superdoc/layout-bridge';
+import type { SelectionDebugHudState } from '../selection/SelectionDebug.js';
+import type { EpochPositionMapper } from '../layout/EpochPositionMapper.js';
+import type { HeaderFooterSessionManager } from '../header-footer/HeaderFooterSessionManager.js';
+
+import { clickToPosition, getFragmentAtPosition } from '@superdoc/layout-bridge';
+import {
+  getFirstTextPosition as getFirstTextPositionFromHelper,
+  registerPointerClick as registerPointerClickFromHelper,
+} from '../input/ClickSelectionUtilities.js';
+import { calculateExtendedSelection } from '../selection/SelectionHelpers.js';
+import {
+  shouldUseCellSelection as shouldUseCellSelectionFromHelper,
+  getCellPosFromTableHit as getCellPosFromTableHitFromHelper,
+  getTablePosFromHit as getTablePosFromHitFromHelper,
+  hitTestTable as hitTestTableFromHelper,
+} from '../tables/TableSelectionUtilities.js';
+import {
+  createExternalFieldAnnotationDragOverHandler,
+  createExternalFieldAnnotationDropHandler,
+} from '../input/FieldAnnotationDragDrop.js';
+import { debugLog } from '../selection/SelectionDebug.js';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
+const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
+
+// =============================================================================
+// Types
+// =============================================================================
+
+/**
+ * Layout state provided by PresentationEditor.
+ */
+export type LayoutState = {
+  layout: Layout | null;
+  blocks: FlowBlock[];
+  measures: Measure[];
+};
+
+/**
+ * Dependencies injected from PresentationEditor.
+ */
+export type PointerEventDependencies = {
+  /** Get the active editor (body or header/footer) */
+  getActiveEditor: () => Editor;
+  /** Get the main body editor */
+  getEditor: () => Editor;
+  /** Get current layout state */
+  getLayoutState: () => LayoutState;
+  /** Get the epoch mapper for position translation */
+  getEpochMapper: () => EpochPositionMapper;
+  /** Get viewport host element */
+  getViewportHost: () => HTMLElement;
+  /** Get visible host element (for scroll) */
+  getVisibleHost: () => HTMLElement;
+  /** Get header/footer session manager */
+  getHeaderFooterSession: () => HeaderFooterSessionManager | null;
+  /** Get page geometry helper */
+  getPageGeometryHelper: () => PageGeometryHelper | null;
+  /** Get layout options zoom */
+  getZoom: () => number;
+  /** Check if view is locked */
+  isViewLocked: () => boolean;
+  /** Get document mode */
+  getDocumentMode: () => 'editing' | 'viewing' | 'suggesting';
+  /** Get page element by index */
+  getPageElement: (pageIndex: number) => HTMLElement | null;
+  /** Check if selection-aware virtualization is enabled */
+  isSelectionAwareVirtualizationEnabled: () => boolean;
+};
+
+/**
+ * Callbacks for events that the manager emits.
+ * All callbacks are optional to allow incremental setup.
+ */
+export type PointerEventCallbacks = {
+  /** Schedule selection update */
+  scheduleSelectionUpdate?: () => void;
+  /** Schedule rerender */
+  scheduleRerender?: () => void;
+  /** Set pending doc change flag */
+  setPendingDocChange?: () => void;
+  /** Update selection virtualization pins */
+  updateSelectionVirtualizationPins?: (options?: { includeDragBuffer?: boolean; extraPages?: number[] }) => void;
+  /** Schedule a11y announcement */
+  scheduleA11ySelectionAnnouncement?: (options: { immediate: boolean }) => void;
+  /** Go to anchor */
+  goToAnchor?: (href: string) => void;
+  /** Emit event */
+  emit?: (event: string, payload: unknown) => void;
+  /** Normalize client point to layout coordinates */
+  normalizeClientPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null;
+  /** Hit test header/footer region */
+  hitTestHeaderFooterRegion?: (x: number, y: number) => HeaderFooterRegion | null;
+  /** Exit header/footer mode */
+  exitHeaderFooterMode?: () => void;
+  /** Activate header/footer region */
+  activateHeaderFooterRegion?: (region: HeaderFooterRegion) => void;
+  /** Create default header/footer */
+  createDefaultHeaderFooter?: (region: HeaderFooterRegion) => void;
+  /** Emit header/footer edit blocked */
+  emitHeaderFooterEditBlocked?: (reason: string) => void;
+  /** Find region for page */
+  findRegionForPage?: (kind: 'header' | 'footer', pageIndex: number) => HeaderFooterRegion | null;
+  /** Get current page index */
+  getCurrentPageIndex?: () => number;
+  /** Resolve descriptor for region */
+  resolveDescriptorForRegion?: (region: HeaderFooterRegion) => unknown | null;
+  /** Update selection debug HUD */
+  updateSelectionDebugHud?: () => void;
+  /** Clear hover region */
+  clearHoverRegion?: () => void;
+  /** Render hover region */
+  renderHoverRegion?: (region: HeaderFooterRegion) => void;
+  /** Focus editor after image selection */
+  focusEditorAfterImageSelection?: () => void;
+  /** Resolve field annotation from element */
+  resolveFieldAnnotationSelectionFromElement?: (el: HTMLElement) => { node: unknown; pos: number } | null;
+  /** Compute pending margin click */
+  computePendingMarginClick?: (pointerId: number, x: number, y: number) => PendingMarginClick | null;
+  /** Select word at position */
+  selectWordAt?: (pos: number) => boolean;
+  /** Select paragraph at position */
+  selectParagraphAt?: (pos: number) => boolean;
+  /** Finalize drag selection with DOM */
+  finalizeDragSelectionWithDom?: (
+    pointer: { clientX: number; clientY: number },
+    dragAnchor: number,
+    dragMode: 'char' | 'word' | 'para',
+  ) => void;
+  /** Hit test table at coordinates */
+  hitTestTable?: (x: number, y: number) => TableHitResult | null;
+};
+
+// =============================================================================
+// PointerEventManager Class
+// =============================================================================
+
+export class PointerEventManager {
+  // Dependencies
+  #deps: PointerEventDependencies | null = null;
+  #callbacks: PointerEventCallbacks = {};
+
+  // Drag selection state
+  #isDragging = false;
+  #dragAnchor: number | null = null;
+  #dragAnchorPageIndex: number | null = null;
+  #dragExtensionMode: 'char' | 'word' | 'para' = 'char';
+  #dragLastPointer: SelectionDebugHudState['lastPointer'] = null;
+  #dragLastRawHit: PositionHit | null = null;
+  #dragUsedPageNotMountedFallback = false;
+
+  // Click tracking for multi-click detection
+  #clickCount = 0;
+  #lastClickTime = 0;
+  #lastClickPosition: { x: number; y: number } | null = null;
+
+  // Cell selection state
+  #cellAnchor: CellAnchorState | null = null;
+  #cellDragMode: 'none' | 'pending' | 'active' = 'none';
+
+  // Margin click state
+  #pendingMarginClick: PendingMarginClick | null = null;
+
+  // Image selection state
+  #lastSelectedImageBlockId: string | null = null;
+
+  // Focus suppression (for draggable annotations)
+  #suppressFocusInFromDraggable = false;
+
+  // Debug state
+  #debugLastPointer: { clientX: number; clientY: number; x: number; y: number } | null = null;
+  #debugLastHit: {
+    source: 'dom' | 'geometry' | 'margin' | 'none';
+    pos: number | null;
+    layoutEpoch: number | null;
+    mappedPos: number | null;
+  } | null = null;
+
+  // Bound handlers for event listener cleanup
+  #boundHandlePointerDown: ((e: PointerEvent) => void) | null = null;
+  #boundHandlePointerMove: ((e: PointerEvent) => void) | null = null;
+  #boundHandlePointerUp: ((e: PointerEvent) => void) | null = null;
+  #boundHandlePointerLeave: (() => void) | null = null;
+  #boundHandleDoubleClick: ((e: MouseEvent) => void) | null = null;
+  #boundHandleKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  #boundHandleDragOver: ((e: DragEvent) => void) | null = null;
+  #boundHandleDrop: ((e: DragEvent) => void) | null = null;
+  #boundHandleFocusIn: ((e: FocusEvent) => void) | null = null;
+
+  // ==========================================================================
+  // Constructor
+  // ==========================================================================
+
+  constructor() {
+    // Handlers will be bound when dependencies are set
+  }
+
+  // ==========================================================================
+  // Setup Methods
+  // ==========================================================================
+
+  /**
+   * Set dependencies from PresentationEditor.
+   */
+  setDependencies(deps: PointerEventDependencies): void {
+    this.#deps = deps;
+  }
+
+  /**
+   * Set callbacks for events.
+   */
+  setCallbacks(callbacks: PointerEventCallbacks): void {
+    this.#callbacks = callbacks;
+  }
+
+  /**
+   * Bind event listeners to DOM elements.
+   */
+  bind(): void {
+    if (!this.#deps) return;
+
+    const viewportHost = this.#deps.getViewportHost();
+    const visibleHost = this.#deps.getVisibleHost();
+    const doc = viewportHost.ownerDocument ?? document;
+
+    // Create bound handlers
+    this.#boundHandlePointerDown = this.#handlePointerDown.bind(this);
+    this.#boundHandlePointerMove = this.#handlePointerMove.bind(this);
+    this.#boundHandlePointerUp = this.#handlePointerUp.bind(this);
+    this.#boundHandlePointerLeave = this.#handlePointerLeave.bind(this);
+    this.#boundHandleDoubleClick = this.#handleDoubleClick.bind(this);
+    this.#boundHandleKeyDown = this.#handleKeyDown.bind(this);
+    this.#boundHandleDragOver = this.#createDragOverHandler();
+    this.#boundHandleDrop = this.#createDropHandler();
+    this.#boundHandleFocusIn = this.#handleFocusIn.bind(this);
+
+    // Attach pointer event listeners
+    viewportHost.addEventListener('pointerdown', this.#boundHandlePointerDown);
+    viewportHost.addEventListener('pointermove', this.#boundHandlePointerMove);
+    viewportHost.addEventListener('pointerup', this.#boundHandlePointerUp);
+    viewportHost.addEventListener('pointerleave', this.#boundHandlePointerLeave);
+    viewportHost.addEventListener('dblclick', this.#boundHandleDoubleClick);
+    viewportHost.addEventListener('dragover', this.#boundHandleDragOver);
+
+    // Keyboard events on container
+    const container = viewportHost.closest('.presentation-editor') as HTMLElement | null;
+    if (container) {
+      container.addEventListener('keydown', this.#boundHandleKeyDown);
+    }
+
+    // Focus events on visible host
+    visibleHost.addEventListener('focusin', this.#boundHandleFocusIn);
+  }
+
+  /**
+   * Unbind event listeners.
+   */
+  unbind(): void {
+    if (!this.#deps) return;
+
+    const viewportHost = this.#deps.getViewportHost();
+    const visibleHost = this.#deps.getVisibleHost();
+
+    if (this.#boundHandlePointerDown) {
+      viewportHost.removeEventListener('pointerdown', this.#boundHandlePointerDown);
+    }
+    if (this.#boundHandlePointerMove) {
+      viewportHost.removeEventListener('pointermove', this.#boundHandlePointerMove);
+    }
+    if (this.#boundHandlePointerUp) {
+      viewportHost.removeEventListener('pointerup', this.#boundHandlePointerUp);
+    }
+    if (this.#boundHandlePointerLeave) {
+      viewportHost.removeEventListener('pointerleave', this.#boundHandlePointerLeave);
+    }
+    if (this.#boundHandleDoubleClick) {
+      viewportHost.removeEventListener('dblclick', this.#boundHandleDoubleClick);
+    }
+    if (this.#boundHandleDragOver) {
+      viewportHost.removeEventListener('dragover', this.#boundHandleDragOver);
+    }
+    if (this.#boundHandleKeyDown) {
+      const container = viewportHost.closest('.presentation-editor') as HTMLElement | null;
+      if (container) {
+        container.removeEventListener('keydown', this.#boundHandleKeyDown);
+      }
+    }
+    if (this.#boundHandleFocusIn) {
+      visibleHost.removeEventListener('focusin', this.#boundHandleFocusIn);
+    }
+
+    // Clear bound handlers
+    this.#boundHandlePointerDown = null;
+    this.#boundHandlePointerMove = null;
+    this.#boundHandlePointerUp = null;
+    this.#boundHandlePointerLeave = null;
+    this.#boundHandleDoubleClick = null;
+    this.#boundHandleKeyDown = null;
+    this.#boundHandleDragOver = null;
+    this.#boundHandleDrop = null;
+    this.#boundHandleFocusIn = null;
+  }
+
+  /**
+   * Destroy the manager and clean up.
+   */
+  destroy(): void {
+    this.unbind();
+    this.#deps = null;
+    this.#callbacks = {};
+    this.#clearDragState();
+    this.#clearCellAnchor();
+  }
+
+  // ==========================================================================
+  // Public Getters
+  // ==========================================================================
+
+  /** Whether currently dragging */
+  get isDragging(): boolean {
+    return this.#isDragging;
+  }
+
+  /** Current drag anchor position */
+  get dragAnchor(): number | null {
+    return this.#dragAnchor;
+  }
+
+  /** Cell anchor state for table selection */
+  get cellAnchor(): CellAnchorState | null {
+    return this.#cellAnchor;
+  }
+
+  /** Debug last pointer position */
+  get debugLastPointer(): { clientX: number; clientY: number; x: number; y: number } | null {
+    return this.#debugLastPointer;
+  }
+
+  /** Debug last hit */
+  get debugLastHit(): {
+    source: 'dom' | 'geometry' | 'margin' | 'none';
+    pos: number | null;
+    layoutEpoch: number | null;
+    mappedPos: number | null;
+  } | null {
+    return this.#debugLastHit;
+  }
+
+  /** Last selected image block ID */
+  get lastSelectedImageBlockId(): string | null {
+    return this.#lastSelectedImageBlockId;
+  }
+
+  // ==========================================================================
+  // Public Methods
+  // ==========================================================================
+
+  /**
+   * Clear cell anchor (used when document changes).
+   */
+  clearCellAnchor(): void {
+    this.#clearCellAnchor();
+  }
+
+  /**
+   * Set suppress focus in flag (for draggable annotations).
+   */
+  setSuppressFocusInFromDraggable(value: boolean): void {
+    this.#suppressFocusInFromDraggable = value;
+  }
+
+  // ==========================================================================
+  // Private Helper Methods
+  // ==========================================================================
+
+  #clearDragState(): void {
+    this.#isDragging = false;
+    this.#dragAnchor = null;
+    this.#dragAnchorPageIndex = null;
+    this.#dragExtensionMode = 'char';
+    this.#dragLastPointer = null;
+    this.#dragLastRawHit = null;
+    this.#dragUsedPageNotMountedFallback = false;
+  }
+
+  #clearCellAnchor(): void {
+    this.#cellAnchor = null;
+    this.#cellDragMode = 'none';
+  }
+
+  #registerPointerClick(event: MouseEvent): number {
+    const nextState = registerPointerClickFromHelper(
+      event,
+      {
+        clickCount: this.#clickCount,
+        lastClickTime: this.#lastClickTime,
+        lastClickPosition: this.#lastClickPosition,
+      },
+      {
+        timeThresholdMs: MULTI_CLICK_TIME_THRESHOLD_MS,
+        distanceThresholdPx: MULTI_CLICK_DISTANCE_THRESHOLD_PX,
+        maxClickCount: 3,
+      },
+    );
+
+    this.#clickCount = nextState.clickCount;
+    this.#lastClickTime = nextState.lastClickTime;
+    this.#lastClickPosition = nextState.lastClickPosition;
+
+    return nextState.clickCount;
+  }
+
+  #getFirstTextPosition(): number {
+    const editor = this.#deps?.getEditor();
+    return getFirstTextPositionFromHelper(editor?.state?.doc ?? null);
+  }
+
+  #calculateExtendedSelection(
+    anchor: number,
+    head: number,
+    mode: 'char' | 'word' | 'para',
+  ): { selAnchor: number; selHead: number } {
+    const layoutState = this.#deps?.getLayoutState();
+    return calculateExtendedSelection(layoutState?.blocks ?? [], anchor, head, mode);
+  }
+
+  #shouldUseCellSelection(currentTableHit: TableHitResult | null): boolean {
+    return shouldUseCellSelectionFromHelper(currentTableHit, this.#cellAnchor, this.#cellDragMode);
+  }
+
+  #getCellPosFromTableHit(tableHit: TableHitResult): number | null {
+    const editor = this.#deps?.getEditor();
+    const layoutState = this.#deps?.getLayoutState();
+    return getCellPosFromTableHitFromHelper(tableHit, editor?.state?.doc ?? null, layoutState?.blocks ?? []);
+  }
+
+  #getTablePosFromHit(tableHit: TableHitResult): number | null {
+    const editor = this.#deps?.getEditor();
+    const layoutState = this.#deps?.getLayoutState();
+    return getTablePosFromHitFromHelper(tableHit, editor?.state?.doc ?? null, layoutState?.blocks ?? []);
+  }
+
+  #setCellAnchor(tableHit: TableHitResult, tablePos: number): void {
+    const cellPos = this.#getCellPosFromTableHit(tableHit);
+    if (cellPos === null) return;
+
+    this.#cellAnchor = {
+      tablePos,
+      cellPos,
+      cellRowIndex: tableHit.cellRowIndex,
+      cellColIndex: tableHit.cellColIndex,
+      tableBlockId: tableHit.block.id,
+    };
+    this.#cellDragMode = 'pending';
+  }
+
+  #hitTestTable(x: number, y: number): TableHitResult | null {
+    return this.#callbacks.hitTestTable?.(x, y) ?? null;
+  }
+
+  #createDragOverHandler(): (e: DragEvent) => void {
+    return createExternalFieldAnnotationDragOverHandler({
+      getActiveEditor: () => this.#deps?.getActiveEditor() as Editor,
+      hitTest: (clientX: number, clientY: number) => {
+        const layoutState = this.#deps?.getLayoutState();
+        const viewportHost = this.#deps?.getViewportHost();
+        const pageGeometryHelper = this.#deps?.getPageGeometryHelper();
+        if (!layoutState?.layout || !viewportHost) return null;
+
+        const normalized = this.#callbacks.normalizeClientPoint?.(clientX, clientY);
+        if (!normalized) return null;
+
+        return clickToPosition(
+          layoutState.layout,
+          layoutState.blocks,
+          layoutState.measures,
+          { x: normalized.x, y: normalized.y },
+          viewportHost,
+          clientX,
+          clientY,
+          pageGeometryHelper ?? undefined,
+        );
+      },
+      scheduleSelectionUpdate: () => this.#callbacks.scheduleSelectionUpdate?.(),
+    });
+  }
+
+  #createDropHandler(): (e: DragEvent) => void {
+    return createExternalFieldAnnotationDropHandler({
+      getActiveEditor: () => this.#deps?.getActiveEditor() as Editor,
+      hitTest: (clientX: number, clientY: number) => {
+        const layoutState = this.#deps?.getLayoutState();
+        const viewportHost = this.#deps?.getViewportHost();
+        const pageGeometryHelper = this.#deps?.getPageGeometryHelper();
+        if (!layoutState?.layout || !viewportHost) return null;
+
+        const normalized = this.#callbacks.normalizeClientPoint?.(clientX, clientY);
+        if (!normalized) return null;
+
+        return clickToPosition(
+          layoutState.layout,
+          layoutState.blocks,
+          layoutState.measures,
+          { x: normalized.x, y: normalized.y },
+          viewportHost,
+          clientX,
+          clientY,
+          pageGeometryHelper ?? undefined,
+        );
+      },
+      scheduleSelectionUpdate: () => this.#callbacks.scheduleSelectionUpdate?.(),
+    });
+  }
+
+  // ==========================================================================
+  // Event Handlers
+  // ==========================================================================
+
+  #handlePointerDown(event: PointerEvent): void {
+    if (!this.#deps) return;
+
+    // Return early for non-left clicks
+    if (event.button !== 0) return;
+
+    // On Mac, Ctrl+Click triggers the context menu
+    if (event.ctrlKey && navigator.platform.includes('Mac')) return;
+
+    this.#pendingMarginClick = null;
+
+    const target = event.target as HTMLElement;
+
+    // Skip ruler handle clicks
+    if (target?.closest?.('.superdoc-ruler-handle') != null) return;
+
+    // Handle link clicks
+    const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;
+    if (linkEl) {
+      this.#handleLinkClick(event, linkEl);
+      return;
+    }
+
+    // Handle field annotation clicks
+    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
+    const isDraggableAnnotation = target?.closest?.('[data-draggable="true"]') != null;
+    this.#suppressFocusInFromDraggable = isDraggableAnnotation;
+
+    if (annotationEl) {
+      this.#handleAnnotationClick(event, annotationEl);
+      return;
+    }
+
+    const layoutState = this.#deps.getLayoutState();
+    if (!layoutState.layout) {
+      this.#handleClickWithoutLayout(event, isDraggableAnnotation);
+      return;
+    }
+
+    const normalizedPoint = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
+    if (!normalizedPoint) return;
+
+    const { x, y } = normalizedPoint;
+    this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
+
+    // Check header/footer session state
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      if (this.#handleClickInHeaderFooterMode(event, x, y)) return;
+    }
+
+    // Check for header/footer region hit
+    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    if (headerFooterRegion) return; // Will be handled by double-click
+
+    // Get hit position
+    const viewportHost = this.#deps.getViewportHost();
+    const pageGeometryHelper = this.#deps.getPageGeometryHelper();
+    const rawHit = clickToPosition(
+      layoutState.layout,
+      layoutState.blocks,
+      layoutState.measures,
+      { x, y },
+      viewportHost,
+      event.clientX,
+      event.clientY,
+      pageGeometryHelper ?? undefined,
+    );
+
+    const editor = this.#deps.getEditor();
+    const doc = editor.state?.doc;
+    const epochMapper = this.#deps.getEpochMapper();
+    const mapped =
+      rawHit && doc ? epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1) : null;
+
+    if (mapped && !mapped.ok) {
+      debugLog('warn', 'pointerdown mapping failed', mapped);
+    }
+
+    const hit =
+      rawHit && doc && mapped?.ok
+        ? { ...rawHit, pos: Math.max(0, Math.min(mapped.pos, doc.content.size)), layoutEpoch: mapped.toEpoch }
+        : null;
+
+    this.#debugLastHit = hit
+      ? { source: 'dom', pos: rawHit?.pos ?? null, layoutEpoch: rawHit?.layoutEpoch ?? null, mappedPos: hit.pos }
+      : { source: 'none', pos: rawHit?.pos ?? null, layoutEpoch: rawHit?.layoutEpoch ?? null, mappedPos: null };
+    this.#callbacks.updateSelectionDebugHud?.();
+
+    // Don't preventDefault for draggable annotations
+    if (!isDraggableAnnotation) {
+      event.preventDefault();
+    }
+
+    // Handle click outside text content
+    if (!rawHit) {
+      this.#focusEditorAtFirstPosition();
+      return;
+    }
+
+    if (!hit || !doc) {
+      this.#callbacks.setPendingDocChange?.();
+      this.#callbacks.scheduleRerender?.();
+      return;
+    }
+
+    // Check for image/fragment hit
+    const fragmentHit = getFragmentAtPosition(layoutState.layout, layoutState.blocks, layoutState.measures, rawHit.pos);
+
+    // Handle inline image click
+    const targetImg = (event.target as HTMLElement | null)?.closest?.('img');
+    if (this.#handleInlineImageClick(event, targetImg, rawHit, doc, epochMapper)) return;
+
+    // Handle atomic fragment (image/drawing) click
+    if (this.#handleFragmentClick(event, fragmentHit, hit, doc)) return;
+
+    // Deselect image if clicking elsewhere
+    if (this.#lastSelectedImageBlockId) {
+      this.#callbacks.emit?.('imageDeselected', { blockId: this.#lastSelectedImageBlockId });
+      this.#lastSelectedImageBlockId = null;
+    }
+
+    // Handle shift+click to extend selection
+    if (event.shiftKey && editor.state.selection.$anchor) {
+      this.#handleShiftClick(event, hit.pos);
+      return;
+    }
+
+    // Track click depth for multi-click
+    const clickDepth = this.#registerPointerClick(event);
+
+    // Set up drag selection state
+    if (clickDepth === 1) {
+      this.#dragAnchor = hit.pos;
+      this.#dragAnchorPageIndex = hit.pageIndex;
+      this.#pendingMarginClick = this.#callbacks.computePendingMarginClick?.(event.pointerId, x, y) ?? null;
+
+      // Check for table cell selection
+      const tableHit = this.#hitTestTable(x, y);
+      if (tableHit) {
+        const tablePos = this.#getTablePosFromHit(tableHit);
+        if (tablePos !== null) {
+          this.#setCellAnchor(tableHit, tablePos);
+        }
+      } else {
+        this.#clearCellAnchor();
+      }
+    } else {
+      this.#pendingMarginClick = null;
+    }
+
+    this.#dragLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
+    this.#dragLastRawHit = hit;
+    this.#dragUsedPageNotMountedFallback = false;
+
+    this.#isDragging = true;
+    if (clickDepth >= 3) {
+      this.#dragExtensionMode = 'para';
+    } else if (clickDepth === 2) {
+      this.#dragExtensionMode = 'word';
+    } else {
+      this.#dragExtensionMode = 'char';
+    }
+
+    // Capture pointer for reliable drag tracking
+    if (typeof viewportHost.setPointerCapture === 'function') {
+      viewportHost.setPointerCapture(event.pointerId);
+    }
+
+    // Handle double/triple click selection
+    let handledByDepth = false;
+    const sessionModeForDepth = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionModeForDepth === 'body') {
+      const selectionPos = clickDepth >= 2 && this.#dragAnchor !== null ? this.#dragAnchor : hit.pos;
+
+      if (clickDepth >= 3) {
+        handledByDepth = this.#callbacks.selectParagraphAt?.(selectionPos) ?? false;
+      } else if (clickDepth === 2) {
+        handledByDepth = this.#callbacks.selectWordAt?.(selectionPos) ?? false;
+      }
+    }
+
+    // Set selection for single click
+    if (!handledByDepth) {
+      try {
+        let nextSelection: Selection = TextSelection.create(doc, hit.pos);
+        if (!nextSelection.$from.parent.inlineContent) {
+          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+        }
+        const tr = editor.state.tr.setSelection(nextSelection);
+        editor.view?.dispatch(tr);
+      } catch {
+        // Position may be invalid during layout updates
+      }
+    }
+
+    this.#callbacks.scheduleSelectionUpdate?.();
+    this.#focusEditor();
+  }
+
+  #handlePointerMove(event: PointerEvent): void {
+    if (!this.#deps) return;
+
+    const layoutState = this.#deps.getLayoutState();
+    if (!layoutState.layout) return;
+
+    const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
+    if (!normalized) return;
+
+    // Handle drag selection
+    if (this.#isDragging && this.#dragAnchor !== null && event.buttons & 1) {
+      this.#handleDragSelection(event, normalized);
+      return;
+    }
+
+    // Handle header/footer hover
+    this.#handleHover(normalized);
+  }
+
+  #handlePointerUp(event: PointerEvent): void {
+    if (!this.#deps) return;
+
+    this.#suppressFocusInFromDraggable = false;
+
+    if (!this.#isDragging) return;
+
+    // Release pointer capture
+    const viewportHost = this.#deps.getViewportHost();
+    if (
+      typeof viewportHost.hasPointerCapture === 'function' &&
+      typeof viewportHost.releasePointerCapture === 'function' &&
+      viewportHost.hasPointerCapture(event.pointerId)
+    ) {
+      viewportHost.releasePointerCapture(event.pointerId);
+    }
+
+    const pendingMarginClick = this.#pendingMarginClick;
+    this.#pendingMarginClick = null;
+
+    const dragAnchor = this.#dragAnchor;
+    const dragMode = this.#dragExtensionMode;
+    const dragUsedFallback = this.#dragUsedPageNotMountedFallback;
+    const dragPointer = this.#dragLastPointer;
+
+    this.#isDragging = false;
+
+    // Reset cell drag mode
+    if (this.#cellDragMode !== 'none') {
+      this.#cellDragMode = 'none';
+    }
+
+    // Handle non-margin click end
+    if (!pendingMarginClick || pendingMarginClick.pointerId !== event.pointerId) {
+      this.#callbacks.updateSelectionVirtualizationPins?.({ includeDragBuffer: false });
+
+      if (dragUsedFallback && dragAnchor != null) {
+        const pointer = dragPointer ?? { clientX: event.clientX, clientY: event.clientY };
+        this.#callbacks.finalizeDragSelectionWithDom?.(pointer, dragAnchor, dragMode);
+      }
+
+      this.#callbacks.scheduleA11ySelectionAnnouncement?.({ immediate: true });
+
+      this.#dragLastPointer = null;
+      this.#dragLastRawHit = null;
+      this.#dragUsedPageNotMountedFallback = false;
+      return;
+    }
+
+    // Handle margin clicks
+    this.#handleMarginClickEnd(event, pendingMarginClick);
+  }
+
+  #handlePointerLeave(): void {
+    this.#callbacks.clearHoverRegion?.();
+  }
+
+  #handleDoubleClick(event: MouseEvent): void {
+    if (!this.#deps) return;
+    if (event.button !== 0) return;
+
+    const layoutState = this.#deps.getLayoutState();
+    if (!layoutState.layout) return;
+
+    const viewportHost = this.#deps.getViewportHost();
+    const visibleHost = this.#deps.getVisibleHost();
+    const zoom = this.#deps.getZoom();
+    const rect = viewportHost.getBoundingClientRect();
+    const scrollLeft = visibleHost.scrollLeft ?? 0;
+    const scrollTop = visibleHost.scrollTop ?? 0;
+    const x = (event.clientX - rect.left + scrollLeft) / zoom;
+    const y = (event.clientY - rect.top + scrollTop) / zoom;
+
+    const region = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    if (region) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Create default header/footer if none exists
+      const descriptor = this.#callbacks.resolveDescriptorForRegion?.(region);
+      const hfManager = this.#deps.getHeaderFooterSession()?.manager;
+      if (!descriptor && hfManager) {
+        this.#callbacks.createDefaultHeaderFooter?.(region);
+        hfManager.refresh();
+      }
+
+      this.#callbacks.activateHeaderFooterRegion?.(region);
+    } else if ((this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body') !== 'body') {
+      this.#callbacks.exitHeaderFooterMode?.();
+    }
+  }
+
+  #handleKeyDown(event: KeyboardEvent): void {
+    if (!this.#deps) return;
+
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (event.key === 'Escape' && sessionMode !== 'body') {
+      event.preventDefault();
+      this.#callbacks.exitHeaderFooterMode?.();
+      return;
+    }
+
+    // Ctrl+Alt+H/F shortcuts
+    if (event.ctrlKey && event.altKey && !event.shiftKey) {
+      if (event.code === 'KeyH') {
+        event.preventDefault();
+        this.#focusHeaderFooterShortcut('header');
+      } else if (event.code === 'KeyF') {
+        event.preventDefault();
+        this.#focusHeaderFooterShortcut('footer');
+      }
+    }
+  }
+
+  #handleFocusIn(event: FocusEvent): void {
+    if (!this.#deps) return;
+
+    if (this.#suppressFocusInFromDraggable) {
+      this.#suppressFocusInFromDraggable = false;
+      return;
+    }
+
+    try {
+      this.#deps.getActiveEditor().view?.focus();
+    } catch {
+      // Ignore focus failures
+    }
+  }
+
+  // ==========================================================================
+  // Handler Helpers
+  // ==========================================================================
+
+  #handleLinkClick(event: PointerEvent, linkEl: HTMLAnchorElement): void {
+    const href = linkEl.getAttribute('href') ?? '';
+    const isAnchorLink = href.startsWith('#') && href.length > 1;
+    const isTocLink = linkEl.closest('.superdoc-toc-entry') !== null;
+
+    if (isAnchorLink && isTocLink) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.#callbacks.goToAnchor?.(href);
+      return;
+    }
+
+    // Dispatch link click event
+    event.preventDefault();
+    event.stopPropagation();
+
+    const linkClickEvent = new CustomEvent('superdoc-link-click', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        href,
+        target: linkEl.getAttribute('target'),
+        rel: linkEl.getAttribute('rel'),
+        tooltip: linkEl.getAttribute('title'),
+        element: linkEl,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      },
+    });
+    linkEl.dispatchEvent(linkClickEvent);
+  }
+
+  #handleAnnotationClick(event: PointerEvent, annotationEl: HTMLElement): void {
+    const editor = this.#deps?.getEditor();
+    if (!editor?.isEditable) return;
+
+    const resolved = this.#callbacks.resolveFieldAnnotationSelectionFromElement?.(annotationEl);
+    if (resolved) {
+      try {
+        const tr = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, resolved.pos));
+        editor.view?.dispatch(tr);
+      } catch {}
+
+      editor.emit('fieldAnnotationClicked', {
+        editor,
+        node: resolved.node,
+        nodePos: resolved.pos,
+        event,
+        currentTarget: annotationEl,
+      });
+    }
+  }
+
+  #handleClickWithoutLayout(event: PointerEvent, isDraggableAnnotation: boolean): void {
+    if (!isDraggableAnnotation) {
+      event.preventDefault();
+    }
+
+    // Blur and focus editor
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    this.#focusEditorAtFirstPosition();
+  }
+
+  #handleClickInHeaderFooterMode(event: PointerEvent, x: number, y: number): boolean {
+    const session = this.#deps?.getHeaderFooterSession();
+    const activeEditorHost = session?.overlayManager?.getActiveEditorHost?.();
+    const clickedInsideEditorHost =
+      activeEditorHost && (activeEditorHost.contains(event.target as Node) || activeEditorHost === event.target);
+
+    if (clickedInsideEditorHost) {
+      return true; // Let editor handle it
+    }
+
+    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    if (!headerFooterRegion) {
+      this.#callbacks.exitHeaderFooterMode?.();
+      return false; // Continue to body click handling
+    }
+
+    return true; // In header/footer region
+  }
+
+  #handleInlineImageClick(
+    event: PointerEvent,
+    targetImg: HTMLImageElement | null,
+    rawHit: PositionHit,
+    doc: ProseMirrorNode,
+    epochMapper: EpochPositionMapper,
+  ): boolean {
+    if (!targetImg) return false;
+
+    const imgPmStart = targetImg.dataset?.pmStart ? Number(targetImg.dataset.pmStart) : null;
+    if (Number.isNaN(imgPmStart) || imgPmStart == null) return false;
+
+    const imgLayoutEpochRaw = targetImg.dataset?.layoutEpoch;
+    const imgLayoutEpoch = imgLayoutEpochRaw != null ? Number(imgLayoutEpochRaw) : NaN;
+    const rawLayoutEpoch = Number.isFinite(rawHit.layoutEpoch) ? rawHit.layoutEpoch : NaN;
+    const effectiveEpoch =
+      Number.isFinite(imgLayoutEpoch) && Number.isFinite(rawLayoutEpoch)
+        ? Math.max(imgLayoutEpoch, rawLayoutEpoch)
+        : Number.isFinite(imgLayoutEpoch)
+          ? imgLayoutEpoch
+          : rawHit.layoutEpoch;
+
+    const mappedImg = epochMapper.mapPosFromLayoutToCurrentDetailed(imgPmStart, effectiveEpoch, 1);
+    if (!mappedImg.ok) {
+      debugLog('warn', 'inline image mapping failed', mappedImg);
+      this.#callbacks.setPendingDocChange?.();
+      this.#callbacks.scheduleRerender?.();
+      return true;
+    }
+
+    const clampedImgPos = Math.max(0, Math.min(mappedImg.pos, doc.content.size));
+    if (clampedImgPos < 0 || clampedImgPos >= doc.content.size) return true;
+
+    // Emit deselect for previous image
+    const newSelectionId = `inline-${clampedImgPos}`;
+    if (this.#lastSelectedImageBlockId && this.#lastSelectedImageBlockId !== newSelectionId) {
+      this.#callbacks.emit?.('imageDeselected', { blockId: this.#lastSelectedImageBlockId });
+    }
+
+    const editor = this.#deps?.getEditor();
+    try {
+      const tr = editor!.state.tr.setSelection(NodeSelection.create(doc, clampedImgPos));
+      editor!.view?.dispatch(tr);
+
+      const selector = `.superdoc-inline-image[data-pm-start="${imgPmStart}"]`;
+      const viewportHost = this.#deps?.getViewportHost();
+      const targetElement = viewportHost?.querySelector(selector);
+      this.#callbacks.emit?.('imageSelected', {
+        element: targetElement ?? targetImg,
+        blockId: null,
+        pmStart: clampedImgPos,
+      });
+      this.#lastSelectedImageBlockId = newSelectionId;
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[PointerEventManager] Failed to create NodeSelection for inline image:`, error);
+      }
+    }
+
+    this.#callbacks.focusEditorAfterImageSelection?.();
+    return true;
+  }
+
+  #handleFragmentClick(
+    event: PointerEvent,
+    fragmentHit: ReturnType<typeof getFragmentAtPosition>,
+    hit: PositionHit,
+    doc: ProseMirrorNode,
+  ): boolean {
+    if (!fragmentHit) return false;
+    if (fragmentHit.fragment.kind !== 'image' && fragmentHit.fragment.kind !== 'drawing') return false;
+
+    const editor = this.#deps?.getEditor();
+    try {
+      const tr = editor!.state.tr.setSelection(NodeSelection.create(doc, hit.pos));
+      editor!.view?.dispatch(tr);
+
+      if (this.#lastSelectedImageBlockId && this.#lastSelectedImageBlockId !== fragmentHit.fragment.blockId) {
+        this.#callbacks.emit?.('imageDeselected', { blockId: this.#lastSelectedImageBlockId });
+      }
+
+      if (fragmentHit.fragment.kind === 'image') {
+        const viewportHost = this.#deps?.getViewportHost();
+        const targetElement = viewportHost?.querySelector(
+          `.superdoc-image-fragment[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
+        );
+        if (targetElement) {
+          this.#callbacks.emit?.('imageSelected', {
+            element: targetElement,
+            blockId: fragmentHit.fragment.blockId,
+            pmStart: fragmentHit.fragment.pmStart,
+          });
+          this.#lastSelectedImageBlockId = fragmentHit.fragment.blockId;
+        }
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PointerEventManager] Failed to create NodeSelection for atomic fragment:', error);
+      }
+    }
+
+    this.#callbacks.focusEditorAfterImageSelection?.();
+    return true;
+  }
+
+  #handleShiftClick(event: PointerEvent, headPos: number): void {
+    const editor = this.#deps?.getEditor();
+    if (!editor) return;
+
+    const anchor = editor.state.selection.anchor;
+    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, headPos, this.#dragExtensionMode);
+
+    try {
+      const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
+      editor.view?.dispatch(tr);
+      this.#callbacks.scheduleSelectionUpdate?.();
+    } catch (error) {
+      console.warn('[SELECTION] Failed to extend selection on shift+click:', error);
+    }
+
+    this.#focusEditor();
+  }
+
+  #handleDragSelection(event: PointerEvent, normalized: { x: number; y: number }): void {
+    if (!this.#deps) return;
+
+    this.#pendingMarginClick = null;
+    const prevPointer = this.#dragLastPointer;
+    this.#dragLastPointer = { clientX: event.clientX, clientY: event.clientY, x: normalized.x, y: normalized.y };
+
+    const layoutState = this.#deps.getLayoutState();
+    const viewportHost = this.#deps.getViewportHost();
+    const pageGeometryHelper = this.#deps.getPageGeometryHelper();
+
+    const rawHit = clickToPosition(
+      layoutState.layout!,
+      layoutState.blocks,
+      layoutState.measures,
+      { x: normalized.x, y: normalized.y },
+      viewportHost,
+      event.clientX,
+      event.clientY,
+      pageGeometryHelper ?? undefined,
+    );
+
+    if (!rawHit) return;
+
+    const editor = this.#deps.getEditor();
+    const doc = editor.state?.doc;
+    if (!doc) return;
+
+    this.#dragLastRawHit = rawHit;
+
+    const pageMounted = this.#deps.getPageElement(rawHit.pageIndex) != null;
+    if (!pageMounted && this.#deps.isSelectionAwareVirtualizationEnabled()) {
+      this.#dragUsedPageNotMountedFallback = true;
+    }
+
+    this.#callbacks.updateSelectionVirtualizationPins?.({ includeDragBuffer: true, extraPages: [rawHit.pageIndex] });
+
+    const epochMapper = this.#deps.getEpochMapper();
+    const mappedHead = epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1);
+    if (!mappedHead.ok) {
+      debugLog('warn', 'drag mapping failed', mappedHead);
+      return;
+    }
+
+    const hit = {
+      ...rawHit,
+      pos: Math.max(0, Math.min(mappedHead.pos, doc.content.size)),
+      layoutEpoch: mappedHead.toEpoch,
+    };
+
+    this.#debugLastHit = {
+      source: pageMounted ? 'dom' : 'geometry',
+      pos: rawHit.pos,
+      layoutEpoch: rawHit.layoutEpoch,
+      mappedPos: hit.pos,
+    };
+    this.#callbacks.updateSelectionDebugHud?.();
+
+    // Check for cell selection
+    const currentTableHit = this.#hitTestTable(normalized.x, normalized.y);
+    const shouldUseCellSel = this.#shouldUseCellSelection(currentTableHit);
+
+    if (shouldUseCellSel && this.#cellAnchor) {
+      this.#handleCellDragSelection(currentTableHit, hit);
+      return;
+    }
+
+    // Text selection mode
+    const anchor = this.#dragAnchor!;
+    const head = hit.pos;
+    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
+
+    try {
+      const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
+      editor.view?.dispatch(tr);
+      this.#callbacks.scheduleSelectionUpdate?.();
+    } catch (error) {
+      console.warn('[SELECTION] Failed to extend selection during drag:', error);
+    }
+  }
+
+  #handleCellDragSelection(currentTableHit: TableHitResult | null, hit: PositionHit): void {
+    const headCellPos = currentTableHit ? this.#getCellPosFromTableHit(currentTableHit) : null;
+    if (headCellPos === null) return;
+
+    if (this.#cellDragMode !== 'active') {
+      this.#cellDragMode = 'active';
+    }
+
+    const editor = this.#deps?.getEditor();
+    if (!editor) return;
+
+    try {
+      const doc = editor.state.doc;
+      const anchorCellPos = this.#cellAnchor!.cellPos;
+      const clampedAnchor = Math.max(0, Math.min(anchorCellPos, doc.content.size));
+      const clampedHead = Math.max(0, Math.min(headCellPos, doc.content.size));
+
+      const cellSelection = CellSelection.create(doc, clampedAnchor, clampedHead);
+      const tr = editor.state.tr.setSelection(cellSelection);
+      editor.view?.dispatch(tr);
+      this.#callbacks.scheduleSelectionUpdate?.();
+    } catch (error) {
+      console.warn('[CELL-SELECTION] Failed to create CellSelection, falling back to TextSelection:', error);
+      // Fall back to text selection
+      const anchor = this.#dragAnchor!;
+      const head = hit.pos;
+      const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
+
+      try {
+        const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
+        editor.view?.dispatch(tr);
+        this.#callbacks.scheduleSelectionUpdate?.();
+      } catch {}
+    }
+  }
+
+  #handleHover(normalized: { x: number; y: number }): void {
+    if (!this.#deps) return;
+
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      this.#callbacks.clearHoverRegion?.();
+      return;
+    }
+
+    if (this.#deps.getDocumentMode() === 'viewing') {
+      this.#callbacks.clearHoverRegion?.();
+      return;
+    }
+
+    const region = this.#callbacks.hitTestHeaderFooterRegion?.(normalized.x, normalized.y);
+    if (!region) {
+      this.#callbacks.clearHoverRegion?.();
+      return;
+    }
+
+    const currentHover = this.#deps.getHeaderFooterSession()?.hoverRegion;
+    if (
+      currentHover &&
+      currentHover.kind === region.kind &&
+      currentHover.pageIndex === region.pageIndex &&
+      currentHover.sectionType === region.sectionType
+    ) {
+      return;
+    }
+
+    this.#deps.getHeaderFooterSession()?.renderHover(region);
+    this.#callbacks.renderHoverRegion?.(region);
+  }
+
+  #handleMarginClickEnd(event: PointerEvent, pendingMarginClick: PendingMarginClick): void {
+    const sessionMode = this.#deps?.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionMode !== 'body' || this.#deps?.isViewLocked()) {
+      this.#clearDragPointerState();
+      return;
+    }
+
+    const editor = this.#deps?.getEditor();
+    const doc = editor?.state?.doc;
+    if (!doc) {
+      this.#clearDragPointerState();
+      return;
+    }
+
+    const epochMapper = this.#deps?.getEpochMapper();
+    if (!epochMapper) {
+      this.#clearDragPointerState();
+      return;
+    }
+
+    if (pendingMarginClick.kind === 'aboveFirstLine') {
+      const pos = this.#getFirstTextPosition();
+      try {
+        const tr = editor!.state.tr.setSelection(TextSelection.create(doc, pos));
+        editor!.view?.dispatch(tr);
+        this.#callbacks.scheduleSelectionUpdate?.();
+      } catch {}
+      this.#debugLastHit = { source: 'margin', pos: null, layoutEpoch: null, mappedPos: pos };
+      this.#callbacks.updateSelectionDebugHud?.();
+      this.#clearDragPointerState();
+      return;
+    }
+
+    if (pendingMarginClick.kind === 'right') {
+      const mappedEnd = epochMapper.mapPosFromLayoutToCurrentDetailed(
+        pendingMarginClick.pmEnd,
+        pendingMarginClick.layoutEpoch,
+        1,
+      );
+      if (!mappedEnd.ok) {
+        this.#callbacks.setPendingDocChange?.();
+        this.#callbacks.scheduleRerender?.();
+        this.#clearDragPointerState();
+        return;
+      }
+      const caretPos = Math.max(0, Math.min(mappedEnd.pos, doc.content.size));
+      try {
+        const tr = editor!.state.tr.setSelection(TextSelection.create(doc, caretPos));
+        editor!.view?.dispatch(tr);
+        this.#callbacks.scheduleSelectionUpdate?.();
+      } catch {}
+      this.#debugLastHit = {
+        source: 'margin',
+        pos: pendingMarginClick.pmEnd,
+        layoutEpoch: pendingMarginClick.layoutEpoch,
+        mappedPos: caretPos,
+      };
+      this.#callbacks.updateSelectionDebugHud?.();
+      this.#clearDragPointerState();
+      return;
+    }
+
+    // Left margin click - select line
+    const mappedStart = epochMapper.mapPosFromLayoutToCurrentDetailed(
+      pendingMarginClick.pmStart,
+      pendingMarginClick.layoutEpoch,
+      1,
+    );
+    const mappedEnd = epochMapper.mapPosFromLayoutToCurrentDetailed(
+      pendingMarginClick.pmEnd,
+      pendingMarginClick.layoutEpoch,
+      -1,
+    );
+
+    if (!mappedStart.ok || !mappedEnd.ok) {
+      this.#callbacks.setPendingDocChange?.();
+      this.#callbacks.scheduleRerender?.();
+      this.#clearDragPointerState();
+      return;
+    }
+
+    const selFrom = Math.max(0, Math.min(Math.min(mappedStart.pos, mappedEnd.pos), doc.content.size));
+    const selTo = Math.max(0, Math.min(Math.max(mappedStart.pos, mappedEnd.pos), doc.content.size));
+    try {
+      const tr = editor!.state.tr.setSelection(TextSelection.create(doc, selFrom, selTo));
+      editor!.view?.dispatch(tr);
+      this.#callbacks.scheduleSelectionUpdate?.();
+    } catch {}
+    this.#debugLastHit = {
+      source: 'margin',
+      pos: pendingMarginClick.pmStart,
+      layoutEpoch: pendingMarginClick.layoutEpoch,
+      mappedPos: selFrom,
+    };
+    this.#callbacks.updateSelectionDebugHud?.();
+    this.#clearDragPointerState();
+  }
+
+  #clearDragPointerState(): void {
+    this.#dragLastPointer = null;
+    this.#dragLastRawHit = null;
+    this.#dragUsedPageNotMountedFallback = false;
+  }
+
+  #focusHeaderFooterShortcut(kind: 'header' | 'footer'): void {
+    const pageIndex = this.#callbacks.getCurrentPageIndex?.() ?? 0;
+    const region = this.#callbacks.findRegionForPage?.(kind, pageIndex);
+    if (!region) {
+      this.#callbacks.emitHeaderFooterEditBlocked?.('missingRegion');
+      return;
+    }
+    this.#callbacks.activateHeaderFooterRegion?.(region);
+  }
+
+  #focusEditorAtFirstPosition(): void {
+    const editor = this.#deps?.getEditor();
+    const editorDom = editor?.view?.dom as HTMLElement | undefined;
+    if (!editorDom) return;
+
+    const validPos = this.#getFirstTextPosition();
+    const doc = editor?.state?.doc;
+
+    if (doc) {
+      try {
+        const tr = editor!.state.tr.setSelection(TextSelection.create(doc, validPos));
+        editor!.view?.dispatch(tr);
+      } catch {}
+    }
+
+    editorDom.focus();
+    editor?.view?.focus();
+    this.#callbacks.scheduleSelectionUpdate?.();
+  }
+
+  #focusEditor(): void {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    const editor = this.#deps?.getEditor();
+    const editorDom = editor?.view?.dom as HTMLElement | undefined;
+    if (editorDom) {
+      editorDom.focus();
+      editor?.view?.focus();
+    }
+  }
+}

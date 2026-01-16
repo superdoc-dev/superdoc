@@ -12,7 +12,7 @@
     "test:superdoc": "vitest run --root ./packages/superdoc",
     "test:cov": "node scripts/test-cov.mjs",
     "type-check": "tsc -b --force tsconfig.references.json",
-    "rebuild:types": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom --filter=@superdoc/painter-pdf --filter=@superdoc/layout-bridge build",
+    "rebuild:types": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom --filter=@superdoc/layout-bridge build",
     "validate:commands": "node scripts/validate-command-types.mjs",
     "unzip": "bash packages/super-editor/src/tests/helpers/unzip.sh",
     "dev": "pnpm --prefix packages/superdoc run dev",

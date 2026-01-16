@@ -2,24 +2,22 @@
 import '@superdoc/super-editor/style.css';
 import '@superdoc/common/styles/common-styles.css';
 
-import { ref, shallowRef, computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { NMessageProvider } from 'naive-ui';
 import { SuperEditor } from '@superdoc/super-editor';
-import { PresentationEditor } from '@core/PresentationEditor.js';
+import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getFileObject } from '@superdoc/common/helpers/get-file-object';
 import { DOCX } from '@superdoc/common';
 import { SuperToolbar } from '@components/toolbar/super-toolbar';
 import { PaginationPluginKey } from '@extensions/pagination/pagination-helpers.js';
 import BasicUpload from './BasicUpload.vue';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
-import { Telemetry } from '@superdoc/common/Telemetry';
 
 // Import the component the same you would in your app
 let activeEditor;
 const currentFile = ref(null);
 const pageStyles = ref(null);
 const isDebuggingPagination = ref(false);
-const telemetry = shallowRef(null);
 const urlParams = new URLSearchParams(window.location.search);
 const useLayoutEngine = ref(urlParams.get('layout') === '1');
 
@@ -86,7 +84,6 @@ const editorOptions = computed(() => {
     suppressSkeletonLoader: true,
     users: [], // For comment @-mentions, only users that have access to the document
     pagination: useLayoutEngine.value,
-    telemetry: telemetry.value,
     annotations: true,
     editorCtor: useLayoutEngine.value ? PresentationEditor : undefined,
   };
@@ -157,11 +154,6 @@ const injectContent = () => {
 onMounted(async () => {
   // set document to blank
   currentFile.value = await getFileObject(BlankDOCX, 'blank_document.docx', DOCX);
-
-  telemetry.value = new Telemetry({
-    enabled: false,
-    superdocId: 'dev-playground',
-  });
 });
 
 const toggleLayoutEngine = () => {

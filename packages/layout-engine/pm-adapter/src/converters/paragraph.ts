@@ -41,6 +41,7 @@ import {
   normalizeParagraphSpacing,
   normalizeParagraphIndent,
   normalizePxIndent,
+  normalizeOoxmlTabs,
 } from '../attributes/index.js';
 import { hydrateParagraphStyleAttrs, hydrateCharacterStyleAttrs } from '../attributes/paragraph-styles.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
@@ -414,9 +415,12 @@ export function fieldAnnotationNodeToRun(
 }
 
 /**
- * Helper to check if a run is a text run (not a tab).
+ * Helper to check if a run is a text run.
  */
-const isTextRun = (run: Run): run is TextRun => (run as { kind?: string }).kind !== 'tab';
+const isTextRun = (run: Run): run is TextRun => {
+  const kind = (run as { kind?: string }).kind;
+  return (kind === undefined || kind === 'text') && 'text' in run;
+};
 
 /**
  * Checks if two text runs have compatible data attributes for merging.
@@ -1018,6 +1022,13 @@ export function paragraphToFlowBlocks(
     converterContext,
     paragraphHydration,
   );
+  if (paragraphAttrs && (!Array.isArray(paragraphAttrs.tabs) || paragraphAttrs.tabs.length === 0)) {
+    const rawTabs = para.attrs?.tabs ?? para.attrs?.tabStops ?? paragraphProps.tabStops ?? paragraphProps.tabs;
+    const normalizedTabs = normalizeOoxmlTabs(rawTabs);
+    if (normalizedTabs && normalizedTabs.length > 0) {
+      paragraphAttrs.tabs = normalizedTabs;
+    }
+  }
 
   if (paragraphAttrs?.spacing) {
     const spacing = { ...(paragraphAttrs.spacing as Record<string, unknown>) };

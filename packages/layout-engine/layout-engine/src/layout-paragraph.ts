@@ -247,6 +247,12 @@ export type ParagraphLayoutContext = {
   columnX: (columnIndex: number) => number;
   floatManager: FloatingObjectManager;
   remeasureParagraph?: (block: ParagraphBlock, maxWidth: number, firstLineIndent?: number) => ParagraphMeasure;
+  /**
+   * Override the paragraph's spacing-after value. Used when contextual spacing
+   * should suppress spacing between this paragraph and the next (same-style) paragraph.
+   * When undefined, uses the value from block.attrs.spacing.after.
+   */
+  overrideSpacingAfter?: number;
 };
 
 export type AnchoredDrawingEntry = {
@@ -458,7 +464,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   const styleId = asString(attrs?.styleId);
   const contextualSpacing = asBoolean(attrs?.contextualSpacing);
   let spacingBefore = Math.max(0, Number(spacing.before ?? spacing.lineSpaceBefore ?? 0));
-  let spacingAfter = Math.max(0, Number(spacing.after ?? spacing.lineSpaceAfter ?? 0));
+  let spacingAfter = ctx.overrideSpacingAfter ?? Math.max(0, Number(spacing.after ?? spacing.lineSpaceAfter ?? 0));
   const emptyTextParagraph = isEmptyTextParagraph(block);
   if (emptyTextParagraph && spacingExplicit) {
     if (!spacingExplicit.before) spacingBefore = 0;

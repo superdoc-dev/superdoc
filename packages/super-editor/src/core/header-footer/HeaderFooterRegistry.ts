@@ -1,5 +1,5 @@
 import { toFlowBlocks } from '@superdoc/pm-adapter';
-import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../SchemaNodeTypes.js';
+import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../presentation-editor/utils/SchemaNodeTypes.js';
 import type { FlowBlock } from '@superdoc/contracts';
 import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';

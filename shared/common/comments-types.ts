@@ -5,10 +5,12 @@ export type Comment = {
   fileType: string;
   mentions: unknown[];
   creatorName: string;
+  creatorEmail?: string;
   createdTime: number;
   importedId: string;
   importedAuthor: {
     name: string;
+    email?: string;
   };
   isInternal: boolean;
   commentText: string;
@@ -27,7 +29,21 @@ export type Comment = {
   commentJSON: CommentJSON;
   origin?: 'word' | 'google-docs' | 'unknown';
   threadingMethod?: 'commentsExtended' | 'range-based' | 'mixed';
+  threadingStyleOverride?: CommentThreadingStyle;
+  threadingParentCommentId?: string;
   originalXmlStructure?: {
+    hasCommentsExtended: boolean;
+    hasCommentsExtensible: boolean;
+    hasCommentsIds: boolean;
+  };
+};
+
+export type CommentThreadingStyle = 'commentsExtended' | 'range-based';
+
+export type CommentThreadingProfile = {
+  defaultStyle: CommentThreadingStyle;
+  mixed?: boolean;
+  fileSet: {
     hasCommentsExtended: boolean;
     hasCommentsExtensible: boolean;
     hasCommentsIds: boolean;

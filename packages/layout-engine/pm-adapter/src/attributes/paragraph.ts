@@ -1448,10 +1448,46 @@ export const computeParagraphAttrs = (
   const hasExplicitIndent = Boolean(normalizedIndent);
   const hasNumberingIndent = Boolean(computed.numbering?.indent?.left || computed.numbering?.indent?.hanging);
   if (hasExplicitIndent || hasNumberingIndent || (bidi && adjustRightInd)) {
-    const indentPx = indentPtToPx(indent);
+    const styleIndentPx = indentPtToPx(indent);
 
-    if (indentPx) {
-      const adjustedIndent = bidi && adjustRightInd ? ensureBidiIndentPx({ ...indentPx }) : indentPx;
+    if (styleIndentPx || normalizedIndent) {
+      // Merge style-resolved indent with explicitly set indent (normalizedIndent has priority).
+      // The normalizedIndent already has firstLine/hanging mutual exclusivity handled by combineIndentProperties.
+      const mergedIndent: ParagraphIndent = { ...(styleIndentPx ?? {}) };
+
+      // Apply explicit indent values, which override style defaults
+      if (normalizedIndent) {
+        // Copy explicit values from normalizedIndent
+        // Note: Zero left/right are treated as "no indent" and filtered out (cosmetic optimization),
+        // but zero firstLine/hanging are meaningful overrides and must be preserved.
+        if (normalizedIndent.left !== undefined) {
+          if (normalizedIndent.left === 0) {
+            delete mergedIndent.left; // Zero left is cosmetic, filter it out
+          } else {
+            mergedIndent.left = normalizedIndent.left;
+          }
+        }
+        if (normalizedIndent.right !== undefined) {
+          if (normalizedIndent.right === 0) {
+            delete mergedIndent.right; // Zero right is cosmetic, filter it out
+          } else {
+            mergedIndent.right = normalizedIndent.right;
+          }
+        }
+        if (normalizedIndent.firstLine !== undefined) mergedIndent.firstLine = normalizedIndent.firstLine;
+        if (normalizedIndent.hanging !== undefined) mergedIndent.hanging = normalizedIndent.hanging;
+
+        // Handle firstLine/hanging mutual exclusivity: if normalizedIndent has hanging (and thus
+        // firstLine was deleted by combineIndentProperties), remove firstLine from merged result.
+        // Similarly, if normalizedIndent has firstLine, remove hanging.
+        if (normalizedIndent.hanging !== undefined && normalizedIndent.firstLine === undefined) {
+          delete mergedIndent.firstLine;
+        } else if (normalizedIndent.firstLine !== undefined && normalizedIndent.hanging === undefined) {
+          delete mergedIndent.hanging;
+        }
+      }
+
+      const adjustedIndent = bidi && adjustRightInd ? ensureBidiIndentPx({ ...mergedIndent }) : mergedIndent;
       const finalIndent = bidi && adjustRightInd ? mirrorIndentForRtl({ ...adjustedIndent }) : adjustedIndent;
       paragraphAttrs.indent = finalIndent;
     } else if (bidi && adjustRightInd) {

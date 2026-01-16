@@ -3,6 +3,8 @@ import { preProcessNumPagesInstruction } from './num-pages-preprocessor.js';
 import { preProcessPageRefInstruction } from './page-ref-preprocessor.js';
 import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
 import { preProcessTocInstruction } from './toc-preprocessor.js';
+import { preProcessIndexInstruction } from './index-preprocessor.js';
+import { preProcessXeInstruction } from './xe-preprocessor.js';
 
 /**
  * @callback InstructionPreProcessor
@@ -30,6 +32,10 @@ export const getInstructionPreProcessor = (instruction) => {
       return preProcessHyperlinkInstruction;
     case 'TOC':
       return preProcessTocInstruction;
+    case 'INDEX':
+      return preProcessIndexInstruction;
+    case 'XE':
+      return preProcessXeInstruction;
     default:
       return null;
   }

@@ -891,6 +891,41 @@ describe('tracked change + comment threading export', () => {
     expect(insertedStarts).toEqual(['reply-1', 'reply-2']);
   });
 
+  it('attaches trackInsert/trackDelete marks when exporting replace comment ranges', () => {
+    const schema = createSchemaWithTrackChanges();
+    const insertMark = schema.marks.trackInsert.create({ id: 'replace-1', author: 'Test' });
+    const deleteMark = schema.marks.trackDelete.create({ id: 'replace-1', author: 'Test' });
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'replace-comment', internal: false });
+
+    const paragraph = schema.nodes.paragraph.create(null, [
+      schema.text('Inserted text', [insertMark, commentMark]),
+      schema.text('Deleted text', [deleteMark]),
+    ]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    const comments = [{ commentId: 'replace-comment', createdTime: 1, isInternal: false }];
+
+    prepareCommentsForExport(state.doc, tr, schema, comments);
+
+    const applied = state.apply(tr);
+    let startMarks = [];
+    let endMarks = [];
+
+    applied.doc.descendants((node) => {
+      if (node.type.name === 'commentRangeStart' && node.attrs['w:id'] === 'replace-comment') {
+        startMarks = node.marks.map((mark) => mark.type.name);
+      }
+      if (node.type.name === 'commentRangeEnd' && node.attrs['w:id'] === 'replace-comment') {
+        endMarks = node.marks.map((mark) => mark.type.name);
+      }
+    });
+
+    expect(startMarks).toContain('trackInsert');
+    expect(endMarks).toContain('trackDelete');
+  });
+
   it('does not duplicate ranges for comments already processed via comment marks', () => {
     const schema = createSchemaWithTrackChanges();
     const commentMark = schema.marks[CommentMarkName].create({ commentId: 'comment-1', internal: false });

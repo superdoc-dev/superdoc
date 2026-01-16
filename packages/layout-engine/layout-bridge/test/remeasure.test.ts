@@ -331,6 +331,90 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].width).toBeGreaterThan(48);
     });
 
+    it('keeps right-aligned tab groups on the same line', () => {
+      const tabStop: TabStop = { pos: pxToTwips(100), val: 'end' };
+      const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], { tabs: [tabStop] });
+      const measure = remeasureParagraph(block, 100);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].toRun).toBe(2);
+      expect(measure.lines[0].width).toBeGreaterThanOrEqual(100);
+    });
+
+    it('keeps center-aligned tab groups on the same line', () => {
+      const tabStop: TabStop = { pos: pxToTwips(100), val: 'center' };
+      const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], { tabs: [tabStop] });
+      const measure = remeasureParagraph(block, 150);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].toRun).toBe(2);
+    });
+
+    it('keeps decimal-aligned tab groups on the same line', () => {
+      const tabStop: TabStop = { pos: pxToTwips(100), val: 'decimal' };
+      const block = createBlock([textRun('AAA'), tabRun(), textRun('123.45')], { tabs: [tabStop] });
+      const measure = remeasureParagraph(block, 150);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].toRun).toBe(2);
+    });
+
+    it('handles decimal tab with comma separator', () => {
+      const tabStop: TabStop = { pos: pxToTwips(100), val: 'decimal' };
+      const block = createBlock([textRun('AAA'), tabRun(), textRun('123,45')], {
+        tabs: [tabStop],
+        decimalSeparator: ',',
+      });
+      const measure = remeasureParagraph(block, 150);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].toRun).toBe(2);
+    });
+
+    it('handles tab with dot leader', () => {
+      const tabStop: TabStop = { pos: pxToTwips(100), val: 'end', leader: 'dot' };
+      const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], { tabs: [tabStop] });
+      const measure = remeasureParagraph(block, 150);
+
+      expect(measure.lines).toHaveLength(1);
+      // Leaders should be recorded on the line
+      expect(measure.lines[0].leaders).toBeDefined();
+      expect(measure.lines[0].leaders?.length).toBeGreaterThan(0);
+      expect(measure.lines[0].leaders?.[0].style).toBe('dot');
+    });
+
+    it('handles tab with hyphen leader', () => {
+      const tabStop: TabStop = { pos: pxToTwips(100), val: 'end', leader: 'hyphen' };
+      const block = createBlock([textRun('Entry'), tabRun(), textRun('99')], { tabs: [tabStop] });
+      const measure = remeasureParagraph(block, 150);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].leaders?.[0].style).toBe('hyphen');
+    });
+
+    it('handles multiple aligned tabs on same line', () => {
+      const tabStops: TabStop[] = [
+        { pos: pxToTwips(50), val: 'center' },
+        { pos: pxToTwips(100), val: 'end' },
+      ];
+      const block = createBlock([textRun('A'), tabRun(), textRun('B'), tabRun(), textRun('C')], {
+        tabs: tabStops,
+      });
+      const measure = remeasureParagraph(block, 150);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].toRun).toBe(4);
+    });
+
+    it('creates segments for aligned tab content', () => {
+      const tabStop: TabStop = { pos: pxToTwips(100), val: 'end' };
+      const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], { tabs: [tabStop] });
+      const measure = remeasureParagraph(block, 150);
+
+      expect(measure.lines[0].segments).toBeDefined();
+      expect(measure.lines[0].segments?.length).toBeGreaterThan(0);
+    });
+
     it('handles tab at various positions within text', () => {
       // Tab after some text should advance to next stop after current position
       const tabStop: TabStop = { pos: 720, val: 'start' }; // 48px

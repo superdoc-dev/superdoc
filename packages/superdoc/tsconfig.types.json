@@ -4,9 +4,5 @@
     "composite": true,
     "outDir": "dist-types"
   },
-  "references": [
-    { "path": "../layout-engine/painters/pdf/tsconfig.json" },
-    { "path": "../super-editor/tsconfig.types.json" },
-    { "path": "../../shared/common/tsconfig.json" }
-  ]
+  "references": [{ "path": "../super-editor/tsconfig.types.json" }, { "path": "../../shared/common/tsconfig.json" }]
 }

@@ -69,21 +69,21 @@ Documentation is crucial for our project. You can help by:
    cd SuperDoc
    ```
 
-2. **Install Dependencies**:
+2. **Install Dependencies** (pnpm required):
 
    ```bash
-   npm install
+   pnpm install
    ```
 
 3. **Set Up Development Environment**:
 
    ```bash
-   npm run dev
+   pnpm run dev
    ```
 
 4. **Run Tests**:
    ```bash
-   npm test
+   pnpm test
    ```
 
 ## Pull Request Process

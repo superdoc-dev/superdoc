@@ -7,6 +7,7 @@ import {
   resolveFontSizeWithFallback,
   orderDefaultsAndNormal,
   createFirstLineIndentHandler,
+  createHangingIndentHandler,
   combineIndentProperties,
   DEFAULT_FONT_SIZE_HALF_POINTS,
   INLINE_OVERRIDE_PROPERTIES,
@@ -494,6 +495,32 @@ describe('cascade - createFirstLineIndentHandler', () => {
   });
 });
 
+describe('cascade - createHangingIndentHandler', () => {
+  it('returns a function', () => {
+    const handler = createHangingIndentHandler();
+    expect(typeof handler).toBe('function');
+  });
+
+  it('removes firstLine from target when source has hanging', () => {
+    const handler = createHangingIndentHandler();
+    const target = { firstLine: 432, left: 720 };
+    const source = { hanging: 360 };
+    const result = handler(target, source);
+    expect(result).toBe(360);
+    expect(target.firstLine).toBeUndefined();
+    expect(target.left).toBe(720); // Preserved
+  });
+
+  it('does not remove firstLine when source has no hanging', () => {
+    const handler = createHangingIndentHandler();
+    const target = { firstLine: 432 };
+    const source = { left: 720 };
+    const result = handler(target, source);
+    expect(result).toBeUndefined(); // source.hanging is undefined
+    expect(target.firstLine).toBe(432); // Preserved
+  });
+});
+
 describe('cascade - combineIndentProperties', () => {
   it('extracts and combines indent properties from objects', () => {
     const result = combineIndentProperties([{ indent: { left: 720 } }, { indent: { left: 1440, hanging: 360 } }]);
@@ -509,6 +536,15 @@ describe('cascade - combineIndentProperties', () => {
     });
     // hanging should be removed due to special handler
     expect(result.indent?.hanging).toBeUndefined();
+  });
+
+  it('handles hanging/firstLine mutual exclusivity', () => {
+    const result = combineIndentProperties([{ indent: { left: 720, firstLine: 432 } }, { indent: { hanging: 360 } }]);
+    expect(result).toEqual({
+      indent: { left: 720, hanging: 360 },
+    });
+    // firstLine should be removed due to special handler
+    expect(result.indent?.firstLine).toBeUndefined();
   });
 
   it('handles empty array', () => {

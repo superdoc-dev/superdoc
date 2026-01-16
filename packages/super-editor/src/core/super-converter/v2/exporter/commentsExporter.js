@@ -150,24 +150,33 @@ export const determineExportStrategy = (comments) => {
   return 'word';
 };
 
+const resolveThreadingStyle = (comment, threadingProfile) => {
+  if (comment?.threadingStyleOverride) return comment.threadingStyleOverride;
+  if (threadingProfile?.defaultStyle) return threadingProfile.defaultStyle;
+  return comment?.originalXmlStructure?.hasCommentsExtended ? 'commentsExtended' : 'range-based';
+};
+
 /**
  * This function updates the commentsExtended.xml structure with the comments list.
  *
  * @param {Array[Object]} comments The comments list
  * @param {Object} commentsExtendedXml The commentsExtended.xml structure as JSON
- * @param {'word' | 'google-docs' | 'unknown'} exportStrategy The export strategy to use
+ * @param {import('@superdoc/common').CommentThreadingProfile | 'word' | 'google-docs' | 'unknown'} threadingProfile
  * @returns {Object | null} The updated commentsExtended structure, or null if it shouldn't be generated
  */
-export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, exportStrategy = 'word') => {
-  // For Google Docs origin, check if original had commentsExtended.xml
-  // If not, we skip generating it entirely (threading will be range-based in document.xml)
-  // The importer only uses range-based threading when the file is missing, not when it's empty
-  const shouldGenerateCommentsExtended =
-    exportStrategy === 'word' || comments.some((c) => c.originalXmlStructure?.hasCommentsExtended);
+export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, threadingProfile = null) => {
+  if (!commentsExtendedXml) {
+    return null;
+  }
+  const exportStrategy = typeof threadingProfile === 'string' ? threadingProfile : 'word';
+  const profile = typeof threadingProfile === 'string' ? null : threadingProfile;
+  const shouldGenerateCommentsExtended = profile
+    ? profile.defaultStyle === 'commentsExtended' ||
+      profile.mixed ||
+      comments.some((comment) => resolveThreadingStyle(comment, profile) === 'commentsExtended')
+    : exportStrategy === 'word' || comments.some((c) => c.originalXmlStructure?.hasCommentsExtended);
 
   if (!shouldGenerateCommentsExtended && exportStrategy === 'google-docs') {
-    // For Google Docs without original commentsExtended.xml, return null to skip file generation
-    // Threading will be handled via range nesting in document.xml
     return null;
   }
 
@@ -181,14 +190,15 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, ex
       'w15:done': isResolved ? '1' : '0',
     };
 
-    // For Word format, always use paraIdParent for threading
-    // For Google Docs, use paraIdParent if original had commentsExtended.xml
+    // Use paraIdParent only for comments that should use commentsExtended threading.
     // Note: If the parent is a tracked change (not a real Word comment), we don't set this attribute
-    // because Word doesn't recognize tracked changes as comment parents
-    const parentId = comment.parentCommentId;
-    if (parentId && (exportStrategy === 'word' || comment.originalXmlStructure?.hasCommentsExtended)) {
+    // because Word doesn't recognize tracked changes as comment parents.
+    const parentId = comment.threadingParentCommentId || comment.parentCommentId;
+    const threadingStyle = resolveThreadingStyle(comment, profile);
+    if (parentId && threadingStyle === 'commentsExtended') {
       const parentComment = comments.find((c) => c.commentId === parentId);
-      if (parentComment && !parentComment.trackedChange) {
+      const allowTrackedParent = profile?.defaultStyle === 'commentsExtended';
+      if (parentComment && (allowTrackedParent || !parentComment.trackedChange)) {
         attributes['w15:paraIdParent'] = parentComment.commentParaId;
       }
     }
@@ -263,12 +273,16 @@ export const updateDocumentRels = () => {
  * @param {Object} convertedXml The converted XML structure of the docx file
  * @returns {Object} The updated XML structure with the comments files
  */
-export const generateConvertedXmlWithCommentFiles = (convertedXml) => {
+export const generateConvertedXmlWithCommentFiles = (convertedXml, fileSet = null) => {
   const newXml = carbonCopy(convertedXml);
   newXml['word/comments.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_XML_DEF;
-  newXml['word/commentsExtended.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_EXTENDED_XML_DEF;
-  newXml['word/commentsExtensible.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_EXTENSIBLE_XML_DEF;
-  newXml['word/commentsIds.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_IDS_XML_DEF;
+  const includeExtended = fileSet ? fileSet.hasCommentsExtended : true;
+  const includeExtensible = fileSet ? fileSet.hasCommentsExtensible : true;
+  const includeIds = fileSet ? fileSet.hasCommentsIds : true;
+
+  if (includeExtended) newXml['word/commentsExtended.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_EXTENDED_XML_DEF;
+  if (includeExtensible) newXml['word/commentsExtensible.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_EXTENSIBLE_XML_DEF;
+  if (includeIds) newXml['word/commentsIds.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_IDS_XML_DEF;
   newXml['[Content_Types].xml'] = COMMENTS_XML_DEFINITIONS.CONTENT_TYPES;
   return newXml;
 };
@@ -331,7 +345,13 @@ export const generateRelationship = (target) => {
  * @param {Object} param0
  * @returns
  */
-export const prepareCommentsXmlFilesForExport = ({ convertedXml, defs, commentsWithParaIds, exportType }) => {
+export const prepareCommentsXmlFilesForExport = ({
+  convertedXml,
+  defs,
+  commentsWithParaIds,
+  exportType,
+  threadingProfile,
+}) => {
   const relationships = [];
 
   if (exportType === 'clean') {
@@ -340,7 +360,7 @@ export const prepareCommentsXmlFilesForExport = ({ convertedXml, defs, commentsW
   }
 
   const exportStrategy = determineExportStrategy(commentsWithParaIds);
-  const updatedXml = generateConvertedXmlWithCommentFiles(convertedXml);
+  const updatedXml = generateConvertedXmlWithCommentFiles(convertedXml, threadingProfile?.fileSet);
 
   updatedXml['word/comments.xml'] = updateCommentsXml(defs, updatedXml['word/comments.xml']);
   relationships.push(generateRelationship('comments.xml'));
@@ -348,7 +368,7 @@ export const prepareCommentsXmlFilesForExport = ({ convertedXml, defs, commentsW
   const commentsExtendedXml = updateCommentsExtendedXml(
     commentsWithParaIds,
     updatedXml['word/commentsExtended.xml'],
-    exportStrategy,
+    threadingProfile || exportStrategy,
   );
 
   // Only add the file and relationship if we're actually generating commentsExtended.xml
@@ -363,15 +383,17 @@ export const prepareCommentsXmlFilesForExport = ({ convertedXml, defs, commentsW
 
   // Generate updates for documentIds.xml and commentsExtensible.xml here
   // We do them at the same time as we need them to generate and share durable IDs between them
-  const { documentIdsUpdated, extensibleUpdated } = updateCommentsIdsAndExtensible(
-    commentsWithParaIds,
-    updatedXml['word/commentsIds.xml'],
-    updatedXml['word/commentsExtensible.xml'],
-  );
-  updatedXml['word/commentsIds.xml'] = documentIdsUpdated;
-  updatedXml['word/commentsExtensible.xml'] = extensibleUpdated;
-  relationships.push(generateRelationship('commentsIds.xml'));
-  relationships.push(generateRelationship('commentsExtensible.xml'));
+  if (updatedXml['word/commentsIds.xml'] && updatedXml['word/commentsExtensible.xml']) {
+    const { documentIdsUpdated, extensibleUpdated } = updateCommentsIdsAndExtensible(
+      commentsWithParaIds,
+      updatedXml['word/commentsIds.xml'],
+      updatedXml['word/commentsExtensible.xml'],
+    );
+    updatedXml['word/commentsIds.xml'] = documentIdsUpdated;
+    updatedXml['word/commentsExtensible.xml'] = extensibleUpdated;
+    relationships.push(generateRelationship('commentsIds.xml'));
+    relationships.push(generateRelationship('commentsExtensible.xml'));
+  }
 
   return {
     relationships,

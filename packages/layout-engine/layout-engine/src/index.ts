@@ -40,6 +40,7 @@ import { collectAnchoredDrawings, collectAnchoredTables, collectPreRegisteredAnc
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty } from './layout-utils.js';
+import { balancePageColumns } from './column-balancing.js';
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -127,6 +128,291 @@ function getMeasureHeight(block: FlowBlock, measure: Measure): number {
 }
 
 // ConstraintBoundary and PageState now come from paginator
+
+/**
+ * Represents a chain of consecutive paragraphs with keepNext=true.
+ *
+ * In OOXML, the `w:keepNext` property indicates that a paragraph should stay on the same
+ * page as the following paragraph. When multiple consecutive paragraphs all have keepNext,
+ * they form an indivisible "chain" that Word treats as a single unit for pagination.
+ *
+ * For example, given paragraphs A, B, C, D where A, B, C have keepNext=true:
+ * - The chain includes A, B, C (memberIndices)
+ * - D is the "anchor" - the paragraph the chain must stay with
+ * - If the combined height of A+B+C+D.firstLine doesn't fit, the entire chain moves to the next page
+ *
+ * @see ECMA-376 Part 1, Section 17.3.1.14 (keepNext)
+ */
+type KeepNextChain = {
+  /** Index of the first paragraph in the chain (the chain "starter") */
+  startIndex: number;
+  /** Index of the last paragraph with keepNext=true in the chain */
+  endIndex: number;
+  /** All paragraph indices that are members of this chain (inclusive of start and end) */
+  memberIndices: number[];
+  /**
+   * Index of the paragraph immediately after the chain (the "anchor").
+   * This is the paragraph that the chain must stay with on the same page.
+   * Set to -1 if there is no valid anchor (e.g., chain at end of document or followed by a break).
+   */
+  anchorIndex: number;
+};
+
+/**
+ * Pre-computes keepNext chains for correct pagination grouping.
+ *
+ * This function scans the document blocks to identify sequences of consecutive paragraphs
+ * that all have `keepNext=true`. These sequences form "chains" that must be treated as
+ * indivisible units during pagination - if the chain doesn't fit on the current page,
+ * the entire chain moves to the next page together.
+ *
+ * Algorithm:
+ * 1. Iterate through blocks looking for paragraphs with keepNext=true
+ * 2. When found, walk forward to find all consecutive keepNext paragraphs
+ * 3. Record the chain with its anchor (the first non-keepNext paragraph after the chain)
+ * 4. Chains break at section/page/column breaks or non-paragraph blocks
+ *
+ * Time complexity: O(n) where n is the number of blocks
+ * Space complexity: O(k) where k is the number of chains
+ *
+ * @param blocks - All flow blocks in the document
+ * @returns Map where keys are chain start indices and values are KeepNextChain objects.
+ *          Only paragraphs that START a chain are included as keys.
+ *
+ * @example
+ * // Given blocks: [P1(keepNext), P2(keepNext), P3, P4(keepNext), P5]
+ * // Returns Map with:
+ * //   0 -> { startIndex: 0, endIndex: 1, memberIndices: [0, 1], anchorIndex: 2 }
+ * //   3 -> { startIndex: 3, endIndex: 3, memberIndices: [3], anchorIndex: 4 }
+ */
+function computeKeepNextChains(blocks: FlowBlock[]): Map<number, KeepNextChain> {
+  const chains = new Map<number, KeepNextChain>();
+  // Track indices we've already included in a chain to avoid re-processing
+  const processedIndices = new Set<number>();
+
+  for (let i = 0; i < blocks.length; i++) {
+    // Skip blocks already claimed by a previous chain (they're mid-chain, not starters)
+    if (processedIndices.has(i)) continue;
+
+    const block = blocks[i];
+    // Only paragraph blocks can have the keepNext property in OOXML
+    if (block.kind !== 'paragraph') continue;
+
+    const paraBlock = block as ParagraphBlock;
+    // Skip paragraphs without keepNext - they can't start a chain
+    if (paraBlock.attrs?.keepNext !== true) continue;
+
+    // Found a keepNext paragraph - this is a potential chain starter.
+    // Walk forward to find all consecutive keepNext paragraphs.
+    const memberIndices: number[] = [i];
+    let endIndex = i;
+
+    for (let j = i + 1; j < blocks.length; j++) {
+      const nextBlock = blocks[j];
+
+      // Explicit breaks terminate the chain - keepNext doesn't span across them
+      if (nextBlock.kind === 'sectionBreak' || nextBlock.kind === 'pageBreak' || nextBlock.kind === 'columnBreak') {
+        break;
+      }
+
+      // Non-paragraph blocks (tables, images) also terminate the chain
+      // Note: This could be extended in the future to support tables in chains
+      if (nextBlock.kind !== 'paragraph') {
+        break;
+      }
+
+      const nextPara = nextBlock as ParagraphBlock;
+      if (nextPara.attrs?.keepNext === true) {
+        // This paragraph continues the chain - add it and mark as processed
+        memberIndices.push(j);
+        endIndex = j;
+        processedIndices.add(j);
+      } else {
+        // Found a paragraph without keepNext - this becomes the anchor
+        // The chain must stay on the same page as this paragraph's first line
+        break;
+      }
+    }
+
+    // Determine the anchor: the first paragraph after the chain that we must "keep with"
+    // A single keepNext paragraph still needs chain logic to evaluate with its anchor
+    const anchorIndex = endIndex + 1 < blocks.length ? endIndex + 1 : -1;
+
+    // Validate that the anchor is not an explicit break (those don't count as anchors)
+    if (anchorIndex !== -1) {
+      const anchorBlock = blocks[anchorIndex];
+      if (
+        anchorBlock.kind === 'sectionBreak' ||
+        anchorBlock.kind === 'pageBreak' ||
+        anchorBlock.kind === 'columnBreak'
+      ) {
+        // No valid anchor due to break. Only record the chain if it has multiple
+        // members (multi-member chains without anchors still need to stay together)
+        if (memberIndices.length > 1) {
+          chains.set(i, {
+            startIndex: i,
+            endIndex,
+            memberIndices,
+            anchorIndex: -1,
+          });
+        }
+        continue;
+      }
+    }
+
+    // Record this chain - it will be used during pagination to make group decisions
+    chains.set(i, {
+      startIndex: i,
+      endIndex,
+      memberIndices,
+      anchorIndex,
+    });
+  }
+
+  return chains;
+}
+
+/**
+ * Calculates the total height needed to keep a keepNext chain together on the same page.
+ *
+ * This function computes the combined height of all paragraphs in a keepNext chain,
+ * plus the first line of the anchor paragraph. This height is used to determine
+ * whether the entire chain can fit on the current page or needs to move to the next.
+ *
+ * The calculation accounts for:
+ * - Heights of all chain member paragraphs (from their measures)
+ * - Inter-paragraph spacing with OOXML spacing collapse rules (max of after/before)
+ * - Contextual spacing suppression when adjacent paragraphs share the same style
+ * - Effective spacing before the first chain member (considering page state)
+ * - First line height of the anchor paragraph (optimization per SD-1282)
+ *
+ * Spacing rules per OOXML spec:
+ * - Adjacent paragraph spacing collapses to max(paragraph1.after, paragraph2.before)
+ * - contextualSpacing suppresses a paragraph's spacing when adjacent to same-style paragraph
+ *
+ * @param chain - The keepNext chain to calculate height for
+ * @param blocks - All flow blocks in the document
+ * @param measures - Pre-computed measures for all blocks (must be parallel array with blocks)
+ * @param state - Current page state, used for trailing spacing and last paragraph style
+ * @returns Total height in pixels needed to keep the chain together. Returns 0 if chain is empty.
+ *
+ * @example
+ * // For a chain of [Heading(30px), Body(50px)] with anchor Paragraph(20px first line):
+ * // Height = 0 (spacing before heading on fresh page)
+ * //        + 30 (heading height)
+ * //        + 12 (inter-paragraph spacing)
+ * //        + 50 (body height)
+ * //        + 10 (spacing to anchor)
+ * //        + 20 (anchor first line)
+ * //        = 122px
+ */
+function calculateChainHeight(
+  chain: KeepNextChain,
+  blocks: FlowBlock[],
+  measures: Measure[],
+  state: PageState,
+): number {
+  let totalHeight = 0;
+
+  // Track state from previous paragraph for spacing calculations
+  let prevStyleId: string | undefined;
+  let prevSpacingAfter = 0;
+  let prevContextualSpacing = false;
+  let isFirstMember = true;
+
+  // Phase 1: Sum heights of all chain member paragraphs with inter-paragraph spacing
+  for (const memberIndex of chain.memberIndices) {
+    const block = blocks[memberIndex] as ParagraphBlock;
+    const measure = measures[memberIndex];
+    if (!measure) continue;
+
+    // Extract spacing and style properties for this paragraph
+    const spacingBefore = getParagraphSpacingBefore(block);
+    const spacingAfter = getParagraphSpacingAfter(block);
+    const styleId = typeof block.attrs?.styleId === 'string' ? block.attrs?.styleId : undefined;
+    const contextualSpacing = block.attrs?.contextualSpacing === true;
+
+    if (isFirstMember) {
+      // First chain member: calculate spacing relative to the paragraph before the chain
+      // (which is tracked in PageState from the previous layout operation)
+      const prevTrailing =
+        Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
+      const sameAsLastOnPage = styleId && state.lastParagraphStyleId === styleId;
+
+      // Apply contextual spacing suppression if this paragraph has it AND matches previous style
+      const effectiveSpacingBefore =
+        contextualSpacing && sameAsLastOnPage ? 0 : Math.max(spacingBefore - prevTrailing, 0);
+      totalHeight += effectiveSpacingBefore;
+      isFirstMember = false;
+    } else {
+      // Subsequent chain members: calculate inter-paragraph spacing within the chain
+      const sameStyle = styleId && prevStyleId && styleId === prevStyleId;
+
+      // OOXML spacing rules:
+      // 1. If previous paragraph has contextualSpacing AND styles match → suppress its spacingAfter
+      // 2. If current paragraph has contextualSpacing AND styles match → suppress its spacingBefore
+      // 3. Resulting gap = max(effective spacingAfter, effective spacingBefore)
+      const effectiveSpacingAfterPrev = prevContextualSpacing && sameStyle ? 0 : prevSpacingAfter;
+      const effectiveSpacingBefore = contextualSpacing && sameStyle ? 0 : spacingBefore;
+      const interParagraphSpacing = Math.max(effectiveSpacingAfterPrev, effectiveSpacingBefore);
+      totalHeight += interParagraphSpacing;
+    }
+
+    // Add this paragraph's content height
+    totalHeight += getMeasureHeight(block, measure);
+
+    // Store state for next iteration's spacing calculation
+    prevStyleId = styleId;
+    prevSpacingAfter = spacingAfter;
+    prevContextualSpacing = contextualSpacing;
+  }
+
+  // Phase 2: Add the anchor paragraph's contribution (first line height only)
+  // The "anchor" is the paragraph after the chain that we must keep with.
+  // We only need space for its first line to start - not its full height.
+  if (chain.anchorIndex !== -1) {
+    const anchorBlock = blocks[chain.anchorIndex];
+    const anchorMeasure = measures[chain.anchorIndex];
+
+    if (anchorBlock && anchorMeasure) {
+      if (anchorBlock.kind === 'paragraph' && anchorMeasure.kind === 'paragraph') {
+        // Paragraph anchor: apply same spacing rules as chain members
+        const anchorSpacingBefore = getParagraphSpacingBefore(anchorBlock as ParagraphBlock);
+        const anchorStyleId =
+          typeof (anchorBlock as ParagraphBlock).attrs?.styleId === 'string'
+            ? (anchorBlock as ParagraphBlock).attrs?.styleId
+            : undefined;
+        const anchorContextualSpacing = (anchorBlock as ParagraphBlock).attrs?.contextualSpacing === true;
+
+        const sameStyle = anchorStyleId && prevStyleId && anchorStyleId === prevStyleId;
+        const effectiveSpacingAfterPrev = prevContextualSpacing && sameStyle ? 0 : prevSpacingAfter;
+        const effectiveAnchorSpacingBefore = anchorContextualSpacing && sameStyle ? 0 : anchorSpacingBefore;
+        const interParagraphSpacing = Math.max(effectiveSpacingAfterPrev, effectiveAnchorSpacingBefore);
+
+        // Optimization (SD-1282): Only require space for anchor's first line, not full height.
+        // This prevents excessive page breaks while still honoring the keepNext contract.
+        const firstLineHeight = anchorMeasure.lines[0]?.lineHeight;
+        const anchorHeight =
+          typeof firstLineHeight === 'number' && Number.isFinite(firstLineHeight) && firstLineHeight > 0
+            ? firstLineHeight
+            : getMeasureHeight(anchorBlock, anchorMeasure);
+
+        totalHeight += interParagraphSpacing + anchorHeight;
+      } else {
+        // Non-paragraph anchor (table, image, etc.): use full height
+        // No contextual spacing applies to non-paragraph blocks
+        // Skip anchored tables - they're positioned out of flow and don't consume flow height
+        // (consistent with shouldSkipAnchoredTable guard in legacy keepNext path)
+        const isAnchoredTable = anchorBlock.kind === 'table' && (anchorBlock as TableBlock).anchor?.isAnchored === true;
+        if (!isAnchoredTable) {
+          totalHeight += prevSpacingAfter + getMeasureHeight(anchorBlock, anchorMeasure);
+        }
+      }
+    }
+  }
+
+  return totalHeight;
+}
 
 export type LayoutOptions = {
   pageSize?: PageSize;
@@ -532,8 +818,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         next.activeRightMargin = rightMargin;
         next.pendingRightMargin = rightMargin;
       }
+      // Update columns - if section has columns, use them; if undefined, reset to single column.
+      // In OOXML, absence of <w:cols> means single column (default).
       if (block.columns) {
         next.activeColumns = { count: block.columns.count, gap: block.columns.gap };
+        next.pendingColumns = null;
+      } else {
+        // No columns specified = reset to single column (OOXML default)
+        next.activeColumns = { count: 1, gap: 0 };
         next.pendingColumns = null;
       }
       // Schedule section refs for first section (will be applied on first page creation)
@@ -607,9 +899,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.pageSize) next.pendingPageSize = { w: block.pageSize.w, h: block.pageSize.h };
     if (block.orientation) next.pendingOrientation = block.orientation;
     const sectionType = block.type ?? 'continuous';
+    // Check if columns are changing: either explicitly to a different config,
+    // or implicitly resetting to single column (undefined = single column in OOXML)
     const isColumnsChanging =
-      !!block.columns &&
-      (block.columns.count !== next.activeColumns.count || block.columns.gap !== next.activeColumns.gap);
+      (block.columns &&
+        (block.columns.count !== next.activeColumns.count || block.columns.gap !== next.activeColumns.gap)) ||
+      (!block.columns && next.activeColumns.count > 1);
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
     const metadataIndex = typeof sectionIndexRaw === 'number' ? sectionIndexRaw : Number(sectionIndexRaw ?? NaN);
@@ -634,26 +929,32 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       pendingSectionRefs = mergeSectionRefs(baseSectionRefs, nextSectionRefs);
       layoutLog(`[Layout] Compat fallback: Scheduled pendingSectionRefs:`, pendingSectionRefs);
     }
+    // Helper to get column config: use block.columns if defined, otherwise reset to single column (OOXML default)
+    const getColumnConfig = () =>
+      block.columns ? { count: block.columns.count, gap: block.columns.gap } : { count: 1, gap: 0 };
+
     if (block.attrs?.requirePageBoundary) {
-      if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: true, forceMidPageRegion: false }, state: next };
     }
     if (sectionType === 'nextPage') {
-      if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: true, forceMidPageRegion: false }, state: next };
     }
     if (sectionType === 'evenPage') {
-      if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: true, forceMidPageRegion: false, requiredParity: 'even' }, state: next };
     }
     if (sectionType === 'oddPage') {
-      if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: true, forceMidPageRegion: false, requiredParity: 'odd' }, state: next };
     }
     if (isColumnsChanging) {
+      next.pendingColumns = getColumnConfig();
       return { decision: { forcePageBreak: false, forceMidPageRegion: true }, state: next };
     }
-    if (block.columns) next.pendingColumns = { count: block.columns.count, gap: block.columns.gap };
+    // For continuous section breaks, schedule column change for next page boundary
+    next.pendingColumns = getColumnConfig();
     return { decision: { forcePageBreak: false, forceMidPageRegion: false }, state: next };
   };
 
@@ -1123,6 +1424,19 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     preRegisteredPositions.set(entry.block.id, { anchorX, anchorY, pageNumber: state.page.number });
   }
 
+  // Pre-compute keepNext chains for correct pagination grouping.
+  // Word treats consecutive paragraphs with keepNext=true as indivisible units.
+  const keepNextChains = computeKeepNextChains(blocks);
+
+  // Build set of mid-chain indices (not chain starters) to skip redundant checks
+  const midChainIndices = new Set<number>();
+  for (const chain of keepNextChains.values()) {
+    // All members except the first are mid-chain
+    for (let i = 1; i < chain.memberIndices.length; i++) {
+      midChainIndices.add(chain.memberIndices[i]);
+    }
+  }
+
   // PASS 2: Layout all blocks, consulting float manager for affected paragraphs
   for (let index = 0; index < blocks.length; index += 1) {
     const block = blocks[index];
@@ -1311,32 +1625,21 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
-      // Handle mid-page region changes
-      if (breakInfo.forceMidPageRegion && block.columns) {
+      // Handle mid-page region changes (column layout changes within a page)
+      // Uses pendingColumns from scheduleSectionBreak which handles both:
+      // - Explicit column changes (block.columns defined with different config)
+      // - Implicit reset to single column (block.columns undefined per OOXML spec)
+      if (breakInfo.forceMidPageRegion && updatedState.pendingColumns) {
         let state = paginator.ensurePage();
         const columnIndexBefore = state.columnIndex;
+        const newColumns = updatedState.pendingColumns;
 
-        // Validate and normalize column count to ensure it's a positive integer
-        const rawCount = block.columns.count;
-        const validatedCount =
-          typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0
-            ? Math.max(1, Math.floor(rawCount))
-            : 1;
-
-        // Validate and normalize gap to ensure it's non-negative
-        const rawGap = block.columns.gap;
-        const validatedGap =
-          typeof rawGap === 'number' && Number.isFinite(rawGap) && rawGap >= 0 ? Math.max(0, rawGap) : 0;
-
-        const newColumns = { count: validatedCount, gap: validatedGap };
-
-        // If we reduce column count and are currently in a column that won't exist
-        // in the new layout, start a fresh page to avoid overwriting earlier columns.
+        // If reducing column count and currently in a column that won't exist
+        // in the new layout, start a fresh page to avoid overwriting earlier columns
         if (columnIndexBefore >= newColumns.count) {
           state = paginator.startNewPage();
         }
 
-        // Start a new mid-page region with the new column configuration
         startMidPageRegion(state, newColumns);
       }
 
@@ -1437,7 +1740,56 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
-      if (paraBlock.attrs?.keepNext === true) {
+      /**
+       * keepNext Chain-Aware Page Break Logic
+       *
+       * Word treats consecutive paragraphs with keepNext=true as an indivisible unit.
+       * If the entire chain (plus the first line of the anchor paragraph) doesn't fit
+       * on the current page, the whole chain moves to the next page.
+       *
+       * Three cases:
+       * 1. Mid-chain paragraph: Skip keepNext check (chain-start already decided)
+       * 2. Chain starter: Calculate total chain height and decide for entire chain
+       * 3. Orphan keepNext (no chain, e.g., next is a break): Use single-paragraph logic
+       */
+      const chain = keepNextChains.get(index);
+
+      if (midChainIndices.has(index)) {
+        // Case 1: Mid-chain paragraph - chain starter already made the page break decision
+        // No action needed, just proceed to layout
+      } else if (chain) {
+        // Case 2: Chain starter - evaluate entire chain height
+        let state = paginator.ensurePage();
+        const availableHeight = state.contentBottom - state.cursorY;
+
+        // Check if first chain member has contextualSpacing that would reclaim trailing space.
+        // When contextualSpacing applies, the previous paragraph's trailing spacing is not
+        // rendered as a gap, so we have more available space than cursorY suggests.
+        const firstMemberBlock = blocks[chain.startIndex] as ParagraphBlock;
+        const firstMemberStyleId =
+          typeof firstMemberBlock.attrs?.styleId === 'string' ? firstMemberBlock.attrs?.styleId : undefined;
+        const firstMemberContextualSpacing = firstMemberBlock.attrs?.contextualSpacing === true;
+        const contextualSpacingApplies =
+          firstMemberContextualSpacing && firstMemberStyleId && state.lastParagraphStyleId === firstMemberStyleId;
+        const prevTrailing =
+          Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
+        const effectiveAvailableHeight = contextualSpacingApplies ? availableHeight + prevTrailing : availableHeight;
+
+        const chainHeight = calculateChainHeight(chain, blocks, measures, state);
+
+        // Calculate page content height to check if chain fits on a blank page
+        const pageContentHeight = state.contentBottom - state.topMargin;
+        const chainFitsOnBlankPage = chainHeight <= pageContentHeight;
+
+        // Only advance if chain fits on blank page but not current page
+        // (prevents infinite loop for chains taller than page)
+        if (chainFitsOnBlankPage && chainHeight > effectiveAvailableHeight && state.page.fragments.length > 0) {
+          state = paginator.advanceColumn(state);
+        }
+      } else if (paraBlock.attrs?.keepNext === true) {
+        // Case 3: Orphan keepNext (next block is a break type or end of document)
+        // This shouldn't normally happen since computeKeepNextChains handles most cases,
+        // but we keep it for safety (e.g., keepNext at end of document with no anchor)
         const nextBlock = blocks[index + 1];
         const nextMeasure = measures[index + 1];
         if (
@@ -1452,97 +1804,73 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             let state = paginator.ensurePage();
             const availableHeight = state.contentBottom - state.cursorY;
 
-            /**
-             * Contextual Spacing for keepNext Page Break Decisions
-             *
-             * Per OOXML spec, contextualSpacing suppresses spacing between adjacent paragraphs
-             * of the same style. This affects page break calculations in two ways:
-             * 1. Spacing before current paragraph may be suppressed (vs previous paragraph)
-             * 2. Spacing between current and next paragraph may be suppressed
-             *
-             * We must account for this when calculating whether the current paragraph
-             * and the start of the next paragraph fit on the current page.
-             */
             const spacingBefore = getParagraphSpacingBefore(paraBlock);
             const spacingAfter = getParagraphSpacingAfter(paraBlock);
-            /** Trailing spacing from previous paragraph (validated to be finite and positive). */
             const prevTrailing =
               Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
             const currentStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs?.styleId : undefined;
             const currentContextualSpacing = asBoolean(paraBlock.attrs?.contextualSpacing);
-            /** True if contextual spacing applies between previous paragraph and current. */
             const contextualSpacingApplies =
               currentContextualSpacing && currentStyleId && state.lastParagraphStyleId === currentStyleId;
-            /** Effective spacing before current, accounting for contextual spacing and trailing collapse. */
             const effectiveSpacingBefore = contextualSpacingApplies ? 0 : Math.max(spacingBefore - prevTrailing, 0);
             const currentHeight = getMeasureHeight(paraBlock, measure);
             const nextHeight = getMeasureHeight(nextBlock, nextMeasure);
 
-            // Type guard: Check if both block and measure are paragraphs for type-safe access
             const nextIsParagraph = nextBlock.kind === 'paragraph' && nextMeasure.kind === 'paragraph';
-
-            /**
-             * Spacing before the next block.
-             * Only paragraph blocks have configurable spacing-before values.
-             */
             const nextSpacingBefore = nextIsParagraph ? getParagraphSpacingBefore(nextBlock) : 0;
             const nextStyleId =
               nextIsParagraph && typeof nextBlock.attrs?.styleId === 'string' ? nextBlock.attrs?.styleId : undefined;
             const nextContextualSpacing = nextIsParagraph && asBoolean(nextBlock.attrs?.contextualSpacing);
 
-            /**
-             * Inter-paragraph spacing with contextual spacing support.
-             * Per OOXML: contextualSpacing suppresses a paragraph's spacing when adjacent to same-style paragraph.
-             * - current's spacingAfter is suppressed if current has contextualSpacing and next is same style
-             * - next's spacingBefore is suppressed if next has contextualSpacing and current is same style
-             */
             const sameStyleAsNext = currentStyleId && nextStyleId && nextStyleId === currentStyleId;
             const effectiveSpacingAfter = currentContextualSpacing && sameStyleAsNext ? 0 : spacingAfter;
             const effectiveNextSpacingBefore = nextContextualSpacing && sameStyleAsNext ? 0 : nextSpacingBefore;
-            /** Gap between current and next paragraph, with contextual spacing applied. */
             const interParagraphSpacing = nextIsParagraph
               ? Math.max(effectiveSpacingAfter, effectiveNextSpacingBefore)
               : effectiveSpacingAfter;
 
-            /**
-             * Height of the first line of the next block.
-             * For paragraphs, use the actual first line height for more accurate keepNext calculations.
-             * Falls back to full block height if line height is invalid or block is not a paragraph.
-             * Related to SD-1282: This optimization prevents unnecessary page breaks by only requiring
-             * space for the next block's first line rather than its full height.
-             */
             const nextFirstLineHeight = (() => {
               if (!nextIsParagraph) {
                 return nextHeight;
               }
               const firstLineHeight = nextMeasure.lines[0]?.lineHeight;
-              // Validate lineHeight is a positive finite number
               if (typeof firstLineHeight === 'number' && Number.isFinite(firstLineHeight) && firstLineHeight > 0) {
                 return firstLineHeight;
               }
               return nextHeight;
             })();
 
-            /**
-             * Combined height needed to keep current paragraph with the start of next.
-             * For keepNext, we only need enough space for the next block to start (heading + first line),
-             * not the full next block. This prevents excessive page breaks while still honoring keepNext.
-             */
             const combinedHeight = nextIsParagraph
               ? effectiveSpacingBefore + currentHeight + interParagraphSpacing + nextFirstLineHeight
               : effectiveSpacingBefore + currentHeight + spacingAfter + nextHeight;
 
-            /**
-             * Available height adjusted for contextual spacing.
-             * When contextual spacing applies, the previous paragraph's trailing spacing is reclaimed
-             * since it won't be rendered as a gap.
-             */
             const effectiveAvailableHeight = contextualSpacingApplies
               ? availableHeight + prevTrailing
               : availableHeight;
             if (combinedHeight > effectiveAvailableHeight && state.page.fragments.length > 0) {
               state = paginator.advanceColumn(state);
             }
+          }
+        }
+      }
+
+      /**
+       * Contextual spacing suppression for spacingAfter.
+       * Per OOXML spec: when current paragraph has contextualSpacing=true and
+       * the next paragraph has the same styleId, suppress current's spacingAfter.
+       */
+      let overrideSpacingAfter: number | undefined;
+      const curStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs.styleId : undefined;
+      const curContextualSpacing = asBoolean(paraBlock.attrs?.contextualSpacing);
+      if (curContextualSpacing && curStyleId) {
+        const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
+        if (nextBlock?.kind === 'paragraph') {
+          const nextStyleId =
+            typeof (nextBlock as ParagraphBlock).attrs?.styleId === 'string'
+              ? (nextBlock as ParagraphBlock).attrs?.styleId
+              : undefined;
+          if (nextStyleId === curStyleId) {
+            overrideSpacingAfter = 0;
           }
         }
       }
@@ -1557,6 +1885,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           columnX,
           floatManager,
           remeasureParagraph: options.remeasureParagraph,
+          overrideSpacingAfter,
         },
         anchorsForPara
           ? {
@@ -1800,6 +2129,93 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (yOffset > 0) {
       for (const fragment of page.fragments) {
         fragment.y += yOffset;
+      }
+    }
+  }
+
+  // Apply column balancing to pages with multi-column layout.
+  // This redistributes fragments to achieve balanced column heights, matching Word's behavior.
+  if (activeColumns.count > 1) {
+    const contentWidth = pageSize.w - (activeLeftMargin + activeRightMargin);
+    const normalizedCols = normalizeColumns(activeColumns, contentWidth);
+
+    // Build measure map for fragment height calculation during balancing
+    const measureMap = new Map<string, { kind: string; lines?: Array<{ lineHeight: number }>; height?: number }>();
+    // Build blockId -> sectionIndex map to filter fragments by section
+    const blockSectionMap = new Map<string, number>();
+    blocks.forEach((block, idx) => {
+      const measure = measures[idx];
+      if (measure) {
+        measureMap.set(block.id, measure as { kind: string; lines?: Array<{ lineHeight: number }>; height?: number });
+      }
+      // Track section index for each block (for filtering during balancing)
+      // Not all block types have attrs, so access it safely
+      const blockWithAttrs = block as { attrs?: { sectionIndex?: number } };
+      const sectionIdx = blockWithAttrs.attrs?.sectionIndex;
+      if (typeof sectionIdx === 'number') {
+        blockSectionMap.set(block.id, sectionIdx);
+      }
+    });
+
+    for (const page of pages) {
+      // Balance the last page (section ends at document end).
+      // TODO: Track section boundaries and balance at each continuous section break.
+      if (page === pages[pages.length - 1] && page.fragments.length > 0) {
+        // Skip balancing if fragments are already in multiple columns (e.g., explicit column breaks).
+        // Balancing should only apply when all content flows naturally in column 0.
+        const uniqueXPositions = new Set(page.fragments.map((f) => Math.round(f.x)));
+        const hasExplicitColumnStructure = uniqueXPositions.size > 1;
+
+        if (hasExplicitColumnStructure) {
+          continue;
+        }
+
+        // Skip balancing if fragments have different widths (indicating different column configs
+        // from multiple sections). Balancing would incorrectly apply the final section's width to all.
+        const uniqueWidths = new Set(page.fragments.map((f) => Math.round(f.width)));
+        const hasMixedColumnWidths = uniqueWidths.size > 1;
+
+        if (hasMixedColumnWidths) {
+          continue;
+        }
+
+        // Check if page has content from multiple sections.
+        // If so, only balance fragments from the final multi-column section.
+        const fragmentSections = new Set<number>();
+        for (const f of page.fragments) {
+          const section = blockSectionMap.get(f.blockId);
+          if (section !== undefined) {
+            fragmentSections.add(section);
+          }
+        }
+
+        // Only balance fragments from the final section when there are mixed sections
+        const hasMixedSections = fragmentSections.size > 1;
+        const fragmentsToBalance = hasMixedSections
+          ? page.fragments.filter((f) => {
+              const fragSection = blockSectionMap.get(f.blockId);
+              return fragSection === activeSectionIndex;
+            })
+          : page.fragments;
+
+        if (fragmentsToBalance.length > 0) {
+          balancePageColumns(
+            fragmentsToBalance as {
+              x: number;
+              y: number;
+              width: number;
+              kind: string;
+              blockId: string;
+              fromLine?: number;
+              toLine?: number;
+              height?: number;
+            }[],
+            normalizedCols,
+            { left: activeLeftMargin },
+            activeTopMargin,
+            measureMap,
+          );
+        }
       }
     }
   }

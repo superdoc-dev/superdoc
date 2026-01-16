@@ -147,6 +147,15 @@ describe('trackChangesHelpers', () => {
     expect(tracked).toBeTruthy();
   });
 
+  it('markInsertion uses provided id for replace operations', () => {
+    const state = createState(createDocWithText('Hello'));
+    const tr = state.tr.insertText('X', 1);
+    const customId = 'shared-replacement-id';
+
+    const mark = markInsertion({ tr, from: 1, to: 2, user, date, id: customId });
+    expect(mark.attrs.id).toBe(customId);
+  });
+
   it('markDeletion applies trackDelete marks and collects nodes', () => {
     const state = createState(createDocWithText('World'));
     const tr = state.tr;

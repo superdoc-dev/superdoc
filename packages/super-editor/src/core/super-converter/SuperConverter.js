@@ -188,6 +188,7 @@ class SuperConverter {
     this.footnotes = [];
     this.footnoteProperties = null;
     this.inlineDocumentFonts = [];
+    this.commentThreadingProfile = null;
 
     // Store custom highlight colors
     this.docHiglightColors = new Set([]);
@@ -227,8 +228,6 @@ class SuperConverter {
     this.tagsNotInSchema = ['w:body'];
     this.savedTagsToRestore = [];
 
-    // Initialize telemetry
-    this.telemetry = params?.telemetry || null;
     this.documentInternalId = null;
 
     // Uploaded file
@@ -664,7 +663,7 @@ class SuperConverter {
   }
 
   /**
-   * Generate document hash for telemetry (async, lazy)
+   * Generate document hash (async, lazy)
    */
   async #generateDocumentHash() {
     if (!this.fileSource) return `HASH-${Date.now()}`;
@@ -1097,7 +1096,7 @@ class SuperConverter {
       convertedXml: this.convertedXml,
       defs,
       commentsWithParaIds,
-      converter: this,
+      threadingProfile: this.commentThreadingProfile,
     });
 
     return { documentXml, relationships };

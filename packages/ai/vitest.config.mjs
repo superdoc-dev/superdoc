@@ -17,7 +17,7 @@ export default defineConfig({
 
       { find: '@stores', replacement: path.resolve(__dirname, '../superdoc/src/stores') },
       {
-        find: /^@superdoc\/(?!common|contracts|geometry-utils|pm-adapter|layout-engine|layout-bridge|painter-dom|painter-pdf|style-engine|measuring-dom|word-layout|url-validation|preset-geometry|super-editor|locale-utils|font-utils)(.*)/,
+        find: /^@superdoc\/(?!common|contracts|geometry-utils|pm-adapter|layout-engine|layout-bridge|painter-dom|style-engine|measuring-dom|word-layout|url-validation|preset-geometry|super-editor|locale-utils|font-utils)(.*)/,
         replacement: path.resolve(__dirname, '../superdoc/src/$1'),
       },
     ],

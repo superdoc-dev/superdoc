@@ -12,7 +12,7 @@ import type {
   CommentLocationsPayload,
   ListDefinitionsPayload,
 } from './EditorEvents.js';
-import type { ProseMirrorJSON, TelemetryData } from './EditorTypes.js';
+import type { ProseMirrorJSON } from './EditorTypes.js';
 
 /**
  * User information for collaboration
@@ -334,9 +334,6 @@ export interface EditorOptions {
 
   /** Handler for image uploads - async (file) => url */
   handleImageUpload?: ((file: File) => Promise<string>) | null;
-
-  /** Telemetry configuration */
-  telemetry?: TelemetryData | null;
 
   /** Host-provided permission hook */
   permissionResolver?: ((params: PermissionParams) => boolean | undefined) | null;

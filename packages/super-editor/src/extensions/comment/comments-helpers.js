@@ -179,19 +179,64 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
     commentMap.set(c.commentId, c);
   });
 
+  const trackedChangeSpanById = new Map();
+  const trackedChangeMarksById = new Map();
+  doc.descendants((node, pos) => {
+    const trackedChangeMark = node.marks?.find((mark) => TRACK_CHANGE_MARKS.includes(mark.type.name));
+    if (!trackedChangeMark) return;
+    const trackedChangeId = trackedChangeMark.attrs?.id;
+    if (!trackedChangeId) return;
+
+    const existing = trackedChangeSpanById.get(trackedChangeId);
+    const startPos = pos;
+    const endPos = pos + node.nodeSize;
+    if (!existing) {
+      trackedChangeSpanById.set(trackedChangeId, { startPos, endPos });
+    } else {
+      existing.startPos = Math.min(existing.startPos, startPos);
+      existing.endPos = Math.max(existing.endPos, endPos);
+    }
+
+    const marksEntry = trackedChangeMarksById.get(trackedChangeId) || {};
+    if (trackedChangeMark.type?.name === TrackInsertMarkName && !marksEntry.insertMark) {
+      marksEntry.insertMark = trackedChangeMark;
+    }
+    if (trackedChangeMark.type?.name === TrackDeleteMarkName && !marksEntry.deleteMark) {
+      marksEntry.deleteMark = trackedChangeMark;
+    }
+    trackedChangeMarksById.set(trackedChangeId, marksEntry);
+  });
+
+  const getThreadingParentId = (comment) => {
+    if (!comment) return comment?.parentCommentId;
+    const usesRangeThreading =
+      comment.threadingStyleOverride === 'range-based' ||
+      comment.threadingMethod === 'range-based' ||
+      comment.originalXmlStructure?.hasCommentsExtended === false;
+    if (usesRangeThreading && comment.threadingParentCommentId) {
+      return comment.threadingParentCommentId;
+    }
+    return comment.parentCommentId;
+  };
+
   // First pass: collect full ranges for each comment mark
   // Map of commentId -> { start: number, end: number, attrs: object }
   const commentRanges = new Map();
+  const commentTrackedChangeId = new Map();
 
   doc.descendants((node, pos) => {
     const commentMarks = node.marks?.filter((mark) => mark.type.name === CommentMarkName) || [];
+    if (!commentMarks.length) return;
+
+    const nodeEnd = pos + node.nodeSize;
+    const trackedChangeMark = node.marks?.find((mark) => TRACK_CHANGE_MARKS.includes(mark.type.name));
+    const trackedChangeId = trackedChangeMark?.attrs?.id;
+
     commentMarks.forEach((commentMark) => {
       const { attrs = {} } = commentMark;
       const { commentId } = attrs;
 
       if (commentId === 'pending') return;
-
-      const nodeEnd = pos + node.nodeSize;
 
       if (!commentRanges.has(commentId)) {
         // First occurrence - record start and end
@@ -206,6 +251,10 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         existing.start = Math.min(existing.start, pos);
         existing.end = Math.max(existing.end, nodeEnd);
       }
+
+      if (trackedChangeId && !commentTrackedChangeId.has(commentId)) {
+        commentTrackedChangeId.set(commentId, trackedChangeId);
+      }
     });
   });
 
@@ -213,6 +262,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
   const startNodes = [];
   const endNodes = [];
   const seen = new Set();
+  const trackedChangeCommentMeta = new Map();
 
   // Second pass: create start/end nodes using the full ranges
   commentRanges.forEach(({ start, end, attrs }, commentId) => {
@@ -220,7 +270,17 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
     seen.add(commentId);
 
     const comment = commentMap.get(commentId);
-    const parentCommentId = comment?.parentCommentId;
+    const parentCommentId = getThreadingParentId(comment);
+    const trackedChangeId = commentTrackedChangeId.get(commentId);
+    const trackedSpan = trackedChangeId ? trackedChangeSpanById.get(trackedChangeId) : null;
+    if (trackedSpan) {
+      trackedChangeCommentMeta.set(commentId, {
+        comment,
+        parentCommentId,
+        trackedChangeId,
+      });
+      return;
+    }
 
     const commentStartNodeAttrs = getPreparedComment(attrs);
     const startNode = schema.nodes.commentRangeStart.create(commentStartNodeAttrs);
@@ -241,7 +301,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
 
     // Find child comments that should be nested inside this comment
     const childComments = comments
-      .filter((c) => c.parentCommentId === commentId)
+      .filter((c) => getThreadingParentId(c) === commentId)
       .sort((a, b) => a.createdTime - b.createdTime);
 
     childComments.forEach((c) => {
@@ -262,7 +322,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         pos: childStart,
         node: childStartNode,
         commentId: c.commentId,
-        parentCommentId: c.parentCommentId,
+        parentCommentId: getThreadingParentId(c),
       });
 
       const childEndNode = schema.nodes.commentRangeEnd.create(childMark);
@@ -270,48 +330,133 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         pos: childEnd,
         node: childEndNode,
         commentId: c.commentId,
-        parentCommentId: c.parentCommentId,
+        parentCommentId: getThreadingParentId(c),
       });
     });
   });
 
-  // Handle tracked change comments that don't have marks in the document
-  doc.descendants((node, pos) => {
-    const trackedChangeMark = node.marks?.find((mark) => TRACK_CHANGE_MARKS.includes(mark.type.name));
-    if (trackedChangeMark) {
-      const trackedChangeId = trackedChangeMark.attrs?.id;
-      if (trackedChangeId) {
-        const childComments = comments
-          .filter((c) => c.parentCommentId === trackedChangeId && !c.trackedChange)
-          .sort((a, b) => a.createdTime - b.createdTime);
+  if (trackedChangeSpanById.size > 0) {
+    trackedChangeCommentMeta.forEach(({ comment, parentCommentId, trackedChangeId }) => {
+      if (!comment || !trackedChangeSpanById.has(trackedChangeId)) return;
 
-        childComments.forEach((c) => {
-          if (seen.has(c.commentId)) return;
-          seen.add(c.commentId);
+      const span = trackedChangeSpanById.get(trackedChangeId);
+      if (!span) return;
 
-          const childMark = getPreparedComment({
-            commentId: c.commentId,
-            internal: c.isInternal,
-          });
-          const childStartNode = schema.nodes.commentRangeStart.create(childMark);
-          startNodes.push({
-            pos,
-            node: childStartNode,
-            commentId: c.commentId,
-            parentCommentId: c.parentCommentId,
-          });
+      const childMark = getPreparedComment({
+        commentId: comment.commentId,
+        internal: comment.isInternal,
+      });
 
-          const childEndNode = schema.nodes.commentRangeEnd.create(childMark);
-          endNodes.push({
-            pos: pos + node.nodeSize,
-            node: childEndNode,
-            commentId: c.commentId,
-            parentCommentId: c.parentCommentId,
-          });
+      const trackedMarks = trackedChangeMarksById.get(trackedChangeId) || {};
+      const startMarks = trackedMarks.insertMark
+        ? [trackedMarks.insertMark]
+        : trackedMarks.deleteMark
+          ? [trackedMarks.deleteMark]
+          : undefined;
+      const endMarks = trackedMarks.deleteMark
+        ? [trackedMarks.deleteMark]
+        : trackedMarks.insertMark
+          ? [trackedMarks.insertMark]
+          : undefined;
+
+      const childStartNode = schema.nodes.commentRangeStart.create(childMark, null, startMarks);
+      startNodes.push({
+        pos: span.startPos,
+        node: childStartNode,
+        commentId: comment.commentId,
+        parentCommentId,
+      });
+
+      const childEndNode = schema.nodes.commentRangeEnd.create(childMark, null, endMarks);
+      endNodes.push({
+        pos: span.endPos,
+        node: childEndNode,
+        commentId: comment.commentId,
+        parentCommentId,
+      });
+
+      const childComments = comments
+        .filter((c) => getThreadingParentId(c) === comment.commentId)
+        .sort((a, b) => a.createdTime - b.createdTime);
+
+      childComments.forEach((c) => {
+        if (seen.has(c.commentId)) return;
+        seen.add(c.commentId);
+
+        const childRange = commentRanges.get(c.commentId);
+        const childStart = childRange?.start ?? span.startPos;
+        const childEnd = childRange?.end ?? span.endPos;
+        const childStartMarks = childRange ? undefined : startMarks;
+        const childEndMarks = childRange ? undefined : endMarks;
+
+        const childMarkAttrs = getPreparedComment({
+          commentId: c.commentId,
+          internal: c.isInternal,
         });
-      }
-    }
-  });
+
+        const childStartNode = schema.nodes.commentRangeStart.create(childMarkAttrs, null, childStartMarks);
+        startNodes.push({
+          pos: childStart,
+          node: childStartNode,
+          commentId: c.commentId,
+          parentCommentId: getThreadingParentId(c),
+        });
+
+        const childEndNode = schema.nodes.commentRangeEnd.create(childMarkAttrs, null, childEndMarks);
+        endNodes.push({
+          pos: childEnd,
+          node: childEndNode,
+          commentId: c.commentId,
+          parentCommentId: getThreadingParentId(c),
+        });
+      });
+    });
+
+    comments
+      .filter((comment) => trackedChangeSpanById.has(comment.parentCommentId) && !comment.trackedChange)
+      .sort((a, b) => a.createdTime - b.createdTime)
+      .forEach((comment) => {
+        if (seen.has(comment.commentId)) return;
+        seen.add(comment.commentId);
+
+        const span = trackedChangeSpanById.get(comment.parentCommentId);
+        if (!span) return;
+
+        const childMark = getPreparedComment({
+          commentId: comment.commentId,
+          internal: comment.isInternal,
+        });
+
+        const parentCommentId = getThreadingParentId(comment);
+        const trackedMarks = trackedChangeMarksById.get(comment.parentCommentId) || {};
+        const startMarks = trackedMarks.insertMark
+          ? [trackedMarks.insertMark]
+          : trackedMarks.deleteMark
+            ? [trackedMarks.deleteMark]
+            : undefined;
+        const endMarks = trackedMarks.deleteMark
+          ? [trackedMarks.deleteMark]
+          : trackedMarks.insertMark
+            ? [trackedMarks.insertMark]
+            : undefined;
+
+        const childStartNode = schema.nodes.commentRangeStart.create(childMark, null, startMarks);
+        startNodes.push({
+          pos: span.startPos,
+          node: childStartNode,
+          commentId: comment.commentId,
+          parentCommentId,
+        });
+
+        const childEndNode = schema.nodes.commentRangeEnd.create(childMark, null, endMarks);
+        endNodes.push({
+          pos: span.endPos,
+          node: childEndNode,
+          commentId: comment.commentId,
+          parentCommentId,
+        });
+      });
+  }
 
   // Sort start nodes to ensure proper nesting order for Google Docs format:
   // Parent ranges must wrap child ranges: Parent Start, Child Start, Content, Parent End, Child End

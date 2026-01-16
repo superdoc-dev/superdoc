@@ -445,6 +445,9 @@ export const useCommentsStore = defineStore('comments', () => {
    */
   const processLoadedDocxComments = async ({ superdoc, editor, comments, documentId }) => {
     const document = superdocStore.getDocument(documentId);
+    if (document?.commentThreadingProfile) {
+      document.commentThreadingProfile.value = editor?.converter?.commentThreadingProfile || null;
+    }
 
     comments.forEach((comment) => {
       const htmlContent = getHtmlFromComment(comment.textJson);
@@ -480,6 +483,8 @@ export const useCommentsStore = defineStore('comments', () => {
         // Preserve origin metadata for export
         origin: comment.origin || 'word', // Default to 'word' for backward compatibility
         threadingMethod: comment.threadingMethod,
+        threadingStyleOverride: comment.threadingStyleOverride,
+        threadingParentCommentId: comment.threadingParentCommentId,
         originalXmlStructure: comment.originalXmlStructure,
       });
 

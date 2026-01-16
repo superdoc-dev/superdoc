@@ -967,6 +967,30 @@ export interface TableOfContentsAttrs extends BlockNodeAttributes {
 }
 
 // ============================================
+// DOCUMENT INDEX
+// ============================================
+
+/** Index node attributes */
+export interface DocumentIndexAttrs extends BlockNodeAttributes {
+  /** Field instruction */
+  instruction?: string | null;
+  /** Field instruction tokens (preserve tabs, etc.) */
+  instructionTokens?: unknown;
+  /** SuperDoc block tracking ID */
+  sdBlockId?: string | null;
+}
+
+/** Index entry node attributes */
+export interface IndexEntryAttrs extends InlineNodeAttributes {
+  /** Field instruction */
+  instruction?: string | null;
+  /** Field instruction tokens (preserve tabs, etc.) */
+  instructionTokens?: unknown;
+  /** Marks captured as attrs for export */
+  marksAsAttrs?: unknown;
+}
+
+// ============================================
 // STRUCTURED CONTENT BLOCK
 // ============================================
 
@@ -1137,6 +1161,8 @@ declare module '../../core/types/NodeAttributesMap.js' {
     // Content blocks
     contentBlock: ContentBlockAttrs;
     tableOfContents: TableOfContentsAttrs;
+    index: DocumentIndexAttrs;
+    indexEntry: IndexEntryAttrs;
 
     // Structured content
     structuredContent: StructuredContentAttrs;

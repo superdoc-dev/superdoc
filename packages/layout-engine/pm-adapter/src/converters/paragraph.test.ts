@@ -40,6 +40,7 @@ vi.mock('../attributes/index.js', () => ({
   normalizeParagraphSpacing: vi.fn(),
   normalizeParagraphIndent: vi.fn(),
   normalizePxIndent: vi.fn(),
+  normalizeOoxmlTabs: vi.fn(),
 }));
 
 vi.mock('../sdt/index.js', () => ({

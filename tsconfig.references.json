@@ -7,7 +7,6 @@
     { "path": "packages/layout-engine/layout-engine/tsconfig.json" },
     { "path": "packages/layout-engine/measuring/dom/tsconfig.json" },
     { "path": "packages/layout-engine/painters/dom/tsconfig.json" },
-    { "path": "packages/layout-engine/painters/pdf/tsconfig.json" },
     { "path": "packages/layout-engine/style-engine/tsconfig.json" },
     { "path": "packages/layout-engine/layout-bridge/tsconfig.types.json" },
     { "path": "packages/super-editor/tsconfig.types.json" },

@@ -21,7 +21,6 @@ const DEFAULT_USER = Object.freeze({
 });
 
 /** @typedef {import('./types').User} User */
-/** @typedef {import('./types').TelemetryConfig} TelemetryConfig */
 /** @typedef {import('./types').Document} Document */
 /** @typedef {import('./types').Modules} Modules */
 /** @typedef {import('./types').Editor} Editor */
@@ -89,9 +88,6 @@ export class SuperDoc extends EventEmitter {
     uiDisplayFallbackFont: 'Arial, Helvetica, sans-serif',
 
     isDev: false,
-
-    // telemetry config
-    telemetry: null,
 
     // Events
     onEditorBeforeCreate: () => null,
@@ -1129,23 +1125,5 @@ export class SuperDoc extends EventEmitter {
     if (!this.activeEditor) return;
     this.activeEditor.setHighContrastMode(isHighContrast);
     this.highContrastModeStore.setHighContrastMode(isHighContrast);
-  }
-
-  /**
-   * Capture layout pipeline events from PresentationEditor
-   * Forwards metrics and errors to host callbacks
-   * @param {Object} payload - Event payload from PresentationEditor.onTelemetry
-   * @param {string} payload.type - Event type: 'layout' or 'error'
-   * @param {Object} payload.data - Event data (metrics for layout, error details for error)
-   * @returns {void}
-   */
-  captureLayoutPipelineEvent(payload) {
-    // Emit as an event so hosts can listen
-    this.emit('layout-pipeline', payload);
-
-    // Call the host callback if provided in config
-    if (typeof this.config.onLayoutPipelineEvent === 'function') {
-      this.config.onLayoutPipelineEvent(payload);
-    }
   }
 }

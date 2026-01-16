@@ -22,6 +22,9 @@ export {
 // Table of Contents
 export { applyTocMetadata, processTocChildren, handleTableOfContentsNode } from './toc.js';
 
+// Document Index
+export { handleIndexNode } from './document-index.js';
+
 // Structured Content Block
 export { handleStructuredContentBlockNode } from './structured-content-block.js';
 

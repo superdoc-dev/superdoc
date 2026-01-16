@@ -31,7 +31,7 @@ export const getAliases = (_isDev) => {
     // Also note: this regexp is duplicated in packages/ai/vitest.config.mjs
 
     {
-      find: /^@superdoc\/(?!common|contracts|geometry-utils|pm-adapter|layout-engine|layout-bridge|painter-dom|painter-pdf|style-engine|measuring-dom|word-layout|url-validation|preset-geometry|super-editor|locale-utils|font-utils)(.*)/,
+      find: /^@superdoc\/(?!common|contracts|geometry-utils|pm-adapter|layout-engine|layout-bridge|painter-dom|style-engine|measuring-dom|word-layout|url-validation|preset-geometry|super-editor|locale-utils|font-utils)(.*)/,
       replacement: path.resolve(__dirname, './src/$1'),
     },
 

@@ -25,6 +25,7 @@ import { tabNodeEntityHandler } from './tabImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
+import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
@@ -81,6 +82,27 @@ const detectDocumentOrigin = (docx) => {
   return 'unknown';
 };
 
+/**
+ * Detect the document-level threading profile for comments based on file structure.
+ * @param {ParsedDocx} docx The parsed docx object
+ * @returns {import('@superdoc/common').CommentThreadingProfile}
+ */
+const detectCommentThreadingProfile = (docx) => {
+  const hasCommentsExtended = !!docx['word/commentsExtended.xml'];
+  const hasCommentsExtensible = !!docx['word/commentsExtensible.xml'];
+  const hasCommentsIds = !!docx['word/commentsIds.xml'];
+
+  return {
+    defaultStyle: hasCommentsExtended ? 'commentsExtended' : 'range-based',
+    mixed: false,
+    fileSet: {
+      hasCommentsExtended,
+      hasCommentsExtensible,
+      hasCommentsIds,
+    },
+  };
+};
+
 export const createDocumentJson = (docx, converter, editor) => {
   const json = carbonCopy(getInitialJSON(docx));
   if (!json) return null;
@@ -88,43 +110,7 @@ export const createDocumentJson = (docx, converter, editor) => {
   if (converter) {
     importFootnotePropertiesFromSettings(docx, converter);
     converter.documentOrigin = detectDocumentOrigin(docx);
-  }
-
-  // Track initial document structure
-  if (converter?.telemetry) {
-    const files = Object.keys(docx).map((filePath) => {
-      const parts = filePath.split('/');
-      return {
-        filePath,
-        fileDepth: parts.length,
-        fileType: filePath.split('.').pop(),
-      };
-    });
-
-    const trackStructure = (documentIdentifier = null) =>
-      converter.telemetry.trackFileStructure(
-        {
-          totalFiles: files.length,
-          maxDepth: Math.max(...files.map((f) => f.fileDepth)),
-          totalNodes: 0,
-          files,
-        },
-        converter.fileSource,
-        converter.documentGuid ?? converter.documentId ?? null,
-        documentIdentifier ?? converter.documentId ?? null,
-        converter.documentInternalId,
-      );
-
-    try {
-      const identifierResult = converter.getDocumentIdentifier?.();
-      if (identifierResult && typeof identifierResult.then === 'function') {
-        identifierResult.then(trackStructure).catch(() => trackStructure());
-      } else {
-        trackStructure(identifierResult);
-      }
-    } catch {
-      trackStructure();
-    }
+    converter.commentThreadingProfile = detectCommentThreadingProfile(docx);
   }
 
   const nodeListHandler = defaultNodeListHandler();
@@ -182,14 +168,6 @@ export const createDocumentJson = (docx, converter, editor) => {
       },
     };
 
-    // Not empty document
-    if (result.content.length > 1) {
-      converter?.telemetry?.trackUsage('document_import', {
-        documentType: 'docx',
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     return {
       pmDoc: result,
       savedTagsToRestore: node,
@@ -225,6 +203,8 @@ export const defaultNodeListHandler = () => {
     footnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
     tableOfContentsHandlerEntity,
+    indexHandlerEntity,
+    indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
     pageReferenceEntity,
@@ -333,20 +313,8 @@ const createNodeListHandler = (nodeHandlers) => {
           );
           if (unhandled) {
             if (!context.elementName) continue;
-
-            converter?.telemetry?.trackStatistic('unknown', context);
             continue;
           } else {
-            converter?.telemetry?.trackStatistic('node', context);
-
-            // Use Telemetry to track list item attributes
-            if (context.type === 'orderedList' || context.type === 'bulletList') {
-              context.content.forEach((item) => {
-                const innerItemContext = getSafeElementContext([item], 0, item, `/word/${filename || 'document.xml'}`);
-                converter?.telemetry?.trackStatistic('attributes', innerItemContext);
-              });
-            }
-
             const hasHighlightMark = nodes[0]?.marks?.find((mark) => mark.type === 'highlight');
             if (hasHighlightMark) {
               converter?.docHiglightColors.add(hasHighlightMark.attrs.color.toUpperCase());
@@ -371,14 +339,6 @@ const createNodeListHandler = (nodeHandlers) => {
         } catch (error) {
           console.debug('Import error', error);
           editor?.emit('exception', { error, editor });
-
-          converter?.telemetry?.trackStatistic('error', {
-            type: 'processing_error',
-            message: error.message,
-            name: error.name,
-            stack: error.stack,
-            fileName: `/word/${filename || 'document.xml'}`,
-          });
         }
       }
 
@@ -386,15 +346,6 @@ const createNodeListHandler = (nodeHandlers) => {
     } catch (error) {
       console.debug('Error during import', error);
       editor?.emit('exception', { error, editor });
-
-      // Track only catastrophic handler failures
-      converter?.telemetry?.trackStatistic('error', {
-        type: 'fatal_error',
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-        fileName: `/word/${filename || 'document.xml'}`,
-      });
 
       throw error;
     }

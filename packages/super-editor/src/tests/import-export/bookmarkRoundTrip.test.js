@@ -63,7 +63,6 @@ describe('Bookmark import/export round trip', () => {
       headerIds: {},
       footers: {},
       footerIds: {},
-      telemetry: null,
       docHiglightColors: new Set(),
     };
 

@@ -3,7 +3,7 @@ import { NSkeleton, useMessage } from 'naive-ui';
 import 'tippy.js/dist/tippy.css';
 import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, computed, watch, nextTick } from 'vue';
 import { Editor } from '@superdoc/super-editor';
-import { PresentationEditor } from '@core/PresentationEditor.js';
+import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import SlashMenu from './slash-menu/SlashMenu.vue';
 import { onMarginClickCursorChange } from './cursor-helpers.js';
@@ -969,7 +969,13 @@ const handleMarginClick = (event) => {
   if (event.ctrlKey && isMacOS()) {
     return;
   }
-  if (event.target.classList.contains('ProseMirror')) return;
+  const target = event.target;
+  if (target?.classList?.contains('ProseMirror')) return;
+
+  // Causes issues with node selection.
+  if (target?.closest?.('.presentation-editor, .superdoc-layout')) {
+    return;
+  }
 
   onMarginClickCursorChange(event, activeEditor.value);
 };

@@ -1059,6 +1059,14 @@ export class SuperToolbar extends EventEmitter {
     const isMarkToggle = this.isMarkToggle(item);
     const shouldRestoreFocus = Boolean(item?.restoreEditorFocus);
 
+    const hasArgument = argument !== null && argument !== undefined;
+    const isDropdownOpen = item?.type === 'dropdown' && !hasArgument;
+    const isFontCommand = item?.command === 'setFontFamily' || item?.command === 'setFontSize';
+    if (isDropdownOpen && isFontCommand) {
+      // Opening/closing a dropdown should not shift editor focus or alter selection state.
+      return;
+    }
+
     // If the editor wasn't focused and this is a mark toggle, queue it and keep the button active
     // until the next selection update (after the user clicks into the editor).
     if (!wasFocused && isMarkToggle) {

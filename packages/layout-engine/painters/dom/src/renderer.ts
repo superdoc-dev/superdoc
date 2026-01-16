@@ -3956,8 +3956,8 @@ export class DomPainter {
       (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
       // Add thin visual indicator for nested comments when outer comment is selected
       // Use box-shadow instead of border to avoid affecting text layout
-      if (commentHighlight.hasNestedComments) {
-        const borderColor = `${COMMENT_EXTERNAL_COLOR}99`; // Semi-transparent for subtlety
+      if (commentHighlight.hasNestedComments && commentHighlight.baseColor) {
+        const borderColor = `${commentHighlight.baseColor}99`; // Semi-transparent for subtlety
         (elem as HTMLElement).style.boxShadow = `inset 1px 0 0 ${borderColor}, inset -1px 0 0 ${borderColor}`;
       } else {
         (elem as HTMLElement).style.boxShadow = '';
@@ -5972,6 +5972,7 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
 
 interface CommentHighlightResult {
   color?: string;
+  baseColor?: string;
   hasNestedComments?: boolean;
 }
 
@@ -5996,6 +5997,7 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
       );
       return {
         color: `${base}${COMMENT_ACTIVE_ALPHA}`,
+        baseColor: base,
         hasNestedComments: nestedComments.length > 0,
       };
     }

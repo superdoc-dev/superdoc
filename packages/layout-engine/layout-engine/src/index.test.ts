@@ -3617,4 +3617,509 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'next')).toBe(true);
     });
   });
+
+  /**
+   * Tests for keepNext chain handling.
+   *
+   * In OOXML, when multiple consecutive paragraphs all have keepNext=true, they form
+   * a "chain" that Word treats as an indivisible unit for pagination. If the chain
+   * doesn't fit on the current page, the entire chain moves to the next page.
+   *
+   * @see ECMA-376 Part 1, Section 17.3.1.14 (keepNext)
+   */
+  describe('keepNext chain handling', () => {
+    it('moves entire chain to next page when chain does not fit', () => {
+      // A filler paragraph uses up space on page 1, then a chain that fits on
+      // a blank page but NOT on the remaining space should move to page 2.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {}, // No keepNext
+      };
+      const para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p1',
+        runs: [{ text: 'Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const para2: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p2',
+        runs: [{ text: 'Para 2', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {}, // No keepNext - this is the anchor
+      };
+
+      // Filler is 50px, chain members are each 25px
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(50)],
+        totalHeight: 50,
+      };
+      const chainMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(25)],
+        totalHeight: 25,
+      };
+
+      // Page has 100px content area
+      // After filler (50px), only 50px remains
+      // Chain needs 25+25+25 = 75px (doesn't fit in 50px, but fits on blank 100px page)
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 100px content
+      };
+
+      const layout = layoutDocument(
+        [filler, para1, para2, anchor],
+        [fillerMeasure, chainMeasure, chainMeasure, chainMeasure],
+        options,
+      );
+
+      // Filler on page 1, chain moves to page 2 as a unit
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'p1')).toBe(false);
+      // All chain members + anchor should be on page 2
+      expect(pageContainsBlock(layout.pages[1], 'p1')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'p2')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
+    });
+
+    it('keeps chain on current page when it fits', () => {
+      // Create a chain of 2 paragraphs with keepNext, followed by an anchor
+      const para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p1',
+        runs: [{ text: 'Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const para2: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p2',
+        runs: [{ text: 'Para 2', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      // Each paragraph is 20px tall
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // Page has 100px content area, chain needs 20+20+20 = 60px (fits)
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument([para1, para2, anchor], [measure, measure, measure], options);
+
+      // Everything should fit on one page
+      expect(layout.pages).toHaveLength(1);
+      expect(pageContainsBlock(layout.pages[0], 'p1')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'p2')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'anchor')).toBe(true);
+    });
+
+    it('breaks chain at section breaks', () => {
+      // Chain broken by section break should not treat post-break paragraphs as part of chain
+      const para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p1',
+        runs: [{ text: 'Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const sectionBreak: SectionBreakBlock = {
+        kind: 'sectionBreak',
+        id: 'sb1',
+        type: 'nextPage',
+      };
+      const para2: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p2',
+        runs: [{ text: 'Para 2', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      const paraMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+      const breakMeasure: Measure = { kind: 'sectionBreak' };
+
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument(
+        [para1, sectionBreak, para2, anchor],
+        [paraMeasure, breakMeasure, paraMeasure, paraMeasure],
+        options,
+      );
+
+      // para1 should be alone on page 1 (chain broken by section break)
+      // para2 and anchor should be on page 2 (new chain after break)
+      expect(layout.pages.length).toBeGreaterThanOrEqual(2);
+      expect(pageContainsBlock(layout.pages[0], 'p1')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'p2')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
+    });
+
+    it('handles single keepNext paragraph (chain of 1)', () => {
+      // A single paragraph with keepNext should still keep with its anchor
+      const heading: FlowBlock = {
+        kind: 'paragraph',
+        id: 'heading',
+        runs: [{ text: 'Heading', fontFamily: 'Arial', fontSize: 24 }],
+        attrs: { keepNext: true },
+      };
+      const body: FlowBlock = {
+        kind: 'paragraph',
+        id: 'body',
+        runs: [{ text: 'Body text', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      const headingMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(30)],
+        totalHeight: 30,
+      };
+      const bodyMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // Page has 60px content area, heading+body need 50px (fits)
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 120 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument([heading, body], [headingMeasure, bodyMeasure], options);
+
+      expect(layout.pages).toHaveLength(1);
+      expect(pageContainsBlock(layout.pages[0], 'heading')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'body')).toBe(true);
+    });
+
+    it('handles chain without valid anchor (at end of document)', () => {
+      // Chain at end of document with no following paragraph
+      const para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p1',
+        runs: [{ text: 'Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const para2: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p2',
+        runs: [{ text: 'Para 2', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 120 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument([para1, para2], [measure, measure], options);
+
+      // Both paragraphs should be laid out (chain with no anchor still works)
+      expect(layout.pages).toHaveLength(1);
+      expect(pageContainsBlock(layout.pages[0], 'p1')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'p2')).toBe(true);
+    });
+
+    it('does not create infinite loop when chain is taller than page', () => {
+      // Chain that exceeds page height but individual paragraphs can fit.
+      // The chain logic should NOT advance endlessly - it should lay out
+      // content normally when the chain can never fit on any page.
+      const para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p1',
+        runs: [{ text: 'Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const para2: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p2',
+        runs: [{ text: 'Para 2', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const para3: FlowBlock = {
+        kind: 'paragraph',
+        id: 'p3',
+        runs: [{ text: 'Para 3', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      // Each paragraph is 40px tall (fits individually on 100px page)
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(40)],
+        totalHeight: 40,
+      };
+
+      // Page has 100px content area - chain (40*4=160px) will never fit
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      // Should not hang or throw - gracefully falls back to normal pagination
+      const layout = layoutDocument([para1, para2, para3, anchor], [measure, measure, measure, measure], options);
+
+      // Content should be spread across multiple pages (not all on one page)
+      expect(layout.pages.length).toBeGreaterThan(1);
+      // All paragraphs should be laid out somewhere
+      const allFragments = layout.pages.flatMap((p) => p.fragments);
+      const blockIds = allFragments.filter((f) => f.kind === 'para').map((f) => (f as ParaFragment).blockId);
+      expect(blockIds).toContain('p1');
+      expect(blockIds).toContain('p2');
+      expect(blockIds).toContain('p3');
+      expect(blockIds).toContain('anchor');
+    });
+
+    it('handles multiple separate chains in document', () => {
+      // Document with two separate chains
+      const chain1Para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'c1p1',
+        runs: [{ text: 'Chain 1 Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const chain1Anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'c1anchor',
+        runs: [{ text: 'Chain 1 Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+      const chain2Para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'c2p1',
+        runs: [{ text: 'Chain 2 Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true },
+      };
+      const chain2Anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'c2anchor',
+        runs: [{ text: 'Chain 2 Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument(
+        [chain1Para1, chain1Anchor, chain2Para1, chain2Anchor],
+        [measure, measure, measure, measure],
+        options,
+      );
+
+      // All should fit on one page
+      expect(layout.pages).toHaveLength(1);
+      expect(pageContainsBlock(layout.pages[0], 'c1p1')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'c1anchor')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'c2p1')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'c2anchor')).toBe(true);
+    });
+
+    it('uses first line height of anchor in chain calculation', () => {
+      // Anchor has multiple lines but only first line should be considered
+      const heading: FlowBlock = {
+        kind: 'paragraph',
+        id: 'heading',
+        runs: [{ text: 'Heading', fontFamily: 'Arial', fontSize: 24 }],
+        attrs: { keepNext: true },
+      };
+      const body: FlowBlock = {
+        kind: 'paragraph',
+        id: 'body',
+        runs: [{ text: 'Body with multiple lines', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      const headingMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(30)],
+        totalHeight: 30,
+      };
+      // Body has 3 lines of 20px each = 60px total, but only first line (20px) matters for chain
+      const bodyMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20), makeLine(20), makeLine(20)],
+        totalHeight: 60,
+      };
+
+      // 55px content area: heading(30) + body.firstLine(20) = 50px fits
+      // But full body (60) wouldn't fit with heading
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 115 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument([heading, body], [headingMeasure, bodyMeasure], options);
+
+      // Heading and body should start on same page (chain fits using first line optimization)
+      expect(pageContainsBlock(layout.pages[0], 'heading')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'body')).toBe(true);
+    });
+
+    it('reclaims trailing spacing when chain starter has contextualSpacing', () => {
+      // Previous paragraph has spacingAfter, chain starter has contextualSpacing + same style.
+      // The trailing spacing should be reclaimed, making room for the chain.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal', spacingAfter: 10 },
+      };
+      const chainStarter: FlowBlock = {
+        kind: 'paragraph',
+        id: 'chainStarter',
+        runs: [{ text: 'Chain starter', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, contextualSpacing: true, styleId: 'Normal' },
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      // Filler is 40px, chain starter and anchor are each 25px
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(40)],
+        totalHeight: 40,
+      };
+      const chainMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(25)],
+        totalHeight: 25,
+      };
+
+      // Page has 100px content area
+      // After filler (40px) + spacingAfter (10px), cursor is at 50px from top
+      // Available without reclaim: 100 - 50 = 50px
+      // Chain needs: 25 + 25 = 50px (exactly fits with reclaim, doesn't fit without)
+      // With contextualSpacing, the 10px spacingAfter is reclaimed → 60px available
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 100px content
+      };
+
+      const layout = layoutDocument(
+        [filler, chainStarter, anchor],
+        [fillerMeasure, chainMeasure, chainMeasure],
+        options,
+      );
+
+      // All should fit on one page because contextualSpacing reclaims the 10px
+      expect(layout.pages).toHaveLength(1);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'chainStarter')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'anchor')).toBe(true);
+    });
+
+    it('does not reclaim trailing spacing when styles differ', () => {
+      // Previous paragraph has spacingAfter, chain starter has contextualSpacing but DIFFERENT style.
+      // The trailing spacing should NOT be reclaimed.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal', spacingAfter: 10 },
+      };
+      const chainStarter: FlowBlock = {
+        kind: 'paragraph',
+        id: 'chainStarter',
+        runs: [{ text: 'Chain starter', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, contextualSpacing: true, styleId: 'Heading1' }, // Different style
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      // Filler is 50px, chain starter and anchor are each 25px
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(50)],
+        totalHeight: 50,
+      };
+      const chainMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(25)],
+        totalHeight: 25,
+      };
+
+      // Page has 95px content area (155 - 30 - 30)
+      // After filler (50px), cursorY leaves 45px remaining
+      // Chain needs: 25 + 25 = 50px > 45px available (doesn't fit)
+      // Styles differ so no reclaim - chain must move to page 2
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 155 }, // 95px content area
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument(
+        [filler, chainStarter, anchor],
+        [fillerMeasure, chainMeasure, chainMeasure],
+        options,
+      );
+
+      // Chain should move to page 2 because styles differ (no reclaim)
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'chainStarter')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import type { Node as ProseMirrorNode, ResolvedPos } from 'prosemirror-model';
 import type { EditorState } from 'prosemirror-state';
-import { isWordCharacter } from './SelectionHelpers.js';
+import { isWordCharacter } from '../selection/SelectionHelpers.js';
 
 /**
  * State tracking for rapid multi-click detection (double-click, triple-click, etc.).

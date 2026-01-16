@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PresentationInputBridge } from './PresentationInputBridge';
-import { SLASH_MENU_HANDLED_FLAG } from '../../components/slash-menu/event-flags.js';
+import { PresentationInputBridge } from '../input/PresentationInputBridge.js';
+import { SLASH_MENU_HANDLED_FLAG } from '../../../components/slash-menu/event-flags.js';
 
 describe('PresentationInputBridge - Context Menu Handling', () => {
   let bridge: PresentationInputBridge;

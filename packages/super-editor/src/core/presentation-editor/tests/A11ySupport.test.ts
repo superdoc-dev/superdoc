@@ -6,7 +6,7 @@ import {
   syncHiddenEditorA11yAttributes,
   scheduleA11ySelectionAnnouncement,
   computeA11ySelectionAnnouncement,
-} from '../A11ySupport.js';
+} from '../utils/A11ySupport.js';
 
 describe('syncHiddenEditorA11yAttributes', () => {
   let pmDom: HTMLElement;

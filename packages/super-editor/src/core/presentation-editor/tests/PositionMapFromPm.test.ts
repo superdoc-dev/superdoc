@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Schema } from 'prosemirror-model';
 import { EditorState } from 'prosemirror-state';
 
-import { buildPositionMapFromPmDoc } from '../PositionMapFromPm.js';
+import { buildPositionMapFromPmDoc } from '../utils/PositionMapFromPm.js';
 
 const testSchema = new Schema({
   nodes: {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SelectionSyncCoordinator, type SelectionSyncScheduler } from '../SelectionSyncCoordinator.js';
+import { SelectionSyncCoordinator, type SelectionSyncScheduler } from '../selection/SelectionSyncCoordinator.js';
 
 function createManualScheduler(): {
   scheduler: SelectionSyncScheduler;

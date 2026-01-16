@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createHiddenHost } from './HiddenHost.js';
+import { createHiddenHost } from '../dom/HiddenHost.js';
 
 /**
  * Comprehensive unit tests for the createHiddenHost function.

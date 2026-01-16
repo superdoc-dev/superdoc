@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
-import { PresentationEditor } from './PresentationEditor';
-import type { Editor as EditorInstance } from '../Editor';
+import { PresentationEditor } from '../PresentationEditor.js';
+import type { Editor as EditorInstance } from '../../Editor.js';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -135,7 +135,7 @@ const {
 });
 
 // Mock Editor class
-vi.mock('../Editor', () => {
+vi.mock('../../Editor', () => {
   return {
     Editor: vi.fn().mockImplementation(() => ({
       setDocumentMode: vi.fn(),
@@ -261,23 +261,20 @@ vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
   updateYdocDocxData: mockUpdateYdocDocxData,
 }));
 
-vi.mock('./header-footer/EditorOverlayManager', () => ({
+vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
 
 /**
- * Test suite for PresentationEditor.#getCurrentPageIndex() fragment fallback
+ * Test suite for PresentationEditor.getCurrentSectionPageStyles()
  *
- * The #getCurrentPageIndex() method determines which page contains the current
- * caret position. It has two strategies:
- * 1. Primary: Use selectionToRects() which queries the layout engine directly
- * 2. Fallback: When selectionToRects returns empty (e.g., collapsed cursor at
- *    edge positions), scan page fragments to find which page contains the position
- *
- * This fallback mechanism is critical for maintaining section-aware functionality
- * when the primary method cannot determine the page location.
+ * This method returns page size, margins, section index, and orientation
+ * for the section containing the current caret position. It's critical for
+ * section-aware UI components like rulers that need to display accurate
+ * information for multi-section documents where each section can have
+ * different page dimensions and orientations.
  */
-describe('PresentationEditor.#getCurrentPageIndex() fragment fallback', () => {
+describe('PresentationEditor.getCurrentSectionPageStyles()', () => {
   let container: HTMLElement;
   let presentation: PresentationEditor;
 
@@ -304,42 +301,21 @@ describe('PresentationEditor.#getCurrentPageIndex() fragment fallback', () => {
   });
 
   /**
-   * Test: Uses selectionToRects when it returns valid rects
+   * Test: Returns default values when no page/layout is available
    *
-   * When selectionToRects successfully returns rectangle data for the current
-   * selection, that should be the authoritative source for determining the
-   * page index. The fragment fallback should not be used in this case.
+   * When the layout engine hasn't produced any pages yet (e.g., during initial
+   * document load or before first layout pass), the method should return safe
+   * defaults (8.5" x 11" portrait with 1" margins on all sides).
    */
-  it('should use selectionToRects when it returns valid rects', async () => {
-    const PPI = 96;
+  it('should return default values when no page/layout is available', async () => {
     mockIncrementalLayout.mockResolvedValueOnce({
-      layout: {
-        pages: [
-          {
-            number: 1,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [{ pmStart: 0, pmEnd: 50 }],
-          },
-          {
-            number: 2,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [{ pmStart: 51, pmEnd: 100 }],
-          },
-        ],
-      },
+      layout: { pages: [] },
       measures: [],
     });
 
-    // selectionToRects returns page 1
-    mockSelectionToRects.mockReturnValue([{ pageIndex: 1, x: 100, y: 100, width: 10, height: 10 }]);
-
     presentation = new PresentationEditor({
       element: container,
-      documentId: 'test-selection-rects',
+      documentId: 'test-no-layout',
       content: { type: 'doc', content: [{ type: 'paragraph' }] },
       mode: 'docx',
     });
@@ -348,76 +324,20 @@ describe('PresentationEditor.#getCurrentPageIndex() fragment fallback', () => {
 
     const styles = presentation.getCurrentSectionPageStyles();
 
-    // Should use page index 1 from selectionToRects
-    expect(mockSelectionToRects).toHaveBeenCalled();
-    // Verify we're on page 2 (index 1) by checking that the page was used
-    expect(styles.sectionIndex).toBe(0);
-  });
-
-  /**
-   * Test: Falls back to fragment scanning when selectionToRects returns empty array
-   *
-   * When selectionToRects returns an empty array (e.g., collapsed cursor at
-   * boundary positions), the method should fall back to scanning page fragments
-   * to determine which page contains the current position.
-   */
-  it('should fall back to fragment scanning when selectionToRects returns empty array', async () => {
-    const PPI = 96;
-    mockIncrementalLayout.mockResolvedValueOnce({
-      layout: {
-        pages: [
-          {
-            number: 1,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [{ pmStart: 0, pmEnd: 50 }],
-          },
-          {
-            number: 2,
-            size: { w: 11 * PPI, h: 8.5 * PPI },
-            orientation: 'landscape',
-            sectionIndex: 1,
-            fragments: [{ pmStart: 51, pmEnd: 100 }],
-          },
-        ],
-      },
-      measures: [],
-    });
-
-    // selectionToRects returns empty - trigger fallback
-    mockSelectionToRects.mockReturnValue([]);
-
-    presentation = new PresentationEditor({
-      element: container,
-      documentId: 'test-fragment-fallback',
-      content: { type: 'doc', content: [{ type: 'paragraph' }] },
-      mode: 'docx',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Mock editor selection to position 0 (should be on page 0)
-    const mockEditor = (presentation as unknown as { editor?: { state?: { selection?: { from: number } } } }).editor;
-    if (mockEditor && mockEditor.state && mockEditor.state.selection) {
-      mockEditor.state.selection.from = 0;
-    }
-
-    const styles = presentation.getCurrentSectionPageStyles();
-
-    // Should fall back to fragment scanning and find position 0 on page 0
+    expect(styles.pageSize).toEqual({ width: 8.5, height: 11 });
+    expect(styles.pageMargins).toEqual({ left: 1, right: 1, top: 1, bottom: 1 });
     expect(styles.sectionIndex).toBe(0);
     expect(styles.orientation).toBe('portrait');
   });
 
   /**
-   * Test: Finds position in fragment on non-first page
+   * Test: Returns portrait dimensions for portrait page
    *
-   * Verifies that the fragment scanning fallback correctly identifies positions
-   * on pages other than the first page. This ensures the fallback logic properly
-   * iterates through all pages and fragments.
+   * Verifies that when a page has explicit portrait dimensions (8.5" x 11"),
+   * the method correctly returns these dimensions in inches and identifies
+   * the orientation as 'portrait'.
    */
-  it('should find position in fragment on non-first page', async () => {
+  it('should return portrait dimensions for portrait page', async () => {
     const PPI = 96;
     mockIncrementalLayout.mockResolvedValueOnce({
       layout: {
@@ -425,6 +345,337 @@ describe('PresentationEditor.#getCurrentPageIndex() fragment fallback', () => {
           {
             number: 1,
             size: { w: 8.5 * PPI, h: 11 * PPI },
+            margins: { left: 72, right: 72, top: 72, bottom: 72 },
+            orientation: 'portrait',
+            section: { index: 0 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-portrait',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    expect(styles.pageSize.width).toBeCloseTo(8.5, 2);
+    expect(styles.pageSize.height).toBeCloseTo(11, 2);
+    expect(styles.orientation).toBe('portrait');
+    expect(styles.pageMargins.left).toBeCloseTo(0.75, 2);
+    expect(styles.pageMargins.right).toBeCloseTo(0.75, 2);
+    expect(styles.pageMargins.top).toBeCloseTo(0.75, 2);
+    expect(styles.pageMargins.bottom).toBeCloseTo(0.75, 2);
+  });
+
+  /**
+   * Test: Returns landscape dimensions for landscape page
+   *
+   * Verifies that when a page has landscape orientation (11" x 8.5"),
+   * the method correctly returns these swapped dimensions and identifies
+   * the orientation as 'landscape'.
+   */
+  it('should return landscape dimensions for landscape page', async () => {
+    const PPI = 96;
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: { w: 11 * PPI, h: 8.5 * PPI },
+            margins: { left: 72, right: 72, top: 72, bottom: 72 },
+            orientation: 'landscape',
+            section: { index: 0 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-landscape',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    expect(styles.pageSize.width).toBeCloseTo(11, 2);
+    expect(styles.pageSize.height).toBeCloseTo(8.5, 2);
+    expect(styles.orientation).toBe('landscape');
+  });
+
+  /**
+   * Test: Uses orientation-based defaults when page.size is undefined
+   *
+   * When a page object exists but doesn't have explicit size dimensions,
+   * the method should infer the size based on the orientation field:
+   * - portrait: 8.5" x 11"
+   * - landscape: 11" x 8.5"
+   */
+  it('should use orientation-based defaults when page.size is undefined', async () => {
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: undefined,
+            margins: { left: 72, right: 72, top: 72, bottom: 72 },
+            orientation: 'landscape',
+            section: { index: 0 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-orientation-default',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    // Should use landscape defaults: 11" x 8.5"
+    expect(styles.pageSize.width).toBeCloseTo(11, 2);
+    expect(styles.pageSize.height).toBeCloseTo(8.5, 2);
+    expect(styles.orientation).toBe('landscape');
+  });
+
+  /**
+   * Test: Falls back to converter margins when page margins are undefined
+   *
+   * When a page doesn't have explicit margin values, the method should use
+   * the document-level margins from the converter's pageStyles. This ensures
+   * consistent behavior even when layout data is incomplete.
+   */
+  it('should fall back to converter margins when page margins are undefined', async () => {
+    const PPI = 96;
+    mockEditorConverterStore.current.pageStyles = {
+      pageMargins: { left: 1.5, right: 1.5, top: 2, bottom: 2 },
+    };
+
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: { w: 8.5 * PPI, h: 11 * PPI },
+            margins: undefined,
+            orientation: 'portrait',
+            section: { index: 0 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-fallback-margins',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    // Should use converter margins: 1.5", 1.5", 2", 2"
+    expect(styles.pageMargins.left).toBeCloseTo(1.5, 2);
+    expect(styles.pageMargins.right).toBeCloseTo(1.5, 2);
+    expect(styles.pageMargins.top).toBeCloseTo(2, 2);
+    expect(styles.pageMargins.bottom).toBeCloseTo(2, 2);
+  });
+
+  /**
+   * Test: Falls back to safe defaults when converter margins are invalid/undefined
+   *
+   * When both page margins and converter margins are missing or invalid,
+   * the method should use safe default margins of 1" on all sides to prevent
+   * NaN or undefined values from breaking the UI.
+   */
+  it('should fall back to safe defaults when converter margins are invalid/undefined', async () => {
+    const PPI = 96;
+    mockEditorConverterStore.current.pageStyles = {
+      pageMargins: undefined,
+    };
+
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: { w: 8.5 * PPI, h: 11 * PPI },
+            margins: undefined,
+            orientation: 'portrait',
+            section: { index: 0 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-safe-defaults',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    // Should use safe defaults: 1" on all sides
+    expect(styles.pageMargins.left).toBe(1);
+    expect(styles.pageMargins.right).toBe(1);
+    expect(styles.pageMargins.top).toBe(1);
+    expect(styles.pageMargins.bottom).toBe(1);
+  });
+
+  /**
+   * Test: Falls back to safe defaults when converter margins have invalid values
+   *
+   * Validates that the method properly sanitizes margin values. When converter
+   * margins are undefined or null, they get replaced with safe defaults of 1".
+   *
+   * Note: The typeof check filters out undefined/null but not NaN (typeof NaN === 'number').
+   * Non-number types get coerced to numbers when used in calculations (string becomes 1).
+   */
+  it('should fall back to safe defaults when converter margins have invalid values', async () => {
+    const PPI = 96;
+    mockEditorConverterStore.current.pageStyles = {
+      pageMargins: {
+        left: undefined,
+        right: null as unknown as number,
+        top: undefined,
+        bottom: null as unknown as number,
+      },
+    };
+
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: { w: 8.5 * PPI, h: 11 * PPI },
+            margins: undefined,
+            orientation: 'portrait',
+            sectionIndex: 0,
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-invalid-margins',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    // undefined and null get replaced with safe default 1"
+    expect(styles.pageMargins.left).toBe(1);
+    expect(styles.pageMargins.right).toBe(1);
+    expect(styles.pageMargins.top).toBe(1);
+    expect(styles.pageMargins.bottom).toBe(1);
+  });
+
+  /**
+   * Test: Handles invalid orientation values (falls back to 'portrait')
+   *
+   * When a page has an invalid or unrecognized orientation value,
+   * the method should safely default to 'portrait' rather than breaking
+   * or returning invalid data.
+   */
+  it('should handle invalid orientation values (falls back to portrait)', async () => {
+    const PPI = 96;
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: { w: 8.5 * PPI, h: 11 * PPI },
+            margins: { left: 72, right: 72, top: 72, bottom: 72 },
+            orientation: 'invalid-orientation' as unknown as 'portrait' | 'landscape',
+            section: { index: 0 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-invalid-orientation',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    // Should default to portrait for invalid orientation
+    expect(styles.orientation).toBe('portrait');
+  });
+
+  /**
+   * Test: Returns correct section for multi-section documents
+   *
+   * In documents with multiple sections, the method should correctly identify
+   * which section contains the current caret position and return that section's
+   * index along with its specific page dimensions and margins.
+   */
+  it('should return correct section for multi-section documents', async () => {
+    const PPI = 96;
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: { w: 8.5 * PPI, h: 11 * PPI },
+            margins: { left: 72, right: 72, top: 72, bottom: 72 },
             orientation: 'portrait',
             sectionIndex: 0,
             fragments: [{ pmStart: 0, pmEnd: 50 }],
@@ -432,13 +683,15 @@ describe('PresentationEditor.#getCurrentPageIndex() fragment fallback', () => {
           {
             number: 2,
             size: { w: 11 * PPI, h: 8.5 * PPI },
+            margins: { left: 96, right: 96, top: 96, bottom: 96 },
             orientation: 'landscape',
             sectionIndex: 1,
             fragments: [{ pmStart: 51, pmEnd: 100 }],
           },
           {
             number: 3,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
+            size: { w: 7 * PPI, h: 9 * PPI },
+            margins: { left: 48, right: 48, top: 48, bottom: 48 },
             orientation: 'portrait',
             sectionIndex: 2,
             fragments: [{ pmStart: 101, pmEnd: 150 }],
@@ -448,342 +701,106 @@ describe('PresentationEditor.#getCurrentPageIndex() fragment fallback', () => {
       measures: [],
     });
 
-    // selectionToRects returns empty - trigger fallback
-    mockSelectionToRects.mockReturnValue([]);
-
-    presentation = new PresentationEditor({
-      element: container,
-      documentId: 'test-non-first-page',
-      content: { type: 'doc', content: [{ type: 'paragraph' }] },
-      mode: 'docx',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Mock editor selection to position 75 (should be on page 1, section 1)
-    const mockEditor = (presentation as unknown as { editor?: { state?: { selection?: { from: number } } } }).editor;
-    if (mockEditor && mockEditor.state && mockEditor.state.selection) {
-      mockEditor.state.selection.from = 75;
-    }
-
-    const styles = presentation.getCurrentSectionPageStyles();
-
-    // Should find position 75 on page 1 (landscape section)
-    expect(styles.sectionIndex).toBe(1);
-    expect(styles.orientation).toBe('landscape');
-  });
-
-  /**
-   * Test: Returns 0 when position not found in any fragment
-   *
-   * When a position cannot be found in any page fragment (e.g., position is
-   * beyond the last fragment), the method should safely return page index 0
-   * rather than throwing an error or returning undefined.
-   */
-  it('should return 0 when position not found in any fragment', async () => {
-    const PPI = 96;
-    mockIncrementalLayout.mockResolvedValueOnce({
-      layout: {
-        pages: [
-          {
-            number: 1,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [{ pmStart: 0, pmEnd: 50 }],
-          },
-        ],
-      },
-      measures: [],
-    });
-
-    // selectionToRects returns empty - trigger fallback
-    mockSelectionToRects.mockReturnValue([]);
-
-    presentation = new PresentationEditor({
-      element: container,
-      documentId: 'test-position-not-found',
-      content: { type: 'doc', content: [{ type: 'paragraph' }] },
-      mode: 'docx',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Mock editor selection to position 999 (beyond any fragment)
-    const mockEditor = (presentation as unknown as { editor?: { state?: { selection?: { from: number } } } }).editor;
-    if (mockEditor && mockEditor.state && mockEditor.state.selection) {
-      mockEditor.state.selection.from = 999;
-    }
-
-    const styles = presentation.getCurrentSectionPageStyles();
-
-    // Should default to section 0 when position not found
-    expect(styles.sectionIndex).toBe(0);
-  });
-
-  /**
-   * Test: Handles fragments without pmStart/pmEnd gracefully
-   *
-   * Some fragments may not have pmStart/pmEnd properties (e.g., drawing
-   * fragments that don't correspond to text content). The method should
-   * skip these fragments without throwing errors.
-   */
-  it('should handle fragments without pmStart/pmEnd gracefully', async () => {
-    const PPI = 96;
-    mockIncrementalLayout.mockResolvedValueOnce({
-      layout: {
-        pages: [
-          {
-            number: 1,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [
-              { pmStart: undefined, pmEnd: undefined }, // Fragment without position data
-              { pmStart: 0, pmEnd: 50 },
-            ],
-          },
-          {
-            number: 2,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [
-              { pmStart: null, pmEnd: null }, // Fragment with null positions
-              { pmStart: 51, pmEnd: 100 },
-            ],
-          },
-        ],
-      },
-      measures: [],
-    });
-
-    // selectionToRects returns empty - trigger fallback
-    mockSelectionToRects.mockReturnValue([]);
-
-    presentation = new PresentationEditor({
-      element: container,
-      documentId: 'test-incomplete-fragments',
-      content: { type: 'doc', content: [{ type: 'paragraph' }] },
-      mode: 'docx',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Mock editor selection to position 60 (should be on page 1)
-    const mockEditor = (presentation as unknown as { editor?: { state?: { selection?: { from: number } } } }).editor;
-    if (mockEditor && mockEditor.state && mockEditor.state.selection) {
-      mockEditor.state.selection.from = 60;
-    }
-
-    const styles = presentation.getCurrentSectionPageStyles();
-
-    // Should skip incomplete fragments and find position 60 on page 1
-    expect(styles.sectionIndex).toBe(0);
-  });
-
-  /**
-   * Test: Correctly identifies position at fragment boundaries
-   *
-   * Positions at the exact start or end of a fragment should be correctly
-   * identified as belonging to that fragment/page. This tests the inclusive
-   * range check (pos >= pmStart && pos <= pmEnd).
-   */
-  it('should correctly identify position at fragment boundaries', async () => {
-    const PPI = 96;
-    mockIncrementalLayout.mockResolvedValueOnce({
-      layout: {
-        pages: [
-          {
-            number: 1,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [{ pmStart: 0, pmEnd: 50 }],
-          },
-          {
-            number: 2,
-            size: { w: 11 * PPI, h: 8.5 * PPI },
-            orientation: 'landscape',
-            sectionIndex: 1,
-            fragments: [{ pmStart: 51, pmEnd: 100 }],
-          },
-        ],
-      },
-      measures: [],
-    });
-
-    // selectionToRects returns empty - trigger fallback
-    mockSelectionToRects.mockReturnValue([]);
-
-    presentation = new PresentationEditor({
-      element: container,
-      documentId: 'test-boundary-positions',
-      content: { type: 'doc', content: [{ type: 'paragraph' }] },
-      mode: 'docx',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Test position at end of first fragment
-    const mockEditor = (presentation as unknown as { editor?: { state?: { selection?: { from: number } } } }).editor;
-    if (mockEditor && mockEditor.state && mockEditor.state.selection) {
-      mockEditor.state.selection.from = 50;
-    }
-
-    let styles = presentation.getCurrentSectionPageStyles();
-    expect(styles.sectionIndex).toBe(0);
-    expect(styles.orientation).toBe('portrait');
-
-    // Test position at start of second fragment
-    if (mockEditor && mockEditor.state && mockEditor.state.selection) {
-      mockEditor.state.selection.from = 51;
-    }
-
-    styles = presentation.getCurrentSectionPageStyles();
-    expect(styles.sectionIndex).toBe(1);
-    expect(styles.orientation).toBe('landscape');
-  });
-
-  /**
-   * Test: Handles empty pages array gracefully
-   *
-   * When the layout has no pages yet, the method should return page index 0
-   * without throwing errors or attempting to scan non-existent pages.
-   */
-  it('should handle empty pages array gracefully', async () => {
-    mockIncrementalLayout.mockResolvedValueOnce({
-      layout: {
-        pages: [],
-      },
-      measures: [],
-    });
-
-    mockSelectionToRects.mockReturnValue([]);
-
-    presentation = new PresentationEditor({
-      element: container,
-      documentId: 'test-empty-pages',
-      content: { type: 'doc', content: [{ type: 'paragraph' }] },
-      mode: 'docx',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const styles = presentation.getCurrentSectionPageStyles();
-
-    // Should return default values when no pages exist
-    expect(styles.sectionIndex).toBe(0);
-    expect(styles.pageSize).toEqual({ width: 8.5, height: 11 });
-    expect(styles.orientation).toBe('portrait');
-  });
-
-  /**
-   * Test: Handles pages with empty fragments arrays
-   *
-   * Pages may exist but have no fragments yet (e.g., during incremental layout).
-   * The method should handle this case without errors and continue searching
-   * other pages.
-   */
-  it('should handle pages with empty fragments arrays', async () => {
-    const PPI = 96;
-    mockIncrementalLayout.mockResolvedValueOnce({
-      layout: {
-        pages: [
-          {
-            number: 1,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [], // Empty fragments array
-          },
-          {
-            number: 2,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [{ pmStart: 0, pmEnd: 100 }],
-          },
-        ],
-      },
-      measures: [],
-    });
-
-    mockSelectionToRects.mockReturnValue([]);
-
-    presentation = new PresentationEditor({
-      element: container,
-      documentId: 'test-empty-fragments',
-      content: { type: 'doc', content: [{ type: 'paragraph' }] },
-      mode: 'docx',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const mockEditor = (presentation as unknown as { editor?: { state?: { selection?: { from: number } } } }).editor;
-    if (mockEditor && mockEditor.state && mockEditor.state.selection) {
-      mockEditor.state.selection.from = 50;
-    }
-
-    const styles = presentation.getCurrentSectionPageStyles();
-
-    // Should skip page with empty fragments and find position on page 1
-    expect(styles.sectionIndex).toBe(0);
-  });
-
-  /**
-   * Test: Prefers selectionToRects over fragment fallback when both are available
-   *
-   * Even if fragment data would give a valid result, the method should always
-   * prefer selectionToRects when it returns non-empty results, as it's the
-   * more accurate, authoritative source.
-   */
-  it('should prefer selectionToRects over fragment fallback when both available', async () => {
-    const PPI = 96;
-    mockIncrementalLayout.mockResolvedValueOnce({
-      layout: {
-        pages: [
-          {
-            number: 1,
-            size: { w: 8.5 * PPI, h: 11 * PPI },
-            orientation: 'portrait',
-            sectionIndex: 0,
-            fragments: [{ pmStart: 0, pmEnd: 100 }],
-          },
-          {
-            number: 2,
-            size: { w: 11 * PPI, h: 8.5 * PPI },
-            orientation: 'landscape',
-            sectionIndex: 1,
-            fragments: [{ pmStart: 101, pmEnd: 200 }],
-          },
-        ],
-      },
-      measures: [],
-    });
-
-    // selectionToRects says page 1 (landscape)
+    // Simulate caret on page 2 (section 1)
     mockSelectionToRects.mockReturnValue([{ pageIndex: 1, x: 100, y: 100, width: 10, height: 10 }]);
 
     presentation = new PresentationEditor({
       element: container,
-      documentId: 'test-prefer-selection-rects',
+      documentId: 'test-multi-section',
       content: { type: 'doc', content: [{ type: 'paragraph' }] },
       mode: 'docx',
     });
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // Mock editor position to 50 (which would be page 0 via fragments)
-    const mockEditor = (presentation as unknown as { editor?: { state?: { selection?: { from: number } } } }).editor;
-    if (mockEditor && mockEditor.state && mockEditor.state.selection) {
-      mockEditor.state.selection.from = 50;
-    }
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    // Should return section 1 (landscape page)
+    expect(styles.sectionIndex).toBe(1);
+    expect(styles.orientation).toBe('landscape');
+    expect(styles.pageSize.width).toBeCloseTo(11, 2);
+    expect(styles.pageSize.height).toBeCloseTo(8.5, 2);
+    expect(styles.pageMargins.left).toBeCloseTo(1, 2);
+    expect(styles.pageMargins.right).toBeCloseTo(1, 2);
+  });
+
+  /**
+   * Test: Uses section index from page metadata
+   *
+   * Verifies that when a page has explicit section metadata, the method
+   * correctly extracts and returns the section index from that metadata.
+   */
+  it('should use section index from page metadata', async () => {
+    const PPI = 96;
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: { w: 8.5 * PPI, h: 11 * PPI },
+            margins: { left: 72, right: 72, top: 72, bottom: 72 },
+            orientation: 'portrait',
+            sectionIndex: 5,
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-section-index',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const styles = presentation.getCurrentSectionPageStyles();
 
-    // Should use selectionToRects result (page 1, landscape) not fragment fallback (page 0, portrait)
-    expect(styles.orientation).toBe('landscape');
-    expect(styles.sectionIndex).toBe(1);
+    expect(styles.sectionIndex).toBe(5);
+  });
+
+  /**
+   * Test: Defaults section index to 0 when section metadata is missing
+   *
+   * When a page doesn't have section metadata, the method should safely
+   * default to section index 0 rather than returning undefined or null.
+   */
+  it('should default section index to 0 when section metadata is missing', async () => {
+    const PPI = 96;
+    mockIncrementalLayout.mockResolvedValueOnce({
+      layout: {
+        pages: [
+          {
+            number: 1,
+            size: { w: 8.5 * PPI, h: 11 * PPI },
+            margins: { left: 72, right: 72, top: 72, bottom: 72 },
+            orientation: 'portrait',
+            section: undefined,
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    mockSelectionToRects.mockReturnValue([{ pageIndex: 0, x: 100, y: 100, width: 10, height: 10 }]);
+
+    presentation = new PresentationEditor({
+      element: container,
+      documentId: 'test-no-section-metadata',
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      mode: 'docx',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const styles = presentation.getCurrentSectionPageStyles();
+
+    expect(styles.sectionIndex).toBe(0);
   });
 });

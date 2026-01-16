@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DomPositionIndex } from '../DomPositionIndex.js';
+import { DomPositionIndex } from '../dom/DomPositionIndex.js';
 
 describe('DomPositionIndex', () => {
   it('indexes leaf PM-range elements and finds element at position', () => {

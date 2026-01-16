@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import { convertPageLocalToOverlayCoords, getPageOffsetX } from '../CoordinateTransform.js';
+import { convertPageLocalToOverlayCoords, getPageOffsetX } from '../dom/CoordinateTransform.js';
 
 describe('CoordinateTransform', () => {
   let mockDom: {

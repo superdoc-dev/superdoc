@@ -18,7 +18,7 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
-import { computeTableCaretLayoutRectFromDom } from './TableCaretDomGeometry.js';
+import { computeTableCaretLayoutRectFromDom } from '../tables/TableCaretDomGeometry.js';
 
 /**
  * Represents the geometric layout information for a caret position.

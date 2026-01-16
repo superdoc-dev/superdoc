@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
-import { PresentationEditor } from './PresentationEditor.js';
-import type { Editor as EditorInstance } from '../Editor.js';
+import { PresentationEditor } from '../PresentationEditor.js';
+import type { Editor as EditorInstance } from '../../Editor.js';
 
 /**
  * Comprehensive unit tests for the PresentationEditor#wrapHiddenEditorFocus functionality.
@@ -94,7 +94,7 @@ const {
 });
 
 // Mock Editor class
-vi.mock('../Editor.js', () => {
+vi.mock('../../Editor.js', () => {
   return {
     Editor: vi.fn().mockImplementation(() => {
       const domElement = document.createElement('div');
@@ -198,7 +198,7 @@ vi.mock('@superdoc/painter-dom', () => ({
 }));
 
 // Mock EditorOverlayManager
-vi.mock('./header-footer/EditorOverlayManager.js', () => ({
+vi.mock('../../header-footer/EditorOverlayManager.js', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
 

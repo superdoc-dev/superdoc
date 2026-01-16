@@ -1,7 +1,7 @@
 import { TextSelection } from 'prosemirror-state';
 import { createDragHandler } from '@superdoc/layout-bridge';
 import type { DropEvent, DragOverEvent, PositionHit } from '@superdoc/layout-bridge';
-import type { Editor } from '../Editor.js';
+import type { Editor } from '../../Editor.js';
 
 /**
  * Attributes for a field annotation node

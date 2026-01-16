@@ -1,6 +1,6 @@
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
 
-import { debugLog, getSelectionDebugConfig } from './SelectionDebug.js';
+import { debugLog, getSelectionDebugConfig } from '../selection/SelectionDebug.js';
 
 /**
  * Represents a single entry in the DOM position index.

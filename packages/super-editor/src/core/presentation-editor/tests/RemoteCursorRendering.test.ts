@@ -3,7 +3,7 @@ import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
 import type { PageGeometryHelper } from '@superdoc/layout-bridge';
 import * as layoutBridge from '@superdoc/layout-bridge';
 
-import { renderRemoteCursors } from '../RemoteCursorRendering.js';
+import { renderRemoteCursors } from '../remote-cursors/RemoteCursorRendering.js';
 import type { RemoteCursorState } from '../PresentationEditor.js';
 
 /**

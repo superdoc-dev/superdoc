@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { getSelectionDebugConfig, type SelectionDebugConfig, type SelectionDebugLogLevel } from './SelectionDebug.js';
+import {
+  getSelectionDebugConfig,
+  type SelectionDebugConfig,
+  type SelectionDebugLogLevel,
+} from '../selection/SelectionDebug.js';
 
 describe('SelectionDebug', () => {
   // Store original window.superdocDebug to restore after tests

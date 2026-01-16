@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import type { FlowBlock, Layout, Line, Measure, ParaFragment } from '@superdoc/contracts';
 
-import { computeCaretLayoutRectGeometry, type ComputeCaretLayoutRectGeometryDeps } from '../CaretGeometry.js';
+import { computeCaretLayoutRectGeometry, type ComputeCaretLayoutRectGeometryDeps } from '../selection/CaretGeometry.js';
 
 /**
  * Mock helper to create a minimal paragraph block for testing.

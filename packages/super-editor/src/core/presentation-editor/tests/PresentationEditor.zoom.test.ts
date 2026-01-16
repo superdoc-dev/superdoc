@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
-import { PresentationEditor } from './PresentationEditor';
-import type { Editor as EditorInstance } from '../Editor';
-import { Editor } from '../Editor';
+import { PresentationEditor } from '../PresentationEditor.js';
+import type { Editor as EditorInstance } from '../../Editor.js';
+import { Editor } from '../../Editor.js';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -148,7 +148,7 @@ const {
 });
 
 // Mock Editor class
-vi.mock('../Editor', () => {
+vi.mock('../../Editor', () => {
   return {
     Editor: vi.fn().mockImplementation(() => ({
       setDocumentMode: vi.fn(),
@@ -274,7 +274,7 @@ vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
   updateYdocDocxData: mockUpdateYdocDocxData,
 }));
 
-vi.mock('./header-footer/EditorOverlayManager', () => ({
+vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
 

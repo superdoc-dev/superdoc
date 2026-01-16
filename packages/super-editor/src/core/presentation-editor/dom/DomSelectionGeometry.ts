@@ -2,7 +2,7 @@ import type { Layout } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
 
 import type { DomPositionIndex, DomPositionIndexEntry } from './DomPositionIndex.js';
-import { debugLog, getSelectionDebugConfig } from './SelectionDebug.js';
+import { debugLog, getSelectionDebugConfig } from '../selection/SelectionDebug.js';
 
 /**
  * A rectangle representing a selection highlight in document layout coordinates.

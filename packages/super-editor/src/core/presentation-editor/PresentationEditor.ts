@@ -5,63 +5,63 @@ import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
-import { EpochPositionMapper } from './EpochPositionMapper.js';
-import { DomPositionIndex } from './DomPositionIndex.js';
-import { DomPositionIndexObserverManager } from './DomPositionIndexObserverManager.js';
+import { EpochPositionMapper } from './layout/EpochPositionMapper.js';
+import { DomPositionIndex } from './dom/DomPositionIndex.js';
+import { DomPositionIndexObserverManager } from './dom/DomPositionIndexObserverManager.js';
 import {
   computeDomCaretPageLocal as computeDomCaretPageLocalFromDom,
   computeSelectionRectsFromDom as computeSelectionRectsFromDomFromDom,
-} from './DomSelectionGeometry.js';
+} from './dom/DomSelectionGeometry.js';
 import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
-} from './CoordinateTransform.js';
-import { normalizeClientPoint as normalizeClientPointFromPointer } from './PointerNormalization.js';
-import { getPageElementByIndex } from './PageDom.js';
-import { inchesToPx, parseColumns } from './LayoutOptionParsing.js';
-import { createLayoutMetrics as createLayoutMetricsFromHelper } from './PresentationLayoutMetrics.js';
-import { safeCleanup } from './SafeCleanup.js';
-import { createHiddenHost } from './HiddenHost.js';
-import { normalizeAwarenessStates as normalizeAwarenessStatesFromHelper } from './RemoteCursorAwareness.js';
-import { renderRemoteCursors as renderRemoteCursorsFromHelper } from './RemoteCursorRendering.js';
-import { SelectionSyncCoordinator } from './SelectionSyncCoordinator.js';
-import { PresentationInputBridge } from './PresentationInputBridge.js';
-import { calculateExtendedSelection } from './SelectionHelpers.js';
-import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from './SchemaNodeTypes.js';
-import { buildPositionMapFromPmDoc } from './PositionMapFromPm.js';
+} from './dom/CoordinateTransform.js';
+import { normalizeClientPoint as normalizeClientPointFromPointer } from './dom/PointerNormalization.js';
+import { getPageElementByIndex } from './dom/PageDom.js';
+import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
+import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
+import { safeCleanup } from './utils/SafeCleanup.js';
+import { createHiddenHost } from './dom/HiddenHost.js';
+import { normalizeAwarenessStates as normalizeAwarenessStatesFromHelper } from './remote-cursors/RemoteCursorAwareness.js';
+import { renderRemoteCursors as renderRemoteCursorsFromHelper } from './remote-cursors/RemoteCursorRendering.js';
+import { SelectionSyncCoordinator } from './selection/SelectionSyncCoordinator.js';
+import { PresentationInputBridge } from './input/PresentationInputBridge.js';
+import { calculateExtendedSelection } from './selection/SelectionHelpers.js';
+import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from './utils/SchemaNodeTypes.js';
+import { buildPositionMapFromPmDoc } from './utils/PositionMapFromPm.js';
 import {
   computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
   computeWordSelectionRangeAt as computeWordSelectionRangeAtFromHelper,
   getFirstTextPosition as getFirstTextPositionFromHelper,
   registerPointerClick as registerPointerClickFromHelper,
-} from './ClickSelectionUtilities.js';
+} from './input/ClickSelectionUtilities.js';
 import {
   computeA11ySelectionAnnouncement as computeA11ySelectionAnnouncementFromHelper,
   scheduleA11ySelectionAnnouncement as scheduleA11ySelectionAnnouncementFromHelper,
   syncHiddenEditorA11yAttributes as syncHiddenEditorA11yAttributesFromHelper,
-} from './A11ySupport.js';
-import { computeSelectionVirtualizationPins } from './SelectionVirtualizationPins.js';
-import { debugLog, updateSelectionDebugHud, type SelectionDebugHudState } from './SelectionDebug.js';
-import { renderCellSelectionOverlay } from './CellSelectionOverlay.js';
-import { renderCaretOverlay, renderSelectionRects } from './LocalSelectionOverlayRendering.js';
-import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './CaretGeometry.js';
-import { collectCommentPositions as collectCommentPositionsFromHelper } from './CommentPositionCollection.js';
-import { getCurrentSectionPageStyles as getCurrentSectionPageStylesFromHelper } from './SectionPageStyles.js';
+} from './utils/A11ySupport.js';
+import { computeSelectionVirtualizationPins } from './selection/SelectionVirtualizationPins.js';
+import { debugLog, updateSelectionDebugHud, type SelectionDebugHudState } from './selection/SelectionDebug.js';
+import { renderCellSelectionOverlay } from './selection/CellSelectionOverlay.js';
+import { renderCaretOverlay, renderSelectionRects } from './selection/LocalSelectionOverlayRendering.js';
+import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './selection/CaretGeometry.js';
+import { collectCommentPositions as collectCommentPositionsFromHelper } from './utils/CommentPositionCollection.js';
+import { getCurrentSectionPageStyles as getCurrentSectionPageStylesFromHelper } from './layout/SectionPageStyles.js';
 import {
   computeAnchorMap as computeAnchorMapFromHelper,
   goToAnchor as goToAnchorFromHelper,
-} from './AnchorNavigation.js';
+} from './utils/AnchorNavigation.js';
 import {
   getCellPosFromTableHit as getCellPosFromTableHitFromHelper,
   getTablePosFromHit as getTablePosFromHitFromHelper,
   hitTestTable as hitTestTableFromHelper,
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
-} from './TableSelectionUtilities.js';
+} from './tables/TableSelectionUtilities.js';
 import {
   createExternalFieldAnnotationDragOverHandler,
   createExternalFieldAnnotationDropHandler,
   setupInternalFieldAnnotationDragHandlers,
-} from './FieldAnnotationDragDrop.js';
+} from './input/FieldAnnotationDragDrop.js';
 import { initHeaderFooterRegistry as initHeaderFooterRegistryFromHelper } from '../header-footer/HeaderFooterRegistryInit.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
@@ -128,7 +128,7 @@ import {
   type HeaderFooterDescriptor,
 } from '../header-footer/HeaderFooterRegistry.js';
 import { EditorOverlayManager } from '../header-footer/EditorOverlayManager.js';
-import { isInRegisteredSurface } from './uiSurfaceRegistry.js';
+import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 
 export type PageSize = {
   w: number;

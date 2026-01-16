@@ -8,7 +8,7 @@ import {
   computeParagraphSelectionRangeAt,
   getFirstTextPosition,
   type MultiClickState,
-} from '../ClickSelectionUtilities.js';
+} from '../input/ClickSelectionUtilities.js';
 
 /**
  * Create a basic ProseMirror schema for testing.

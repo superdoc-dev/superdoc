@@ -1,7 +1,7 @@
 import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
 import { selectionToRects, type PageGeometryHelper } from '@superdoc/layout-bridge';
 
-import type { RemoteCursorState } from './PresentationEditor.js';
+import type { RemoteCursorState } from '../PresentationEditor.js';
 import { validateCursorColor } from './RemoteCursorColors.js';
 
 /**

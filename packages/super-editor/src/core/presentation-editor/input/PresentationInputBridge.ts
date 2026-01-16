@@ -1,5 +1,5 @@
-import { isInRegisteredSurface } from './uiSurfaceRegistry.js';
-import { SLASH_MENU_HANDLED_FLAG } from '../../components/slash-menu/event-flags.js';
+import { isInRegisteredSurface } from '../utils/uiSurfaceRegistry.js';
+import { SLASH_MENU_HANDLED_FLAG } from '../../../components/slash-menu/event-flags.js';
 
 export class PresentationInputBridge {
   #windowRoot: Window;

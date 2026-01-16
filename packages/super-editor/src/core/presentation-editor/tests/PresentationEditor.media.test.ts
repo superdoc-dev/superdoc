@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PresentationEditor } from './PresentationEditor';
+import { PresentationEditor } from '../PresentationEditor.js';
 
 /**
  * Regression test for SD-1313: Images not rendering when loading from persisted YDoc
@@ -14,7 +14,7 @@ const { mockStorage } = vi.hoisted(() => ({
   mockStorage: { media: {} as Record<string, string> },
 }));
 
-vi.mock('../Editor', () => ({
+vi.mock('../../Editor', () => ({
   Editor: vi.fn().mockImplementation(() => ({
     on: vi.fn(),
     off: vi.fn(),
@@ -85,7 +85,7 @@ vi.mock('@superdoc/painter-dom', () => ({
 
 vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: vi.fn(() => ({ width: 100, height: 100 })) }));
 
-vi.mock('./header-footer/HeaderFooterRegistry', () => ({
+vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
   HeaderFooterEditorManager: vi.fn(() => ({
     createEditor: vi.fn(),
     destroyEditor: vi.fn(),
@@ -101,7 +101,7 @@ vi.mock('./header-footer/HeaderFooterRegistry', () => ({
   })),
 }));
 
-vi.mock('./header-footer/EditorOverlayManager', () => ({
+vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: vi.fn(() => ({
     showEditingOverlay: vi.fn(() => ({ success: true, editorHost: document.createElement('div') })),
     hideEditingOverlay: vi.fn(),

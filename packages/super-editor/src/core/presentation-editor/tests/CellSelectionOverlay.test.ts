@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { TableMap, type CellSelection } from 'prosemirror-tables';
 import type { FlowBlock, Layout, Measure, TableBlock, TableFragment, TableMeasure } from '@superdoc/contracts';
 
-import { renderCellSelectionOverlay, type RenderCellSelectionOverlayDeps } from '../CellSelectionOverlay.js';
+import { renderCellSelectionOverlay, type RenderCellSelectionOverlayDeps } from '../selection/CellSelectionOverlay.js';
 
 /**
  * Creates a mock CellSelection object for testing.

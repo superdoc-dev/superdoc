@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowBlock } from '@superdoc/contracts';
 
-import { isWordCharacter, calculateExtendedSelection } from '../SelectionHelpers.js';
+import { isWordCharacter, calculateExtendedSelection } from '../selection/SelectionHelpers.js';
 
 describe('SelectionHelpers', () => {
   describe('isWordCharacter', () => {

@@ -208,7 +208,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
   });
 
   const getThreadingParentId = (comment) => {
-    if (!comment) return comment?.parentCommentId;
+    if (!comment) return undefined;
     const usesRangeThreading =
       comment.threadingStyleOverride === 'range-based' ||
       comment.threadingMethod === 'range-based' ||

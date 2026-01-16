@@ -18,7 +18,10 @@ export function calculateResolvedParagraphProperties(editor, node, $pos) {
   const tableNode = findParentNodeClosestToPos($pos, (node) => node.type.name === 'table');
   const tableStyleId = tableNode?.node.attrs.tableStyleId || null;
   const paragraphProperties = resolveParagraphProperties(
-    { translatedNumbering: editor.converter.translatedNumbering, translatedLinkedStyles: editor.converter.translatedLinkedStyles },
+    {
+      translatedNumbering: editor.converter.translatedNumbering,
+      translatedLinkedStyles: editor.converter.translatedLinkedStyles,
+    },
     node.attrs.paragraphProperties || {},
     tableStyleId,
   );

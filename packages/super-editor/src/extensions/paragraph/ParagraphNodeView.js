@@ -392,7 +392,10 @@ export class ParagraphNodeView {
     // START: modify after CSS styles
     const paragraphProperties = getResolvedParagraphProperties(this.node);
     const runProperties = resolveRunProperties(
-      { translatedNumbering: this.editor.converter.translatedNumbering, translatedLinkedStyles: this.editor.converter.translatedLinkedStyles },
+      {
+        translatedNumbering: this.editor.converter.translatedNumbering,
+        translatedLinkedStyles: this.editor.converter.translatedLinkedStyles,
+      },
       paragraphProperties.runProperties || {},
       paragraphProperties,
       true,

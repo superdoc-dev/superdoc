@@ -3,10 +3,7 @@
  */
 
 import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta, Engines } from '@superdoc/contracts';
-import type {
-  StyleContext as StyleEngineContext,
-  ComputedParagraphStyle,
-} from '@superdoc/style-engine';
+import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
 export type { ConverterContext } from './converter-context.js';

@@ -71,7 +71,10 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           getResolvedParagraphProperties(paragraphNode) ||
           calculateResolvedParagraphProperties(editor, paragraphNode, $pos);
         const runPropertiesFromStyles = resolveRunProperties(
-          { translatedNumbering: editor.converter?.translatedNumbering ?? {}, translatedLinkedStyles: editor.converter?.translatedLinkedStyles ?? {} },
+          {
+            translatedNumbering: editor.converter?.translatedNumbering ?? {},
+            translatedLinkedStyles: editor.converter?.translatedLinkedStyles ?? {},
+          },
           {},
           paragraphProperties,
           false,

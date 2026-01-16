@@ -19,11 +19,7 @@ export {
 } from './borders.js';
 
 // Spacing and indent
-export {
-  normalizeAlignment,
-  normalizeParagraphSpacing,
-  normalizeLineRule,
-} from './spacing-indent.js';
+export { normalizeAlignment, normalizeParagraphSpacing, normalizeLineRule } from './spacing-indent.js';
 
 // Tab stops
 export { normalizeOoxmlTabs, normalizeTabVal, normalizeTabLeader } from './tabs.js';
@@ -32,7 +28,4 @@ export { normalizeOoxmlTabs, normalizeTabVal, normalizeTabLeader } from './tabs.
 export { mirrorIndentForRtl, ensureBidiIndentPx, DEFAULT_BIDI_INDENT_PX } from './bidi.js';
 
 // Paragraph attributes
-export {
-  computeParagraphAttrs,
-  deepClone,
-} from './paragraph.js';
+export { computeParagraphAttrs, deepClone } from './paragraph.js';

@@ -1,7 +1,13 @@
 import { NodeTranslator } from '@translator';
 import { translator as wAbstractNumIdTranslator } from '../../w/abstractNumId';
 import { translator as wLvlOverrideTranslator } from '../../w/lvlOverride';
-import { createIntegerAttributeHandler, encodeProperties, decodeProperties, encodePropertiesByKey, decodePropertiesByKey } from '@converter/v3/handlers/utils.js';
+import {
+  createIntegerAttributeHandler,
+  encodeProperties,
+  decodeProperties,
+  encodePropertiesByKey,
+  decodePropertiesByKey,
+} from '@converter/v3/handlers/utils.js';
 
 /**
  * The NodeTranslator instance for the w:num element.
@@ -34,12 +40,16 @@ export const translator = NodeTranslator.from({
     const decodedAttrs = this.decodeAttributes({ node: { ...params.node, attrs: currentValue } });
 
     const elements = [
-      ...decodeProperties(params, {
-        abstractNumId: wAbstractNumIdTranslator,
-      }, currentValue),
+      ...decodeProperties(
+        params,
+        {
+          abstractNumId: wAbstractNumIdTranslator,
+        },
+        currentValue,
+      ),
       ...decodePropertiesByKey('w:lvlOverride', 'lvlOverrides', wLvlOverrideTranslator, params, currentValue),
     ];
-    
+
     const newNode = {
       name: 'w:num',
       type: 'element',

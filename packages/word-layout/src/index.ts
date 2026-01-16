@@ -4,11 +4,7 @@
  * Track A focuses on defining data interfaces and pure helpers.
  */
 
-import type {
-  WordParagraphLayoutInput,
-  WordParagraphLayoutOutput,
-  WordListSuffix,
-} from './types.js';
+import type { WordParagraphLayoutInput, WordParagraphLayoutOutput, WordListSuffix } from './types.js';
 import { DEFAULT_LIST_HANGING_PX, LIST_MARKER_GAP } from './marker-utils.js';
 import { twipsToPixels } from './unit-conversions.js';
 
@@ -106,7 +102,10 @@ export function computeWordParagraphLayout(input: WordParagraphLayoutInput): Wor
   // Per OOXML spec, firstLine and hanging are mutually exclusive.
   // Validate that firstLine is a finite number to handle NaN, Infinity, and -Infinity gracefully.
   const hasFirstLineIndent =
-    paragraph.indent?.firstLine != null && Number.isFinite(paragraph.indent.firstLine) && paragraph.indent.firstLine > 0 && !paragraph.indent.hanging;
+    paragraph.indent?.firstLine != null &&
+    Number.isFinite(paragraph.indent.firstLine) &&
+    paragraph.indent.firstLine > 0 &&
+    !paragraph.indent.hanging;
 
   let markerBoxWidthPx: number;
   let markerX: number;
@@ -141,7 +140,6 @@ export function computeWordParagraphLayout(input: WordParagraphLayoutInput): Wor
 
   return layout;
 }
-
 
 const normalizeSuffix = (suffix?: string | null): WordListSuffix => {
   if (suffix === 'tab' || suffix === 'space' || suffix === 'nothing') {

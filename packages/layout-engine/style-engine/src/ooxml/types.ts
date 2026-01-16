@@ -55,7 +55,7 @@ export interface ParagraphProperties {
   /** Tab stop definitions for the paragraph. */
   tabStops?: ParagraphTabStop[];
   /** Baseline text alignment within the line. */
-  textAlignment?: "top" | "center" | "baseline" | "bottom" | "auto";
+  textAlignment?: 'top' | 'center' | 'baseline' | 'bottom' | 'auto';
   /** Text direction for the paragraph. */
   textDirection?: string;
   /** Textbox tight wrap setting for the paragraph. */
@@ -129,7 +129,7 @@ export interface ParagraphFrameProperties {
   /** Frame width in twentieths of a point. */
   w?: number;
   /** Wrapping style for the frame. */
-  wrap?: "auto" | "notBeside" | "around" | "tight" | "through" | "none";
+  wrap?: 'auto' | 'notBeside' | 'around' | 'tight' | 'through' | 'none';
   /** Horizontal position. */
   x?: number;
   /** Horizontal alignment. */

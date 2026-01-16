@@ -6,7 +6,13 @@ import { translator as wStyleLinkTranslator } from '../../w/styleLink';
 import { translator as wNumStyleLinkTranslator } from '../../w/numStyleLink';
 import { translator as wMultiLevelTypeTranslator } from '../../w/multiLevelType';
 import { translator as wLvlTranslator } from '../../w/lvl';
-import { createIntegerAttributeHandler, encodeProperties, decodeProperties, encodePropertiesByKey, decodePropertiesByKey } from '@converter/v3/handlers/utils.js';
+import {
+  createIntegerAttributeHandler,
+  encodeProperties,
+  decodeProperties,
+  encodePropertiesByKey,
+  decodePropertiesByKey,
+} from '@converter/v3/handlers/utils.js';
 
 const propertyTranslators = [
   wNsidTranslator,

@@ -11,10 +11,14 @@ import {
 import { isValidHexColor, getHexColorFromDocxSystem } from '@converter/helpers';
 import { SuperConverter } from '@converter/SuperConverter.js';
 import { getUnderlineCssString } from '@extensions/linked-styles/underline-css.js';
-import { resolveDocxFontFamily, resolveRunProperties, resolveParagraphProperties, combineRunProperties } from '@superdoc/style-engine/ooxml';
+import {
+  resolveDocxFontFamily,
+  resolveRunProperties,
+  resolveParagraphProperties,
+  combineRunProperties,
+} from '@superdoc/style-engine/ooxml';
 
 export { resolveRunProperties, resolveParagraphProperties, combineRunProperties };
-
 
 /**
  * Font family converter from SuperConverter (lazy getter to avoid circular import)

@@ -31,10 +31,7 @@ import type {
   ThemeColorPalette,
 } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
-import {
-  computeParagraphAttrs,
-  deepClone,
-} from '../attributes/index.js';
+import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
 import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBreakBlock } from '../sections/index.js';
 import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
@@ -60,7 +57,6 @@ import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
  * This ensures images are always rendered with a fallback size for better UX.
  */
 const DEFAULT_IMAGE_DIMENSION_PX = 100;
-
 
 // ============================================================================
 // Helper functions for inline image detection and conversion
@@ -597,7 +593,6 @@ const extractFirstTextRunFont = (para: PMNode): { fontSizePx?: number; fontFamil
   return font;
 };
 
-
 const applyInlineRunProperties = (
   run: TextRun,
   runProperties: RunProperties | undefined,
@@ -702,10 +697,7 @@ export function paragraphToFlowBlocks(
       ? (para.attrs.paragraphProperties as ParagraphProperties)
       : {};
   const baseBlockId = nextBlockId('paragraph');
-  const { paragraphAttrs, resolvedParagraphProperties } = computeParagraphAttrs(
-    para,
-    converterContext,
-  );
+  const { paragraphAttrs, resolvedParagraphProperties } = computeParagraphAttrs(para, converterContext);
 
   const blocks: FlowBlock[] = [];
   const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
@@ -910,9 +902,7 @@ export function paragraphToFlowBlocks(
         false,
         false,
       );
-      node.content.forEach((child) =>
-        visitNode(child, mergedMarks, activeSdt, resolvedRunProperties, nextHidden),
-      );
+      node.content.forEach((child) => visitNode(child, mergedMarks, activeSdt, resolvedRunProperties, nextHidden));
       return;
     }
 
@@ -920,9 +910,7 @@ export function paragraphToFlowBlocks(
     if (node.type === 'structuredContent' && Array.isArray(node.content)) {
       const inlineMetadata = resolveNodeSdtMetadata(node, 'structuredContent');
       const nextSdt = inlineMetadata ?? activeSdt;
-      node.content.forEach((child) =>
-        visitNode(child, inheritedMarks, nextSdt, activeRunProperties, activeHidden),
-      );
+      node.content.forEach((child) => visitNode(child, inheritedMarks, nextSdt, activeRunProperties, activeHidden));
       return;
     }
 
@@ -1033,9 +1021,7 @@ export function paragraphToFlowBlocks(
         currentRuns.push(tokenRun);
       } else if (Array.isArray(node.content)) {
         // No bookmark found, fall back to treating as transparent container
-        node.content.forEach((child) =>
-          visitNode(child, mergedMarks, activeSdt, activeRunProperties),
-        );
+        node.content.forEach((child) => visitNode(child, mergedMarks, activeSdt, activeRunProperties));
       }
       return;
     }
@@ -1053,9 +1039,7 @@ export function paragraphToFlowBlocks(
       }
       // Process any content inside the bookmark (usually empty)
       if (Array.isArray(node.content)) {
-        node.content.forEach((child) =>
-          visitNode(child, inheritedMarks, activeSdt, activeRunProperties),
-        );
+        node.content.forEach((child) => visitNode(child, inheritedMarks, activeSdt, activeRunProperties));
       }
       return;
     }

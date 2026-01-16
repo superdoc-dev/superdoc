@@ -182,7 +182,15 @@ export const createDocumentJson = (docx, converter, editor) => {
     return {
       pmDoc: result,
       savedTagsToRestore: node,
-      pageStyles: getDocumentStyles(node, docx, converter, editor, numbering, translatedNumbering, translatedLinkedStyles),
+      pageStyles: getDocumentStyles(
+        node,
+        docx,
+        converter,
+        editor,
+        numbering,
+        translatedNumbering,
+        translatedLinkedStyles,
+      ),
       comments,
       footnotes,
       inlineDocumentFonts,

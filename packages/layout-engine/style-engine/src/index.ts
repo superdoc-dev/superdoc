@@ -10,7 +10,6 @@
  * - Conversion to pixels happens at measurement boundary only
  */
 
-
 // Re-export cascade utilities - these are the SINGLE SOURCE OF TRUTH for property merging
 export {
   combineProperties,
@@ -94,7 +93,6 @@ export interface ComputedParagraphStyle {
   tabs?: TabStop[];
 }
 
-
 export interface StyleContext {
   styles?: Record<string, unknown>;
   numbering?: Record<string, unknown>;
@@ -134,7 +132,6 @@ const sdtMetadataCache = new Map<string, SdtMetadata>();
 export function clearSdtMetadataCache(): void {
   sdtMetadataCache.clear();
 }
-
 
 /**
  * Normalizes Structured Document Tag (SDT) metadata into a stable contract shape.

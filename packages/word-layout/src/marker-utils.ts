@@ -21,4 +21,3 @@ export const LIST_MARKER_GAP = 8;
  * The bullet point (•) is the standard Unicode character for unordered lists.
  */
 export const DEFAULT_BULLET_GLYPH = '•';
-

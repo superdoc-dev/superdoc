@@ -3909,7 +3909,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(layout.pages.length).toBeGreaterThan(1);
       // All paragraphs should be laid out somewhere
       const allFragments = layout.pages.flatMap((p) => p.fragments);
-      const blockIds = allFragments.filter((f) => f.kind === 'paragraph').map((f) => (f as ParaFragment).blockId);
+      const blockIds = allFragments.filter((f) => f.kind === 'para').map((f) => (f as ParaFragment).blockId);
       expect(blockIds).toContain('p1');
       expect(blockIds).toContain('p2');
       expect(blockIds).toContain('p3');
@@ -4007,6 +4007,119 @@ describe('requirePageBoundary edge cases', () => {
       // Heading and body should start on same page (chain fits using first line optimization)
       expect(pageContainsBlock(layout.pages[0], 'heading')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'body')).toBe(true);
+    });
+
+    it('reclaims trailing spacing when chain starter has contextualSpacing', () => {
+      // Previous paragraph has spacingAfter, chain starter has contextualSpacing + same style.
+      // The trailing spacing should be reclaimed, making room for the chain.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal', spacingAfter: 10 },
+      };
+      const chainStarter: FlowBlock = {
+        kind: 'paragraph',
+        id: 'chainStarter',
+        runs: [{ text: 'Chain starter', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, contextualSpacing: true, styleId: 'Normal' },
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      // Filler is 40px, chain starter and anchor are each 25px
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(40)],
+        totalHeight: 40,
+      };
+      const chainMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(25)],
+        totalHeight: 25,
+      };
+
+      // Page has 100px content area
+      // After filler (40px) + spacingAfter (10px), cursor is at 50px from top
+      // Available without reclaim: 100 - 50 = 50px
+      // Chain needs: 25 + 25 = 50px (exactly fits with reclaim, doesn't fit without)
+      // With contextualSpacing, the 10px spacingAfter is reclaimed → 60px available
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 100px content
+      };
+
+      const layout = layoutDocument(
+        [filler, chainStarter, anchor],
+        [fillerMeasure, chainMeasure, chainMeasure],
+        options,
+      );
+
+      // All should fit on one page because contextualSpacing reclaims the 10px
+      expect(layout.pages).toHaveLength(1);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'chainStarter')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'anchor')).toBe(true);
+    });
+
+    it('does not reclaim trailing spacing when styles differ', () => {
+      // Previous paragraph has spacingAfter, chain starter has contextualSpacing but DIFFERENT style.
+      // The trailing spacing should NOT be reclaimed.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal', spacingAfter: 10 },
+      };
+      const chainStarter: FlowBlock = {
+        kind: 'paragraph',
+        id: 'chainStarter',
+        runs: [{ text: 'Chain starter', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, contextualSpacing: true, styleId: 'Heading1' }, // Different style
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      // Filler is 50px, chain starter and anchor are each 25px
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(50)],
+        totalHeight: 50,
+      };
+      const chainMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(25)],
+        totalHeight: 25,
+      };
+
+      // Page has 95px content area (155 - 30 - 30)
+      // After filler (50px), cursorY leaves 45px remaining
+      // Chain needs: 25 + 25 = 50px > 45px available (doesn't fit)
+      // Styles differ so no reclaim - chain must move to page 2
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 155 }, // 95px content area
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument(
+        [filler, chainStarter, anchor],
+        [fillerMeasure, chainMeasure, chainMeasure],
+        options,
+      );
+
+      // Chain should move to page 2 because styles differ (no reclaim)
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'chainStarter')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
     });
   });
 });

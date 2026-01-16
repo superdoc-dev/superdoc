@@ -1757,6 +1757,19 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         let state = paginator.ensurePage();
         const availableHeight = state.contentBottom - state.cursorY;
 
+        // Check if first chain member has contextualSpacing that would reclaim trailing space.
+        // When contextualSpacing applies, the previous paragraph's trailing spacing is not
+        // rendered as a gap, so we have more available space than cursorY suggests.
+        const firstMemberBlock = blocks[chain.startIndex] as ParagraphBlock;
+        const firstMemberStyleId =
+          typeof firstMemberBlock.attrs?.styleId === 'string' ? firstMemberBlock.attrs?.styleId : undefined;
+        const firstMemberContextualSpacing = firstMemberBlock.attrs?.contextualSpacing === true;
+        const contextualSpacingApplies =
+          firstMemberContextualSpacing && firstMemberStyleId && state.lastParagraphStyleId === firstMemberStyleId;
+        const prevTrailing =
+          Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
+        const effectiveAvailableHeight = contextualSpacingApplies ? availableHeight + prevTrailing : availableHeight;
+
         const chainHeight = calculateChainHeight(chain, blocks, measures, state);
 
         // Calculate page content height to check if chain fits on a blank page
@@ -1765,7 +1778,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
         // Only advance if chain fits on blank page but not current page
         // (prevents infinite loop for chains taller than page)
-        if (chainFitsOnBlankPage && chainHeight > availableHeight && state.page.fragments.length > 0) {
+        if (chainFitsOnBlankPage && chainHeight > effectiveAvailableHeight && state.page.fragments.length > 0) {
           state = paginator.advanceColumn(state);
         }
       } else if (paraBlock.attrs?.keepNext === true) {

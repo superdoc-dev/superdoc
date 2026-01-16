@@ -889,7 +889,11 @@ export class DomPainter {
       // This bypasses the virtualization cache check
       this.layoutVersion += 1;
       // Clear page states to force full re-render (activeCommentId affects run rendering)
-      // For virtualized mode:
+      // For virtualized mode: remove existing page elements before clearing state
+      // to prevent duplicate pages in the DOM
+      for (const state of this.pageIndexToState.values()) {
+        state.element.remove();
+      }
       this.pageIndexToState.clear();
       this.virtualMountedKey = '';
       // For non-virtualized mode:

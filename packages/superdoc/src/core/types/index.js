@@ -40,6 +40,13 @@
  */
 
 /**
+ * @typedef {Object} CommentsHighlightColors
+ * @property {string} [external] Highlight color for external comments (default: '#B1124B')
+ * @property {string} [internal] Highlight color for internal comments (default: '#078383')
+ * @property {string} [resolved] Highlight color for resolved comments (default: '#808080')
+ */
+
+/**
  * @typedef {Object} Modules
  * @property {Object | false} [comments] Comments module configuration (false to disable)
  * @property {(params: {
@@ -51,6 +58,7 @@
  *   currentUser?: User | null,
  *   superdoc?: SuperDoc | null,
  * }) => boolean | undefined} [comments.permissionResolver] Custom permission resolver for comment actions
+ * @property {CommentsHighlightColors} [comments.highlightColors] Custom colors for comment highlights
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services

@@ -382,10 +382,8 @@ const DEFAULT_PAGE_HEIGHT_PX = 1056;
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
 const COMMENT_EXTERNAL_COLOR = '#B1124B';
 const COMMENT_INTERNAL_COLOR = '#078383';
-const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive/depth-based
+const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
 const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
-const COMMENT_DEPTH_BONUS = 0x1a; // +10% per nesting level
-const COMMENT_MAX_DEPTH_ALPHA = 0x8c; // Cap at ~55%
 
 type LinkRenderData = {
   href?: string;

@@ -869,6 +869,7 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
 };
 
 const handleSuperEditorKeydown = (event) => {
+  console.log('[debug] handleSuperEditorKeydown', event);
   // cmd/ctrl + opt/alt + shift + M
   if ((event.metaKey || event.ctrlKey) && event.altKey && event.shiftKey) {
     if (event.code === 'KeyM') {

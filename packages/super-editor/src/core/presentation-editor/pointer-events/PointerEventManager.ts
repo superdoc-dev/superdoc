@@ -853,6 +853,7 @@ export class PointerEventManager {
   #handleKeyDown(event: KeyboardEvent): void {
     if (!this.#deps) return;
 
+    console.log('[debug] handleKeyDown1', event);
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     if (event.key === 'Escape' && sessionMode !== 'body') {
       event.preventDefault();

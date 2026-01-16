@@ -49,7 +49,7 @@
 .ProseMirror.view-mode .sd-structured-content,
 .ProseMirror.view-mode .sd-structured-content-block {
   padding: 0;
-  border: none;
+  /* border: none; */
 }
 
 .ProseMirror.view-mode .sd-structured-content-draggable {
@@ -59,9 +59,22 @@
 .presentation-editor--viewing .sd-structured-content,
 .presentation-editor--viewing .sd-structured-content-block {
   padding: 0;
-  border: none;
+  /* border: none; */
 }
 
 .presentation-editor--viewing .sd-structured-content-draggable {
   display: none;
+}
+
+.ProseMirror.view-mode[contenteditable='true'] .sd-structured-content,
+.ProseMirror.view-mode[contenteditable='true'] .sd-structured-content-block,
+.presentation-editor--viewing .ProseMirror[contenteditable='true'] .sd-structured-content,
+.presentation-editor--viewing .ProseMirror[contenteditable='true'] .sd-structured-content-block {
+  padding: 1px;
+  border: 1px solid #629be7;
+}
+
+.ProseMirror.view-mode[contenteditable='true'] .sd-structured-content-draggable,
+.presentation-editor--viewing .ProseMirror[contenteditable='true'] .sd-structured-content-draggable {
+  display: inline-flex;
 }

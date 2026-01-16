@@ -3864,6 +3864,7 @@ export class PresentationEditor extends EventEmitter {
       this.#exitHeaderFooterMode();
       return;
     }
+    console.log('[debug] handleKeyDown', event);
     if (event.ctrlKey && event.altKey && !event.shiftKey) {
       if (event.code === 'KeyH') {
         event.preventDefault();

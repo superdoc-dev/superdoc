@@ -457,13 +457,11 @@ const SDT_CONTAINER_STYLES = `
 .presentation-editor--viewing .superdoc-structured-content-block,
 .presentation-editor--viewing .superdoc-structured-content-inline {
   background: none;
-  border: none;
   padding: 0;
 }
 
 .presentation-editor--viewing .superdoc-structured-content-inline:hover {
   background: none;
-  border: none;
 }
 
 .presentation-editor--viewing .superdoc-structured-content__label,
@@ -472,7 +470,7 @@ const SDT_CONTAINER_STYLES = `
 }
 
 /* Print mode: hide visual styling for SDT containers */
-@media print {
+@media print {rod
   .superdoc-document-section,
   .superdoc-structured-content-block,
   .superdoc-structured-content-inline {

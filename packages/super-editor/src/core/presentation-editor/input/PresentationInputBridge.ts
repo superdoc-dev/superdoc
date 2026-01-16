@@ -146,7 +146,9 @@ export class PresentationInputBridge {
    * @param event - The keyboard event from the layout surface
    */
   #forwardKeyboardEvent(event: KeyboardEvent) {
-    if (!this.#isEditable()) {
+    console.log('[debug] forwardKeyboardEvent123123123', event);
+    const allowWhileLocked = this.#isUndoRedoShortcut(event);
+    if (!this.#isEditable() && !allowWhileLocked) {
       return;
     }
     if (this.#shouldSkipSurface(event)) {
@@ -178,6 +180,15 @@ export class PresentationInputBridge {
     this.#dispatchToTarget(event, synthetic);
   }
 
+  #isUndoRedoShortcut(event: KeyboardEvent): boolean {
+    const modifier = event.metaKey || event.ctrlKey;
+    if (!modifier) return false;
+    const key = event.key?.toLowerCase();
+    if (key === 'z') return true;
+    if (key === 'y') return true;
+    return false;
+  }
+
   /**
    * Forwards text input events (beforeinput) to the hidden editor.
    * Skips composition events and uses microtask deferral for cooperative handling.
@@ -185,6 +196,7 @@ export class PresentationInputBridge {
    * @param event - The input event from the layout surface
    */
   #forwardTextEvent(event: InputEvent | TextEvent) {
+    console.log('[debug] forwardTextEvent123123123', event);
     if (!this.#isEditable()) {
       return;
     }

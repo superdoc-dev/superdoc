@@ -62,7 +62,7 @@ describe('createDocumentJson', () => {
       footerIds: {},
     };
 
-    const editor = { options: {} };
+    const editor = { options: {}, emit: vi.fn() };
 
     const result = createDocumentJson(docx, converter, editor);
 

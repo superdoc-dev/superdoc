@@ -60,7 +60,7 @@ describe('w:latentStyles translator', () => {
   });
 
   describe('decode', () => {
-    it.only('should decode latentStyles into OOXML elements', () => {
+    it('should decode latentStyles into OOXML elements', () => {
       const superDocNode = {
         attrs: {
           latentStyles: {

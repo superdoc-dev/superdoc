@@ -592,7 +592,7 @@ function getStyleDefinitions(docx) {
   return allParsedStyles;
 }
 
-function translateStyleDefinitions(docx) {
+export function translateStyleDefinitions(docx) {
   const styles = docx['word/styles.xml'];
   if (!styles) return [];
   const stylesElement = styles.elements[0];

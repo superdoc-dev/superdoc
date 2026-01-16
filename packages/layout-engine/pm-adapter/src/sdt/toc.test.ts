@@ -149,11 +149,6 @@ describe('toc', () => {
       styles: new Map(),
       numbering: new Map(),
     };
-    const mockListCounterContext = {
-      getListCounter: vi.fn(),
-      incrementListCounter: vi.fn(),
-      resetListCounter: vi.fn(),
-    };
     const mockHyperlinkConfig = {
       mode: 'preserve' as const,
     };
@@ -197,7 +192,6 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
         },
         { blocks, recordBlockKind },
@@ -253,7 +247,6 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
         },
         { blocks, recordBlockKind },
@@ -307,7 +300,6 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
         },
         { blocks, recordBlockKind },
@@ -359,7 +351,6 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
         },
         { blocks, recordBlockKind },
@@ -416,7 +407,6 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
         },
         { blocks, recordBlockKind },
@@ -464,7 +454,6 @@ describe('toc', () => {
           defaultFont: 'Calibri',
           defaultSize: 14,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           bookmarks: mockBookmarks,
           trackedChanges: mockTrackedChanges,
           hyperlinkConfig: mockHyperlinkConfig,
@@ -480,7 +469,6 @@ describe('toc', () => {
         'Calibri',
         14,
         mockStyleContext,
-        mockListCounterContext,
         mockTrackedChanges,
         mockBookmarks,
         mockHyperlinkConfig,

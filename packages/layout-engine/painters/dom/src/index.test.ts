@@ -764,6 +764,7 @@ describe('DomPainter', () => {
               y: 0,
               width: 400,
               markerWidth: 24,
+              markerTextWidth: 12,
             },
           ],
         },
@@ -860,6 +861,7 @@ describe('DomPainter', () => {
               y: 0,
               width: 400,
               markerWidth: 24,
+              markerTextWidth: 12,
             },
           ],
         },
@@ -872,11 +874,11 @@ describe('DomPainter', () => {
     const firstLine = mount.querySelector('.superdoc-line') as HTMLElement;
     // Word-spacing is calculated based on available width AFTER accounting for marker position + inline width.
     // Fragment has indent: { left: 48, hanging: 24 }, so markerStartPos = 48 - 24 = 24
-    // fragment.markerTextWidth is not set, so falls back to fragment.markerWidth = 24
-    // Text starts at: markerStartPos (24) + markerTextWidth (24) + space (~4px) = 52px
-    // availableWidth = 400 - 52 = 348
-    // slack = 348 - 180 = 168, wordSpacing = 168 / 5 = 33.6px
-    expect(firstLine.style.wordSpacing).toBe('33.6px');
+    // fragment.markerTextWidth is 12
+    // Text starts at: markerStartPos (24) + markerTextWidth (12) + space (4px) = 40px
+    // availableWidth = 400 - 40 = 360
+    // slack = 360 - 180 = 180, wordSpacing = 180 / 5 = 36px
+    expect(firstLine.style.wordSpacing).toBe('36px');
 
     const suffix = firstLine.querySelector('.superdoc-marker-suffix-space') as HTMLElement;
     expect(suffix).toBeTruthy();
@@ -944,6 +946,7 @@ describe('DomPainter', () => {
               y: 0,
               width: 400,
               markerWidth: 24,
+              markerTextWidth: 12,
             },
           ],
         },
@@ -1855,6 +1858,7 @@ describe('DomPainter', () => {
               y: 96,
               width: 300,
               markerWidth: 20,
+              markerTextWidth: 12,
             },
           ],
         },
@@ -1943,6 +1947,7 @@ describe('DomPainter', () => {
               y: 120,
               width: 300,
               markerWidth: 24,
+              markerTextWidth: 12,
             },
           ],
         },
@@ -2028,6 +2033,7 @@ describe('DomPainter', () => {
               y: 96,
               width: 300,
               markerWidth: 15,
+              markerTextWidth: 10,
             },
           ],
         },
@@ -2047,10 +2053,10 @@ describe('DomPainter', () => {
 
     // Tab should reach implicit tab stop at indentLeft (48px)
     // markerStartPos = paraIndentLeft - hanging = 48 - 24 = 24
-    // currentPos = markerStartPos + markerWidth = 24 + 15 = 39
+    // currentPos = markerStartPos + markerTextWidth = 24 + 10 = 34
     // implicitTabStop = paraIndentLeft = 48
-    // tabWidth = 48 - 39 = 9
-    const expectedTabWidth = 9;
+    // tabWidth = 48 - 34 = 14
+    const expectedTabWidth = 14;
     expect(tabEl.style.width).toBe(`${expectedTabWidth}px`);
   });
 
@@ -2116,6 +2122,7 @@ describe('DomPainter', () => {
               y: 96,
               width: 300,
               markerWidth: 45,
+              markerTextWidth: 40,
             },
           ],
         },
@@ -2135,11 +2142,11 @@ describe('DomPainter', () => {
 
     // Marker extends past implicit tab stop, so advance to next default tab interval
     // markerStartPos = paraIndentLeft - hanging = 24 - 12 = 12
-    // currentPos = markerStartPos + markerWidth = 12 + 45 = 57
+    // currentPos = markerStartPos + markerTextWidth = 12 + 40 = 52
     // implicitTabStop = paraIndentLeft = 24
     // tabWidth would be negative (24 - 57 = -33), so use default tab interval
-    // tabWidth = 48 - (57 % 48) = 48 - 9 = 39
-    const expectedTabWidth = 39;
+    // tabWidth = 48 - (52 % 48) = 48 - 4 = 44
+    const expectedTabWidth = 44;
     expect(tabEl.style.width).toBe(`${expectedTabWidth}px`);
   });
 
@@ -2208,6 +2215,7 @@ describe('DomPainter', () => {
               width: 300,
               markerWidth: 20,
               markerGutter: 12,
+              markerTextWidth: 10,
             },
           ],
         },
@@ -2225,8 +2233,8 @@ describe('DomPainter', () => {
     const tabEl = fragment.querySelector('.superdoc-tab') as HTMLElement;
     expect(tabEl).toBeTruthy();
 
-    // For right-justified markers, use fragment.markerGutter
-    const expectedTabWidth = 12;
+    // For right-justified markers without firstLine, tab width uses hanging indent
+    const expectedTabWidth = 24;
     expect(tabEl.style.width).toBe(`${expectedTabWidth}px`);
   });
 
@@ -8662,6 +8670,7 @@ describe('applyRunDataAttributes', () => {
                 y: 24,
                 width: 300,
                 markerWidth: 15,
+                markerTextWidth: 10,
                 pmStart: 0,
                 pmEnd: 14,
               },
@@ -8758,6 +8767,7 @@ describe('applyRunDataAttributes', () => {
                 y: 24,
                 width: 300,
                 markerWidth: 15,
+                markerTextWidth: 10,
                 pmStart: 0,
                 pmEnd: 4,
               },
@@ -8849,6 +8859,7 @@ describe('applyRunDataAttributes', () => {
                 y: 24,
                 width: 300,
                 markerWidth: 15,
+                markerTextWidth: 10,
                 pmStart: 0,
                 pmEnd: 4,
               },
@@ -8924,6 +8935,7 @@ describe('applyRunDataAttributes', () => {
                 y: 24,
                 width: 300,
                 markerWidth: 15,
+                markerTextWidth: 10,
                 pmStart: 0,
                 pmEnd: 4,
               },

@@ -5,7 +5,7 @@ import '@superdoc/common/styles/common-styles.css';
 import { ref, shallowRef, computed, onMounted } from 'vue';
 import { NMessageProvider } from 'naive-ui';
 import { SuperEditor } from '@superdoc/super-editor';
-import { PresentationEditor } from '@core/PresentationEditor.js';
+import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getFileObject } from '@superdoc/common/helpers/get-file-object';
 import { DOCX } from '@superdoc/common';
 import { SuperToolbar } from '@components/toolbar/super-toolbar';

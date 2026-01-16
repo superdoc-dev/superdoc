@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { PresentationEditor } from './PresentationEditor';
-import type { Editor as EditorInstance } from './Editor';
-import { Editor } from './Editor';
+import type { Editor as EditorInstance } from '../Editor';
+import { Editor } from '../Editor';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -148,7 +148,7 @@ const {
 });
 
 // Mock Editor class
-vi.mock('./Editor', () => {
+vi.mock('../Editor', () => {
   return {
     Editor: vi.fn().mockImplementation(() => ({
       setDocumentMode: vi.fn(),

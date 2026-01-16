@@ -15,6 +15,6 @@ export * as utilities from './utilities/index.js';
 
 // This needs to be last otherwise it causes circular dependencies
 export * from './Editor.js';
-export * from './PresentationEditor.js';
+export * from './presentation-editor/index.js';
 
 export { default as DocxZipper } from './DocxZipper.js';

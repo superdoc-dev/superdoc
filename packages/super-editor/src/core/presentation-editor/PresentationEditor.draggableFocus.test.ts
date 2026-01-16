@@ -81,7 +81,7 @@ const {
 });
 
 // Mock Editor class
-vi.mock('./Editor.js', () => {
+vi.mock('../Editor.js', () => {
   return {
     Editor: vi.fn().mockImplementation(() => {
       const domElement = document.createElement('div');

@@ -1,6 +1,6 @@
 import { selectionToRects, type PageGeometryHelper } from '@superdoc/layout-bridge';
 import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
-import type { Editor } from './Editor.js';
+import type { Editor } from '../Editor.js';
 
 /**
  * Build an anchor map (bookmark name -> page index) using fragment PM ranges.

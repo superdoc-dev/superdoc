@@ -56,7 +56,7 @@ import { createDocFromMarkdown, createDocFromHTML } from '@core/helpers/index.js
 import { isHeadless } from '../utils/headless-helpers.js';
 import { canUseDOM } from '../utils/canUseDOM.js';
 import { buildSchemaSummary } from './schema-summary.js';
-import { PresentationEditor } from './PresentationEditor';
+import { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 

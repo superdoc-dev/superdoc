@@ -3,8 +3,8 @@ import { CellSelection } from 'prosemirror-tables';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
-import { Editor } from './Editor.js';
-import { EventEmitter } from './EventEmitter.js';
+import { Editor } from '../Editor.js';
+import { EventEmitter } from '../EventEmitter.js';
 import { EpochPositionMapper } from './EpochPositionMapper.js';
 import { DomPositionIndex } from './DomPositionIndex.js';
 import { DomPositionIndexObserverManager } from './DomPositionIndexObserverManager.js';
@@ -62,10 +62,10 @@ import {
   createExternalFieldAnnotationDropHandler,
   setupInternalFieldAnnotationDragHandlers,
 } from './FieldAnnotationDragDrop.js';
-import { initHeaderFooterRegistry as initHeaderFooterRegistryFromHelper } from './header-footer/HeaderFooterRegistryInit.js';
-import { decodeRPrFromMarks } from './super-converter/styles.js';
-import { halfPointToPoints } from './super-converter/helpers.js';
-import { layoutPerRIdHeaderFooters as layoutPerRIdHeaderFootersFromHelper } from './header-footer/HeaderFooterPerRidLayout.js';
+import { initHeaderFooterRegistry as initHeaderFooterRegistryFromHelper } from '../header-footer/HeaderFooterRegistryInit.js';
+import { decodeRPrFromMarks } from '../super-converter/styles.js';
+import { halfPointToPoints } from '../super-converter/helpers.js';
+import { layoutPerRIdHeaderFooters as layoutPerRIdHeaderFootersFromHelper } from '../header-footer/HeaderFooterPerRidLayout.js';
 import { toFlowBlocks, ConverterContext } from '@superdoc/pm-adapter';
 import {
   incrementalLayout,
@@ -126,8 +126,8 @@ import {
   HeaderFooterEditorManager,
   HeaderFooterLayoutAdapter,
   type HeaderFooterDescriptor,
-} from './header-footer/HeaderFooterRegistry.js';
-import { EditorOverlayManager } from './header-footer/EditorOverlayManager.js';
+} from '../header-footer/HeaderFooterRegistry.js';
+import { EditorOverlayManager } from '../header-footer/EditorOverlayManager.js';
 import { isInRegisteredSurface } from './uiSurfaceRegistry.js';
 
 export type PageSize = {

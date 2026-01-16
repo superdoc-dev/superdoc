@@ -1,20 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PresentationEditor } from './PresentationEditor';
 
-/**
- * Regression test for SD-1313: Images not rendering when loading from persisted YDoc
- *
- * The bug: PresentationEditor passed options.mediaFiles (empty) to toFlowBlocks
- * instead of storage.image.media (populated from YDoc).
- */
+let capturedLayoutOptions: any;
 
-let capturedMediaFiles: Record<string, string> | undefined;
-
-const { mockStorage } = vi.hoisted(() => ({
-  mockStorage: { media: {} as Record<string, string> },
-}));
-
-vi.mock('./Editor', () => ({
+vi.mock('../Editor', () => ({
   Editor: vi.fn().mockImplementation(() => ({
     on: vi.fn(),
     off: vi.fn(),
@@ -23,7 +12,17 @@ vi.mock('./Editor', () => ({
     setOptions: vi.fn(),
     getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
     isEditable: true,
-    state: { selection: { from: 0, to: 0 }, doc: { nodeSize: 100, content: { size: 100 }, descendants: vi.fn() } },
+    schema: {},
+    state: {
+      selection: { from: 0, to: 0 },
+      doc: {
+        nodeSize: 100,
+        content: { size: 100 },
+        descendants: vi.fn((cb: (node: any, pos: number) => void) => {
+          cb({ type: { name: 'footnoteReference' }, attrs: { id: '1' }, nodeSize: 1 }, 10);
+        }),
+      },
+    },
     view: { dom: document.createElement('div'), hasFocus: vi.fn(() => false) },
     options: { documentId: 'test', element: document.createElement('div'), mediaFiles: {} },
     converter: {
@@ -31,20 +30,29 @@ vi.mock('./Editor', () => ({
       footers: {},
       headerIds: { default: null, ids: [] },
       footerIds: { default: null, ids: [] },
+      footnotes: [{ id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] }],
     },
-    storage: { image: mockStorage },
+    storage: { image: { media: {} } },
   })),
 }));
 
 vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: vi.fn((_, opts) => {
-    capturedMediaFiles = opts?.mediaFiles;
+  toFlowBlocks: vi.fn((_: unknown, opts?: any) => {
+    if (typeof opts?.blockIdPrefix === 'string' && opts.blockIdPrefix.startsWith('footnote-')) {
+      return {
+        blocks: [{ kind: 'paragraph', runs: [{ kind: 'text', text: 'Body', pmStart: 5, pmEnd: 9 }] }],
+        bookmarks: new Map(),
+      };
+    }
     return { blocks: [], bookmarks: new Map() };
   }),
 }));
 
 vi.mock('@superdoc/layout-bridge', () => ({
-  incrementalLayout: vi.fn(async () => ({ layout: { pages: [] }, measures: [] })),
+  incrementalLayout: vi.fn(async (...args: any[]) => {
+    capturedLayoutOptions = args[3];
+    return { layout: { pages: [] }, measures: [] };
+  }),
   selectionToRects: vi.fn(() => []),
   clickToPosition: vi.fn(),
   getFragmentAtPosition: vi.fn(),
@@ -119,15 +127,14 @@ vi.mock('y-prosemirror', () => ({
   relativePositionToAbsolutePosition: vi.fn((relPos) => relPos?.pos ?? null),
 }));
 
-describe('SD-1313: toFlowBlocks receives media from storage.image.media', () => {
+describe('PresentationEditor - footnote number marker PM position', () => {
   let editor: PresentationEditor;
   let container: HTMLElement;
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
-    capturedMediaFiles = undefined;
-    mockStorage.media = {};
+    capturedLayoutOptions = undefined;
   });
 
   afterEach(() => {
@@ -136,24 +143,18 @@ describe('SD-1313: toFlowBlocks receives media from storage.image.media', () => 
     vi.clearAllMocks();
   });
 
-  it('passes storage.image.media to toFlowBlocks', async () => {
-    mockStorage.media = { 'word/media/image1.jpeg': 'base64-data' };
-
+  it('adds pmStart/pmEnd to the data-sd-footnote-number marker run', async () => {
     editor = new PresentationEditor({ element: container });
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(capturedMediaFiles?.['word/media/image1.jpeg']).toBe('base64-data');
-  });
+    const footnotes = capturedLayoutOptions?.footnotes;
+    expect(footnotes).toBeTruthy();
+    const blocks = footnotes.blocksById?.get('1');
+    expect(blocks?.[0]?.kind).toBe('paragraph');
 
-  it('includes all media entries from storage', async () => {
-    mockStorage.media = {
-      'word/media/image1.jpeg': 'data-1',
-      'word/media/image2.png': 'data-2',
-    };
-
-    editor = new PresentationEditor({ element: container });
-    await new Promise((r) => setTimeout(r, 100));
-
-    expect(Object.keys(capturedMediaFiles || {})).toHaveLength(2);
+    const markerRun = blocks?.[0]?.runs?.[0];
+    expect(markerRun?.dataAttrs?.['data-sd-footnote-number']).toBe('true');
+    expect(markerRun?.pmStart).toBe(5);
+    expect(markerRun?.pmEnd).toBe(6);
   });
 });

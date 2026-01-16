@@ -47,7 +47,7 @@ const { mockEditorConverterStore, mockAbsolutePositionToRelativePosition, mockRe
   });
 
 // Mock Editor class
-vi.mock('./Editor', () => ({
+vi.mock('../Editor', () => ({
   Editor: vi.fn().mockImplementation(() => ({
     setDocumentMode: vi.fn(),
     setOptions: vi.fn(),

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { PresentationEditor } from '@core/PresentationEditor.js';
+import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 

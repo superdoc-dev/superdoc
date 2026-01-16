@@ -1,6 +1,6 @@
 /**
- * Pointer event handling module for PresentationEditor.
+ * Editor input handling module for PresentationEditor.
  */
 
-export { PointerEventManager } from './PointerEventManager.js';
-export type { LayoutState, PointerEventDependencies, PointerEventCallbacks } from './PointerEventManager.js';
+export { EditorInputManager } from './EditorInputManager.js';
+export type { LayoutState, EditorInputDependencies, EditorInputCallbacks } from './EditorInputManager.js';

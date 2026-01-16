@@ -1,0 +1,21 @@
+name = "superdoc-page-count"
+compatibility_date = "2023-12-01"
+
+[env.production]
+account_id = ""
+zone_id = ""
+
+# Pages configuration
+pages_build_output_dir = "dist"
+
+# Build configuration
+[build]
+command = "npm run build"
+cwd = ""
+
+# Environment variables (if needed)
+[vars]
+
+# Custom domains (optional)
+[env.production.routes]
+# Add custom domains here if needed

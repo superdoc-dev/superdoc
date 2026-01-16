@@ -76,7 +76,7 @@ catalogs:
       specifier: ^4.4.4
       version: 4.4.4
     eslint-plugin-import-x:
-      specifier: ^4.16.1
+      specifier: 4.16.1
       version: 4.16.1
     eslint-plugin-jsdoc:
       specifier: ^54.1.0

@@ -68,11 +68,7 @@ import {
   clickToPosition,
   getFragmentAtPosition,
   extractIdentifierFromConverter,
-  getHeaderFooterType,
-  getBucketForPageNumber,
-  getBucketRepresentative,
   buildMultiSectionIdentifier,
-  getHeaderFooterTypeForSection,
   layoutHeaderFooterWithCache as _layoutHeaderFooterWithCache,
   PageGeometryHelper,
 } from '@superdoc/layout-bridge';
@@ -3747,427 +3743,20 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  /**
+   * Update decoration providers for header/footer.
+   * Delegates to HeaderFooterSessionManager which handles provider creation.
+   */
   #updateDecorationProviders(layout: Layout) {
-    if (this.#headerFooterSession) {
-      this.#headerFooterSession.headerDecorationProvider = this.#createDecorationProvider('header', layout);
-      this.#headerFooterSession.footerDecorationProvider = this.#createDecorationProvider('footer', layout);
-      this.#headerFooterSession.rebuildRegions(layout);
-    }
+    this.#headerFooterSession?.updateDecorationProviders(layout);
   }
 
   /**
-   * Computes layout metrics for header/footer decoration rendering.
-   *
-   * This helper consolidates the calculation of layout height, container height, and vertical offset
-   * for header/footer content, ensuring consistent metrics across both per-rId and variant-based layouts.
-   *
-   * For headers:
-   * - layoutHeight: The actual measured height of the header content
-   * - containerHeight: The larger of the box height (space between headerDistance and topMargin) or layoutHeight
-   * - offset: Always positioned at headerDistance from page top (Word's model)
-   *
-   * For footers:
-   * - layoutHeight: The actual measured height of the footer content
-   * - containerHeight: The larger of the box height (space between bottomMargin and footerDistance) or layoutHeight
-   * - offset: Positioned so the container bottom aligns with footerDistance from page bottom
-   *   When content exceeds the nominal space (box.height), the footer extends upward into the body area,
-   *   matching Word's behavior where overflow pushes body text up rather than clipping.
-   *
-   * @param kind - Whether this is a header or footer
-   * @param layoutHeight - The measured height of the header/footer content layout (may be 0 if layout has no height)
-   * @param box - The computed decoration box containing nominal position and dimensions
-   * @param pageHeight - Total page height in points
-   * @param footerMargin - Footer margin (footerDistance) from page bottom, used only for footer offset calculation
-   * @returns Object containing layoutHeight (validated as non-negative finite number),
-   *          containerHeight (max of box height and layout height), and offset (vertical position from page top)
+   * Hit test for header/footer regions at a given point.
+   * Delegates to HeaderFooterSessionManager which manages region tracking.
    */
-  #computeHeaderFooterMetrics(
-    kind: 'header' | 'footer',
-    layoutHeight: number,
-    box: { height: number; offset: number },
-    pageHeight: number,
-    footerMargin: number,
-  ): { layoutHeight: number; containerHeight: number; offset: number } {
-    // Ensure layoutHeight is a valid finite number, default to 0 if not
-    const validatedLayoutHeight = Number.isFinite(layoutHeight) && layoutHeight >= 0 ? layoutHeight : 0;
-
-    // Container must accommodate both the nominal box height and the actual content height
-    const containerHeight = Math.max(box.height, validatedLayoutHeight);
-
-    // Calculate vertical offset based on header/footer type
-    // Headers: Always start at headerDistance (box.offset) from page top
-    // Footers: Position so container bottom is at footerDistance from page bottom
-    //   - If content is taller than box.height, this extends the footer upward
-    //   - This matches Word's behavior where overflow grows into body area
-    const offset = kind === 'header' ? box.offset : Math.max(0, pageHeight - footerMargin - containerHeight);
-
-    return {
-      layoutHeight: validatedLayoutHeight,
-      containerHeight,
-      offset,
-    };
-  }
-
-  #createDecorationProvider(kind: 'header' | 'footer', layout: Layout): PageDecorationProvider | undefined {
-    const results =
-      kind === 'header'
-        ? this.#headerFooterSession?.headerLayoutResults
-        : this.#headerFooterSession?.footerLayoutResults;
-    const layoutsByRId =
-      kind === 'header' ? this.#headerFooterSession?.headerLayoutsByRId : this.#headerFooterSession?.footerLayoutsByRId;
-
-    if ((!results || results.length === 0) && (!layoutsByRId || layoutsByRId.size === 0)) {
-      return undefined;
-    }
-
-    const multiSectionId = this.#headerFooterSession?.multiSectionIdentifier;
-    const legacyIdentifier =
-      this.#headerFooterSession?.headerFooterIdentifier ??
-      extractIdentifierFromConverter((this.#editor as Editor & { converter?: unknown }).converter);
-
-    const sectionFirstPageNumbers = new Map<number, number>();
-    for (const p of layout.pages) {
-      const idx = p.sectionIndex ?? 0;
-      if (!sectionFirstPageNumbers.has(idx)) {
-        sectionFirstPageNumbers.set(idx, p.number);
-      }
-    }
-
-    return (pageNumber, pageMargins, page) => {
-      const sectionIndex = page?.sectionIndex ?? 0;
-      const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
-      const sectionPageNumber =
-        typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
-      const headerFooterType = multiSectionId
-        ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, { kind, sectionPageNumber })
-        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind });
-
-      // Resolve the section-specific rId for this header/footer variant.
-      // Implements Word's OOXML inheritance model:
-      //   1. Try current section's variant (e.g., 'first' header for first page with titlePg)
-      //   2. If not found, inherit from previous section's same variant
-      //   3. Final fallback: use current section's 'default' variant
-      // This ensures documents with multi-section layouts render correctly when sections
-      // don't explicitly define all header/footer variants (common in Word documents).
-      let sectionRId: string | undefined;
-      if (page?.sectionRefs && kind === 'header') {
-        sectionRId = page.sectionRefs.headerRefs?.[headerFooterType as keyof typeof page.sectionRefs.headerRefs];
-        // Step 2: Inherit from previous section if variant not found
-        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
-          const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
-          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
-        }
-        // Step 3: Fall back to current section's 'default'
-        if (!sectionRId && headerFooterType !== 'default') {
-          sectionRId = page.sectionRefs.headerRefs?.default;
-        }
-      } else if (page?.sectionRefs && kind === 'footer') {
-        sectionRId = page.sectionRefs.footerRefs?.[headerFooterType as keyof typeof page.sectionRefs.footerRefs];
-        // Step 2: Inherit from previous section if variant not found
-        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
-          const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
-          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
-        }
-        // Step 3: Fall back to current section's 'default'
-        if (!sectionRId && headerFooterType !== 'default') {
-          sectionRId = page.sectionRefs.footerRefs?.default;
-        }
-      }
-
-      if (!headerFooterType) {
-        return null;
-      }
-
-      // PRIORITY 1: Try per-rId layout if we have a section-specific rId
-      if (sectionRId && layoutsByRId.has(sectionRId)) {
-        const rIdLayout = layoutsByRId.get(sectionRId);
-        // Defensive null check: layoutsByRId.has() should guarantee the value exists,
-        // but we verify to prevent runtime errors if the Map state is inconsistent
-        if (!rIdLayout) {
-          console.warn(
-            `[PresentationEditor] Inconsistent state: layoutsByRId.has('${sectionRId}') returned true but get() returned undefined`,
-          );
-          // Fall through to PRIORITY 2 (variant-based layout)
-        } else {
-          const slotPage = this.#findHeaderFooterPageForPageNumber(rIdLayout.layout.pages, pageNumber);
-          if (slotPage) {
-            const fragments = slotPage.fragments ?? [];
-
-            const pageHeight =
-              page?.size?.h ?? layout.pageSize?.h ?? this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-            const margins = pageMargins ?? layout.pages[0]?.margins ?? this.#layoutOptions.margins ?? DEFAULT_MARGINS;
-            const decorationMargins =
-              kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
-            const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
-
-            // Use helper to compute metrics with type safety and consistent logic
-            const rawLayoutHeight = rIdLayout.layout.height ?? 0;
-            const metrics = this.#computeHeaderFooterMetrics(
-              kind,
-              rawLayoutHeight,
-              box,
-              pageHeight,
-              margins.footer ?? 0,
-            );
-
-            // Normalize fragments to start at y=0 if minY is negative
-            const layoutMinY = rIdLayout.layout.minY ?? 0;
-            const normalizedFragments =
-              layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
-
-            return {
-              fragments: normalizedFragments,
-              height: metrics.containerHeight,
-              contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
-              offset: metrics.offset,
-              marginLeft: box.x,
-              contentWidth: box.width,
-              headerId: sectionRId,
-              sectionType: headerFooterType,
-              minY: layoutMinY,
-              box: {
-                x: box.x,
-                y: metrics.offset,
-                width: box.width,
-                height: metrics.containerHeight,
-              },
-              hitRegion: {
-                x: box.x,
-                y: metrics.offset,
-                width: box.width,
-                height: metrics.containerHeight,
-              },
-            };
-          }
-        }
-      }
-
-      // PRIORITY 2: Fall back to variant-based layout (legacy behavior)
-      if (!results || results.length === 0) {
-        return null;
-      }
-
-      const variant = results.find((entry) => entry.type === headerFooterType);
-      if (!variant || !variant.layout?.pages?.length) {
-        return null;
-      }
-
-      const slotPage = this.#findHeaderFooterPageForPageNumber(variant.layout.pages, pageNumber);
-      if (!slotPage) {
-        return null;
-      }
-      const fragments = slotPage.fragments ?? [];
-
-      const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-      const margins = pageMargins ?? layout.pages[0]?.margins ?? this.#layoutOptions.margins ?? DEFAULT_MARGINS;
-      const decorationMargins =
-        kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
-      const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
-
-      // Use helper to compute metrics with type safety and consistent logic
-      const rawLayoutHeight = variant.layout.height ?? 0;
-      const metrics = this.#computeHeaderFooterMetrics(kind, rawLayoutHeight, box, pageHeight, margins.footer ?? 0);
-      const fallbackId = this.#headerFooterSession?.manager?.getVariantId(kind, headerFooterType);
-      const finalHeaderId = sectionRId ?? fallbackId ?? undefined;
-
-      // Normalize fragments to start at y=0 if minY is negative
-      const layoutMinY = variant.layout.minY ?? 0;
-      const normalizedFragments = layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
-
-      return {
-        fragments: normalizedFragments,
-        height: metrics.containerHeight,
-        contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
-        offset: metrics.offset,
-        marginLeft: box.x,
-        contentWidth: box.width,
-        headerId: finalHeaderId,
-        sectionType: headerFooterType,
-        minY: layoutMinY,
-        box: {
-          x: box.x,
-          y: metrics.offset,
-          width: box.width,
-          height: metrics.containerHeight,
-        },
-        hitRegion: {
-          x: box.x,
-          y: metrics.offset,
-          width: box.width,
-          height: metrics.containerHeight,
-        },
-      };
-    };
-  }
-
-  /**
-   * Finds the header/footer page layout for a given page number with bucket fallback.
-   *
-   * Lookup strategy:
-   * 1. Try exact match first (find page with matching number)
-   * 2. If bucketing is used, fall back to the bucket's representative page
-   * 3. Finally, fall back to the first available page
-   *
-   * Digit buckets (for large documents):
-   * - d1: pages 1-9 → representative page 5
-   * - d2: pages 10-99 → representative page 50
-   * - d3: pages 100-999 → representative page 500
-   * - d4: pages 1000+ → representative page 5000
-   *
-   * @param pages - Array of header/footer layout pages from the variant
-   * @param pageNumber - Physical page number to find layout for (1-indexed)
-   * @returns Header/footer page layout, or undefined if no suitable page found
-   */
-  #findHeaderFooterPageForPageNumber(
-    pages: Array<{ number: number; fragments: Fragment[] }>,
-    pageNumber: number,
-  ): { number: number; fragments: Fragment[] } | undefined {
-    if (!pages || pages.length === 0) {
-      return undefined;
-    }
-
-    // 1. Try exact match first
-    const exactMatch = pages.find((p) => p.number === pageNumber);
-    if (exactMatch) {
-      return exactMatch;
-    }
-
-    // 2. If bucketing is used, find the representative for this page's bucket
-    const bucket = getBucketForPageNumber(pageNumber);
-    const representative = getBucketRepresentative(bucket);
-    const bucketMatch = pages.find((p) => p.number === representative);
-    if (bucketMatch) {
-      return bucketMatch;
-    }
-
-    // 3. Final fallback: return the first available page
-    return pages[0];
-  }
-
-  #computeDecorationBox(kind: 'header' | 'footer', pageMargins?: PageMargins, pageHeight?: number) {
-    const margins = pageMargins ?? this.#layoutOptions.margins ?? DEFAULT_MARGINS;
-    const pageSize = this.#layoutOptions.pageSize ?? DEFAULT_PAGE_SIZE;
-    const left = margins.left ?? DEFAULT_MARGINS.left!;
-    const right = margins.right ?? DEFAULT_MARGINS.right!;
-    const width = Math.max(pageSize.w - (left + right), 1);
-    const totalHeight = pageHeight ?? pageSize.h;
-
-    // MS Word positioning:
-    // - Header: ALWAYS starts at headerMargin (headerDistance) from page top
-    // - Footer: ends at footerMargin from page bottom, can extend up to bottomMargin
-    // Word keeps header at headerDistance regardless of topMargin value.
-    // Even for zero-margin docs, the header content starts at headerDistance from page top.
-    if (kind === 'header') {
-      const headerMargin = margins.header ?? 0;
-      const topMargin = margins.top ?? DEFAULT_MARGINS.top ?? 0;
-      // Height is the space available for header (between headerMargin and topMargin)
-      const height = Math.max(topMargin - headerMargin, 1);
-      // Header always starts at headerDistance from page top, matching Word behavior
-      const offset = headerMargin;
-      return { x: left, width, height, offset };
-    } else {
-      const footerMargin = margins.footer ?? 0;
-      const bottomMargin = margins.bottom ?? DEFAULT_MARGINS.bottom ?? 0;
-      // Height is the space available for footer (between bottomMargin and footerMargin)
-      const height = Math.max(bottomMargin - footerMargin, 1);
-      // Position so container bottom is at footerMargin from page bottom
-      const offset = Math.max(0, totalHeight - footerMargin - height);
-      return { x: left, width, height, offset };
-    }
-  }
-
-  #stripFootnoteReserveFromBottomMargin(pageMargins: PageMargins, page?: Page | null): PageMargins {
-    const reserveRaw = (page as Page | null | undefined)?.footnoteReserved;
-    const reserve = typeof reserveRaw === 'number' && Number.isFinite(reserveRaw) && reserveRaw > 0 ? reserveRaw : 0;
-    if (!reserve) return pageMargins;
-
-    const bottomRaw = pageMargins.bottom;
-    const bottom = typeof bottomRaw === 'number' && Number.isFinite(bottomRaw) ? bottomRaw : 0;
-    const nextBottom = Math.max(0, bottom - reserve);
-    if (nextBottom === bottom) return pageMargins;
-
-    return { ...pageMargins, bottom: nextBottom };
-  }
-
-  /**
-   * Computes the expected header/footer section type for a page based on document configuration.
-   *
-   * Unlike getHeaderFooterType/getHeaderFooterTypeForSection, this returns the appropriate
-   * variant even when no header/footer IDs are configured. This is needed to determine
-   * what variant to create when the user double-clicks an empty header/footer region.
-   *
-   * @param kind - Whether this is for a header or footer
-   * @param page - The page to compute the section type for
-   * @param sectionFirstPageNumbers - Map of section index to first page number in that section
-   * @returns The expected section type ('default', 'first', 'even', or 'odd')
-   */
-  #computeExpectedSectionType(
-    kind: 'header' | 'footer',
-    page: Page,
-    sectionFirstPageNumbers: Map<number, number>,
-  ): HeaderFooterType {
-    const sectionIndex = page.sectionIndex ?? 0;
-    const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
-    const sectionPageNumber =
-      typeof firstPageInSection === 'number' ? page.number - firstPageInSection + 1 : page.number;
-
-    // Get titlePg and alternateHeaders settings from identifiers
-    const multiSectionId = this.#headerFooterSession?.multiSectionIdentifier;
-    const legacyIdentifier = this.#headerFooterSession?.headerFooterIdentifier;
-
-    let titlePgEnabled = false;
-    let alternateHeaders = false;
-
-    if (multiSectionId) {
-      titlePgEnabled = multiSectionId.sectionTitlePg?.get(sectionIndex) ?? multiSectionId.titlePg;
-      alternateHeaders = multiSectionId.alternateHeaders;
-    } else if (legacyIdentifier) {
-      titlePgEnabled = legacyIdentifier.titlePg;
-      alternateHeaders = legacyIdentifier.alternateHeaders;
-    }
-
-    // First page of section with titlePg enabled
-    if (sectionPageNumber === 1 && titlePgEnabled) {
-      return 'first';
-    }
-
-    // Alternate headers (even/odd)
-    if (alternateHeaders) {
-      return page.number % 2 === 0 ? 'even' : 'odd';
-    }
-
-    return 'default';
-  }
-
-  #rebuildHeaderFooterRegions(layout: Layout) {
-    // Delegate to session manager which handles region building
-    this.#headerFooterSession?.rebuildRegions(layout);
-  }
-
   #hitTestHeaderFooterRegion(x: number, y: number): HeaderFooterRegion | null {
-    const layout = this.#layoutState.layout;
-    if (!layout) return null;
-    const pageHeight = layout.pageSize?.h ?? this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-    const pageGap = layout.pageGap ?? 0;
-    if (pageHeight <= 0) return null;
-    const pageIndex = Math.max(0, Math.floor(y / (pageHeight + pageGap)));
-    const pageLocalY = y - pageIndex * (pageHeight + pageGap);
-
-    const headerRegion = this.#headerFooterSession?.headerRegions?.get(pageIndex);
-    if (headerRegion && this.#pointInRegion(headerRegion, x, pageLocalY)) {
-      return headerRegion;
-    }
-    const footerRegion = this.#headerFooterSession?.footerRegions?.get(pageIndex);
-    if (footerRegion && this.#pointInRegion(footerRegion, x, pageLocalY)) {
-      return footerRegion;
-    }
-    return null;
-  }
-
-  #pointInRegion(region: HeaderFooterRegion, x: number, localY: number) {
-    const withinX = x >= region.localX && x <= region.localX + region.width;
-    const withinY = localY >= region.localY && localY <= region.localY + region.height;
-    return withinX && withinY;
+    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout) ?? null;
   }
 
   #activateHeaderFooterRegion(region: HeaderFooterRegion) {
@@ -4193,35 +3782,6 @@ export class PresentationEditor extends EventEmitter {
     return this.#editor.view?.dom ?? null;
   }
 
-  #emitHeaderFooterModeChanged() {
-    const session = this.#headerFooterSession?.session ?? { mode: 'body' as const };
-    this.emit('headerFooterModeChanged', {
-      mode: session.mode,
-      kind: session.kind,
-      headerId: session.headerId,
-      sectionType: session.sectionType,
-      pageIndex: session.pageIndex,
-      pageNumber: session.pageNumber,
-    });
-    this.#updateAwarenessSession();
-    this.#updateModeBanner();
-  }
-
-  #emitHeaderFooterEditingContext(editor: Editor) {
-    const session = this.#headerFooterSession?.session ?? { mode: 'body' as const };
-    this.emit('headerFooterEditingContext', {
-      kind: session.mode,
-      editor,
-      headerId: session.headerId,
-      sectionType: session.sectionType,
-    });
-    this.#announce(
-      session.mode === 'body'
-        ? 'Exited header/footer edit mode.'
-        : `Editing ${session.kind === 'header' ? 'Header' : 'Footer'} (${session.sectionType ?? 'default'})`,
-    );
-  }
-
   #updateAwarenessSession() {
     const provider = this.#options.collaborationProvider;
     const awareness = provider?.awareness;
@@ -4241,21 +3801,6 @@ export class PresentationEditor extends EventEmitter {
       headerId: session.headerId ?? null,
       pageNumber: session.pageNumber ?? null,
     });
-  }
-
-  #updateModeBanner() {
-    if (!this.#modeBanner) return;
-    const session = this.#headerFooterSession?.session;
-    if (!session || session.mode === 'body') {
-      this.#modeBanner.style.display = 'none';
-      this.#modeBanner.textContent = '';
-      return;
-    }
-    const title = session.kind === 'header' ? 'Header' : 'Footer';
-    const variant = session.sectionType ?? 'default';
-    const page = session.pageNumber != null ? `Page ${session.pageNumber}` : '';
-    this.#modeBanner.textContent = `Editing ${title} (${variant}) ${page} – Press Esc to return`;
-    this.#modeBanner.style.display = 'block';
   }
 
   #announce(message: string) {
@@ -4300,79 +3845,20 @@ export class PresentationEditor extends EventEmitter {
     this.#announce(announcement.message);
   }
 
-  #validateHeaderFooterEditPermission(): { allowed: boolean; reason?: string } {
-    if (this.#isViewLocked()) {
-      return { allowed: false, reason: 'documentMode' };
-    }
-    if (!this.#editor.isEditable) {
-      return { allowed: false, reason: 'readOnly' };
-    }
-    return { allowed: true };
-  }
-
   #emitHeaderFooterEditBlocked(reason: string) {
     this.emit('headerFooterEditBlocked', { reason });
   }
 
   #resolveDescriptorForRegion(region: HeaderFooterRegion): HeaderFooterDescriptor | null {
-    const manager = this.#headerFooterSession?.manager;
-    if (!manager) return null;
-    if (region.headerId) {
-      const descriptor = manager.getDescriptorById(region.headerId);
-      if (descriptor) return descriptor;
-    }
-    if (region.sectionType) {
-      const descriptors = manager.getDescriptors(region.kind);
-      const match = descriptors.find((entry) => entry.variant === region.sectionType);
-      if (match) return match;
-    }
-    const descriptors = manager.getDescriptors(region.kind);
-    if (!descriptors.length) {
-      console.warn('[PresentationEditor] No descriptor found for region:', region);
-      return null;
-    }
-    return descriptors[0];
+    return this.#headerFooterSession?.resolveDescriptorForRegion(region) ?? null;
   }
 
   /**
    * Creates a default header or footer when none exists.
-   *
-   * This method is called when a user double-clicks a header/footer region
-   * but no content exists yet. It uses the converter API to create an empty
-   * header/footer document.
-   *
-   * @param region - The header/footer region containing kind ('header' | 'footer')
-   *   and sectionType ('default' | 'first' | 'even' | 'odd') information
-   *
-   * Side effects:
-   * - Calls converter.createDefaultHeader() or converter.createDefaultFooter() to
-   *   create a new header/footer document in the underlying document model
-   * - Updates this.#headerFooterIdentifier with the new header/footer IDs from
-   *   the converter after creation
-   *
-   * Behavior when converter is unavailable:
-   * - Returns early without creating any header/footer if converter is not attached
-   * - Returns early if the appropriate create method is not available on the converter
+   * Delegates to HeaderFooterSessionManager which handles converter API calls.
    */
   #createDefaultHeaderFooter(region: HeaderFooterRegion): void {
-    const converter = (this.#editor as EditorWithConverter).converter;
-
-    if (!converter) {
-      return;
-    }
-
-    const variant = region.sectionType ?? 'default';
-
-    if (region.kind === 'header' && typeof converter.createDefaultHeader === 'function') {
-      converter.createDefaultHeader(variant);
-    } else if (region.kind === 'footer' && typeof converter.createDefaultFooter === 'function') {
-      converter.createDefaultFooter(variant);
-    }
-
-    // Update legacy identifier for getHeaderFooterType() fallback path
-    if (this.#headerFooterSession) {
-      this.#headerFooterSession.headerFooterIdentifier = extractIdentifierFromConverter(converter);
-    }
+    this.#headerFooterSession?.createDefault(region);
   }
 
   /**
@@ -4641,18 +4127,10 @@ export class PresentationEditor extends EventEmitter {
 
   /**
    * Get the page height for the current header/footer context.
-   * Returns the actual layout height from the header/footer context, or falls back to 1 if unavailable.
-   * Used for correct coordinate mapping when rendering selections in header/footer mode.
+   * Delegates to HeaderFooterSessionManager which handles context lookup and fallbacks.
    */
   #getHeaderFooterPageHeight(): number {
-    const context = this.#getHeaderFooterContext();
-    if (!context) {
-      // Fallback to 1 if context is missing (should rarely happen)
-      console.warn('[PresentationEditor] Header/footer context missing when computing page height');
-      return 1;
-    }
-    // Use the actual page height from the header/footer layout
-    return context.layout.pageSize?.h ?? context.region.height ?? 1;
+    return this.#headerFooterSession?.getPageHeight() ?? 1;
   }
 
   /**
@@ -4703,82 +4181,32 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  /**
+   * Render header/footer hover highlight for a region.
+   * Delegates to HeaderFooterSessionManager which manages the hover UI elements.
+   */
   #renderHoverRegion(region: HeaderFooterRegion) {
-    if (this.#documentMode === 'viewing') {
-      this.#clearHoverRegion();
-      return;
-    }
-    if (!this.#hoverOverlay || !this.#hoverTooltip) return;
-    const coords = this.#convertPageLocalToOverlayCoords(region.pageIndex, region.localX, region.localY);
-    if (!coords) {
-      this.#clearHoverRegion();
-      return;
-    }
-    this.#hoverOverlay.style.display = 'block';
-    this.#hoverOverlay.style.left = `${coords.x}px`;
-    this.#hoverOverlay.style.top = `${coords.y}px`;
-    // Width and height are in layout space - the transform on #selectionOverlay handles scaling
-    this.#hoverOverlay.style.width = `${region.width}px`;
-    this.#hoverOverlay.style.height = `${region.height}px`;
-
-    const tooltipText = `Double-click to edit ${region.kind === 'header' ? 'header' : 'footer'}`;
-    this.#hoverTooltip.textContent = tooltipText;
-    this.#hoverTooltip.style.display = 'block';
-    this.#hoverTooltip.style.left = `${coords.x}px`;
-
-    // Position tooltip above region by default, but below if too close to viewport top
-    // This prevents clipping for headers at the top of the page
-    const tooltipHeight = 24; // Approximate tooltip height
-    const spaceAbove = coords.y;
-    // Height is in layout space - the transform on #selectionOverlay handles scaling
-    const regionHeight = region.height;
-    const tooltipY =
-      spaceAbove < tooltipHeight + 4
-        ? coords.y + regionHeight + 4 // Position below if near top (with 4px spacing)
-        : coords.y - tooltipHeight; // Position above otherwise
-    this.#hoverTooltip.style.top = `${Math.max(0, tooltipY)}px`;
+    this.#headerFooterSession?.renderHover(region);
   }
 
+  /**
+   * Clear header/footer hover highlight.
+   * Delegates to HeaderFooterSessionManager which manages the hover UI elements.
+   */
   #clearHoverRegion() {
     this.#headerFooterSession?.clearHover();
-    if (this.#hoverOverlay) {
-      this.#hoverOverlay.style.display = 'none';
-    }
-    if (this.#hoverTooltip) {
-      this.#hoverTooltip.style.display = 'none';
-    }
   }
 
   #getHeaderFooterContext(): HeaderFooterLayoutContext | null {
     return this.#headerFooterSession?.getContext() ?? null;
   }
 
+  /**
+   * Compute selection rectangles in header/footer mode.
+   * Delegates to HeaderFooterSessionManager which handles context lookup and coordinate transformation.
+   */
   #computeHeaderFooterSelectionRects(from: number, to: number): LayoutRect[] {
-    const context = this.#getHeaderFooterContext();
-    const bodyLayout = this.#layoutState.layout;
-    if (!context) {
-      // Warn when header/footer context is unavailable to aid debugging
-      const session = this.#headerFooterSession?.session;
-      console.warn('[PresentationEditor] Header/footer context unavailable for selection rects', {
-        mode: session?.mode,
-        pageIndex: session?.pageIndex,
-      });
-      return [];
-    }
-    if (!bodyLayout) return [];
-    const rects = selectionToRects(context.layout, context.blocks, context.measures, from, to, undefined) ?? [];
-    const headerPageHeight = context.layout.pageSize?.h ?? context.region.height ?? 1;
-    const bodyPageHeight = this.#getBodyPageHeight();
-    return rects.map((rect: LayoutRect) => {
-      const headerLocalY = rect.y - rect.pageIndex * headerPageHeight;
-      return {
-        pageIndex: context.region.pageIndex,
-        x: rect.x + context.region.localX,
-        y: context.region.pageIndex * bodyPageHeight + context.region.localY + headerLocalY,
-        width: rect.width,
-        height: rect.height,
-      };
-    });
+    return this.#headerFooterSession?.computeSelectionRects(from, to) ?? [];
   }
 
   #syncTrackedChangesPreferences(): boolean {
@@ -5217,9 +4645,7 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #findRegionForPage(kind: 'header' | 'footer', pageIndex: number): HeaderFooterRegion | null {
-    const map = kind === 'header' ? this.#headerFooterSession?.headerRegions : this.#headerFooterSession?.footerRegions;
-    if (!map) return null;
-    return map.get(pageIndex) ?? map.values().next().value ?? null;
+    return this.#headerFooterSession?.findRegionForPage(kind, pageIndex) ?? null;
   }
 
   #handleLayoutError(phase: LayoutError['phase'], error: Error) {

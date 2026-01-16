@@ -334,10 +334,22 @@ export const CommentsPlugin = Extension.create({
 
           if (type === 'setActiveComment') {
             shouldUpdate = true;
-            pluginState.activeThreadId = meta.activeThreadId; // Update the outer scope variable
+            const previousActiveThreadId = pluginState.activeThreadId;
+            const newActiveThreadId = meta.activeThreadId;
+
+            // Emit commentsUpdate event when active comment changes (e.g., from comment bubble click)
+            if (previousActiveThreadId !== newActiveThreadId) {
+              const update = {
+                type: comments_module_events.SELECTED,
+                activeCommentId: newActiveThreadId ? newActiveThreadId : null,
+              };
+              editor.emit('commentsUpdate', update);
+            }
+
+            pluginState.activeThreadId = newActiveThreadId;
             return {
               ...pluginState,
-              activeThreadId: meta.activeThreadId,
+              activeThreadId: newActiveThreadId,
               changedActiveThread: true,
             };
           }
@@ -467,12 +479,13 @@ export const CommentsPlugin = Extension.create({
                 const isInternal = attrs.internal;
                 if (!hasActive) hasActive = currentActiveThreadId === threadId;
 
-                // Get the color based on current activeThreadId
+                // Get the color based on current activeThreadId and nesting depth
                 let color = getHighlightColor({
                   activeThreadId: currentActiveThreadId,
                   threadId,
                   isInternal,
                   editor,
+                  nestingDepth: commentMarks.length,
                 });
 
                 const deco = Decoration.inline(pos, pos + node.nodeSize, {

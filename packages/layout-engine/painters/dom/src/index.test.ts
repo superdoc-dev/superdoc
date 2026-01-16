@@ -2737,6 +2737,117 @@ describe('DomPainter', () => {
     expect(span.style.backgroundColor).not.toBe('');
   });
 
+  it('highlights only the active comment range when setActiveComment is called', () => {
+    // Single run with comment-A
+    const commentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'active-comment-block',
+      runs: [
+        {
+          text: 'Commented text',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          comments: [{ commentId: 'comment-A', internal: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      commentBlock.id,
+      commentBlock.runs[0].text.length,
+    );
+
+    const painter = createDomPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
+
+    // Initially (no active comment), should be highlighted
+    painter.paint(paragraphLayout, mount);
+    let span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span.style.backgroundColor).not.toBe('');
+
+    // Select comment-A: should still be highlighted
+    painter.setActiveComment('comment-A');
+    painter.paint(paragraphLayout, mount);
+    span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span.style.backgroundColor).not.toBe('');
+
+    // Select a different comment (comment-B): should NOT be highlighted
+    painter.setActiveComment('comment-B');
+    painter.paint(paragraphLayout, mount);
+    span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span.style.backgroundColor).toBe(''); // Not highlighted because active comment doesn't match
+  });
+
+  it('shows nested comment indicators when outer comment is selected', () => {
+    // One run with two comments (outer and nested)
+    const nestedCommentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'nested-comment-block',
+      runs: [
+        {
+          text: 'Nested area',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          comments: [
+            { commentId: 'outer-comment', internal: false },
+            { commentId: 'inner-comment', internal: false },
+          ],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      nestedCommentBlock.id,
+      nestedCommentBlock.runs[0].text.length,
+    );
+
+    const painter = createDomPainter({ blocks: [nestedCommentBlock], measures: [paragraphMeasure] });
+
+    // Select outer comment
+    painter.setActiveComment('outer-comment');
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.style.backgroundColor).not.toBe('');
+    // Should have box-shadow indicating nested comment
+    expect(span.style.boxShadow).not.toBe('');
+  });
+
+  it('clears active comment highlighting when setActiveComment(null) is called', () => {
+    const commentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'clear-comment-block',
+      runs: [
+        {
+          text: 'Some text',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          comments: [{ commentId: 'comment-X', internal: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      commentBlock.id,
+      commentBlock.runs[0].text.length,
+    );
+
+    const painter = createDomPainter({ blocks: [commentBlock], measures: [paragraphMeasure] });
+
+    // First select a comment
+    painter.setActiveComment('comment-X');
+    painter.paint(paragraphLayout, mount);
+
+    // Then deselect
+    painter.setActiveComment(null);
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    // Should still have background (default highlighting)
+    expect(span.style.backgroundColor).not.toBe('');
+  });
+
   it('respects trackedChangesMode modifiers for insertions', () => {
     const finalBlock: FlowBlock = {
       kind: 'paragraph',

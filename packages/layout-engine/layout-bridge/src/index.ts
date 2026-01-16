@@ -168,20 +168,6 @@ export {
   getRunBooleanProp,
 } from './paragraph-hash-utils';
 
-// Drag Handler
-export { DragHandler, createDragHandler } from './drag-handler';
-export type {
-  FieldAnnotationDragData,
-  DragStartEvent,
-  DropEvent,
-  DragOverEvent,
-  DragStartCallback,
-  DropCallback,
-  DragOverCallback,
-  DragEndCallback,
-  DragHandlerConfig,
-} from './drag-handler';
-
 export type Point = { x: number; y: number };
 export type PageHit = { pageIndex: number; page: Layout['pages'][number] };
 export type FragmentHit = {

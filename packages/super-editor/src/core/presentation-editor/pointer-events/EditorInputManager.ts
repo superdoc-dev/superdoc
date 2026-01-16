@@ -1,13 +1,15 @@
 /**
- * PointerEventManager - Handles pointer/input events for PresentationEditor.
+ * EditorInputManager - Handles pointer/input events for PresentationEditor.
  *
- * This manager encapsulates all pointer event handling including:
+ * This manager encapsulates all pointer and focus event handling including:
  * - Pointer down/move/up handlers
  * - Drag selection state machine
  * - Cell selection for tables
  * - Multi-click detection (double/triple click)
  * - Link click handling
  * - Image selection
+ * - Focus management
+ * - Header/footer hover interactions
  */
 
 import { Selection, TextSelection, NodeSelection } from 'prosemirror-state';
@@ -33,10 +35,6 @@ import {
   getTablePosFromHit as getTablePosFromHitFromHelper,
   hitTestTable as hitTestTableFromHelper,
 } from '../tables/TableSelectionUtilities.js';
-import {
-  createExternalFieldAnnotationDragOverHandler,
-  createExternalFieldAnnotationDropHandler,
-} from '../input/FieldAnnotationDragDrop.js';
 import { debugLog } from '../selection/SelectionDebug.js';
 
 // =============================================================================
@@ -62,7 +60,7 @@ export type LayoutState = {
 /**
  * Dependencies injected from PresentationEditor.
  */
-export type PointerEventDependencies = {
+export type EditorInputDependencies = {
   /** Get the active editor (body or header/footer) */
   getActiveEditor: () => Editor;
   /** Get the main body editor */
@@ -95,7 +93,7 @@ export type PointerEventDependencies = {
  * Callbacks for events that the manager emits.
  * All callbacks are optional to allow incremental setup.
  */
-export type PointerEventCallbacks = {
+export type EditorInputCallbacks = {
   /** Schedule selection update */
   scheduleSelectionUpdate?: () => void;
   /** Schedule rerender */
@@ -155,13 +153,13 @@ export type PointerEventCallbacks = {
 };
 
 // =============================================================================
-// PointerEventManager Class
+// EditorInputManager Class
 // =============================================================================
 
-export class PointerEventManager {
+export class EditorInputManager {
   // Dependencies
-  #deps: PointerEventDependencies | null = null;
-  #callbacks: PointerEventCallbacks = {};
+  #deps: EditorInputDependencies | null = null;
+  #callbacks: EditorInputCallbacks = {};
 
   // Drag selection state
   #isDragging = false;
@@ -206,8 +204,6 @@ export class PointerEventManager {
   #boundHandlePointerLeave: (() => void) | null = null;
   #boundHandleDoubleClick: ((e: MouseEvent) => void) | null = null;
   #boundHandleKeyDown: ((e: KeyboardEvent) => void) | null = null;
-  #boundHandleDragOver: ((e: DragEvent) => void) | null = null;
-  #boundHandleDrop: ((e: DragEvent) => void) | null = null;
   #boundHandleFocusIn: ((e: FocusEvent) => void) | null = null;
 
   // ==========================================================================
@@ -225,14 +221,14 @@ export class PointerEventManager {
   /**
    * Set dependencies from PresentationEditor.
    */
-  setDependencies(deps: PointerEventDependencies): void {
+  setDependencies(deps: EditorInputDependencies): void {
     this.#deps = deps;
   }
 
   /**
    * Set callbacks for events.
    */
-  setCallbacks(callbacks: PointerEventCallbacks): void {
+  setCallbacks(callbacks: EditorInputCallbacks): void {
     this.#callbacks = callbacks;
   }
 
@@ -253,8 +249,6 @@ export class PointerEventManager {
     this.#boundHandlePointerLeave = this.#handlePointerLeave.bind(this);
     this.#boundHandleDoubleClick = this.#handleDoubleClick.bind(this);
     this.#boundHandleKeyDown = this.#handleKeyDown.bind(this);
-    this.#boundHandleDragOver = this.#createDragOverHandler();
-    this.#boundHandleDrop = this.#createDropHandler();
     this.#boundHandleFocusIn = this.#handleFocusIn.bind(this);
 
     // Attach pointer event listeners
@@ -263,7 +257,6 @@ export class PointerEventManager {
     viewportHost.addEventListener('pointerup', this.#boundHandlePointerUp);
     viewportHost.addEventListener('pointerleave', this.#boundHandlePointerLeave);
     viewportHost.addEventListener('dblclick', this.#boundHandleDoubleClick);
-    viewportHost.addEventListener('dragover', this.#boundHandleDragOver);
 
     // Keyboard events on container
     const container = viewportHost.closest('.presentation-editor') as HTMLElement | null;
@@ -299,9 +292,6 @@ export class PointerEventManager {
     if (this.#boundHandleDoubleClick) {
       viewportHost.removeEventListener('dblclick', this.#boundHandleDoubleClick);
     }
-    if (this.#boundHandleDragOver) {
-      viewportHost.removeEventListener('dragover', this.#boundHandleDragOver);
-    }
     if (this.#boundHandleKeyDown) {
       const container = viewportHost.closest('.presentation-editor') as HTMLElement | null;
       if (container) {
@@ -319,8 +309,6 @@ export class PointerEventManager {
     this.#boundHandlePointerLeave = null;
     this.#boundHandleDoubleClick = null;
     this.#boundHandleKeyDown = null;
-    this.#boundHandleDragOver = null;
-    this.#boundHandleDrop = null;
     this.#boundHandleFocusIn = null;
   }
 
@@ -374,6 +362,21 @@ export class PointerEventManager {
     return this.#lastSelectedImageBlockId;
   }
 
+  /** Drag anchor page index */
+  get dragAnchorPageIndex(): number | null {
+    return this.#dragAnchorPageIndex;
+  }
+
+  /** Get the page index from the last raw hit during drag */
+  get dragLastHitPageIndex(): number | null {
+    return this.#dragLastRawHit?.pageIndex ?? null;
+  }
+
+  /** Get the last raw hit during drag (for finalization) */
+  get dragLastRawHit(): PositionHit | null {
+    return this.#dragLastRawHit;
+  }
+
   // ==========================================================================
   // Public Methods
   // ==========================================================================
@@ -417,7 +420,7 @@ export class PointerEventManager {
       {
         clickCount: this.#clickCount,
         lastClickTime: this.#lastClickTime,
-        lastClickPosition: this.#lastClickPosition,
+        lastClickPosition: this.#lastClickPosition ?? { x: 0, y: 0 },
       },
       {
         timeThresholdMs: MULTI_CLICK_TIME_THRESHOLD_MS,
@@ -479,60 +482,6 @@ export class PointerEventManager {
 
   #hitTestTable(x: number, y: number): TableHitResult | null {
     return this.#callbacks.hitTestTable?.(x, y) ?? null;
-  }
-
-  #createDragOverHandler(): (e: DragEvent) => void {
-    return createExternalFieldAnnotationDragOverHandler({
-      getActiveEditor: () => this.#deps?.getActiveEditor() as Editor,
-      hitTest: (clientX: number, clientY: number) => {
-        const layoutState = this.#deps?.getLayoutState();
-        const viewportHost = this.#deps?.getViewportHost();
-        const pageGeometryHelper = this.#deps?.getPageGeometryHelper();
-        if (!layoutState?.layout || !viewportHost) return null;
-
-        const normalized = this.#callbacks.normalizeClientPoint?.(clientX, clientY);
-        if (!normalized) return null;
-
-        return clickToPosition(
-          layoutState.layout,
-          layoutState.blocks,
-          layoutState.measures,
-          { x: normalized.x, y: normalized.y },
-          viewportHost,
-          clientX,
-          clientY,
-          pageGeometryHelper ?? undefined,
-        );
-      },
-      scheduleSelectionUpdate: () => this.#callbacks.scheduleSelectionUpdate?.(),
-    });
-  }
-
-  #createDropHandler(): (e: DragEvent) => void {
-    return createExternalFieldAnnotationDropHandler({
-      getActiveEditor: () => this.#deps?.getActiveEditor() as Editor,
-      hitTest: (clientX: number, clientY: number) => {
-        const layoutState = this.#deps?.getLayoutState();
-        const viewportHost = this.#deps?.getViewportHost();
-        const pageGeometryHelper = this.#deps?.getPageGeometryHelper();
-        if (!layoutState?.layout || !viewportHost) return null;
-
-        const normalized = this.#callbacks.normalizeClientPoint?.(clientX, clientY);
-        if (!normalized) return null;
-
-        return clickToPosition(
-          layoutState.layout,
-          layoutState.blocks,
-          layoutState.measures,
-          { x: normalized.x, y: normalized.y },
-          viewportHost,
-          clientX,
-          clientY,
-          pageGeometryHelper ?? undefined,
-        );
-      },
-      scheduleSelectionUpdate: () => this.#callbacks.scheduleSelectionUpdate?.(),
-    });
   }
 
   // ==========================================================================
@@ -649,7 +598,7 @@ export class PointerEventManager {
     const fragmentHit = getFragmentAtPosition(layoutState.layout, layoutState.blocks, layoutState.measures, rawHit.pos);
 
     // Handle inline image click
-    const targetImg = (event.target as HTMLElement | null)?.closest?.('img');
+    const targetImg = (event.target as HTMLElement | null)?.closest?.('img') as HTMLImageElement | null;
     if (this.#handleInlineImageClick(event, targetImg, rawHit, doc, epochMapper)) return;
 
     // Handle atomic fragment (image/drawing) click
@@ -1031,7 +980,7 @@ export class PointerEventManager {
       this.#lastSelectedImageBlockId = newSelectionId;
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[PointerEventManager] Failed to create NodeSelection for inline image:`, error);
+        console.warn(`[EditorInputManager] Failed to create NodeSelection for inline image:`, error);
       }
     }
 
@@ -1073,7 +1022,7 @@ export class PointerEventManager {
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PointerEventManager] Failed to create NodeSelection for atomic fragment:', error);
+        console.warn('[EditorInputManager] Failed to create NodeSelection for atomic fragment:', error);
       }
     }
 

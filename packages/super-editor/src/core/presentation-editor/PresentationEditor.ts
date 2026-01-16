@@ -23,6 +23,7 @@ import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/P
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
+import { EditorInputManager } from './pointer-events/EditorInputManager.js';
 import { SelectionSyncCoordinator } from './selection/SelectionSyncCoordinator.js';
 import { PresentationInputBridge } from './input/PresentationInputBridge.js';
 import { calculateExtendedSelection } from './selection/SelectionHelpers.js';
@@ -56,11 +57,7 @@ import {
   hitTestTable as hitTestTableFromHelper,
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
 } from './tables/TableSelectionUtilities.js';
-import {
-  createExternalFieldAnnotationDragOverHandler,
-  createExternalFieldAnnotationDropHandler,
-  setupInternalFieldAnnotationDragHandlers,
-} from './input/FieldAnnotationDragDrop.js';
+import { DragDropManager } from './input/DragDropManager.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
@@ -262,7 +259,7 @@ export class PresentationEditor extends EventEmitter {
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
-  #dragHandlerCleanup: (() => void) | null = null;
+  #dragDropManager: DragDropManager | null = null;
   #layoutError: LayoutError | null = null;
   #layoutErrorState: 'healthy' | 'degraded' | 'failed' = 'healthy';
   #errorBanner: HTMLElement | null = null;
@@ -279,9 +276,6 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
-  #debugLastPointer: SelectionDebugHudState['lastPointer'] = null;
-  #debugLastHit: SelectionDebugHudState['lastHit'] = null;
-  #pendingMarginClick: PendingMarginClick | null = null;
   #rafHandle: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #sectionMetadata: SectionMetadata[] = [];
@@ -298,31 +292,10 @@ export class PresentationEditor extends EventEmitter {
   #ariaLiveRegion: HTMLElement | null = null;
   #a11ySelectionAnnounceTimeout: number | null = null;
   #a11yLastAnnouncedSelectionKey: string | null = null;
-  #clickCount = 0;
-  #lastClickTime = 0;
-  #lastClickPosition: { x: number; y: number } = { x: 0, y: 0 };
-  #lastSelectedImageBlockId: string | null = null;
   #lastSelectedFieldAnnotation: {
     element: HTMLElement;
     pmStart: number;
   } | null = null;
-
-  // Drag selection state
-  #dragAnchor: number | null = null;
-  #dragAnchorPageIndex: number | null = null;
-  #isDragging = false;
-  #dragExtensionMode: 'char' | 'word' | 'para' = 'char';
-  #dragLastPointer: SelectionDebugHudState['lastPointer'] = null;
-  #dragLastRawHit: PositionHit | null = null;
-  #dragUsedPageNotMountedFallback = false;
-  #suppressFocusInFromDraggable = false;
-
-  // Cell selection drag state
-  // Tracks cell-specific context when drag starts in a table for multi-cell selection
-  #cellAnchor: CellAnchorState | null = null;
-
-  /** Cell drag mode state machine: 'none' = not in table, 'pending' = in table but haven't crossed cell boundary, 'active' = crossed cell boundary */
-  #cellDragMode: 'none' | 'pending' | 'active' = 'none';
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
@@ -331,6 +304,10 @@ export class PresentationEditor extends EventEmitter {
   #remoteCursorOverlay: HTMLElement | null = null;
   /** DOM element for rendering local selection/caret (dual-layer overlay architecture) */
   #localSelectionLayer: HTMLElement | null = null;
+
+  // Editor input management
+  /** Manager for pointer events, focus, drag selection, and click handling */
+  #editorInputManager: EditorInputManager | null = null;
 
   constructor(options: PresentationEditorOptions) {
     super();
@@ -586,6 +563,7 @@ export class PresentationEditor extends EventEmitter {
       this.#setupHeaderFooterSession();
       this.#applyZoom();
       this.#setupEditorListeners();
+      this.#initializeEditorInputManager();
       this.#setupPointerHandlers();
       this.#setupDragHandlers();
       this.#setupInputBridge();
@@ -1666,8 +1644,8 @@ export class PresentationEditor extends EventEmitter {
         docEpoch: this.#epochMapper.getCurrentEpoch(),
         layoutEpoch: this.#layoutEpoch,
         selection,
-        lastPointer: this.#debugLastPointer,
-        lastHit: this.#debugLastHit,
+        lastPointer: this.#editorInputManager?.debugLastPointer ?? null,
+        lastHit: this.#editorInputManager?.debugLastHit ?? null,
       });
     } catch {
       // Debug HUD should never break editor interaction paths
@@ -2153,15 +2131,14 @@ export class PresentationEditor extends EventEmitter {
     this.#domIndexObserverManager?.destroy();
     this.#domIndexObserverManager = null;
 
-    this.#viewportHost?.removeEventListener('pointerdown', this.#handlePointerDown);
-    this.#viewportHost?.removeEventListener('dblclick', this.#handleDoubleClick);
-    this.#viewportHost?.removeEventListener('pointermove', this.#handlePointerMove);
-    this.#viewportHost?.removeEventListener('pointerup', this.#handlePointerUp);
-    this.#viewportHost?.removeEventListener('pointerleave', this.#handlePointerLeave);
-    this.#viewportHost?.removeEventListener('dragover', this.#handleDragOver);
-    this.#viewportHost?.removeEventListener('drop', this.#handleDrop);
-    this.#visibleHost?.removeEventListener('keydown', this.#handleKeyDown);
-    this.#visibleHost?.removeEventListener('focusin', this.#handleVisibleHostFocusIn);
+    // Clean up editor input manager (handles event listeners and drag/cell state)
+    if (this.#editorInputManager) {
+      safeCleanup(() => {
+        this.#editorInputManager?.destroy();
+        this.#editorInputManager = null;
+      }, 'Editor input manager');
+    }
+
     this.#inputBridge?.notifyTargetChanged();
     this.#inputBridge?.destroy();
     this.#inputBridge = null;
@@ -2170,9 +2147,6 @@ export class PresentationEditor extends EventEmitter {
       clearTimeout(this.#a11ySelectionAnnounceTimeout);
       this.#a11ySelectionAnnounceTimeout = null;
     }
-
-    // Clean up cell selection drag state to prevent memory leaks
-    this.#clearCellAnchor();
 
     // Unregister from static registry
     if (this.#options?.documentId) {
@@ -2187,8 +2161,8 @@ export class PresentationEditor extends EventEmitter {
 
     this.#domPainter = null;
     this.#pageGeometryHelper = null;
-    this.#dragHandlerCleanup?.();
-    this.#dragHandlerCleanup = null;
+    this.#dragDropManager?.destroy();
+    this.#dragDropManager = null;
     this.#selectionOverlay?.remove();
     this.#painterHost?.remove();
     this.#hiddenHost?.remove();
@@ -2246,7 +2220,7 @@ export class PresentationEditor extends EventEmitter {
         this.#updateLocalAwarenessCursor();
         // Clear cell anchor on document changes to prevent stale references
         // (table structure may have changed, cell positions may be invalid)
-        this.#clearCellAnchor();
+        this.#editorInputManager?.clearCellAnchor();
       }
     };
     const handleSelection = () => {
@@ -2376,34 +2350,85 @@ export class PresentationEditor extends EventEmitter {
     this.#remoteCursorManager?.render(this.#getRemoteCursorRenderDeps());
   }
 
+  /**
+   * Initialize the EditorInputManager with dependencies and callbacks.
+   * @private
+   */
+  #initializeEditorInputManager(): void {
+    this.#editorInputManager = new EditorInputManager();
+
+    // Set dependencies - getters that provide access to PresentationEditor state
+    this.#editorInputManager.setDependencies({
+      getActiveEditor: () => this.getActiveEditor(),
+      getEditor: () => this.#editor,
+      getLayoutState: () => this.#layoutState,
+      getEpochMapper: () => this.#epochMapper,
+      getViewportHost: () => this.#viewportHost,
+      getVisibleHost: () => this.#visibleHost,
+      getHeaderFooterSession: () => this.#headerFooterSession,
+      getPageGeometryHelper: () => this.#pageGeometryHelper,
+      getZoom: () => this.#layoutOptions.zoom ?? 1,
+      isViewLocked: () => this.#isViewLocked(),
+      getDocumentMode: () => this.#documentMode,
+      getPageElement: (pageIndex: number) => this.#getPageElement(pageIndex),
+      isSelectionAwareVirtualizationEnabled: () => this.#isSelectionAwareVirtualizationEnabled(),
+    });
+
+    // Set callbacks - functions that the manager calls to interact with PresentationEditor
+    this.#editorInputManager.setCallbacks({
+      scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
+      scheduleRerender: () => this.#scheduleRerender(),
+      setPendingDocChange: () => {
+        this.#pendingDocChange = true;
+      },
+      updateSelectionVirtualizationPins: (options) => this.#updateSelectionVirtualizationPins(options),
+      scheduleA11ySelectionAnnouncement: (options) => this.#scheduleA11ySelectionAnnouncement(options),
+      goToAnchor: (href: string) => this.goToAnchor(href),
+      emit: (event: string, payload: unknown) => this.emit(event, payload),
+      normalizeClientPoint: (clientX: number, clientY: number) => this.#normalizeClientPoint(clientX, clientY),
+      hitTestHeaderFooterRegion: (x: number, y: number) => this.#hitTestHeaderFooterRegion(x, y),
+      exitHeaderFooterMode: () => this.#exitHeaderFooterMode(),
+      activateHeaderFooterRegion: (region) => this.#activateHeaderFooterRegion(region),
+      createDefaultHeaderFooter: (region) => this.#createDefaultHeaderFooter(region),
+      emitHeaderFooterEditBlocked: (reason: string) => this.#emitHeaderFooterEditBlocked(reason),
+      findRegionForPage: (kind, pageIndex) => this.#findRegionForPage(kind, pageIndex),
+      getCurrentPageIndex: () => this.#getCurrentPageIndex(),
+      resolveDescriptorForRegion: (region) => this.#resolveDescriptorForRegion(region),
+      updateSelectionDebugHud: () => this.#updateSelectionDebugHud(),
+      clearHoverRegion: () => this.#clearHoverRegion(),
+      renderHoverRegion: (region) => this.#renderHoverRegion(region),
+      focusEditorAfterImageSelection: () => this.#focusEditorAfterImageSelection(),
+      resolveFieldAnnotationSelectionFromElement: (el) => this.#resolveFieldAnnotationSelectionFromElement(el),
+      computePendingMarginClick: (pointerId, x, y) => this.#computePendingMarginClick(pointerId, x, y),
+      selectWordAt: (pos: number) => this.#selectWordAt(pos),
+      selectParagraphAt: (pos: number) => this.#selectParagraphAt(pos),
+      finalizeDragSelectionWithDom: (pointer, dragAnchor, dragMode) =>
+        this.#finalizeDragSelectionWithDom(pointer, dragAnchor, dragMode),
+      hitTestTable: (x: number, y: number) => this.#hitTestTable(x, y),
+    });
+  }
+
   #setupPointerHandlers() {
-    this.#viewportHost.addEventListener('pointerdown', this.#handlePointerDown);
-    this.#viewportHost.addEventListener('dblclick', this.#handleDoubleClick);
-    this.#viewportHost.addEventListener('pointermove', this.#handlePointerMove);
-    this.#viewportHost.addEventListener('pointerup', this.#handlePointerUp);
-    this.#viewportHost.addEventListener('pointerleave', this.#handlePointerLeave);
-    this.#viewportHost.addEventListener('dragover', this.#handleDragOver);
-    this.#viewportHost.addEventListener('drop', this.#handleDrop);
-    this.#visibleHost.addEventListener('keydown', this.#handleKeyDown);
-    this.#visibleHost.addEventListener('focusin', this.#handleVisibleHostFocusIn);
+    // Delegate to EditorInputManager for pointer events
+    this.#editorInputManager?.bind();
   }
 
   /**
-   * Sets up drag and drop handlers for field annotations in the layout engine view.
-   * Uses the DragHandler from layout-bridge to handle drag events and map drop
-   * coordinates to ProseMirror positions.
+   * Sets up drag and drop handlers for field annotations.
    */
   #setupDragHandlers() {
-    // Clean up any existing handler
-    this.#dragHandlerCleanup?.();
-    this.#dragHandlerCleanup = null;
+    // Clean up any existing manager
+    this.#dragDropManager?.destroy();
 
-    this.#dragHandlerCleanup = setupInternalFieldAnnotationDragHandlers({
-      painterHost: this.#painterHost,
+    this.#dragDropManager = new DragDropManager();
+    this.#dragDropManager.setDependencies({
       getActiveEditor: () => this.getActiveEditor(),
       hitTest: (clientX, clientY) => this.hitTest(clientX, clientY),
       scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
+      getViewportHost: () => this.#viewportHost,
+      getPainterHost: () => this.#painterHost,
     });
+    this.#dragDropManager.bind();
   }
 
   /**
@@ -2545,692 +2570,6 @@ export class PresentationEditor extends EventEmitter {
     this.#headerFooterSession.initialize();
   }
 
-  #handlePointerDown = (event: PointerEvent) => {
-    // Return early for non-left clicks (right-click, middle-click)
-    if (event.button !== 0) {
-      return;
-    }
-
-    // On Mac, Ctrl+Click triggers the context menu but reports button=0.
-    // Treat it like a right-click: preserve selection and let the contextmenu handler take over.
-    // This prevents the selection from being destroyed when user Ctrl+clicks on selected text.
-    if (event.ctrlKey && navigator.platform.includes('Mac')) {
-      return;
-    }
-
-    this.#pendingMarginClick = null;
-
-    // Check if clicking on a draggable field annotation - if so, don't preventDefault
-    // to allow native HTML5 drag-and-drop to work (mousedown must fire for dragstart)
-    const target = event.target as HTMLElement;
-    if (target?.closest?.('.superdoc-ruler-handle') != null) {
-      return;
-    }
-
-    // Handle clicks on links in the layout engine
-    const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;
-    if (linkEl) {
-      const href = linkEl.getAttribute('href') ?? '';
-      const isAnchorLink = href.startsWith('#') && href.length > 1;
-      const isTocLink = linkEl.closest('.superdoc-toc-entry') !== null;
-
-      if (isAnchorLink && isTocLink) {
-        // TOC entry anchor links: navigate to the anchor
-        event.preventDefault();
-        event.stopPropagation();
-        this.goToAnchor(href);
-        return;
-      }
-
-      // Non-TOC links: dispatch custom event to show the link popover
-      // We dispatch from pointerdown because the DOM may be re-rendered before click fires,
-      // which would cause the click event to land on the wrong element
-      event.preventDefault();
-      event.stopPropagation();
-
-      const linkClickEvent = new CustomEvent('superdoc-link-click', {
-        bubbles: true,
-        composed: true,
-        detail: {
-          href: href,
-          target: linkEl.getAttribute('target'),
-          rel: linkEl.getAttribute('rel'),
-          tooltip: linkEl.getAttribute('title'),
-          element: linkEl,
-          clientX: event.clientX,
-          clientY: event.clientY,
-        },
-      });
-      linkEl.dispatchEvent(linkClickEvent);
-      return;
-    }
-
-    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
-    const isDraggableAnnotation = target?.closest?.('[data-draggable="true"]') != null;
-    this.#suppressFocusInFromDraggable = isDraggableAnnotation;
-
-    if (annotationEl) {
-      if (!this.#editor.isEditable) {
-        return;
-      }
-
-      const resolved = this.#resolveFieldAnnotationSelectionFromElement(annotationEl);
-      if (resolved) {
-        try {
-          const tr = this.#editor.state.tr.setSelection(NodeSelection.create(this.#editor.state.doc, resolved.pos));
-          this.#editor.view?.dispatch(tr);
-        } catch {}
-
-        this.#editor.emit('fieldAnnotationClicked', {
-          editor: this.#editor,
-          node: resolved.node,
-          nodePos: resolved.pos,
-          event,
-          currentTarget: annotationEl,
-        });
-      }
-      return;
-    }
-
-    if (!this.#layoutState.layout) {
-      // Layout not ready yet, but still focus the editor and set cursor to start
-      // so the user can immediately begin typing
-      if (!isDraggableAnnotation) {
-        event.preventDefault();
-      }
-
-      // Blur any currently focused element
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-      }
-
-      const editorDom = this.#editor.view?.dom as HTMLElement | undefined;
-      if (!editorDom) {
-        return;
-      }
-
-      // Find the first valid text position in the document
-      const validPos = this.#getFirstTextPosition();
-      const doc = this.#editor?.state?.doc;
-
-      if (doc) {
-        try {
-          const tr = this.#editor.state.tr.setSelection(TextSelection.create(doc, validPos));
-          this.#editor.view?.dispatch(tr);
-        } catch (error) {
-          // Error dispatching selection - this can happen if the document is in an invalid state
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[PresentationEditor] Failed to set selection to first text position:', error);
-          }
-        }
-      }
-
-      // Focus the hidden editor
-      editorDom.focus();
-      this.#editor.view?.focus();
-      // Force selection update to render the caret
-      this.#scheduleSelectionUpdate();
-
-      return;
-    }
-
-    const normalizedPoint = this.#normalizeClientPoint(event.clientX, event.clientY);
-    if (!normalizedPoint) {
-      return;
-    }
-    const { x, y } = normalizedPoint;
-    this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
-
-    // Exit header/footer mode if clicking outside the current region
-    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      // Check if click is inside the active editor host element (more reliable than coordinate hit testing)
-      const activeEditorHost = this.#headerFooterSession?.overlayManager?.getActiveEditorHost?.();
-      const clickedInsideEditorHost =
-        activeEditorHost && (activeEditorHost.contains(event.target as Node) || activeEditorHost === event.target);
-
-      if (clickedInsideEditorHost) {
-        // Clicked within the active editor host - let the editor handle it, don't interfere
-        return;
-      }
-
-      // Fallback: use coordinate-based hit testing
-      const headerFooterRegion = this.#hitTestHeaderFooterRegion(x, y);
-      if (!headerFooterRegion) {
-        // Clicked outside header/footer region - exit mode and continue to position cursor in body
-        this.#exitHeaderFooterMode();
-        // Fall through to body click handling below
-      } else {
-        // Clicked within header/footer region but not in editor host - still let editor handle it
-        return;
-      }
-    }
-
-    const headerFooterRegion = this.#hitTestHeaderFooterRegion(x, y);
-    if (headerFooterRegion) {
-      // Header/footer mode will be handled via double-click; ignore single clicks for now.
-      return;
-    }
-
-    const rawHit = clickToPosition(
-      this.#layoutState.layout,
-      this.#layoutState.blocks,
-      this.#layoutState.measures,
-      { x, y },
-      this.#viewportHost,
-      event.clientX,
-      event.clientY,
-      this.#pageGeometryHelper ?? undefined,
-    );
-
-    const doc = this.#editor.state?.doc;
-    const mapped =
-      rawHit && doc ? this.#epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1) : null;
-    if (mapped && !mapped.ok) {
-      debugLog('warn', 'pointerdown mapping failed', mapped);
-    }
-    const hit =
-      rawHit && doc && mapped?.ok
-        ? { ...rawHit, pos: Math.max(0, Math.min(mapped.pos, doc.content.size)), layoutEpoch: mapped.toEpoch }
-        : null;
-    this.#debugLastHit = hit
-      ? { source: 'dom', pos: rawHit?.pos ?? null, layoutEpoch: rawHit?.layoutEpoch ?? null, mappedPos: hit.pos }
-      : { source: 'none', pos: rawHit?.pos ?? null, layoutEpoch: rawHit?.layoutEpoch ?? null, mappedPos: null };
-    this.#updateSelectionDebugHud();
-
-    // Don't preventDefault for draggable annotations - allows mousedown to fire for native drag
-    if (!isDraggableAnnotation) {
-      event.preventDefault();
-    }
-
-    // Even if clickToPosition returns null (clicked outside text content),
-    // we still want to focus the editor so the user can start typing
-    if (!rawHit) {
-      // Blur any currently focused element
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-      }
-
-      const editorDom = this.#editor.view?.dom as HTMLElement | undefined;
-      if (editorDom) {
-        // Find the first valid text position in the document
-        const validPos = this.#getFirstTextPosition();
-        const doc = this.#editor?.state?.doc;
-
-        if (doc) {
-          try {
-            const tr = this.#editor.state.tr.setSelection(TextSelection.create(doc, validPos));
-            this.#editor.view?.dispatch(tr);
-          } catch (error) {
-            // Error dispatching selection - this can happen if the document is in an invalid state
-            if (process.env.NODE_ENV === 'development') {
-              console.warn('[PresentationEditor] Failed to set selection to first text position:', error);
-            }
-          }
-        }
-        editorDom.focus();
-        this.#editor.view?.focus();
-        // Force selection update to render the caret
-        this.#scheduleSelectionUpdate();
-      }
-      return;
-    }
-
-    if (!hit || !doc) {
-      // We got a layout position but couldn't map it to the current document deterministically.
-      // Keep the existing selection and allow the pending re-layout to catch up.
-      this.#pendingDocChange = true;
-      this.#scheduleRerender();
-      return;
-    }
-
-    // Check if click landed on an atomic fragment (image, drawing)
-    const fragmentHit = getFragmentAtPosition(
-      this.#layoutState.layout,
-      this.#layoutState.blocks,
-      this.#layoutState.measures,
-      rawHit.pos,
-    );
-
-    // Inline image hit detection via DOM target (for inline images rendered inside paragraphs)
-    const targetImg = (event.target as HTMLElement | null)?.closest?.('img');
-    const imgPmStart = targetImg?.dataset?.pmStart ? Number(targetImg.dataset.pmStart) : null;
-    if (!Number.isNaN(imgPmStart) && imgPmStart != null) {
-      const doc = this.#editor.state.doc;
-      const imgLayoutEpochRaw = targetImg?.dataset?.layoutEpoch;
-      const imgLayoutEpoch = imgLayoutEpochRaw != null ? Number(imgLayoutEpochRaw) : NaN;
-      const rawLayoutEpoch = Number.isFinite(rawHit.layoutEpoch) ? rawHit.layoutEpoch : NaN;
-      const effectiveEpoch =
-        Number.isFinite(imgLayoutEpoch) && Number.isFinite(rawLayoutEpoch)
-          ? Math.max(imgLayoutEpoch, rawLayoutEpoch)
-          : Number.isFinite(imgLayoutEpoch)
-            ? imgLayoutEpoch
-            : rawHit.layoutEpoch;
-      const mappedImg = this.#epochMapper.mapPosFromLayoutToCurrentDetailed(imgPmStart, effectiveEpoch, 1);
-      if (!mappedImg.ok) {
-        debugLog('warn', 'inline image mapping failed', mappedImg);
-        this.#pendingDocChange = true;
-        this.#scheduleRerender();
-        return;
-      }
-      const clampedImgPos = Math.max(0, Math.min(mappedImg.pos, doc.content.size));
-
-      // Validate position is within document bounds
-      if (clampedImgPos < 0 || clampedImgPos >= doc.content.size) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(
-            `[PresentationEditor] Invalid position ${clampedImgPos} for inline image (document size: ${doc.content.size})`,
-          );
-        }
-        return;
-      }
-
-      // Emit imageDeselected if previous selection was a different image
-      const newSelectionId = `inline-${clampedImgPos}`;
-      if (this.#lastSelectedImageBlockId && this.#lastSelectedImageBlockId !== newSelectionId) {
-        this.emit('imageDeselected', { blockId: this.#lastSelectedImageBlockId } as ImageDeselectedEvent);
-      }
-
-      try {
-        const tr = this.#editor.state.tr.setSelection(NodeSelection.create(doc, clampedImgPos));
-        this.#editor.view?.dispatch(tr);
-
-        const selector = `.superdoc-inline-image[data-pm-start="${imgPmStart}"]`;
-        const targetElement = this.#viewportHost.querySelector(selector);
-        this.emit('imageSelected', {
-          element: targetElement ?? targetImg,
-          blockId: null,
-          pmStart: clampedImgPos,
-        } as ImageSelectedEvent);
-        this.#lastSelectedImageBlockId = newSelectionId;
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(
-            `[PresentationEditor] Failed to create NodeSelection for inline image at position ${imgPmStart}:`,
-            error,
-          );
-        }
-      }
-
-      this.#focusEditorAfterImageSelection();
-      return;
-    }
-
-    // If clicked on an atomic fragment (image or drawing), create NodeSelection
-    if (fragmentHit && (fragmentHit.fragment.kind === 'image' || fragmentHit.fragment.kind === 'drawing')) {
-      const doc = this.#editor.state.doc;
-      try {
-        // Create NodeSelection for atomic node at hit position
-        const tr = this.#editor.state.tr.setSelection(NodeSelection.create(doc, hit.pos));
-        this.#editor.view?.dispatch(tr);
-
-        // Emit imageDeselected if previous selection was a different image
-        if (this.#lastSelectedImageBlockId && this.#lastSelectedImageBlockId !== fragmentHit.fragment.blockId) {
-          this.emit('imageDeselected', { blockId: this.#lastSelectedImageBlockId } as ImageDeselectedEvent);
-        }
-
-        // Emit imageSelected event for overlay to detect
-        if (fragmentHit.fragment.kind === 'image') {
-          const targetElement = this.#viewportHost.querySelector(
-            `.superdoc-image-fragment[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
-          );
-          if (targetElement) {
-            this.emit('imageSelected', {
-              element: targetElement,
-              blockId: fragmentHit.fragment.blockId,
-              pmStart: fragmentHit.fragment.pmStart,
-            } as ImageSelectedEvent);
-            this.#lastSelectedImageBlockId = fragmentHit.fragment.blockId;
-          }
-        }
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] Failed to create NodeSelection for atomic fragment:', error);
-        }
-      }
-
-      this.#focusEditorAfterImageSelection();
-      return;
-    }
-
-    // If clicking away from an image, emit imageDeselected
-    if (this.#lastSelectedImageBlockId) {
-      this.emit('imageDeselected', { blockId: this.#lastSelectedImageBlockId } as ImageDeselectedEvent);
-      this.#lastSelectedImageBlockId = null;
-    }
-
-    // Handle shift+click to extend selection
-    if (event.shiftKey && this.#editor.state.selection.$anchor) {
-      const anchor = this.#editor.state.selection.anchor;
-      const head = hit.pos;
-
-      // Use current extension mode (from previous double/triple click) or default to character mode
-      const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
-
-      try {
-        const tr = this.#editor.state.tr.setSelection(TextSelection.create(this.#editor.state.doc, selAnchor, selHead));
-        this.#editor.view?.dispatch(tr);
-        this.#scheduleSelectionUpdate();
-      } catch (error) {
-        console.warn('[SELECTION] Failed to extend selection on shift+click:', {
-          error,
-          anchor,
-          head,
-          selAnchor,
-          selHead,
-          mode: this.#dragExtensionMode,
-        });
-      }
-
-      // Focus editor
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-      }
-      const editorDom = this.#editor.view?.dom as HTMLElement | undefined;
-      if (editorDom) {
-        editorDom.focus();
-        this.#editor.view?.focus();
-      }
-
-      return; // Don't start drag on shift+click
-    }
-
-    const clickDepth = this.#registerPointerClick(event);
-
-    // Set up drag selection state
-    // Only update dragAnchor on single click; preserve it for double/triple clicks
-    // so word/paragraph selection uses the consistent first-click position
-    // (the second click can return a slightly different position due to mouse movement)
-    if (clickDepth === 1) {
-      this.#dragAnchor = hit.pos;
-      this.#dragAnchorPageIndex = hit.pageIndex;
-      this.#pendingMarginClick = this.#computePendingMarginClick(event.pointerId, x, y);
-
-      // Check if click is inside a table cell for potential cell selection
-      // Only set up cell anchor on single click (not double/triple for word/para selection)
-      const tableHit = this.#hitTestTable(x, y);
-
-      if (tableHit) {
-        const tablePos = this.#getTablePosFromHit(tableHit);
-        if (tablePos !== null) {
-          this.#setCellAnchor(tableHit, tablePos);
-        }
-      } else {
-        // Clicked outside table - clear any existing cell anchor
-        this.#clearCellAnchor();
-      }
-    } else {
-      this.#pendingMarginClick = null;
-    }
-
-    this.#dragLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
-    this.#dragLastRawHit = hit;
-    this.#dragUsedPageNotMountedFallback = false;
-
-    this.#isDragging = true;
-    if (clickDepth >= 3) {
-      this.#dragExtensionMode = 'para';
-    } else if (clickDepth === 2) {
-      this.#dragExtensionMode = 'word';
-    } else {
-      this.#dragExtensionMode = 'char';
-    }
-
-    debugLog(
-      'verbose',
-      `Drag selection start ${JSON.stringify({
-        pointer: { clientX: event.clientX, clientY: event.clientY, x, y },
-        clickDepth,
-        extensionMode: this.#dragExtensionMode,
-        anchor: this.#dragAnchor,
-        anchorPageIndex: this.#dragAnchorPageIndex,
-        rawHit: rawHit
-          ? {
-              pos: rawHit.pos,
-              pageIndex: rawHit.pageIndex,
-              blockId: rawHit.blockId,
-              lineIndex: rawHit.lineIndex,
-              layoutEpoch: rawHit.layoutEpoch,
-            }
-          : null,
-        mapped: mapped
-          ? mapped.ok
-            ? { ok: true, pos: mapped.pos, fromEpoch: mapped.fromEpoch, toEpoch: mapped.toEpoch }
-            : {
-                ok: false,
-                reason: (mapped as { ok: false; reason: string }).reason,
-                fromEpoch: mapped.fromEpoch,
-                toEpoch: mapped.toEpoch,
-              }
-          : null,
-        hit: hit ? { pos: hit.pos, pageIndex: hit.pageIndex, layoutEpoch: hit.layoutEpoch } : null,
-      })}`,
-    );
-
-    // Capture pointer for reliable drag tracking even outside viewport
-    // Guard for test environments where setPointerCapture may not exist
-    if (typeof this.#viewportHost.setPointerCapture === 'function') {
-      this.#viewportHost.setPointerCapture(event.pointerId);
-    }
-
-    let handledByDepth = false;
-    const sessionModeForDepth = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionModeForDepth === 'body') {
-      // For double/triple clicks, use the stored dragAnchor from the first click
-      // to avoid position drift from slight mouse movement between clicks
-      const selectionPos = clickDepth >= 2 && this.#dragAnchor !== null ? this.#dragAnchor : hit.pos;
-
-      if (clickDepth >= 3) {
-        handledByDepth = this.#selectParagraphAt(selectionPos);
-      } else if (clickDepth === 2) {
-        handledByDepth = this.#selectWordAt(selectionPos);
-      }
-    }
-
-    if (!handledByDepth) {
-      try {
-        const doc = this.#editor.state.doc;
-        let nextSelection: Selection = TextSelection.create(doc, hit.pos);
-        if (!nextSelection.$from.parent.inlineContent) {
-          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
-        }
-        const tr = this.#editor.state.tr.setSelection(nextSelection);
-        this.#editor.view?.dispatch(tr);
-      } catch {
-        // Position may be invalid during layout updates (e.g., after drag-drop) - ignore
-      }
-    }
-
-    // Force selection update to clear stale carets even if PM thinks selection didn't change.
-    // This handles clicking at/near same position where PM's selection.eq() might return true,
-    // which prevents 'selectionUpdate' event from firing and leaves old carets on screen.
-    // By forcing the update, we ensure #updateSelection() runs and clears the DOM layer.
-    this.#scheduleSelectionUpdate();
-
-    // Blur any currently focused element to ensure the PM editor can receive focus
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-
-    const editorDom = this.#editor.view?.dom as HTMLElement | undefined;
-    if (!editorDom) {
-      return;
-    }
-
-    // Try direct DOM focus first
-    editorDom.focus();
-    this.#editor.view?.focus();
-  };
-
-  /**
-   * Finds the first valid text position in the document.
-   *
-   * Traverses the document tree to locate the first textblock node (paragraph, heading, etc.)
-   * and returns a position inside it. This is used when focusing the editor but no specific
-   * position is available (e.g., clicking outside text content or before layout is ready).
-   *
-   * @returns The position inside the first textblock, or 1 if no textblock is found
-   * @private
-   */
-  #getFirstTextPosition(): number {
-    return getFirstTextPositionFromHelper(this.#editor?.state?.doc ?? null);
-  }
-
-  /**
-   * Registers a pointer click event and tracks multi-click sequences (double, triple).
-   *
-   * This method implements multi-click detection by tracking the timing and position
-   * of consecutive clicks. Clicks within 400ms and 5px of each other increment the
-   * click count, up to a maximum of 3 (single, double, triple).
-   *
-   * @param event - The mouse event from the pointer down handler
-   * @returns The current click count (1 = single, 2 = double, 3 = triple)
-   * @private
-   */
-  #registerPointerClick(event: MouseEvent): number {
-    const nextState = registerPointerClickFromHelper(
-      event,
-      { clickCount: this.#clickCount, lastClickTime: this.#lastClickTime, lastClickPosition: this.#lastClickPosition },
-      {
-        timeThresholdMs: MULTI_CLICK_TIME_THRESHOLD_MS,
-        distanceThresholdPx: MULTI_CLICK_DISTANCE_THRESHOLD_PX,
-        maxClickCount: 3,
-      },
-    );
-
-    this.#clickCount = nextState.clickCount;
-    this.#lastClickTime = nextState.lastClickTime;
-    this.#lastClickPosition = nextState.lastClickPosition;
-
-    return nextState.clickCount;
-  }
-
-  // ============================================================================
-  // Cell Selection Utilities
-  // ============================================================================
-
-  /**
-   * Gets the ProseMirror position at the start of a table cell from a table hit result.
-   *
-   * This method navigates the ProseMirror document structure to find the exact position where
-   * a table cell begins. The position returned is suitable for use with CellSelection.create().
-   *
-   * Algorithm:
-   * 1. Validate input (tableHit structure and cell indices)
-   * 2. Traverse document to find the table node matching tableHit.block.id
-   * 3. Navigate through table structure (table > row > cell) to target row
-   * 4. Track logical column position accounting for colspan (handles merged cells)
-   * 5. Return position when target column falls within a cell's span
-   *
-   * Merged cell handling:
-   * - Does NOT assume 1:1 mapping between cell index and logical column
-   * - Tracks cumulative logical column position by summing colspan values
-   * - A cell with colspan=3 occupies logical columns [n, n+1, n+2]
-   * - Finds the cell whose logical span contains the target column index
-   *
-   * Error handling:
-   * - Input validation with console warnings for debugging
-   * - Try-catch around document traversal (catches corrupted document errors)
-   * - Bounds checking for row indices
-   * - Null checks at each navigation step
-   *
-   * @param tableHit - The table hit result from hitTestTableFragment containing:
-   *   - block: TableBlock with the table's block ID
-   *   - cellRowIndex: 0-based row index of the target cell
-   *   - cellColIndex: 0-based logical column index of the target cell
-   * @returns The PM position at the start of the cell, or null if:
-   *   - Invalid input (null tableHit, negative indices)
-   *   - Table not found in document
-   *   - Target row out of bounds
-   *   - Target column not found in row
-   *   - Document traversal error
-   * @private
-   *
-   * @throws Never throws - all errors are caught and logged, returns null on failure
-   */
-  #getCellPosFromTableHit(tableHit: TableHitResult): number | null {
-    return getCellPosFromTableHitFromHelper(tableHit, this.#editor.state?.doc ?? null, this.#layoutState.blocks);
-  }
-
-  /**
-   * Gets the table position (start of table node) from a table hit result.
-   *
-   * @param tableHit - The table hit result from hitTestTableFragment
-   * @returns The PM position at the start of the table, or null if not found
-   * @private
-   */
-  #getTablePosFromHit(tableHit: TableHitResult): number | null {
-    return getTablePosFromHitFromHelper(tableHit, this.#editor.state?.doc ?? null, this.#layoutState.blocks);
-  }
-
-  /**
-   * Determines if the current drag should create a CellSelection instead of TextSelection.
-   *
-   * Implements a state machine for table cell selection:
-   * - 'none': Not in a table, use TextSelection
-   * - 'pending': Started drag in a table, but haven't crossed cell boundary yet
-   * - 'active': Crossed cell boundary, use CellSelection
-   *
-   * State transitions:
-   * - none → pending: When drag starts in a table cell (#setCellAnchor)
-   * - pending → active: When drag crosses into a different cell (this method returns true)
-   * - active → none: When drag ends (#clearCellAnchor)
-   * - * → none: When document changes or clicking outside table
-   *
-   * Decision logic:
-   * 1. No cell anchor → false (not in table drag mode)
-   * 2. Current position outside table → return current state (stay in 'active' if already there)
-   * 3. Different table → treat as outside table
-   * 4. Different cell in same table → true (activate cell selection)
-   * 5. Same cell → return current state (stay in 'active' if already there, else false)
-   *
-   * This state machine ensures:
-   * - Text selection works normally within a single cell
-   * - Cell selection activates smoothly when crossing cell boundaries
-   * - Once activated, cell selection persists even if dragging back to anchor cell
-   *
-   * @param currentTableHit - The table hit result for the current pointer position, or null if not in a table
-   * @returns true if we should create a CellSelection, false for TextSelection
-   * @private
-   */
-  #shouldUseCellSelection(currentTableHit: TableHitResult | null): boolean {
-    return shouldUseCellSelectionFromHelper(currentTableHit, this.#cellAnchor, this.#cellDragMode);
-  }
-
-  /**
-   * Stores the cell anchor when a drag operation starts inside a table cell.
-   *
-   * @param tableHit - The table hit result for the initial click position
-   * @param tablePos - The PM position of the table node
-   * @private
-   */
-  #setCellAnchor(tableHit: TableHitResult, tablePos: number): void {
-    const cellPos = this.#getCellPosFromTableHit(tableHit);
-    if (cellPos === null) {
-      return;
-    }
-
-    this.#cellAnchor = {
-      tablePos,
-      cellPos,
-      cellRowIndex: tableHit.cellRowIndex,
-      cellColIndex: tableHit.cellColIndex,
-      tableBlockId: tableHit.block.id,
-    };
-    this.#cellDragMode = 'pending';
-  }
-
-  /**
-   * Clears the cell drag state.
-   * Called when drag ends or when clicking outside a table.
-   *
-   * @private
-   */
-  #clearCellAnchor(): void {
-    this.#cellAnchor = null;
-    this.#cellDragMode = 'none';
-  }
-
   /**
    * Attempts to perform a table hit test for the given normalized coordinates.
    *
@@ -3349,516 +2688,6 @@ export class PresentationEditor extends EventEmitter {
     mode: 'char' | 'word' | 'para',
   ): { selAnchor: number; selHead: number } {
     return calculateExtendedSelection(this.#layoutState.blocks, anchor, head, mode);
-  }
-
-  #handlePointerMove = (event: PointerEvent) => {
-    if (!this.#layoutState.layout) return;
-    const normalized = this.#normalizeClientPoint(event.clientX, event.clientY);
-    if (!normalized) return;
-
-    // Handle drag selection when button is held
-    if (this.#isDragging && this.#dragAnchor !== null && event.buttons & 1) {
-      this.#pendingMarginClick = null;
-      const prevPointer = this.#dragLastPointer;
-      const prevRawHit = this.#dragLastRawHit;
-      this.#dragLastPointer = { clientX: event.clientX, clientY: event.clientY, x: normalized.x, y: normalized.y };
-      const rawHit = clickToPosition(
-        this.#layoutState.layout,
-        this.#layoutState.blocks,
-        this.#layoutState.measures,
-        { x: normalized.x, y: normalized.y },
-        this.#viewportHost,
-        event.clientX,
-        event.clientY,
-        this.#pageGeometryHelper ?? undefined,
-      );
-
-      // If we can't find a position, keep the last selection
-      if (!rawHit) {
-        debugLog(
-          'verbose',
-          `Drag selection update (no hit) ${JSON.stringify({
-            pointer: { clientX: event.clientX, clientY: event.clientY, x: normalized.x, y: normalized.y },
-            prevPointer,
-            anchor: this.#dragAnchor,
-          })}`,
-        );
-        return;
-      }
-
-      const doc = this.#editor.state?.doc;
-      if (!doc) return;
-
-      this.#dragLastRawHit = rawHit;
-      const pageMounted = this.#getPageElement(rawHit.pageIndex) != null;
-      if (!pageMounted && this.#isSelectionAwareVirtualizationEnabled()) {
-        this.#dragUsedPageNotMountedFallback = true;
-        debugLog('warn', 'Geometry fallback', { reason: 'page_not_mounted', pageIndex: rawHit.pageIndex });
-      }
-      this.#updateSelectionVirtualizationPins({ includeDragBuffer: true, extraPages: [rawHit.pageIndex] });
-
-      const mappedHead = this.#epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1);
-      if (!mappedHead.ok) {
-        debugLog('warn', 'drag mapping failed', mappedHead);
-        debugLog(
-          'verbose',
-          `Drag selection update (map failed) ${JSON.stringify({
-            pointer: { clientX: event.clientX, clientY: event.clientY, x: normalized.x, y: normalized.y },
-            prevPointer,
-            anchor: this.#dragAnchor,
-            rawHit: {
-              pos: rawHit.pos,
-              pageIndex: rawHit.pageIndex,
-              blockId: rawHit.blockId,
-              lineIndex: rawHit.lineIndex,
-              layoutEpoch: rawHit.layoutEpoch,
-            },
-            mapped: {
-              ok: false,
-              reason: (mappedHead as { ok: false; reason: string }).reason,
-              fromEpoch: mappedHead.fromEpoch,
-              toEpoch: mappedHead.toEpoch,
-            },
-          })}`,
-        );
-        return;
-      }
-
-      const hit = {
-        ...rawHit,
-        pos: Math.max(0, Math.min(mappedHead.pos, doc.content.size)),
-        layoutEpoch: mappedHead.toEpoch,
-      };
-      this.#debugLastHit = {
-        source: pageMounted ? 'dom' : 'geometry',
-        pos: rawHit.pos,
-        layoutEpoch: rawHit.layoutEpoch,
-        mappedPos: hit.pos,
-      };
-      this.#updateSelectionDebugHud();
-
-      const anchor = this.#dragAnchor;
-      const head = hit.pos;
-      const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
-      debugLog(
-        'verbose',
-        `Drag selection update ${JSON.stringify({
-          pointer: { clientX: event.clientX, clientY: event.clientY, x: normalized.x, y: normalized.y },
-          prevPointer,
-          rawHit: {
-            pos: rawHit.pos,
-            pageIndex: rawHit.pageIndex,
-            blockId: rawHit.blockId,
-            lineIndex: rawHit.lineIndex,
-            layoutEpoch: rawHit.layoutEpoch,
-          },
-          prevRawHit: prevRawHit
-            ? {
-                pos: prevRawHit.pos,
-                pageIndex: prevRawHit.pageIndex,
-                blockId: prevRawHit.blockId,
-                lineIndex: prevRawHit.lineIndex,
-                layoutEpoch: prevRawHit.layoutEpoch,
-              }
-            : null,
-          mappedHead: { pos: mappedHead.pos, fromEpoch: mappedHead.fromEpoch, toEpoch: mappedHead.toEpoch },
-          hit: { pos: hit.pos, pageIndex: hit.pageIndex, layoutEpoch: hit.layoutEpoch },
-          anchor,
-          head,
-          selAnchor,
-          selHead,
-          direction: head >= anchor ? 'down' : 'up',
-          selectionDirection: selHead >= selAnchor ? 'down' : 'up',
-          extensionMode: this.#dragExtensionMode,
-          hitSource: pageMounted ? 'dom' : 'geometry',
-          pageMounted,
-        })}`,
-      );
-
-      // Check for cell selection mode (table drag)
-      const currentTableHit = this.#hitTestTable(normalized.x, normalized.y);
-      const shouldUseCellSel = this.#shouldUseCellSelection(currentTableHit);
-
-      if (shouldUseCellSel && this.#cellAnchor) {
-        // Cell selection mode - create CellSelection spanning anchor to current cell
-        const headCellPos = currentTableHit ? this.#getCellPosFromTableHit(currentTableHit) : null;
-
-        if (headCellPos !== null) {
-          // Transition to active mode if we weren't already
-          if (this.#cellDragMode !== 'active') {
-            this.#cellDragMode = 'active';
-          }
-
-          try {
-            const doc = this.#editor.state.doc;
-            const anchorCellPos = this.#cellAnchor.cellPos;
-
-            // Validate positions are within document bounds
-            const clampedAnchor = Math.max(0, Math.min(anchorCellPos, doc.content.size));
-            const clampedHead = Math.max(0, Math.min(headCellPos, doc.content.size));
-
-            const cellSelection = CellSelection.create(doc, clampedAnchor, clampedHead);
-            const tr = this.#editor.state.tr.setSelection(cellSelection);
-            this.#editor.view?.dispatch(tr);
-            this.#scheduleSelectionUpdate();
-          } catch (error) {
-            // CellSelection creation can fail if positions are invalid
-            // Fall back to text selection
-            console.warn('[CELL-SELECTION] Failed to create CellSelection, falling back to TextSelection:', error);
-
-            const anchor = this.#dragAnchor;
-            const head = hit.pos;
-            const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
-
-            try {
-              const tr = this.#editor.state.tr.setSelection(
-                TextSelection.create(this.#editor.state.doc, selAnchor, selHead),
-              );
-              this.#editor.view?.dispatch(tr);
-              this.#scheduleSelectionUpdate();
-            } catch {
-              // Position may be invalid during layout updates - ignore
-            }
-          }
-
-          return; // Skip header/footer hover logic during drag
-        }
-      }
-
-      // Text selection mode (default)
-      // Apply extension mode to expand selection boundaries, preserving direction
-
-      try {
-        const tr = this.#editor.state.tr.setSelection(TextSelection.create(this.#editor.state.doc, selAnchor, selHead));
-        this.#editor.view?.dispatch(tr);
-        this.#scheduleSelectionUpdate();
-      } catch (error) {
-        console.warn('[SELECTION] Failed to extend selection during drag:', {
-          error,
-          anchor,
-          head,
-          selAnchor,
-          selHead,
-          mode: this.#dragExtensionMode,
-        });
-      }
-
-      return; // Skip header/footer hover logic during drag
-    }
-
-    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      this.#clearHoverRegion();
-      return;
-    }
-    if (this.#documentMode === 'viewing') {
-      this.#clearHoverRegion();
-      return;
-    }
-    const region = this.#hitTestHeaderFooterRegion(normalized.x, normalized.y);
-    if (!region) {
-      this.#clearHoverRegion();
-      return;
-    }
-    const currentHover = this.#headerFooterSession?.hoverRegion;
-    if (
-      currentHover &&
-      currentHover.kind === region.kind &&
-      currentHover.pageIndex === region.pageIndex &&
-      currentHover.sectionType === region.sectionType
-    ) {
-      return;
-    }
-    this.#headerFooterSession?.renderHover(region);
-    this.#renderHoverRegion(region);
-  };
-
-  #handlePointerLeave = () => {
-    this.#clearHoverRegion();
-  };
-
-  #handleVisibleHostFocusIn = (event: FocusEvent) => {
-    // Avoid stealing focus from toolbars/dropdowns registered as UI surfaces.
-    if (isInRegisteredSurface(event)) {
-      return;
-    }
-
-    if (this.#suppressFocusInFromDraggable) {
-      this.#suppressFocusInFromDraggable = false;
-      return;
-    }
-
-    const target = event.target as Node | null;
-    const activeTarget = this.#getActiveDomTarget();
-    if (!activeTarget) {
-      return;
-    }
-
-    const activeNode = activeTarget as unknown as Node;
-    const containsFn =
-      typeof (activeNode as { contains?: (node: Node | null) => boolean }).contains === 'function'
-        ? (activeNode as { contains: (node: Node | null) => boolean }).contains
-        : null;
-
-    if (target && (activeNode === target || (containsFn && containsFn.call(activeNode, target)))) {
-      return;
-    }
-
-    try {
-      if (activeTarget instanceof HTMLElement && typeof activeTarget.focus === 'function') {
-        // preventScroll supported in modern browsers; fall back silently when not.
-        (activeTarget as unknown as { focus?: (opts?: { preventScroll?: boolean }) => void }).focus?.({
-          preventScroll: true,
-        });
-      } else if (typeof (activeTarget as { focus?: () => void }).focus === 'function') {
-        (activeTarget as { focus: () => void }).focus();
-      }
-    } catch {
-      // Ignore focus failures (e.g., non-focusable targets in headless tests)
-    }
-
-    try {
-      this.getActiveEditor().view?.focus();
-    } catch {
-      // Ignore focus failures
-    }
-  };
-
-  #handlePointerUp = (event: PointerEvent) => {
-    this.#suppressFocusInFromDraggable = false;
-
-    if (!this.#isDragging) return;
-
-    // Release pointer capture if we have it
-    // Guard for test environments where pointer capture methods may not exist
-    if (
-      typeof this.#viewportHost.hasPointerCapture === 'function' &&
-      typeof this.#viewportHost.releasePointerCapture === 'function' &&
-      this.#viewportHost.hasPointerCapture(event.pointerId)
-    ) {
-      this.#viewportHost.releasePointerCapture(event.pointerId);
-    }
-
-    const pendingMarginClick = this.#pendingMarginClick;
-    this.#pendingMarginClick = null;
-
-    const dragAnchor = this.#dragAnchor;
-    const dragMode = this.#dragExtensionMode;
-    const dragUsedFallback = this.#dragUsedPageNotMountedFallback;
-    const dragPointer = this.#dragLastPointer;
-
-    // Clear drag state - but preserve #dragAnchor and #dragExtensionMode
-    // because they're needed for double-click word selection (the anchor from
-    // the first click must persist to the second click) and for shift+click
-    // to extend selection in the same mode (word/para) after a multi-click
-    this.#isDragging = false;
-
-    // Reset cell drag mode but preserve #cellAnchor for potential shift+click extension
-    // If we were in active cell selection mode, the CellSelection is already dispatched
-    // and preserved in the editor state
-    if (this.#cellDragMode !== 'none') {
-      this.#cellDragMode = 'none';
-    }
-
-    if (!pendingMarginClick || pendingMarginClick.pointerId !== event.pointerId) {
-      // End of drag selection (non-margin). Drop drag buffer pages and keep endpoints mounted.
-      this.#updateSelectionVirtualizationPins({ includeDragBuffer: false });
-
-      if (dragUsedFallback && dragAnchor != null) {
-        const pointer = dragPointer ?? { clientX: event.clientX, clientY: event.clientY };
-        this.#finalizeDragSelectionWithDom(pointer, dragAnchor, dragMode);
-      }
-
-      this.#scheduleA11ySelectionAnnouncement({ immediate: true });
-
-      this.#dragLastPointer = null;
-      this.#dragLastRawHit = null;
-      this.#dragUsedPageNotMountedFallback = false;
-      return;
-    }
-    const sessionModeForDrag = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionModeForDrag !== 'body' || this.#isViewLocked()) {
-      this.#dragLastPointer = null;
-      this.#dragLastRawHit = null;
-      this.#dragUsedPageNotMountedFallback = false;
-      return;
-    }
-
-    const doc = this.#editor.state?.doc;
-    if (!doc) {
-      this.#dragLastPointer = null;
-      this.#dragLastRawHit = null;
-      this.#dragUsedPageNotMountedFallback = false;
-      return;
-    }
-
-    if (pendingMarginClick.kind === 'aboveFirstLine') {
-      const pos = this.#getFirstTextPosition();
-      try {
-        const tr = this.#editor.state.tr.setSelection(TextSelection.create(doc, pos));
-        this.#editor.view?.dispatch(tr);
-        this.#scheduleSelectionUpdate();
-      } catch {
-        // Ignore invalid positions during re-layout
-      }
-      this.#debugLastHit = { source: 'margin', pos: null, layoutEpoch: null, mappedPos: pos };
-      this.#updateSelectionDebugHud();
-      this.#dragLastPointer = null;
-      this.#dragLastRawHit = null;
-      this.#dragUsedPageNotMountedFallback = false;
-      return;
-    }
-
-    if (pendingMarginClick.kind === 'right') {
-      const mappedEnd = this.#epochMapper.mapPosFromLayoutToCurrentDetailed(
-        pendingMarginClick.pmEnd,
-        pendingMarginClick.layoutEpoch,
-        1,
-      );
-      if (!mappedEnd.ok) {
-        debugLog('warn', 'right margin mapping failed', mappedEnd);
-        this.#pendingDocChange = true;
-        this.#scheduleRerender();
-        this.#dragLastPointer = null;
-        this.#dragLastRawHit = null;
-        this.#dragUsedPageNotMountedFallback = false;
-        return;
-      }
-      const caretPos = Math.max(0, Math.min(mappedEnd.pos, doc.content.size));
-      try {
-        const tr = this.#editor.state.tr.setSelection(TextSelection.create(doc, caretPos));
-        this.#editor.view?.dispatch(tr);
-        this.#scheduleSelectionUpdate();
-      } catch {
-        // Ignore invalid positions during re-layout
-      }
-      this.#debugLastHit = {
-        source: 'margin',
-        pos: pendingMarginClick.pmEnd,
-        layoutEpoch: pendingMarginClick.layoutEpoch,
-        mappedPos: caretPos,
-      };
-      this.#updateSelectionDebugHud();
-      this.#dragLastPointer = null;
-      this.#dragLastRawHit = null;
-      this.#dragUsedPageNotMountedFallback = false;
-      return;
-    }
-
-    const mappedStart = this.#epochMapper.mapPosFromLayoutToCurrentDetailed(
-      pendingMarginClick.pmStart,
-      pendingMarginClick.layoutEpoch,
-      1,
-    );
-    const mappedEnd = this.#epochMapper.mapPosFromLayoutToCurrentDetailed(
-      pendingMarginClick.pmEnd,
-      pendingMarginClick.layoutEpoch,
-      -1,
-    );
-    if (!mappedStart.ok || !mappedEnd.ok) {
-      if (!mappedStart.ok) debugLog('warn', 'left margin mapping failed (start)', mappedStart);
-      if (!mappedEnd.ok) debugLog('warn', 'left margin mapping failed (end)', mappedEnd);
-      this.#pendingDocChange = true;
-      this.#scheduleRerender();
-      this.#dragLastPointer = null;
-      this.#dragLastRawHit = null;
-      this.#dragUsedPageNotMountedFallback = false;
-      return;
-    }
-
-    const selFrom = Math.max(0, Math.min(Math.min(mappedStart.pos, mappedEnd.pos), doc.content.size));
-    const selTo = Math.max(0, Math.min(Math.max(mappedStart.pos, mappedEnd.pos), doc.content.size));
-    try {
-      const tr = this.#editor.state.tr.setSelection(TextSelection.create(doc, selFrom, selTo));
-      this.#editor.view?.dispatch(tr);
-      this.#scheduleSelectionUpdate();
-    } catch {
-      // Ignore invalid positions during re-layout
-    }
-    this.#debugLastHit = {
-      source: 'margin',
-      pos: pendingMarginClick.pmStart,
-      layoutEpoch: pendingMarginClick.layoutEpoch,
-      mappedPos: selFrom,
-    };
-    this.#updateSelectionDebugHud();
-
-    this.#dragLastPointer = null;
-    this.#dragLastRawHit = null;
-    this.#dragUsedPageNotMountedFallback = false;
-  };
-
-  #handleDragOver = createExternalFieldAnnotationDragOverHandler({
-    getActiveEditor: () => this.getActiveEditor(),
-    hitTest: (clientX, clientY) => this.hitTest(clientX, clientY),
-    scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
-  });
-
-  #handleDrop = createExternalFieldAnnotationDropHandler({
-    getActiveEditor: () => this.getActiveEditor(),
-    hitTest: (clientX, clientY) => this.hitTest(clientX, clientY),
-    scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
-  });
-
-  #handleDoubleClick = (event: MouseEvent) => {
-    if (event.button !== 0) return;
-    if (!this.#layoutState.layout) return;
-
-    const rect = this.#viewportHost.getBoundingClientRect();
-    // Use effective zoom from actual rendered dimensions for accurate coordinate conversion
-    const zoom = this.#layoutOptions.zoom ?? 1;
-    const scrollLeft = this.#visibleHost.scrollLeft ?? 0;
-    const scrollTop = this.#visibleHost.scrollTop ?? 0;
-    const x = (event.clientX - rect.left + scrollLeft) / zoom;
-    const y = (event.clientY - rect.top + scrollTop) / zoom;
-
-    const region = this.#hitTestHeaderFooterRegion(x, y);
-    if (region) {
-      event.preventDefault();
-      event.stopPropagation();
-
-      // Check if header/footer exists, create if not
-      const descriptor = this.#resolveDescriptorForRegion(region);
-      const hfManager = this.#headerFooterSession?.manager;
-      if (!descriptor && hfManager) {
-        // No header/footer exists - create a default one
-        this.#createDefaultHeaderFooter(region);
-        // Refresh the manager to pick up the new descriptor
-        hfManager.refresh();
-      }
-
-      this.#activateHeaderFooterRegion(region);
-    } else if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
-      this.#exitHeaderFooterMode();
-    }
-  };
-
-  #handleKeyDown = (event: KeyboardEvent) => {
-    const sessionModeForKey = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (event.key === 'Escape' && sessionModeForKey !== 'body') {
-      event.preventDefault();
-      this.#exitHeaderFooterMode();
-      return;
-    }
-    if (event.ctrlKey && event.altKey && !event.shiftKey) {
-      if (event.code === 'KeyH') {
-        event.preventDefault();
-        this.#focusHeaderFooterShortcut('header');
-      } else if (event.code === 'KeyF') {
-        event.preventDefault();
-        this.#focusHeaderFooterShortcut('footer');
-      }
-    }
-  };
-
-  #focusHeaderFooterShortcut(kind: 'header' | 'footer') {
-    const pageIndex = this.#getCurrentPageIndex();
-    const region = this.#findRegionForPage(kind, pageIndex);
-    if (!region) {
-      this.#emitHeaderFooterEditBlocked('missingRegion');
-      return;
-    }
-    this.#activateHeaderFooterRegion(region);
   }
 
   #scheduleRerender() {
@@ -4426,7 +3255,7 @@ export class PresentationEditor extends EventEmitter {
 
     // Ensure selection endpoints remain mounted under virtualization so DOM-first
     // caret/selection rendering stays available during cross-page selection.
-    this.#updateSelectionVirtualizationPins({ includeDragBuffer: this.#isDragging });
+    this.#updateSelectionVirtualizationPins({ includeDragBuffer: this.#editorInputManager?.isDragging ?? false });
 
     // Handle CellSelection - render cell backgrounds for selected table cells
     if (selection instanceof CellSelection) {
@@ -5445,7 +4274,7 @@ export class PresentationEditor extends EventEmitter {
       {
         ariaLiveRegion: this.#ariaLiveRegion,
         sessionMode,
-        isDragging: this.#isDragging,
+        isDragging: this.#editorInputManager?.isDragging ?? false,
         visibleHost: this.#visibleHost,
         currentTimeout: this.#a11ySelectionAnnounceTimeout,
         announceNow: () => {
@@ -5590,9 +4419,9 @@ export class PresentationEditor extends EventEmitter {
         : null,
       docSize,
       includeDragBuffer: Boolean(options?.includeDragBuffer),
-      isDragging: this.#isDragging,
-      dragAnchorPageIndex: this.#dragAnchorPageIndex,
-      dragLastHitPageIndex: this.#dragLastRawHit ? this.#dragLastRawHit.pageIndex : null,
+      isDragging: this.#editorInputManager?.isDragging ?? false,
+      dragAnchorPageIndex: this.#editorInputManager?.dragAnchorPageIndex ?? null,
+      dragLastHitPageIndex: this.#editorInputManager?.dragLastHitPageIndex ?? null,
       extraPages: options?.extraPages,
     });
 
@@ -5616,9 +4445,10 @@ export class PresentationEditor extends EventEmitter {
     if (!normalized) return;
 
     // Ensure endpoint pages are pinned so DOM hit testing can resolve without scrolling.
+    const dragLastRawHit = this.#editorInputManager?.dragLastRawHit;
     this.#updateSelectionVirtualizationPins({
       includeDragBuffer: false,
-      extraPages: this.#dragLastRawHit ? [this.#dragLastRawHit.pageIndex] : undefined,
+      extraPages: dragLastRawHit ? [dragLastRawHit.pageIndex] : undefined,
     });
 
     const refined = clickToPosition(
@@ -5638,7 +4468,7 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    const prior = this.#dragLastRawHit;
+    const prior = dragLastRawHit;
     if (prior && (prior.pos !== refined.pos || prior.pageIndex !== refined.pageIndex)) {
       debugLog('info', 'Drag finalize refined hit', {
         fromPos: prior.pos,
@@ -5868,7 +4698,7 @@ export class PresentationEditor extends EventEmitter {
       localSelectionLayer,
       blocks: this.#layoutState.blocks,
       measures: this.#layoutState.measures,
-      cellAnchorTableBlockId: this.#cellAnchor?.tableBlockId ?? null,
+      cellAnchorTableBlockId: this.#editorInputManager?.cellAnchor?.tableBlockId ?? null,
       convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
     });
   }

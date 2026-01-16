@@ -1,3 +1,10 @@
+# [1.8.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.7.0...v1.8.0-next.1) (2026-01-16)
+
+
+### Features
+
+* add insertTrackedChange programmatic shortcut ([#1761](https://github.com/superdoc-dev/superdoc/issues/1761)) ([cd0628e](https://github.com/superdoc-dev/superdoc/commit/cd0628e82c2a15de41895c3e073d2d516a88532c))
+
 # [1.7.0](https://github.com/superdoc-dev/superdoc/compare/v1.6.1...v1.7.0) (2026-01-16)
 
 

@@ -340,6 +340,136 @@ describe('CommentsPlugin commands', () => {
     expect(editor.view.focus).not.toHaveBeenCalled();
   });
 
+  describe('addCommentReply', () => {
+    it('emits commentsUpdate event with parentCommentId', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      const command = commands.addCommentReply({
+        parentId: 'parent-123',
+        content: 'This is a reply',
+      });
+      const result = command({ editor });
+
+      expect(result).toBe(true);
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          type: comments_module_events.ADD,
+          comment: expect.objectContaining({
+            commentId: 'generated-id',
+            parentCommentId: 'parent-123',
+            commentText: 'This is a reply',
+            creatorName: 'Test User',
+            creatorEmail: 'test.user@example.com',
+            creatorImage: 'https://example.com/avatar.png',
+          }),
+          activeCommentId: 'generated-id',
+        }),
+      );
+    });
+
+    it('uses provided author fields instead of editor config', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      const command = commands.addCommentReply({
+        parentId: 'parent-456',
+        content: 'Custom author reply',
+        author: 'Custom Author',
+        authorEmail: 'custom@example.com',
+        authorImage: 'https://example.com/custom.png',
+      });
+      const result = command({ editor });
+
+      expect(result).toBe(true);
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            parentCommentId: 'parent-456',
+            creatorName: 'Custom Author',
+            creatorEmail: 'custom@example.com',
+            creatorImage: 'https://example.com/custom.png',
+          }),
+        }),
+      );
+    });
+
+    it('returns false and warns when parentId is missing', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const command = commands.addCommentReply({ content: 'No parent' });
+      const result = command({ editor });
+
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith('addCommentReply requires a parentId');
+      expect(editor.emit).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('falls back to editor config user when author fields not provided', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      const command = commands.addCommentReply({
+        parentId: 'parent-789',
+        content: 'Reply with default user',
+      });
+      command({ editor });
+
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            creatorName: 'Test User',
+            creatorEmail: 'test.user@example.com',
+            creatorImage: 'https://example.com/avatar.png',
+          }),
+        }),
+      );
+    });
+
+    it('handles empty editor options gracefully', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      // Clear user from editor options
+      editor.options.user = undefined;
+
+      const command = commands.addCommentReply({
+        parentId: 'parent-no-user',
+        content: 'Reply without user config',
+      });
+      const result = command({ editor });
+
+      expect(result).toBe(true);
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            parentCommentId: 'parent-no-user',
+            commentText: 'Reply without user config',
+          }),
+        }),
+      );
+    });
+  });
+
   it('findRangeById finds resolved comment via commentRangeStart/End nodes', () => {
     const schema = createCommentSchema();
     const startNode = schema.nodes.commentRangeStart.create({ 'w:id': 'resolved-1' });

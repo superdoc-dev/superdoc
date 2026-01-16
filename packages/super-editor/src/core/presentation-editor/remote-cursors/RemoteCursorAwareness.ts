@@ -3,7 +3,7 @@ import { relativePositionToAbsolutePosition, ySyncPluginKey } from 'y-prosemirro
 import * as Y from 'yjs';
 
 import { getFallbackCursorColor } from './RemoteCursorColors.js';
-import type { RemoteCursorState } from '../PresentationEditor.js';
+import type { RemoteCursorState } from '../types.js';
 
 /**
  * Minimal interface for Yjs awareness object.

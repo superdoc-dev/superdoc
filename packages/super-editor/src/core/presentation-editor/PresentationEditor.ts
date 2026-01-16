@@ -22,8 +22,7 @@ import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
-import { normalizeAwarenessStates as normalizeAwarenessStatesFromHelper } from './remote-cursors/RemoteCursorAwareness.js';
-import { renderRemoteCursors as renderRemoteCursorsFromHelper } from './remote-cursors/RemoteCursorRendering.js';
+import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
 import { SelectionSyncCoordinator } from './selection/SelectionSyncCoordinator.js';
 import { PresentationInputBridge } from './input/PresentationInputBridge.js';
 import { calculateExtendedSelection } from './selection/SelectionHelpers.js';
@@ -106,7 +105,7 @@ import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 
 // Collaboration cursor imports
-import { absolutePositionToRelativePosition, ySyncPluginKey } from 'y-prosemirror';
+import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
 import {
   HeaderFooterEditorManager,
@@ -132,9 +131,6 @@ import type {
   ImageSelectedEvent,
   ImageDeselectedEvent,
   TelemetryEvent,
-  AwarenessState,
-  AwarenessCursorData,
-  AwarenessWithSetField,
   CellAnchorState,
   EditorWithConverter,
   LayoutState,
@@ -199,19 +195,10 @@ const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
 const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
 /** Budget for header/footer initialization before warning (milliseconds) */
 const HEADER_FOOTER_INIT_BUDGET_MS = 200;
-/**
- * Debounce delay for scroll events (milliseconds).
- * Set to 32ms (~31fps) for responsive cursor updates during scrolling while avoiding
- * excessive re-renders. Reduced from 100ms to improve collaboration cursor responsiveness
- * when users scroll to view remote collaborators' positions.
- */
-const SCROLL_DEBOUNCE_MS = 32;
 /** Maximum zoom level before warning */
 const MAX_ZOOM_WARNING_THRESHOLD = 10;
 /** Maximum number of selection rectangles per user (performance guardrail) */
 const MAX_SELECTION_RECTS_PER_USER = 100;
-/** Default timeout for stale collaborator cleanup (milliseconds) */
-const DEFAULT_STALE_TIMEOUT_MS = 5 * 60 * 1000;
 
 const GLOBAL_PERFORMANCE: Performance | undefined = typeof performance !== 'undefined' ? performance : undefined;
 
@@ -292,7 +279,6 @@ export class PresentationEditor extends EventEmitter {
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
   #selectionSync = new SelectionSyncCoordinator();
-  #remoteCursorUpdateScheduled = false;
   #epochMapper = new EpochPositionMapper();
   #layoutEpoch = 0;
   #htmlAnnotationHeights: Map<string, number> = new Map();
@@ -358,26 +344,12 @@ export class PresentationEditor extends EventEmitter {
   #cellDragMode: 'none' | 'pending' | 'active' = 'none';
 
   // Remote cursor/presence state management
-  /** Map of clientId -> normalized remote cursor state */
-  #remoteCursorState: Map<number, RemoteCursorState> = new Map();
-  /** Map of clientId -> DOM element for cursor (enables DOM reuse to prevent flicker) */
-  #remoteCursorElements: Map<number, HTMLElement> = new Map();
-  /** Flag indicating remote cursor state needs re-rendering (RAF batching) */
-  #remoteCursorDirty = false;
+  /** Manager for remote cursor rendering and awareness subscriptions */
+  #remoteCursorManager: RemoteCursorManager | null = null;
   /** DOM element for rendering remote cursor overlays */
   #remoteCursorOverlay: HTMLElement | null = null;
   /** DOM element for rendering local selection/caret (dual-layer overlay architecture) */
   #localSelectionLayer: HTMLElement | null = null;
-  /** Cleanup function for awareness subscription */
-  #awarenessCleanup: (() => void) | null = null;
-  /** Cleanup function for scroll listener (virtualization updates) */
-  #scrollCleanup: (() => void) | null = null;
-  /** Timeout handle for scroll debounce (instance-level tracking for proper cleanup) */
-  #scrollTimeout: number | undefined = undefined;
-  /** Timestamp of last remote cursor render for throttle-based immediate rendering */
-  #lastRemoteCursorRenderTime = 0;
-  /** Timeout handle for trailing edge of cursor throttle */
-  #remoteCursorThrottleTimeout: number | null = null;
 
   constructor(options: PresentationEditorOptions) {
     super();
@@ -502,6 +474,23 @@ export class PresentationEditor extends EventEmitter {
     this.#selectionOverlay.appendChild(this.#remoteCursorOverlay);
     this.#selectionOverlay.appendChild(this.#localSelectionLayer);
     this.#viewportHost.appendChild(this.#selectionOverlay);
+
+    // Initialize remote cursor manager
+    this.#remoteCursorManager = new RemoteCursorManager({
+      visibleHost: this.#visibleHost,
+      remoteCursorOverlay: this.#remoteCursorOverlay,
+      presence: validatedPresence,
+      collaborationProvider: options.collaborationProvider,
+      fallbackColors: PresentationEditor.FALLBACK_COLORS,
+      cursorStyles: PresentationEditor.CURSOR_STYLES,
+      maxSelectionRectsPerUser: MAX_SELECTION_RECTS_PER_USER,
+      defaultPageHeight: DEFAULT_PAGE_SIZE.h,
+    });
+
+    // Wire up manager callbacks to use PresentationEditor methods
+    this.#remoteCursorManager.setUpdateCallback(() => this.#updateRemoteCursors());
+    this.#remoteCursorManager.setReRenderCallback(() => this.#renderRemoteCursors());
+
     this.#hoverOverlay = doc.createElement('div');
     this.#hoverOverlay.className = 'presentation-editor__hover-overlay';
     Object.assign(this.#hoverOverlay.style, {
@@ -1573,7 +1562,7 @@ export class PresentationEditor extends EventEmitter {
    * ```
    */
   getRemoteCursors(): RemoteCursorState[] {
-    return Array.from(this.#remoteCursorState.values());
+    return Array.from(this.#remoteCursorManager?.state.values() ?? []);
   }
 
   /**
@@ -2143,9 +2132,9 @@ export class PresentationEditor extends EventEmitter {
     this.emit('zoomChange', { zoom });
     this.#scheduleSelectionUpdate();
     // Trigger cursor updates on zoom changes
-    if (this.#remoteCursorState.size > 0) {
-      this.#remoteCursorDirty = true;
-      this.#scheduleRemoteCursorUpdate();
+    if (this.#remoteCursorManager?.hasRemoteCursors()) {
+      this.#remoteCursorManager.markDirty();
+      this.#remoteCursorManager.scheduleUpdate();
     }
     this.#pendingDocChange = true;
     this.#scheduleRerender();
@@ -2165,13 +2154,14 @@ export class PresentationEditor extends EventEmitter {
       }, 'Layout RAF');
     }
 
-    // Cancel pending remote cursor throttle timeout to prevent execution after destroy
-    if (this.#remoteCursorThrottleTimeout !== null) {
+    // Clean up remote cursor manager
+    if (this.#remoteCursorManager) {
       safeCleanup(() => {
-        clearTimeout(this.#remoteCursorThrottleTimeout!);
-        this.#remoteCursorThrottleTimeout = null;
-      }, 'Remote cursor throttle');
+        this.#remoteCursorManager?.destroy();
+        this.#remoteCursorManager = null;
+      }, 'Remote cursor manager');
     }
+    this.#remoteCursorOverlay = null;
 
     this.#selectionSync.destroy();
 
@@ -2198,21 +2188,6 @@ export class PresentationEditor extends EventEmitter {
       clearTimeout(this.#a11ySelectionAnnounceTimeout);
       this.#a11ySelectionAnnounceTimeout = null;
     }
-
-    // Clean up collaboration cursor subscriptions
-    if (this.#awarenessCleanup) {
-      this.#awarenessCleanup();
-      this.#awarenessCleanup = null;
-    }
-
-    if (this.#scrollCleanup) {
-      this.#scrollCleanup();
-      this.#scrollCleanup = null;
-    }
-
-    this.#remoteCursorState.clear();
-    this.#remoteCursorElements.clear();
-    this.#remoteCursorOverlay = null;
 
     // Clean up cell selection drag state to prevent memory leaks
     this.#clearCellAnchor();
@@ -2368,330 +2343,72 @@ export class PresentationEditor extends EventEmitter {
 
   /**
    * Setup awareness event subscriptions for remote cursor tracking.
-   * Includes scroll listener for virtualization updates.
-   * Called after collaborationReady event when ySync plugin is initialized.
-   * Prevents double-initialization by cleaning up existing subscriptions first.
+   * Delegates to RemoteCursorManager.
    * @private
    */
   #setupCollaborationCursors() {
-    const provider = this.#options.collaborationProvider;
-    if (!provider?.awareness) return;
-
-    // Prevent double-initialization: cleanup existing subscriptions
-    if (this.#awarenessCleanup) {
-      this.#awarenessCleanup();
-      this.#awarenessCleanup = null;
-    }
-    if (this.#scrollCleanup) {
-      this.#scrollCleanup();
-      this.#scrollCleanup = null;
-    }
-
-    const handleAwarenessChange = () => {
-      this.#remoteCursorDirty = true;
-      this.#scheduleRemoteCursorUpdate();
-    };
-
-    provider.awareness.on('change', handleAwarenessChange);
-    provider.awareness.on('update', handleAwarenessChange);
-
-    // Store cleanup function for awareness subscriptions
-    this.#awarenessCleanup = () => {
-      provider.awareness?.off('change', handleAwarenessChange);
-      provider.awareness?.off('update', handleAwarenessChange);
-    };
-
-    // Setup scroll listener for virtualization updates
-    // When scrolling causes pages to mount/unmount, we need to re-render cursors
-    // Attach to #visibleHost (the actual scrolling element) instead of #painterHost
-    // This ensures remote cursors update during pagination/virtualization as the container scrolls
-    const handleScroll = () => {
-      if (this.#remoteCursorState.size > 0) {
-        this.#remoteCursorDirty = true;
-        this.#scheduleRemoteCursorUpdate();
-      }
-    };
-
-    // Debounce scroll updates to avoid excessive re-renders
-    // Use instance-level scrollTimeout for proper cleanup
-    const debouncedHandleScroll = () => {
-      if (this.#scrollTimeout !== undefined) {
-        clearTimeout(this.#scrollTimeout);
-      }
-      this.#scrollTimeout = window.setTimeout(handleScroll, SCROLL_DEBOUNCE_MS);
-    };
-
-    this.#visibleHost.addEventListener('scroll', debouncedHandleScroll, { passive: true });
-
-    // Store cleanup function for scroll listener
-    // Clear pending timeout to prevent memory leak when component is destroyed
-    this.#scrollCleanup = () => {
-      if (this.#scrollTimeout !== undefined) {
-        clearTimeout(this.#scrollTimeout);
-        this.#scrollTimeout = undefined;
-      }
-      this.#visibleHost.removeEventListener('scroll', debouncedHandleScroll);
-    };
-
-    // Trigger initial normalization for existing collaborators
-    // When joining a session with existing collaborators, awareness.getStates() has data
-    // but no 'change' event fires, so we need to normalize immediately
-    handleAwarenessChange();
+    this.#remoteCursorManager?.setup();
   }
 
   /**
    * Update local cursor position in awareness.
-   *
-   * CRITICAL FIX: The y-prosemirror cursor plugin only updates awareness when
-   * view.hasFocus() returns true. In PresentationEditor, the hidden PM EditorView
-   * may not have DOM focus (focus is on the visual representation / input bridge).
-   * This causes the cursor plugin to not send cursor updates, making remote users
-   * see a stale cursor position.
-   *
-   * This method bypasses the focus check and manually updates awareness with the
-   * current selection position whenever the PM selection changes.
-   *
+   * Delegates to RemoteCursorManager.
    * @private
-   * @returns {void}
-   * @throws {Error} Position conversion errors are silently caught and ignored.
-   *   These can occur during document restructuring when the PM document structure
-   *   doesn't match the Yjs structure, or when positions are temporarily invalid.
    */
   #updateLocalAwarenessCursor(): void {
-    const provider = this.#options.collaborationProvider;
-    if (!provider?.awareness) return;
-
-    // Runtime validation: ensure setLocalStateField method exists
-    if (typeof provider.awareness.setLocalStateField !== 'function') {
-      // Awareness implementation doesn't support setLocalStateField
-      return;
-    }
-
-    const editorState = this.#editor?.state;
-    if (!editorState) return;
-
-    const ystate = ySyncPluginKey.getState(editorState);
-    if (!ystate?.binding?.mapping) return;
-
-    const { selection } = editorState;
-    const { anchor, head } = selection;
-
-    try {
-      // Convert PM positions to Yjs relative positions
-      const relAnchor = absolutePositionToRelativePosition(anchor, ystate.type, ystate.binding.mapping);
-      const relHead = absolutePositionToRelativePosition(head, ystate.type, ystate.binding.mapping);
-
-      if (relAnchor && relHead) {
-        // Update awareness with cursor position
-        // Use 'cursor' as the field name to match y-prosemirror's convention
-        const cursorData: AwarenessCursorData = {
-          anchor: relAnchor,
-          head: relHead,
-        };
-        provider.awareness.setLocalStateField('cursor', cursorData);
-      }
-    } catch {
-      // Silently ignore conversion errors - can happen during document restructuring
-    }
-  }
-
-  /**
-   * Normalize awareness states from Yjs relative positions to absolute PM positions.
-   * Converts remote cursor data into PresentationEditor-friendly coordinate space.
-   * @private
-   */
-  /**
-   * Schedule a remote cursor update using microtask + throttle-based rendering.
-   *
-   * CRITICAL: Uses queueMicrotask to defer cursor normalization until after all
-   * synchronous code completes. This fixes a race condition where awareness events
-   * fire before the ProseMirror state is updated with Yjs document changes:
-   *
-   * 1. WebSocket message arrives with doc update + awareness update
-   * 2. Yjs doc is updated, sync plugin starts creating PM transaction
-   * 3. Awareness update fires events (PresentationEditor handler called)
-   * 4. If we read PM state NOW, it may not have the new text yet
-   * 5. Cursor position conversion uses stale mapping → wrong position
-   *
-   * By deferring to a microtask, we ensure:
-   * - All synchronous code completes (including PM transaction dispatch)
-   * - PM state reflects the latest Yjs document state
-   * - Cursor positions are calculated correctly
-   *
-   * Throttling is still applied (60fps max) to prevent excessive re-renders.
-   *
-   * @private
-   */
-  #scheduleRemoteCursorUpdate() {
-    // Skip scheduling entirely when presence is disabled
-    // This avoids unnecessary scheduling when the feature is toggled off
-    if (this.#layoutOptions.presence?.enabled === false) return;
-
-    // Already have a pending update scheduled
-    if (this.#remoteCursorUpdateScheduled) return;
-    this.#remoteCursorUpdateScheduled = true;
-
-    // Use microtask to defer until after PM state is synced with Yjs
-    queueMicrotask(() => {
-      if (!this.#remoteCursorUpdateScheduled) return; // Was cancelled
-
-      const now = performance.now();
-      const elapsed = now - this.#lastRemoteCursorRenderTime;
-      /**
-       * Throttle window for remote cursor updates (milliseconds).
-       * Set to 16ms to target ~60fps rendering (one animation frame at 60Hz).
-       * This prevents excessive re-renders during rapid awareness updates while
-       * maintaining smooth visual feedback for collaboration cursors.
-       * Using requestAnimationFrame would be ideal, but microtask deferral is
-       * critical for fixing the race condition with Yjs state synchronization.
-       */
-      const THROTTLE_MS = 16;
-
-      // If enough time has passed, render now
-      if (elapsed >= THROTTLE_MS) {
-        // Clear any pending trailing edge timeout
-        if (this.#remoteCursorThrottleTimeout !== null) {
-          clearTimeout(this.#remoteCursorThrottleTimeout);
-          this.#remoteCursorThrottleTimeout = null;
-        }
-        this.#remoteCursorUpdateScheduled = false;
-        this.#lastRemoteCursorRenderTime = now;
-        this.#updateRemoteCursors();
-        return;
-      }
-
-      // Within throttle window: schedule trailing edge render
-      const remaining = THROTTLE_MS - elapsed;
-      this.#remoteCursorThrottleTimeout = window.setTimeout(() => {
-        this.#remoteCursorUpdateScheduled = false;
-        this.#remoteCursorThrottleTimeout = null;
-        this.#lastRemoteCursorRenderTime = performance.now();
-        this.#updateRemoteCursors();
-      }, remaining) as unknown as number;
-    });
+    this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
   }
 
   /**
    * Schedule a remote cursor re-render without re-normalizing awareness states.
-   * Performance optimization: avoids expensive Yjs position conversions on layout changes.
-   * Used when layout geometry changes but cursor positions haven't (e.g., zoom, scroll, reflow).
-   *
-   * Note: This method doesn't need microtask deferral because it uses already-computed
-   * PM positions from #remoteCursorState, not awareness relative positions.
+   * Delegates to RemoteCursorManager.
    * @private
    */
   #scheduleRemoteCursorReRender() {
-    if (this.#layoutOptions.presence?.enabled === false) return;
-    if (this.#remoteCursorUpdateScheduled) return;
-    this.#remoteCursorUpdateScheduled = true;
+    this.#remoteCursorManager?.scheduleReRender();
+  }
 
-    // Use RAF for re-renders since they're triggered by layout/scroll events
-    // and should align with the browser's paint cycle
-    const win = this.#visibleHost.ownerDocument?.defaultView ?? window;
-    win.requestAnimationFrame(() => {
-      this.#remoteCursorUpdateScheduled = false;
-      this.#lastRemoteCursorRenderTime = performance.now();
-      this.#renderRemoteCursors();
-    });
+  /**
+   * Get render dependencies for the RemoteCursorManager.
+   * @private
+   */
+  #getRemoteCursorRenderDeps(): RenderDependencies {
+    return {
+      layout: this.#layoutState?.layout ?? null,
+      blocks: this.#layoutState?.blocks ?? [],
+      measures: this.#layoutState?.measures ?? [],
+      pageGeometryHelper: this.#pageGeometryHelper,
+      pageHeight: this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h,
+      computeCaretLayoutRect: (pos) => this.#computeCaretLayoutRect(pos),
+      convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
+    };
   }
 
   /**
    * Update remote cursor state, render overlays, and emit event for host consumption.
-   * Normalizes awareness states, applies performance guardrails, and renders cursor/selection overlays.
+   * Delegates to RemoteCursorManager.
    * @private
    */
   #updateRemoteCursors() {
-    // Gate behind presence.enabled check
-    // Clear overlay DOM BEFORE returning when presence is disabled
-    // This ensures already-rendered cursors are wiped when toggling presence off
-    if (this.#layoutOptions.presence?.enabled === false) {
-      this.#remoteCursorState.clear();
-      this.#remoteCursorElements.clear();
-      if (this.#remoteCursorOverlay) {
-        this.#remoteCursorOverlay.innerHTML = '';
-      }
-      return;
-    }
+    if (!this.#remoteCursorManager) return;
 
-    if (!this.#remoteCursorDirty) return;
-    this.#remoteCursorDirty = false;
-
-    // Track render start time for telemetry
-    const startTime = performance.now();
-
-    // Normalize awareness states to PM positions
-    this.#remoteCursorState = normalizeAwarenessStatesFromHelper({
-      provider: this.#options.collaborationProvider ?? null,
-      editorState: this.#editor?.state ?? null,
-      previousState: this.#remoteCursorState,
-      fallbackColors: PresentationEditor.FALLBACK_COLORS,
-      staleTimeoutMs: this.#layoutOptions.presence?.staleTimeout ?? DEFAULT_STALE_TIMEOUT_MS,
-    });
-
-    // Render cursors with existing state
-    this.#renderRemoteCursors();
+    this.#remoteCursorManager.update(this.#editor?.state ?? null, this.#getRemoteCursorRenderDeps());
 
     // Emit event for host consumption
     this.emit('remoteCursorsUpdate', {
-      cursors: Array.from(this.#remoteCursorState.values()),
+      cursors: Array.from(this.#remoteCursorManager.state.values()),
     });
 
-    // Optional telemetry for monitoring performance
-    if (this.#telemetryEmitter) {
-      const renderTime = performance.now() - startTime;
-      const maxVisible = this.#layoutOptions.presence?.maxVisible ?? 20;
-      const visibleCount = Math.min(this.#remoteCursorState.size, maxVisible);
-      this.#telemetryEmitter({
-        type: 'remoteCursorsRender',
-        data: {
-          collaboratorCount: this.#remoteCursorState.size,
-          visibleCount,
-          renderTimeMs: renderTime,
-        },
-      });
-    }
+    // Optional telemetry - now handled by the manager via callback
   }
 
   /**
    * Render remote cursors from existing state without normalization.
-   * Extracted rendering logic to support both full updates and geometry-only re-renders.
-   * Used by #updateRemoteCursors (after awareness normalization) and #scheduleRemoteCursorReRender
-   * (when only layout geometry changes, not cursor positions).
-   *
-   * FLICKER PREVENTION: This method reuses existing DOM elements instead of clearing
-   * and recreating them. Elements are keyed by clientId and only created/removed when
-   * clients join/leave. Position updates use CSS transitions for smooth movement.
-   *
+   * Delegates to RemoteCursorManager.
    * @private
    */
   #renderRemoteCursors() {
-    const layout = this.#layoutState?.layout;
-    const blocks = this.#layoutState?.blocks;
-    const measures = this.#layoutState?.measures;
-
-    if (!layout || !blocks || !measures) {
-      // Layout not ready, skip rendering
-      return;
-    }
-
-    renderRemoteCursorsFromHelper({
-      layout,
-      blocks,
-      measures,
-      pageGeometryHelper: this.#pageGeometryHelper,
-      presence: this.#layoutOptions.presence,
-      remoteCursorState: this.#remoteCursorState,
-      remoteCursorElements: this.#remoteCursorElements,
-      remoteCursorOverlay: this.#remoteCursorOverlay,
-      doc: this.#visibleHost.ownerDocument ?? document,
-      computeCaretLayoutRect: (pos) => this.#computeCaretLayoutRect(pos),
-      convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
-      fallbackColors: PresentationEditor.FALLBACK_COLORS,
-      cursorStyles: PresentationEditor.CURSOR_STYLES,
-      maxSelectionRectsPerUser: MAX_SELECTION_RECTS_PER_USER,
-      defaultPageHeight: DEFAULT_PAGE_SIZE.h,
-      fallbackPageHeight: this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h,
-    });
+    this.#remoteCursorManager?.render(this.#getRemoteCursorRenderDeps());
   }
 
   #setupPointerHandlers() {
@@ -4459,7 +4176,7 @@ export class PresentationEditor extends EventEmitter {
       // Trigger cursor re-rendering on layout changes without re-normalizing awareness
       // Layout reflow requires repositioning cursors in the DOM, but awareness states haven't changed
       // This optimization avoids expensive Yjs position conversions on every layout update
-      if (this.#remoteCursorState.size > 0) {
+      if (this.#remoteCursorManager?.hasRemoteCursors()) {
         this.#scheduleRemoteCursorReRender();
       }
     } finally {

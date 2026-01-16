@@ -24,4 +24,4 @@ export type {
   ImageSelectedEvent,
   ImageDeselectedEvent,
   TelemetryEvent,
-} from './PresentationEditor.js';
+} from './types.js';

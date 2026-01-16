@@ -105,20 +105,6 @@ import type {
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 
-// Comment and tracked change mark names (inline to avoid missing declaration files)
-const CommentMarkName = 'commentMark';
-const TrackInsertMarkName = 'trackInsert';
-const TrackDeleteMarkName = 'trackDelete';
-const TrackFormatMarkName = 'trackFormat';
-
-/**
- * Font size scaling factor for subscript and superscript text.
- * This value (0.65 or 65%) matches Microsoft Word's default rendering behavior
- * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
- * Applied to the base font size to reduce text size for sub/superscripts.
- */
-const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
-
 // Collaboration cursor imports
 import { absolutePositionToRelativePosition, ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
@@ -130,295 +116,72 @@ import {
 import { EditorOverlayManager } from '../header-footer/EditorOverlayManager.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 
-export type PageSize = {
-  w: number;
-  h: number;
-};
+// Types
+import type {
+  PageSize,
+  PageMargins,
+  VirtualizationOptions,
+  RemoteUserInfo,
+  RemoteCursorState,
+  PresenceOptions,
+  LayoutEngineOptions,
+  TrackedChangesOverrides,
+  PresentationEditorOptions,
+  RemoteCursorsRenderPayload,
+  LayoutUpdatePayload,
+  ImageSelectedEvent,
+  ImageDeselectedEvent,
+  TelemetryEvent,
+  AwarenessState,
+  AwarenessCursorData,
+  AwarenessWithSetField,
+  CellAnchorState,
+  EditorWithConverter,
+  LayoutState,
+  FootnoteReference,
+  FootnotesLayoutInput,
+  LayoutMetrics,
+  LayoutError,
+  LayoutRect,
+  RangeRect,
+  HeaderFooterMode,
+  HeaderFooterSession,
+  HeaderFooterRegion,
+  HeaderFooterLayoutContext,
+  PendingMarginClick,
+  EditorViewWithScrollFlag,
+  PotentiallyMockedFunction,
+} from './types.js';
 
-export type PageMargins = {
-  top?: number;
-  right?: number;
-  bottom?: number;
-  left?: number;
-  header?: number;
-  footer?: number;
-};
+// Re-export public types for backward compatibility
+export type {
+  PageSize,
+  PageMargins,
+  VirtualizationOptions,
+  RemoteUserInfo,
+  RemoteCursorState,
+  PresenceOptions,
+  LayoutEngineOptions,
+  TrackedChangesOverrides,
+  PresentationEditorOptions,
+  RemoteCursorsRenderPayload,
+  LayoutUpdatePayload,
+  ImageSelectedEvent,
+  ImageDeselectedEvent,
+  TelemetryEvent,
+} from './types.js';
 
-export type VirtualizationOptions = {
-  enabled?: boolean;
-  window?: number;
-  overscan?: number;
-  gap?: number;
-  paddingTop?: number;
-};
-
-/**
- * Awareness state structure from y-protocols.
- * Represents the state stored for each collaborator in the awareness protocol.
- */
-type AwarenessState = {
-  cursor?: {
-    anchor: unknown;
-    head: unknown;
-  };
-  user?: {
-    name?: string;
-    email?: string;
-    color?: string;
-  };
-  [key: string]: unknown;
-};
-
-/**
- * Cursor position data stored in awareness state.
- * Contains relative Yjs positions for anchor and head.
- */
-type AwarenessCursorData = {
-  /** Relative Yjs position for selection anchor */
-  anchor: Y.RelativePosition;
-  /** Relative Yjs position for selection head (caret) */
-  head: Y.RelativePosition;
-};
-
-/**
- * Extended awareness interface that includes the setLocalStateField method.
- * The base Awareness type from y-protocols has this method but it's not always
- * included in type definitions, so we extend it here for type safety.
- */
-interface AwarenessWithSetField {
-  clientID: number;
-  getStates: () => Map<number, AwarenessState>;
-  on: (event: string, handler: () => void) => void;
-  off: (event: string, handler: () => void) => void;
-  /**
-   * Update a specific field in the local awareness state.
-   * @param field - The field name to update (e.g., 'cursor', 'user')
-   * @param value - The value to set for the field
-   */
-  setLocalStateField: (field: string, value: unknown) => void;
-}
+// Mark name constants
+import { CommentMarkName } from '@extensions/comment/comments-constants.js';
+import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 
 /**
- * User metadata for remote collaborators.
- * Exported as a standalone type for external consumers building custom presence UI.
+ * Font size scaling factor for subscript and superscript text.
+ * This value (0.65 or 65%) matches Microsoft Word's default rendering behavior
+ * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
+ * Applied to the base font size to reduce text size for sub/superscripts.
  */
-export type RemoteUserInfo = {
-  /** User's display name (optional) */
-  name?: string;
-  /** User's email address (optional) */
-  email?: string;
-  /** Hex color code for this user's cursor/selection */
-  color: string;
-};
-
-/**
- * Normalized remote cursor state for a single collaborator.
- * Contains absolute ProseMirror positions and user metadata.
- */
-export type RemoteCursorState = {
-  /** Yjs client ID for this collaborator */
-  clientId: number;
-  /** User metadata (name, email, color) */
-  user: RemoteUserInfo;
-  /** Selection anchor (absolute PM position) */
-  anchor: number;
-  /** Selection head/caret position (absolute PM position) */
-  head: number;
-  /** Timestamp of last update (for recency-based rendering limits) */
-  updatedAt: number;
-};
-
-/**
- * Cell anchor state for table cell drag selection.
- *
- * Lifecycle:
- * - Created when a drag operation starts inside a table cell (#setCellAnchor)
- * - Persists throughout the drag to track the anchor cell
- * - Cleared when drag ends (#clearCellAnchor) or document changes
- *
- * Used by the cell selection state machine to determine when to transition
- * from text selection to cell selection mode during table drag operations.
- */
-type CellAnchorState = {
-  /** PM position of the table node */
-  tablePos: number;
-  /** PM position at the start of the anchor cell */
-  cellPos: number;
-  /** Row index of the anchor cell (0-based) */
-  cellRowIndex: number;
-  /** Column index of the anchor cell (0-based) */
-  cellColIndex: number;
-  /** Cached reference to table block ID for performance */
-  tableBlockId: string;
-};
-
-/**
- * Configuration options for remote cursor presence rendering.
- * Controls how collaborator cursors and selections appear in the layout.
- */
-export type PresenceOptions = {
-  /** Enable remote cursor rendering. Default: true */
-  enabled?: boolean;
-  /** Show name labels above remote cursors. Default: true */
-  showLabels?: boolean;
-  /** Maximum number of remote cursors to render (performance guardrail). Default: 20 */
-  maxVisible?: number;
-  /** Custom formatter for user labels. Default: user.name ?? user.email */
-  labelFormatter?: (user: RemoteUserInfo) => string;
-  /** Opacity for remote selection highlights (0-1). Default: 0.35 */
-  highlightOpacity?: number;
-  /** Time in milliseconds before removing inactive cursors. Default: 300000 (5 minutes) */
-  staleTimeout?: number;
-};
-
-/**
- * Type-safe interface for Editor instances with SuperConverter attached.
- * Used to access converter-specific properties for header/footer management
- * without resorting to type assertions throughout the codebase.
- */
-interface EditorWithConverter extends Editor {
-  converter: Editor['converter'] & {
-    pageStyles?: { alternateHeaders?: boolean };
-    headerIds?: { default?: string; first?: string; even?: string; odd?: string };
-    footerIds?: { default?: string; first?: string; even?: string; odd?: string };
-    createDefaultHeader?: (variant: string) => string;
-    createDefaultFooter?: (variant: string) => string;
-    footnotes?: Array<{
-      id: string;
-      content?: unknown[];
-    }>;
-  };
-}
-
-export type LayoutEngineOptions = {
-  pageSize?: PageSize;
-  margins?: PageMargins;
-  zoom?: number;
-  virtualization?: VirtualizationOptions;
-  pageStyles?: Record<string, unknown>;
-  debugLabel?: string;
-  layoutMode?: LayoutMode;
-  trackedChanges?: TrackedChangesOverrides;
-  /** Emit comment positions while in viewing mode (used to render comment highlights). */
-  emitCommentPositionsInViewing?: boolean;
-  /** Render comment highlights while in viewing mode. */
-  enableCommentsInViewing?: boolean;
-  /** Collaboration cursor/presence configuration */
-  presence?: PresenceOptions;
-  /**
-   * Per-page ruler options.
-   * When enabled, renders a horizontal ruler at the top of each page showing
-   * inch marks and optionally margin handles for interactive margin adjustment.
-   */
-  ruler?: RulerOptions;
-};
-
-export type TrackedChangesOverrides = {
-  mode?: TrackedChangesMode;
-  enabled?: boolean;
-};
-
-export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] & {
-  /**
-   * Host element where the layout-engine powered UI should render.
-   */
-  element: HTMLElement;
-  /**
-   * Layout-specific configuration consumed by PresentationEditor.
-   */
-  layoutEngineOptions?: LayoutEngineOptions;
-  /**
-   * Document mode for the editor. Determines editability and tracked changes behavior.
-   * @default 'editing'
-   */
-  documentMode?: 'editing' | 'viewing' | 'suggesting';
-  /**
-   * Collaboration provider with awareness support (e.g., WebsocketProvider from y-websocket).
-   * Required for remote cursor rendering.
-   */
-  collaborationProvider?: {
-    awareness?: AwarenessWithSetField;
-    disconnect?: () => void;
-  } | null;
-  /**
-   * Whether to disable the context menu.
-   * @default false
-   */
-  disableContextMenu?: boolean;
-};
-
-type LayoutState = {
-  blocks: FlowBlock[];
-  measures: Measure[];
-  layout: Layout | null;
-  bookmarks: Map<string, number>;
-  anchorMap?: Map<string, number>;
-};
-
-type FootnoteReference = { id: string; pos: number };
-type FootnotesLayoutInput = {
-  refs: FootnoteReference[];
-  blocksById: Map<string, FlowBlock[]>;
-  gap?: number;
-  topPadding?: number;
-  dividerHeight?: number;
-  separatorSpacingBefore?: number;
-};
-
-type LayoutMetrics = {
-  durationMs: number;
-  blockCount: number;
-  pageCount: number;
-};
-
-type LayoutError = {
-  phase: 'initialization' | 'render';
-  error: Error;
-  timestamp: number;
-};
-
-type LayoutRect = { x: number; y: number; width: number; height: number; pageIndex: number };
-type RangeRect = {
-  pageIndex: number;
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-  width: number;
-  height: number;
-};
-
-type HeaderFooterMode = 'body' | 'header' | 'footer';
-type HeaderFooterSession = {
-  mode: HeaderFooterMode;
-  kind?: 'header' | 'footer';
-  headerId?: string | null;
-  sectionType?: string | null;
-  pageIndex?: number;
-  pageNumber?: number;
-};
-
-type HeaderFooterRegion = {
-  kind: 'header' | 'footer';
-  headerId?: string;
-  sectionType?: string;
-  pageIndex: number;
-  pageNumber: number;
-  localX: number;
-  localY: number;
-  width: number;
-  height: number;
-  contentHeight?: number;
-  /** Minimum Y coordinate from layout (can be negative if content extends above y=0) */
-  minY?: number;
-};
-
-type HeaderFooterLayoutContext = {
-  layout: Layout;
-  blocks: FlowBlock[];
-  measures: Measure[];
-  region: HeaderFooterRegion;
-};
+const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
 
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
@@ -451,88 +214,6 @@ const MAX_SELECTION_RECTS_PER_USER = 100;
 const DEFAULT_STALE_TIMEOUT_MS = 5 * 60 * 1000;
 
 const GLOBAL_PERFORMANCE: Performance | undefined = typeof performance !== 'undefined' ? performance : undefined;
-
-/**
- * Telemetry payload for remote cursor render events.
- * Provides performance metrics for monitoring collaboration cursor rendering.
- */
-export type RemoteCursorsRenderPayload = {
-  /** Total number of collaborators with cursors */
-  collaboratorCount: number;
-  /** Number of cursors actually rendered (after maxVisible limit) */
-  visibleCount: number;
-  /** Time taken to render all cursors in milliseconds */
-  renderTimeMs: number;
-};
-
-/**
- * Telemetry payload for layout updates.
- */
-export type LayoutUpdatePayload = {
-  layout: Layout;
-  blocks: FlowBlock[];
-  measures: Measure[];
-  metrics: LayoutMetrics;
-};
-
-/**
- * Event payload emitted when an image is selected in the editor.
- */
-export type ImageSelectedEvent = {
-  /** The DOM element representing the selected image */
-  element: HTMLElement;
-  /** The layout-engine block ID for the image (null for inline images) */
-  blockId: string | null;
-  /** The ProseMirror document position where the image node starts */
-  pmStart: number;
-};
-
-/**
- * Event payload emitted when an image is deselected in the editor.
- */
-export type ImageDeselectedEvent = {
-  /** The block ID of the previously selected image (may be a synthetic ID like "inline-{position}") */
-  blockId: string;
-};
-
-type PendingMarginClick =
-  | { pointerId: number; kind: 'aboveFirstLine' }
-  | { pointerId: number; kind: 'left' | 'right'; layoutEpoch: number; pmStart: number; pmEnd: number };
-
-/**
- * Extended editor view type with a flag indicating the focus method has been wrapped
- * to prevent unwanted scroll behavior when the hidden editor receives focus.
- *
- * @remarks
- * This flag is set by {@link PresentationEditor#wrapHiddenEditorFocus} to ensure
- * the wrapping is idempotent (applied only once per view instance).
- */
-interface EditorViewWithScrollFlag {
-  /** Flag indicating focus wrapping has been applied to prevent scroll on focus */
-  __sdPreventScrollFocus?: boolean;
-}
-
-/**
- * Extended function type that may have a mock property, used to detect test mocks.
- *
- * @remarks
- * During testing, mocking libraries like Vitest often attach a `mock` property to
- * mocked functions. We check for this property to avoid wrapping already-mocked
- * focus functions, which could interfere with test assertions or cause test failures.
- */
-interface PotentiallyMockedFunction {
-  /** Property present on mocked functions in test environments */
-  mock?: unknown;
-}
-
-/**
- * Discriminated union for all telemetry events.
- * Use TypeScript's type narrowing to handle each event type safely.
- */
-export type TelemetryEvent =
-  | { type: 'layout'; data: LayoutUpdatePayload }
-  | { type: 'error'; data: LayoutError }
-  | { type: 'remoteCursorsRender'; data: RemoteCursorsRenderPayload };
 
 /**
  * PresentationEditor bootstraps the classic Editor instance in a hidden container

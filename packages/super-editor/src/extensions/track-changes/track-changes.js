@@ -337,8 +337,8 @@ export const TrackChanges = Extension.create({
 
           dispatch(tr);
 
-          // Handle comment if provided
-          if (comment?.trim() && changeId) {
+          // Handle comment if provided (guard for editors without comments extension)
+          if (comment?.trim() && changeId && editor.commands.addCommentReply) {
             editor.commands.addCommentReply({
               parentId: changeId,
               content: comment,

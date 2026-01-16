@@ -1958,14 +1958,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
+      const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
 
-      transactionToApply = isTrackChangesActive
-        ? trackedTransaction({
-            tr: transactionToApply,
-            state: prevState,
-            user: this.options.user!,
-          })
-        : transactionToApply;
+      transactionToApply =
+        isTrackChangesActive && !skipTrackChanges
+          ? trackedTransaction({
+              tr: transactionToApply,
+              state: prevState,
+              user: this.options.user!,
+            })
+          : transactionToApply;
 
       const { state: appliedState } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;

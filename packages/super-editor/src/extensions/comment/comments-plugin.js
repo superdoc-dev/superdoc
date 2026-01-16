@@ -125,6 +125,59 @@ export const CommentsPlugin = Extension.create({
         },
 
       /**
+       * Add a reply to an existing comment or tracked change
+       * @category Command
+       * @param {Object} options - Reply options
+       * @param {string} options.parentId - The ID of the parent comment or tracked change
+       * @param {string} [options.content] - The reply content (text or HTML)
+       * @param {string} [options.author] - Author name (defaults to user from editor config)
+       * @param {string} [options.authorEmail] - Author email (defaults to user from editor config)
+       * @param {string} [options.authorImage] - Author image URL (defaults to user from editor config)
+       * @returns {boolean} True if the reply was added successfully, false otherwise
+       * @example
+       * editor.commands.addCommentReply({
+       *   parentId: 'comment-123',
+       *   content: 'I agree with this suggestion'
+       * })
+       */
+      addCommentReply:
+        (options = {}) =>
+        ({ editor }) => {
+          const { parentId, content, author, authorEmail, authorImage } = options;
+
+          if (!parentId) {
+            console.warn('addCommentReply requires a parentId');
+            return false;
+          }
+
+          const commentId = uuidv4();
+          const configUser = editor.options?.user || {};
+
+          const commentPayload = normalizeCommentEventPayload({
+            conversation: {
+              commentId,
+              parentCommentId: parentId,
+              commentText: content,
+              creatorName: author ?? configUser.name,
+              creatorEmail: authorEmail ?? configUser.email,
+              creatorImage: authorImage ?? configUser.image,
+              createdTime: Date.now(),
+            },
+            editorOptions: editor.options,
+            fallbackCommentId: commentId,
+            fallbackInternal: false,
+          });
+
+          editor.emit('commentsUpdate', {
+            type: comments_module_events.ADD,
+            comment: commentPayload,
+            activeCommentId: commentId,
+          });
+
+          return true;
+        },
+
+      /**
        * @private
        * Internal command to insert a comment mark at the current selection.
        * Use `addComment` for the public API.

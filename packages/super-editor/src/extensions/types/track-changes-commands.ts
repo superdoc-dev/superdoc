@@ -4,6 +4,8 @@
  * @module TrackChangesCommands
  */
 
+import type { User } from '../../core/types/EditorConfig.js';
+
 /** Tracked change object with position info */
 export type TrackedChange = {
   /** Start position of the change */
@@ -20,6 +22,20 @@ export type TrackedChange = {
 export type TrackedChangeOptions = {
   /** The tracked change to accept/reject */
   trackedChange: TrackedChange;
+};
+
+/** Options for programmatic tracked change insertion */
+export type InsertTrackedChangeOptions = {
+  /** Start position (defaults to selection start) */
+  from?: number;
+  /** End position (defaults to selection end) */
+  to?: number;
+  /** Replacement text */
+  text?: string;
+  /** Author override for the tracked change (defaults to editor user if not provided) */
+  user?: Partial<User>;
+  /** Optional comment reply to attach to the tracked change */
+  comment?: string;
 };
 
 export interface TrackChangesCommands {
@@ -98,6 +114,12 @@ export interface TrackChangesCommands {
    * Reject all tracked changes in the document
    */
   rejectAllTrackedChanges: () => boolean;
+
+  /**
+   * Insert a tracked change without toggling editor mode.
+   * Optionally attaches a comment reply to the change.
+   */
+  insertTrackedChange: (options?: InsertTrackedChangeOptions) => boolean;
 
   // ============================================
   // TRACK CHANGES MODE COMMANDS

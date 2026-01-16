@@ -76,6 +76,20 @@ export type ResolveCommentOptions = {
   commentId: string;
 };
 
+/** Options for addCommentReply command */
+export type AddCommentReplyOptions = {
+  /** The ID of the parent comment or tracked change to reply to */
+  parentId: string;
+  /** The reply content (text or HTML) */
+  content?: string;
+  /** Author name (defaults to user from editor config) */
+  author?: string;
+  /** Author email (defaults to user from editor config) */
+  authorEmail?: string;
+  /** Author image URL (defaults to user from editor config) */
+  authorImage?: string;
+};
+
 export interface CommentCommands {
   /**
    * Add a comment to the current selection
@@ -149,6 +163,18 @@ export interface CommentCommands {
    * editor.commands.setCursorById('comment-123')
    */
   setCursorById: (id: string) => boolean;
+
+  /**
+   * Add a reply to an existing comment or tracked change
+   * @param options - Reply options including parentId and content
+   * @returns True if the reply was added successfully, false otherwise
+   * @example
+   * editor.commands.addCommentReply({
+   *   parentId: 'comment-123',
+   *   content: 'I agree with this suggestion'
+   * })
+   */
+  addCommentReply: (options: AddCommentReplyOptions) => boolean;
 }
 
 declare module '../../core/types/ChainedCommands.js' {

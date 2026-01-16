@@ -567,4 +567,347 @@ describe('TrackChanges extension commands', () => {
     ).toBe(true);
     expect(rejectAll).toHaveBeenCalledWith(0, doc.content.size);
   });
+
+  describe('insertTrackedChange', () => {
+    it('inserts text as a tracked change with both delete and insert marks', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 7,
+        to: 12,
+        text: 'universe',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      expect(dispatch).toHaveBeenCalled();
+      // Track changes keeps deleted content with a mark, so both old and new text are present
+      expect(nextState.doc.textContent).toContain('Hello');
+      expect(nextState.doc.textContent).toContain('universe');
+      // Check for both marks in the document
+      let hasDeleteMark = false;
+      let hasInsertMark = false;
+      nextState.doc.descendants((node) => {
+        if (node.marks.some((m) => m.type.name === TrackDeleteMarkName)) hasDeleteMark = true;
+        if (node.marks.some((m) => m.type.name === TrackInsertMarkName)) hasInsertMark = true;
+      });
+      expect(hasDeleteMark).toBe(true);
+      expect(hasInsertMark).toBe(true);
+    });
+
+    it('returns false when no change is needed', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      const dispatch = vi.fn();
+      const result = commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hello',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(false);
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it('uses provided user for tracked change author', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+      });
+
+      commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hi',
+        user: { name: 'Custom User', email: 'custom@example.com' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      expect(meta.insertedMark.attrs.author).toBe('Custom User');
+      expect(meta.insertedMark.attrs.authorEmail).toBe('custom@example.com');
+    });
+
+    it('falls back to editor user when user option not provided', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+      });
+
+      commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hi',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Editor User', email: 'editor@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      expect(meta.insertedMark.attrs.author).toBe('Editor User');
+      expect(meta.insertedMark.attrs.authorEmail).toBe('editor@example.com');
+    });
+
+    it('calls addCommentReply when comment is provided', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      const addCommentReply = vi.fn();
+      const dispatch = vi.fn((tr) => {
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hi',
+        comment: 'This is a suggestion',
+        user: { name: 'Commenter', email: 'commenter@example.com', image: 'https://example.com/avatar.png' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply },
+        },
+      });
+
+      expect(addCommentReply).toHaveBeenCalledWith({
+        parentId: expect.any(String),
+        content: 'This is a suggestion',
+        author: 'Commenter',
+        authorEmail: 'commenter@example.com',
+        authorImage: 'https://example.com/avatar.png',
+      });
+    });
+
+    it('does not call addCommentReply when comment is empty', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      const addCommentReply = vi.fn();
+      const dispatch = vi.fn((tr) => {
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hi',
+        comment: '   ',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply },
+        },
+      });
+
+      expect(addCommentReply).not.toHaveBeenCalled();
+    });
+
+    it('replaces text and creates tracked marks', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Goodbye',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      // Track changes keeps deleted "Hello" with mark and adds inserted "Goodbye"
+      expect(nextState.doc.textContent).toContain('Goodbye');
+      expect(nextState.doc.textContent).toContain('world');
+    });
+
+    it('handles pure deletion (empty replacement text)', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 6,
+        to: 12,
+        text: '',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      expect(dispatch).toHaveBeenCalled();
+      // The deleted content should be marked with TrackDeleteMarkName
+      // Check anywhere in the doc for the mark
+      let hasDeleteMark = false;
+      nextState.doc.descendants((node) => {
+        if (node.marks.some((m) => m.type.name === TrackDeleteMarkName)) {
+          hasDeleteMark = true;
+        }
+      });
+      expect(hasDeleteMark).toBe(true);
+    });
+
+    it('handles pure insertion (from equals to)', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 6,
+        to: 6,
+        text: ' world',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      expect(nextState.doc.textContent).toBe('Hello world');
+      // Check anywhere in the doc for the mark
+      let hasInsertMark = false;
+      nextState.doc.descendants((node) => {
+        if (node.marks.some((m) => m.type.name === TrackInsertMarkName)) {
+          hasInsertMark = true;
+        }
+      });
+      expect(hasInsertMark).toBe(true);
+    });
+
+    it('replacement marks share the same ID for proper comment linking', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 7,
+        to: 12,
+        text: 'universe',
+        user: { name: 'Test', email: 'test@example.com' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      // Both marks should exist and share the same ID
+      expect(meta.insertedMark).toBeDefined();
+      expect(meta.deletionMark).toBeDefined();
+      expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
+    });
+
+    it('attaches comment to replacement using shared ID', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      const addCommentReply = vi.fn();
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 7,
+        to: 12,
+        text: 'universe',
+        comment: 'Replacing world with universe',
+        user: { name: 'Test', email: 'test@example.com' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      const sharedId = meta.insertedMark.attrs.id;
+
+      // Comment should be attached using the shared ID
+      expect(addCommentReply).toHaveBeenCalledWith({
+        parentId: sharedId,
+        content: 'Replacing world with universe',
+        author: 'Test',
+        authorEmail: 'test@example.com',
+        authorImage: undefined,
+      });
+    });
+  });
 });

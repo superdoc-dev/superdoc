@@ -36,6 +36,8 @@ export type InsertTrackedChangeOptions = {
   user?: Partial<User>;
   /** Optional comment reply to attach to the tracked change */
   comment?: string;
+  /** Whether to add the change to the undo history (defaults to true) */
+  addToHistory?: boolean;
 };
 
 export interface TrackChangesCommands {

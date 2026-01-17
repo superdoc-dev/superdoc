@@ -963,7 +963,7 @@ class SuperConverter {
     const { result, params } = this.exportToXmlJson({
       data: jsonData,
       editorSchema,
-      comments,
+      comments: exportableComments,
       commentDefinitions,
       commentsExportType,
       isFinalDoc,

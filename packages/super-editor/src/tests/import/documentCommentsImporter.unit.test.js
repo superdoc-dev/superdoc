@@ -837,8 +837,8 @@ describe('Google Docs tracked change comment threading', () => {
     expect(comments).toHaveLength(1);
 
     const comment = comments[0];
-    // The parent should be the tracked change ID ('0')
-    expect(comment.parentCommentId).toBe('0');
+    // The tracked change ID ('0') should be in trackedChangeParentId (not parentCommentId)
+    expect(comment.trackedChangeParentId).toBe('0');
   });
 
   it('detects comment inside tracked change insertion as child of tracked change', () => {
@@ -869,7 +869,7 @@ describe('Google Docs tracked change comment threading', () => {
     expect(comments).toHaveLength(1);
 
     const comment = comments[0];
-    expect(comment.parentCommentId).toBe('2');
+    expect(comment.trackedChangeParentId).toBe('2');
   });
 
   it('detects multiple comments inside same tracked change', () => {
@@ -907,9 +907,9 @@ describe('Google Docs tracked change comment threading', () => {
     const firstComment = comments.find((c) => c.commentId === 'first-comment');
     const secondComment = comments.find((c) => c.commentId === 'second-comment');
 
-    // Both should have the tracked change as parent
-    expect(firstComment.parentCommentId).toBe('1');
-    expect(secondComment.parentCommentId).toBe('1');
+    // Both should have the tracked change as trackedChangeParentId (not parentCommentId)
+    expect(firstComment.trackedChangeParentId).toBe('1');
+    expect(secondComment.trackedChangeParentId).toBe('1');
   });
 
   it('detects comments inside replacement tracked change (ins + del)', () => {
@@ -957,9 +957,10 @@ describe('Google Docs tracked change comment threading', () => {
     const comment1 = comments.find((c) => c.commentId === 'replacement-comment-1');
     const comment2 = comments.find((c) => c.commentId === 'replacement-comment-2');
 
-    // Both should have the tracked change (ins) as parent since their range starts in the ins element
-    expect(comment1.parentCommentId).toBe('3');
-    expect(comment2.parentCommentId).toBe('3');
+    // Both should have the tracked change (ins) as trackedChangeParentId since their range starts in the ins element
+    // (parentCommentId is reserved for actual comment replies, not TC associations)
+    expect(comment1.trackedChangeParentId).toBe('3');
+    expect(comment2.trackedChangeParentId).toBe('3');
   });
 
   it('does not affect comments outside tracked changes', () => {
@@ -1008,8 +1009,8 @@ describe('Google Docs tracked change comment threading', () => {
 
     // Regular comment should have no parent
     expect(regularComment.parentCommentId).toBeUndefined();
-    // TC comment should have the tracked change as parent
-    expect(tcComment.parentCommentId).toBe('1');
+    // TC comment should have the tracked change as trackedChangeParentId (not parentCommentId)
+    expect(tcComment.trackedChangeParentId).toBe('1');
   });
 });
 

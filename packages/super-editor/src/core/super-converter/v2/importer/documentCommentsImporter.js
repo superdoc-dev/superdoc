@@ -182,14 +182,20 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
             c.elements?.some((el) => el.attrs?.['w14:paraId'] === details.paraIdParent),
         );
         const rangeParent = rangeParentMap.get(comment.commentId);
-        if (parentComment?.trackedChange && rangeParent) {
-          threadingParentCommentId = rangeParent;
+        if (parentComment?.trackedChange) {
+          // Parent is a tracked change - use range parent if available, otherwise leave parentCommentId undefined
+          // (TC association is tracked separately via trackedChangeParentId, not parentCommentId)
+          if (rangeParent) {
+            threadingParentCommentId = rangeParent;
+            parentCommentId = threadingParentCommentId;
+          }
+          // If no rangeParent, we intentionally leave parentCommentId undefined
+          // so the comment appears as a separate bubble from the TC
         } else {
+          // Parent is a real comment (not a TC) - use it for threading
           threadingParentCommentId = parentComment?.commentId;
+          parentCommentId = threadingParentCommentId;
         }
-        // Always set parentCommentId for threading relationships
-        // (TC association is tracked separately via trackedChangeParentId)
-        parentCommentId = threadingParentCommentId;
       }
     }
 
@@ -609,7 +615,7 @@ const applyParentRelationships = (comments, parentMap, trackedChangeParentMap = 
     if (trackedChangeParent && trackedChangeParent.isTrackedChangeParent) {
       return {
         ...comment,
-        parentCommentId: trackedChangeParent.trackedChangeId,
+        trackedChangeParentId: trackedChangeParent.trackedChangeId,
       };
     }
 

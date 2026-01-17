@@ -97,7 +97,8 @@ export const useCommentsStore = defineStore('comments', () => {
     if (!isViewingMode.value) return true;
     const parent = getThreadParent(comment);
     if (!parent && comment?.parentCommentId) return false;
-    const isTrackedChange = Boolean(parent?.trackedChange);
+    // Check both parent's trackedChange flag and comment's trackedChangeParentId
+    const isTrackedChange = Boolean(parent?.trackedChange) || Boolean(comment?.trackedChangeParentId);
     return isTrackedChange ? viewingVisibility.trackChangesVisible : viewingVisibility.commentsVisible;
   };
 
@@ -465,6 +466,7 @@ export const useCommentsStore = defineStore('comments', () => {
         commentId: comment.commentId,
         isInternal: false,
         parentCommentId: comment.parentCommentId,
+        trackedChangeParentId: comment.trackedChangeParentId,
         creatorName,
         createdTime: comment.createdTime,
         creatorEmail: comment.creatorEmail,

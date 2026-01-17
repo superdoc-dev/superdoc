@@ -166,6 +166,11 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
     const trackedChangeParent = trackedChangeParentMap.get(comment.importedId);
     const isInsideTrackedChange = trackedChangeParent?.isTrackedChangeParent;
 
+    // Track whether comment has an entry in commentsExtended.xml
+    // If it has an entry but no paraIdParent, it's explicitly a top-level comment
+    // and we should NOT use range-based parenting as a fallback
+    const hasExtendedEntry = !!extendedDef;
+
     if (extendedDef) {
       const details = getExtendedDetails(extendedDef);
       isDone = details.isDone ?? false;
@@ -182,17 +187,23 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
         } else {
           threadingParentCommentId = parentComment?.commentId;
         }
-        if (!isInsideTrackedChange) {
-          parentCommentId = threadingParentCommentId;
-        }
+        // Always set parentCommentId for threading relationships
+        // (TC association is tracked separately via trackedChangeParentId)
+        parentCommentId = threadingParentCommentId;
       }
     }
 
-    if (isInsideTrackedChange) {
-      parentCommentId = trackedChangeParent.trackedChangeId;
-    }
+    // Track the tracked change association but don't use it as parentCommentId
+    // This keeps comments and tracked changes as separate bubbles in the UI
+    // while preserving the relationship for export and visual purposes
+    const trackedChangeParentId = isInsideTrackedChange ? trackedChangeParent.trackedChangeId : undefined;
 
-    if (!parentCommentId && rangeParentMap.has(comment.commentId)) {
+    // Only use range-based parenting as fallback when:
+    // 1. parentCommentId is not set from commentsExtended.xml, AND
+    // 2. The comment has NO entry in commentsExtended.xml at all
+    // If a comment has an entry in commentsExtended.xml but no paraIdParent,
+    // it's explicitly a top-level comment - don't override with range-based parenting
+    if (!parentCommentId && !hasExtendedEntry && rangeParentMap.has(comment.commentId)) {
       parentCommentId = rangeParentMap.get(comment.commentId);
       if (threadingProfile?.defaultStyle === 'commentsExtended') {
         threadingStyleOverride = 'range-based';
@@ -205,6 +216,7 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
       parentCommentId,
       threadingStyleOverride,
       threadingParentCommentId,
+      trackedChangeParentId,
     };
   });
 };

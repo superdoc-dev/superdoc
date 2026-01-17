@@ -480,13 +480,12 @@ export const CommentsPlugin = Extension.create({
                 const isInternal = attrs.internal;
                 if (!hasActive) hasActive = currentActiveThreadId === threadId;
 
-                // Get the color based on current activeThreadId and nesting depth
+                // Get the color based on current activeThreadId
                 let color = getHighlightColor({
                   activeThreadId: currentActiveThreadId,
                   threadId,
                   isInternal,
                   editor,
-                  nestingDepth: commentMarks.length,
                 });
 
                 const deco = Decoration.inline(pos, pos + node.nodeSize, {

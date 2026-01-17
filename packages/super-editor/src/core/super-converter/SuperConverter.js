@@ -953,7 +953,9 @@ class SuperConverter {
     exportJsonOnly = false,
     fieldsHighlightColor,
   ) {
-    const commentsWithParaIds = comments.map((c) => prepareCommentParaIds(c));
+    // Filter out synthetic tracked change comments - they shouldn't be exported to comments.xml
+    const exportableComments = comments.filter((c) => !c.trackedChange);
+    const commentsWithParaIds = exportableComments.map((c) => prepareCommentParaIds(c));
     const commentDefinitions = commentsWithParaIds.map((c, index) =>
       getCommentDefinition(c, index, commentsWithParaIds, editor),
     );

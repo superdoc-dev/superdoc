@@ -382,7 +382,8 @@ const DEFAULT_PAGE_HEIGHT_PX = 1056;
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
 const COMMENT_EXTERNAL_COLOR = '#B1124B';
 const COMMENT_INTERNAL_COLOR = '#078383';
-const COMMENT_INACTIVE_ALPHA = '22';
+const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
+const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
 
 type LinkRenderData = {
   href?: string;
@@ -820,6 +821,8 @@ export class DomPainter {
   private onScrollHandler: ((e: Event) => void) | null = null;
   private onWindowScrollHandler: ((e: Event) => void) | null = null;
   private onResizeHandler: ((e: Event) => void) | null = null;
+  /** The currently active/selected comment ID for highlighting */
+  private activeCommentId: string | null = null;
 
   constructor(blocks: FlowBlock[], measures: Measure[], options: PainterOptions = {}) {
     this.options = options;
@@ -870,6 +873,37 @@ export class DomPainter {
     if (this.virtualEnabled && this.mount) {
       this.updateVirtualWindow();
     }
+  }
+
+  /**
+   * Sets the active comment ID for highlighting.
+   * When set, only the active comment's range is highlighted.
+   * When null, all comments show depth-based highlighting.
+   */
+  public setActiveComment(commentId: string | null): void {
+    if (this.activeCommentId !== commentId) {
+      this.activeCommentId = commentId;
+      // Force re-render of all pages by incrementing layout version
+      // This bypasses the virtualization cache check
+      this.layoutVersion += 1;
+      // Clear page states to force full re-render (activeCommentId affects run rendering)
+      // For virtualized mode: remove existing page elements before clearing state
+      // to prevent duplicate pages in the DOM
+      for (const state of this.pageIndexToState.values()) {
+        state.element.remove();
+      }
+      this.pageIndexToState.clear();
+      this.virtualMountedKey = '';
+      // For non-virtualized mode:
+      this.pageStates = [];
+    }
+  }
+
+  /**
+   * Gets the currently active comment ID.
+   */
+  public getActiveComment(): string | null {
+    return this.activeCommentId;
   }
 
   /**
@@ -3915,11 +3949,18 @@ export class DomPainter {
     const textRun = run as TextRun;
     const commentAnnotations = textRun.comments;
     const hasAnyComment = !!commentAnnotations?.length;
-    const hasHighlightableComment = !!commentAnnotations?.some((c) => !c.trackedChange);
-    const commentColor = getCommentHighlight(textRun);
+    const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
 
-    if (commentColor && !textRun.highlight && hasHighlightableComment) {
-      (elem as HTMLElement).style.backgroundColor = commentColor;
+    if (commentHighlight.color && !textRun.highlight && hasAnyComment) {
+      (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
+      // Add thin visual indicator for nested comments when outer comment is selected
+      // Use box-shadow instead of border to avoid affecting text layout
+      if (commentHighlight.hasNestedComments && commentHighlight.baseColor) {
+        const borderColor = `${commentHighlight.baseColor}99`; // Semi-transparent for subtlety
+        (elem as HTMLElement).style.boxShadow = `inset 1px 0 0 ${borderColor}, inset -1px 0 0 ${borderColor}`;
+      } else {
+        (elem as HTMLElement).style.boxShadow = '';
+      }
     }
     // We still need to preserve the comment ids
     if (hasAnyComment) {
@@ -5928,12 +5969,47 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
   }
 };
 
-const getCommentHighlight = (run: TextRun): string | undefined => {
+interface CommentHighlightResult {
+  color?: string;
+  baseColor?: string;
+  hasNestedComments?: boolean;
+}
+
+const getCommentHighlight = (run: TextRun, activeCommentId: string | null): CommentHighlightResult => {
   const comments = run.comments;
-  if (!comments || comments.length === 0) return undefined;
+  if (!comments || comments.length === 0) return {};
+
+  // Helper to match comment by ID or importedId
+  const matchesId = (c: { commentId: string; importedId?: string }, id: string) =>
+    c.commentId === id || c.importedId === id;
+
+  // When a comment is selected, only highlight that comment's range
+  if (activeCommentId != null) {
+    const activeComment = comments.find((c) =>
+      matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
+    );
+    if (activeComment) {
+      const base = activeComment.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+      // Check if there are OTHER comments besides the active one (nested comments)
+      const nestedComments = comments.filter(
+        (c) => !matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
+      );
+      return {
+        color: `${base}${COMMENT_ACTIVE_ALPHA}`,
+        baseColor: base,
+        hasNestedComments: nestedComments.length > 0,
+      };
+    }
+    // This run doesn't contain the active comment - still show light highlight for its own comments
+    const primary = comments[0];
+    const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+    return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
+  }
+
+  // No active comment - show uniform light highlight (like Word/Google Docs)
   const primary = comments[0];
   const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-  return `${base}${COMMENT_INACTIVE_ALPHA}`;
+  return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
 };
 
 /**

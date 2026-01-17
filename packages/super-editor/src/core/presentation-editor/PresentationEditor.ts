@@ -2277,6 +2277,27 @@ export class PresentationEditor extends EventEmitter {
       event: 'remoteHeaderFooterChanged',
       handler: handleRemoteHeaderFooterChanged as (...args: unknown[]) => void,
     });
+
+    // Listen for comment selection changes to update Layout Engine highlighting
+    const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
+      if (this.#domPainter?.setActiveComment) {
+        // Only update active comment when the field is explicitly present in the payload.
+        // This prevents unrelated events (like tracked change updates) from clearing
+        // the active comment selection unexpectedly.
+        if ('activeCommentId' in payload) {
+          const activeId = payload.activeCommentId ?? null;
+          this.#domPainter.setActiveComment(activeId);
+          // Mark as needing re-render to apply the new active comment highlighting
+          this.#pendingDocChange = true;
+          this.#scheduleRerender();
+        }
+      }
+    };
+    this.#editor.on('commentsUpdate', handleCommentsUpdate);
+    this.#editorListeners.push({
+      event: 'commentsUpdate',
+      handler: handleCommentsUpdate as (...args: unknown[]) => void,
+    });
   }
 
   /**

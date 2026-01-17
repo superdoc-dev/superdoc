@@ -341,12 +341,19 @@ describe('comment helpers', () => {
       externalColor: '#abcdef',
     });
 
+    // Active comment gets brighter highlight (27% = 44 hex)
     const color = getHighlightColor({ activeThreadId: 'thread-1', threadId: 'thread-1', isInternal: false, editor });
     expect(color).toBe('#abcdef44');
 
+    // Other comments get lighter highlight (13% = 22 hex) when another is active
     const external = getHighlightColor({ activeThreadId: 'thread-2', threadId: 'thread-1', isInternal: false, editor });
     expect(external).toBe('#abcdef22');
 
+    // No active comment - shows lighter highlight (13% = 22 hex)
+    const inactive = getHighlightColor({ activeThreadId: null, threadId: 'thread-3', isInternal: false, editor });
+    expect(inactive).toBe('#abcdef22');
+
+    // Internal comment when not in internal mode is hidden
     const hidden = getHighlightColor({ activeThreadId: null, threadId: 'thread-3', isInternal: true, editor });
     expect(hidden).toBe('transparent');
   });

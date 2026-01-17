@@ -208,7 +208,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
   });
 
   const getThreadingParentId = (comment) => {
-    if (!comment) return comment?.parentCommentId;
+    if (!comment) return undefined;
     const usesRangeThreading =
       comment.threadingStyleOverride === 'range-based' ||
       comment.threadingMethod === 'range-based' ||
@@ -278,6 +278,8 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         comment,
         parentCommentId,
         trackedChangeId,
+        actualStart: start,
+        actualEnd: end,
       });
       return;
     }
@@ -336,7 +338,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
   });
 
   if (trackedChangeSpanById.size > 0) {
-    trackedChangeCommentMeta.forEach(({ comment, parentCommentId, trackedChangeId }) => {
+    trackedChangeCommentMeta.forEach(({ comment, parentCommentId, trackedChangeId, actualStart, actualEnd }) => {
       if (!comment || !trackedChangeSpanById.has(trackedChangeId)) return;
 
       const span = trackedChangeSpanById.get(trackedChangeId);
@@ -359,9 +361,13 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
           ? [trackedMarks.insertMark]
           : undefined;
 
+      // Use actual comment range if available, fall back to full TC span
+      const startPos = actualStart ?? span.startPos;
+      const endPos = actualEnd ?? span.endPos;
+
       const childStartNode = schema.nodes.commentRangeStart.create(childMark, null, startMarks);
       startNodes.push({
-        pos: span.startPos,
+        pos: startPos,
         node: childStartNode,
         commentId: comment.commentId,
         parentCommentId,
@@ -369,7 +375,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
 
       const childEndNode = schema.nodes.commentRangeEnd.create(childMark, null, endMarks);
       endNodes.push({
-        pos: span.endPos,
+        pos: endPos,
         node: childEndNode,
         commentId: comment.commentId,
         parentCommentId,
@@ -384,8 +390,9 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         seen.add(c.commentId);
 
         const childRange = commentRanges.get(c.commentId);
-        const childStart = childRange?.start ?? span.startPos;
-        const childEnd = childRange?.end ?? span.endPos;
+        // Use child's own range, fall back to parent's actual range, then TC span
+        const childStart = childRange?.start ?? actualStart ?? span.startPos;
+        const childEnd = childRange?.end ?? actualEnd ?? span.endPos;
         const childStartMarks = childRange ? undefined : startMarks;
         const childEndMarks = childRange ? undefined : endMarks;
 
@@ -412,14 +419,19 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
       });
     });
 
+    // Handle comments that are on tracked change text (identified by trackedChangeParentId)
     comments
-      .filter((comment) => trackedChangeSpanById.has(comment.parentCommentId) && !comment.trackedChange)
+      .filter((comment) => {
+        const tcParentId = comment.trackedChangeParentId || comment.parentCommentId;
+        return trackedChangeSpanById.has(tcParentId) && !comment.trackedChange;
+      })
       .sort((a, b) => a.createdTime - b.createdTime)
       .forEach((comment) => {
         if (seen.has(comment.commentId)) return;
         seen.add(comment.commentId);
 
-        const span = trackedChangeSpanById.get(comment.parentCommentId);
+        const tcParentId = comment.trackedChangeParentId || comment.parentCommentId;
+        const span = trackedChangeSpanById.get(tcParentId);
         if (!span) return;
 
         const childMark = getPreparedComment({
@@ -428,7 +440,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         });
 
         const parentCommentId = getThreadingParentId(comment);
-        const trackedMarks = trackedChangeMarksById.get(comment.parentCommentId) || {};
+        const trackedMarks = trackedChangeMarksById.get(tcParentId) || {};
         const startMarks = trackedMarks.insertMark
           ? [trackedMarks.insertMark]
           : trackedMarks.deleteMark

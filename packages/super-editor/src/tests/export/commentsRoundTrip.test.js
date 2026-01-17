@@ -468,4 +468,52 @@ describe('Nested comments export', () => {
       editor.destroy();
     }
   });
+
+  it('exports commentsExtended.xml and preserves comments as separate (not threaded) after round-trip', async () => {
+    // Regression test for SD-1519: Nested comments should remain separate bubbles,
+    // not get threaded together based on range nesting.
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      const originalComments = editor.converter.comments;
+      expect(originalComments.length).toBeGreaterThanOrEqual(2);
+
+      // Verify original comments don't have parentCommentId (they're independent)
+      const originalNonThreaded = originalComments.filter((c) => !c.parentCommentId);
+      expect(originalNonThreaded.length).toBeGreaterThanOrEqual(2);
+
+      const commentsForExport = originalComments.map((comment) => ({
+        ...comment,
+        commentJSON: comment.textJson,
+      }));
+
+      await editor.exportDocx({
+        comments: commentsForExport,
+        commentsType: 'external',
+      });
+
+      const exportedXml = editor.converter.convertedXml;
+
+      // Verify commentsExtended.xml is generated (key for preserving non-threaded status)
+      const commentsExtendedXml = exportedXml['word/commentsExtended.xml'];
+      expect(commentsExtendedXml).toBeDefined();
+      const extendedElements = commentsExtendedXml?.elements?.[0]?.elements ?? [];
+      expect(extendedElements.length).toBe(originalComments.length);
+
+      // Verify NO comments have w15:paraIdParent (they should be independent)
+      const hasParaIdParent = extendedElements.some((el) => el.attributes?.['w15:paraIdParent']);
+      expect(hasParaIdParent).toBe(false);
+
+      // Re-import and verify comments remain independent (no parentCommentId from range-based threading)
+      const reimportedComments = importCommentData({ docx: carbonCopy(exportedXml) }) ?? [];
+      expect(reimportedComments.length).toBe(originalComments.length);
+
+      // Key assertion: After round-trip, comments should NOT have parentCommentId
+      // set based on range nesting (they should remain separate bubbles)
+      const reimportedNonThreaded = reimportedComments.filter((c) => !c.parentCommentId);
+      expect(reimportedNonThreaded.length).toBe(originalNonThreaded.length);
+    } finally {
+      editor.destroy();
+    }
+  });
 });

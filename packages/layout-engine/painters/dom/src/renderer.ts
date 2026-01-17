@@ -6000,8 +6000,10 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
         hasNestedComments: nestedComments.length > 0,
       };
     }
-    // This run doesn't contain the active comment - hide highlighting
-    return {};
+    // This run doesn't contain the active comment - still show light highlight for its own comments
+    const primary = comments[0];
+    const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+    return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)

@@ -2677,7 +2677,7 @@ describe('DomPainter', () => {
     expect(span.dataset.trackChangeAuthorEmail).toBe('reviewer@example.com');
   });
 
-  it('keeps comment metadata but skips highlight styles for tracked-change comments', () => {
+  it('applies background highlight for comments on tracked-change text', () => {
     const trackedCommentBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'tracked-comment-block',
@@ -2701,12 +2701,14 @@ describe('DomPainter', () => {
     );
 
     const painter = createDomPainter({ blocks: [trackedCommentBlock], measures: [paragraphMeasure] });
+    painter.setActiveComment('comment-1');
     painter.paint(paragraphLayout, mount);
 
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span).toBeTruthy();
     expect(span.dataset.commentIds).toBe('comment-1');
-    expect(span.style.backgroundColor).toBe('');
+    // Comments on tracked change text should have normal background-color highlight
+    expect(span.style.backgroundColor).not.toBe('');
   });
 
   it('applies comment highlight styles for non-tracked-change comments', () => {

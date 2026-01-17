@@ -1013,3 +1013,124 @@ describe('internal helper functions', () => {
     expect(result).toBeUndefined();
   });
 });
+
+describe('getActiveCommentId - nested comments and TC precedence', () => {
+  it('returns innermost comment when cursor is in nested range', () => {
+    // Doc: "Hello [outer: world [inner: !]]"
+    const schema = createCommentSchema();
+    const outerMark = schema.marks[CommentMarkName].create({ commentId: 'outer-comment' });
+    const innerMark = schema.marks[CommentMarkName].create({ commentId: 'inner-comment' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Hello '),
+      schema.text('world ', [outerMark]),
+      schema.text('!', [outerMark, innerMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position 13 is on "!" (0=doc, 1=paragraph start, then "Hello " is 6 chars, "world " is 6 chars = pos 13)
+    const selection = TextSelection.create(doc, 13);
+    expect(getActiveCommentId(doc, selection)).toBe('inner-comment');
+  });
+
+  it('returns outer comment when cursor is outside inner range', () => {
+    // Doc: "Hello [outer: world [inner: !]]"
+    const schema = createCommentSchema();
+    const outerMark = schema.marks[CommentMarkName].create({ commentId: 'outer-comment' });
+    const innerMark = schema.marks[CommentMarkName].create({ commentId: 'inner-comment' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Hello '),
+      schema.text('world ', [outerMark]),
+      schema.text('!', [outerMark, innerMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position 8 is on "world" (outside inner range)
+    const selection = TextSelection.create(doc, 8);
+    expect(getActiveCommentId(doc, selection)).toBe('outer-comment');
+  });
+
+  it('returns comment ID when both comment and TC exist at cursor position', () => {
+    // Doc: text has both TC and comment marks - comment should take precedence
+    const schema = createCommentSchema();
+    const tcMark = schema.marks[TrackInsertMarkName].create({ id: 'tc-1' });
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'comment-1' });
+    const paragraph = schema.node('paragraph', null, [schema.text('lorem ipsum', [tcMark, commentMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const selection = TextSelection.create(doc, 3);
+    expect(getActiveCommentId(doc, selection)).toBe('comment-1'); // NOT 'tc-1'
+  });
+
+  it('returns TC ID when only TC exists at cursor position', () => {
+    const schema = createCommentSchema();
+    const tcMark = schema.marks[TrackInsertMarkName].create({ id: 'tc-only' });
+    const paragraph = schema.node('paragraph', null, [schema.text('TC only text', [tcMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const selection = TextSelection.create(doc, 3);
+    expect(getActiveCommentId(doc, selection)).toBe('tc-only');
+  });
+
+  it('returns comment ID on overlapping text, TC ID on TC-only text', () => {
+    // Doc: "[TC: Hello [comment: world]]"
+    const schema = createCommentSchema();
+    const tcMark = schema.marks[TrackInsertMarkName].create({ id: 'tc-2' });
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'comment-2' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Hello ', [tcMark]),
+      schema.text('world', [tcMark, commentMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Cursor on "Hello" (TC only) - position 3
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 3))).toBe('tc-2');
+    // Cursor on "world" (both TC and comment) - position 8
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 8))).toBe('comment-2');
+  });
+
+  it('handles three levels of nested comments', () => {
+    const schema = createCommentSchema();
+    const outerMark = schema.marks[CommentMarkName].create({ commentId: 'outer' });
+    const middleMark = schema.marks[CommentMarkName].create({ commentId: 'middle' });
+    const innerMark = schema.marks[CommentMarkName].create({ commentId: 'inner' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Outer ', [outerMark]),
+      schema.text('Middle ', [outerMark, middleMark]),
+      schema.text('Inner', [outerMark, middleMark, innerMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position on "Inner" text (pos 14) - should return innermost
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 14))).toBe('inner');
+    // Position on "Middle" text (pos 8) - should return middle
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 8))).toBe('middle');
+    // Position on "Outer" text (pos 3) - should return outer
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 3))).toBe('outer');
+  });
+
+  it('returns null when cursor is outside all comments', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'c-1' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('No comment. '),
+      schema.text('Has comment.', [commentMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position 5 is on "No comment." (no marks)
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 5))).toBeNull();
+  });
+
+  it('correctly identifies adjacent non-overlapping comments', () => {
+    const schema = createCommentSchema();
+    const markA = schema.marks[CommentMarkName].create({ commentId: 'a' });
+    const markB = schema.marks[CommentMarkName].create({ commentId: 'b' });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [markA]), schema.text('World', [markB])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position 3 is on "Hello" (mark A)
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 3))).toBe('a');
+    // Position 8 is on "World" (mark B)
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 8))).toBe('b');
+  });
+});

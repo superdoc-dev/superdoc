@@ -1114,7 +1114,13 @@ export class HeaderFooterSessionManager {
     const converter = (this.#options.editor as EditorWithConverter).converter;
     const hasAlternateHeaders = converter?.pageStyles?.alternateHeaders === true;
 
-    if (isFirstPageOfSection) {
+    // Only use 'first' variant when titlePg is enabled (w:titlePg element in OOXML).
+    // Without titlePg, even the first page of a section uses 'default'.
+    const headerIds = converter?.headerIds as { titlePg?: boolean } | undefined;
+    const footerIds = converter?.footerIds as { titlePg?: boolean } | undefined;
+    const titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
+
+    if (isFirstPageOfSection && titlePgEnabled) {
       return 'first';
     }
     if (hasAlternateHeaders) {
@@ -1127,13 +1133,14 @@ export class HeaderFooterSessionManager {
     margins: HeaderFooterLayoutOptions['margins'],
     page: Page,
   ): HeaderFooterLayoutOptions['margins'] {
-    const footnoteReserve = (page as Page & { footnoteReserve?: number }).footnoteReserve ?? 0;
-    if (footnoteReserve <= 0) return margins;
+    // Note: property is 'footnoteReserved' (with 'd') as defined in @superdoc/contracts
+    const footnoteReserved = page.footnoteReserved ?? 0;
+    if (footnoteReserved <= 0) return margins;
 
     const currentBottom = margins?.bottom ?? this.#options.defaultMargins.bottom ?? 0;
     return {
       ...margins,
-      bottom: Math.max(0, currentBottom - footnoteReserve),
+      bottom: Math.max(0, currentBottom - footnoteReserved),
     };
   }
 

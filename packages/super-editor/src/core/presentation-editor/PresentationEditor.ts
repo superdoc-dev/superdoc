@@ -20,6 +20,7 @@ import { normalizeClientPoint as normalizeClientPointFromPointer } from './dom/P
 import { getPageElementByIndex } from './dom/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
+import { buildFootnotesInput } from './layout/FootnotesBuilder.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
@@ -2808,10 +2809,12 @@ export class PresentationEditor extends EventEmitter {
       this.#applyHtmlAnnotationMeasurements(blocks);
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
-      const footnotesLayoutInput = this.#buildFootnotesLayoutInput({
+      const footnotesLayoutInput = buildFootnotesInput(
+        this.#editor?.state,
+        (this.#editor as EditorWithConverter)?.converter,
         converterContext,
-        themeColors: this.#editor?.converter?.themeColors ?? undefined,
-      });
+        this.#editor?.converter?.themeColors ?? undefined,
+      );
       const layoutOptions = footnotesLayoutInput
         ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
         : baseLayoutOptions;
@@ -3435,164 +3438,6 @@ export class PresentationEditor extends EventEmitter {
         Partial<Pick<PageMargins, 'header' | 'footer'>>,
       ...(columns ? { columns } : {}),
       sectionMetadata,
-    };
-  }
-
-  #buildFootnotesLayoutInput({
-    converterContext,
-    themeColors,
-  }: {
-    converterContext: ConverterContext | undefined;
-    themeColors: unknown;
-  }): FootnotesLayoutInput | null {
-    const footnoteNumberById = converterContext?.footnoteNumberById;
-
-    const toSuperscriptDigits = (value: unknown): string => {
-      const map: Record<string, string> = {
-        '0': '⁰',
-        '1': '¹',
-        '2': '²',
-        '3': '³',
-        '4': '⁴',
-        '5': '⁵',
-        '6': '⁶',
-        '7': '⁷',
-        '8': '⁸',
-        '9': '⁹',
-      };
-      const str = String(value ?? '');
-      return str
-        .split('')
-        .map((ch) => map[ch] ?? ch)
-        .join('');
-    };
-
-    const ensureFootnoteMarker = (blocks: FlowBlock[], id: string): void => {
-      const displayNumberRaw =
-        footnoteNumberById && typeof footnoteNumberById === 'object' ? footnoteNumberById[id] : undefined;
-      const displayNumber =
-        typeof displayNumberRaw === 'number' && Number.isFinite(displayNumberRaw) && displayNumberRaw > 0
-          ? displayNumberRaw
-          : 1;
-      const firstParagraph = blocks.find((b) => b?.kind === 'paragraph') as
-        | (FlowBlock & { kind: 'paragraph'; runs?: Array<Record<string, unknown>> })
-        | undefined;
-      if (!firstParagraph) return;
-      const runs = Array.isArray(firstParagraph.runs) ? firstParagraph.runs : [];
-      const markerText = toSuperscriptDigits(displayNumber);
-
-      const baseRun = runs.find((r) => {
-        const dataAttrs = (r as { dataAttrs?: Record<string, string> }).dataAttrs;
-        if (dataAttrs?.['data-sd-footnote-number']) return false;
-        const pmStart = (r as { pmStart?: unknown }).pmStart;
-        const pmEnd = (r as { pmEnd?: unknown }).pmEnd;
-        return (
-          typeof pmStart === 'number' && Number.isFinite(pmStart) && typeof pmEnd === 'number' && Number.isFinite(pmEnd)
-        );
-      }) as { pmStart: number; pmEnd: number } | undefined;
-
-      const markerPmStart = baseRun?.pmStart ?? null;
-      const markerPmEnd =
-        markerPmStart != null
-          ? baseRun?.pmEnd != null
-            ? Math.max(markerPmStart, Math.min(baseRun.pmEnd, markerPmStart + markerText.length))
-            : markerPmStart + markerText.length
-          : null;
-
-      const alreadyHasMarker = runs.some((r) => {
-        const dataAttrs = (r as { dataAttrs?: Record<string, string> }).dataAttrs;
-        return Boolean(dataAttrs?.['data-sd-footnote-number']);
-      });
-      if (alreadyHasMarker) {
-        if (markerPmStart != null && markerPmEnd != null) {
-          const markerRun = runs.find((r) => {
-            const dataAttrs = (r as { dataAttrs?: Record<string, string> }).dataAttrs;
-            return Boolean(dataAttrs?.['data-sd-footnote-number']);
-          }) as { pmStart?: number | null; pmEnd?: number | null } | undefined;
-          if (markerRun) {
-            if (markerRun.pmStart == null) markerRun.pmStart = markerPmStart;
-            if (markerRun.pmEnd == null) markerRun.pmEnd = markerPmEnd;
-          }
-        }
-        return;
-      }
-
-      const firstTextRun = runs.find((r) => typeof (r as { text?: unknown }).text === 'string') as
-        | { fontFamily?: unknown; fontSize?: unknown; color?: unknown; text?: unknown }
-        | undefined;
-
-      const markerRun: Record<string, unknown> = {
-        kind: 'text',
-        text: markerText,
-        dataAttrs: {
-          'data-sd-footnote-number': 'true',
-        },
-        ...(markerPmStart != null ? { pmStart: markerPmStart } : {}),
-        ...(markerPmEnd != null ? { pmEnd: markerPmEnd } : {}),
-      };
-      markerRun.fontFamily = typeof firstTextRun?.fontFamily === 'string' ? firstTextRun.fontFamily : 'Arial';
-      markerRun.fontSize =
-        typeof firstTextRun?.fontSize === 'number' && Number.isFinite(firstTextRun.fontSize)
-          ? firstTextRun.fontSize
-          : 12;
-      if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
-
-      // Insert marker at the very start.
-      runs.unshift(markerRun);
-
-      firstParagraph.runs = runs;
-    };
-
-    const state = this.#editor?.state;
-    if (!state) return null;
-
-    const converter = (this.#editor as Partial<EditorWithConverter>)?.converter;
-    const importedFootnotes = Array.isArray(converter?.footnotes) ? converter.footnotes : [];
-    if (importedFootnotes.length === 0) return null;
-
-    const refs: FootnoteReference[] = [];
-    const idsInUse = new Set<string>();
-    state.doc.descendants((node, pos) => {
-      if (node.type?.name !== 'footnoteReference') return;
-      const id = node.attrs?.id;
-      if (id == null) return;
-      const key = String(id);
-      const insidePos = Math.min(pos + 1, state.doc.content.size);
-      refs.push({ id: key, pos: insidePos });
-      idsInUse.add(key);
-    });
-    if (refs.length === 0) return null;
-
-    const blocksById = new Map<string, FlowBlock[]>();
-    idsInUse.forEach((id) => {
-      const entry = importedFootnotes.find((f) => String(f?.id) === id);
-      const content = entry?.content;
-      if (!Array.isArray(content) || content.length === 0) return;
-
-      try {
-        const clonedContent = JSON.parse(JSON.stringify(content));
-        const footnoteDoc = { type: 'doc', content: clonedContent };
-        const result = toFlowBlocks(footnoteDoc, {
-          blockIdPrefix: `footnote-${id}-`,
-          enableRichHyperlinks: true,
-          themeColors: themeColors as never,
-          converterContext: converterContext as never,
-        });
-        if (result?.blocks?.length) {
-          ensureFootnoteMarker(result.blocks, id);
-          blocksById.set(id, result.blocks);
-        }
-      } catch {}
-    });
-
-    if (blocksById.size === 0) return null;
-
-    return {
-      refs,
-      blocksById,
-      gap: 2,
-      topPadding: 4,
-      dividerHeight: 1,
     };
   }
 

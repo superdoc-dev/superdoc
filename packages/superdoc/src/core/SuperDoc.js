@@ -881,6 +881,49 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Get the current zoom level as a percentage (e.g., 100 for 100%)
+   * @returns {number} The current zoom level as a percentage
+   * @example
+   * const zoom = superdoc.getZoom(); // Returns 100, 150, 200, etc.
+   */
+  getZoom() {
+    const doc = this.superdocStore?.documents?.[0];
+    const presentationEditor = typeof doc?.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
+    if (presentationEditor && typeof presentationEditor.zoom === 'number') {
+      return Math.round(presentationEditor.zoom * 100);
+    }
+    // Fallback to 100% if no presentation editor
+    return 100;
+  }
+
+  /**
+   * Set the zoom level for all documents
+   * @param {number} percent - The zoom level as a percentage (e.g., 100, 150, 200)
+   * @example
+   * superdoc.setZoom(150); // Set zoom to 150%
+   * superdoc.setZoom(50);  // Set zoom to 50%
+   */
+  setZoom(percent) {
+    if (typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0) {
+      console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
+      return;
+    }
+
+    const zoomMultiplier = percent / 100;
+
+    // Update all presentation editors
+    this.superdocStore?.documents?.forEach((doc) => {
+      const presentationEditor = typeof doc?.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
+      if (presentationEditor && typeof presentationEditor.setZoom === 'function') {
+        presentationEditor.setZoom(zoomMultiplier);
+      }
+    });
+
+    // Emit zoom change event
+    this.emit('zoomChange', { zoom: percent });
+  }
+
+  /**
    * Set the document to locked or unlocked
    * @param {boolean} lock
    */

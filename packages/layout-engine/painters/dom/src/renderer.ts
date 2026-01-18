@@ -159,6 +159,39 @@ type EffectExtent = {
   bottom: number;
 };
 
+type CustomGeometryPath = {
+  d: string;
+  fillRule?: string;
+  clipRule?: string;
+};
+
+type CustomGeometry = {
+  paths: CustomGeometryPath[];
+};
+
+function isCustomGeometry(value: unknown): value is CustomGeometry {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as { paths?: unknown };
+  if (!Array.isArray(v.paths) || v.paths.length === 0) return false;
+  return v.paths.every((p) => {
+    if (!p || typeof p !== 'object') return false;
+    const path = p as { d?: unknown; fillRule?: unknown; clipRule?: unknown };
+    if (typeof path.d !== 'string' || path.d.length === 0) return false;
+    if (path.fillRule != null && typeof path.fillRule !== 'string') return false;
+    if (path.clipRule != null && typeof path.clipRule !== 'string') return false;
+    return true;
+  });
+}
+
+function escapeXmlAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
 type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
   lineEnds?: LineEnds;
   effectExtent?: EffectExtent;
@@ -2891,7 +2924,11 @@ export class DomPainter {
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
 
-    const svgMarkup = block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
+    const svgMarkup =
+      this.tryCreateCustomGeometrySvg(block, innerWidth, innerHeight) ??
+      (block.shapeKind && block.shapeKind !== 'custom'
+        ? this.tryCreatePresetSvg(block, innerWidth, innerHeight)
+        : null);
     if (svgMarkup) {
       const svgElement = this.parseSafeSvg(svgMarkup);
       if (svgElement) {
@@ -3179,6 +3216,38 @@ export class DomPainter {
       console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
       return null;
     }
+  }
+
+  private tryCreateCustomGeometrySvg(
+    block: VectorShapeDrawing,
+    widthOverride?: number,
+    heightOverride?: number,
+  ): string | null {
+    const attrs = block.attrs;
+    if (!attrs || typeof attrs !== 'object') return null;
+
+    const customGeometryRaw = (attrs as Record<string, unknown>).customGeometry;
+    if (!isCustomGeometry(customGeometryRaw)) return null;
+
+    const width = widthOverride ?? block.geometry.width;
+    const height = heightOverride ?? block.geometry.height;
+
+    const fill = block.fillColor === null ? 'none' : typeof block.fillColor === 'string' ? block.fillColor : '#000000';
+    const stroke =
+      block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : 'none';
+    const strokeWidth =
+      typeof block.strokeWidth === 'number' && Number.isFinite(block.strokeWidth) ? block.strokeWidth : 1;
+
+    const pathMarkup = customGeometryRaw.paths
+      .map((p) => {
+        const d = escapeXmlAttribute(p.d);
+        const fillRule = p.fillRule ? ` fill-rule="${escapeXmlAttribute(p.fillRule)}"` : '';
+        const clipRule = p.clipRule ? ` clip-rule="${escapeXmlAttribute(p.clipRule)}"` : '';
+        return `<path d="${d}" fill="${escapeXmlAttribute(fill)}" stroke="${escapeXmlAttribute(stroke)}" stroke-width="${strokeWidth}"${fillRule}${clipRule} />`;
+      })
+      .join('');
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${pathMarkup}</svg>`;
   }
 
   private parseSafeSvg(markup: string): SVGElement | null {
@@ -5687,9 +5756,17 @@ const deriveBlockVersion = (block: FlowBlock): string => {
     }
     if (block.drawingKind === 'vectorShape') {
       const vector = block as VectorShapeDrawing;
+      const customGeometryVersion = (() => {
+        const attrs = vector.attrs;
+        if (!attrs || typeof attrs !== 'object') return '';
+        const customGeometryRaw = (attrs as Record<string, unknown>).customGeometry;
+        if (!isCustomGeometry(customGeometryRaw)) return '';
+        return customGeometryRaw.paths.map((p) => `${p.d}:${p.fillRule ?? ''}:${p.clipRule ?? ''}`).join('|');
+      })();
       return [
         'drawing:vector',
         vector.shapeKind ?? '',
+        customGeometryVersion,
         vector.fillColor ?? '',
         vector.strokeColor ?? '',
         vector.strokeWidth ?? '',

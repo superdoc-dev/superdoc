@@ -156,6 +156,75 @@ describe('handleImageNode', () => {
     };
   };
 
+  const makeCustomGeomShapeNode = () => ({
+    attributes: {
+      distT: '1000',
+      distB: '2000',
+      distL: '3000',
+      distR: '4000',
+    },
+    elements: [
+      { name: 'wp:extent', attributes: { cx: '1000', cy: '2000' } },
+      {
+        name: 'a:graphic',
+        elements: [
+          {
+            name: 'a:graphicData',
+            attributes: { uri: shapeUri },
+            elements: [
+              {
+                name: 'wps:wsp',
+                elements: [
+                  {
+                    name: 'wps:spPr',
+                    elements: [
+                      {
+                        name: 'a:custGeom',
+                        elements: [
+                          {
+                            name: 'a:pathLst',
+                            elements: [
+                              {
+                                name: 'a:path',
+                                attributes: { w: '1000', h: '2000' },
+                                elements: [
+                                  { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '1000', y: '0' } }] },
+                                  { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+                                  { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '2000' } }] },
+                                  {
+                                    name: 'a:lnTo',
+                                    elements: [{ name: 'a:pt', attributes: { x: '1000', y: '2000' } }],
+                                  },
+                                  { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '1000', y: '0' } }] },
+                                  { name: 'a:close' },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { name: 'wp:docPr', attributes: { id: '99', name: 'Shape', descr: 'Custom geometry' } },
+      {
+        name: 'wp:positionH',
+        attributes: { relativeFrom: 'page' },
+        elements: [{ name: 'wp:posOffset', elements: [{ text: '7000' }] }],
+      },
+      {
+        name: 'wp:positionV',
+        attributes: { relativeFrom: 'paragraph' },
+        elements: [{ name: 'wp:posOffset', elements: [{ text: '8000' }] }],
+      },
+    ],
+  });
+
   it('returns null if picture is missing', () => {
     const node = makeNode();
     node.elements[1].elements[0].elements = [];
@@ -454,6 +523,22 @@ describe('handleImageNode', () => {
     expect(extractFillColor).toHaveBeenCalled();
     expect(extractStrokeColor).toHaveBeenCalled();
     expect(extractStrokeWidth).toHaveBeenCalled();
+  });
+
+  it('renders custom geometry shapes (a:custGeom) as vectorShapes', () => {
+    extractFillColor.mockReturnValue('#000000');
+    extractStrokeColor.mockReturnValue(null);
+    extractStrokeWidth.mockReturnValue(1);
+
+    const node = makeCustomGeomShapeNode();
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result.type).toBe('vectorShape');
+    expect(result.attrs.kind).toBe('custom');
+    expect(result.attrs.width).toBe(1);
+    expect(result.attrs.height).toBe(2);
+    expect(result.attrs.customGeometry).toBeDefined();
+    expect(result.attrs.customGeometry.paths[0].d).toContain('M');
   });
 
   it('renders textbox shapes as vectorShapes with text content', () => {

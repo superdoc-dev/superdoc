@@ -132,6 +132,11 @@ export const VectorShape = Node.create({
         rendered: false,
       },
 
+      customGeometry: {
+        default: null,
+        rendered: false,
+      },
+
       textContent: {
         default: null,
         rendered: false,

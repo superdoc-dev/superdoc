@@ -77,10 +77,21 @@ export class VectorShapeView {
     if (typeof globalThis !== 'undefined' && globalThis.requestAnimationFrame) {
       globalThis.requestAnimationFrame(() => {
         try {
-          const parent = this.root?.parentElement;
-          if (parent && parent.tagName === 'P') {
-            // Set parent paragraph as positioned so vector shape positions relative to it
-            parent.style.position = 'relative';
+          let paragraph = null;
+          if (typeof this.root?.closest === 'function') {
+            paragraph = this.root.closest('p');
+          } else if (this.root?.parentElement?.tagName === 'P') {
+            paragraph = this.root.parentElement;
+          }
+          if (paragraph) {
+            const currentPosition =
+              typeof globalThis.getComputedStyle === 'function'
+                ? globalThis.getComputedStyle(paragraph).position
+                : paragraph.style.position;
+            if (!currentPosition || currentPosition === 'static') {
+              // Set paragraph as positioned so vector shape positions relative to it
+              paragraph.style.position = 'relative';
+            }
           }
         } catch (error) {
           // Silently handle DOM manipulation errors (e.g., detached node, read-only style)
@@ -344,10 +355,32 @@ export class VectorShapeView {
     const stroke = strokeColor === null ? 'none' : strokeColor || 'none';
     const strokeW = strokeColor === null ? 0 : strokeColor ? strokeWidth || 1 : 0;
 
+    // Custom geometry (a:custGeom) paths extracted from OOXML
+    const customGeometry = attrs.customGeometry;
+    if (customGeometry?.paths?.length) {
+      for (const { d, fillRule, clipRule } of customGeometry.paths) {
+        if (!d) continue;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('fill', fill);
+        if (fillOpacity < 1) {
+          path.setAttribute('fill-opacity', fillOpacity.toString());
+        }
+        path.setAttribute('stroke', stroke);
+        path.setAttribute('stroke-width', strokeW.toString());
+        if (fillRule) path.setAttribute('fill-rule', fillRule);
+        if (clipRule) path.setAttribute('clip-rule', clipRule);
+        svg.appendChild(path);
+      }
+      return svg;
+    }
+
+    const resolvedKind = kind || 'rect';
+
     // Create shape element based on kind
     let shapeElement;
 
-    switch (kind) {
+    switch (resolvedKind) {
       case 'rect':
         shapeElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         shapeElement.setAttribute('x', '0');

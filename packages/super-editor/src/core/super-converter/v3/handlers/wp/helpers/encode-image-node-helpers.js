@@ -449,9 +449,10 @@ const handleShapeDrawing = (
   const spPr = wsp.elements.find((el) => el.name === 'wps:spPr');
   const prstGeom = spPr?.elements.find((el) => el.name === 'a:prstGeom');
   const shapeType = prstGeom?.attributes['prst'];
+  const hasCustomGeometry = Boolean(spPr?.elements?.some((el) => el.name === 'a:custGeom'));
 
   // For all other shapes (with or without text), or shapes with gradients, use the vector shape handler
-  if (shapeType) {
+  if (shapeType || hasCustomGeometry) {
     const result = getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor });
     if (result?.attrs && isHidden) {
       result.attrs.hidden = true;
@@ -1060,18 +1061,24 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
     return null;
   }
 
-  // Extract shape kind
-  const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
-  const shapeKind = prstGeom?.attributes?.['prst'];
-  if (!shapeKind) {
-    console.warn('Shape kind not found');
-  }
-  schemaAttrs.kind = shapeKind;
-
   // Use wp:extent for dimensions (final displayed size from anchor)
   // This is the correct size that Word displays the shape at
   const width = size?.width ?? DEFAULT_SHAPE_WIDTH;
   const height = size?.height ?? DEFAULT_SHAPE_HEIGHT;
+
+  // Extract shape kind (preset geometry) and/or custom geometry (a:custGeom)
+  const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
+  const shapeKind = prstGeom?.attributes?.['prst'];
+  // Extract custom geometry (a:custGeom) when no preset is provided
+  const customGeometry = extractCustomGeometry(spPr, width, height);
+  if (!shapeKind && !customGeometry) {
+    console.warn('Shape kind not found');
+  }
+
+  schemaAttrs.kind = shapeKind || (customGeometry ? 'custom' : undefined);
+  if (customGeometry) {
+    schemaAttrs.customGeometry = customGeometry;
+  }
 
   // Extract transformations from a:xfrm (rotation and flips are still valid)
   const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
@@ -1124,4 +1131,96 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
       originalAttributes: node?.attributes,
     },
   };
+}
+
+function extractCustomGeometry(spPr, targetWidthPx, targetHeightPx) {
+  const custGeom = spPr?.elements?.find((el) => el.name === 'a:custGeom');
+  if (!custGeom?.elements) return null;
+
+  const pathLst = custGeom.elements.find((el) => el.name === 'a:pathLst');
+  const paths = pathLst?.elements?.filter((el) => el.name === 'a:path') || [];
+  if (!paths.length) return null;
+
+  const toFiniteNumber = (value) => {
+    const numeric = typeof value === 'string' ? Number(value) : value;
+    return Number.isFinite(numeric) ? numeric : null;
+  };
+
+  const formatNumber = (value) => {
+    if (!Number.isFinite(value)) return '0';
+    const rounded = Math.round(value * 1000) / 1000;
+    return String(rounded);
+  };
+
+  const buildPathD = (pathEl, scaleX, scaleY) => {
+    const commands = [];
+    const pathChildren = pathEl?.elements || [];
+
+    const transformPoint = (ptEl) => {
+      const xEmu = toFiniteNumber(ptEl?.attributes?.x) ?? 0;
+      const yEmu = toFiniteNumber(ptEl?.attributes?.y) ?? 0;
+      const xPx = emuToPixels(xEmu) * scaleX;
+      const yPx = emuToPixels(yEmu) * scaleY;
+      return { x: xPx, y: yPx };
+    };
+
+    for (const child of pathChildren) {
+      if (!child) continue;
+      if (child.name === 'a:moveTo' || child.name === 'a:lnTo') {
+        const pt = child.elements?.find((el) => el.name === 'a:pt');
+        if (!pt) continue;
+        const { x, y } = transformPoint(pt);
+        commands.push(`${child.name === 'a:moveTo' ? 'M' : 'L'} ${formatNumber(x)} ${formatNumber(y)}`);
+        continue;
+      }
+
+      if (child.name === 'a:quadBezTo') {
+        const pts = (child.elements || []).filter((el) => el.name === 'a:pt');
+        if (pts.length < 2) continue;
+        const c = transformPoint(pts[0]);
+        const end = transformPoint(pts[1]);
+        commands.push(`Q ${formatNumber(c.x)} ${formatNumber(c.y)} ${formatNumber(end.x)} ${formatNumber(end.y)}`);
+        continue;
+      }
+
+      if (child.name === 'a:cubicBezTo') {
+        const pts = (child.elements || []).filter((el) => el.name === 'a:pt');
+        if (pts.length < 3) continue;
+        const c1 = transformPoint(pts[0]);
+        const c2 = transformPoint(pts[1]);
+        const end = transformPoint(pts[2]);
+        commands.push(
+          `C ${formatNumber(c1.x)} ${formatNumber(c1.y)} ${formatNumber(c2.x)} ${formatNumber(c2.y)} ${formatNumber(end.x)} ${formatNumber(end.y)}`,
+        );
+        continue;
+      }
+
+      if (child.name === 'a:close') {
+        commands.push('Z');
+        continue;
+      }
+    }
+
+    const d = commands.join(' ');
+    return d ? { d } : null;
+  };
+
+  const builtPaths = [];
+  for (const pathEl of paths) {
+    const intrinsicWEmu = toFiniteNumber(pathEl.attributes?.w);
+    const intrinsicHEmu = toFiniteNumber(pathEl.attributes?.h);
+    const intrinsicWPx = intrinsicWEmu ? emuToPixels(intrinsicWEmu) : null;
+    const intrinsicHPx = intrinsicHEmu ? emuToPixels(intrinsicHEmu) : null;
+
+    const scaleX =
+      intrinsicWPx && intrinsicWPx > 0 && Number.isFinite(targetWidthPx) ? targetWidthPx / intrinsicWPx : 1;
+    const scaleY =
+      intrinsicHPx && intrinsicHPx > 0 && Number.isFinite(targetHeightPx) ? targetHeightPx / intrinsicHPx : 1;
+
+    const built = buildPathD(pathEl, scaleX, scaleY);
+    if (built?.d) builtPaths.push(built);
+  }
+
+  if (!builtPaths.length) return null;
+  return { paths: builtPaths };
 }

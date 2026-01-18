@@ -624,6 +624,52 @@ describe('VectorShapeView', () => {
       expect(element.style.left).toBe('50px');
     });
 
+    it('positions absolute vector shapes relative to the containing paragraph', () => {
+      const rafCallbacks = [];
+      const originalRAF = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = (cb) => {
+        rafCallbacks.push(cb);
+        return 1;
+      };
+
+      const node = {
+        attrs: {
+          kind: 'rect',
+          width: 100,
+          height: 100,
+          wrap: {
+            type: 'None',
+            attrs: {},
+          },
+          marginOffset: {
+            horizontal: 10,
+            top: 5,
+          },
+        },
+      };
+
+      const view = new VectorShapeView({
+        node,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const paragraph = document.createElement('p');
+      const wrapper = document.createElement('span');
+      paragraph.appendChild(wrapper);
+      wrapper.appendChild(view.dom);
+
+      expect(paragraph.style.position).toBe('');
+      rafCallbacks.forEach((cb) => cb());
+      expect(paragraph.style.position).toBe('relative');
+
+      globalThis.requestAnimationFrame = originalRAF;
+    });
+
     it('applies center alignment for margin-relative anchors', () => {
       const centeredNode = {
         attrs: {

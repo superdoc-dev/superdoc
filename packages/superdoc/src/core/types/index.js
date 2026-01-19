@@ -51,6 +51,21 @@
  *   currentUser?: User | null,
  *   superdoc?: SuperDoc | null,
  * }) => boolean | undefined} [comments.permissionResolver] Custom permission resolver for comment actions
+ * @property {Object} [comments.highlightColors] Comment highlight colors (internal/external and active overrides)
+ * @property {string} [comments.highlightColors.internal] Base highlight color for internal comments
+ * @property {string} [comments.highlightColors.external] Base highlight color for external comments
+ * @property {string} [comments.highlightColors.activeInternal] Active highlight color override for internal comments
+ * @property {string} [comments.highlightColors.activeExternal] Active highlight color override for external comments
+ * @property {Object} [comments.highlightOpacity] Comment highlight opacity values (0-1)
+ * @property {number} [comments.highlightOpacity.active] Opacity for active comment highlight
+ * @property {number} [comments.highlightOpacity.inactive] Opacity for inactive comment highlight
+ * @property {string} [comments.highlightHoverColor] Hover highlight color for comment marks
+ * @property {Object} [comments.trackChangeHighlightColors] Track change highlight colors
+ * @property {string} [comments.trackChangeHighlightColors.insertBorder] Border color for inserted text highlight
+ * @property {string} [comments.trackChangeHighlightColors.insertBackground] Background color for inserted text highlight
+ * @property {string} [comments.trackChangeHighlightColors.deleteBorder] Border color for deleted text highlight
+ * @property {string} [comments.trackChangeHighlightColors.deleteBackground] Background color for deleted text highlight
+ * @property {string} [comments.trackChangeHighlightColors.formatBorder] Border color for format change highlight
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services

@@ -136,6 +136,62 @@ describe('ooxml - resolveRunProperties', () => {
     const result = resolveRunProperties(params, null, null);
     expect(result).toHaveProperty('fontSize', 22);
   });
+
+  it('prefers defaults over Normal when Normal is not default', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        docDefaults: { runProperties: { fontSize: 20, color: { val: 'AAAAAA' } } },
+        styles: {
+          Normal: { default: false, runProperties: { fontSize: 22, color: { val: 'BBBBBB' } } },
+        },
+      },
+    });
+    const result = resolveRunProperties(params, null, null);
+    expect(result).toEqual({ fontSize: 20, color: { val: 'AAAAAA' } });
+  });
+
+  it('skips run style props for TOC paragraphs', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          TOC1: { runProperties: { bold: true } },
+          Emphasis: { runProperties: { italic: true } },
+        },
+      },
+    });
+    const result = resolveRunProperties(params, { styleId: 'Emphasis', color: { val: 'FF0000' } }, { styleId: 'TOC1' });
+    expect(result.bold).toBe(true);
+    expect(result.italic).toBeUndefined();
+    expect(result.color).toEqual({ val: 'FF0000' });
+  });
+
+  it('ignores inline rPr for list numbers when numbering is not inline', () => {
+    const params = buildParams({
+      translatedNumbering: {
+        definitions: { '1': { abstractNumId: 10 } },
+        abstracts: {
+          '10': {
+            levels: {
+              '0': { runProperties: { bold: false, color: { val: '00FF00' } } },
+            },
+          },
+        },
+      },
+    });
+    const result = resolveRunProperties(
+      params,
+      { underline: { val: 'single' }, bold: true },
+      { numberingProperties: { numId: 1, ilvl: 0 } },
+      null,
+      true,
+      false,
+    );
+    expect(result.bold).toBe(false);
+    expect(result.underline).toBeUndefined();
+    expect(result.color).toEqual({ val: '00FF00' });
+  });
 });
 
 describe('ooxml - resolveParagraphProperties', () => {
@@ -152,5 +208,73 @@ describe('ooxml - resolveParagraphProperties', () => {
     const inlineProps = { spacing: { before: 480 } };
     const result = resolveParagraphProperties(params, inlineProps);
     expect(result.spacing).toEqual({ before: 480, after: 120 });
+  });
+
+  it('lets numbering override style indent when numbering is defined inline', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          ListStyle: { paragraphProperties: { indent: { left: 1200 } } },
+        },
+      },
+      translatedNumbering: {
+        definitions: { '1': { abstractNumId: 10 } },
+        abstracts: {
+          '10': {
+            levels: {
+              '0': { paragraphProperties: { indent: { left: 720 } } },
+            },
+          },
+        },
+      },
+    });
+    const result = resolveParagraphProperties(params, {
+      styleId: 'ListStyle',
+      numberingProperties: { numId: 1, ilvl: 0 },
+    });
+    expect(result.indent?.left).toBe(720);
+  });
+
+  it('uses numbering style but ignores basedOn chain for indentation', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          BaseStyle: { paragraphProperties: { indent: { left: 2000 } } },
+          NumberedStyle: {
+            basedOn: 'BaseStyle',
+            paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } },
+          },
+        },
+      },
+      translatedNumbering: {
+        definitions: { '1': { abstractNumId: 10 } },
+        abstracts: {
+          '10': {
+            levels: {
+              '0': { paragraphProperties: { indent: { left: 800 } }, styleId: 'NumberedStyle' },
+            },
+          },
+        },
+      },
+    });
+    const inlineProps = { numberingProperties: { numId: 1, ilvl: 0 } };
+    const result = resolveParagraphProperties(params, inlineProps);
+    expect(result.indent?.left).toBe(800);
+  });
+
+  it('overrides tabStops across the cascade', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        docDefaults: { paragraphProperties: { tabStops: [{ pos: 720 }] } },
+        styles: {
+          Normal: { default: true, paragraphProperties: { tabStops: [{ pos: 1440 }] } },
+        },
+      },
+    });
+    const result = resolveParagraphProperties(params, { tabStops: [{ pos: 2160 }] });
+    expect(result.tabStops).toEqual([{ pos: 2160 }]);
   });
 });

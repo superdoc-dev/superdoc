@@ -56,7 +56,8 @@ const handleLoadFromUrl = async () => {
     await handleNewFile(file);
   } catch (err) {
     console.error('Failed to load from URL:', err);
-    alert(`Failed to load document: ${err.message}`);
+    const message = err instanceof Error ? err.message : String(err);
+    alert(`Failed to load document: ${message}`);
   } finally {
     isLoadingUrl.value = false;
   }

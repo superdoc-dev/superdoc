@@ -206,7 +206,8 @@ export const useSuperdocStore = defineStore('superdoc', () => {
         const fileObject = await getFileObject(doc.url, doc.name || 'document', doc.type);
         return { ...doc, data: fileObject };
       } catch (err) {
-        console.debug('[SuperDoc] Failed to fetch document from URL:', err.message);
+        const message = err instanceof Error ? err.message : String(err);
+        console.debug('[SuperDoc] Failed to fetch document from URL:', message);
         throw err;
       }
     }

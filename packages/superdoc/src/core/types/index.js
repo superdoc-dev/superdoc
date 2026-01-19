@@ -66,6 +66,12 @@
  * @property {string} [comments.trackChangeHighlightColors.deleteBorder] Border color for deleted text highlight
  * @property {string} [comments.trackChangeHighlightColors.deleteBackground] Background color for deleted text highlight
  * @property {string} [comments.trackChangeHighlightColors.formatBorder] Border color for format change highlight
+ * @property {Object} [comments.trackChangeActiveHighlightColors] Active track change highlight colors (defaults to trackChangeHighlightColors)
+ * @property {string} [comments.trackChangeActiveHighlightColors.insertBorder] Active border color for inserted text highlight
+ * @property {string} [comments.trackChangeActiveHighlightColors.insertBackground] Active background color for inserted text highlight
+ * @property {string} [comments.trackChangeActiveHighlightColors.deleteBorder] Active border color for deleted text highlight
+ * @property {string} [comments.trackChangeActiveHighlightColors.deleteBackground] Active background color for deleted text highlight
+ * @property {string} [comments.trackChangeActiveHighlightColors.formatBorder] Active border color for format change highlight
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services

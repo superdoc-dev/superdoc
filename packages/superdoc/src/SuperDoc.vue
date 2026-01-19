@@ -118,11 +118,12 @@ const superdocStyleVars = computed(() => {
   }
 
   const trackChangeColors = commentsConfig.trackChangeHighlightColors || {};
-  if (trackChangeColors.insertBorder) vars['--sd-track-insert-border'] = trackChangeColors.insertBorder;
-  if (trackChangeColors.insertBackground) vars['--sd-track-insert-bg'] = trackChangeColors.insertBackground;
-  if (trackChangeColors.deleteBorder) vars['--sd-track-delete-border'] = trackChangeColors.deleteBorder;
-  if (trackChangeColors.deleteBackground) vars['--sd-track-delete-bg'] = trackChangeColors.deleteBackground;
-  if (trackChangeColors.formatBorder) vars['--sd-track-format-border'] = trackChangeColors.formatBorder;
+  const activeTrackChangeColors = commentsConfig.trackChangeActiveHighlightColors || trackChangeColors;
+  if (activeTrackChangeColors.insertBorder) vars['--sd-track-insert-border'] = activeTrackChangeColors.insertBorder;
+  if (activeTrackChangeColors.insertBackground) vars['--sd-track-insert-bg'] = activeTrackChangeColors.insertBackground;
+  if (activeTrackChangeColors.deleteBorder) vars['--sd-track-delete-border'] = activeTrackChangeColors.deleteBorder;
+  if (activeTrackChangeColors.deleteBackground) vars['--sd-track-delete-bg'] = activeTrackChangeColors.deleteBackground;
+  if (activeTrackChangeColors.formatBorder) vars['--sd-track-format-border'] = activeTrackChangeColors.formatBorder;
 
   return vars;
 });

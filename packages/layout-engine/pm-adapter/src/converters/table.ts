@@ -78,8 +78,7 @@ type ParseTableCellArgs = {
   cellIndex: number;
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
-  /** Table style paragraph props to pass to paragraph converter for style cascade */
-  tableStyleParagraphProps?: import('../converter-context.js').TableStyleParagraphProps;
+  tableStyleId?: string;
 };
 
 type ParseTableRowArgs = {
@@ -87,8 +86,8 @@ type ParseTableRowArgs = {
   rowIndex: number;
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
-  /** Table style paragraph props to pass to paragraph converter for style cascade */
-  tableStyleParagraphProps?: import('../converter-context.js').TableStyleParagraphProps;
+  /** Table style to pass to paragraph converter for style cascade */
+  tableStyleId?: string;
 };
 
 const isTableRowNode = (node: PMNode): boolean => node.type === 'tableRow' || node.type === 'table_row';
@@ -191,7 +190,7 @@ const normalizeRowHeight = (rowProps?: Record<string, unknown>): NormalizedRowHe
  * // Returns: null
  */
 const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
-  const { cellNode, rowIndex, cellIndex, context, defaultCellPadding, tableStyleParagraphProps } = args;
+  const { cellNode, rowIndex, cellIndex, context, defaultCellPadding, tableStyleId } = args;
   if (!isTableCellNode(cellNode) || !Array.isArray(cellNode.content)) {
     return null;
   }
@@ -218,10 +217,10 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // This allows paragraphs inside table cells to inherit table style's pPr
   // Also includes backgroundColor for auto text color resolution
   const cellConverterContext: ConverterContext | undefined =
-    tableStyleParagraphProps || cellBackgroundColor
+    tableStyleId || cellBackgroundColor
       ? ({
           ...context.converterContext,
-          ...(tableStyleParagraphProps && { tableStyleParagraphProps }),
+          ...(tableStyleId && { tableStyleId }),
           ...(cellBackgroundColor && { backgroundColor: cellBackgroundColor }),
         } as ConverterContext)
       : context.converterContext;
@@ -476,7 +475,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * @param args.rowIndex - Zero-based row index for ID generation
  * @param args.context - Parser dependencies (block ID generator, converters, style context)
  * @param args.defaultCellPadding - Optional default padding from table style to pass to cells
- * @param args.tableStyleParagraphProps - Optional paragraph properties from table style for cascade
+ * @param args.tableStyleId - Optional table style ID for paragraph style cascade in cells
  * @returns TableRow object with cells and attributes, or null if the row contains no valid cells
  *
  * @example
@@ -498,7 +497,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * // Returns: null
  */
 const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
-  const { rowNode, rowIndex, context, defaultCellPadding, tableStyleParagraphProps } = args;
+  const { rowNode, rowIndex, context, defaultCellPadding, tableStyleId } = args;
   if (!isTableRowNode(rowNode) || !Array.isArray(rowNode.content)) {
     return null;
   }
@@ -511,7 +510,7 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       cellIndex,
       context,
       defaultCellPadding,
-      tableStyleParagraphProps,
+      tableStyleId,
     });
     if (parsedCell) {
       cells.push(parsedCell);
@@ -725,7 +724,6 @@ export function tableNodeToBlock(
 
   const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext);
   const defaultCellPadding = hydratedTableStyle?.cellPadding;
-  const tableStyleParagraphProps = hydratedTableStyle?.paragraphProps;
 
   const rows: TableRow[] = [];
   node.content.forEach((rowNode, rowIndex) => {
@@ -734,7 +732,7 @@ export function tableNodeToBlock(
       rowIndex,
       context: parserDeps,
       defaultCellPadding,
-      tableStyleParagraphProps,
+      tableStyleId: (node.attrs?.tableProperties as { tableStyleId?: string })?.tableStyleId,
     });
     if (parsedRow) {
       rows.push(parsedRow);

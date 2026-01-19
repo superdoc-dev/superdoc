@@ -31,6 +31,7 @@ export function resolveRunProperties(
   params: OoxmlResolverParams,
   inlineRpr: RunProperties | null | undefined,
   resolvedPpr: ParagraphProperties | null | undefined,
+  tableStyleId: string | null = null,
   isListNumber = false,
   numberingDefinedInline = false,
 ): RunProperties {
@@ -49,6 +50,11 @@ export function resolveRunProperties(
   const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
   const normalProps = (normalStyleDef?.runProperties ?? {}) as RunProperties;
   const isNormalDefault = normalStyleDef?.default ?? false;
+
+  // Getting table style run properties
+  const tableStyleProps = (
+    tableStyleId ? resolveStyleChain('runProperties', params, tableStyleId) : {}
+  ) as RunProperties;
 
   // Get run properties from direct character style, unless it's inside a TOC paragraph style
   let runStyleProps = {} as RunProperties;
@@ -79,9 +85,9 @@ export function resolveRunProperties(
       delete inlineRpr.underline;
     }
 
-    styleChain = [...defaultsChain, paragraphStyleProps, runStyleProps, inlineRpr, numberingProps];
+    styleChain = [...defaultsChain, tableStyleProps, paragraphStyleProps, runStyleProps, inlineRpr, numberingProps];
   } else {
-    styleChain = [...defaultsChain, paragraphStyleProps, runStyleProps, inlineRpr];
+    styleChain = [...defaultsChain, tableStyleProps, paragraphStyleProps, runStyleProps, inlineRpr];
   }
 
   const finalProps = combineRunProperties(styleChain);
@@ -279,7 +285,7 @@ export function resolveDocxFontFamily(
 
   const ascii = (attributes['w:ascii'] ?? attributes['ascii'] ?? attributes['eastAsia']) as string | undefined;
   let themeAscii = (attributes['w:asciiTheme'] ?? attributes['asciiTheme']) as string | undefined;
-  if (!ascii && attributes.hint === 'default') {
+  if ((!ascii && attributes.hint === 'default') || (!ascii && !themeAscii)) {
     themeAscii = 'major';
   }
 

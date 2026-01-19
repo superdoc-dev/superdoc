@@ -52,7 +52,7 @@ export type ConverterContext = {
    *
    * Style cascade: docDefaults → tableStyleParagraphProps → paragraph style → direct formatting
    */
-  tableStyleParagraphProps?: TableStyleParagraphProps;
+  tableStyleId?: string;
   /**
    * Background color of the containing table cell (hex format, e.g., "#342D8C").
    * Used for auto text color resolution - text without explicit color should

@@ -189,7 +189,7 @@ const extractDropCapRunFromParagraph = (para: PMNode, converterContext?: Convert
   const runProperties = (firstRun.attrs?.runProperties ?? {}) as RunProperties;
   let resolvedRunProperties;
   if (converterContext) {
-    resolvedRunProperties = resolveRunProperties(converterContext, runProperties, {}, false, false);
+    resolvedRunProperties = resolveRunProperties(converterContext, runProperties, {}, null, false, false);
   } else {
     resolvedRunProperties = runProperties as RunProperties;
   }
@@ -229,7 +229,11 @@ export const computeParagraphAttrs = (
   if (!converterContext) {
     resolvedParagraphProperties = paragraphProperties;
   } else {
-    resolvedParagraphProperties = resolveParagraphProperties(converterContext, paragraphProperties);
+    resolvedParagraphProperties = resolveParagraphProperties(
+      converterContext,
+      paragraphProperties,
+      converterContext.tableStyleId,
+    );
   }
 
   const normalizedSpacing = normalizeParagraphSpacing(resolvedParagraphProperties.spacing);
@@ -276,6 +280,7 @@ export const computeParagraphAttrs = (
       converterContext!,
       resolvedParagraphProperties.runProperties,
       resolvedParagraphProperties,
+      converterContext!.tableStyleId,
       true,
       Boolean(paragraphProperties.numberingProperties),
     );

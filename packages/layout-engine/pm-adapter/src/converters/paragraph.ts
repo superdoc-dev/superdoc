@@ -43,7 +43,6 @@ import {
 import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
-import { extractRunStyleId } from '../styles/linked-run.js';
 import { ptToPx, pickNumber, isPlainObject, twipsToPx } from '../utilities.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
@@ -899,6 +898,7 @@ export function paragraphToFlowBlocks(
         converterContext!,
         runProperties,
         resolvedParagraphProperties,
+        converterContext!.tableStyleId,
         false,
         false,
       );

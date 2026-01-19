@@ -185,6 +185,20 @@ export interface EditorOptions {
   /** Whether comments are enabled */
   isCommentsEnabled?: boolean;
 
+  /** Comment highlight configuration */
+  comments?: {
+    highlightColors?: {
+      internal?: string;
+      external?: string;
+      activeInternal?: string;
+      activeExternal?: string;
+    };
+    highlightOpacity?: {
+      active?: number;
+      inactive?: number;
+    };
+  };
+
   /** Whether this is a new file */
   isNewFile?: boolean;
 

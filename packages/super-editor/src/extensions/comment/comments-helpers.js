@@ -718,10 +718,47 @@ export const translateFormatChangesToEnglish = (attrs = {}) => {
  * @param {EditorView} param0.editor The current editor view
  * @returns {String} The color to use for the highlight
  */
+const DEFAULT_ACTIVE_ALPHA = 0x44 / 0xff;
+const DEFAULT_INACTIVE_ALPHA = 0x22 / 0xff;
+
+const clampOpacity = (value) => {
+  if (!Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
+};
+
+const applyAlphaToHex = (color, opacity) => {
+  if (typeof color !== 'string') return color;
+  const match = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return color;
+
+  const hex =
+    match[1].length === 3
+      ? match[1]
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : match[1];
+  const alpha = Math.round(opacity * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `#${hex}${alpha}`;
+};
+
 export const getHighlightColor = ({ activeThreadId, threadId, isInternal, editor }) => {
   if (!editor.options.isInternal && isInternal) return 'transparent';
   const pluginState = CommentsPluginKey.getState(editor.state);
-  const color = isInternal ? pluginState.internalColor : pluginState.externalColor;
-  const alpha = activeThreadId == threadId ? '44' : '22';
-  return `${color}${alpha}`;
+  const highlightColors = editor.options.comments?.highlightColors || {};
+  const highlightOpacity = editor.options.comments?.highlightOpacity || {};
+  const isActive = activeThreadId == threadId;
+
+  const baseColor = isInternal
+    ? (highlightColors.internal ?? pluginState.internalColor)
+    : (highlightColors.external ?? pluginState.externalColor);
+
+  const activeOverride = isInternal ? highlightColors.activeInternal : highlightColors.activeExternal;
+  if (isActive && activeOverride) return activeOverride;
+
+  const resolvedOpacity = clampOpacity(isActive ? highlightOpacity.active : highlightOpacity.inactive);
+  const opacity = resolvedOpacity ?? (isActive ? DEFAULT_ACTIVE_ALPHA : DEFAULT_INACTIVE_ALPHA);
+  return applyAlphaToHex(baseColor, opacity);
 };

@@ -536,4 +536,108 @@ describe('comments-store', () => {
       expect(ordered).toEqual(['c-1', null, undefined]);
     });
   });
+
+  describe('comment anchor helpers', () => {
+    it('returns comment position by id or comment object', () => {
+      const comment = { commentId: 'c-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'c-1': { start: 12, end: 18 },
+      };
+
+      expect(store.getCommentPosition('c-1')).toEqual({ start: 12, end: 18 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 12, end: 18 });
+    });
+
+    it('returns comment position using importedId fallback', () => {
+      const comment = { importedId: 'imported-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'imported-1': { start: 20, end: 30 },
+      };
+
+      expect(store.getCommentPosition('imported-1')).toEqual({ start: 20, end: 30 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
+    });
+
+    it('returns anchored text when editor and positions are available', () => {
+      const textBetween = vi.fn(() => 'Anchored text');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 5, end: 12 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1')).toBe('Anchored text');
+      expect(textBetween).toHaveBeenCalledWith(5, 12, ' ', ' ');
+    });
+
+    it('returns anchored text with custom separator option', () => {
+      const textBetween = vi.fn(() => 'Line1\nLine2');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 0, end: 20 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1', { separator: '\n' })).toBe('Line1\nLine2');
+      expect(textBetween).toHaveBeenCalledWith(0, 20, '\n', '\n');
+    });
+
+    it('returns anchored text without trimming when trim is false', () => {
+      const textBetween = vi.fn(() => '  spaced text  ');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 0, end: 15 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1', { trim: false })).toBe('  spaced text  ');
+      expect(store.getCommentAnchoredText('c-1')).toBe('spaced text');
+    });
+
+    it('returns null when position or editor is missing', () => {
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {};
+
+      expect(store.getCommentAnchoredText('c-1')).toBeNull();
+      expect(store.getCommentAnchorData('c-1')).toBeNull();
+    });
+
+    it('returns anchor data with position and text when available', () => {
+      const textBetween = vi.fn(() => 'Selected text');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 10, end: 25 },
+      };
+
+      const result = store.getCommentAnchorData('c-1');
+      expect(result).toEqual({
+        position: { start: 10, end: 25 },
+        anchoredText: 'Selected text',
+      });
+    });
+
+    it('handles empty anchored text', () => {
+      const textBetween = vi.fn(() => '');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 5, end: 5 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1')).toBe('');
+    });
+  });
 });

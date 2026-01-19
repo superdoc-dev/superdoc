@@ -93,6 +93,93 @@ export const useCommentsStore = defineStore('comments', () => {
     return getComment(comment.parentCommentId);
   };
 
+  /**
+   * Extract the position lookup key from a comment or comment ID.
+   * Prefers importedId for imported comments since editor marks retain the original ID.
+   *
+   * @param {Object | string | null | undefined} commentOrId The comment object or comment ID
+   * @returns {string | null} The position key (importedId or commentId)
+   */
+  const getCommentPositionKey = (commentOrId) => {
+    if (!commentOrId) return null;
+    if (typeof commentOrId === 'object') {
+      return commentOrId.importedId ?? commentOrId.commentId ?? null;
+    }
+    return commentOrId;
+  };
+
+  /**
+   * Normalize a position object to a consistent { start, end } format.
+   * Handles different editor position schemas (start/end, pos/to, from/to).
+   *
+   * @param {Object | null | undefined} position The position object
+   * @returns {{ start: number, end: number } | null} The normalized range or null
+   */
+  const getCommentPositionRange = (position) => {
+    if (!position) return null;
+    const start = position.start ?? position.pos ?? position.from;
+    const end = position.end ?? position.to ?? start;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    return { start, end };
+  };
+
+  /**
+   * Get the editor position data for a comment.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @returns {Object | null} The position data from editorCommentPositions
+   */
+  const getCommentPosition = (commentOrId) => {
+    const key = getCommentPositionKey(commentOrId);
+    if (!key) return null;
+    return editorCommentPositions.value?.[key] ?? null;
+  };
+
+  /**
+   * Get the text that a comment is anchored to in the document.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @param {Object} [options] Options for text extraction
+   * @param {string} [options.separator=' '] Separator for textBetween when crossing nodes
+   * @param {boolean} [options.trim=true] Whether to trim whitespace from the result
+   * @returns {string | null} The anchored text or null if unavailable
+   */
+  const getCommentAnchoredText = (commentOrId, options = {}) => {
+    const comment = typeof commentOrId === 'object' ? commentOrId : getComment(commentOrId);
+    if (!comment) return null;
+
+    const position = getCommentPosition(comment);
+    const range = getCommentPositionRange(position);
+    if (!range) return null;
+
+    const doc = superdocStore.getDocument(comment.fileId);
+    const editor = doc?.getEditor?.();
+    const docNode = editor?.state?.doc;
+    if (!docNode?.textBetween) return null;
+
+    const separator = options.separator ?? ' ';
+    const text = docNode.textBetween(range.start, range.end, separator, separator);
+    return options.trim === false ? text : text?.trim();
+  };
+
+  /**
+   * Get both position and anchored text data for a comment.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @param {Object} [options] Options passed to getCommentAnchoredText
+   * @param {string} [options.separator=' '] Separator for textBetween when crossing nodes
+   * @param {boolean} [options.trim=true] Whether to trim whitespace from the result
+   * @returns {{ position: Object, anchoredText: string | null } | null} The anchor data or null
+   */
+  const getCommentAnchorData = (commentOrId, options = {}) => {
+    const position = getCommentPosition(commentOrId);
+    if (!position) return null;
+    return {
+      position,
+      anchoredText: getCommentAnchoredText(commentOrId, options),
+    };
+  };
+
   const isThreadVisible = (comment) => {
     if (!isViewingMode.value) return true;
     const parent = getThreadParent(comment);
@@ -232,15 +319,6 @@ export const useCommentsStore = defineStore('comments', () => {
 
     activeComment.value = pendingComment.value.commentID;
   };
-
-  /**
-   * Get the key used to look up a comment's position in editorCommentPositions.
-   * Prefers importedId for imported comments since editor marks retain the original ID.
-   *
-   * @param {Object} comment - The comment object
-   * @returns {string|undefined} The position lookup key
-   */
-  const getCommentPositionKey = (comment) => comment?.importedId ?? comment?.commentId;
 
   /**
    * Get the numeric position value for sorting a comment by document order.
@@ -782,6 +860,9 @@ export const useCommentsStore = defineStore('comments', () => {
     getGroupedComments,
     getCommentsByPosition,
     getFloatingComments,
+    getCommentPosition,
+    getCommentAnchoredText,
+    getCommentAnchorData,
 
     // Actions
     init,

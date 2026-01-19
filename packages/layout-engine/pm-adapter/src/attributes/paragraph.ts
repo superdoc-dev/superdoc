@@ -110,14 +110,21 @@ export const normalizeFramePr = (value: ParagraphFrameProperties | undefined): P
   return Object.keys(frame).length > 0 ? (frame as ParagraphFrame) : undefined;
 };
 
+export const normalizeNumberingProperties = (
+  value: ParagraphProperties['numberingProperties'] | undefined,
+): ParagraphProperties['numberingProperties'] | undefined => {
+  if (value?.numId === 0) {
+    return undefined;
+  }
+  return value;
+};
 export const normalizeDropCap = (
   framePr: ParagraphFrameProperties | undefined,
   para: PMNode,
   converterContext?: ConverterContext,
 ): DropCapDescriptor | undefined => {
-  if (!framePr) return undefined;
+  if (!framePr || !framePr.dropCap || framePr.dropCap === 'none') return undefined;
 
-  // Keep the legacy dropCap flag for backward compatibility
   const dropCap = framePr.dropCap;
 
   // Build structured DropCapDescriptor for enhanced drop cap support
@@ -249,6 +256,7 @@ export const computeParagraphAttrs = (
   const tabIntervalTwips = DEFAULT_TAB_INTERVAL_TWIPS;
   const normalizedFramePr = normalizeFramePr(resolvedParagraphProperties.framePr);
   const floatAlignment = normalizedFramePr?.xAlign;
+  const normalizedNumberingProperties = normalizeNumberingProperties(resolvedParagraphProperties.numberingProperties);
   const dropCapDescriptor = normalizeDropCap(resolvedParagraphProperties.framePr, para, converterContext);
   const normalizedListRendering = attrs.listRendering as {
     markerText: string;
@@ -266,7 +274,7 @@ export const computeParagraphAttrs = (
     indent: normalizedIndent,
     dropCapDescriptor: dropCapDescriptor,
     frame: normalizedFramePr,
-    numberingProperties: resolvedParagraphProperties.numberingProperties,
+    numberingProperties: normalizedNumberingProperties,
     borders: normalizedBorders,
     shading: normalizedShading,
     tabs: normalizedTabStops,
@@ -278,7 +286,7 @@ export const computeParagraphAttrs = (
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
   };
 
-  if (resolvedParagraphProperties.numberingProperties && normalizedListRendering) {
+  if (normalizedNumberingProperties && normalizedListRendering) {
     const markerRunProperties = resolveRunProperties(
       converterContext!,
       resolvedParagraphProperties.runProperties,
@@ -316,10 +324,11 @@ export const computeRunAttrs = (
     fontSize: runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx,
     bold: runProps.bold,
     italic: runProps.italic,
-    underline: runProps.underline && {
-      style: (runProps.underline!['w:val'] as 'single' | 'double' | 'dotted' | 'dashed' | 'wavy') || 'single',
-      color: runProps.underline!['w:color'] || undefined,
-    },
+    underline: runProps.underline &&
+      runProps.underline!['w:val'] && {
+        style: (runProps.underline!['w:val'] as 'single' | 'double' | 'dotted' | 'dashed' | 'wavy') || 'single',
+        color: runProps.underline!['w:color'] || undefined,
+      },
     strike: runProps.strike,
     color: normalizeColor(runProps.color?.val),
     highlight: runProps.highlight?.['w:val'] || undefined,

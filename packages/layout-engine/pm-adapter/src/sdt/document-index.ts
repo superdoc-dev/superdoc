@@ -48,7 +48,6 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -60,8 +59,6 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
   if (!paragraphToFlowBlocks) {
     return;
   }
-
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
 
   children.forEach((child) => {
     if (child.type !== 'paragraph') {
@@ -89,7 +86,6 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
       defaultFont,
       defaultSize,
       styleContext,
-      { getListCounter, incrementListCounter, resetListCounter },
       trackedChangesConfig,
       bookmarks,
       hyperlinkConfig,

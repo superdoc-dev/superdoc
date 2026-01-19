@@ -176,9 +176,6 @@ export const createDocumentJson = (docx, converter, editor) => {
       },
     };
 
-    const translatedLinkedStyles = translateStyleDefinitions(docx);
-    const translatedNumbering = translateNumberingDefinitions(docx);
-
     return {
       pmDoc: result,
       savedTagsToRestore: node,

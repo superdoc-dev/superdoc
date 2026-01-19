@@ -227,7 +227,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
   const paragraphToFlowBlocks = context.converters?.paragraphToFlowBlocks ?? context.paragraphToFlowBlocks;
   const tableNodeToBlock = context.converters?.tableNodeToBlock;
-  const listCounterContext = context.listCounterContext;
 
   /**
    * Appends converted paragraph blocks to the cell's blocks array.
@@ -287,7 +286,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             context.defaultFont,
             context.defaultSize,
             context.styleContext,
-            listCounterContext,
             context.trackedChanges,
             context.bookmarks,
             context.hyperlinkConfig,
@@ -311,7 +309,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             context.themeColors,
             paragraphToFlowBlocks,
             context.converterContext,
-            { listCounterContext, converters: context.converters },
+            { converters: context.converters },
           );
           if (tableBlock && tableBlock.kind === 'table') {
             applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
@@ -337,7 +335,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.themeColors,
         paragraphToFlowBlocks,
         context.converterContext,
-        { listCounterContext, converters: context.converters },
+        { converters: context.converters },
       );
       if (tableBlock && tableBlock.kind === 'table') {
         blocks.push(tableBlock);

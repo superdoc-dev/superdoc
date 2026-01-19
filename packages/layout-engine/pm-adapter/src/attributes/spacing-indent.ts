@@ -111,7 +111,7 @@ export const normalizeParagraphSpacing = (value: OoxmlParagraphSpacing | undefin
   if (before != null) spacing.before = twipsToPx(before);
   if (after != null) spacing.after = twipsToPx(after);
   if (line != null) spacing.line = line;
-  if (resolvedLineRule) spacing.lineRule = resolvedLineRule;
+  if (lineRule != null) spacing.lineRule = lineRule;
   if (beforeAutospacing != null) spacing.beforeAutospacing = beforeAutospacing;
   if (afterAutospacing != null) spacing.afterAutospacing = afterAutospacing;
 

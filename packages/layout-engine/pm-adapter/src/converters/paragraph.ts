@@ -129,7 +129,7 @@ export function isInlineImage(node: PMNode): boolean {
 
 const isNodeHidden = (node: PMNode): boolean => {
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
-  if (toBoolean(attrs.hidden) === true) return true;
+  if (attrs.hidden === true) return true;
   return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
 };
 
@@ -732,9 +732,7 @@ export function paragraphToFlowBlocks(
       emptyRun.pmStart = paraPos.start + 1;
       emptyRun.pmEnd = paraPos.start + 1;
     }
-    applyBaseRunDefaults(emptyRun, baseRunDefaults, defaultFont, defaultSize);
-    applyParagraphMarkRunProps(emptyRun, paragraphProps, converterContext);
-    let emptyParagraphAttrs = cloneParagraphAttrs(paragraphAttrs);
+    let emptyParagraphAttrs = deepClone(paragraphAttrs);
     if (isSectPrMarker) {
       if (emptyParagraphAttrs) {
         emptyParagraphAttrs.sectPrMarker = true;
@@ -828,7 +826,7 @@ export function paragraphToFlowBlocks(
       const displayId = resolveFootnoteDisplayNumber(id) ?? id ?? '*';
       const displayText = toSuperscriptDigits(displayId);
 
-      const run = textNodeToRun(
+      let run = textNodeToRun(
         { type: 'text', text: displayText } as PMNode,
         positions,
         defaultFont,
@@ -838,9 +836,7 @@ export function paragraphToFlowBlocks(
         hyperlinkConfig,
         themeColors,
       );
-      const inlineStyleId = getInlineStyleId(mergedMarks);
-      applyRunStyles(run, inlineStyleId, activeRunStyleId);
-      applyBaseRunDefaults(run, baseRunDefaults, defaultFont, defaultSize);
+      run = applyInlineRunProperties(run, activeRunProperties);
       applyMarksToRun(run, mergedMarks, hyperlinkConfig, themeColors);
 
       // Copy PM positions from the parent footnoteReference node

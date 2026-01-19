@@ -7,7 +7,7 @@ packages:
 
 catalog:
   '@commitlint/cli': ^19.8.1
-  '@commitlint/config-conventional': ^19.8.1
+  '@commitlint/config-conventional': ^20.3.1
   '@eslint/js': ^9.31.0
   '@floating-ui/dom': ^1.7.0
   '@fontsource/inter': ^5.2.8

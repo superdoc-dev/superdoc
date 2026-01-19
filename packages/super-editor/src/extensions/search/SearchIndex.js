@@ -270,10 +270,22 @@ export class SearchIndex {
    * @returns {string} Regex pattern string
    */
   static toFlexiblePattern(searchString) {
+    const hasLeadingWhitespace = /^[\s\u00a0]+/.test(searchString);
+    const hasTrailingWhitespace = /[\s\u00a0]+$/.test(searchString);
+    const trimmed = searchString.replace(/^[\s\u00a0]+|[\s\u00a0]+$/g, '');
     // Split by whitespace (including non-breaking spaces), escape each part, rejoin with flexible whitespace pattern
-    const parts = searchString.split(/[\s\u00a0]+/).filter((part) => part.length > 0);
-    if (parts.length === 0) return '';
-    return parts.map((part) => SearchIndex.escapeRegex(part)).join('[\\s\\u00a0]+');
+    const parts = trimmed.split(/[\s\u00a0]+/).filter((part) => part.length > 0);
+    if (parts.length === 0) {
+      return hasLeadingWhitespace || hasTrailingWhitespace ? '[\\s\\u00a0]+' : '';
+    }
+    let pattern = parts.map((part) => SearchIndex.escapeRegex(part)).join('[\\s\\u00a0]+');
+    if (hasLeadingWhitespace) {
+      pattern = '[\\s\\u00a0]+' + pattern;
+    }
+    if (hasTrailingWhitespace) {
+      pattern = pattern + '[\\s\\u00a0]+';
+    }
+    return pattern;
   }
 
   /**

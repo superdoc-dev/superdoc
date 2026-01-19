@@ -273,7 +273,13 @@ export class SearchIndex {
     // Split by whitespace (including non-breaking spaces), escape each part, rejoin with flexible whitespace pattern
     const parts = searchString.split(/[\s\u00a0]+/).filter((part) => part.length > 0);
     if (parts.length === 0) return '';
-    return parts.map((part) => SearchIndex.escapeRegex(part)).join('[\\s\\u00a0]+');
+    const blockSeparatorPattern = '(?:\\n)?';
+    const escapedParts = parts.map((part) => {
+      const chars = Array.from(part);
+      if (chars.length === 0) return '';
+      return chars.map((ch) => SearchIndex.escapeRegex(ch)).join(blockSeparatorPattern);
+    });
+    return escapedParts.join('[\\s\\u00a0]+');
   }
 
   /**

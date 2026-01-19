@@ -122,6 +122,27 @@ describe('Cross-paragraph search', () => {
         }
       });
 
+      it('should find matches across paragraph boundaries without whitespace in query', () => {
+        const editor = createDocxTestEditor();
+
+        try {
+          const { doc, paragraph, run } = editor.schema.nodes;
+          const testDoc = doc.create(null, [
+            paragraph.create(null, [run.create(null, [editor.schema.text('February 7, 2023')])]),
+            paragraph.create(null, [run.create(null, [editor.schema.text('Via Electronic Mail')])]),
+          ]);
+
+          const index = new SearchIndex();
+          index.build(testDoc);
+
+          const matches = index.search('2023Via');
+
+          expect(matches.length).toBeGreaterThan(0);
+        } finally {
+          editor.destroy();
+        }
+      });
+
       it('should handle case-insensitive search', () => {
         const editor = createDocxTestEditor();
 
@@ -248,6 +269,32 @@ describe('Cross-paragraph search', () => {
           const ranges = index.offsetRangeToDocRanges(matches[0].start, matches[0].end);
           // Should have 2 ranges (one for each paragraph's text)
           expect(ranges).toHaveLength(2);
+        } finally {
+          editor.destroy();
+        }
+      });
+
+      it('should map cross-paragraph match without whitespace to multiple ranges', () => {
+        const editor = createDocxTestEditor();
+
+        try {
+          const { doc, paragraph, run } = editor.schema.nodes;
+          const testDoc = doc.create(null, [
+            paragraph.create(null, [run.create(null, [editor.schema.text('February 7, 2023')])]),
+            paragraph.create(null, [run.create(null, [editor.schema.text('Via Electronic Mail')])]),
+          ]);
+
+          const index = new SearchIndex();
+          index.build(testDoc);
+
+          const matches = index.search('2023Via');
+          expect(matches.length).toBeGreaterThan(0);
+
+          const ranges = index.offsetRangeToDocRanges(matches[0].start, matches[0].end);
+          expect(ranges).toHaveLength(2);
+
+          const combinedText = ranges.map((range) => testDoc.textBetween(range.from, range.to)).join('');
+          expect(combinedText).toBe('2023Via');
         } finally {
           editor.destroy();
         }

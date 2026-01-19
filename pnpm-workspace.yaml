@@ -39,7 +39,7 @@ catalog:
   jszip: 3.10.1
   lib0: ^0.2.114
   lint-staged: ^16.1.4
-  marked: ^16.2.0
+  marked: ^17.0.1
   naive-ui: ^2.43.1
   nodemon: ^3.1.10
   patch-package: ^8.0.1

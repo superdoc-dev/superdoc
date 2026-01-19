@@ -42,6 +42,26 @@ const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
 
+// URL loading
+const documentUrl = ref('');
+const isLoadingUrl = ref(false);
+
+const handleLoadFromUrl = async () => {
+  const url = documentUrl.value.trim();
+  if (!url) return;
+
+  isLoadingUrl.value = true;
+  try {
+    const file = await getFileObject(url, 'document.docx', DOCX);
+    await handleNewFile(file);
+  } catch (err) {
+    console.error('Failed to load from URL:', err);
+    alert(`Failed to load document: ${err.message}`);
+  } finally {
+    isLoadingUrl.value = false;
+  }
+};
+
 const user = {
   name: testUserName,
   email: testUserEmail,
@@ -557,6 +577,22 @@ if (scrollTestMode.value) {
                 </div>
                 <span class="dev-app__upload-filename">{{ uploadDisplayName }}</span>
               </div>
+              <div class="dev-app__url-control">
+                <input
+                  v-model="documentUrl"
+                  type="text"
+                  class="dev-app__url-input"
+                  placeholder="Paste document URL..."
+                  @keydown.enter="handleLoadFromUrl"
+                />
+                <button
+                  class="dev-app__url-btn"
+                  :disabled="isLoadingUrl || !documentUrl.trim()"
+                  @click="handleLoadFromUrl"
+                >
+                  {{ isLoadingUrl ? 'Loading...' : 'Load URL' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -946,6 +982,58 @@ if (scrollTestMode.value) {
 .dev-app__upload-hint {
   color: #94a3b8;
   font-size: 12px;
+}
+
+.dev-app__url-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dev-app__url-input {
+  flex: 1;
+  min-width: 280px;
+  padding: 8px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+.dev-app__url-input::placeholder {
+  color: #64748b;
+}
+
+.dev-app__url-input:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.dev-app__url-btn {
+  padding: 8px 14px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.2);
+  color: #e2e8f0;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.dev-app__url-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.dev-app__url-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .dev-app__header-actions {

@@ -202,8 +202,13 @@ export const useSuperdocStore = defineStore('superdoc', () => {
     else if (doc.url && doc.type) {
       if (doc.type.toLowerCase() === 'docx') doc.type = DOCX;
       else if (doc.type.toLowerCase() === 'pdf') doc.type = PDF;
-      const fileObject = await getFileObject(doc.url, doc.name || 'document', doc.type);
-      return { ...doc, data: fileObject };
+      try {
+        const fileObject = await getFileObject(doc.url, doc.name || 'document', doc.type);
+        return { ...doc, data: fileObject };
+      } catch (err) {
+        console.debug('[SuperDoc] Failed to fetch document from URL:', err.message);
+        throw err;
+      }
     }
     // Invalid configuration
     return null;

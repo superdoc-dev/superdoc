@@ -703,7 +703,7 @@ const loadNewFileData = async () => {
     const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource.value);
     return { content: docx, media, mediaFiles, fonts };
   } catch (err) {
-    console.debug('Error loading new file data:', err);
+    console.debug('[SuperDoc] Error loading file:', err);
     if (typeof props.options.onException === 'function') {
       props.options.onException({ error: err, editor: null });
     }

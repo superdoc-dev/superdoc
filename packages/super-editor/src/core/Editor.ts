@@ -630,6 +630,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
         } else {
           // Browser: fetch the file
           const response = await fetch(source);
+          if (!response.ok) {
+            console.debug('[SuperDoc] Fetch failed:', response.status, response.statusText);
+            throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+          }
           const blob = await response.blob();
           const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(blob))!;
           resolvedOptions.content = docx;
@@ -750,6 +754,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      console.debug('[SuperDoc] Document load error:', err.message);
       throw new DocumentLoadError(`Failed to load document: ${err.message}`, err);
     }
   }

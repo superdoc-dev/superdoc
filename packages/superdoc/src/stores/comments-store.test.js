@@ -394,4 +394,35 @@ describe('comments-store', () => {
       expect(store.getGroupedComments.parentComments).toEqual([]);
     });
   });
+
+  describe('getCommentsByPosition', () => {
+    it('orders parent comments by document position when available', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 2 },
+        { commentId: 'c-2', createdTime: 1 },
+        { commentId: 'c-3', createdTime: 3 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { start: 40, end: 50 },
+        'c-2': { start: 10, end: 20 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1', 'c-3']);
+    });
+
+    it('falls back to createdTime for comments without positions', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 3 },
+        { commentId: 'c-2', createdTime: 1 },
+        { commentId: 'c-3', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {};
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
+    });
+  });
 });

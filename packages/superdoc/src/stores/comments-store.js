@@ -237,7 +237,36 @@ export const useCommentsStore = defineStore('comments', () => {
    * Generate the comments list separating resolved and active
    * We only return parent comments here, since CommentDialog.vue will handle threaded comments
    */
-  const getGroupedComments = computed(() => {
+  const getCommentPositionKey = (comment) => comment?.commentId ?? comment?.importedId;
+
+  const getPositionSortValue = (comment) => {
+    const key = getCommentPositionKey(comment);
+    if (!key) return null;
+    const position = editorCommentPositions.value?.[key];
+    if (!position) return null;
+    if (Number.isFinite(position.start)) return position.start;
+    if (Number.isFinite(position.pos)) return position.pos;
+    if (Number.isFinite(position.from)) return position.from;
+    if (Number.isFinite(position.to)) return position.to;
+    return null;
+  };
+
+  const compareByCreatedTime = (a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0);
+
+  const compareByPosition = (a, b) => {
+    const posA = getPositionSortValue(a);
+    const posB = getPositionSortValue(b);
+
+    const hasA = Number.isFinite(posA);
+    const hasB = Number.isFinite(posB);
+
+    if (hasA && hasB && posA !== posB) return posA - posB;
+    if (hasA && !hasB) return -1;
+    if (!hasA && hasB) return 1;
+    return compareByCreatedTime(a, b);
+  };
+
+  const buildGroupedComments = (sorter) => {
     const parentComments = [];
     const resolvedComments = [];
     const childCommentMap = new Map();
@@ -264,14 +293,18 @@ export const useCommentsStore = defineStore('comments', () => {
     });
 
     // Return only parent comments
-    const sortedParentComments = parentComments.sort((a, b) => a.createdTime - b.createdTime);
-    const sortedResolvedComments = resolvedComments.sort((a, b) => a.createdTime - b.createdTime);
+    const sortedParentComments = parentComments.sort(sorter);
+    const sortedResolvedComments = resolvedComments.sort(sorter);
 
     return {
       parentComments: sortedParentComments,
       resolvedComments: sortedResolvedComments,
     };
-  });
+  };
+
+  const getGroupedComments = computed(() => buildGroupedComments(compareByCreatedTime));
+
+  const getCommentsByPosition = computed(() => buildGroupedComments(compareByPosition));
 
   const hasOverlapId = (id) => overlappedIds.includes(id);
   const documentsWithConverations = computed(() => {
@@ -710,6 +743,7 @@ export const useCommentsStore = defineStore('comments', () => {
     getConfig,
     documentsWithConverations,
     getGroupedComments,
+    getCommentsByPosition,
     getFloatingComments,
 
     // Actions

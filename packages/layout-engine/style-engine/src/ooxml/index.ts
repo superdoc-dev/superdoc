@@ -251,7 +251,7 @@ export function getNumberingProperties<T extends PropertyObject>(
   const listDefinitionForThisNumId = abstracts[String(abstractNumId)];
   if (!listDefinitionForThisNumId) return {} as T;
 
-  const numStyleLinkId = listDefinitionForThisNumId.styleLink;
+  const numStyleLinkId = listDefinitionForThisNumId.numStyleLink ?? listDefinitionForThisNumId.styleLink;
 
   if (numStyleLinkId && tries < 1) {
     const styleDef = params.translatedLinkedStyles?.styles?.[numStyleLinkId];

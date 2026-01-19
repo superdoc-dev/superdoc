@@ -236,7 +236,10 @@ export const computeParagraphAttrs = (
     );
   }
 
-  const normalizedSpacing = normalizeParagraphSpacing(resolvedParagraphProperties.spacing);
+  const normalizedSpacing = normalizeParagraphSpacing(
+    resolvedParagraphProperties.spacing,
+    Boolean(resolvedParagraphProperties.numberingProperties),
+  );
   const normalizedIndent = normalizeIndentTwipsToPx(resolvedParagraphProperties.indent as ParagraphIndent);
   const normalizedTabStops = normalizeOoxmlTabs(resolvedParagraphProperties.tabStops);
   const normalizedAlignment = normalizeAlignment(resolvedParagraphProperties.justification);

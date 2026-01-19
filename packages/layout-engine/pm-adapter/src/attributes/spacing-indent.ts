@@ -95,16 +95,26 @@ export const normalizeAlignment = (value: unknown): ParagraphAttrs['alignment'] 
  * // { before: 16, line: 32, lineRule: 'exact' } (line converted from twips)
  * ```
  */
-export const normalizeParagraphSpacing = (value: OoxmlParagraphSpacing | undefined): ParagraphSpacing | undefined => {
+export const normalizeParagraphSpacing = (
+  value: OoxmlParagraphSpacing | undefined,
+  isList: boolean,
+): ParagraphSpacing | undefined => {
   if (!value || typeof value !== 'object') return undefined;
   const spacing: ParagraphSpacing = {};
 
-  const before = pickNumber(value.before);
-  const after = pickNumber(value.after);
+  let before = pickNumber(value.before);
+  let after = pickNumber(value.after);
   const lineRaw = pickNumber(value.line);
   const lineRule = normalizeLineRule(value.lineRule);
   const beforeAutospacing = value.beforeAutospacing;
   const afterAutospacing = value.afterAutospacing;
+
+  if (beforeAutospacing && isList) {
+    before = undefined;
+  }
+  if (afterAutospacing && isList) {
+    after = undefined;
+  }
 
   const line = normalizeLineValue(lineRaw, lineRule);
 

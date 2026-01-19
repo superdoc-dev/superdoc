@@ -185,12 +185,22 @@ function isCustomGeometry(value: unknown): value is CustomGeometry {
 }
 
 function escapeXmlAttribute(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+  return value.replace(/[&"'<>]/g, (ch) => {
+    switch (ch) {
+      case '&':
+        return '&amp;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&apos;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      default:
+        return ch;
+    }
+  });
 }
 
 type VectorShapeDrawingWithEffects = VectorShapeDrawing & {

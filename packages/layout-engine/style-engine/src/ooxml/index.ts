@@ -46,7 +46,7 @@ export function resolveRunProperties(
   const paragraphStyleProps = resolveStyleChain('runProperties', params, paragraphStyleId) as RunProperties;
 
   // Getting default properties and normal style properties
-  const defaultProps = params.translatedLinkedStyles.docDefaults.runProperties ?? {};
+  const defaultProps = params.translatedLinkedStyles.docDefaults?.runProperties ?? {};
   const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
   const normalProps = (normalStyleDef?.runProperties ?? {}) as RunProperties;
   const isNormalDefault = normalStyleDef?.default ?? false;

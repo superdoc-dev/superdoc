@@ -394,4 +394,39 @@ describe('comments-store', () => {
       expect(store.getGroupedComments.parentComments).toEqual([]);
     });
   });
+
+  describe('comment anchor helpers', () => {
+    it('returns comment position by id or comment object', () => {
+      const comment = { commentId: 'c-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'c-1': { start: 12, end: 18 },
+      };
+
+      expect(store.getCommentPosition('c-1')).toEqual({ start: 12, end: 18 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 12, end: 18 });
+    });
+
+    it('returns anchored text when editor and positions are available', () => {
+      const textBetween = vi.fn(() => 'Anchored text');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 5, end: 12 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1')).toBe('Anchored text');
+      expect(textBetween).toHaveBeenCalledWith(5, 12, ' ', ' ');
+    });
+
+    it('returns null when position or editor is missing', () => {
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {};
+
+      expect(store.getCommentAnchoredText('c-1')).toBeNull();
+      expect(store.getCommentAnchorData('c-1')).toBeNull();
+    });
+  });
 });

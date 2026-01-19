@@ -93,6 +93,55 @@ export const useCommentsStore = defineStore('comments', () => {
     return getComment(comment.parentCommentId);
   };
 
+  const getCommentPositionKey = (commentOrId) => {
+    if (!commentOrId) return null;
+    if (typeof commentOrId === 'object') {
+      return commentOrId.commentId ?? commentOrId.importedId ?? null;
+    }
+    return commentOrId;
+  };
+
+  const getCommentPositionRange = (position) => {
+    if (!position) return null;
+    const start = position.start ?? position.pos ?? position.from;
+    const end = position.end ?? position.to ?? start;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    return { start, end };
+  };
+
+  const getCommentPosition = (commentOrId) => {
+    const key = getCommentPositionKey(commentOrId);
+    if (!key) return null;
+    return editorCommentPositions.value?.[key] ?? null;
+  };
+
+  const getCommentAnchoredText = (commentOrId, options = {}) => {
+    const comment = typeof commentOrId === 'object' ? commentOrId : getComment(commentOrId);
+    if (!comment) return null;
+
+    const position = getCommentPosition(comment);
+    const range = getCommentPositionRange(position);
+    if (!range) return null;
+
+    const doc = superdocStore.getDocument(comment.fileId);
+    const editor = doc?.getEditor?.();
+    const docNode = editor?.state?.doc;
+    if (!docNode?.textBetween) return null;
+
+    const separator = options.separator ?? ' ';
+    const text = docNode.textBetween(range.start, range.end, separator, separator);
+    return options.trim === false ? text : text?.trim();
+  };
+
+  const getCommentAnchorData = (commentOrId, options = {}) => {
+    const position = getCommentPosition(commentOrId);
+    if (!position) return null;
+    return {
+      position,
+      anchoredText: getCommentAnchoredText(commentOrId, options),
+    };
+  };
+
   const isThreadVisible = (comment) => {
     if (!isViewingMode.value) return true;
     const parent = getThreadParent(comment);
@@ -711,6 +760,9 @@ export const useCommentsStore = defineStore('comments', () => {
     documentsWithConverations,
     getGroupedComments,
     getFloatingComments,
+    getCommentPosition,
+    getCommentAnchoredText,
+    getCommentAnchorData,
 
     // Actions
     init,

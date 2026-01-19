@@ -804,6 +804,27 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Scroll the document to a given comment or tracked change by thread id.
+   *
+   * @param {string} commentId The comment or tracked change id
+   * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
+   * @returns {boolean} Whether a matching element was found
+   */
+  scrollToComment(commentId, options = {}) {
+    const commentsConfig = this.config?.modules?.comments;
+    if (!commentsConfig || commentsConfig === false) return false;
+    if (!commentId || typeof commentId !== 'string') return false;
+
+    const element = document.querySelector(`[data-thread-id="${commentId}"]`);
+    if (!element) return false;
+
+    const { behavior = 'smooth', block = 'start' } = options;
+    element.scrollIntoView({ behavior, block });
+    this.commentsStore?.setActiveComment?.(this, commentId);
+    return true;
+  }
+
+  /**
    * Toggle the custom context menu globally.
    * Updates both flow editors and PresentationEditor instances so downstream listeners can short-circuit early.
    * @param {boolean} disabled

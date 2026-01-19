@@ -350,6 +350,64 @@ describe('comment helpers', () => {
     const hidden = getHighlightColor({ activeThreadId: null, threadId: 'thread-3', isInternal: true, editor });
     expect(hidden).toBe('transparent');
   });
+
+  it('uses configured highlight colors and opacity for inactive comments', () => {
+    const editor = {
+      options: {
+        isInternal: false,
+        comments: {
+          highlightColors: { external: '#112233' },
+          highlightOpacity: { inactive: 0.25 },
+        },
+      },
+      state: {},
+    };
+    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+      internalColor: '#123456',
+      externalColor: '#abcdef',
+    });
+
+    const color = getHighlightColor({ activeThreadId: 'thread-2', threadId: 'thread-1', isInternal: false, editor });
+    expect(color).toBe('#11223340');
+  });
+
+  it('uses active highlight override color when provided', () => {
+    const editor = {
+      options: {
+        isInternal: false,
+        comments: {
+          highlightColors: { external: '#112233', activeExternal: '#ff0000' },
+        },
+      },
+      state: {},
+    };
+    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+      internalColor: '#123456',
+      externalColor: '#abcdef',
+    });
+
+    const color = getHighlightColor({ activeThreadId: 'thread-1', threadId: 'thread-1', isInternal: false, editor });
+    expect(color).toBe('#ff0000');
+  });
+
+  it('falls back to plugin colors with custom opacity', () => {
+    const editor = {
+      options: {
+        isInternal: false,
+        comments: {
+          highlightOpacity: { active: 0.2 },
+        },
+      },
+      state: {},
+    };
+    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+      internalColor: '#123456',
+      externalColor: '#abcdef',
+    });
+
+    const color = getHighlightColor({ activeThreadId: 'thread-1', threadId: 'thread-1', isInternal: false, editor });
+    expect(color).toBe('#abcdef33');
+  });
 });
 
 describe('comments plugin commands', () => {

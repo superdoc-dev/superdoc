@@ -351,12 +351,21 @@ export const prepareCommentsXmlFilesForExport = ({
   commentsWithParaIds,
   exportType,
   threadingProfile,
+  preserveCommentsOnEmpty,
 }) => {
   const relationships = [];
 
-  if (exportType === 'clean') {
+  // Remove comment files if explicitly cleaning OR if no comments and preserveCommentsOnEmpty is false
+  const shouldRemoveComments =
+    exportType === 'clean' || (commentsWithParaIds.length === 0 && preserveCommentsOnEmpty === false);
+  if (shouldRemoveComments) {
     const documentXml = removeCommentsFilesFromConvertedXml(convertedXml);
     return { documentXml, relationships };
+  }
+
+  // Preserve existing comments when array is empty and preserveCommentsOnEmpty is true (default)
+  if (commentsWithParaIds.length === 0) {
+    return { documentXml: convertedXml, relationships };
   }
 
   const exportStrategy = determineExportStrategy(commentsWithParaIds);

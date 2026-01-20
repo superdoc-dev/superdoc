@@ -367,6 +367,120 @@ describe('Resolved comments round-trip', () => {
   });
 });
 
+describe('preserveCommentsOnEmpty flag behavior', () => {
+  const filename = 'WordOriginatedComments.docx';
+  let docx;
+  let media;
+  let mediaFiles;
+  let fonts;
+
+  beforeAll(async () => {
+    ({ docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(filename));
+  });
+
+  it('preserves existing comments when empty array passed and preserveCommentsOnEmpty is true', async () => {
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      const originalCommentCount = editor.converter.comments.length;
+      expect(originalCommentCount).toBeGreaterThan(0);
+
+      await editor.exportDocx({
+        comments: [],
+        commentsType: 'external',
+        preserveCommentsOnEmpty: true,
+      });
+
+      const exportedXml = editor.converter.convertedXml;
+      const commentsXml = exportedXml['word/comments.xml'];
+
+      // Comments should be preserved (not removed)
+      expect(commentsXml).toBeDefined();
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('preserves existing comments when empty array passed and preserveCommentsOnEmpty is omitted (default true)', async () => {
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      const originalCommentCount = editor.converter.comments.length;
+      expect(originalCommentCount).toBeGreaterThan(0);
+
+      // Omit preserveCommentsOnEmpty entirely - should default to true (preserving)
+      await editor.exportDocx({
+        comments: [],
+        commentsType: 'external',
+      });
+
+      const exportedXml = editor.converter.convertedXml;
+      const commentsXml = exportedXml['word/comments.xml'];
+
+      // Comments should be preserved (not removed) - backward compatible behavior
+      expect(commentsXml).toBeDefined();
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('removes all comments when empty array passed and preserveCommentsOnEmpty is false', async () => {
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      const originalCommentCount = editor.converter.comments.length;
+      expect(originalCommentCount).toBeGreaterThan(0);
+
+      await editor.exportDocx({
+        comments: [],
+        commentsType: 'external',
+        preserveCommentsOnEmpty: false,
+      });
+
+      const exportedXml = editor.converter.convertedXml;
+
+      // All comment files should be removed
+      expect(exportedXml['word/comments.xml']).toBeUndefined();
+      expect(exportedXml['word/commentsExtended.xml']).toBeUndefined();
+      expect(exportedXml['word/commentsExtensible.xml']).toBeUndefined();
+      expect(exportedXml['word/commentsIds.xml']).toBeUndefined();
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('replaces comments with provided array regardless of preserveCommentsOnEmpty flag', async () => {
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      const originalCommentCount = editor.converter.comments.length;
+      expect(originalCommentCount).toBeGreaterThan(0);
+
+      // Create a single new comment for export
+      const singleComment = {
+        ...editor.converter.comments[0],
+        commentJSON: editor.converter.comments[0].textJson,
+        commentId: 'test-single-comment',
+      };
+
+      await editor.exportDocx({
+        comments: [singleComment],
+        commentsType: 'external',
+        preserveCommentsOnEmpty: false, // flag shouldn't matter when array is non-empty
+      });
+
+      const exportedXml = editor.converter.convertedXml;
+      const commentsXml = exportedXml['word/comments.xml'];
+      const exportedComments = commentsXml?.elements?.[0]?.elements ?? [];
+
+      // Should have exactly 1 comment (the one we passed)
+      expect(exportedComments).toHaveLength(1);
+    } finally {
+      editor.destroy();
+    }
+  });
+});
+
 describe('Nested comments export', () => {
   const filename = 'nested-comments.docx';
   let docx;

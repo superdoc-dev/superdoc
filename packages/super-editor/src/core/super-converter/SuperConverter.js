@@ -952,6 +952,7 @@ class SuperConverter {
     editor,
     exportJsonOnly = false,
     fieldsHighlightColor,
+    preserveCommentsOnEmpty = true,
   ) {
     const commentsWithParaIds = comments.map((c) => prepareCommentParaIds(c));
     const commentDefinitions = commentsWithParaIds.map((c, index) =>
@@ -998,19 +999,33 @@ class SuperConverter {
     );
 
     // Update content types and comments files as needed
+    // Empty array preserves existing comments unless preserveCommentsOnEmpty is true
     let updatedXml = { ...this.convertedXml };
     let commentsRels = [];
-    if (comments.length) {
-      const { documentXml, relationships } = this.#prepareCommentsXmlFilesForExport({
-        defs: params.exportedCommentDefs,
-        exportType: commentsExportType,
-        commentsWithParaIds,
-      });
-      updatedXml = { ...documentXml };
-      commentsRels = relationships;
-    }
+    const { documentXml, relationships } = this.#prepareCommentsXmlFilesForExport({
+      defs: params.exportedCommentDefs,
+      exportType: commentsExportType,
+      commentsWithParaIds,
+      preserveCommentsOnEmpty,
+    });
+    updatedXml = { ...documentXml };
+    commentsRels = relationships;
 
     this.convertedXml = { ...this.convertedXml, ...updatedXml };
+
+    // Explicitly delete comment files when exporting with no comments
+    // (spread merge doesn't remove keys that exist in the original object)
+    const shouldRemoveComments =
+      commentsExportType === 'clean' || (commentsWithParaIds.length === 0 && preserveCommentsOnEmpty === false);
+    if (shouldRemoveComments) {
+      const commentFileKeys = [
+        'word/comments.xml',
+        'word/commentsExtended.xml',
+        'word/commentsExtensible.xml',
+        'word/commentsIds.xml',
+      ];
+      commentFileKeys.forEach((key) => delete this.convertedXml[key]);
+    }
 
     const headFootRels = this.#exportProcessHeadersFooters({ isFinalDoc });
 
@@ -1090,13 +1105,14 @@ class SuperConverter {
   /**
    * Update comments files and relationships depending on export type
    */
-  #prepareCommentsXmlFilesForExport({ defs, exportType, commentsWithParaIds }) {
+  #prepareCommentsXmlFilesForExport({ defs, exportType, commentsWithParaIds, preserveCommentsOnEmpty }) {
     const { documentXml, relationships } = prepareCommentsXmlFilesForExport({
       exportType,
       convertedXml: this.convertedXml,
       defs,
       commentsWithParaIds,
       threadingProfile: this.commentThreadingProfile,
+      preserveCommentsOnEmpty,
     });
 
     return { documentXml, relationships };

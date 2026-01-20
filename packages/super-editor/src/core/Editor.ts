@@ -129,6 +129,9 @@ export interface SaveOptions {
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
+
+  /** When true (default), passing an empty comments array preserves existing comments. When false, empty array removes all comments. */
+  preserveCommentsOnEmpty?: boolean;
 }
 
 /**
@@ -2376,6 +2379,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments,
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
+    preserveCommentsOnEmpty = true,
   }: {
     isFinalDoc?: boolean;
     commentsType?: string;
@@ -2384,6 +2388,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments?: Comment[];
     getUpdatedDocs?: boolean;
     fieldsHighlightColor?: string | null;
+    preserveCommentsOnEmpty?: boolean;
   } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
@@ -2410,6 +2415,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         this,
         exportJsonOnly,
         fieldsHighlightColor,
+        preserveCommentsOnEmpty,
       );
 
       this.#validateDocumentExport();
@@ -2468,8 +2474,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
         updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
       }
 
-      if (preparedComments.length) {
-        const commentsXml = this.converter.schemaToXml(this.converter.convertedXml['word/comments.xml'].elements[0]);
+      // Check if comment files exist in convertedXml (they're removed when cleaning or empty array)
+      const commentsFile = this.converter.convertedXml['word/comments.xml'];
+      if (commentsFile?.elements?.[0]) {
+        const commentsXml = this.converter.schemaToXml(commentsFile.elements[0]);
         updatedDocs['word/comments.xml'] = String(commentsXml);
 
         const commentsExtended = this.converter.convertedXml['word/commentsExtended.xml'];
@@ -2782,6 +2790,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       commentsType: options?.commentsType,
       comments: options?.comments,
       fieldsHighlightColor: options?.fieldsHighlightColor,
+      preserveCommentsOnEmpty: options?.preserveCommentsOnEmpty,
     });
 
     return result as Blob | Buffer;

@@ -80,6 +80,20 @@
  */
 
 /**
+ * @typedef {'print' | 'web'} ViewLayout
+ * Document view layout values - mirrors OOXML ST_View (ECMA-376 §17.18.102)
+ * - 'print': Print Layout View - displays document as it prints (default)
+ * - 'web': Web Page View - content reflows to fit container (mobile/accessibility)
+ */
+
+/**
+ * @typedef {Object} ViewOptions
+ * Document view options for controlling how the document is displayed.
+ * Mirrors OOXML document view settings.
+ * @property {ViewLayout} [layout='print'] Document view layout (OOXML ST_View compatible)
+ */
+
+/**
  * @typedef {Object} ExportParams
  * @property {ExportType[]} [exportType=['docx']] - File formats to export
  * @property {CommentsType} [commentsType='external'] - How to handle comments
@@ -156,6 +170,7 @@
  * @property {string} [html] HTML content to initialize the editor with
  * @property {string} [markdown] Markdown content to initialize the editor with
  * @property {boolean} [isDebug=false] Whether to enable debug mode
+ * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
  */
 
 export {};

@@ -61,6 +61,14 @@ const contextMenuDisabled = computed(() => {
 });
 
 /**
+ * Computed property that determines if web layout mode is active (OOXML ST_View 'web').
+ * @returns {boolean} True if viewOptions.layout is 'web'
+ */
+const isWebLayout = computed(() => {
+  return props.options.viewOptions?.layout === 'web';
+});
+
+/**
  * Reactive ruler visibility state.
  * Uses a ref with a deep watcher to ensure proper reactivity when options.rulers changes.
  */
@@ -126,6 +134,12 @@ watch(
  * falling back to 8.5in (letter size).
  */
 const containerStyle = computed(() => {
+  // Web layout mode: no min-width, let CSS handle responsive width
+  if (isWebLayout.value) {
+    return {};
+  }
+
+  // Print layout mode: use fixed page dimensions
   // Default: 8.5 inches at 96 DPI = 816px (letter size)
   let maxWidth = 8.5 * 96;
 
@@ -1040,7 +1054,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="super-editor-container" :style="containerStyle">
+  <div class="super-editor-container" :class="{ 'web-layout': isWebLayout }" :style="containerStyle">
     <!-- Ruler: teleport to external container if specified, otherwise render inline -->
     <Teleport v-if="options.rulerContainer && rulersVisible && !!activeEditor" :to="options.rulerContainer">
       <div class="ruler-host" :style="rulerHostStyle">
@@ -1139,6 +1153,35 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   flex-direction: column;
+}
+
+/* Web layout mode (OOXML ST_View 'web'): content reflows to fit container */
+.super-editor-container.web-layout {
+  min-height: unset;
+  min-width: unset;
+  width: 100%;
+}
+
+.super-editor-container.web-layout .super-editor {
+  width: 100%;
+}
+
+.super-editor-container.web-layout .editor-element {
+  width: 100%;
+}
+
+/* Web layout: ensure editor fills screen width and content reflows (WCAG AA) */
+.super-editor-container.web-layout :deep(.ProseMirror) {
+  width: 100%;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.super-editor-container.web-layout :deep(.ProseMirror p),
+.super-editor-container.web-layout :deep(.ProseMirror div),
+.super-editor-container.web-layout :deep(.ProseMirror li) {
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .ruler-host {

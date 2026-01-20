@@ -114,6 +114,11 @@ export class SuperDoc extends EventEmitter {
     // Disable context menus (slash and right-click) globally
     disableContextMenu: false,
 
+    // Document view options (OOXML ST_View compatible)
+    // - 'print': Print Layout View - displays document as it prints (default)
+    // - 'web': Web Page View - content reflows to fit container (mobile/accessibility)
+    viewOptions: { layout: 'print' },
+
     // Internal: toggle layout-engine-powered PresentationEditor in dev shells
     useLayoutEngine: true,
   };
@@ -140,6 +145,14 @@ export class SuperDoc extends EventEmitter {
       this.config.trackChanges = { visible: false };
     } else if (typeof this.config.trackChanges.visible !== 'boolean') {
       this.config.trackChanges.visible = false;
+    }
+
+    // Web layout mode requires layout engine to be disabled (content reflows vs pagination)
+    if (this.config.viewOptions?.layout === 'web' && this.config.useLayoutEngine) {
+      console.warn(
+        '[SuperDoc] Web layout mode requires useLayoutEngine: false. Automatically disabling layout engine.',
+      );
+      this.config.useLayoutEngine = false;
     }
 
     const incomingUser = this.config.user;

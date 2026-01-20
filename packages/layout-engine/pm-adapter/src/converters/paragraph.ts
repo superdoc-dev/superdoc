@@ -961,12 +961,16 @@ export function paragraphToFlowBlocks(
       const bookmarkId = bookmarkMatch ? bookmarkMatch[1] : '';
 
       // If we have a bookmark ID, create a token run for dynamic resolution
+      let runProperties = {};
       if (bookmarkId) {
         // Check if there's materialized content (pre-baked page number from Word)
         let fallbackText = '??'; // Default placeholder if resolution fails
         if (Array.isArray(node.content) && node.content.length > 0) {
           // Extract text from children as fallback
           const extractText = (n: PMNode): string => {
+            if (n.type === 'run') {
+              runProperties = n.attrs?.runProperties ?? {};
+            }
             if (n.type === 'text' && n.text) return n.text;
             if (Array.isArray(n.content)) {
               return n.content.map(extractText).join('');
@@ -991,7 +995,15 @@ export function paragraphToFlowBlocks(
           hyperlinkConfig,
           themeColors,
         );
-        tokenRun = applyInlineRunProperties(tokenRun, activeRunProperties);
+        const resolvedRunProperties = resolveRunProperties(
+          converterContext!,
+          runProperties,
+          resolvedParagraphProperties,
+          null,
+          false,
+          false,
+        );
+        tokenRun = applyInlineRunProperties(tokenRun, resolvedRunProperties);
         // Apply marks ONCE here - this ensures they override linked styles and honor enableComments
         applyMarksToRun(
           tokenRun,

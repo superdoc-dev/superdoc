@@ -151,7 +151,7 @@ export function orderDefaultsAndNormal<T extends PropertyObject>(
  */
 export function combineRunProperties(propertiesArray: RunProperties[]): RunProperties {
   return combineProperties(propertiesArray, {
-    fullOverrideProps: ['fontFamily', 'color'],
+    fullOverrideProps: ['color'],
   });
 }
 

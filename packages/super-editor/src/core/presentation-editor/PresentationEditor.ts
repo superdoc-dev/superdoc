@@ -1979,6 +1979,55 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Scrolls a specific page into view.
+   *
+   * This method supports virtualized rendering: if the target page is not currently
+   * mounted in the DOM, it will scroll to the computed y-position to trigger
+   * virtualization, wait for the page to mount, then perform precise scrolling.
+   *
+   * @param pageNumber - One-based page number to scroll to (e.g., 1 for first page)
+   * @param scrollBehavior - Scroll behavior ('auto' | 'smooth'). Defaults to 'smooth'.
+   * @returns Promise resolving to true if the page was scrolled to, false if layout not available or invalid page
+   *
+   * @example
+   * ```typescript
+   * // Smooth scroll to first page
+   * await presentationEditor.scrollToPage(1);
+   *
+   * // Instant scroll to page 5
+   * await presentationEditor.scrollToPage(5, 'auto');
+   * ```
+   */
+  async scrollToPage(pageNumber: number, scrollBehavior: ScrollBehavior = 'smooth'): Promise<boolean> {
+    const layout = this.#layoutState.layout;
+    if (!layout) return false;
+
+    // Convert 1-based page number to 0-based index
+    const pageIndex = pageNumber - 1;
+
+    // Clamp to valid page range
+    const maxPage = layout.pages.length - 1;
+    if (pageIndex < 0 || pageIndex > maxPage) return false;
+
+    // Check if page is already mounted
+    let pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+
+    // If not mounted (virtualized), scroll to computed y-position to trigger mount
+    if (!pageEl) {
+      this.#scrollPageIntoView(pageIndex);
+      const mounted = await this.#waitForPageMount(pageIndex, { timeout: 2000 });
+      if (!mounted) return false;
+      pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+    }
+
+    if (pageEl) {
+      pageEl.scrollIntoView({ block: 'start', inline: 'nearest', behavior: scrollBehavior });
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Get document position from viewport coordinates (header/footer-aware).
    *
    * This method maps viewport coordinates to document positions while respecting

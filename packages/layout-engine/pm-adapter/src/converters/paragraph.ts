@@ -1041,7 +1041,7 @@ export function paragraphToFlowBlocks(
     }
 
     if (node.type === 'tab') {
-      const tabRun = tabNodeToRun(node, positions, tabOrdinal, para, inheritedMarks);
+      const tabRun = tabNodeToRun(node, positions, tabOrdinal, paragraphAttrs, inheritedMarks);
       tabOrdinal += 1;
       if (tabRun) {
         currentRuns.push(tabRun);

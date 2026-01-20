@@ -173,7 +173,7 @@ export function resolveParagraphProperties(
 
   const finalProps = combineProperties(propsChain, {
     specialHandling: {
-      tabs: (target: ParagraphProperties, source: ParagraphProperties): unknown => {
+      tabStops: (target: ParagraphProperties, source: ParagraphProperties): unknown => {
         // If a higher priority source defines firstLine, remove hanging from the final result
         if (target.tabStops != null && source.tabStops != null) {
           return [...(target.tabStops as unknown[]), ...(source.tabStops as unknown[])];

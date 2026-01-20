@@ -10,6 +10,9 @@ export const generateV2HandlerEntity = (handlerName, translator) => ({
   handlerName,
   handler: (params) => {
     const { nodes } = params;
+    if (!translator || !translator.xmlName) {
+      return { nodes: [], consumed: 0 };
+    }
     if (nodes.length === 0 || nodes[0].name !== translator.xmlName) {
       return { nodes: [], consumed: 0 };
     }

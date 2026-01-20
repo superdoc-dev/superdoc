@@ -836,8 +836,8 @@ export function paragraphToFlowBlocks(
         hyperlinkConfig,
         themeColors,
       );
-      run = applyInlineRunProperties(run, activeRunProperties);
       applyMarksToRun(run, mergedMarks, hyperlinkConfig, themeColors);
+      run = applyInlineRunProperties(run, activeRunProperties);
 
       // Copy PM positions from the parent footnoteReference node
       if (refPos) {
@@ -867,7 +867,6 @@ export function paragraphToFlowBlocks(
         hyperlinkConfig,
         themeColors,
       );
-      run = applyInlineRunProperties(run, activeRunProperties);
       // Apply marks ONCE here - this ensures they override linked styles
       applyMarksToRun(
         run,
@@ -877,6 +876,7 @@ export function paragraphToFlowBlocks(
         converterContext?.backgroundColor,
         enableComments,
       );
+      run = applyInlineRunProperties(run, activeRunProperties);
       currentRuns.push(run);
       return;
     }
@@ -1003,7 +1003,6 @@ export function paragraphToFlowBlocks(
           false,
           false,
         );
-        tokenRun = applyInlineRunProperties(tokenRun, resolvedRunProperties);
         // Apply marks ONCE here - this ensures they override linked styles and honor enableComments
         applyMarksToRun(
           tokenRun,
@@ -1013,6 +1012,7 @@ export function paragraphToFlowBlocks(
           converterContext?.backgroundColor,
           enableComments,
         );
+        tokenRun = applyInlineRunProperties(tokenRun, resolvedRunProperties);
         // Copy PM positions from parent pageReference node
         if (pageRefPos) {
           (tokenRun as TextRun).pmStart = pageRefPos.start;

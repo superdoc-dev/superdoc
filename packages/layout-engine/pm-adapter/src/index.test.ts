@@ -162,9 +162,9 @@ describe('toFlowBlocks', () => {
       expect(trueVal?.bold).toBe(true);
       expect(val1?.bold).toBe(true);
       expect(onVal?.bold).toBe(true);
-      expect(falseVal?.bold).toBeUndefined();
-      expect(zeroVal?.bold).toBeUndefined();
-      expect(offVal?.bold).toBeUndefined();
+      expect(falseVal?.bold).toBe(false);
+      expect(zeroVal?.bold).toBe(false);
+      expect(offVal?.bold).toBe(false);
     });
 
     it('maps italic mark to Run.italic', () => {

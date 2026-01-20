@@ -985,7 +985,7 @@ describe('paragraph converters', () => {
 
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
 
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenCalledWith(tabNode, positions, 0, para, []);
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenCalledWith(tabNode, positions, 0, {}, []);
         const paraBlock = blocks[0] as ParagraphBlock;
         expect(paraBlock.runs).toContain(mockTabRun);
       });
@@ -998,9 +998,9 @@ describe('paragraph converters', () => {
 
         paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
 
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(1, expect.any(Object), positions, 0, para, []);
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(2, expect.any(Object), positions, 1, para, []);
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(3, expect.any(Object), positions, 2, para, []);
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(1, expect.any(Object), positions, 0, {}, []);
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(2, expect.any(Object), positions, 1, {}, []);
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(3, expect.any(Object), positions, 2, {}, []);
       });
 
       it('should skip tab when tabNodeToRun returns null', () => {
@@ -1332,7 +1332,20 @@ describe('paragraph converters', () => {
         vi.mocked(getNodeInstruction).mockReturnValue('PAGEREF _Toc123 \\h');
         positions.set(pageRefNode, { start: 10, end: 15 });
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(
+          para,
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          styleContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          converterContext,
+        );
 
         const paraBlock = blocks[0] as ParagraphBlock;
         const run = paraBlock.runs[0] as TextRun;
@@ -1353,7 +1366,20 @@ describe('paragraph converters', () => {
 
         vi.mocked(getNodeInstruction).mockReturnValue('PAGEREF "_Toc456" \\h');
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(
+          para,
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          styleContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          converterContext,
+        );
 
         const paraBlock = blocks[0] as ParagraphBlock;
         const run = paraBlock.runs[0] as TextRun;
@@ -1379,6 +1405,12 @@ describe('paragraph converters', () => {
           'Arial',
           16,
           styleContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          converterContext,
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
@@ -1406,6 +1438,12 @@ describe('paragraph converters', () => {
           'Arial',
           16,
           styleContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          converterContext,
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
@@ -1439,6 +1477,12 @@ describe('paragraph converters', () => {
           'Arial',
           16,
           styleContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          converterContext,
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
@@ -1473,6 +1517,12 @@ describe('paragraph converters', () => {
           'Arial',
           16,
           styleContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          converterContext,
         );
 
         // textNodeToRun is called with empty marks (marks are applied separately via applyMarksToRun)

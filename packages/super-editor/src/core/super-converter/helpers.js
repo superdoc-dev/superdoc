@@ -380,6 +380,54 @@ const rgbToHex = (rgb) => {
   return '#' + rgb.match(/\d+/g).map(componentToHex).join('');
 };
 
+const DEFAULT_SHADING_FOREGROUND_COLOR = '#000000';
+
+const hexToRgb = (hex) => {
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) return null;
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+};
+
+const clamp01 = (value) => {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+};
+
+const blendHexColors = (backgroundHex, foregroundHex, foregroundRatio) => {
+  const background = hexToRgb(backgroundHex);
+  const foreground = hexToRgb(foregroundHex);
+  if (!background || !foreground) return null;
+  const ratio = clamp01(foregroundRatio);
+
+  const r = Math.round(background.r * (1 - ratio) + foreground.r * ratio);
+  const g = Math.round(background.g * (1 - ratio) + foreground.g * ratio);
+  const b = Math.round(background.b * (1 - ratio) + foreground.b * ratio);
+
+  const toByte = (n) => n.toString(16).padStart(2, '0').toUpperCase();
+  return `${toByte(r)}${toByte(g)}${toByte(b)}`;
+};
+
+const resolveShadingFillColor = (shading) => {
+  if (!shading || typeof shading !== 'object') return null;
+
+  const fill = normalizeHexColor(shading.fill);
+  if (!fill) return null;
+
+  const val = typeof shading.val === 'string' ? shading.val.trim().toLowerCase() : '';
+  const pctMatch = val.match(/^pct(\d{1,3})$/);
+  if (!pctMatch) return fill;
+
+  const pct = Number.parseInt(pctMatch[1], 10);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return fill;
+
+  const foreground = normalizeHexColor(shading.color) ?? DEFAULT_SHADING_FOREGROUND_COLOR;
+  return blendHexColors(fill, foreground, pct / 100) ?? fill;
+};
+
 const getLineHeightValueString = (lineHeight, defaultUnit, lineRule = '', isObject = false) => {
   let [value, unit] = parseSizeUnit(lineHeight);
   if (Number.isNaN(value) || value === 0) return {};
@@ -519,4 +567,5 @@ export {
   polygonUnitsToPixels,
   pixelsToPolygonUnits,
   convertSizeToCSS,
+  resolveShadingFillColor,
 };

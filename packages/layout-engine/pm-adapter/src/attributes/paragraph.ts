@@ -952,6 +952,25 @@ const extractDropCapRunFromParagraph = (para: PMNode): DropCapRun | null => {
 };
 
 /**
+ * Extract the (raw) text color from the first `run` inside a paragraph node.
+ *
+ * Reads `run.attrs.runProperties.color.val` (typically a hex string without a leading `#`).
+ *
+ * @param paragraph - ProseMirror paragraph node to inspect.
+ * @returns The raw color value, or `undefined` if no run/color is present. May be non-string if the node attrs are not
+ * shaped as expected.
+ */
+const extractColorFromRun = (paragraph: PMNode): string | unknown => {
+  if (!Array.isArray(paragraph?.content) || paragraph?.content?.length === 0) {
+    return undefined;
+  } else {
+    const firstRun = paragraph?.content?.find((item) => item.type === 'run');
+    const runPr = firstRun?.attrs?.runProperties;
+    return safeGetProperty(safeGetProperty(runPr, 'color'), 'val');
+  }
+};
+
+/**
  * Compute Word paragraph layout for numbered paragraphs.
  *
  * Integrates with @superdoc/word-layout to compute accurate list marker positioning,
@@ -1036,7 +1055,10 @@ export const computeWordLayoutForParagraph = (
       paragraphNode && converterContext ? hydrateMarkerStyleAttrs(paragraphNode, converterContext, resolvedPpr) : null;
 
     if (markerHydration) {
-      const resolvedColor = markerHydration.color ? `#${markerHydration.color.replace('#', '')}` : undefined;
+      const rawColorFromPr = paragraphNode ? extractColorFromRun(paragraphNode) : undefined;
+      const resultColorFromPr = typeof rawColorFromPr === 'string' && rawColorFromPr ? `#${rawColorFromPr}` : undefined;
+      const resolvedColor = markerHydration.color ? `#${markerHydration.color.replace('#', '')}` : resultColorFromPr;
+
       markerRun = {
         fontFamily: markerHydration.fontFamily ?? 'Times New Roman',
         fontSize: markerHydration.fontSize / 2, // half-points to points

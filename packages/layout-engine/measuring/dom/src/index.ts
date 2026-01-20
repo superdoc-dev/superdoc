@@ -2498,7 +2498,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
       // Scale to effectiveTargetWidth (resolved percentage or explicit width)
       // This handles both scaling down (too wide) and scaling up (percentage-based)
-      if (totalWidth !== effectiveTargetWidth && effectiveTargetWidth > 0) {
+      if (totalWidth > effectiveTargetWidth && effectiveTargetWidth > 0) {
         const scale = effectiveTargetWidth / totalWidth;
         columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
         // Normalize to exact target width (handle rounding errors)

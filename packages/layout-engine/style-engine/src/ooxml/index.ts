@@ -301,10 +301,12 @@ export function getNumberingProperties<T extends PropertyObject>(
 
   const abstractProps = levelDefinition[propertyType as keyof typeof levelDefinition] as T;
 
-  if (levelDefinition?.styleId) {
-    abstractProps.styleId = levelDefinition?.styleId;
+  if (abstractProps != null) {
+    if (levelDefinition?.styleId) {
+      abstractProps.styleId = levelDefinition?.styleId;
+    }
+    propertiesChain.push(abstractProps);
   }
-  propertiesChain.push(abstractProps);
 
   propertiesChain.reverse();
   return combineProperties(propertiesChain);

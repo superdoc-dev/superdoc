@@ -145,10 +145,13 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {string | null} The anchored text or null if unavailable
    */
   const getCommentAnchoredText = (commentOrId, options = {}) => {
+    const key = getCommentPositionKey(commentOrId);
+    if (!key) return null;
+
     const comment = typeof commentOrId === 'object' ? commentOrId : getComment(commentOrId);
     if (!comment) return null;
 
-    const position = getCommentPosition(comment);
+    const position = editorCommentPositions.value?.[key] ?? null;
     const range = getCommentPositionRange(position);
     if (!range) return null;
 

@@ -278,7 +278,7 @@ export class SearchIndex {
     if (parts.length === 0) {
       return hasLeadingWhitespace || hasTrailingWhitespace ? '[\\s\\u00a0]+' : '';
     }
-    const blockSeparatorPattern = '(?:\\n)?';
+    const blockSeparatorPattern = '(?:\\n)*';
     const escapedParts = parts.map((part) => {
       const chars = Array.from(part);
       return chars.map((ch) => SearchIndex.escapeRegex(ch)).join(blockSeparatorPattern);

@@ -228,22 +228,22 @@ describe('Cross-paragraph search', () => {
     describe('toFlexiblePattern', () => {
       it('should generate pattern with block separators between characters', () => {
         const pattern = SearchIndex.toFlexiblePattern('abc');
-        expect(pattern).toBe('a(?:\\n)?b(?:\\n)?c');
+        expect(pattern).toBe('a(?:\\n)*b(?:\\n)*c');
       });
 
       it('should handle multi-word input with whitespace between words', () => {
         const pattern = SearchIndex.toFlexiblePattern('ab cd');
-        expect(pattern).toBe('a(?:\\n)?b[\\s\\u00a0]+c(?:\\n)?d');
+        expect(pattern).toBe('a(?:\\n)*b[\\s\\u00a0]+c(?:\\n)*d');
       });
 
       it('should preserve leading whitespace in pattern', () => {
         const pattern = SearchIndex.toFlexiblePattern(' abc');
-        expect(pattern).toBe('[\\s\\u00a0]+a(?:\\n)?b(?:\\n)?c');
+        expect(pattern).toBe('[\\s\\u00a0]+a(?:\\n)*b(?:\\n)*c');
       });
 
       it('should preserve trailing whitespace in pattern', () => {
         const pattern = SearchIndex.toFlexiblePattern('abc ');
-        expect(pattern).toBe('a(?:\\n)?b(?:\\n)?c[\\s\\u00a0]+');
+        expect(pattern).toBe('a(?:\\n)*b(?:\\n)*c[\\s\\u00a0]+');
       });
 
       it('should return empty string for empty input', () => {
@@ -254,6 +254,12 @@ describe('Cross-paragraph search', () => {
       it('should return whitespace pattern for whitespace-only input', () => {
         const pattern = SearchIndex.toFlexiblePattern('   ');
         expect(pattern).toBe('[\\s\\u00a0]+');
+      });
+
+      it('should match across multiple consecutive block separators', () => {
+        const pattern = SearchIndex.toFlexiblePattern('ab');
+        const regex = new RegExp(pattern);
+        expect(regex.test('a\n\n\nb')).toBe(true);
       });
     });
 

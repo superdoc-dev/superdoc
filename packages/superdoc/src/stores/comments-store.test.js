@@ -424,5 +424,116 @@ describe('comments-store', () => {
       const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
       expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
     });
+
+    it('uses importedId over commentId when looking up positions', () => {
+      store.commentsList = [
+        { commentId: 'uuid-1', importedId: 'imported-1', createdTime: 3 },
+        { commentId: 'uuid-2', importedId: 'imported-2', createdTime: 1 },
+        { commentId: 'uuid-3', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'imported-1': { start: 50, end: 60 },
+        'imported-2': { start: 10, end: 20 },
+        'uuid-3': { start: 30, end: 40 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['uuid-2', 'uuid-3', 'uuid-1']);
+    });
+
+    it('orders resolved comments by document position', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 1, resolvedTime: 100 },
+        { commentId: 'c-2', createdTime: 2, resolvedTime: 200 },
+        { commentId: 'c-3', createdTime: 3, resolvedTime: 300 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { start: 50 },
+        'c-2': { start: 10 },
+        'c-3': { start: 30 },
+      };
+
+      const ordered = store.getCommentsByPosition.resolvedComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
+    });
+
+    it('supports pos property for position lookup', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 1 },
+        { commentId: 'c-2', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { pos: 50 },
+        'c-2': { pos: 10 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1']);
+    });
+
+    it('supports from property for position lookup', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 1 },
+        { commentId: 'c-2', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { from: 50, to: 60 },
+        'c-2': { from: 10, to: 20 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1']);
+    });
+
+    it('supports to property as fallback for position lookup', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 1 },
+        { commentId: 'c-2', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { to: 50 },
+        'c-2': { to: 10 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1']);
+    });
+
+    it('falls back to createdTime when positions are equal', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 3 },
+        { commentId: 'c-2', createdTime: 1 },
+        { commentId: 'c-3', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { start: 10 },
+        'c-2': { start: 10 },
+        'c-3': { start: 10 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
+    });
+
+    it('handles comments with null or undefined ids gracefully', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 2 },
+        { commentId: null, createdTime: 1 },
+        { createdTime: 3 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { start: 10 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-1', null, undefined]);
+    });
   });
 });

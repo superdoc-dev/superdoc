@@ -234,16 +234,28 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   /**
-   * Generate the comments list separating resolved and active
-   * We only return parent comments here, since CommentDialog.vue will handle threaded comments
+   * Get the key used to look up a comment's position in editorCommentPositions.
+   * Prefers importedId for imported comments since editor marks retain the original ID.
+   *
+   * @param {Object} comment - The comment object
+   * @returns {string|undefined} The position lookup key
    */
-  const getCommentPositionKey = (comment) => comment?.commentId ?? comment?.importedId;
+  const getCommentPositionKey = (comment) => comment?.importedId ?? comment?.commentId;
 
+  /**
+   * Get the numeric position value for sorting a comment by document order.
+   * Checks multiple position properties to handle different editor position schemas
+   * (e.g., ProseMirror uses from/to, other editors may use start/pos).
+   *
+   * @param {Object} comment - The comment object
+   * @returns {number|null} The position value, or null if not found
+   */
   const getPositionSortValue = (comment) => {
     const key = getCommentPositionKey(comment);
     if (!key) return null;
     const position = editorCommentPositions.value?.[key];
     if (!position) return null;
+    // Check different position properties to handle various editor position schemas
     if (Number.isFinite(position.start)) return position.start;
     if (Number.isFinite(position.pos)) return position.pos;
     if (Number.isFinite(position.from)) return position.from;
@@ -251,8 +263,24 @@ export const useCommentsStore = defineStore('comments', () => {
     return null;
   };
 
+  /**
+   * Comparator that sorts comments by creation time (ascending).
+   *
+   * @param {Object} a - First comment
+   * @param {Object} b - Second comment
+   * @returns {number} Comparison result
+   */
   const compareByCreatedTime = (a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0);
 
+  /**
+   * Comparator that sorts comments by document position (ascending).
+   * Comments without positions are sorted after those with positions.
+   * Falls back to creation time when positions are equal or unavailable.
+   *
+   * @param {Object} a - First comment
+   * @param {Object} b - Second comment
+   * @returns {number} Comparison result
+   */
   const compareByPosition = (a, b) => {
     const posA = getPositionSortValue(a);
     const posB = getPositionSortValue(b);
@@ -266,6 +294,13 @@ export const useCommentsStore = defineStore('comments', () => {
     return compareByCreatedTime(a, b);
   };
 
+  /**
+   * Generate the comments list separating resolved and active.
+   * We only return parent comments here, since CommentDialog.vue will handle threaded comments.
+   *
+   * @param {(a: Object, b: Object) => number} sorter - Comparator function for sorting comments
+   * @returns {{parentComments: Array, resolvedComments: Array}} Grouped and sorted comments
+   */
   const buildGroupedComments = (sorter) => {
     const parentComments = [];
     const resolvedComments = [];
@@ -302,8 +337,10 @@ export const useCommentsStore = defineStore('comments', () => {
     };
   };
 
+  /** @type {import('vue').ComputedRef<{parentComments: Array, resolvedComments: Array}>} Comments grouped and sorted by creation time */
   const getGroupedComments = computed(() => buildGroupedComments(compareByCreatedTime));
 
+  /** @type {import('vue').ComputedRef<{parentComments: Array, resolvedComments: Array}>} Comments grouped and sorted by document position */
   const getCommentsByPosition = computed(() => buildGroupedComments(compareByPosition));
 
   const hasOverlapId = (id) => overlappedIds.includes(id);

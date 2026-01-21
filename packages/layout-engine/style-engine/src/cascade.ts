@@ -10,7 +10,7 @@
  * - layout-engine's style resolution (for rendering)
  */
 
-import { ParagraphProperties, RunProperties } from './ooxml/types';
+import { ParagraphProperties, RunFontFamilyProperties, RunProperties } from './ooxml/types';
 
 export type PropertyObject = ParagraphProperties | RunProperties;
 
@@ -152,6 +152,20 @@ export function orderDefaultsAndNormal<T extends PropertyObject>(
 export function combineRunProperties(propertiesArray: RunProperties[]): RunProperties {
   return combineProperties(propertiesArray, {
     fullOverrideProps: ['color'],
+    specialHandling: {
+      fontFamily: (target: Record<string, unknown>, source: Record<string, unknown>): unknown => {
+        const fontFamilySource = { ...(source.fontFamily as object) } as RunFontFamilyProperties;
+        const fontFamilyTarget = { ...(target.fontFamily as object) } as RunFontFamilyProperties;
+        if (fontFamilySource.asciiTheme != null) {
+          delete fontFamilyTarget.ascii;
+          delete fontFamilyTarget.asciiTheme;
+        }
+        if (fontFamilySource.ascii != null) {
+          delete fontFamilyTarget.asciiTheme;
+        }
+        return { ...(fontFamilyTarget as object), ...(fontFamilySource as object) };
+      },
+    },
   });
 }
 

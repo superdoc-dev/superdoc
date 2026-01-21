@@ -324,7 +324,7 @@ export function resolveDocxFontFamily(
   }
 
   let resolved = ascii;
-  if (docx && themeAscii && !resolved) {
+  if (docx && themeAscii) {
     const theme = docx['word/theme/theme1.xml'] as Record<string, unknown> | undefined;
     const themeElements = theme?.elements as Array<Record<string, unknown>> | undefined;
     if (themeElements?.length) {

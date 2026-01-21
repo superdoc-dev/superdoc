@@ -159,9 +159,9 @@ export interface TableProperties {
   /** Table style identifier. */
   tableStyleId?: string;
   /** Table style column band size. */
-  tableStyleColBandSize?: string;
+  tableStyleColBandSize?: number;
   /** Table style row band size. */
-  tableStyleRowBandSize?: string;
+  tableStyleRowBandSize?: number;
   /** Table width properties. */
   tableWidth?: MeasurementProperties;
   /** Floating table properties. */
@@ -383,7 +383,7 @@ export type TableStyleType =
  */
 export interface TableStyleProperties {
   /** Table style property type. */
-  type?: string;
+  type?: TableStyleType;
   /** Paragraph properties for the table style. */
   paragraphProperties?: ParagraphProperties;
   /** Run properties for the table style. */

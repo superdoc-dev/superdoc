@@ -1,3 +1,11 @@
+# [1.8.0-next.6](https://github.com/superdoc-dev/superdoc/compare/v1.8.0-next.5...v1.8.0-next.6) (2026-01-20)
+
+
+### Bug Fixes
+
+* annotation drop ([#1789](https://github.com/superdoc-dev/superdoc/issues/1789)) ([f384213](https://github.com/superdoc-dev/superdoc/commit/f3842134ab2648fc46752688350dbebb88f58f5a))
+* annotation selection, applying formatting ([#1784](https://github.com/superdoc-dev/superdoc/issues/1784)) ([924af4b](https://github.com/superdoc-dev/superdoc/commit/924af4be941717c202821ba10d9372dbe78a1954))
+
 # [1.8.0-next.4](https://github.com/superdoc-dev/superdoc/compare/v1.8.0-next.3...v1.8.0-next.4) (2026-01-17)
 
 

@@ -101,6 +101,40 @@ export interface PermissionParams {
 }
 
 /**
+ * Comment highlight color configuration
+ */
+export interface CommentHighlightColors {
+  /** Base highlight color for internal comments */
+  internal?: string;
+  /** Base highlight color for external comments */
+  external?: string;
+  /** Active highlight color override for internal comments */
+  activeInternal?: string;
+  /** Active highlight color override for external comments */
+  activeExternal?: string;
+}
+
+/**
+ * Comment highlight opacity configuration
+ */
+export interface CommentHighlightOpacity {
+  /** Opacity for active comment highlight (0-1) */
+  active?: number;
+  /** Opacity for inactive comment highlight (0-1) */
+  inactive?: number;
+}
+
+/**
+ * Comment configuration options
+ */
+export interface CommentConfig {
+  /** Comment highlight colors */
+  highlightColors?: CommentHighlightColors;
+  /** Comment highlight opacity values */
+  highlightOpacity?: CommentHighlightOpacity;
+}
+
+/**
  * Editor configuration options
  */
 export interface EditorOptions {
@@ -184,6 +218,9 @@ export interface EditorOptions {
 
   /** Whether comments are enabled */
   isCommentsEnabled?: boolean;
+
+  /** Comment highlight configuration */
+  comments?: CommentConfig;
 
   /** Whether this is a new file */
   isNewFile?: boolean;

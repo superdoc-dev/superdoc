@@ -138,8 +138,15 @@ function extractFieldAnnotationData(element: HTMLElement): FieldAnnotationDragDa
  */
 function hasFieldAnnotationData(event: DragEvent): boolean {
   if (!event.dataTransfer) return false;
-  const types = event.dataTransfer.types;
-  return types.includes(INTERNAL_MIME_TYPE) || types.includes(FIELD_ANNOTATION_DATA_TYPE);
+  const types = Array.from(event.dataTransfer.types ?? []);
+  const lowerTypes = types.map((type) => type.toLowerCase());
+  const hasFieldAnnotationType =
+    lowerTypes.includes(INTERNAL_MIME_TYPE.toLowerCase()) ||
+    lowerTypes.includes(FIELD_ANNOTATION_DATA_TYPE.toLowerCase());
+  if (hasFieldAnnotationType) return true;
+  return Boolean(
+    event.dataTransfer.getData(INTERNAL_MIME_TYPE) || event.dataTransfer.getData(FIELD_ANNOTATION_DATA_TYPE),
+  );
 }
 
 /**

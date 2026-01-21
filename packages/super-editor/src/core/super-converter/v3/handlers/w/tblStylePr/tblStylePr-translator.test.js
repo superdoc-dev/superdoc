@@ -1,172 +1,127 @@
 import { describe, it, expect } from 'vitest';
-import { NodeTranslator } from '@translator';
 import { translator } from './tblStylePr-translator.js';
+import { NodeTranslator } from '@translator';
 
 describe('w:tblStylePr translator', () => {
   describe('config', () => {
-    it('exports a NodeTranslator instance', () => {
-      expect(translator).toBeDefined();
-      expect(translator).toBeInstanceOf(NodeTranslator);
+    it('should have correct properties', () => {
       expect(translator.xmlName).toBe('w:tblStylePr');
       expect(translator.sdNodeOrKeyName).toBe('tableStyleProperties');
+      expect(translator).toBeInstanceOf(NodeTranslator);
     });
   });
 
   describe('encode', () => {
-    it('encodes nested <w:tblPr> and <w:tcPr> correctly', () => {
-      const params = {
-        nodes: [
+    it('should encode nested table style properties correctly', () => {
+      const xmlNode = {
+        name: 'w:tblStylePr',
+        attributes: { 'w:type': 'wholeTable' },
+        elements: [
           {
-            name: 'w:tblStylePr',
+            name: 'w:pPr',
+            elements: [{ name: 'w:keepNext' }, { name: 'w:pStyle', attributes: { 'w:val': 'Heading1' } }],
+          },
+          { name: 'w:rPr', elements: [{ name: 'w:b' }] },
+          { name: 'w:tblPr', elements: [{ name: 'w:tblStyle', attributes: { 'w:val': 'TableGrid' } }] },
+          {
+            name: 'w:trPr',
             elements: [
-              {
-                name: 'w:tblPr',
-                elements: [
-                  { name: 'w:tblStyle', attributes: { 'w:val': 'TableGrid' } },
-                  { name: 'w:tblW', attributes: { 'w:w': '5000', 'w:type': 'pct' } },
-                  { name: 'w:jc', attributes: { 'w:val': 'center' } },
-                ],
-              },
-              {
-                name: 'w:tcPr',
-                elements: [
-                  { name: 'w:tcW', attributes: { 'w:w': '2000', 'w:type': 'dxa' } },
-                  { name: 'w:gridSpan', attributes: { 'w:val': '2' } },
-                  { name: 'w:noWrap' },
-                ],
-              },
+              { name: 'w:tblHeader' },
+              { name: 'w:trHeight', attributes: { 'w:val': '240', 'w:hRule': 'atLeast' } },
             ],
           },
+          { name: 'w:tcPr', elements: [{ name: 'w:vAlign', attributes: { 'w:val': 'center' } }] },
         ],
       };
 
-      const result = translator.encode(params);
+      const result = translator.encode({ nodes: [xmlNode] });
 
       expect(result).toEqual({
-        tableProperties: {
-          tableStyleId: 'TableGrid',
-          tableWidth: { value: 5000, type: 'pct' },
-          justification: 'center',
-        },
-        tableCellProperties: {
-          cellWidth: { value: 2000, type: 'dxa' },
-          gridSpan: 2,
-          noWrap: true,
-        },
-      });
-    });
-
-    it('returns undefined when no nested properties are encoded', () => {
-      const params = {
-        nodes: [
-          {
-            name: 'w:tblStylePr',
-            elements: [
-              { name: 'w:tblPr', elements: [{ name: 'w:tblW', attributes: {} }] },
-              { name: 'w:tcPr', elements: [{ name: 'w:tcW', attributes: {} }] },
-            ],
-          },
-        ],
-      };
-
-      expect(translator.encode(params)).toBeUndefined();
-    });
-
-    it('encodes when at least one nested property group is present', () => {
-      const params = {
-        nodes: [
-          {
-            name: 'w:tblStylePr',
-            elements: [
-              {
-                name: 'w:tblPr',
-                elements: [{ name: 'w:tblStyle', attributes: { 'w:val': 'TableGrid' } }],
-              },
-            ],
-          },
-        ],
-      };
-
-      expect(translator.encode(params)).toEqual({
+        paragraphProperties: { keepNext: true, styleId: 'Heading1' },
+        runProperties: { bold: true },
         tableProperties: { tableStyleId: 'TableGrid' },
+        tableRowProperties: {
+          cantSplit: false,
+          hidden: false,
+          repeatHeader: true,
+          rowHeight: { value: 240, rule: 'atLeast' },
+        },
+        tableCellProperties: { vAlign: 'center' },
+        type: 'wholeTable',
       });
+    });
+
+    it('should return undefined if no child properties are present', () => {
+      const xmlNode = { name: 'w:tblStylePr', elements: [] };
+      const result = translator.encode({ nodes: [xmlNode] });
+      expect(result).toBeUndefined();
     });
   });
 
   describe('decode', () => {
-    it('decodes a complex tableStyleProperties object correctly', () => {
-      const tableStyleProperties = {
-        tableProperties: {
-          tableStyleId: 'TableGrid',
-          tableWidth: { value: 5000, type: 'pct' },
-          justification: 'center',
-        },
-        tableCellProperties: {
-          cellWidth: { value: 2000, type: 'dxa' },
-          gridSpan: 2,
-          noWrap: true,
+    it('should decode a tableStyleProperties object correctly', () => {
+      const superDocNode = {
+        attrs: {
+          tableStyleProperties: {
+            type: 'wholeTable',
+            paragraphProperties: { keepNext: true, styleId: 'Heading1' },
+            runProperties: { bold: true },
+            tableProperties: { tableStyleId: 'TableGrid' },
+            tableRowProperties: { repeatHeader: true, rowHeight: { value: 240, rule: 'atLeast' } },
+            tableCellProperties: { vAlign: 'center' },
+          },
         },
       };
 
-      const result = translator.decode({ node: { attrs: { tableStyleProperties } } });
+      const result = translator.decode({ node: superDocNode });
 
-      expect(result).toEqual({
-        name: 'w:tblStylePr',
-        type: 'element',
-        attributes: {},
-        elements: expect.arrayContaining([
+      expect(result.name).toBe('w:tblStylePr');
+      expect(result.attributes).toEqual({ 'w:type': 'wholeTable' });
+      expect(result.elements).toEqual(
+        expect.arrayContaining([
+          {
+            name: 'w:pPr',
+            type: 'element',
+            attributes: {},
+            elements: [
+              { name: 'w:keepNext', attributes: {} },
+              { name: 'w:pStyle', attributes: { 'w:val': 'Heading1' } },
+            ],
+          },
+          {
+            name: 'w:rPr',
+            type: 'element',
+            attributes: {},
+            elements: [{ name: 'w:b', attributes: {} }],
+          },
           {
             name: 'w:tblPr',
             type: 'element',
             attributes: {},
-            elements: expect.arrayContaining([
-              { name: 'w:tblStyle', attributes: { 'w:val': 'TableGrid' } },
-              { name: 'w:tblW', attributes: { 'w:w': '5000', 'w:type': 'pct' } },
-              { name: 'w:jc', attributes: { 'w:val': 'center' } },
-            ]),
+            elements: [{ name: 'w:tblStyle', attributes: { 'w:val': 'TableGrid' } }],
+          },
+          {
+            name: 'w:trPr',
+            type: 'element',
+            attributes: {},
+            elements: [
+              { name: 'w:tblHeader', attributes: {} },
+              { name: 'w:trHeight', attributes: { 'w:val': '240', 'w:hRule': 'atLeast' } },
+            ],
           },
           {
             name: 'w:tcPr',
             type: 'element',
             attributes: {},
-            elements: expect.arrayContaining([
-              { name: 'w:tcW', attributes: { 'w:w': '2000', 'w:type': 'dxa' } },
-              { name: 'w:gridSpan', attributes: { 'w:val': '2' } },
-              { name: 'w:noWrap', attributes: { 'w:val': '1' } },
-            ]),
+            elements: [{ name: 'w:vAlign', attributes: { 'w:val': 'center' } }],
           },
         ]),
-      });
+      );
     });
 
-    it('handles missing tableStyleProperties object', () => {
-      expect(translator.decode({ node: { attrs: {} } })).toBeUndefined();
-    });
-
-    it('handles empty tableStyleProperties object', () => {
-      expect(translator.decode({ node: { attrs: { tableStyleProperties: {} } } })).toBeUndefined();
-    });
-  });
-
-  describe('round-trip', () => {
-    it('maintains consistency for a complex object', () => {
-      const tableStyleProperties = {
-        tableProperties: {
-          tableStyleId: 'TableGrid',
-          tableWidth: { value: 5000, type: 'pct' },
-          justification: 'center',
-        },
-        tableCellProperties: {
-          cellWidth: { value: 2000, type: 'dxa' },
-          gridSpan: 2,
-          noWrap: true,
-        },
-      };
-
-      const decodedResult = translator.decode({ node: { attrs: { tableStyleProperties } } });
-      const encodedResult = translator.encode({ nodes: [decodedResult] });
-
-      expect(encodedResult).toEqual(tableStyleProperties);
+    it('should return undefined if no tableStyleProperties are present', () => {
+      const result = translator.decode({ node: { attrs: {} } });
+      expect(result).toBeUndefined();
     });
   });
 });

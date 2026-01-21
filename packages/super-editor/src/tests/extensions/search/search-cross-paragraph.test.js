@@ -122,6 +122,28 @@ describe('Cross-paragraph search', () => {
         }
       });
 
+      it('should find matches across paragraph boundaries without whitespace in query', () => {
+        const editor = createDocxTestEditor();
+
+        try {
+          const { doc, paragraph, run } = editor.schema.nodes;
+          const testDoc = doc.create(null, [
+            paragraph.create(null, [run.create(null, [editor.schema.text('February 7, 2023')])]),
+            paragraph.create(null, [run.create(null, [editor.schema.text('Via Electronic Mail')])]),
+          ]);
+
+          const index = new SearchIndex();
+          index.build(testDoc);
+
+          const matches = index.search('2023Via');
+
+          expect(matches).toHaveLength(1);
+          expect(matches[0].text).toBe('2023\nVia');
+        } finally {
+          editor.destroy();
+        }
+      });
+
       it('should handle case-insensitive search', () => {
         const editor = createDocxTestEditor();
 
@@ -203,6 +225,44 @@ describe('Cross-paragraph search', () => {
       });
     });
 
+    describe('toFlexiblePattern', () => {
+      it('should generate pattern with block separators between characters', () => {
+        const pattern = SearchIndex.toFlexiblePattern('abc');
+        expect(pattern).toBe('a(?:\\n)*b(?:\\n)*c');
+      });
+
+      it('should handle multi-word input with whitespace between words', () => {
+        const pattern = SearchIndex.toFlexiblePattern('ab cd');
+        expect(pattern).toBe('a(?:\\n)*b[\\s\\u00a0]+c(?:\\n)*d');
+      });
+
+      it('should preserve leading whitespace in pattern', () => {
+        const pattern = SearchIndex.toFlexiblePattern(' abc');
+        expect(pattern).toBe('[\\s\\u00a0]+a(?:\\n)*b(?:\\n)*c');
+      });
+
+      it('should preserve trailing whitespace in pattern', () => {
+        const pattern = SearchIndex.toFlexiblePattern('abc ');
+        expect(pattern).toBe('a(?:\\n)*b(?:\\n)*c[\\s\\u00a0]+');
+      });
+
+      it('should return empty string for empty input', () => {
+        const pattern = SearchIndex.toFlexiblePattern('');
+        expect(pattern).toBe('');
+      });
+
+      it('should return whitespace pattern for whitespace-only input', () => {
+        const pattern = SearchIndex.toFlexiblePattern('   ');
+        expect(pattern).toBe('[\\s\\u00a0]+');
+      });
+
+      it('should match across multiple consecutive block separators', () => {
+        const pattern = SearchIndex.toFlexiblePattern('ab');
+        const regex = new RegExp(pattern);
+        expect(regex.test('a\n\n\nb')).toBe(true);
+      });
+    });
+
     describe('offset mapping', () => {
       it('should map single-paragraph match to correct doc positions', () => {
         const editor = createDocxTestEditor();
@@ -248,6 +308,32 @@ describe('Cross-paragraph search', () => {
           const ranges = index.offsetRangeToDocRanges(matches[0].start, matches[0].end);
           // Should have 2 ranges (one for each paragraph's text)
           expect(ranges).toHaveLength(2);
+        } finally {
+          editor.destroy();
+        }
+      });
+
+      it('should map cross-paragraph match without whitespace to multiple ranges', () => {
+        const editor = createDocxTestEditor();
+
+        try {
+          const { doc, paragraph, run } = editor.schema.nodes;
+          const testDoc = doc.create(null, [
+            paragraph.create(null, [run.create(null, [editor.schema.text('February 7, 2023')])]),
+            paragraph.create(null, [run.create(null, [editor.schema.text('Via Electronic Mail')])]),
+          ]);
+
+          const index = new SearchIndex();
+          index.build(testDoc);
+
+          const matches = index.search('2023Via');
+          expect(matches.length).toBeGreaterThan(0);
+
+          const ranges = index.offsetRangeToDocRanges(matches[0].start, matches[0].end);
+          expect(ranges).toHaveLength(2);
+
+          const combinedText = ranges.map((range) => testDoc.textBetween(range.from, range.to)).join('');
+          expect(combinedText).toBe('2023Via');
         } finally {
           editor.destroy();
         }

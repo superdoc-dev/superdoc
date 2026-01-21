@@ -3,7 +3,7 @@
 }
 
 .sd-editor-comment-highlight:hover {
-  background-color: #1354ff55;
+  background-color: var(--sd-comment-highlight-hover, #1354ff55);
 }
 
 .sd-editor-comment-highlight.sd-custom-selection {

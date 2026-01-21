@@ -16,7 +16,7 @@ import { translator as trWBeforeTranslator } from '@converter/v3/handlers/w/wBef
 
 // Property translators for w:trPr child elements
 // Each translator handles a specific property of the table row
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   cantSplitTranslator,
   cnfStyleTranslator,

@@ -9,3 +9,11 @@
 .superdoc .ai-textarea-icon.error > svg {
   fill: #ed4337;
 }
+
+/* Web Layout Mode (OOXML ST_View 'web') - content reflows to container width */
+.superdoc--web-layout,
+.superdoc--web-layout .superdoc__layers,
+.superdoc--web-layout .superdoc__document,
+.superdoc--web-layout .superdoc__sub-document {
+  width: 100%;
+}

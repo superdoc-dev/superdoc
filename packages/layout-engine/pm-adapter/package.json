@@ -38,6 +38,7 @@
     "@superdoc/measuring-dom": "workspace:*",
     "@superdoc/style-engine": "workspace:*",
     "@superdoc/word-layout": "workspace:*",
-    "@superdoc/url-validation": "workspace:*"
+    "@superdoc/url-validation": "workspace:*",
+    "@superdoc/font-utils": "workspace:*"
   }
 }

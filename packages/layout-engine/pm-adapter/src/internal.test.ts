@@ -789,28 +789,6 @@ describe('internal', () => {
       });
     });
 
-    describe('list counter context', () => {
-      it('should provide list counter methods to handlers', () => {
-        const doc: PMNode = {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [] }],
-        };
-
-        toFlowBlocks(doc);
-
-        expect(handleParagraphNode).toHaveBeenCalledWith(
-          expect.any(Object),
-          expect.objectContaining({
-            listCounterContext: {
-              getListCounter: expect.any(Function),
-              incrementListCounter: expect.any(Function),
-              resetListCounter: expect.any(Function),
-            },
-          }),
-        );
-      });
-    });
-
     describe('converters', () => {
       it('should provide converter functions to handlers', () => {
         const doc: PMNode = {
@@ -1111,7 +1089,6 @@ describe('internal', () => {
         context.defaultFont,
         context.defaultSize,
         context.styleContext,
-        undefined,
         context.trackedChangesConfig,
         context.bookmarks,
         context.hyperlinkConfig,
@@ -1120,8 +1097,14 @@ describe('internal', () => {
       );
 
       const lastCall = vi.mocked(paragraphToFlowBlocks).mock.calls.at(-1);
-      expect(lastCall?.[10]).toBe(themeColors);
-      expect(lastCall?.[12]).toBe(converterCtx);
+      expect(lastCall?.[9]).toBe(themeColors);
+      expect(lastCall?.[10]).toEqual(
+        expect.objectContaining({
+          imageNodeToBlock: expect.any(Function),
+          tableNodeToBlock: expect.any(Function),
+        }),
+      );
+      expect(lastCall?.[11]).toBe(converterCtx);
     });
   });
 });

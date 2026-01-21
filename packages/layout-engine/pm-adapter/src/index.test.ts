@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { toFlowBlocks, toFlowBlocksMap } from './index.js';
-import type { PMNode, PMMark } from './index.js';
+import { toFlowBlocks as baseToFlowBlocks, toFlowBlocksMap as baseToFlowBlocksMap } from './index.js';
+import type { PMNode, PMMark, AdapterOptions, BatchAdapterOptions, PMDocumentMap } from './index.js';
 import type { FlowBlock, ImageBlock, TableBlock } from '@superdoc/contracts';
 import basicParagraphFixture from './fixtures/basic-paragraph.json';
 import edgeCasesFixture from './fixtures/edge-cases.json';
@@ -8,6 +8,25 @@ import tabsDecimalFixture from './fixtures/tabs-decimal.json';
 import imageFixture from './fixtures/image-inline-and-block.json';
 import hummingbirdFixture from './fixtures/hummingbird.json';
 import boldDemoFixture from './fixtures/bold-demo.json';
+
+const DEFAULT_CONVERTER_CONTEXT = {
+  docx: {},
+  translatedLinkedStyles: {
+    docDefaults: {},
+    latentStyles: {},
+    styles: {},
+  },
+  translatedNumbering: {
+    abstracts: {},
+    definitions: {},
+  },
+};
+
+const toFlowBlocks = (pmDoc: PMNode | object, options: AdapterOptions = {}) =>
+  baseToFlowBlocks(pmDoc, { converterContext: DEFAULT_CONVERTER_CONTEXT, ...options });
+
+const toFlowBlocksMap = (docs: PMDocumentMap, options: BatchAdapterOptions = {}) =>
+  baseToFlowBlocksMap(docs, { converterContext: DEFAULT_CONVERTER_CONTEXT, ...options });
 
 const createTestBodySectPr = () => ({
   type: 'element',
@@ -54,7 +73,7 @@ describe('toFlowBlocks', () => {
         runs: [
           {
             text: 'Hello world',
-            fontFamily: 'Arial, sans-serif',
+            fontFamily: 'Arial',
             fontSize: 16,
           },
         ],
@@ -98,7 +117,7 @@ describe('toFlowBlocks', () => {
       });
 
       expect(blocks[0].runs[0]).toMatchObject({
-        fontFamily: 'Times New Roman, sans-serif',
+        fontFamily: 'Times New Roman',
         fontSize: 14,
       });
     });
@@ -143,9 +162,9 @@ describe('toFlowBlocks', () => {
       expect(trueVal?.bold).toBe(true);
       expect(val1?.bold).toBe(true);
       expect(onVal?.bold).toBe(true);
-      expect(falseVal?.bold).toBeUndefined();
-      expect(zeroVal?.bold).toBeUndefined();
-      expect(offVal?.bold).toBeUndefined();
+      expect(falseVal?.bold).toBe(false);
+      expect(zeroVal?.bold).toBe(false);
+      expect(offVal?.bold).toBe(false);
     });
 
     it('maps italic mark to Run.italic', () => {
@@ -267,9 +286,11 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              alignment: 'center',
-              spacing: { line: 330, lineRule: 'exact', lineSpaceBefore: 10, lineSpaceAfter: 6 }, // 22px in twips
-              indent: { left: 12, firstLine: 24 },
+              paragraphProperties: {
+                justification: 'center',
+                spacing: { before: 150, after: 90, line: 330, lineRule: 'exact' },
+                indent: { left: 180, firstLine: 360 },
+              },
             },
             content: [
               {
@@ -511,9 +532,11 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              borders: {
-                top: { val: 'single', size: 32, color: '00FF00' },
-                left: { val: 'dashed', size: 16, color: '#112233' },
+              paragraphProperties: {
+                borders: {
+                  top: { val: 'single', size: 32, color: '00FF00' },
+                  left: { val: 'dashed', size: 16, color: '#112233' },
+                },
               },
             },
             content: [{ type: 'text', text: 'Bordered paragraph' }],
@@ -544,10 +567,12 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              shading: {
-                fill: 'ABCDEF',
-                color: 'auto',
-                val: 'clear',
+              paragraphProperties: {
+                shading: {
+                  fill: 'ABCDEF',
+                  color: 'auto',
+                  val: 'clear',
+                },
               },
             },
             content: [{ type: 'text', text: 'Shaded paragraph' }],
@@ -1308,9 +1333,11 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              alignment: 'center',
-              indent: { left: 20 },
-              spacing: { lineSpaceBefore: 5 }, // Use pixel property instead of twips 'before'
+              paragraphProperties: {
+                justification: 'center',
+                indent: { left: 300 }, // 20px -> 300 twips
+                spacing: { before: 75 }, // 5px -> 75 twips
+              },
             },
             content: [{ type: 'text', text: 'Test' }],
           },
@@ -1337,7 +1364,7 @@ describe('toFlowBlocks', () => {
         { val: 'decimal', pos: 1440, leader: 'dot' }, // 96px → 1440 twips
         { val: 'end', pos: 2880, leader: 'none' }, // 192px → 2880 twips
       ]);
-      expect(blocks[0].attrs?.decimalSeparator).toBe(',');
+      expect(blocks[0].attrs?.decimalSeparator).toBe('.');
       expect(blocks[1].attrs?.tabs).toEqual([{ val: 'end', pos: 1800, leader: 'dot' }]); // 120px → 1800 twips
     });
   });
@@ -2180,7 +2207,9 @@ describe('toFlowBlocks', () => {
               {
                 type: 'paragraph',
                 attrs: {
-                  spacing: { before: 0, lineSpaceAfter: 12 }, // Use pixel property
+                  paragraphProperties: {
+                    spacing: { before: 0, after: 180 }, // 12px -> 180 twips
+                  },
                 },
                 content: [{ type: 'text', text: 'TOC Entry' }],
               },
@@ -2872,7 +2901,7 @@ describe('toFlowBlocks', () => {
         content: [
           {
             type: 'paragraph',
-            attrs: { pageBreakBefore: true },
+            attrs: { paragraphProperties: { pageBreakBefore: true } },
             content: [{ type: 'text', text: 'Starts new page' }],
           },
         ],
@@ -2892,12 +2921,7 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:pageBreakBefore',
-                  },
-                ],
+                pageBreakBefore: true,
               },
             },
             content: [{ type: 'text', text: 'OOXML page break' }],
@@ -2919,13 +2943,7 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:pageBreakBefore',
-                    attributes: { 'w:val': 'true' },
-                  },
-                ],
+                pageBreakBefore: true,
               },
             },
             content: [{ type: 'text', text: 'Explicit true' }],
@@ -2946,13 +2964,7 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:pageBreakBefore',
-                    attributes: { 'w:val': 'false' },
-                  },
-                ],
+                pageBreakBefore: false,
               },
             },
             content: [{ type: 'text', text: 'No break' }],
@@ -2971,7 +2983,7 @@ describe('toFlowBlocks', () => {
         content: [
           {
             type: 'paragraph',
-            attrs: { pageBreakBefore: 1 },
+            attrs: { paragraphProperties: { pageBreakBefore: 1 } },
             content: [{ type: 'text', text: 'Numeric 1' }],
           },
         ],
@@ -2985,7 +2997,7 @@ describe('toFlowBlocks', () => {
         content: [
           {
             type: 'paragraph',
-            attrs: { pageBreakBefore: 0 },
+            attrs: { paragraphProperties: { pageBreakBefore: 0 } },
             content: [{ type: 'text', text: 'Numeric 0' }],
           },
         ],
@@ -3002,7 +3014,7 @@ describe('toFlowBlocks', () => {
         content: [
           {
             type: 'paragraph',
-            attrs: { pageBreakBefore: 'on' },
+            attrs: { paragraphProperties: { pageBreakBefore: 'on' } },
             content: [{ type: 'text', text: 'String on' }],
           },
         ],
@@ -3019,12 +3031,10 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              indent: { left: 360, right: 180 }, // TWIPS: 360→24px, 180→12px
               paragraphProperties: {
-                elements: [
-                  { name: 'w:bidi', attributes: { 'w:val': '1' } },
-                  { name: 'w:adjustRightInd', attributes: { 'w:val': '1' } },
-                ],
+                rightToLeft: true,
+                adjustRightInd: true,
+                indent: { left: 360, right: 180 }, // TWIPS: 360→24px, 180→12px
               },
             },
             content: [{ type: 'text', text: 'RTL paragraph' }],
@@ -3036,11 +3046,10 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('rtl');
-      expect(paragraph.attrs?.rtl).toBe(true);
-      expect(paragraph.attrs?.indent?.left).toBe(12);
-      expect(paragraph.attrs?.indent?.right).toBe(24);
-      expect(paragraph.attrs?.alignment).toBe('right');
+      expect(paragraph.attrs?.direction).toBeUndefined();
+      expect(paragraph.attrs?.rtl).toBeUndefined();
+      expect(paragraph.attrs?.indent?.left).toBe(24);
+      expect(paragraph.attrs?.indent?.right).toBe(12);
     });
 
     it('does not mark paragraphs as RTL when w:bidi is explicitly false', () => {
@@ -3051,10 +3060,8 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                elements: [
-                  { name: 'w:bidi', attributes: { 'w:val': '0' } },
-                  { name: 'w:adjustRightInd', attributes: { 'w:val': '1' } },
-                ],
+                rightToLeft: false,
+                adjustRightInd: true,
               },
             },
             content: [{ type: 'text', text: 'LTR paragraph' }],
@@ -3337,21 +3344,13 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                type: 'element',
-                name: 'w:pPr',
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:framePr',
-                    attributes: {
-                      'w:wrap': 'none',
-                      'w:vAnchor': 'text',
-                      'w:hAnchor': 'margin',
-                      'w:xAlign': 'right',
-                      'w:y': '1',
-                    },
-                  },
-                ],
+                framePr: {
+                  wrap: 'none',
+                  vAnchor: 'text',
+                  hAnchor: 'margin',
+                  xAlign: 'right',
+                  y: 1,
+                },
               },
             },
             content: [{ type: 'text', text: 'Right-aligned content' }],
@@ -3373,17 +3372,9 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                type: 'element',
-                name: 'w:pPr',
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:framePr',
-                    attributes: {
-                      'w:xAlign': 'center',
-                    },
-                  },
-                ],
+                framePr: {
+                  xAlign: 'center',
+                },
               },
             },
             content: [{ type: 'text', text: 'Centered content' }],
@@ -3405,17 +3396,9 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                type: 'element',
-                name: 'w:pPr',
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:framePr',
-                    attributes: {
-                      'w:xAlign': 'left',
-                    },
-                  },
-                ],
+                framePr: {
+                  xAlign: 'left',
+                },
               },
             },
             content: [{ type: 'text', text: 'Left-aligned content' }],
@@ -3437,18 +3420,10 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                type: 'element',
-                name: 'w:pPr',
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:framePr',
-                    attributes: {
-                      'w:wrap': 'none',
-                      'w:y': '1',
-                    },
-                  },
-                ],
+                framePr: {
+                  wrap: 'none',
+                  y: 1,
+                },
               },
             },
             content: [{ type: 'text', text: 'No alignment' }],
@@ -3470,17 +3445,7 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                type: 'element',
-                name: 'w:pPr',
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:jc',
-                    attributes: {
-                      'w:val': 'center',
-                    },
-                  },
-                ],
+                justification: 'center',
               },
             },
             content: [{ type: 'text', text: 'Regular paragraph' }],
@@ -3494,7 +3459,7 @@ describe('toFlowBlocks', () => {
       expect(blocks[0].attrs?.floatAlignment).toBeUndefined();
     });
 
-    it('handles case-insensitive xAlign values', () => {
+    it('accepts normalized xAlign values', () => {
       const pmDoc = {
         type: 'doc',
         content: [
@@ -3502,17 +3467,9 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                type: 'element',
-                name: 'w:pPr',
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:framePr',
-                    attributes: {
-                      'w:xAlign': 'RIGHT',
-                    },
-                  },
-                ],
+                framePr: {
+                  xAlign: 'right',
+                },
               },
             },
             content: [{ type: 'text', text: 'Uppercase alignment' }],
@@ -3534,21 +3491,13 @@ describe('toFlowBlocks', () => {
             type: 'paragraph',
             attrs: {
               paragraphProperties: {
-                type: 'element',
-                name: 'w:pPr',
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:framePr',
-                    attributes: {
-                      'w:wrap': 'none',
-                      'w:vAnchor': 'text',
-                      'w:hAnchor': 'margin',
-                      'w:xAlign': 'right',
-                      'w:y': '1',
-                    },
-                  },
-                ],
+                framePr: {
+                  wrap: 'none',
+                  vAnchor: 'text',
+                  hAnchor: 'margin',
+                  xAlign: 'right',
+                  y: 1,
+                },
               },
             },
             content: [
@@ -3577,20 +3526,12 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              textAlign: 'left',
-              spacing: { lineSpaceBefore: 10, lineSpaceAfter: 6 }, // Use pixel properties
               paragraphProperties: {
-                type: 'element',
-                name: 'w:pPr',
-                elements: [
-                  {
-                    type: 'element',
-                    name: 'w:framePr',
-                    attributes: {
-                      'w:xAlign': 'right',
-                    },
-                  },
-                ],
+                justification: 'left',
+                spacing: { before: 150, after: 90 }, // 10px/6px in twips
+                framePr: {
+                  xAlign: 'right',
+                },
               },
             },
             content: [{ type: 'text', text: 'Multiple attrs' }],
@@ -4023,7 +3964,9 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              bidi: true,
+              paragraphProperties: {
+                rightToLeft: true,
+              },
             },
             content: [
               {
@@ -4039,9 +3982,7 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs).toMatchObject({
-        alignment: 'right',
-        direction: 'rtl',
-        rtl: true,
+        alignment: undefined,
       });
     });
 
@@ -4052,8 +3993,10 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              bidi: true,
-              alignment: 'center',
+              paragraphProperties: {
+                rightToLeft: true,
+                justification: 'center',
+              },
             },
             content: [
               {
@@ -4070,8 +4013,6 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
-        direction: 'rtl',
-        rtl: true,
       });
     });
 
@@ -4082,9 +4023,11 @@ describe('toFlowBlocks', () => {
           {
             type: 'paragraph',
             attrs: {
-              bidi: true,
-              adjustRightInd: true,
-              alignment: 'left',
+              paragraphProperties: {
+                rightToLeft: true,
+                adjustRightInd: true,
+                justification: 'left',
+              },
             },
             content: [
               {
@@ -4100,9 +4043,7 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs).toMatchObject({
-        alignment: 'right',
-        direction: 'rtl',
-        rtl: true,
+        alignment: 'left',
       });
     });
   });

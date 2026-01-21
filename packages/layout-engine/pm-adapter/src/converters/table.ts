@@ -29,7 +29,6 @@ import type {
   HyperlinkConfig,
   ThemeColorPalette,
   ConverterContext,
-  ListCounterContext,
   TableNodeToBlockOptions,
   NestedConverters,
 } from '../types.js';
@@ -43,6 +42,7 @@ import {
   applySdtMetadataToParagraphBlocks,
   applySdtMetadataToTableBlock,
 } from '../sdt/index.js';
+import { TableProperties } from '@superdoc/style-engine/ooxml';
 
 type ParagraphConverter = (
   node: PMNode,
@@ -51,7 +51,6 @@ type ParagraphConverter = (
   defaultFont: string,
   defaultSize: number,
   styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
   trackedChanges?: TrackedChangesConfig,
   bookmarks?: Map<string, number>,
   hyperlinkConfig?: HyperlinkConfig,
@@ -65,7 +64,6 @@ type TableParserDependencies = {
   defaultFont: string;
   defaultSize: number;
   styleContext: StyleContext;
-  listCounterContext?: ListCounterContext;
   trackedChanges?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig?: HyperlinkConfig;
@@ -79,19 +77,21 @@ type ParseTableCellArgs = {
   cellNode: PMNode;
   rowIndex: number;
   cellIndex: number;
+  numCells: number;
+  numRows: number;
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
-  /** Table style paragraph props to pass to paragraph converter for style cascade */
-  tableStyleParagraphProps?: import('../converter-context.js').TableStyleParagraphProps;
+  tableProperties?: TableProperties;
 };
 
 type ParseTableRowArgs = {
   rowNode: PMNode;
   rowIndex: number;
+  numRows: number;
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
-  /** Table style paragraph props to pass to paragraph converter for style cascade */
-  tableStyleParagraphProps?: import('../converter-context.js').TableStyleParagraphProps;
+  /** Table style to pass to paragraph converter for style cascade */
+  tableProperties?: TableProperties;
 };
 
 const isTableRowNode = (node: PMNode): boolean => node.type === 'tableRow' || node.type === 'table_row';
@@ -194,7 +194,7 @@ const normalizeRowHeight = (rowProps?: Record<string, unknown>): NormalizedRowHe
  * // Returns: null
  */
 const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
-  const { cellNode, rowIndex, cellIndex, context, defaultCellPadding, tableStyleParagraphProps } = args;
+  const { cellNode, rowIndex, cellIndex, numCells, numRows, context, defaultCellPadding, tableProperties } = args;
   if (!isTableCellNode(cellNode) || !Array.isArray(cellNode.content)) {
     return null;
   }
@@ -221,17 +221,16 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // This allows paragraphs inside table cells to inherit table style's pPr
   // Also includes backgroundColor for auto text color resolution
   const cellConverterContext: ConverterContext | undefined =
-    tableStyleParagraphProps || cellBackgroundColor
-      ? {
+    tableProperties || cellBackgroundColor
+      ? ({
           ...context.converterContext,
-          ...(tableStyleParagraphProps && { tableStyleParagraphProps }),
+          ...(tableProperties && { tableInfo: { tableProperties, rowIndex, cellIndex, numCells, numRows } }),
           ...(cellBackgroundColor && { backgroundColor: cellBackgroundColor }),
-        }
+        } as ConverterContext)
       : context.converterContext;
 
   const paragraphToFlowBlocks = context.converters?.paragraphToFlowBlocks ?? context.paragraphToFlowBlocks;
   const tableNodeToBlock = context.converters?.tableNodeToBlock;
-  const listCounterContext = context.listCounterContext;
 
   /**
    * Appends converted paragraph blocks to the cell's blocks array.
@@ -269,7 +268,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.defaultFont,
         context.defaultSize,
         context.styleContext,
-        listCounterContext,
         context.trackedChanges,
         context.bookmarks,
         context.hyperlinkConfig,
@@ -292,7 +290,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             context.defaultFont,
             context.defaultSize,
             context.styleContext,
-            listCounterContext,
             context.trackedChanges,
             context.bookmarks,
             context.hyperlinkConfig,
@@ -316,7 +313,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             context.themeColors,
             paragraphToFlowBlocks,
             context.converterContext,
-            { listCounterContext, converters: context.converters },
+            { converters: context.converters },
           );
           if (tableBlock && tableBlock.kind === 'table') {
             applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
@@ -342,7 +339,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.themeColors,
         paragraphToFlowBlocks,
         context.converterContext,
-        { listCounterContext, converters: context.converters },
+        { converters: context.converters },
       );
       if (tableBlock && tableBlock.kind === 'table') {
         blocks.push(tableBlock);
@@ -480,7 +477,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * @param args.rowIndex - Zero-based row index for ID generation
  * @param args.context - Parser dependencies (block ID generator, converters, style context)
  * @param args.defaultCellPadding - Optional default padding from table style to pass to cells
- * @param args.tableStyleParagraphProps - Optional paragraph properties from table style for cascade
+ * @param args.tableStyleId - Optional table style ID for paragraph style cascade in cells
  * @returns TableRow object with cells and attributes, or null if the row contains no valid cells
  *
  * @example
@@ -502,7 +499,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * // Returns: null
  */
 const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
-  const { rowNode, rowIndex, context, defaultCellPadding, tableStyleParagraphProps } = args;
+  const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows } = args;
   if (!isTableRowNode(rowNode) || !Array.isArray(rowNode.content)) {
     return null;
   }
@@ -515,7 +512,9 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       cellIndex,
       context,
       defaultCellPadding,
-      tableStyleParagraphProps,
+      tableProperties,
+      numCells: rowNode?.content?.length || 1,
+      numRows,
     });
     if (parsedCell) {
       cells.push(parsedCell);
@@ -699,7 +698,6 @@ export function tableNodeToBlock(
     defaultFont: string,
     defaultSize: number,
     styleContext: StyleContext,
-    listCounterContext?: ListCounterContext,
     trackedChanges?: TrackedChangesConfig,
     bookmarks?: Map<string, number>,
     hyperlinkConfig?: HyperlinkConfig,
@@ -723,7 +721,6 @@ export function tableNodeToBlock(
     bookmarks,
     hyperlinkConfig,
     themeColors,
-    listCounterContext: options?.listCounterContext,
     paragraphToFlowBlocks: paragraphConverter,
     converterContext,
     converters: options?.converters,
@@ -731,16 +728,16 @@ export function tableNodeToBlock(
 
   const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext);
   const defaultCellPadding = hydratedTableStyle?.cellPadding;
-  const tableStyleParagraphProps = hydratedTableStyle?.paragraphProps;
 
   const rows: TableRow[] = [];
   node.content.forEach((rowNode, rowIndex) => {
     const parsedRow = parseTableRow({
       rowNode,
       rowIndex,
+      numRows: node?.content?.length ?? 1,
       context: parserDeps,
       defaultCellPadding,
-      tableStyleParagraphProps,
+      tableProperties: node.attrs?.tableProperties as TableProperties | undefined,
     });
     if (parsedRow) {
       rows.push(parsedRow);
@@ -906,7 +903,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -927,7 +923,7 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     undefined, // themeColors
     converters?.paragraphToFlowBlocks,
     converterContext,
-    { listCounterContext, converters },
+    { converters },
   );
   if (tableBlock) {
     blocks.push(tableBlock);

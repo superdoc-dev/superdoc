@@ -5,7 +5,7 @@ describe('w:tblStyleColBandSize translator', () => {
   describe('encode', () => {
     it('extracts the w:val attribute', () => {
       const result = translator.encode({ nodes: [{ attributes: { 'w:val': '1' } }] });
-      expect(result).toBe('1');
+      expect(result).toBe(1);
     });
 
     it('returns undefined if w:val is missing', () => {
@@ -16,7 +16,7 @@ describe('w:tblStyleColBandSize translator', () => {
 
   describe('decode', () => {
     it('creates a w:tblStyleColBandSize element with the value in w:val', () => {
-      const { attributes: result } = translator.decode({ node: { attrs: { tableStyleColBandSize: '2' } } });
+      const { attributes: result } = translator.decode({ node: { attrs: { tableStyleColBandSize: 2 } } });
       expect(result).toEqual({ 'w:val': '2' });
     });
 

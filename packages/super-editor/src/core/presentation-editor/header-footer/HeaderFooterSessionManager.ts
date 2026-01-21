@@ -11,7 +11,7 @@
  * @module presentation-editor/header-footer/HeaderFooterSessionManager
  */
 
-import type { Layout, FlowBlock, Measure, Page, SectionMetadata } from '@superdoc/contracts';
+import type { Layout, FlowBlock, Measure, Page, SectionMetadata, Fragment } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { selectionToRects } from '@superdoc/layout-bridge';
 
@@ -34,6 +34,10 @@ import { initHeaderFooterRegistry } from '../../header-footer/HeaderFooterRegist
 import { layoutPerRIdHeaderFooters } from '../../header-footer/HeaderFooterPerRidLayout.js';
 import {
   extractIdentifierFromConverter,
+  getHeaderFooterType,
+  getHeaderFooterTypeForSection,
+  getBucketForPageNumber,
+  getBucketRepresentative,
   type HeaderFooterIdentifier,
   type HeaderFooterLayoutResult,
   type MultiSectionHeaderFooterIdentifier,
@@ -532,6 +536,40 @@ export class HeaderFooterSessionManager {
   getRegionForPage(kind: 'header' | 'footer', pageIndex: number): HeaderFooterRegion | null {
     const regionMap = kind === 'header' ? this.#headerRegions : this.#footerRegions;
     return regionMap.get(pageIndex) ?? null;
+  }
+
+  /**
+   * Find a region for a page, with fallback to first available region.
+   * Used when we need any region of the given kind, even if not for the specific page.
+   */
+  findRegionForPage(kind: 'header' | 'footer', pageIndex: number): HeaderFooterRegion | null {
+    const regionMap = kind === 'header' ? this.#headerRegions : this.#footerRegions;
+    if (!regionMap) return null;
+    return regionMap.get(pageIndex) ?? regionMap.values().next().value ?? null;
+  }
+
+  /**
+   * Resolve the header/footer descriptor for a given region.
+   * Looks up by headerId first, then by sectionType, then falls back to first descriptor.
+   */
+  resolveDescriptorForRegion(region: HeaderFooterRegion): HeaderFooterDescriptor | null {
+    const manager = this.#headerFooterManager;
+    if (!manager) return null;
+    if (region.headerId) {
+      const descriptor = manager.getDescriptorById(region.headerId);
+      if (descriptor) return descriptor;
+    }
+    if (region.sectionType) {
+      const descriptors = manager.getDescriptors(region.kind);
+      const match = descriptors.find((entry) => entry.variant === region.sectionType);
+      if (match) return match;
+    }
+    const descriptors = manager.getDescriptors(region.kind);
+    if (!descriptors.length) {
+      console.warn('[HeaderFooterSessionManager] No descriptor found for region:', region);
+      return null;
+    }
+    return descriptors[0];
   }
 
   #pointInRegion(region: HeaderFooterRegion, x: number, localY: number): boolean {
@@ -1076,7 +1114,13 @@ export class HeaderFooterSessionManager {
     const converter = (this.#options.editor as EditorWithConverter).converter;
     const hasAlternateHeaders = converter?.pageStyles?.alternateHeaders === true;
 
-    if (isFirstPageOfSection) {
+    // Only use 'first' variant when titlePg is enabled (w:titlePg element in OOXML).
+    // Without titlePg, even the first page of a section uses 'default'.
+    const headerIds = converter?.headerIds as { titlePg?: boolean } | undefined;
+    const footerIds = converter?.footerIds as { titlePg?: boolean } | undefined;
+    const titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
+
+    if (isFirstPageOfSection && titlePgEnabled) {
       return 'first';
     }
     if (hasAlternateHeaders) {
@@ -1089,13 +1133,14 @@ export class HeaderFooterSessionManager {
     margins: HeaderFooterLayoutOptions['margins'],
     page: Page,
   ): HeaderFooterLayoutOptions['margins'] {
-    const footnoteReserve = (page as Page & { footnoteReserve?: number }).footnoteReserve ?? 0;
-    if (footnoteReserve <= 0) return margins;
+    // Note: property is 'footnoteReserved' (with 'd') as defined in @superdoc/contracts
+    const footnoteReserved = page.footnoteReserved ?? 0;
+    if (footnoteReserved <= 0) return margins;
 
     const currentBottom = margins?.bottom ?? this.#options.defaultMargins.bottom ?? 0;
     return {
       ...margins,
-      bottom: Math.max(0, currentBottom - footnoteReserve),
+      bottom: Math.max(0, currentBottom - footnoteReserved),
     };
   }
 
@@ -1235,6 +1280,200 @@ export class HeaderFooterSessionManager {
    */
   setMultiSectionIdentifier(identifier: MultiSectionHeaderFooterIdentifier | null): void {
     this.#multiSectionIdentifier = identifier;
+  }
+
+  // ===========================================================================
+  // Decoration Provider Creation
+  // ===========================================================================
+
+  /**
+   * Update decoration providers for header and footer.
+   * Creates new providers based on layout results and sets them on this manager.
+   */
+  updateDecorationProviders(layout: Layout): void {
+    this.#headerDecorationProvider = this.createDecorationProvider('header', layout);
+    this.#footerDecorationProvider = this.createDecorationProvider('footer', layout);
+    this.rebuildRegions(layout);
+  }
+
+  /**
+   * Create a decoration provider for header or footer rendering.
+   */
+  createDecorationProvider(kind: 'header' | 'footer', layout: Layout): PageDecorationProvider | undefined {
+    const results = kind === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
+    const layoutsByRId = kind === 'header' ? this.#headerLayoutsByRId : this.#footerLayoutsByRId;
+
+    if ((!results || results.length === 0) && (!layoutsByRId || layoutsByRId.size === 0)) {
+      return undefined;
+    }
+
+    const multiSectionId = this.#multiSectionIdentifier;
+    const legacyIdentifier =
+      this.#headerFooterIdentifier ??
+      extractIdentifierFromConverter((this.#options.editor as Editor & { converter?: unknown }).converter);
+
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const defaultPageSize = this.#options.defaultPageSize;
+    const defaultMargins = this.#options.defaultMargins;
+
+    // Build section first page map
+    const sectionFirstPageNumbers = new Map<number, number>();
+    for (const p of layout.pages) {
+      const idx = p.sectionIndex ?? 0;
+      if (!sectionFirstPageNumbers.has(idx)) {
+        sectionFirstPageNumbers.set(idx, p.number);
+      }
+    }
+
+    return (pageNumber, pageMargins, page) => {
+      const sectionIndex = page?.sectionIndex ?? 0;
+      const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
+      const sectionPageNumber =
+        typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
+      const headerFooterType = multiSectionId
+        ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, { kind, sectionPageNumber })
+        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind });
+
+      // Resolve section-specific rId using Word's OOXML inheritance model
+      let sectionRId: string | undefined;
+      if (page?.sectionRefs && kind === 'header') {
+        sectionRId = page.sectionRefs.headerRefs?.[headerFooterType as keyof typeof page.sectionRefs.headerRefs];
+        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
+          const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
+          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
+        }
+        if (!sectionRId && headerFooterType !== 'default') {
+          sectionRId = page.sectionRefs.headerRefs?.default;
+        }
+      } else if (page?.sectionRefs && kind === 'footer') {
+        sectionRId = page.sectionRefs.footerRefs?.[headerFooterType as keyof typeof page.sectionRefs.footerRefs];
+        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
+          const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
+          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
+        }
+        if (!sectionRId && headerFooterType !== 'default') {
+          sectionRId = page.sectionRefs.footerRefs?.default;
+        }
+      }
+
+      if (!headerFooterType) {
+        return null;
+      }
+
+      // PRIORITY 1: Try per-rId layout
+      if (sectionRId && layoutsByRId.has(sectionRId)) {
+        const rIdLayout = layoutsByRId.get(sectionRId);
+        if (!rIdLayout) {
+          console.warn(
+            `[HeaderFooterSessionManager] Inconsistent state: layoutsByRId.has('${sectionRId}') returned true but get() returned undefined`,
+          );
+        } else {
+          const slotPage = this.#findPageForNumber(rIdLayout.layout.pages, pageNumber);
+          if (slotPage) {
+            const fragments = slotPage.fragments ?? [];
+            const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
+            const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
+            const decorationMargins =
+              kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
+            const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
+
+            const rawLayoutHeight = rIdLayout.layout.height ?? 0;
+            const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
+
+            const layoutMinY = rIdLayout.layout.minY ?? 0;
+            const normalizedFragments =
+              layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
+
+            return {
+              fragments: normalizedFragments,
+              height: metrics.containerHeight,
+              contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
+              offset: metrics.offset,
+              marginLeft: box.x,
+              contentWidth: box.width,
+              headerId: sectionRId,
+              sectionType: headerFooterType,
+              minY: layoutMinY,
+              box: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
+              hitRegion: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
+            };
+          }
+        }
+      }
+
+      // PRIORITY 2: Fall back to variant-based layout
+      if (!results || results.length === 0) {
+        return null;
+      }
+
+      const variant = results.find((entry) => entry.type === headerFooterType);
+      if (!variant || !variant.layout?.pages?.length) {
+        return null;
+      }
+
+      const slotPage = this.#findPageForNumber(variant.layout.pages, pageNumber);
+      if (!slotPage) {
+        return null;
+      }
+      const fragments = slotPage.fragments ?? [];
+
+      const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
+      const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
+      const decorationMargins =
+        kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
+      const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
+
+      const rawLayoutHeight = variant.layout.height ?? 0;
+      const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
+      const fallbackId = this.#headerFooterManager?.getVariantId(kind, headerFooterType);
+      const finalHeaderId = sectionRId ?? fallbackId ?? undefined;
+
+      const layoutMinY = variant.layout.minY ?? 0;
+      const normalizedFragments = layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
+
+      return {
+        fragments: normalizedFragments,
+        height: metrics.containerHeight,
+        contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
+        offset: metrics.offset,
+        marginLeft: box.x,
+        contentWidth: box.width,
+        headerId: finalHeaderId,
+        sectionType: headerFooterType,
+        minY: layoutMinY,
+        box: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
+        hitRegion: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
+      };
+    };
+  }
+
+  /**
+   * Find header/footer page layout for a given page number with bucket fallback.
+   */
+  #findPageForNumber(
+    pages: Array<{ number: number; fragments: Fragment[] }>,
+    pageNumber: number,
+  ): { number: number; fragments: Fragment[] } | undefined {
+    if (!pages || pages.length === 0) {
+      return undefined;
+    }
+
+    // 1. Try exact match
+    const exactMatch = pages.find((p) => p.number === pageNumber);
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    // 2. Try bucket representative
+    const bucket = getBucketForPageNumber(pageNumber);
+    const representative = getBucketRepresentative(bucket);
+    const bucketMatch = pages.find((p) => p.number === representative);
+    if (bucketMatch) {
+      return bucketMatch;
+    }
+
+    // 3. Fallback to first page
+    return pages[0];
   }
 
   // ===========================================================================

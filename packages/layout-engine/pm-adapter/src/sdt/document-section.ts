@@ -11,7 +11,6 @@ import type {
   BlockIdGenerator,
   PositionMap,
   StyleContext,
-  ListCounterContext,
   HyperlinkConfig,
   NodeHandlerContext,
   TrackedChangesConfig,
@@ -37,7 +36,6 @@ type ParagraphConverter = (
   defaultFont: string,
   defaultSize: number,
   styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
   trackedChanges?: TrackedChangesConfig,
   bookmarks?: Map<string, number>,
   hyperlinkConfig?: HyperlinkConfig,
@@ -78,7 +76,6 @@ interface ProcessingContext {
   defaultFont: string;
   defaultSize: number;
   styleContext: StyleContext;
-  listCounterContext: ListCounterContext;
   bookmarks?: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
 }
@@ -117,7 +114,6 @@ function processParagraphChild(
   output: ProcessingOutput,
   converters: NodeConverters,
 ): void {
-  const { getListCounter, incrementListCounter, resetListCounter } = context.listCounterContext;
   const paragraphBlocks = converters.paragraphToFlowBlocks(
     child,
     context.nextBlockId,
@@ -125,7 +121,6 @@ function processParagraphChild(
     context.defaultFont,
     context.defaultSize,
     context.styleContext,
-    { getListCounter, incrementListCounter, resetListCounter },
     undefined, // trackedChanges
     context.bookmarks,
     context.hyperlinkConfig,
@@ -222,7 +217,6 @@ function processNestedStructuredContent(
   output: ProcessingOutput,
   converters: NodeConverters,
 ): void {
-  const { getListCounter, incrementListCounter, resetListCounter } = context.listCounterContext;
   // Nested structured content block inside section - unwrap and chain metadata
   const nestedMetadata = resolveNodeSdtMetadata(child, 'structuredContentBlock');
   child.content?.forEach((grandchild) => {
@@ -234,7 +228,6 @@ function processNestedStructuredContent(
         context.defaultFont,
         context.defaultSize,
         context.styleContext,
-        { getListCounter, incrementListCounter, resetListCounter },
         undefined, // trackedChanges
         context.bookmarks,
         context.hyperlinkConfig,
@@ -287,7 +280,6 @@ function processDocumentPartObject(
   output: ProcessingOutput,
   converters: NodeConverters,
 ): void {
-  const { getListCounter, incrementListCounter, resetListCounter } = context.listCounterContext;
   // Nested doc part (e.g., TOC) inside section
   const docPartGallery = getDocPartGallery(child);
   const docPartObjectId = getDocPartObjectId(child);
@@ -307,7 +299,6 @@ function processDocumentPartObject(
         defaultFont: context.defaultFont,
         defaultSize: context.defaultSize,
         styleContext: context.styleContext,
-        listCounterContext: { getListCounter, incrementListCounter, resetListCounter },
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
       },
@@ -392,7 +383,6 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     bookmarks,
     hyperlinkConfig,
     converters,
@@ -415,7 +405,6 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
       defaultFont,
       defaultSize,
       styleContext,
-      listCounterContext,
       bookmarks,
       hyperlinkConfig,
     },

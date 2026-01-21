@@ -31,9 +31,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * This uses the same machinery as the extract-pm-json script.
  *
  * @param docxPath - Path to DOCX file
- * @returns ProseMirror document
+ * @returns ProseMirror document and converter context
  */
-async function docxToPMJson(docxPath: string): Promise<PMNode> {
+async function docxToPMJson(docxPath: string): Promise<{
+  pmDoc: PMNode;
+  converterContext: {
+    docx: Record<string, unknown>;
+    translatedLinkedStyles: unknown;
+    translatedNumbering: unknown;
+  };
+  themeColors?: unknown;
+}> {
   // Dynamic imports to avoid bundling issues
   const { default: DocxZipper } = await import('../../../super-editor/src/core/DocxZipper.js');
   const { createDocumentJson } = await import(
@@ -76,7 +84,15 @@ async function docxToPMJson(docxPath: string): Promise<PMNode> {
     throw new Error('Failed to extract PM JSON from DOCX');
   }
 
-  return result.pmDoc;
+  return {
+    pmDoc: result.pmDoc,
+    converterContext: {
+      docx,
+      translatedLinkedStyles: result.translatedLinkedStyles,
+      translatedNumbering: result.translatedNumbering,
+    },
+    themeColors: result.themeColors,
+  };
 }
 
 /**
@@ -133,12 +149,16 @@ describe('Multi-Section Document Page Count', () => {
 
     // Convert DOCX to PM JSON
     console.log('Converting DOCX to ProseMirror JSON...');
-    const pmDoc = await docxToPMJson(docxPath);
+    const { pmDoc, converterContext, themeColors } = await docxToPMJson(docxPath);
     console.log(`PM Doc has ${pmDoc.content?.length ?? 0} top-level nodes`);
 
     // Convert PM JSON to flow blocks
     console.log('Converting to flow blocks...');
-    const { blocks, bookmarks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+    const { blocks, bookmarks } = toFlowBlocks(pmDoc, {
+      emitSectionBreaks: true,
+      converterContext,
+      themeColors,
+    });
     console.log(`Generated ${blocks.length} flow blocks`);
 
     // Analyze section breaks
@@ -196,8 +216,12 @@ describe('Multi-Section Document Page Count', () => {
   it('should emit 3 section break blocks for a 4-section document', async () => {
     const docxPath = path.join(__dirname, '../../../super-editor/src/tests/data/multi_section_doc.docx');
 
-    const pmDoc = await docxToPMJson(docxPath);
-    const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+    const { pmDoc, converterContext, themeColors } = await docxToPMJson(docxPath);
+    const { blocks } = toFlowBlocks(pmDoc, {
+      emitSectionBreaks: true,
+      converterContext,
+      themeColors,
+    });
 
     const sectionBreaks = blocks.filter((b) => b.kind === 'sectionBreak');
     console.log(`Section breaks found: ${sectionBreaks.length}`);
@@ -219,8 +243,12 @@ describe('Multi-Section Document Page Count', () => {
   it('should have correct section break types', async () => {
     const docxPath = path.join(__dirname, '../../../super-editor/src/tests/data/multi_section_doc.docx');
 
-    const pmDoc = await docxToPMJson(docxPath);
-    const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+    const { pmDoc, converterContext, themeColors } = await docxToPMJson(docxPath);
+    const { blocks } = toFlowBlocks(pmDoc, {
+      emitSectionBreaks: true,
+      converterContext,
+      themeColors,
+    });
 
     const sectionBreaks = blocks.filter((b) => b.kind === 'sectionBreak') as SectionBreakBlock[];
 

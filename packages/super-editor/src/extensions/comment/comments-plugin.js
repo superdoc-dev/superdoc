@@ -314,10 +314,11 @@ export const CommentsPlugin = Extension.create({
 
       state: {
         init() {
+          const highlightColors = editor.options.comments?.highlightColors || {};
           return {
             activeThreadId: null,
-            externalColor: '#B1124B',
-            internalColor: '#078383',
+            externalColor: highlightColors.external ?? '#B1124B',
+            internalColor: highlightColors.internal ?? '#078383',
             decorations: DecorationSet.empty,
             allCommentPositions: {},
             allCommentIds: [],

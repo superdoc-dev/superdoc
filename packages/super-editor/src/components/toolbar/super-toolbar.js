@@ -25,6 +25,7 @@ import { isList } from '@core/commands/list-helpers';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { twipsToLines } from '@converter/helpers';
 import { parseSizeUnit } from '@core/utilities';
+import { NodeSelection } from 'prosemirror-state';
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -367,6 +368,12 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     setFontSize: ({ item, argument }) => {
+      if (this.#isFieldAnnotationSelection() && argument) {
+        this.activeEditor?.commands.setFieldAnnotationsFontSize(argument, true);
+        this.updateToolbarState();
+        return;
+      }
+
       this.#runCommandWithArgumentOnly({ item, argument }, () => {
         this.activeEditor?.commands.setFieldAnnotationsFontSize(argument, true);
       });
@@ -380,6 +387,12 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     setFontFamily: ({ item, argument }) => {
+      if (this.#isFieldAnnotationSelection() && argument) {
+        this.activeEditor?.commands.setFieldAnnotationsFontFamily(argument, true);
+        this.updateToolbarState();
+        return;
+      }
+
       this.#runCommandWithArgumentOnly({ item, argument }, () => {
         this.activeEditor?.commands.setFieldAnnotationsFontFamily(argument, true);
       });
@@ -523,8 +536,13 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     toggleBold: ({ item, argument }) => {
-      let command = item.command;
+      if (this.#isFieldAnnotationSelection()) {
+        this.activeEditor?.commands.toggleFieldAnnotationsFormat('bold', true);
+        this.updateToolbarState();
+        return;
+      }
 
+      let command = item.command;
       if (command in this.activeEditor.commands) {
         this.activeEditor.commands[command](argument);
         this.activeEditor.commands.toggleFieldAnnotationsFormat('bold', true);
@@ -541,8 +559,13 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     toggleItalic: ({ item, argument }) => {
-      let command = item.command;
+      if (this.#isFieldAnnotationSelection()) {
+        this.activeEditor?.commands.toggleFieldAnnotationsFormat('italic', true);
+        this.updateToolbarState();
+        return;
+      }
 
+      let command = item.command;
       if (command in this.activeEditor.commands) {
         this.activeEditor.commands[command](argument);
         this.activeEditor.commands.toggleFieldAnnotationsFormat('italic', true);
@@ -559,8 +582,13 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     toggleUnderline: ({ item, argument }) => {
-      let command = item.command;
+      if (this.#isFieldAnnotationSelection()) {
+        this.activeEditor?.commands.toggleFieldAnnotationsFormat('underline', true);
+        this.updateToolbarState();
+        return;
+      }
 
+      let command = item.command;
       if (command in this.activeEditor.commands) {
         this.activeEditor.commands[command](argument);
         this.activeEditor.commands.toggleFieldAnnotationsFormat('underline', true);
@@ -1293,6 +1321,11 @@ export class SuperToolbar extends EventEmitter {
 
     const tr = state.tr.setStoredMarks([mark]);
     view.dispatch(tr);
+  }
+
+  #isFieldAnnotationSelection() {
+    const selection = this.activeEditor?.state?.selection;
+    return selection instanceof NodeSelection && selection?.node?.type?.name === 'fieldAnnotation';
   }
 
   /**

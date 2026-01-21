@@ -7,6 +7,7 @@
  * - Tracked changes processing
  */
 
+import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
 import type {
   FlowBlock,
   Run,
@@ -15,8 +16,6 @@ import type {
   ImageBlock,
   TrackedChangeMeta,
   SdtMetadata,
-  ParagraphAttrs,
-  ParagraphIndent,
   FieldAnnotationRun,
   FieldAnnotationMetadata,
 } from '@superdoc/contracts';
@@ -26,24 +25,13 @@ import type {
   BlockIdGenerator,
   PositionMap,
   StyleContext,
-  ListCounterContext,
   TrackedChangesConfig,
   HyperlinkConfig,
   NodeHandlerContext,
   ThemeColorPalette,
 } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
-import {
-  computeParagraphAttrs,
-  cloneParagraphAttrs,
-  hasPageBreakBefore,
-  buildStyleNodeFromAttrs,
-  normalizeParagraphSpacing,
-  normalizeParagraphIndent,
-  normalizePxIndent,
-  normalizeOoxmlTabs,
-} from '../attributes/index.js';
-import { hydrateParagraphStyleAttrs, hydrateCharacterStyleAttrs } from '../attributes/paragraph-styles.js';
+import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
 import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBreakBlock } from '../sections/index.js';
 import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
@@ -55,23 +43,9 @@ import {
 import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
-import { createLinkedStyleResolver, applyLinkedStyleToRun, extractRunStyleId } from '../styles/linked-run.js';
-import {
-  ptToPx,
-  pickNumber,
-  isPlainObject,
-  convertIndentTwipsToPx,
-  twipsToPx,
-  toBoolean,
-  asOoxmlElement,
-  findOoxmlChild,
-  getOoxmlAttribute,
-  parseOoxmlNumber,
-  type OoxmlElement,
-} from '../utilities.js';
-import { resolveStyle } from '@superdoc/style-engine';
-import { resolveDocxFontFamily } from '@superdoc/style-engine/ooxml';
-import { SuperConverter } from '@superdoc/super-editor/converter/internal/SuperConverter.js';
+import { ptToPx, pickNumber, isPlainObject, twipsToPx } from '../utilities.js';
+import { computeRunAttrs } from '../attributes/paragraph.js';
+import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
 // ============================================================================
 // Constants
@@ -82,24 +56,6 @@ import { SuperConverter } from '@superdoc/super-editor/converter/internal/SuperC
  * This ensures images are always rendered with a fallback size for better UX.
  */
 const DEFAULT_IMAGE_DIMENSION_PX = 100;
-
-/**
- * Conversion constant: OOXML font sizes are stored in half-points.
- * To convert to full points: divide by 2.
- */
-const HALF_POINTS_PER_POINT = 2;
-
-/**
- * Screen DPI (dots per inch) for pixel conversions.
- * Standard display density is 96 DPI.
- */
-const SCREEN_DPI = 96;
-
-/**
- * Point DPI (dots per inch) for typography.
- * Standard typography uses 72 DPI (1 inch = 72 points).
- */
-const POINT_DPI = 72;
 
 // ============================================================================
 // Helper functions for inline image detection and conversion
@@ -173,7 +129,7 @@ export function isInlineImage(node: PMNode): boolean {
 
 const isNodeHidden = (node: PMNode): boolean => {
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
-  if (toBoolean(attrs.hidden) === true) return true;
+  if (attrs.hidden === true) return true;
   return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
 };
 
@@ -540,304 +496,16 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
   return merged;
 }
 
-type RunDefaults = {
-  fontFamily?: string;
-  fontSizePx?: number;
-  color?: string;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: TextRun['underline'];
-  letterSpacing?: number;
-};
-
-/**
- * Extracts font properties from the first text node in a paragraph's content.
- * This is used to match list marker font to the paragraph's first text run.
- *
- * @param para - The paragraph PM node
- * @returns Font properties (fontSizePx already in pixels, fontFamily) or undefined if not found
- */
-const extractFirstTextRunFont = (para: PMNode): { fontSizePx?: number; fontFamily?: string } | undefined => {
-  if (!para.content || !Array.isArray(para.content) || para.content.length === 0) {
-    return undefined;
-  }
-
-  // Helper to find fontSize mark and extract value
-  const extractFontFromMarks = (marks?: PMMark[]): { fontSizePx?: number; fontFamily?: string } | undefined => {
-    if (!marks || !Array.isArray(marks)) return undefined;
-
-    const result: { fontSizePx?: number; fontFamily?: string } = {};
-
-    for (const mark of marks) {
-      if (!mark || typeof mark !== 'object') continue;
-
-      // Look for textStyle mark which contains font info
-      if (mark.type === 'textStyle' && mark.attrs) {
-        const attrs = mark.attrs as Record<string, unknown>;
-        // fontSize is stored as a string with unit, e.g., '12pt' or '16px'
-        if (attrs.fontSize != null) {
-          const fontSizeStr = String(attrs.fontSize);
-          const size = parseFloat(fontSizeStr);
-          if (Number.isFinite(size)) {
-            // Check the unit - only convert if it's in points
-            if (fontSizeStr.endsWith('pt')) {
-              result.fontSizePx = ptToPx(size);
-            } else {
-              // px or unitless - already in pixels
-              result.fontSizePx = size;
-            }
-          }
-        }
-        if (typeof attrs.fontFamily === 'string') {
-          result.fontFamily = attrs.fontFamily;
-        }
-      }
-    }
-
-    return Object.keys(result).length > 0 ? result : undefined;
-  };
-
-  // Recursively find first text node
-  const findFirstTextFont = (nodes: PMNode[]): { fontSizePx?: number; fontFamily?: string } | undefined => {
-    for (const node of nodes) {
-      if (!node) continue;
-
-      // If it's a text node, check its marks
-      if (node.type === 'text') {
-        const font = extractFontFromMarks(node.marks);
-        if (font) return font;
-      }
-
-      // If it's a run node, check its content
-      if (node.type === 'run' && Array.isArray(node.content)) {
-        // First check the run's own marks
-        const runFont = extractFontFromMarks(node.marks);
-        // Then check children
-        const childFont = findFirstTextFont(node.content);
-        // Merge: child takes precedence for fontSizePx
-        if (runFont || childFont) {
-          return {
-            fontSizePx: childFont?.fontSizePx ?? runFont?.fontSizePx,
-            fontFamily: childFont?.fontFamily ?? runFont?.fontFamily,
-          };
-        }
-      }
-
-      // Handle other container nodes
-      if (Array.isArray(node.content)) {
-        const font = findFirstTextFont(node.content);
-        if (font) return font;
-      }
-    }
-    return undefined;
-  };
-
-  const font = findFirstTextFont(para.content);
-  return font;
-};
-
-/**
- * Resolves a font family value to a CSS-compatible font family string.
- *
- * Handles both simple string font families and complex OOXML font family objects
- * that may include theme fonts, different scripts (ascii, hAnsi, eastAsia, cs).
- *
- * @param fontFamily - The font family value (string or OOXML font family object)
- * @param docx - Optional docx context for theme font resolution
- * @returns Resolved CSS font family string, or undefined if resolution fails
- *
- * @example
- * ```typescript
- * resolveRunFontFamily('Arial'); // 'Arial'
- * resolveRunFontFamily({ ascii: 'Calibri', hAnsi: 'Calibri' }, docx); // 'Calibri'
- * ```
- */
-const resolveRunFontFamily = (fontFamily: unknown, docx?: Record<string, unknown>): string | undefined => {
-  if (typeof fontFamily === 'string' && fontFamily.trim().length > 0) {
-    return fontFamily;
-  }
-  if (!fontFamily || typeof fontFamily !== 'object') return undefined;
-  const toCssFontFamily = (
-    SuperConverter as { toCssFontFamily?: (fontName: string, docx?: Record<string, unknown>) => string }
-  ).toCssFontFamily;
-  const resolved = resolveDocxFontFamily(fontFamily as Record<string, unknown>, docx ?? null, toCssFontFamily);
-  return resolved ?? undefined;
-};
-
-/**
- * Parses a font size value to pixels.
- *
- * Handles multiple input formats:
- * - Raw number: interpreted as half-points (OOXML format)
- * - String ending in 'pt': interpreted as points
- * - String ending in 'px': returned as-is
- * - String without suffix: interpreted as half-points
- *
- * @param fontSize - The font size value to parse
- * @returns Font size in pixels, or undefined if parsing fails
- *
- * @example
- * ```typescript
- * parseRunFontSizePx(24); // 16 (24 half-points = 12pt = 16px)
- * parseRunFontSizePx('12pt'); // 16
- * parseRunFontSizePx('16px'); // 16
- * ```
- */
-const parseRunFontSizePx = (fontSize: unknown): number | undefined => {
-  if (typeof fontSize === 'number' && Number.isFinite(fontSize)) {
-    return ptToPx(fontSize / HALF_POINTS_PER_POINT) ?? undefined;
-  }
-  if (typeof fontSize === 'string') {
-    const numeric = Number.parseFloat(fontSize);
-    if (!Number.isFinite(numeric)) return undefined;
-    if (fontSize.endsWith('pt')) {
-      return ptToPx(numeric);
-    }
-    if (fontSize.endsWith('px')) {
-      return numeric;
-    }
-    return ptToPx(numeric / HALF_POINTS_PER_POINT) ?? undefined;
-  }
-  return undefined;
-};
-
-/**
- * Extracts run properties from paragraph mark (w:pPr/w:rPr) in OOXML.
- *
- * The paragraph mark in Word has its own run properties that apply to empty
- * paragraphs or the paragraph mark character itself. This function extracts
- * font size and font family from these properties.
- *
- * @param paragraphProps - The paragraph properties object
- * @returns Extracted run properties (fontSize, fontFamily), or undefined if none found
- *
- * @example
- * ```typescript
- * extractParagraphMarkRunProps({
- *   runProperties: { fontSize: 24 }
- * }); // { fontSize: 24 }
- * ```
- */
-const extractParagraphMarkRunProps = (paragraphProps: Record<string, unknown>): Record<string, unknown> | undefined => {
-  const directRunProps = paragraphProps.runProperties;
-  const directRunPropsElement = asOoxmlElement(directRunProps);
-  if (directRunProps && isPlainObject(directRunProps) && !directRunPropsElement) {
-    return directRunProps as Record<string, unknown>;
-  }
-
-  const element = asOoxmlElement(paragraphProps);
-  const pPr = element ? (element.name === 'w:pPr' ? element : findOoxmlChild(element, 'w:pPr')) : undefined;
-  const rPr = directRunPropsElement?.name === 'w:rPr' ? directRunPropsElement : findOoxmlChild(pPr, 'w:rPr');
-  if (!rPr) return undefined;
-
-  const runProps: Record<string, unknown> = {};
-  const sz =
-    parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:sz'), 'w:val')) ??
-    parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:szCs'), 'w:val'));
-  if (sz != null) {
-    runProps.fontSize = sz;
-  }
-
-  const rFonts = findOoxmlChild(rPr, 'w:rFonts');
-  if (rFonts) {
-    const fontFamily: Record<string, unknown> = {};
-    const keys = ['ascii', 'hAnsi', 'eastAsia', 'cs', 'val', 'asciiTheme', 'hAnsiTheme', 'eastAsiaTheme', 'cstheme'];
-    for (const key of keys) {
-      const value = getOoxmlAttribute(rFonts, `w:${key}`);
-      if (value != null) {
-        fontFamily[key] = value;
-      }
-    }
-    if (Object.keys(fontFamily).length > 0) {
-      runProps.fontFamily = fontFamily;
-    }
-  }
-
-  return Object.keys(runProps).length > 0 ? runProps : undefined;
-};
-
-/**
- * Applies paragraph mark run properties to an empty paragraph's text run.
- *
- * In Word, empty paragraphs inherit their appearance from the paragraph mark's
- * run properties (w:pPr/w:rPr). This function applies those properties to ensure
- * empty paragraphs render with the correct font size and family.
- *
- * @param run - The text run to apply properties to
- * @param paragraphProps - The paragraph properties containing run properties
- * @param converterContext - Optional converter context for font resolution
- *
- * @example
- * ```typescript
- * const run: TextRun = { text: '' };
- * applyParagraphMarkRunProps(run, paragraphProps, context);
- * // run.fontSize and run.fontFamily may now be set
- * ```
- */
-const applyParagraphMarkRunProps = (
-  run: TextRun,
-  paragraphProps: Record<string, unknown>,
-  converterContext?: ConverterContext,
-): void => {
-  const runProps = extractParagraphMarkRunProps(paragraphProps);
-  if (!runProps) return;
-  const fontSizePx = parseRunFontSizePx(runProps.fontSize);
-  if (fontSizePx != null) {
-    run.fontSize = fontSizePx;
-  }
-  const fontFamily = resolveRunFontFamily(runProps.fontFamily, converterContext?.docx);
-  if (fontFamily) {
-    run.fontFamily = fontFamily;
-  }
-};
-
-const applyBaseRunDefaults = (
-  run: TextRun,
-  defaults: RunDefaults,
-  uiDisplayFallbackFont: string,
-  fallbackSize: number,
-): void => {
-  if (!run) return;
-  if (defaults.fontFamily && run.fontFamily === uiDisplayFallbackFont) {
-    run.fontFamily = defaults.fontFamily;
-  }
-  if (defaults.fontSizePx != null && run.fontSize === fallbackSize) {
-    run.fontSize = defaults.fontSizePx;
-  }
-  if (defaults.color && !run.color) {
-    run.color = defaults.color;
-  }
-  if (defaults.letterSpacing != null && run.letterSpacing == null) {
-    run.letterSpacing = defaults.letterSpacing;
-  }
-  // NOTE: We intentionally do NOT apply bold, italic, or underline from baseRunDefaults.
-  // These properties come from the paragraph's default character style (e.g., Heading 1's bold),
-  // but should NOT be applied to runs that have their own character styles or marks.
-  // Bold/italic/underline should only come from:
-  // 1. Linked character styles (via applyRunStyles)
-  // 2. Inline marks (via applyMarksToRun)
-  // Applying paragraph-level character defaults here causes incorrect bolding of normal text
-  // in paragraphs with bold styles like Heading 1.
-};
-
 const applyInlineRunProperties = (
   run: TextRun,
-  runProperties: (Record<string, unknown> & { letterSpacing?: number | null }) | null | undefined,
-): void => {
-  if (!runProperties) return;
-  if (runProperties?.letterSpacing != null) {
-    run.letterSpacing = twipsToPx(runProperties.letterSpacing);
+  runProperties: RunProperties | undefined,
+  converterContext?: ConverterContext,
+): TextRun => {
+  if (!runProperties) {
+    return run;
   }
-};
-
-const getVanishValue = (runProperties: unknown): boolean | undefined => {
-  if (!runProperties || typeof runProperties !== 'object' || Array.isArray(runProperties)) {
-    return undefined;
-  }
-  if (!Object.prototype.hasOwnProperty.call(runProperties, 'vanish')) {
-    return undefined;
-  }
-  return (runProperties as Record<string, unknown>).vanish === true;
+  const runAttrs = computeRunAttrs(runProperties, converterContext);
+  return { ...run, ...runAttrs };
 };
 
 /**
@@ -856,7 +524,6 @@ const getVanishValue = (runProperties: unknown): boolean | undefined => {
  * @param defaultFont - Default font family
  * @param defaultSize - Default font size
  * @param styleContext - Style resolution context
- * @param listCounterContext - Optional list counter context
  * @param trackedChanges - Optional tracked changes configuration
  * @param bookmarks - Optional bookmark position map
  * @param hyperlinkConfig - Hyperlink configuration
@@ -873,7 +540,6 @@ export function paragraphToFlowBlocks(
   defaultFont: string,
   defaultSize: number,
   styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
   trackedChanges?: TrackedChangesConfig,
   bookmarks?: Map<string, number>,
   hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
@@ -929,150 +595,13 @@ export function paragraphToFlowBlocks(
   converterContext?: ConverterContext,
   enableComments = true,
 ): FlowBlock[] {
-  const baseBlockId = nextBlockId('paragraph');
   const paragraphProps =
     typeof para.attrs?.paragraphProperties === 'object' && para.attrs.paragraphProperties !== null
-      ? (para.attrs.paragraphProperties as Record<string, unknown>)
+      ? (para.attrs.paragraphProperties as ParagraphProperties)
       : {};
-  const paragraphHiddenByVanish = getVanishValue(paragraphProps.runProperties) === true;
-  const paragraphStyleId =
-    typeof para.attrs?.styleId === 'string' && para.attrs.styleId.trim()
-      ? para.attrs.styleId
-      : typeof paragraphProps.styleId === 'string' && paragraphProps.styleId.trim()
-        ? (paragraphProps.styleId as string)
-        : null;
-  const paragraphHydration = converterContext ? hydrateParagraphStyleAttrs(para, converterContext) : null;
+  const baseBlockId = nextBlockId('paragraph');
+  const { paragraphAttrs, resolvedParagraphProperties } = computeParagraphAttrs(para, converterContext);
 
-  let baseRunDefaults: RunDefaults = {};
-  try {
-    // Try to get character defaults from the correct OOXML cascade via styles.js
-    // This includes w:rPrDefault from w:docDefaults, which resolveStyle() ignores
-    const charHydration = converterContext
-      ? hydrateCharacterStyleAttrs(para, converterContext, paragraphHydration?.resolved as Record<string, unknown>)
-      : null;
-
-    if (charHydration) {
-      // Use correctly cascaded character properties from styles.js
-      // Font size is in half-points, convert to pixels: halfPts / 2 = pts, pts * (96/72) = px
-      const fontSizePx = (charHydration.fontSize / HALF_POINTS_PER_POINT) * (SCREEN_DPI / POINT_DPI);
-      baseRunDefaults = {
-        fontFamily: charHydration.fontFamily,
-        fontSizePx,
-        color: charHydration.color ? `#${charHydration.color.replace('#', '')}` : undefined,
-        bold: charHydration.bold,
-        italic: charHydration.italic,
-        underline: charHydration.underline
-          ? {
-              style: charHydration.underline.type as TextRun['underline'] extends { style?: infer S } ? S : never,
-              color: charHydration.underline.color,
-            }
-          : undefined,
-        letterSpacing: charHydration.letterSpacing != null ? twipsToPx(charHydration.letterSpacing) : undefined,
-      };
-    } else {
-      // Fallback: use resolveStyle when converterContext is not available
-      // This path uses hardcoded defaults but maintains backwards compatibility
-      const spacingSource =
-        para.attrs?.spacing !== undefined
-          ? para.attrs.spacing
-          : paragraphProps.spacing !== undefined
-            ? paragraphProps.spacing
-            : paragraphHydration?.spacing;
-      const normalizeIndentObject = (value: unknown): ParagraphIndent | undefined => {
-        if (!value || typeof value !== 'object') return;
-        return normalizePxIndent(value) ?? convertIndentTwipsToPx(value as ParagraphIndent);
-      };
-      const normalizedSpacing = normalizeParagraphSpacing(spacingSource);
-      const normalizedIndent =
-        normalizeIndentObject(para.attrs?.indent) ??
-        convertIndentTwipsToPx(paragraphProps.indent as ParagraphIndent) ??
-        convertIndentTwipsToPx(paragraphHydration?.indent as ParagraphIndent) ??
-        normalizeParagraphIndent(para.attrs?.textIndent);
-      const styleNodeAttrs =
-        paragraphHydration?.tabStops && !para.attrs?.tabStops && !para.attrs?.tabs
-          ? { ...(para.attrs ?? {}), tabStops: paragraphHydration.tabStops }
-          : (para.attrs ?? {});
-      const styleNode = buildStyleNodeFromAttrs(styleNodeAttrs, normalizedSpacing, normalizedIndent);
-      if (styleNodeAttrs.styleId == null && paragraphProps.styleId) {
-        styleNode.styleId = paragraphProps.styleId as string;
-      }
-      const resolved = resolveStyle(styleNode, styleContext);
-      baseRunDefaults = {
-        fontFamily: resolved.character.font?.family,
-        fontSizePx: ptToPx(resolved.character.font?.size),
-        color: resolved.character.color,
-        bold: resolved.character.font?.weight != null ? resolved.character.font.weight >= 600 : undefined,
-        italic: resolved.character.font?.italic,
-        underline: resolved.character.underline
-          ? {
-              style: resolved.character.underline.style,
-              color: resolved.character.underline.color,
-            }
-          : undefined,
-        letterSpacing: ptToPx(resolved.character.letterSpacing),
-      };
-    }
-  } catch {
-    baseRunDefaults = {};
-  }
-  const paragraphAttrs = computeParagraphAttrs(
-    para,
-    styleContext,
-    listCounterContext,
-    converterContext,
-    paragraphHydration,
-  );
-  if (paragraphAttrs && (!Array.isArray(paragraphAttrs.tabs) || paragraphAttrs.tabs.length === 0)) {
-    const rawTabs = para.attrs?.tabs ?? para.attrs?.tabStops ?? paragraphProps.tabStops ?? paragraphProps.tabs;
-    const normalizedTabs = normalizeOoxmlTabs(rawTabs);
-    if (normalizedTabs && normalizedTabs.length > 0) {
-      paragraphAttrs.tabs = normalizedTabs;
-    }
-  }
-
-  if (paragraphAttrs?.spacing) {
-    const spacing = { ...(paragraphAttrs.spacing as Record<string, unknown>) };
-    const effectiveFontSize = baseRunDefaults.fontSizePx ?? defaultSize;
-    const isList = Boolean(paragraphAttrs.numberingProperties);
-    if (spacing.beforeAutospacing) {
-      spacing.before = isList ? 0 : Math.max(0, Number(spacing.before ?? 0) + effectiveFontSize * 0.5);
-    }
-    if (spacing.afterAutospacing) {
-      spacing.after = isList ? 0 : Math.max(0, Number(spacing.after ?? 0) + effectiveFontSize * 0.5);
-    }
-    paragraphAttrs.spacing = spacing as ParagraphAttrs['spacing'];
-  }
-
-  // Update marker font from first text run if paragraph has numbering
-  // BUT only when the numbering level doesn't explicitly define marker font properties.
-  // This matches MS Word behavior: explicit <w:rFonts> in numbering.xml takes precedence,
-  // otherwise markers inherit font from first text run.
-  if (paragraphAttrs?.numberingProperties && paragraphAttrs?.wordLayout) {
-    const numberingProps = paragraphAttrs.numberingProperties as Record<string, unknown>;
-    const resolvedMarkerRpr = numberingProps.resolvedMarkerRpr as Record<string, unknown> | undefined;
-    // Check if numbering level explicitly defined font properties
-    const hasExplicitMarkerFont = resolvedMarkerRpr?.fontFamily != null;
-    const hasExplicitMarkerSize = resolvedMarkerRpr?.fontSize != null;
-
-    const firstRunFont = extractFirstTextRunFont(para);
-    if (firstRunFont) {
-      const wordLayout = paragraphAttrs.wordLayout as Record<string, unknown>;
-      const marker = wordLayout.marker as Record<string, unknown> | undefined;
-      if (marker?.run) {
-        const markerRun = marker.run as Record<string, unknown>;
-        // Only override with first text run's font if numbering level didn't explicitly define it
-        // fontSizePx is already converted to pixels by extractFirstTextRunFont
-        if (!hasExplicitMarkerSize && firstRunFont.fontSizePx != null && Number.isFinite(firstRunFont.fontSizePx)) {
-          markerRun.fontSize = firstRunFont.fontSizePx;
-        }
-        if (!hasExplicitMarkerFont && firstRunFont.fontFamily) {
-          markerRun.fontFamily = firstRunFont.fontFamily;
-        }
-      }
-    }
-  }
-
-  const linkedStyleResolver = createLinkedStyleResolver(converterContext?.linkedStyles);
   const blocks: FlowBlock[] = [];
   const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
   const rawParagraphProps =
@@ -1082,7 +611,7 @@ export function paragraphToFlowBlocks(
   const hasSectPr = Boolean(rawParagraphProps?.sectPr);
   const isSectPrMarker = hasSectPr || paraAttrs.pageBreakSource === 'sectPr';
 
-  if (hasPageBreakBefore(para)) {
+  if (paragraphAttrs.pageBreakBefore) {
     blocks.push({
       kind: 'pageBreak',
       id: nextBlockId('pageBreak'),
@@ -1091,7 +620,7 @@ export function paragraphToFlowBlocks(
   }
 
   if (!para.content || para.content.length === 0) {
-    if (paragraphHiddenByVanish) {
+    if (paragraphProps.runProperties?.vanish) {
       return blocks;
     }
     // Get the PM position of the empty paragraph for caret rendering
@@ -1107,9 +636,7 @@ export function paragraphToFlowBlocks(
       emptyRun.pmStart = paraPos.start + 1;
       emptyRun.pmEnd = paraPos.start + 1;
     }
-    applyBaseRunDefaults(emptyRun, baseRunDefaults, defaultFont, defaultSize);
-    applyParagraphMarkRunProps(emptyRun, paragraphProps, converterContext);
-    let emptyParagraphAttrs = cloneParagraphAttrs(paragraphAttrs);
+    let emptyParagraphAttrs = deepClone(paragraphAttrs);
     if (isSectPrMarker) {
       if (emptyParagraphAttrs) {
         emptyParagraphAttrs.sectPrMarker = true;
@@ -1121,7 +648,7 @@ export function paragraphToFlowBlocks(
       kind: 'paragraph',
       id: baseBlockId,
       runs: [emptyRun],
-      attrs: emptyParagraphAttrs,
+      attrs: deepClone(paragraphAttrs),
     });
     return blocks;
   }
@@ -1184,36 +711,16 @@ export function paragraphToFlowBlocks(
       kind: 'paragraph',
       id: nextId(),
       runs,
-      attrs: cloneParagraphAttrs(paragraphAttrs),
+      attrs: deepClone(paragraphAttrs),
     });
     partIndex += 1;
-  };
-
-  const getInlineStyleId = (marks: PMMark[] = []): string | null => {
-    const mark = marks.find(
-      (m) => m?.type === 'textStyle' && typeof m.attrs?.styleId === 'string' && m.attrs.styleId.trim(),
-    );
-    return mark ? (mark.attrs!.styleId as string) : null;
-  };
-
-  const applyRunStyles = (run: TextRun, inlineStyleId: string | null, runStyleId: string | null) => {
-    if (!linkedStyleResolver) return;
-    applyLinkedStyleToRun(run, {
-      resolver: linkedStyleResolver,
-      paragraphStyleId,
-      inlineStyleId,
-      runStyleId,
-      defaultFont,
-      defaultSize,
-    });
   };
 
   const visitNode = (
     node: PMNode,
     inheritedMarks: PMMark[] = [],
     activeSdt?: SdtMetadata,
-    activeRunStyleId: string | null = null,
-    activeRunProperties?: Record<string, unknown> | null,
+    activeRunProperties?: RunProperties,
     activeHidden = false,
   ) => {
     if (node.type === 'footnoteReference') {
@@ -1223,7 +730,7 @@ export function paragraphToFlowBlocks(
       const displayId = resolveFootnoteDisplayNumber(id) ?? id ?? '*';
       const displayText = toSuperscriptDigits(displayId);
 
-      const run = textNodeToRun(
+      let run = textNodeToRun(
         { type: 'text', text: displayText } as PMNode,
         positions,
         defaultFont,
@@ -1233,10 +740,8 @@ export function paragraphToFlowBlocks(
         hyperlinkConfig,
         themeColors,
       );
-      const inlineStyleId = getInlineStyleId(mergedMarks);
-      applyRunStyles(run, inlineStyleId, activeRunStyleId);
-      applyBaseRunDefaults(run, baseRunDefaults, defaultFont, defaultSize);
       applyMarksToRun(run, mergedMarks, hyperlinkConfig, themeColors);
+      run = applyInlineRunProperties(run, activeRunProperties, converterContext);
 
       // Copy PM positions from the parent footnoteReference node
       if (refPos) {
@@ -1254,15 +759,9 @@ export function paragraphToFlowBlocks(
     }
 
     if (node.type === 'text' && node.text) {
-      // Apply styles in correct priority order:
-      // 1. Create run with defaults (lowest priority) - textNodeToRun with empty marks
-      // 2. Apply linked styles from paragraph/character styles (medium priority)
-      // 3. Apply base run defaults (medium-high priority)
-      // 4. Apply marks ONCE (highest priority) - inline marks override everything
-      //
       // Pass empty array to textNodeToRun to prevent double mark application.
       // Marks will be applied AFTER linked styles to ensure proper priority.
-      const run = textNodeToRun(
+      let run = textNodeToRun(
         node,
         positions,
         defaultFont,
@@ -1272,10 +771,6 @@ export function paragraphToFlowBlocks(
         hyperlinkConfig,
         themeColors,
       );
-      const inlineStyleId = getInlineStyleId(inheritedMarks);
-      applyRunStyles(run, inlineStyleId, activeRunStyleId);
-      applyBaseRunDefaults(run, baseRunDefaults, defaultFont, defaultSize);
-      applyInlineRunProperties(run, activeRunProperties);
       // Apply marks ONCE here - this ensures they override linked styles
       applyMarksToRun(
         run,
@@ -1285,27 +780,29 @@ export function paragraphToFlowBlocks(
         converterContext?.backgroundColor,
         enableComments,
       );
+      run = applyInlineRunProperties(run, activeRunProperties, converterContext);
       currentRuns.push(run);
       return;
     }
 
     if (node.type === 'run' && Array.isArray(node.content)) {
       const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
-      const runProperties =
-        typeof node.attrs?.runProperties === 'object' && node.attrs.runProperties !== null
-          ? (node.attrs.runProperties as Record<string, unknown>)
-          : null;
-      const runVanish = getVanishValue(runProperties);
+      const runProperties = (node.attrs?.runProperties ?? {}) as RunProperties;
+      const runVanish = runProperties?.vanish;
       const nextHidden = runVanish === undefined ? activeHidden : runVanish;
       if (nextHidden) {
         suppressedByVanish = true;
         return;
       }
-      const nextRunStyleId = extractRunStyleId(runProperties) ?? activeRunStyleId;
-      const nextRunProperties = runProperties ?? activeRunProperties;
-      node.content.forEach((child) =>
-        visitNode(child, mergedMarks, activeSdt, nextRunStyleId, nextRunProperties, nextHidden),
+      const resolvedRunProperties = resolveRunProperties(
+        converterContext!,
+        runProperties,
+        resolvedParagraphProperties,
+        converterContext!.tableInfo,
+        false,
+        false,
       );
+      node.content.forEach((child) => visitNode(child, mergedMarks, activeSdt, resolvedRunProperties, nextHidden));
       return;
     }
 
@@ -1313,9 +810,7 @@ export function paragraphToFlowBlocks(
     if (node.type === 'structuredContent' && Array.isArray(node.content)) {
       const inlineMetadata = resolveNodeSdtMetadata(node, 'structuredContent');
       const nextSdt = inlineMetadata ?? activeSdt;
-      node.content.forEach((child) =>
-        visitNode(child, inheritedMarks, nextSdt, activeRunStyleId, activeRunProperties, activeHidden),
-      );
+      node.content.forEach((child) => visitNode(child, inheritedMarks, nextSdt, activeRunProperties, activeHidden));
       return;
     }
 
@@ -1370,12 +865,16 @@ export function paragraphToFlowBlocks(
       const bookmarkId = bookmarkMatch ? bookmarkMatch[1] : '';
 
       // If we have a bookmark ID, create a token run for dynamic resolution
+      let runProperties = {};
       if (bookmarkId) {
         // Check if there's materialized content (pre-baked page number from Word)
         let fallbackText = '??'; // Default placeholder if resolution fails
         if (Array.isArray(node.content) && node.content.length > 0) {
           // Extract text from children as fallback
           const extractText = (n: PMNode): string => {
+            if (n.type === 'run') {
+              runProperties = n.attrs?.runProperties ?? {};
+            }
             if (n.type === 'text' && n.text) return n.text;
             if (Array.isArray(n.content)) {
               return n.content.map(extractText).join('');
@@ -1390,7 +889,7 @@ export function paragraphToFlowBlocks(
         const pageRefPos = positions.get(node);
         // Pass empty marks to textNodeToRun to prevent double mark application.
         // Marks will be applied AFTER linked styles to ensure proper priority and honor enableComments.
-        const tokenRun = textNodeToRun(
+        let tokenRun = textNodeToRun(
           { type: 'text', text: fallbackText } as PMNode,
           positions,
           defaultFont,
@@ -1400,10 +899,14 @@ export function paragraphToFlowBlocks(
           hyperlinkConfig,
           themeColors,
         );
-        const inlineStyleId = getInlineStyleId(mergedMarks);
-        applyRunStyles(tokenRun, inlineStyleId, activeRunStyleId);
-        applyBaseRunDefaults(tokenRun, baseRunDefaults, defaultFont, defaultSize);
-        applyInlineRunProperties(tokenRun, activeRunProperties);
+        const resolvedRunProperties = resolveRunProperties(
+          converterContext!,
+          runProperties,
+          resolvedParagraphProperties,
+          null,
+          false,
+          false,
+        );
         // Apply marks ONCE here - this ensures they override linked styles and honor enableComments
         applyMarksToRun(
           tokenRun,
@@ -1413,6 +916,7 @@ export function paragraphToFlowBlocks(
           converterContext?.backgroundColor,
           enableComments,
         );
+        tokenRun = applyInlineRunProperties(tokenRun, resolvedRunProperties, converterContext);
         // Copy PM positions from parent pageReference node
         if (pageRefPos) {
           (tokenRun as TextRun).pmStart = pageRefPos.start;
@@ -1429,9 +933,7 @@ export function paragraphToFlowBlocks(
         currentRuns.push(tokenRun);
       } else if (Array.isArray(node.content)) {
         // No bookmark found, fall back to treating as transparent container
-        node.content.forEach((child) =>
-          visitNode(child, mergedMarks, activeSdt, activeRunStyleId, activeRunProperties),
-        );
+        node.content.forEach((child) => visitNode(child, mergedMarks, activeSdt, activeRunProperties));
       }
       return;
     }
@@ -1449,15 +951,13 @@ export function paragraphToFlowBlocks(
       }
       // Process any content inside the bookmark (usually empty)
       if (Array.isArray(node.content)) {
-        node.content.forEach((child) =>
-          visitNode(child, inheritedMarks, activeSdt, activeRunStyleId, activeRunProperties),
-        );
+        node.content.forEach((child) => visitNode(child, inheritedMarks, activeSdt, activeRunProperties));
       }
       return;
     }
 
     if (node.type === 'tab') {
-      const tabRun = tabNodeToRun(node, positions, tabOrdinal, para, inheritedMarks);
+      const tabRun = tabNodeToRun(node, positions, tabOrdinal, paragraphAttrs, inheritedMarks);
       tabOrdinal += 1;
       if (tabRun) {
         currentRuns.push(tabRun);
@@ -1472,7 +972,7 @@ export function paragraphToFlowBlocks(
         const nodeMarks = node.marks ?? [];
         const effectiveMarks = nodeMarks.length > 0 ? nodeMarks : marksAsAttrs;
         const mergedMarks = [...effectiveMarks, ...(inheritedMarks ?? [])];
-        const tokenRun = tokenNodeToRun(
+        let tokenRun = tokenNodeToRun(
           node,
           positions,
           defaultFont,
@@ -1485,9 +985,6 @@ export function paragraphToFlowBlocks(
         if (activeSdt) {
           (tokenRun as TextRun).sdt = activeSdt;
         }
-        const inlineStyleId = getInlineStyleId(inheritedMarks);
-        applyRunStyles(tokenRun as TextRun, inlineStyleId, activeRunStyleId);
-        applyBaseRunDefaults(tokenRun as TextRun, baseRunDefaults, defaultFont, defaultSize);
         if (mergedMarks.length > 0) {
           applyMarksToRun(
             tokenRun as TextRun,
@@ -1498,7 +995,14 @@ export function paragraphToFlowBlocks(
             enableComments,
           );
         }
-        applyInlineRunProperties(tokenRun as TextRun, activeRunProperties);
+        console.debug('[token-debug] paragraph-token-run', {
+          token: (tokenRun as TextRun).token,
+          fontFamily: (tokenRun as TextRun).fontFamily,
+          fontSize: (tokenRun as TextRun).fontSize,
+          inlineStyleId: paragraphProps.styleId || null,
+          mergedMarksCount: mergedMarks.length,
+        });
+        tokenRun = applyInlineRunProperties(tokenRun as TextRun, activeRunProperties, converterContext);
         currentRuns.push(tokenRun);
       }
       return;
@@ -1725,12 +1229,12 @@ export function paragraphToFlowBlocks(
   };
 
   para.content.forEach((child) => {
-    visitNode(child, [], undefined, null, undefined);
+    visitNode(child, [], undefined, undefined);
   });
   flushParagraph();
 
   const hasParagraphBlock = blocks.some((block) => block.kind === 'paragraph');
-  if (!hasParagraphBlock && !suppressedByVanish && !paragraphHiddenByVanish) {
+  if (!hasParagraphBlock && !suppressedByVanish && !paragraphProps.runProperties?.vanish) {
     blocks.push({
       kind: 'paragraph',
       id: baseBlockId,
@@ -1741,7 +1245,7 @@ export function paragraphToFlowBlocks(
           fontSize: defaultSize,
         },
       ],
-      attrs: cloneParagraphAttrs(paragraphAttrs),
+      attrs: deepClone(paragraphAttrs),
     });
   }
 
@@ -1804,7 +1308,6 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -1828,7 +1331,6 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     }
   }
 
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
   const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
   if (!paragraphToFlowBlocks) {
     return;
@@ -1841,7 +1343,6 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     defaultFont,
     defaultSize,
     styleContext,
-    { getListCounter, incrementListCounter, resetListCounter },
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

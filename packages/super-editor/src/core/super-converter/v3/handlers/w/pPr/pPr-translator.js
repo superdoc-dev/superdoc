@@ -39,7 +39,7 @@ import { translator as wRPrTranslator } from '../rpr';
 
 // Property translators for w:pPr child elements
 // Each translator handles a specific property of the paragraph properties
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   mcAlternateContentTranslator,
   wAdjustRightIndTranslator,

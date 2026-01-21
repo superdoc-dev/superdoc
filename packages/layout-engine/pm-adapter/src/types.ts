@@ -3,17 +3,12 @@
  */
 
 import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta, Engines } from '@superdoc/contracts';
-import type {
-  StyleContext as StyleEngineContext,
-  StyleNode as StyleEngineNode,
-  ComputedParagraphStyle,
-} from '@superdoc/style-engine';
+import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
 export type { ConverterContext } from './converter-context.js';
 
 export type StyleContext = StyleEngineContext;
-export type StyleNode = StyleEngineNode;
 export type { ComputedParagraphStyle };
 
 export type ThemeColorPalette = Record<string, string>;
@@ -280,9 +275,6 @@ export interface NodeHandlerContext {
   styleContext: StyleContext;
   converterContext?: ConverterContext;
 
-  // List counters
-  listCounterContext: ListCounterContext;
-
   // Tracked changes & hyperlinks
   trackedChangesConfig: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
@@ -313,11 +305,6 @@ export type NodeHandler = (node: PMNode, context: NodeHandlerContext) => void;
 /**
  * List counter context for numbering
  */
-export type ListCounterContext = {
-  getListCounter: (numId: number, ilvl: number) => number;
-  incrementListCounter: (numId: number, ilvl: number) => number;
-  resetListCounter: (numId: number, ilvl: number) => void;
-};
 
 export type ParagraphToFlowBlocksConverter = (
   para: PMNode,
@@ -326,7 +313,6 @@ export type ParagraphToFlowBlocksConverter = (
   defaultFont: string,
   defaultSize: number,
   styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
   trackedChanges?: TrackedChangesConfig,
   bookmarks?: Map<string, number>,
   hyperlinkConfig?: HyperlinkConfig,
@@ -349,7 +335,6 @@ export type DrawingNodeToBlockConverter = (
 ) => FlowBlock | null;
 
 export type TableNodeToBlockOptions = {
-  listCounterContext?: ListCounterContext;
   converters?: NestedConverters;
 };
 
@@ -384,11 +369,11 @@ export type NestedConverters = {
  * List rendering attributes
  */
 export type ListRenderingAttrs = {
-  markerText?: string;
-  justification?: 'left' | 'right' | 'center';
-  path?: number[];
-  numberingType?: string;
-  suffix?: 'tab' | 'space' | 'nothing';
+  markerText: string;
+  justification: 'left' | 'right' | 'center';
+  path: number[];
+  numberingType: string;
+  suffix: 'tab' | 'space' | 'nothing';
 };
 
 /**

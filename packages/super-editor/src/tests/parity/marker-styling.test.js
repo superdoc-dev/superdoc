@@ -2,11 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import { computeParagraphReferenceSnapshot } from '@tests/helpers/paragraphReference.js';
 import { computeParagraphAttrs } from '@superdoc/pm-adapter/attributes/paragraph.js';
-import {
-  buildStyleContextFromEditor,
-  buildConverterContextFromEditor,
-  createListCounterContext,
-} from '../helpers/adapterTestHelpers.js';
+import { buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
 
 const findParagraphAt = (doc, predicate) => {
   let match = null;
@@ -44,17 +40,15 @@ describe('marker styling parity', () => {
     expect(reference.list).not.toBeNull();
 
     // Get adapter attrs with wordLayout
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const listCounterContext = createListCounterContext();
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, listCounterContext, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
-    expect(adapterAttrs?.wordLayout).toBeDefined();
-    expect(adapterAttrs?.wordLayout?.marker).toBeDefined();
+    expect(paragraphAttrs?.wordLayout).toBeDefined();
+    expect(paragraphAttrs?.wordLayout?.marker).toBeDefined();
 
     // Compare marker text
     if (reference.list.markerText) {
-      expect(adapterAttrs.wordLayout.marker.markerText).toBe(reference.list.markerText);
+      expect(paragraphAttrs.wordLayout.marker.markerText).toBe(reference.list.markerText);
     }
 
     editor.destroy();
@@ -72,14 +66,12 @@ describe('marker styling parity', () => {
     expect(match).toBeTruthy();
 
     const reference = computeParagraphReferenceSnapshot(editor, match.node, match.pos);
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const listCounterContext = createListCounterContext();
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, listCounterContext, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Compare justification
     if (reference.list?.justification) {
-      expect(adapterAttrs?.wordLayout?.marker?.justification).toBe(reference.list.justification);
+      expect(paragraphAttrs?.wordLayout?.marker?.justification).toBe(reference.list.justification);
     }
 
     editor.destroy();
@@ -97,14 +89,12 @@ describe('marker styling parity', () => {
     expect(match).toBeTruthy();
 
     const reference = computeParagraphReferenceSnapshot(editor, match.node, match.pos);
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const listCounterContext = createListCounterContext();
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, listCounterContext, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Compare suffix
     if (reference.list?.suffix) {
-      expect(adapterAttrs?.wordLayout?.marker?.suffix).toBe(reference.list.suffix);
+      expect(paragraphAttrs?.wordLayout?.marker?.suffix).toBe(reference.list.suffix);
     }
 
     editor.destroy();
@@ -122,14 +112,12 @@ describe('marker styling parity', () => {
     expect(match).toBeTruthy();
 
     const reference = computeParagraphReferenceSnapshot(editor, match.node, match.pos);
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const listCounterContext = createListCounterContext();
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, listCounterContext, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Compare run properties
     const referenceRun = reference.list?.markerRunProps;
-    const wordLayoutRun = adapterAttrs?.wordLayout?.marker?.run;
+    const wordLayoutRun = paragraphAttrs?.wordLayout?.marker?.run;
 
     if (referenceRun && wordLayoutRun) {
       if (referenceRun.color) {
@@ -167,15 +155,13 @@ describe('marker styling parity', () => {
     expect(match).toBeTruthy();
 
     const reference = computeParagraphReferenceSnapshot(editor, match.node, match.pos);
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const listCounterContext = createListCounterContext();
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, listCounterContext, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // The reference has markerCss from encodeCSSFromRPr
     // The wordLayout.marker.run should have equivalent styling properties
     const referenceCss = reference.list?.markerCss;
-    const wordLayoutRun = adapterAttrs?.wordLayout?.marker?.run;
+    const wordLayoutRun = paragraphAttrs?.wordLayout?.marker?.run;
 
     if (referenceCss && wordLayoutRun) {
       if (referenceCss.fontFamily) {
@@ -197,19 +183,33 @@ describe('marker styling parity', () => {
       type: { name: 'paragraph' },
       attrs: {
         listRendering: { markerText: '1.', justification: 'right', suffix: 'tab' },
-        paragraphProperties: {},
+        paragraphProperties: {
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
+    const converterContext = {
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: {}, paragraphProperties: {} },
+        latentStyles: {},
+        styles: {
+          Normal: {
+            styleId: 'Normal',
+            type: 'paragraph',
+            default: true,
+            name: 'Normal',
+            runProperties: {},
+            paragraphProperties: {},
+          },
+        },
+      },
     };
 
-    const adapterAttrs = computeParagraphAttrs(mockListPara, styleContext, createListCounterContext());
+    const { paragraphAttrs } = computeParagraphAttrs(mockListPara, converterContext);
 
-    // When listRendering is present, wordLayout should be computed even without numberingProperties
-    expect(adapterAttrs?.wordLayout).toBeDefined();
-    expect(adapterAttrs?.wordLayout?.marker?.markerText).toBe('1.');
+    expect(paragraphAttrs?.wordLayout).toBeDefined();
+    expect(paragraphAttrs?.wordLayout?.marker?.markerText).toBe('1.');
   });
 });

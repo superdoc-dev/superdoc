@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { createDocumentJson } from '@core/super-converter/v2/importer/docxImporter';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 
+const minimalStylesXml =
+  '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+  '<w:docDefaults>' +
+  '<w:rPrDefault><w:rPr/></w:rPrDefault>' +
+  '<w:pPrDefault><w:pPr/></w:pPrDefault>' +
+  '</w:docDefaults>' +
+  '<w:style w:type="paragraph" w:styleId="Normal">' +
+  '<w:name w:val="Normal"/>' +
+  '<w:qFormat/>' +
+  '<w:pPr/>' +
+  '<w:rPr/>' +
+  '</w:style>' +
+  '</w:styles>';
+
 const collectNodeTypes = (node, types = []) => {
   if (!node) return types;
   if (typeof node.type === 'string') types.push(node.type);
@@ -48,6 +62,7 @@ describe('footnotes import', () => {
     const docx = {
       'word/document.xml': parseXmlToJson(documentXml),
       'word/footnotes.xml': parseXmlToJson(footnotesXml),
+      'word/styles.xml': parseXmlToJson(minimalStylesXml),
     };
 
     const converter = { headers: {}, footers: {}, headerIds: {}, footerIds: {}, docHiglightColors: new Set() };

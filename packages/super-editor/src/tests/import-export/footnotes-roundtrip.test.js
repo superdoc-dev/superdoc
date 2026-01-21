@@ -12,6 +12,20 @@ import { carbonCopy } from '@core/utilities/carbonCopy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCX_FIXTURE_NAME = 'basic-footnotes.docx';
+const minimalStylesXml = parseXmlToJson(
+  '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:docDefaults>' +
+    '<w:rPrDefault><w:rPr/></w:rPrDefault>' +
+    '<w:pPrDefault><w:pPr/></w:pPrDefault>' +
+    '</w:docDefaults>' +
+    '<w:style w:type="paragraph" w:styleId="Normal">' +
+    '<w:name w:val="Normal"/>' +
+    '<w:qFormat/>' +
+    '<w:pPr/>' +
+    '<w:rPr/>' +
+    '</w:style>' +
+    '</w:styles>',
+);
 
 // ============================================
 // Helper Functions
@@ -566,6 +580,7 @@ describe('customMarkFollows attribute', () => {
     const docx = {
       'word/document.xml': documentXml,
       'word/footnotes.xml': footnotesXml,
+      'word/styles.xml': minimalStylesXml,
     };
 
     // Import using createDocumentJson
@@ -617,6 +632,7 @@ describe('w:footnotePr properties', () => {
     const docx = {
       'word/document.xml': documentXml,
       'word/settings.xml': settingsXml,
+      'word/styles.xml': minimalStylesXml,
     };
 
     const { createDocumentJson } = await import('@converter/v2/importer/docxImporter.js');
@@ -648,6 +664,7 @@ describe('w:footnotePr properties', () => {
 
     const docx = {
       'word/document.xml': documentXml,
+      'word/styles.xml': minimalStylesXml,
     };
 
     const { createDocumentJson } = await import('@converter/v2/importer/docxImporter.js');
@@ -681,6 +698,7 @@ describe('w:footnotePr properties', () => {
     const docx = {
       'word/document.xml': documentXml,
       'word/settings.xml': settingsXml,
+      'word/styles.xml': minimalStylesXml,
     };
 
     const { createDocumentJson } = await import('@converter/v2/importer/docxImporter.js');

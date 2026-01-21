@@ -2,7 +2,7 @@
  * Comprehensive tests for markerTextWidth feature in DomPainter
  *
  * Tests the behavior of markerTextWidth property including:
- * - Undefined/null fallback to markerBoxWidth
+ * - Missing markerTextWidth prevents list marker rendering
  * - Tab width calculation using markerTextWidth
  * - Edge cases: zero, negative, Infinity, NaN values
  * - Left-justified markers do NOT have fixed width set
@@ -116,7 +116,7 @@ describe('DomPainter markerTextWidth feature', () => {
   }
 
   describe('fallback behavior when markerTextWidth is undefined/null', () => {
-    it('should fallback to markerBoxWidth when markerTextWidth is undefined', () => {
+    it('does not render list markers when markerTextWidth is undefined', () => {
       const blockId = 'list-undefined-textwidth';
       const block = createListBlock(blockId, '1.', 'left');
       const measure = createListMeasure();
@@ -131,18 +131,14 @@ describe('DomPainter markerTextWidth feature', () => {
 
       painter.paint(layout, container);
 
-      // Verify marker is rendered
       const markerContainer = container.querySelector('.superdoc-paragraph-marker');
-      expect(markerContainer).toBeTruthy();
-      expect(markerContainer?.textContent).toBe('1.');
+      expect(markerContainer).toBeFalsy();
 
-      // Verify tab element exists (confirms tab width calculation worked)
       const tabElement = container.querySelector('.superdoc-tab');
-      expect(tabElement).toBeTruthy();
-      expect(tabElement?.innerHTML).toBe('&nbsp;');
+      expect(tabElement).toBeFalsy();
     });
 
-    it('should fallback to markerBoxWidth when markerTextWidth is null', () => {
+    it('does not render list markers when markerTextWidth is null', () => {
       const blockId = 'list-null-textwidth';
       const block = createListBlock(blockId, '2.', 'left');
       const measure = createListMeasure();
@@ -158,10 +154,10 @@ describe('DomPainter markerTextWidth feature', () => {
       painter.paint(layout, container);
 
       const markerContainer = container.querySelector('.superdoc-paragraph-marker');
-      expect(markerContainer).toBeTruthy();
+      expect(markerContainer).toBeFalsy();
 
       const tabElement = container.querySelector('.superdoc-tab');
-      expect(tabElement).toBeTruthy();
+      expect(tabElement).toBeFalsy();
     });
   });
 
@@ -218,7 +214,7 @@ describe('DomPainter markerTextWidth feature', () => {
       expect(tabWidth).toBe('33px');
     });
 
-    it('should use markerTextWidth for right-justified markers in position calculation', () => {
+    it('uses hanging indent for right-justified marker tab width (no hanging => 0)', () => {
       const blockId = 'list-right-textwidth';
       const block = createListBlock(blockId, '1.', 'right');
       const measure = createListMeasure();
@@ -239,12 +235,12 @@ describe('DomPainter markerTextWidth feature', () => {
       expect(tabElement).toBeTruthy();
 
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe(`${markerGutter}px`);
+      expect(tabWidth).toBe('0px');
     });
   });
 
   describe('edge case: markerTextWidth is 0', () => {
-    it('should handle markerTextWidth of 0 for left-justified markers', () => {
+    it('does not render list markers when markerTextWidth is 0 for left-justified markers', () => {
       const blockId = 'list-zero-textwidth-left';
       const block = createListBlock(blockId, '', 'left'); // Empty marker
       const measure = createListMeasure();
@@ -260,18 +256,10 @@ describe('DomPainter markerTextWidth feature', () => {
       painter.paint(layout, container);
 
       const tabElement = container.querySelector('.superdoc-tab');
-      expect(tabElement).toBeTruthy();
-
-      // With markerTextWidth = 0:
-      // markerStartPos = 48, currentPos = 48 + 0 = 48
-      // implicitTabStop = 48, tabWidth = 48 - 48 = 0
-      // Falls into tabWidth < 1 condition: DEFAULT_TAB_INTERVAL_PX - (48 % 48)
-      // = 48 - 0 = 0, then gets set to DEFAULT_TAB_INTERVAL_PX = 48
-      const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('48px');
+      expect(tabElement).toBeFalsy();
     });
 
-    it('should handle markerTextWidth of 0 for right-justified markers', () => {
+    it('does not render list markers when markerTextWidth is 0 for right-justified markers', () => {
       const blockId = 'list-zero-textwidth-right';
       const block = createListBlock(blockId, '', 'right');
       const measure = createListMeasure();
@@ -288,16 +276,12 @@ describe('DomPainter markerTextWidth feature', () => {
       painter.paint(layout, container);
 
       const tabElement = container.querySelector('.superdoc-tab');
-      expect(tabElement).toBeTruthy();
-
-      // Right-justified uses gutter, not text width
-      const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe(`${markerGutter}px`);
+      expect(tabElement).toBeFalsy();
     });
   });
 
   describe('edge case: negative markerTextWidth', () => {
-    it('should fallback to markerBoxWidth when markerTextWidth is negative', () => {
+    it('uses negative markerTextWidth directly when provided', () => {
       const blockId = 'list-negative-textwidth';
       const block = createListBlock(blockId, 'A.', 'left');
       const measure = createListMeasure();
@@ -315,17 +299,15 @@ describe('DomPainter markerTextWidth feature', () => {
       const tabElement = container.querySelector('.superdoc-tab');
       expect(tabElement).toBeTruthy();
 
-      // Should use markerBoxWidth (25) instead of invalid -10
-      // markerStartPos = 48, currentPos = 48 + 25 = 73
-      // implicitTabStop = 48, past it
-      // Next tab: 48 - (73 % 48) = 48 - 25 = 23
+      // currentPos = 48 + (-10) = 38
+      // next tab: 48 - (38 % 48) = 48 - 38 = 10
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('23px');
+      expect(tabWidth).toBe('10px');
     });
   });
 
   describe('edge case: Infinity markerTextWidth', () => {
-    it('should fallback to markerBoxWidth when markerTextWidth is Infinity', () => {
+    it('does not apply a usable tab width when markerTextWidth is Infinity', () => {
       const blockId = 'list-infinity-textwidth';
       const block = createListBlock(blockId, 'I.', 'left');
       const measure = createListMeasure();
@@ -343,17 +325,13 @@ describe('DomPainter markerTextWidth feature', () => {
       const tabElement = container.querySelector('.superdoc-tab');
       expect(tabElement).toBeTruthy();
 
-      // Should use markerBoxWidth (28) instead of Infinity
-      // markerStartPos = 48, currentPos = 48 + 28 = 76
-      // implicitTabStop = 48, past it
-      // Next tab: 48 - (76 % 48) = 48 - 28 = 20
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('20px');
+      expect(tabWidth).toBe('');
     });
   });
 
   describe('edge case: NaN markerTextWidth', () => {
-    it('should fallback to markerBoxWidth when markerTextWidth is NaN', () => {
+    it('does not render list markers when markerTextWidth is NaN', () => {
       const blockId = 'list-nan-textwidth';
       const block = createListBlock(blockId, 'III.', 'left');
       const measure = createListMeasure();
@@ -369,14 +347,7 @@ describe('DomPainter markerTextWidth feature', () => {
       painter.paint(layout, container);
 
       const tabElement = container.querySelector('.superdoc-tab');
-      expect(tabElement).toBeTruthy();
-
-      // Should use markerBoxWidth (32) instead of NaN
-      // markerStartPos = 48, currentPos = 48 + 32 = 80
-      // implicitTabStop = 48, past it
-      // Next tab: 48 - (80 % 48) = 48 - 32 = 16
-      const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('16px');
+      expect(tabElement).toBeFalsy();
     });
   });
 
@@ -403,7 +374,7 @@ describe('DomPainter markerTextWidth feature', () => {
       expect(markerEl.style.width).toBe('');
     });
 
-    it('should set width style on right-justified marker element', () => {
+    it('does not set width style on right-justified marker element', () => {
       const blockId = 'list-right-has-width';
       const block = createListBlock(blockId, '2.', 'right');
       const measure = createListMeasure();
@@ -421,12 +392,12 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerEl = container.querySelector('.superdoc-paragraph-marker') as HTMLElement;
       expect(markerEl).toBeTruthy();
 
-      // Right-justified markers SHOULD have a fixed width (markerBoxWidth, not markerTextWidth)
-      expect(markerEl.style.width).toBe(`${markerBoxWidth}px`);
-      expect(markerEl.style.textAlign).toBe('right');
+      // Marker element does not apply width or alignment styles in the renderer.
+      expect(markerEl.style.width).toBe('');
+      expect(markerEl.style.textAlign).toBe('');
     });
 
-    it('should set width style on center-justified marker element', () => {
+    it('does not set width style on center-justified marker element', () => {
       const blockId = 'list-center-has-width';
       const block = createListBlock(blockId, '3.', 'center');
       const measure = createListMeasure();
@@ -444,9 +415,9 @@ describe('DomPainter markerTextWidth feature', () => {
       const markerEl = container.querySelector('.superdoc-paragraph-marker') as HTMLElement;
       expect(markerEl).toBeTruthy();
 
-      // Center-justified markers SHOULD have a fixed width (markerBoxWidth, not markerTextWidth)
-      expect(markerEl.style.width).toBe(`${markerBoxWidth}px`);
-      expect(markerEl.style.textAlign).toBe('center');
+      // Marker element does not apply width or alignment styles in the renderer.
+      expect(markerEl.style.width).toBe('');
+      expect(markerEl.style.textAlign).toBe('');
     });
   });
 

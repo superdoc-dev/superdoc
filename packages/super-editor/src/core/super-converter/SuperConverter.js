@@ -197,8 +197,11 @@ class SuperConverter {
     this.xml = params?.xml;
     this.declaration = null;
 
-    // List defs
+    // List defs (deprecated)
     this.numbering = {};
+
+    // Translated numbering definitions
+    this.translatedNumbering = {};
 
     // Processed additional content
     this.numbering = null;
@@ -219,8 +222,11 @@ class SuperConverter {
     this.importedBodyHasFooterRef = false;
     this.headerFooterModified = false;
 
-    // Linked Styles
+    // Linked Styles (deprecated)
     this.linkedStyles = [];
+
+    // Translated linked styles
+    this.translatedLinkedStyles = {};
 
     // This is the JSON schema that we will be working with
     this.json = params?.json;
@@ -928,6 +934,8 @@ class SuperConverter {
       this.comments = result.comments;
       this.footnotes = result.footnotes;
       this.linkedStyles = result.linkedStyles;
+      this.translatedLinkedStyles = result.translatedLinkedStyles;
+      this.translatedNumbering = result.translatedNumbering;
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
 

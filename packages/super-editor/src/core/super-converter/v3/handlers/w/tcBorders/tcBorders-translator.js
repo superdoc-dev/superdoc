@@ -13,7 +13,7 @@ import { translator as tr2blTranslator } from '@converter/v3/handlers/w/tr2bl';
 
 // Property translators for w:tcBorders child elements
 // Each translator handles a specific border property of the table
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   wTopTranslator,
   wStartTranslator,

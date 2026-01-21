@@ -107,7 +107,10 @@ const resolveRunPropertiesFromParagraphStyle = (paragraphNode, editor) => {
   if (!styleId) return {};
 
   try {
-    const params = { docx: editor.converter.convertedXml, numbering: editor.converter.numbering };
+    const params = {
+      translatedNumbering: editor.converter.translatedNumbering,
+      translatedLinkedStyles: editor.converter.translatedLinkedStyles,
+    };
     const resolvedPpr = { styleId };
     const runProps = resolveRunProperties(params, {}, resolvedPpr, false, false);
 

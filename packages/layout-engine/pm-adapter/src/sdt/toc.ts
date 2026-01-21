@@ -11,7 +11,6 @@ import type {
   BlockIdGenerator,
   PositionMap,
   StyleContext,
-  ListCounterContext,
   HyperlinkConfig,
   TrackedChangesConfig,
   NodeHandlerContext,
@@ -96,7 +95,6 @@ export function processTocChildren(
     defaultFont: string;
     defaultSize: number;
     styleContext: StyleContext;
-    listCounterContext?: ListCounterContext;
     bookmarks?: Map<string, number>;
     trackedChanges?: TrackedChangesConfig;
     hyperlinkConfig: HyperlinkConfig;
@@ -112,7 +110,6 @@ export function processTocChildren(
     defaultFont: string,
     defaultSize: number,
     styleContext: StyleContext,
-    listCounterContext?: ListCounterContext,
     trackedChanges?: TrackedChangesConfig,
     bookmarks?: Map<string, number>,
     hyperlinkConfig?: HyperlinkConfig,
@@ -131,7 +128,6 @@ export function processTocChildren(
         context.defaultFont,
         context.defaultSize,
         context.styleContext,
-        context.listCounterContext,
         context.trackedChanges,
         context.bookmarks,
         context.hyperlinkConfig,
@@ -185,13 +181,11 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     converters,
   } = context;
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
   const tocInstruction = getNodeInstruction(node);
   const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
   if (!paragraphToFlowBlocks) {
@@ -207,7 +201,6 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
         defaultFont,
         defaultSize,
         styleContext,
-        { getListCounter, incrementListCounter, resetListCounter },
         trackedChangesConfig,
         bookmarks,
         hyperlinkConfig,

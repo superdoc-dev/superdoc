@@ -210,7 +210,7 @@ describe('table converter', () => {
       expect(result.rows).toHaveLength(1);
     });
 
-    it('forwards listCounterContext into paragraph conversion', () => {
+    it('forwards converterContext into paragraph conversion', () => {
       const node: PMNode = {
         type: 'table',
         content: [
@@ -226,15 +226,11 @@ describe('table converter', () => {
         ],
       };
 
-      const listCounterContext = {
-        getListCounter: vi.fn(),
-        incrementListCounter: vi.fn(),
-        resetListCounter: vi.fn(),
-      };
+      const converterContext = { docx: { foo: 'bar' } } as never;
 
       const paragraphSpy = vi.fn((para, ...args) => {
-        const [, , , , , passedListContext] = args;
-        expect(passedListContext).toBe(listCounterContext);
+        const [, , , , , , , , , passedConverterContext] = args;
+        expect(passedConverterContext).toBe(converterContext);
         return mockParagraphConverter(para);
       });
 
@@ -250,8 +246,7 @@ describe('table converter', () => {
         undefined,
         undefined,
         paragraphSpy,
-        undefined,
-        { listCounterContext },
+        converterContext,
       ) as TableBlock;
 
       expect(result.rows[0].cells[0].blocks?.[0].kind).toBe('paragraph');
@@ -1143,7 +1138,7 @@ describe('table converter', () => {
       expect(mockConverter).toHaveBeenCalled();
       // Verify tracked changes config was passed
       const callArgs = mockConverter.mock.calls[0];
-      expect(callArgs[7]).toEqual(trackedChangesConfig);
+      expect(callArgs[6]).toEqual(trackedChangesConfig);
     });
 
     it('returns null when all rows have no cells', () => {

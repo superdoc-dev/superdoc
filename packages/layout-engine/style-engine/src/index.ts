@@ -10,24 +10,13 @@
  * - Conversion to pixels happens at measurement boundary only
  */
 
-import { toCssFontFamily } from '@superdoc/font-utils';
-
 // Re-export cascade utilities - these are the SINGLE SOURCE OF TRUTH for property merging
 export {
   combineProperties,
   combineRunProperties,
-  applyInlineOverrides,
-  resolveFontSizeWithFallback,
   orderDefaultsAndNormal,
   combineIndentProperties,
-  createFirstLineIndentHandler,
-  createHangingIndentHandler,
-  isValidFontSize,
-  INLINE_OVERRIDE_PROPERTIES,
-  DEFAULT_FONT_SIZE_HALF_POINTS,
   type PropertyObject,
-  type SpecialHandler,
-  type CombinePropertiesOptions,
 } from './cascade.js';
 import type {
   TabStop,
@@ -104,81 +93,9 @@ export interface ComputedParagraphStyle {
   tabs?: TabStop[];
 }
 
-export interface ComputedCharacterStyle {
-  font?: {
-    family: string;
-    size?: number;
-    weight?: number;
-    italic?: boolean;
-  };
-  color?: string;
-  underline?: {
-    style?: 'single' | 'double' | 'dotted' | 'dashed' | 'wavy';
-    color?: string;
-  };
-  strike?: boolean;
-  highlight?: string;
-  letterSpacing?: number;
-}
-
-export interface NumberingStyle {
-  numId: string;
-  level: number;
-  indent?: {
-    left?: number;
-    hanging?: number;
-  };
-  format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'bullet' | 'custom';
-  text?: string;
-  start?: number;
-}
-
-export interface ComputedStyle {
-  paragraph: ComputedParagraphStyle;
-  character: ComputedCharacterStyle;
-  numbering?: NumberingStyle;
-  sdt?: SdtMetadata;
-}
-
-export interface StyleNode {
-  styleId?: string;
-  paragraphProps?: Partial<ComputedParagraphStyle>;
-  characterProps?: Partial<ComputedCharacterStyle>;
-  numbering?: {
-    numId: string;
-    level: number;
-  };
-}
-
-export interface ParagraphStyleDefinition {
-  id: string;
-  basedOn?: string;
-  paragraph?: Partial<ComputedParagraphStyle>;
-  character?: Partial<ComputedCharacterStyle>;
-  numbering?: {
-    numId: string;
-    level: number;
-  };
-}
-
-export interface NumberingLevelDefinition {
-  level: number;
-  format?: NumberingStyle['format'];
-  text?: string;
-  start?: number;
-  indent?: {
-    left?: number;
-    hanging?: number;
-  };
-}
-
-export interface NumberingDefinition {
-  levels: NumberingLevelDefinition[];
-}
-
 export interface StyleContext {
-  styles?: Record<string, ParagraphStyleDefinition>;
-  numbering?: Record<string, NumberingDefinition>;
+  styles?: Record<string, unknown>;
+  numbering?: Record<string, unknown>;
   theme?: Record<string, unknown>;
   defaults?: {
     paragraphFont?: string;
@@ -214,137 +131,6 @@ const sdtMetadataCache = new Map<string, SdtMetadata>();
  */
 export function clearSdtMetadataCache(): void {
   sdtMetadataCache.clear();
-}
-
-/**
- * Resolves a node's fully-computed style by applying OOXML cascade rules.
- *
- * Cascade order:
- * 1. Document defaults
- * 2. Style chain (basedOn hierarchy)
- * 3. Direct paragraph/character formatting
- * 4. Numbering overrides
- * 5. SDT metadata (if provided via options)
- *
- * @param node - The style node containing styleId and direct formatting
- * @param context - Style definitions, numbering, theme, and defaults
- * @param options - Optional SDT metadata to attach to the computed style
- * @returns Fully-resolved ComputedStyle with paragraph, character, numbering, and optional SDT metadata
- *
- * @example
- * ```typescript
- * import { resolveStyle } from '@superdoc/style-engine';
- *
- * const style = resolveStyle(
- *   { styleId: 'Heading1', paragraphProps: { indent: { left: 36 } } },
- *   { styles: {...}, defaults: { paragraphFont: 'Calibri', fontSize: 11 } }
- * );
- *
- * console.log(style.paragraph.indent.left); // 36
- * console.log(style.character.font.family); // 'Calibri, sans-serif'
- * ```
- */
-export function resolveStyle(node: StyleNode, context: StyleContext, options: ResolveStyleOptions = {}): ComputedStyle {
-  let paragraph = createDefaultParagraph(context);
-  let character = createDefaultCharacter(context);
-  let numbering: NumberingStyle | undefined;
-
-  const chain = resolveStyleChain(node.styleId, context.styles);
-
-  for (const style of chain) {
-    paragraph = mergeParagraph(paragraph, style.paragraph);
-    character = mergeCharacter(character, style.character);
-    if (!numbering && style.numbering) {
-      numbering = resolveNumbering(style.numbering.numId, style.numbering.level, context);
-    }
-  }
-
-  paragraph = mergeParagraph(paragraph, node.paragraphProps);
-  character = mergeCharacter(character, node.characterProps);
-
-  if (node.numbering) {
-    numbering = resolveNumbering(node.numbering.numId, node.numbering.level, context);
-  }
-
-  const sdt = options?.sdt ? resolveSdtMetadata(options.sdt) : undefined;
-
-  return {
-    paragraph,
-    character,
-    numbering,
-    sdt,
-  };
-}
-
-/**
- * Resolves numbering metadata for a list item at a specific level.
- *
- * Looks up the numbering definition by `numId` and extracts the level-specific
- * formatting (format, text, indent, start value). Returns undefined if the
- * definition or level is not found.
- *
- * @param numId - The numbering definition ID (from w:numPr/w:numId)
- * @param level - The zero-based level index (from w:numPr/w:ilvl)
- * @param context - Style context containing numbering definitions
- * @returns Resolved NumberingStyle or undefined if not found
- *
- * @example
- * ```typescript
- * import { resolveNumbering } from '@superdoc/style-engine';
- *
- * const numbering = resolveNumbering('1', 0, {
- *   numbering: {
- *     '1': {
- *       levels: [{ level: 0, format: 'decimal', text: '%1.', indent: { left: 36, hanging: 18 } }]
- *     }
- *   }
- * });
- *
- * console.log(numbering?.format); // 'decimal'
- * console.log(numbering?.text); // '%1.'
- * ```
- */
-export function resolveNumbering(numId: string, level: number, context: StyleContext): NumberingStyle | undefined {
-  const def = context.numbering?.[numId];
-  if (!def) return undefined;
-
-  const levelDef = def.levels.find((entry) => entry.level === level) ?? def.levels[level];
-
-  if (!levelDef) return undefined;
-
-  return {
-    numId,
-    level,
-    indent: {
-      left: levelDef.indent?.left,
-      hanging: levelDef.indent?.hanging,
-    },
-    format: levelDef.format ?? 'decimal',
-    text: levelDef.text ?? '%1.',
-    start: levelDef.start ?? 1,
-  };
-}
-
-/**
- * Resolves style for a table cell's content.
- *
- * Note: This is a placeholder implementation that returns document defaults.
- * Full table cascade (tblPr -> trPr -> tcPr -> pPr) will be implemented in a future phase.
- *
- * @param table - Table element (reserved for future use)
- * @param row - Row index (reserved for future use)
- * @param col - Column index (reserved for future use)
- * @param context - Style context containing defaults
- * @returns ComputedStyle with document defaults
- */
-export function resolveTableCellStyle(
-  _table: unknown,
-  _row: number,
-  _col: number,
-  context: StyleContext,
-): ComputedStyle {
-  // Placeholder: table cascade arrives with tables phase. For now, reuse resolveStyle defaults.
-  return resolveStyle({}, context);
 }
 
 /**
@@ -418,94 +204,6 @@ export function resolveSdtMetadata(input?: ResolveSdtMetadataInput | null): SdtM
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function createDefaultParagraph(_context: StyleContext): ComputedParagraphStyle {
-  return {
-    alignment: 'left',
-    spacing: {
-      before: 0,
-      after: 0,
-      line: 12,
-      lineRule: 'auto',
-    },
-    indent: {
-      left: 0,
-      right: 0,
-      firstLine: 0,
-      hanging: 0,
-    },
-    tabs: [],
-  };
-}
-
-function createDefaultCharacter(context: StyleContext): ComputedCharacterStyle {
-  const baseFont = context.defaults?.paragraphFont ?? 'Calibri';
-  const fallback = context.defaults?.paragraphFontFallback;
-  const wordFamily = context.defaults?.paragraphFontFamily;
-  const resolvedFamily = toCssFontFamily(baseFont, { fallback, wordFamily }) ?? baseFont;
-
-  return {
-    font: {
-      family: resolvedFamily,
-      size: context.defaults?.fontSize ?? 11,
-      weight: 400,
-      italic: false,
-    },
-    color: '#000000',
-  };
-}
-
-function resolveStyleChain(
-  styleId: string | undefined,
-  styles?: Record<string, ParagraphStyleDefinition>,
-): ParagraphStyleDefinition[] {
-  if (!styleId || !styles) return [];
-  const result: ParagraphStyleDefinition[] = [];
-  const visited = new Set<string>();
-  let current: ParagraphStyleDefinition | undefined = styles[styleId];
-
-  while (current && !visited.has(current.id)) {
-    result.unshift(current);
-    visited.add(current.id);
-    current = current.basedOn ? styles[current.basedOn] : undefined;
-  }
-
-  return result;
-}
-
-function mergeParagraph(
-  base: ComputedParagraphStyle,
-  overrides?: Partial<ComputedParagraphStyle>,
-): ComputedParagraphStyle {
-  if (!overrides) return base;
-
-  return {
-    ...base,
-    alignment: overrides.alignment ?? base.alignment,
-    spacing: overrides.spacing ? { ...base.spacing, ...overrides.spacing } : base.spacing,
-    indent: overrides.indent ? { ...base.indent, ...overrides.indent } : base.indent,
-    borders: overrides.borders ? { ...base.borders, ...overrides.borders } : base.borders,
-    shading: overrides.shading ?? base.shading,
-    tabs: overrides.tabs ?? base.tabs,
-  };
-}
-
-function mergeCharacter(
-  base: ComputedCharacterStyle,
-  overrides?: Partial<ComputedCharacterStyle>,
-): ComputedCharacterStyle {
-  if (!overrides) return base;
-
-  return {
-    ...base,
-    font: overrides.font ? { ...base.font, ...overrides.font } : base.font,
-    color: overrides.color ?? base.color,
-    underline: overrides.underline ?? base.underline,
-    strike: overrides.strike ?? base.strike,
-    highlight: overrides.highlight ?? base.highlight,
-    letterSpacing: overrides.letterSpacing ?? base.letterSpacing,
-  };
-}
 
 function normalizeFieldAnnotationMetadata(attrs: Record<string, unknown>): FieldAnnotationMetadata {
   const fieldId = toOptionalString(attrs.fieldId) ?? '';

@@ -9,7 +9,7 @@
  */
 
 import type { ParagraphSpacing } from '@superdoc/contracts';
-import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
+import type { NumberingProperties, StylesDocumentProperties, TableInfo } from '@superdoc/style-engine/ooxml';
 
 export type ConverterNumberingContext = {
   definitions?: Record<string, unknown>;
@@ -52,7 +52,7 @@ export type ConverterContext = {
    *
    * Style cascade: docDefaults → tableStyleParagraphProps → paragraph style → direct formatting
    */
-  tableStyleId?: string;
+  tableInfo?: TableInfo;
   /**
    * Background color of the containing table cell (hex format, e.g., "#342D8C").
    * Used for auto text color resolution - text without explicit color should

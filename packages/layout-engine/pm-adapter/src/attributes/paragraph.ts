@@ -239,7 +239,7 @@ export const computeParagraphAttrs = (
     resolvedParagraphProperties = resolveParagraphProperties(
       converterContext,
       paragraphProperties,
-      converterContext.tableStyleId,
+      converterContext.tableInfo,
     );
   }
 
@@ -291,7 +291,7 @@ export const computeParagraphAttrs = (
       converterContext!,
       resolvedParagraphProperties.runProperties,
       resolvedParagraphProperties,
-      converterContext!.tableStyleId,
+      converterContext!.tableInfo,
       true,
       Boolean(paragraphProperties.numberingProperties),
     );

@@ -837,7 +837,7 @@ export function paragraphToFlowBlocks(
         themeColors,
       );
       applyMarksToRun(run, mergedMarks, hyperlinkConfig, themeColors);
-      run = applyInlineRunProperties(run, activeRunProperties);
+      run = applyInlineRunProperties(run, activeRunProperties, converterContext);
 
       // Copy PM positions from the parent footnoteReference node
       if (refPos) {
@@ -876,7 +876,7 @@ export function paragraphToFlowBlocks(
         converterContext?.backgroundColor,
         enableComments,
       );
-      run = applyInlineRunProperties(run, activeRunProperties);
+      run = applyInlineRunProperties(run, activeRunProperties, converterContext);
       currentRuns.push(run);
       return;
     }
@@ -894,7 +894,7 @@ export function paragraphToFlowBlocks(
         converterContext!,
         runProperties,
         resolvedParagraphProperties,
-        converterContext!.tableStyleId,
+        converterContext!.tableInfo,
         false,
         false,
       );
@@ -1012,7 +1012,7 @@ export function paragraphToFlowBlocks(
           converterContext?.backgroundColor,
           enableComments,
         );
-        tokenRun = applyInlineRunProperties(tokenRun, resolvedRunProperties);
+        tokenRun = applyInlineRunProperties(tokenRun, resolvedRunProperties, converterContext);
         // Copy PM positions from parent pageReference node
         if (pageRefPos) {
           (tokenRun as TextRun).pmStart = pageRefPos.start;
@@ -1098,7 +1098,7 @@ export function paragraphToFlowBlocks(
           inlineStyleId: paragraphProps.styleId || null,
           mergedMarksCount: mergedMarks.length,
         });
-        tokenRun = applyInlineRunProperties(tokenRun as TextRun, activeRunProperties);
+        tokenRun = applyInlineRunProperties(tokenRun as TextRun, activeRunProperties, converterContext);
         currentRuns.push(tokenRun);
       }
       return;

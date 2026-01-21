@@ -68,6 +68,7 @@ const attributeHandlers = [
 const propertyTranslatorsByXmlName = {};
 const propertyTranslatorsBySdName = {};
 propertyTranslators.forEach((translator) => {
+  if (!translator) return;
   propertyTranslatorsByXmlName[translator.xmlName] = translator;
   propertyTranslatorsBySdName[translator.sdNodeOrKeyName] = translator;
 });

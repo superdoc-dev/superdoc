@@ -39,7 +39,7 @@ export const handleParagraphNode = (params) => {
 
   // Resolve paragraph properties according to styles hierarchy
   const tableStyleId = getTableStyleId(params.path || []);
-  const resolvedParagraphProperties = resolveParagraphProperties(params, inlineParagraphProperties, tableStyleId);
+  const resolvedParagraphProperties = resolveParagraphProperties(params, inlineParagraphProperties, { tableStyleId });
 
   const { elements = [], attributes = {}, marks = [] } = parseProperties(node, params.docx);
   const childContent = [];

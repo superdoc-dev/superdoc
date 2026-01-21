@@ -220,7 +220,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     tableStyleId || cellBackgroundColor
       ? ({
           ...context.converterContext,
-          ...(tableStyleId && { tableStyleId }),
+          ...(tableStyleId && { tableInfo: { tableStyleId } }),
           ...(cellBackgroundColor && { backgroundColor: cellBackgroundColor }),
         } as ConverterContext)
       : context.converterContext;

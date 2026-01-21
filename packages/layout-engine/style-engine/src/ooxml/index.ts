@@ -27,11 +27,15 @@ export interface OoxmlResolverParams {
   translatedLinkedStyles: StylesDocumentProperties | null | undefined;
 }
 
+export interface TableInfo {
+  tableStyleId: string | null | undefined;
+}
+
 export function resolveRunProperties(
   params: OoxmlResolverParams,
   inlineRpr: RunProperties | null | undefined,
   resolvedPpr: ParagraphProperties | null | undefined,
-  tableStyleId: string | null = null,
+  tableInfo: TableInfo | null | undefined = null,
   isListNumber = false,
   numberingDefinedInline = false,
 ): RunProperties {
@@ -53,7 +57,7 @@ export function resolveRunProperties(
 
   // Getting table style run properties
   const tableStyleProps = (
-    tableStyleId ? resolveStyleChain('runProperties', params, tableStyleId) : {}
+    tableInfo?.tableStyleId ? resolveStyleChain('runProperties', params, tableInfo?.tableStyleId) : {}
   ) as RunProperties;
 
   // Get run properties from direct character style, unless it's inside a TOC paragraph style
@@ -98,7 +102,7 @@ export function resolveRunProperties(
 export function resolveParagraphProperties(
   params: OoxmlResolverParams,
   inlineProps: ParagraphProperties | null | undefined,
-  tableStyleId: string | null = null,
+  tableInfo: TableInfo | null | undefined,
 ): ParagraphProperties {
   if (!inlineProps) {
     inlineProps = {} as ParagraphProperties;
@@ -148,7 +152,7 @@ export function resolveParagraphProperties(
 
   // Table properties
   const tableProps = (
-    tableStyleId ? resolveStyleChain('paragraphProperties', params, tableStyleId) : {}
+    tableInfo?.tableStyleId ? resolveStyleChain('paragraphProperties', params, tableInfo?.tableStyleId) : {}
   ) as ParagraphProperties;
 
   // Resolve property chain - regular properties are treated differently from indentation

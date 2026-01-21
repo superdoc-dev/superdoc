@@ -45,6 +45,50 @@ const superdoc = new SuperDoc({
 });
 ```
 
+### Comment Highlight Customization
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#superdoc',
+  documents: [{ id: 'my-doc-id', type: 'docx', data: fileObject }],
+  modules: {
+    comments: {
+      highlightColors: {
+        internal: '#078383',
+        external: '#B1124B',
+        activeInternal: '#1355ff',
+        activeExternal: '#1355ff',
+      },
+      highlightOpacity: {
+        inactive: 0.13,
+        active: 0.27,
+      },
+      overlayHighlightColors: {
+        internal: '#078383',
+        external: '#B1124B',
+        activeInternal: '#1355ff',
+        activeExternal: '#1355ff',
+      },
+      overlayHighlightOpacity: {
+        inactive: 0.2,
+        active: 0.4,
+      },
+    },
+  },
+});
+```
+
+CSS theming can override these values via:
+- `--sd-comment-highlight-color`
+- `--sd-comment-highlight-color-active`
+- `--sd-comment-overlay-color`
+- `--sd-comment-overlay-color-active`
+- `--sd-track-insert-border`
+- `--sd-track-insert-bg`
+- `--sd-track-delete-border`
+- `--sd-track-delete-bg`
+- `--sd-track-format-border`
+
 ## 🛠️ Development Setup
 
 1. **Clone the Repository**

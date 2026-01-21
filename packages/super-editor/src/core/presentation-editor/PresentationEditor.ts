@@ -81,8 +81,13 @@ import type {
   MultiSectionHeaderFooterIdentifier,
   TableHitResult,
 } from '@superdoc/layout-bridge';
-import { createDomPainter } from '@superdoc/painter-dom';
-import type { LayoutMode, PageDecorationProvider, RulerOptions } from '@superdoc/painter-dom';
+import {
+  createDomPainter,
+  type CommentHighlightOptions,
+  LayoutMode,
+  PageDecorationProvider,
+  RulerOptions,
+} from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -157,6 +162,7 @@ export type {
 
 // Mark name constants
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
+import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 
 /**
@@ -254,6 +260,7 @@ export class PresentationEditor extends EventEmitter {
   #hiddenHost: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
+  #activeCommentId: string | null = null;
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -2185,6 +2192,24 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  #syncActiveCommentState(): boolean {
+    const pluginState = CommentsPluginKey.getState(this.#editor.state);
+    const nextActive = pluginState?.activeThreadId ?? null;
+    if (nextActive === this.#activeCommentId) return false;
+    this.#activeCommentId = nextActive;
+    return true;
+  }
+
+  #buildCommentHighlightConfig(): CommentHighlightOptions | undefined {
+    const comments = this.#options.comments;
+    if (!comments && !this.#activeCommentId) return undefined;
+    return {
+      highlightColors: comments?.highlightColors,
+      highlightOpacity: comments?.highlightOpacity,
+      activeThreadId: this.#activeCommentId,
+    };
+  }
+
   #setupEditorListeners() {
     const handleUpdate = ({ transaction }: { transaction?: Transaction }) => {
       const trackedChangesChanged = this.#syncTrackedChangesPreferences();
@@ -2220,6 +2245,11 @@ export class PresentationEditor extends EventEmitter {
         this.#editorInputManager?.clearCellAnchor();
       }
     };
+    const handleTransaction = ({ transaction }: { transaction?: Transaction }) => {
+      if (!transaction) return;
+      if (!this.#syncActiveCommentState()) return;
+      this.#domPainter?.setCommentHighlightConfig?.(this.#buildCommentHighlightConfig());
+    };
     const handleSelection = () => {
       this.#scheduleSelectionUpdate();
       // Update local cursor in awareness for collaboration
@@ -2229,8 +2259,10 @@ export class PresentationEditor extends EventEmitter {
     };
     this.#editor.on('update', handleUpdate);
     this.#editor.on('selectionUpdate', handleSelection);
+    this.#editor.on('transaction', handleTransaction);
     this.#editorListeners.push({ event: 'update', handler: handleUpdate as (...args: unknown[]) => void });
     this.#editorListeners.push({ event: 'selectionUpdate', handler: handleSelection as (...args: unknown[]) => void });
+    this.#editorListeners.push({ event: 'transaction', handler: handleTransaction as (...args: unknown[]) => void });
 
     // Listen for page style changes (e.g., margin adjustments via ruler).
     // These changes don't modify document content (docChanged === false),
@@ -2960,6 +2992,7 @@ export class PresentationEditor extends EventEmitter {
         footerBlocks.length > 0 ? footerBlocks : undefined,
         footerMeasures.length > 0 ? footerMeasures : undefined,
       );
+      painter.setCommentHighlightConfig?.(this.#buildCommentHighlightConfig());
       // Avoid MutationObserver overhead while repainting large DOM trees.
       this.#domIndexObserverManager?.pause();
       // Pass the transaction mapping for efficient position attribute updates.
@@ -3031,6 +3064,7 @@ export class PresentationEditor extends EventEmitter {
         footerProvider: this.#headerFooterSession?.footerDecorationProvider,
         ruler: this.#layoutOptions.ruler,
         pageGap: this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap(),
+        comments: this.#buildCommentHighlightConfig(),
       });
     }
     return this.#domPainter;

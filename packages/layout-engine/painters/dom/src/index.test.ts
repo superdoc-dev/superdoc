@@ -2706,7 +2706,8 @@ describe('DomPainter', () => {
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span).toBeTruthy();
     expect(span.dataset.commentIds).toBe('comment-1');
-    expect(span.style.backgroundColor).toBe('');
+    // Track-change styling still applies; comment highlight should not override it.
+    expect(span.style.backgroundColor).toBe('var(--sd-track-insert-bg, #399c7222)');
   });
 
   it('applies comment highlight styles for non-tracked-change comments', () => {
@@ -2735,6 +2736,112 @@ describe('DomPainter', () => {
     expect(span).toBeTruthy();
     expect(span.dataset.commentIds).toBe('comment-2');
     expect(span.style.backgroundColor).not.toBe('');
+  });
+
+  it('uses configured comment highlight colors and opacity', () => {
+    const commentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'comment-config-block',
+      runs: [
+        {
+          text: 'Configured highlight',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          comments: [{ commentId: 'comment-3', internal: false, trackedChange: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      commentBlock.id,
+      commentBlock.runs[0].text.length,
+    );
+
+    const painter = createDomPainter({
+      blocks: [commentBlock],
+      measures: [paragraphMeasure],
+      comments: {
+        highlightColors: { external: '#112233' },
+        highlightOpacity: { inactive: 1 },
+      },
+    });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.style.backgroundColor).toBe('var(--sd-comment-highlight-color, #112233ff)');
+  });
+
+  it('uses active comment highlight overrides when active', () => {
+    const commentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'comment-active-block',
+      runs: [
+        {
+          text: 'Active highlight',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          comments: [{ commentId: 'comment-4', internal: false, trackedChange: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      commentBlock.id,
+      commentBlock.runs[0].text.length,
+    );
+
+    const painter = createDomPainter({
+      blocks: [commentBlock],
+      measures: [paragraphMeasure],
+      comments: {
+        highlightColors: { activeExternal: '#ff0000' },
+        activeThreadId: 'comment-4',
+      },
+    });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.style.backgroundColor).toBe(
+      'var(--sd-comment-highlight-color-active, var(--sd-comment-highlight-color, #ff0000))',
+    );
+  });
+
+  it('applies tracked-change highlight styles with CSS var fallbacks', () => {
+    const trackedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'tracked-highlight-block',
+      runs: [
+        {
+          text: 'Inserted',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          trackedChange: {
+            kind: 'insert',
+            id: 'change-highlight',
+          },
+        },
+      ],
+      attrs: {
+        trackedChangesMode: 'review',
+        trackedChangesEnabled: true,
+      },
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      trackedBlock.id,
+      trackedBlock.runs[0].text.length,
+    );
+
+    const painter = createDomPainter({ blocks: [trackedBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.track-insert-dec') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.style.backgroundColor).toBe('var(--sd-track-insert-bg, #399c7222)');
+    expect(span.style.borderTop).toBe('1px dashed var(--sd-track-insert-border, #00853d)');
+    expect(span.style.borderBottom).toBe('1px dashed var(--sd-track-insert-border, #00853d)');
   });
 
   it('respects trackedChangesMode modifiers for insertions', () => {

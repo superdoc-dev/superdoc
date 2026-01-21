@@ -59,6 +59,14 @@
  * @property {Object} [comments.highlightOpacity] Comment highlight opacity values (0-1)
  * @property {number} [comments.highlightOpacity.active] Opacity for active comment highlight
  * @property {number} [comments.highlightOpacity.inactive] Opacity for inactive comment highlight
+ * @property {Object} [comments.overlayHighlightColors] Overlay highlight colors for comment blocks
+ * @property {string} [comments.overlayHighlightColors.internal] Overlay color for internal comments
+ * @property {string} [comments.overlayHighlightColors.external] Overlay color for external comments
+ * @property {string} [comments.overlayHighlightColors.activeInternal] Active overlay color for internal comments
+ * @property {string} [comments.overlayHighlightColors.activeExternal] Active overlay color for external comments
+ * @property {Object} [comments.overlayHighlightOpacity] Overlay highlight opacity values (0-1)
+ * @property {number} [comments.overlayHighlightOpacity.active] Opacity for active overlay highlight
+ * @property {number} [comments.overlayHighlightOpacity.inactive] Opacity for inactive overlay highlight
  * @property {string} [comments.highlightHoverColor] Hover highlight color for comment marks
  * @property {Object} [comments.trackChangeHighlightColors] Track change highlight colors
  * @property {string} [comments.trackChangeHighlightColors.insertBorder] Border color for inserted text highlight

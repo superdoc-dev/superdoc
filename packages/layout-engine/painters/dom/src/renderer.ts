@@ -302,6 +302,30 @@ export type RulerOptions = {
   onMarginChange?: (side: 'left' | 'right', marginInches: number) => void;
 };
 
+export type CommentHighlightColors = {
+  /** Base highlight color for internal comments */
+  internal?: string;
+  /** Base highlight color for external comments */
+  external?: string;
+  /** Active highlight color override for internal comments */
+  activeInternal?: string;
+  /** Active highlight color override for external comments */
+  activeExternal?: string;
+};
+
+export type CommentHighlightOpacity = {
+  /** Opacity for active comment highlight (0-1) */
+  active?: number;
+  /** Opacity for inactive comment highlight (0-1) */
+  inactive?: number;
+};
+
+export type CommentHighlightOptions = {
+  highlightColors?: CommentHighlightColors;
+  highlightOpacity?: CommentHighlightOpacity;
+  activeThreadId?: string | null;
+};
+
 type PainterOptions = {
   pageStyles?: PageStyles;
   layoutMode?: LayoutMode;
@@ -319,6 +343,7 @@ type PainterOptions = {
   };
   /** Per-page ruler options */
   ruler?: RulerOptions;
+  comments?: CommentHighlightOptions;
 };
 
 type BlockLookupEntry = {
@@ -382,7 +407,10 @@ const DEFAULT_PAGE_HEIGHT_PX = 1056;
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
 const COMMENT_EXTERNAL_COLOR = '#B1124B';
 const COMMENT_INTERNAL_COLOR = '#078383';
-const COMMENT_INACTIVE_ALPHA = '22';
+/** Default opacity for active comment highlights (0x44/0xff ≈ 0.267). */
+const DEFAULT_ACTIVE_ALPHA = 0x44 / 0xff;
+/** Default opacity for inactive comment highlights (0x22/0xff ≈ 0.133). */
+const DEFAULT_INACTIVE_ALPHA = 0x22 / 0xff;
 
 type LinkRenderData = {
   href?: string;
@@ -477,6 +505,20 @@ const TRACK_CHANGE_BASE_CLASS: Record<TrackedChangeKind, string> = {
   delete: 'track-delete-dec',
   format: 'track-format-dec',
 };
+
+const TRACK_CHANGE_DEFAULTS = {
+  insert: {
+    border: '#00853d',
+    background: '#399c7222',
+  },
+  delete: {
+    border: '#cb0e47',
+    background: '#cb0e4722',
+  },
+  format: {
+    border: 'gold',
+  },
+} as const;
 
 const TRACK_CHANGE_MODIFIER_CLASS: Record<TrackedChangeKind, Record<TrackedChangesMode, string | undefined>> = {
   insert: {
@@ -775,7 +817,7 @@ const applyLinkDataset = (element: HTMLElement, dataset?: Record<string, string>
  */
 export class DomPainter {
   private blockLookup: BlockLookup;
-  private readonly options: PainterOptions;
+  private options: PainterOptions;
   private mount: HTMLElement | null = null;
   private doc: Document | null = null;
   private pageStates: PageDomState[] = [];
@@ -856,6 +898,42 @@ export class DomPainter {
   public setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void {
     this.headerProvider = header;
     this.footerProvider = footer;
+  }
+
+  public setCommentHighlightConfig(config?: CommentHighlightOptions): void {
+    this.options.comments = config;
+    this.refreshCommentHighlights();
+  }
+
+  private refreshCommentHighlights(): void {
+    if (!this.mount) return;
+    const elements = this.mount.querySelectorAll('.superdoc-comment-highlight');
+    elements.forEach((element) => {
+      const el = element as HTMLElement;
+      // Skip tracked-change comments that intentionally do not have a highlight background.
+      if (!el.style.backgroundColor) return;
+      const commentIds = el.dataset.commentIds
+        ? el.dataset.commentIds
+            .split(',')
+            .map((id) => id.trim())
+            .filter(Boolean)
+        : [];
+      if (commentIds.length === 0) return;
+
+      const isInternal = el.dataset.commentInternal === 'true';
+      const comments = commentIds.map((commentId) => ({
+        commentId,
+        internal: isInternal,
+        trackedChange: false,
+      }));
+      const highlight = computeCommentHighlightColors({ comments } as TextRun, this.options.comments);
+      if (!highlight) return;
+      if (highlight.isActive) {
+        el.style.backgroundColor = `var(--sd-comment-highlight-color-active, var(--sd-comment-highlight-color, ${highlight.activeColor}))`;
+      } else {
+        el.style.backgroundColor = `var(--sd-comment-highlight-color, ${highlight.inactiveColor})`;
+      }
+    });
   }
 
   /**
@@ -3916,10 +3994,16 @@ export class DomPainter {
     const commentAnnotations = textRun.comments;
     const hasAnyComment = !!commentAnnotations?.length;
     const hasHighlightableComment = !!commentAnnotations?.some((c) => !c.trackedChange);
-    const commentColor = getCommentHighlight(textRun);
+    const commentHighlight = computeCommentHighlightColors(textRun, this.options.comments);
 
-    if (commentColor && !textRun.highlight && hasHighlightableComment) {
-      (elem as HTMLElement).style.backgroundColor = commentColor;
+    if (commentHighlight && !textRun.highlight && hasHighlightableComment) {
+      const { inactiveColor, activeColor, isActive } = commentHighlight;
+      const element = elem as HTMLElement;
+      if (isActive) {
+        element.style.backgroundColor = `var(--sd-comment-highlight-color-active, var(--sd-comment-highlight-color, ${activeColor}))`;
+      } else {
+        element.style.backgroundColor = `var(--sd-comment-highlight-color, ${inactiveColor})`;
+      }
     }
     // We still need to preserve the comment ids
     if (hasAnyComment) {
@@ -5051,6 +5135,20 @@ export class DomPainter {
       elem.classList.add(modifier);
     }
 
+    if (modifier === 'highlighted') {
+      if (meta.kind === 'insert') {
+        elem.style.borderTop = `1px dashed var(--sd-track-insert-border, ${TRACK_CHANGE_DEFAULTS.insert.border})`;
+        elem.style.borderBottom = `1px dashed var(--sd-track-insert-border, ${TRACK_CHANGE_DEFAULTS.insert.border})`;
+        elem.style.backgroundColor = `var(--sd-track-insert-bg, ${TRACK_CHANGE_DEFAULTS.insert.background})`;
+      } else if (meta.kind === 'delete') {
+        elem.style.borderTop = `1px dashed var(--sd-track-delete-border, ${TRACK_CHANGE_DEFAULTS.delete.border})`;
+        elem.style.borderBottom = `1px dashed var(--sd-track-delete-border, ${TRACK_CHANGE_DEFAULTS.delete.border})`;
+        elem.style.backgroundColor = `var(--sd-track-delete-bg, ${TRACK_CHANGE_DEFAULTS.delete.background})`;
+      } else if (meta.kind === 'format') {
+        elem.style.borderBottom = `2px solid var(--sd-track-format-border, ${TRACK_CHANGE_DEFAULTS.format.border})`;
+      }
+    }
+
     elem.dataset.trackChangeId = meta.id;
     elem.dataset.trackChangeKind = meta.kind;
     if (meta.author) {
@@ -5928,12 +6026,73 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
   }
 };
 
-const getCommentHighlight = (run: TextRun): string | undefined => {
+const clampOpacity = (value: number | undefined): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
+};
+
+const applyAlphaToHex = (color: string, opacity: number): string => {
+  if (typeof color !== 'string') return color;
+  const match = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return color;
+
+  const hex =
+    match[1].length === 3
+      ? match[1]
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : match[1];
+  const alpha = Math.round(opacity * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `#${hex}${alpha}`;
+};
+
+type CommentMeta = NonNullable<TextRun['comments']>[number];
+
+const findActiveComment = (
+  comments: CommentMeta[] | undefined,
+  activeThreadId?: string | null,
+): CommentMeta | undefined => {
+  if (!comments?.length || !activeThreadId) return undefined;
+  return comments.find((comment) => comment.commentId === activeThreadId || comment.importedId === activeThreadId);
+};
+
+const computeCommentHighlightColors = (
+  run: TextRun,
+  config?: CommentHighlightOptions,
+): { inactiveColor: string; activeColor: string; isActive: boolean } | undefined => {
   const comments = run.comments;
   if (!comments || comments.length === 0) return undefined;
+  const activeComment = findActiveComment(comments, config?.activeThreadId);
   const primary = comments[0];
-  const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-  return `${base}${COMMENT_INACTIVE_ALPHA}`;
+  const highlightColors = config?.highlightColors ?? {};
+  const highlightOpacity = config?.highlightOpacity ?? {};
+  const isActive = Boolean(activeComment);
+
+  const baseColor = primary.internal
+    ? (highlightColors.internal ?? COMMENT_INTERNAL_COLOR)
+    : (highlightColors.external ?? COMMENT_EXTERNAL_COLOR);
+
+  const inactiveOpacity = clampOpacity(highlightOpacity.inactive) ?? DEFAULT_INACTIVE_ALPHA;
+  const inactiveColor = applyAlphaToHex(baseColor, inactiveOpacity);
+
+  const activeInternal = (activeComment ?? primary)?.internal === true;
+  const activeBaseColor = activeInternal
+    ? (highlightColors.internal ?? COMMENT_INTERNAL_COLOR)
+    : (highlightColors.external ?? COMMENT_EXTERNAL_COLOR);
+  const activeOverride = activeInternal ? highlightColors.activeInternal : highlightColors.activeExternal;
+  const activeOpacity = clampOpacity(highlightOpacity.active) ?? DEFAULT_ACTIVE_ALPHA;
+  const activeColor = activeOverride ?? applyAlphaToHex(activeBaseColor, activeOpacity);
+
+  return { inactiveColor, activeColor, isActive };
+};
+
+const getCommentHighlight = (run: TextRun, config?: CommentHighlightOptions): string | undefined => {
+  const resolved = computeCommentHighlightColors(run, config);
+  if (!resolved) return undefined;
+  return resolved.isActive ? resolved.activeColor : resolved.inactiveColor;
 };
 
 /**

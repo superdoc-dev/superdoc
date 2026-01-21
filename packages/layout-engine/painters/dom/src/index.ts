@@ -10,7 +10,12 @@ import type {
 } from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
 import type { PageStyles } from './styles.js';
-import type { RulerOptions } from './renderer.js';
+import type {
+  CommentHighlightColors,
+  CommentHighlightOpacity,
+  CommentHighlightOptions,
+  RulerOptions,
+} from './renderer.js';
 
 // Re-export constants
 export { DOM_CLASS_NAMES } from './constants.js';
@@ -33,7 +38,12 @@ export type {
   RulerTick,
   CreateRulerElementOptions,
 } from './ruler/index.js';
-export type { RulerOptions } from './renderer.js';
+export type {
+  CommentHighlightColors,
+  CommentHighlightOpacity,
+  CommentHighlightOptions,
+  RulerOptions,
+} from './renderer.js';
 
 // Re-export utility functions for testing
 export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
@@ -84,6 +94,8 @@ export type DomPainterOptions = {
   pageGap?: number;
   headerProvider?: PageDecorationProvider;
   footerProvider?: PageDecorationProvider;
+  /** Comment highlight configuration */
+  comments?: CommentHighlightOptions;
   /**
    * Feature-flagged page virtualization.
    * When enabled (vertical mode only), the painter renders only a sliding window of pages
@@ -115,6 +127,7 @@ export const createDomPainter = (
   options: DomPainterOptions,
 ): PainterDOM & {
   setProviders?: (header?: PageDecorationProvider, footer?: PageDecorationProvider) => void;
+  setCommentHighlightConfig?: (config?: CommentHighlightOptions) => void;
   setVirtualizationPins?: (pageIndices: number[] | null | undefined) => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
@@ -123,6 +136,7 @@ export const createDomPainter = (
     pageGap: options.pageGap,
     headerProvider: options.headerProvider,
     footerProvider: options.footerProvider,
+    comments: options.comments,
     virtualization: options.virtualization,
     ruler: options.ruler,
   });
@@ -144,6 +158,9 @@ export const createDomPainter = (
     // Non-standard extension for demo app to avoid re-instantiating on provider changes
     setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider) {
       painter.setProviders(header, footer);
+    },
+    setCommentHighlightConfig(config?: CommentHighlightOptions) {
+      painter.setCommentHighlightConfig(config);
     },
     setVirtualizationPins(pageIndices: number[] | null | undefined) {
       painter.setVirtualizationPins(pageIndices);

@@ -62,13 +62,50 @@ const getStyle = (conversation) => {
   const placement = conversation.selection.selectionBounds;
   const top = (parseFloat(placement.top) + containerBounds.top) * activeZoom.value;
 
-  const internalHighlightColor = '#078383';
-  const externalHighlightColor = '#B1124B';
+  const commentsConfig = proxy?.$superdoc?.config?.modules?.comments ?? {};
+  const overlayColors = commentsConfig.overlayHighlightColors ?? {};
+  const baseColors = commentsConfig.highlightColors ?? {};
+  const overlayOpacity = commentsConfig.overlayHighlightOpacity ?? commentsConfig.highlightOpacity ?? {};
 
-  let opacity = '33';
-  activeComment.value === commentId ? (opacity = '66') : '33';
-  let fillColor = conversation.isInternal ? internalHighlightColor : externalHighlightColor;
-  fillColor += opacity;
+  const defaultInactiveOpacity = 0x33 / 0xff;
+  const defaultActiveOpacity = 0x66 / 0xff;
+
+  const isActive = activeComment.value === commentId;
+  const internalBase = overlayColors.internal ?? baseColors.internal ?? '#078383';
+  const externalBase = overlayColors.external ?? baseColors.external ?? '#B1124B';
+  const baseColor = conversation.isInternal ? internalBase : externalBase;
+
+  const activeOverride = conversation.isInternal
+    ? (overlayColors.activeInternal ?? baseColors.activeInternal)
+    : (overlayColors.activeExternal ?? baseColors.activeExternal);
+
+  const activeOpacity = Number.isFinite(overlayOpacity.active) ? Math.max(0, Math.min(overlayOpacity.active, 1)) : null;
+  const inactiveOpacity = Number.isFinite(overlayOpacity.inactive)
+    ? Math.max(0, Math.min(overlayOpacity.inactive, 1))
+    : null;
+
+  const applyAlphaToHex = (color, opacity) => {
+    if (typeof color !== 'string') return color;
+    const match = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (!match) return color;
+    const hex =
+      match[1].length === 3
+        ? match[1]
+            .split('')
+            .map((c) => c + c)
+            .join('')
+        : match[1];
+    const alpha = Math.round(opacity * 255)
+      .toString(16)
+      .padStart(2, '0');
+    return `#${hex}${alpha}`;
+  };
+
+  const inactiveColor = applyAlphaToHex(baseColor, inactiveOpacity ?? defaultInactiveOpacity);
+  const activeColor = activeOverride ?? applyAlphaToHex(baseColor, activeOpacity ?? defaultActiveOpacity);
+  const fillColor = isActive
+    ? `var(--sd-comment-overlay-color-active, var(--sd-comment-overlay-color, ${activeColor}))`
+    : `var(--sd-comment-overlay-color, ${inactiveColor})`;
 
   return {
     position: 'absolute',

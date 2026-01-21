@@ -170,6 +170,7 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
   }
   const exportStrategy = typeof threadingProfile === 'string' ? threadingProfile : 'word';
   const profile = typeof threadingProfile === 'string' ? null : threadingProfile;
+  const hasThreadedComments = comments.some((comment) => comment.threadingParentCommentId || comment.parentCommentId);
 
   // Always generate commentsExtended.xml when exporting comments (unless Google Docs style)
   // This ensures that comments without threading relationships are explicitly marked as
@@ -181,7 +182,10 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
       comments.some((comment) => resolveThreadingStyle(comment, profile) === 'commentsExtended')
     : exportStrategy !== 'google-docs'; // Generate for 'word' and 'unknown' strategies
 
-  if (!shouldGenerateCommentsExtended) {
+  // If any threaded comments exist, always include commentsExtended.xml so Word can retain threads.
+  const shouldIncludeForThreads = hasThreadedComments;
+
+  if (!shouldGenerateCommentsExtended && !shouldIncludeForThreads) {
     return null;
   }
 
@@ -200,7 +204,7 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
     // because Word doesn't recognize tracked changes as comment parents.
     const parentId = comment.threadingParentCommentId || comment.parentCommentId;
     const threadingStyle = resolveThreadingStyle(comment, profile);
-    if (parentId && threadingStyle === 'commentsExtended') {
+    if (parentId && (threadingStyle === 'commentsExtended' || shouldIncludeForThreads)) {
       const parentComment = comments.find((c) => c.commentId === parentId);
       const allowTrackedParent = profile?.defaultStyle === 'commentsExtended';
       if (parentComment && (allowTrackedParent || !parentComment.trackedChange)) {

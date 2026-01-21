@@ -612,23 +612,24 @@ const findCommentsWithSharedStartPosition = (comments, rangePositions) => {
 const applyParentRelationships = (comments, parentMap, trackedChangeParentMap = new Map()) => {
   return comments.map((comment) => {
     const trackedChangeParent = trackedChangeParentMap.get(comment.importedId);
-    if (trackedChangeParent && trackedChangeParent.isTrackedChangeParent) {
-      return {
-        ...comment,
-        trackedChangeParentId: trackedChangeParent.trackedChangeId,
-      };
-    }
+    const updatedComment =
+      trackedChangeParent && trackedChangeParent.isTrackedChangeParent
+        ? {
+            ...comment,
+            trackedChangeParentId: trackedChangeParent.trackedChangeId,
+          }
+        : comment;
 
     const parentImportedId = parentMap.get(comment.importedId);
     if (parentImportedId) {
       const parentComment = comments.find((c) => c.importedId === parentImportedId);
       if (parentComment) {
         return {
-          ...comment,
+          ...updatedComment,
           parentCommentId: parentComment.commentId,
         };
       }
     }
-    return comment;
+    return updatedComment;
   });
 };

@@ -912,6 +912,47 @@ describe('Google Docs tracked change comment threading', () => {
     expect(secondComment.trackedChangeParentId).toBe('1');
   });
 
+  it('threads nested range replies inside a tracked change', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'root-comment', author: 'Author A', date: '2024-01-01T10:00:00Z' },
+        { id: 1, internalId: 'reply-comment', author: 'Author B', date: '2024-01-01T10:05:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': '55', 'w:author': 'Author A', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Inserted text' }] }],
+                },
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const root = comments.find((c) => c.commentId === 'root-comment');
+    const reply = comments.find((c) => c.commentId === 'reply-comment');
+
+    expect(root.trackedChangeParentId).toBe('55');
+    expect(root.parentCommentId).toBeUndefined();
+    expect(reply.trackedChangeParentId).toBe('55');
+    expect(reply.parentCommentId).toBe('root-comment');
+  });
+
   it('detects comments inside replacement tracked change (ins + del)', () => {
     const docx = buildDocx({
       comments: [

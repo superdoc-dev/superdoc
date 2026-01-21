@@ -93,6 +93,22 @@ export const useCommentsStore = defineStore('comments', () => {
     return getComment(comment.parentCommentId);
   };
 
+  const isRangeThreadedComment = (comment) => {
+    if (!comment) return false;
+    return (
+      comment.threadingStyleOverride === 'range-based' ||
+      comment.threadingMethod === 'range-based' ||
+      comment.originalXmlStructure?.hasCommentsExtended === false
+    );
+  };
+
+  const shouldThreadWithTrackedChange = (comment) => {
+    if (!comment?.trackedChangeParentId) return false;
+    if (!isRangeThreadedComment(comment)) return false;
+    const trackedChange = getComment(comment.trackedChangeParentId);
+    return Boolean(trackedChange?.trackedChange);
+  };
+
   const isThreadVisible = (comment) => {
     if (!isViewingMode.value) return true;
     const parent = getThreadParent(comment);
@@ -245,22 +261,24 @@ export const useCommentsStore = defineStore('comments', () => {
 
     commentsList.value.forEach((comment) => {
       if (!isThreadVisible(comment)) return;
+      const trackedChangeParentId = shouldThreadWithTrackedChange(comment) ? comment.trackedChangeParentId : null;
+      const parentId = comment.parentCommentId || trackedChangeParentId;
       // Track resolved comments
       if (comment.resolvedTime) {
         resolvedComments.push(comment);
       }
 
       // Track parent comments
-      else if (!comment.parentCommentId && !comment.resolvedTime) {
+      else if (!parentId && !comment.resolvedTime) {
         parentComments.push({ ...comment });
       }
 
       // Track child comments (threaded comments)
-      else if (comment.parentCommentId) {
-        if (!childCommentMap.has(comment.parentCommentId)) {
-          childCommentMap.set(comment.parentCommentId, []);
+      else if (parentId) {
+        if (!childCommentMap.has(parentId)) {
+          childCommentMap.set(parentId, []);
         }
-        childCommentMap.get(comment.parentCommentId).push(comment);
+        childCommentMap.get(parentId).push(comment);
       }
     });
 

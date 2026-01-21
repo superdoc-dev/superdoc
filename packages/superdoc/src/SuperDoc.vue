@@ -118,7 +118,10 @@ const superdocStyleVars = computed(() => {
   }
 
   const trackChangeColors = commentsConfig.trackChangeHighlightColors || {};
-  const activeTrackChangeColors = commentsConfig.trackChangeActiveHighlightColors || trackChangeColors;
+  const activeTrackChangeColors = {
+    ...trackChangeColors,
+    ...(commentsConfig.trackChangeActiveHighlightColors || {}),
+  };
   if (activeTrackChangeColors.insertBorder) vars['--sd-track-insert-border'] = activeTrackChangeColors.insertBorder;
   if (activeTrackChangeColors.insertBackground) vars['--sd-track-insert-bg'] = activeTrackChangeColors.insertBackground;
   if (activeTrackChangeColors.deleteBorder) vars['--sd-track-delete-border'] = activeTrackChangeColors.deleteBorder;

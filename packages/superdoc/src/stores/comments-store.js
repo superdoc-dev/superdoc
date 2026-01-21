@@ -639,13 +639,27 @@ export const useCommentsStore = defineStore('comments', () => {
   const normalizeCommentForEditor = (node) => {
     if (!node || typeof node !== 'object') return node;
 
+    const stripTextStyleAttrs = (attrs) => {
+      if (!attrs) return attrs;
+      const rest = { ...attrs };
+      delete rest.fontSize;
+      delete rest.fontFamily;
+      delete rest.eastAsiaFontFamily;
+      return Object.keys(rest).length ? rest : undefined;
+    };
+
+    const normalizeMark = (mark) => {
+      if (!mark) return mark;
+      const typeName = typeof mark.type === 'string' ? mark.type : mark.type?.name;
+      const attrs = mark?.attrs ? { ...mark.attrs } : undefined;
+      if (typeName === 'textStyle' && attrs) {
+        return { ...mark, attrs: stripTextStyleAttrs(attrs) };
+      }
+      return { ...mark, attrs };
+    };
+
     const cloneMarks = (marks) =>
-      Array.isArray(marks)
-        ? marks.filter(Boolean).map((mark) => ({
-            ...mark,
-            attrs: mark?.attrs ? { ...mark.attrs } : undefined,
-          }))
-        : undefined;
+      Array.isArray(marks) ? marks.filter(Boolean).map((mark) => normalizeMark(mark)) : undefined;
 
     const cloneAttrs = (attrs) => (attrs && typeof attrs === 'object' ? { ...attrs } : undefined);
 

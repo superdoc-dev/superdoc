@@ -1,9 +1,11 @@
-// @ts-check
 import { NodeTranslator } from '@translator';
 import {
-  createNestedPropertiesTranslator,
   createAttributeHandler,
   createBooleanAttributeHandler,
+  encodeProperties,
+  decodeProperties,
+  encodePropertiesByKey,
+  decodePropertiesByKey,
 } from '@converter/v3/handlers/utils.js';
 import { translator as wNameTranslator } from '../../w/name';
 import { translator as wAliasesTranslator } from '../../w/aliases';
@@ -63,10 +65,67 @@ const attributeHandlers = [
   createBooleanAttributeHandler('w:customStyle'),
 ];
 
+const propertyTranslatorsByXmlName = {};
+const propertyTranslatorsBySdName = {};
+propertyTranslators.forEach((translator) => {
+  propertyTranslatorsByXmlName[translator.xmlName] = translator;
+  propertyTranslatorsBySdName[translator.sdNodeOrKeyName] = translator;
+});
+
 /**
  * The NodeTranslator instance for the w:style element.
  * @type {import('@translator').NodeTranslator}
  */
-export const translator = NodeTranslator.from(
-  createNestedPropertiesTranslator('w:style', 'style', propertyTranslators, {}, attributeHandlers),
-);
+export const translator = NodeTranslator.from({
+  xmlName: 'w:style',
+  sdNodeOrKeyName: 'style',
+  type: NodeTranslator.translatorTypes.NODE,
+  attributes: attributeHandlers,
+  encode: (params, encodedAttrs) => {
+    const { nodes } = params;
+    const node = nodes[0];
+
+    const result = {
+      ...encodedAttrs,
+      ...encodeProperties(params, propertyTranslatorsByXmlName),
+      ...encodePropertiesByKey(
+        wTblStylePrTranslator.xmlName,
+        'tableStyleProperties',
+        wTblStylePrTranslator,
+        params,
+        node,
+        'type',
+      ),
+    };
+
+    return result;
+  },
+  decode: function (params) {
+    const currentValue = params.node.attrs?.['style'];
+    if (!currentValue) {
+      return undefined;
+    }
+
+    const decodedAttrs = this.decodeAttributes({ node: { ...params.node, attrs: currentValue } });
+
+    const elements = [
+      ...decodeProperties(params, propertyTranslatorsBySdName, currentValue),
+      ...decodePropertiesByKey(
+        wTblStylePrTranslator.xmlName,
+        'tableStyleProperties',
+        wTblStylePrTranslator,
+        params,
+        currentValue,
+      ),
+    ];
+
+    const newNode = {
+      name: 'w:style',
+      type: 'element',
+      attributes: decodedAttrs,
+      elements: elements,
+    };
+
+    return newNode;
+  },
+});

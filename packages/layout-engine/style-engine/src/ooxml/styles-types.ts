@@ -119,7 +119,7 @@ export interface StyleDefinition {
   /** Table cell properties applied by the style. */
   tableCellProperties?: TableCellProperties;
   /** Table style properties applied by the style. */
-  tableStyleProperties?: TableStyleProperties;
+  tableStyleProperties?: Record<TableStyleType, TableStyleProperties>;
 }
 
 /**
@@ -364,6 +364,20 @@ export interface TableHeaderReference {
   header: string;
 }
 
+export type TableStyleType =
+  | 'wholeTable'
+  | 'firstRow'
+  | 'lastRow'
+  | 'firstCol'
+  | 'lastCol'
+  | 'band1Vert'
+  | 'band2Vert'
+  | 'band1Horz'
+  | 'band2Horz'
+  | 'neCell'
+  | 'nwCell'
+  | 'seCell'
+  | 'swCell';
 /**
  * Table style properties encoded from w:tblStylePr.
  */

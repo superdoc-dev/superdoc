@@ -15,13 +15,23 @@ describe('w:style translator', () => {
     it('should encode nested style properties correctly', () => {
       const xmlNode = {
         name: 'w:style',
-        attributes: { 'w:type': 'paragraph', 'w:styleId': 'CustomStyle' },
+        attributes: {
+          'w:type': 'paragraph',
+          'w:styleId': 'CustomStyle',
+          'w:default': '1',
+          'w:customStyle': '0',
+        },
         elements: [
           { name: 'w:name', attributes: { 'w:val': 'Custom Style' } },
           { name: 'w:aliases', attributes: { 'w:val': 'Alias1,Alias2' } },
           { name: 'w:uiPriority', attributes: { 'w:val': '1' } },
           { name: 'w:pPr', elements: [{ name: 'w:keepNext' }] },
           { name: 'w:rPr', elements: [{ name: 'w:b' }] },
+          {
+            name: 'w:tblStylePr',
+            attributes: { 'w:type': 'firstRow' },
+            elements: [],
+          },
         ],
       };
 
@@ -30,18 +40,25 @@ describe('w:style translator', () => {
       expect(result).toEqual({
         type: 'paragraph',
         styleId: 'CustomStyle',
+        default: true,
+        customStyle: false,
         name: 'Custom Style',
         aliases: 'Alias1,Alias2',
         uiPriority: 1,
         paragraphProperties: { keepNext: true },
         runProperties: { bold: true },
+        tableStyleProperties: {
+          firstRow: {
+            type: 'firstRow',
+          },
+        },
       });
     });
 
-    it('should return undefined if no child properties are present', () => {
+    it('should return an empty object if no attributes or child properties are present', () => {
       const xmlNode = { name: 'w:style', elements: [] };
       const result = translator.encode({ nodes: [xmlNode] });
-      expect(result).toBeUndefined();
+      expect(result).toEqual({});
     });
   });
 
@@ -50,11 +67,20 @@ describe('w:style translator', () => {
       const superDocNode = {
         attrs: {
           style: {
+            type: 'paragraph',
+            styleId: 'CustomStyle',
+            default: true,
+            customStyle: false,
             name: 'Custom Style',
             aliases: 'Alias1,Alias2',
             uiPriority: 1,
             paragraphProperties: { keepNext: true },
             runProperties: { bold: true },
+            tableStyleProperties: {
+              firstRow: {
+                type: 'firstRow',
+              },
+            },
           },
         },
       };
@@ -62,6 +88,12 @@ describe('w:style translator', () => {
       const result = translator.decode({ node: superDocNode });
 
       expect(result.name).toBe('w:style');
+      expect(result.attributes).toEqual({
+        'w:type': 'paragraph',
+        'w:styleId': 'CustomStyle',
+        'w:default': '1',
+        'w:customStyle': '0',
+      });
       expect(result.elements).toEqual(
         expect.arrayContaining([
           { name: 'w:name', attributes: { 'w:val': 'Custom Style' } },

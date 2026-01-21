@@ -14,7 +14,7 @@ import {
 import type { PropertyObject } from '../cascade.js';
 import type { ParagraphProperties, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';
-import type { StylesDocumentProperties } from './styles-types.ts';
+import type { StylesDocumentProperties, TableStyleType, TableProperties, TableLookProperties } from './styles-types.ts';
 
 export { combineIndentProperties, combineProperties, combineRunProperties, orderDefaultsAndNormal };
 export type { PropertyObject };
@@ -28,7 +28,11 @@ export interface OoxmlResolverParams {
 }
 
 export interface TableInfo {
-  tableStyleId: string | null | undefined;
+  tableProperties: TableProperties | null | undefined;
+  rowIndex: number;
+  cellIndex: number;
+  numCells: number;
+  numRows: number;
 }
 
 export function resolveRunProperties(
@@ -57,8 +61,17 @@ export function resolveRunProperties(
 
   // Getting table style run properties
   const tableStyleProps = (
-    tableInfo?.tableStyleId ? resolveStyleChain('runProperties', params, tableInfo?.tableStyleId) : {}
+    tableInfo?.tableProperties?.tableStyleId
+      ? resolveStyleChain('runProperties', params, tableInfo?.tableProperties?.tableStyleId)
+      : {}
   ) as RunProperties;
+
+  // Getting cell style run properties
+  const cellStyleProps: RunProperties[] = resolveCellStyles<RunProperties>(
+    'runProperties',
+    tableInfo,
+    params.translatedLinkedStyles,
+  );
 
   // Get run properties from direct character style, unless it's inside a TOC paragraph style
   let runStyleProps = {} as RunProperties;
@@ -89,9 +102,17 @@ export function resolveRunProperties(
       delete inlineRpr.underline;
     }
 
-    styleChain = [...defaultsChain, tableStyleProps, paragraphStyleProps, runStyleProps, inlineRpr, numberingProps];
+    styleChain = [
+      ...defaultsChain,
+      tableStyleProps,
+      ...cellStyleProps,
+      paragraphStyleProps,
+      runStyleProps,
+      inlineRpr,
+      numberingProps,
+    ];
   } else {
-    styleChain = [...defaultsChain, tableStyleProps, paragraphStyleProps, runStyleProps, inlineRpr];
+    styleChain = [...defaultsChain, tableStyleProps, ...cellStyleProps, paragraphStyleProps, runStyleProps, inlineRpr];
   }
 
   const finalProps = combineRunProperties(styleChain);
@@ -152,13 +173,22 @@ export function resolveParagraphProperties(
 
   // Table properties
   const tableProps = (
-    tableInfo?.tableStyleId ? resolveStyleChain('paragraphProperties', params, tableInfo?.tableStyleId) : {}
+    tableInfo?.tableProperties?.tableStyleId
+      ? resolveStyleChain('paragraphProperties', params, tableInfo?.tableProperties?.tableStyleId)
+      : {}
   ) as ParagraphProperties;
+
+  // Cell style properties
+  const cellStyleProps: ParagraphProperties[] = resolveCellStyles<ParagraphProperties>(
+    'paragraphProperties',
+    tableInfo,
+    params.translatedLinkedStyles,
+  );
 
   // Resolve property chain - regular properties are treated differently from indentation
   //   Chain for regular properties
   const defaultsChain = orderDefaultsAndNormal(defaultProps, normalProps, isNormalDefault);
-  const propsChain = [...defaultsChain, tableProps, numberingProps, styleProps, inlineProps];
+  const propsChain = [...defaultsChain, tableProps, ...cellStyleProps, numberingProps, styleProps, inlineProps];
 
   //   Chain for indentation properties
   let indentChain: ParagraphProperties[];
@@ -318,4 +348,105 @@ export function resolveDocxFontFamily(
     return toCssFontFamily(resolved, docx ?? undefined);
   }
   return resolved;
+}
+
+export function resolveCellStyles<T extends PropertyObject>(
+  propertyType: 'paragraphProperties' | 'runProperties',
+  tableInfo: TableInfo | null | undefined,
+  translatedLinkedStyles: StylesDocumentProperties,
+): T[] {
+  if (tableInfo == null || !tableInfo.tableProperties?.tableStyleId) {
+    return [];
+  }
+  const cellStyleProps: T[] = [];
+  if (tableInfo != null && tableInfo.tableProperties.tableStyleId) {
+    const tableStyleDef = translatedLinkedStyles.styles[tableInfo.tableProperties.tableStyleId];
+    const tableStylePropsDef = tableStyleDef?.tableProperties;
+    const rowBandSize = tableStylePropsDef?.tableStyleRowBandSize ?? 1;
+    const colBandSize = tableStylePropsDef?.tableStyleColBandSize ?? 1;
+    const cellStyleTypes = determineCellStyleTypes(
+      tableInfo.tableProperties?.tblLook,
+      tableInfo.rowIndex,
+      tableInfo.cellIndex,
+      tableInfo.numRows,
+      tableInfo.numCells,
+      rowBandSize,
+      colBandSize,
+    );
+    cellStyleTypes.forEach((styleType) => {
+      const typeProps = tableStyleDef?.tableStyleProperties?.[styleType]?.[propertyType] as T;
+      if (typeProps) {
+        cellStyleProps.push(typeProps);
+      }
+    });
+  }
+  return cellStyleProps;
+}
+
+function determineCellStyleTypes(
+  tblLook: TableLookProperties | null | undefined,
+  rowIndex: number,
+  cellIndex: number,
+  numRows?: number | null,
+  numCells?: number | null,
+  rowBandSize = 1,
+  colBandSize = 1,
+): TableStyleType[] {
+  const styleTypes: TableStyleType[] = ['wholeTable'];
+
+  const normalizedRowBandSize = rowBandSize > 0 ? rowBandSize : 1;
+  const normalizedColBandSize = colBandSize > 0 ? colBandSize : 1;
+  const rowGroup = Math.floor(rowIndex / normalizedRowBandSize);
+  const colGroup = Math.floor(cellIndex / normalizedColBandSize);
+
+  if (!tblLook?.noHBand) {
+    if (rowGroup % 2 === 0) {
+      styleTypes.push('band1Horz');
+    } else {
+      styleTypes.push('band2Horz');
+    }
+  }
+
+  if (!tblLook?.noVBand) {
+    if (colGroup % 2 === 0) {
+      styleTypes.push('band1Vert');
+    } else {
+      styleTypes.push('band2Vert');
+    }
+  }
+
+  if (tblLook?.firstRow && rowIndex === 0) {
+    styleTypes.push('firstRow');
+  }
+  if (tblLook?.firstColumn && cellIndex === 0) {
+    styleTypes.push('firstCol');
+  }
+  if (tblLook?.lastRow && numRows != null && numRows > 0 && rowIndex === numRows - 1) {
+    styleTypes.push('lastRow');
+  }
+  if (tblLook?.lastColumn && numCells != null && numCells > 0 && cellIndex === numCells - 1) {
+    styleTypes.push('lastCol');
+  }
+
+  if (rowIndex === 0 && cellIndex === 0) {
+    styleTypes.push('nwCell');
+  }
+  if (rowIndex === 0 && numCells != null && numCells > 0 && cellIndex === numCells - 1) {
+    styleTypes.push('neCell');
+  }
+  if (numRows != null && numRows > 0 && rowIndex === numRows - 1 && cellIndex === 0) {
+    styleTypes.push('swCell');
+  }
+  if (
+    numRows != null &&
+    numRows > 0 &&
+    numCells != null &&
+    numCells > 0 &&
+    rowIndex === numRows - 1 &&
+    cellIndex === numCells - 1
+  ) {
+    styleTypes.push('seCell');
+  }
+
+  return styleTypes;
 }

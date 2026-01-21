@@ -42,6 +42,7 @@ import {
   applySdtMetadataToParagraphBlocks,
   applySdtMetadataToTableBlock,
 } from '../sdt/index.js';
+import { TableProperties } from '@superdoc/style-engine/ooxml';
 
 type ParagraphConverter = (
   node: PMNode,
@@ -76,18 +77,21 @@ type ParseTableCellArgs = {
   cellNode: PMNode;
   rowIndex: number;
   cellIndex: number;
+  numCells: number;
+  numRows: number;
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
-  tableStyleId?: string;
+  tableProperties?: TableProperties;
 };
 
 type ParseTableRowArgs = {
   rowNode: PMNode;
   rowIndex: number;
+  numRows: number;
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
   /** Table style to pass to paragraph converter for style cascade */
-  tableStyleId?: string;
+  tableProperties?: TableProperties;
 };
 
 const isTableRowNode = (node: PMNode): boolean => node.type === 'tableRow' || node.type === 'table_row';
@@ -190,7 +194,7 @@ const normalizeRowHeight = (rowProps?: Record<string, unknown>): NormalizedRowHe
  * // Returns: null
  */
 const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
-  const { cellNode, rowIndex, cellIndex, context, defaultCellPadding, tableStyleId } = args;
+  const { cellNode, rowIndex, cellIndex, numCells, numRows, context, defaultCellPadding, tableProperties } = args;
   if (!isTableCellNode(cellNode) || !Array.isArray(cellNode.content)) {
     return null;
   }
@@ -217,10 +221,10 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // This allows paragraphs inside table cells to inherit table style's pPr
   // Also includes backgroundColor for auto text color resolution
   const cellConverterContext: ConverterContext | undefined =
-    tableStyleId || cellBackgroundColor
+    tableProperties || cellBackgroundColor
       ? ({
           ...context.converterContext,
-          ...(tableStyleId && { tableInfo: { tableStyleId } }),
+          ...(tableProperties && { tableInfo: { tableProperties, rowIndex, cellIndex, numCells, numRows } }),
           ...(cellBackgroundColor && { backgroundColor: cellBackgroundColor }),
         } as ConverterContext)
       : context.converterContext;
@@ -495,7 +499,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * // Returns: null
  */
 const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
-  const { rowNode, rowIndex, context, defaultCellPadding, tableStyleId } = args;
+  const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows } = args;
   if (!isTableRowNode(rowNode) || !Array.isArray(rowNode.content)) {
     return null;
   }
@@ -508,7 +512,9 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       cellIndex,
       context,
       defaultCellPadding,
-      tableStyleId,
+      tableProperties,
+      numCells: rowNode?.content?.length || 1,
+      numRows,
     });
     if (parsedCell) {
       cells.push(parsedCell);
@@ -728,9 +734,10 @@ export function tableNodeToBlock(
     const parsedRow = parseTableRow({
       rowNode,
       rowIndex,
+      numRows: node?.content?.length ?? 1,
       context: parserDeps,
       defaultCellPadding,
-      tableStyleId: (node.attrs?.tableProperties as { tableStyleId?: string })?.tableStyleId,
+      tableProperties: node.attrs?.tableProperties as TableProperties | undefined,
     });
     if (parsedRow) {
       rows.push(parsedRow);

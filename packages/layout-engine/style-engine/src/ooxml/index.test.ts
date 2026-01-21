@@ -5,6 +5,7 @@ import {
   resolveDocxFontFamily,
   resolveRunProperties,
   resolveParagraphProperties,
+  resolveCellStyles,
   type OoxmlResolverParams,
 } from './index.js';
 
@@ -192,6 +193,41 @@ describe('ooxml - resolveRunProperties', () => {
     expect(result.underline).toBeUndefined();
     expect(result.color).toEqual({ val: '00FF00' });
   });
+
+  it('applies table cell run properties in cascade order', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          TableStyle1: {
+            type: 'table',
+            runProperties: { color: { val: 'AAAAAA' } },
+            tableProperties: { tableStyleRowBandSize: 1, tableStyleColBandSize: 1 },
+            tableStyleProperties: {
+              wholeTable: { runProperties: { bold: true, fontSize: 10 } },
+              band1Horz: { runProperties: { italic: true, color: { val: 'BBBBBB' }, fontSize: 11 } },
+              band1Vert: { runProperties: { color: { val: 'CCCCCC' }, fontSize: 12 } },
+              firstRow: { runProperties: { fontSize: 13 } },
+              firstCol: { runProperties: { fontSize: 14 } },
+              nwCell: { runProperties: { fontSize: 15 } },
+            },
+          },
+        },
+      },
+    });
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'TableStyle1', tblLook: { firstRow: true, firstColumn: true } },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 2,
+      numCells: 2,
+    };
+    const result = resolveRunProperties(params, {}, null, tableInfo);
+    expect(result.fontSize).toBe(15);
+    expect(result.bold).toBe(true);
+    expect(result.italic).toBe(true);
+    expect(result.color).toEqual({ val: 'CCCCCC' });
+  });
 });
 
 describe('ooxml - resolveParagraphProperties', () => {
@@ -276,5 +312,65 @@ describe('ooxml - resolveParagraphProperties', () => {
     });
     const result = resolveParagraphProperties(params, { tabStops: [{ pos: 2160 }] });
     expect(result.tabStops).toEqual([{ pos: 2160 }]);
+  });
+
+  it('applies table cell paragraph properties over table style props', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          TableStyle1: {
+            type: 'table',
+            paragraphProperties: { spacing: { before: 120, after: 120 }, keepNext: true },
+            tableProperties: { tableStyleRowBandSize: 1, tableStyleColBandSize: 1 },
+            tableStyleProperties: {
+              firstRow: { paragraphProperties: { spacing: { after: 240 } } },
+            },
+          },
+        },
+      },
+    });
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'TableStyle1', tblLook: { firstRow: true } },
+      rowIndex: 0,
+      cellIndex: 2,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveParagraphProperties(params, {}, tableInfo);
+    expect(result.spacing).toEqual({ before: 120, after: 240 });
+    expect(result.keepNext).toBe(true);
+  });
+});
+
+describe('ooxml - resolveCellStyles', () => {
+  it('respects band sizes and tblLook flags', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          TableStyleBand: {
+            type: 'table',
+            tableProperties: { tableStyleRowBandSize: 2, tableStyleColBandSize: 3 },
+            tableStyleProperties: {
+              wholeTable: { runProperties: { fontSize: 10 } },
+              band1Vert: { runProperties: { fontSize: 20 } },
+              band2Vert: { runProperties: { fontSize: 30 } },
+              band1Horz: { runProperties: { fontSize: 40 } },
+              band2Horz: { runProperties: { fontSize: 50 } },
+            },
+          },
+        },
+      },
+    });
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'TableStyleBand', tblLook: { noVBand: true } },
+      rowIndex: 3,
+      cellIndex: 2,
+      numRows: 5,
+      numCells: 6,
+    };
+    const result = resolveCellStyles('runProperties', tableInfo, params.translatedLinkedStyles!);
+    expect(result).toEqual([{ fontSize: 10 }, { fontSize: 50 }]);
   });
 });

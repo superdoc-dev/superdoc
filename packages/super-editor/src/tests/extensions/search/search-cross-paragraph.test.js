@@ -137,7 +137,8 @@ describe('Cross-paragraph search', () => {
 
           const matches = index.search('2023Via');
 
-          expect(matches.length).toBeGreaterThan(0);
+          expect(matches).toHaveLength(1);
+          expect(matches[0].text).toBe('2023\nVia');
         } finally {
           editor.destroy();
         }
@@ -221,6 +222,38 @@ describe('Cross-paragraph search', () => {
         } finally {
           editor.destroy();
         }
+      });
+    });
+
+    describe('toFlexiblePattern', () => {
+      it('should generate pattern with block separators between characters', () => {
+        const pattern = SearchIndex.toFlexiblePattern('abc');
+        expect(pattern).toBe('a(?:\\n)?b(?:\\n)?c');
+      });
+
+      it('should handle multi-word input with whitespace between words', () => {
+        const pattern = SearchIndex.toFlexiblePattern('ab cd');
+        expect(pattern).toBe('a(?:\\n)?b[\\s\\u00a0]+c(?:\\n)?d');
+      });
+
+      it('should preserve leading whitespace in pattern', () => {
+        const pattern = SearchIndex.toFlexiblePattern(' abc');
+        expect(pattern).toBe('[\\s\\u00a0]+a(?:\\n)?b(?:\\n)?c');
+      });
+
+      it('should preserve trailing whitespace in pattern', () => {
+        const pattern = SearchIndex.toFlexiblePattern('abc ');
+        expect(pattern).toBe('a(?:\\n)?b(?:\\n)?c[\\s\\u00a0]+');
+      });
+
+      it('should return empty string for empty input', () => {
+        const pattern = SearchIndex.toFlexiblePattern('');
+        expect(pattern).toBe('');
+      });
+
+      it('should return whitespace pattern for whitespace-only input', () => {
+        const pattern = SearchIndex.toFlexiblePattern('   ');
+        expect(pattern).toBe('[\\s\\u00a0]+');
       });
     });
 

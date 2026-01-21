@@ -281,7 +281,6 @@ export class SearchIndex {
     const blockSeparatorPattern = '(?:\\n)?';
     const escapedParts = parts.map((part) => {
       const chars = Array.from(part);
-      if (chars.length === 0) return '';
       return chars.map((ch) => SearchIndex.escapeRegex(ch)).join(blockSeparatorPattern);
     });
     let pattern = escapedParts.join('[\\s\\u00a0]+');

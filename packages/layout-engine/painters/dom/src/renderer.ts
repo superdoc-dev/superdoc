@@ -910,22 +910,55 @@ export class DomPainter {
     const elements = this.mount.querySelectorAll('.superdoc-comment-highlight');
     elements.forEach((element) => {
       const el = element as HTMLElement;
-      // Skip tracked-change comments that intentionally do not have a highlight background.
-      if (!el.style.backgroundColor) return;
-      const commentIds = el.dataset.commentIds
-        ? el.dataset.commentIds
-            .split(',')
-            .map((id) => id.trim())
-            .filter(Boolean)
-        : [];
-      if (commentIds.length === 0) return;
+      if (el.dataset.commentHighlightApplied !== 'true') return;
+      if (el.dataset.trackChangeKind && el.classList.contains('highlighted')) return;
 
-      const isInternal = el.dataset.commentInternal === 'true';
-      const comments = commentIds.map((commentId) => ({
-        commentId,
-        internal: isInternal,
-        trackedChange: false,
-      }));
+      let comments: CommentMeta[] = [];
+      if (el.dataset.commentMeta) {
+        try {
+          const parsed = JSON.parse(el.dataset.commentMeta);
+          if (Array.isArray(parsed)) {
+            comments = parsed
+              .map((item) => {
+                if (!item || typeof item.commentId !== 'string' || item.commentId.length === 0) return null;
+                const importedId =
+                  typeof item.importedId === 'string'
+                    ? item.importedId
+                    : typeof item.importedId === 'number'
+                      ? String(item.importedId)
+                      : undefined;
+                return {
+                  commentId: item.commentId,
+                  importedId,
+                  internal: item.internal === true,
+                  trackedChange: item.trackedChange === true,
+                } as CommentMeta;
+              })
+              .filter(Boolean) as CommentMeta[];
+          }
+        } catch {
+          // Ignore parse errors and fall back to data-comment-ids.
+        }
+      }
+
+      if (comments.length === 0) {
+        const commentIds = el.dataset.commentIds
+          ? el.dataset.commentIds
+              .split(',')
+              .map((id) => id.trim())
+              .filter(Boolean)
+          : [];
+        if (commentIds.length === 0) return;
+        const isInternal = el.dataset.commentInternal === 'true';
+        comments = commentIds.map((commentId) => ({
+          commentId,
+          internal: isInternal,
+          trackedChange: false,
+        }));
+      }
+
+      if (!comments.some((comment) => !comment.trackedChange)) return;
+
       const highlight = computeCommentHighlightColors({ comments } as TextRun, this.options.comments);
       if (!highlight) return;
       if (highlight.isActive) {
@@ -4004,6 +4037,7 @@ export class DomPainter {
       } else {
         element.style.backgroundColor = `var(--sd-comment-highlight-color, ${inactiveColor})`;
       }
+      element.dataset.commentHighlightApplied = 'true';
     }
     // We still need to preserve the comment ids
     if (hasAnyComment) {
@@ -4011,6 +4045,14 @@ export class DomPainter {
       if (commentAnnotations.some((c) => c.internal)) {
         elem.dataset.commentInternal = 'true';
       }
+      elem.dataset.commentMeta = JSON.stringify(
+        commentAnnotations.map((comment) => ({
+          commentId: comment.commentId,
+          ...(comment.importedId != null ? { importedId: comment.importedId } : {}),
+          internal: comment.internal === true,
+          trackedChange: comment.trackedChange === true,
+        })),
+      );
       elem.classList.add('superdoc-comment-highlight');
     }
     // Ensure text renders above tab leaders (leaders are z-index: 0)

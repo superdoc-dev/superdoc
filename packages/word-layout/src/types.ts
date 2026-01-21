@@ -41,7 +41,7 @@ export type ResolvedRunProperties = {
   underline?: {
     style?: 'single' | 'double' | 'dotted' | 'dashed' | 'wavy';
     color?: string;
-  };
+  } | null;
   strike?: boolean;
   color?: string;
   highlight?: string;

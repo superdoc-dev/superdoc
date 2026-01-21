@@ -324,11 +324,13 @@ export const computeRunAttrs = (
     fontSize: runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx,
     bold: runProps.bold,
     italic: runProps.italic,
-    underline: runProps.underline &&
-      runProps.underline!['w:val'] && {
-        style: (runProps.underline!['w:val'] as 'single' | 'double' | 'dotted' | 'dashed' | 'wavy') || 'single',
-        color: runProps.underline!['w:color'] || undefined,
-      },
+    underline:
+      runProps.underline && runProps.underline!['w:val'] && runProps.underline!['w:val'] !== 'none'
+        ? {
+            style: (runProps.underline!['w:val'] as 'single' | 'double' | 'dotted' | 'dashed' | 'wavy') || 'single',
+            color: runProps.underline!['w:color'] || undefined,
+          }
+        : null,
     strike: runProps.strike,
     color: normalizeColor(runProps.color?.val),
     highlight: runProps.highlight?.['w:val'] || undefined,

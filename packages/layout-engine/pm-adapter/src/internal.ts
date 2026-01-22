@@ -51,9 +51,8 @@ import type {
   ConverterContext,
 } from './types.js';
 
-const DEFAULT_FONT = 'Arial';
-const DEFAULT_SIZE = 16;
-const DEFAULT_DECIMAL_SEPARATOR = '.';
+const DEFAULT_FONT = 'Times New Roman';
+const DEFAULT_SIZE = 10;
 
 /**
  * Dispatch map for node type handlers.

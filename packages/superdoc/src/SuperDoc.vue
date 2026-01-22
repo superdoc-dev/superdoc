@@ -1001,6 +1001,7 @@ watch(getFloatingComments, () => {
 .floating-comments {
   min-width: 300px;
   width: 300px;
+  height: 100%;
 }
 
 .superdoc__layers {

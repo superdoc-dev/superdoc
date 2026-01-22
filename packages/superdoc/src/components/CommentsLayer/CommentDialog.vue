@@ -380,7 +380,7 @@ onMounted(() => {
         @overflow-select="handleOverflowSelect($event, comment)"
       />
 
-      <div class="card-section comment-body" v-if="comment.trackedChange">
+      <div class="card-section comment-body" :class="{ 'is-active': isActiveComment }" v-if="comment.trackedChange">
         <div class="tracked-change">
           <div class="tracked-change">
             <div v-if="comment.trackedChangeType === 'trackFormat'">
@@ -400,7 +400,7 @@ onMounted(() => {
       </div>
 
       <!-- Show the comment text, unless we enter edit mode, then show an input and update buttons -->
-      <div class="card-section comment-body" v-if="!comment.trackedChange">
+      <div class="card-section comment-body" :class="{ 'is-active': isActiveComment }" v-if="!comment.trackedChange">
         <div v-if="!isDebugging && !isEditingThisComment(comment)" class="comment" v-html="comment.commentText"></div>
         <div v-else-if="isDebugging && !isEditingThisComment(comment)" class="comment">
           {{
@@ -462,6 +462,15 @@ onMounted(() => {
 }
 .initial-internal-dropdown {
   margin-top: 10px;
+}
+.comment-body {
+  overflow-y: auto;
+  max-height: 4rem;
+  transition: max-height 250ms ease;
+}
+.comment-body.is-active {
+  max-height: none;
+  overflow-y: visible;
 }
 .comments-dialog {
   display: flex;

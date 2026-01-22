@@ -288,6 +288,97 @@ describe('PermissionRanges extension', () => {
       user: { name: 'Viewer', email: 'viewer@example.com' },
     });
     expect(instance.isEditable).toBe(false);
-    expect(instance.storage.permissionRanges?.ranges?.length ?? 0).toBe(0);
+    expect(instance.storage.permissionRanges?.ranges?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it('wrapBetweenPermission inserts permission tags around the current selection', () => {
+    const instance = createEditor(docWithoutPermissionRange, { documentMode: 'editing' });
+    const startPos = findTextPos(instance.state.doc, 'editable');
+    expect(startPos).toBeGreaterThan(0);
+    const endPos = startPos + 'editable'.length;
+    const selection = TextSelection.create(instance.state.doc, startPos, endPos);
+    instance.view.dispatch(instance.state.tr.setSelection(selection));
+
+    const result = instance.commands.wrapBetweenPermission();
+    expect(result).toBe(true);
+
+    const tags = [];
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permStart' || node.type?.name === 'permEnd') {
+        tags.push(node);
+      }
+      return;
+    });
+
+    expect(tags).toHaveLength(2);
+    const [startNode, endNode] = tags;
+    expect(startNode.type.name).toBe('permStart');
+    expect(endNode.type.name).toBe('permEnd');
+    expect(startNode.attrs.id).toBeTruthy();
+    expect(startNode.attrs.id).toBe(endNode.attrs.id);
+    expect(startNode.attrs.edGrp).toBe('everyone');
+    expect(endNode.attrs.edGrp).toBe('everyone');
+  });
+
+  it('wrapBetweenPermission allows overriding id, edGrp, and ed', () => {
+    const instance = createEditor(docWithoutPermissionRange, { documentMode: 'editing' });
+    const startPos = findTextPos(instance.state.doc, 'No');
+    expect(startPos).toBeGreaterThanOrEqual(0);
+    const endPos = startPos + 'No editable ranges.'.length;
+    const selection = TextSelection.create(instance.state.doc, startPos, endPos);
+    instance.view.dispatch(instance.state.tr.setSelection(selection));
+
+    const result = instance.commands.wrapBetweenPermission({
+      id: 'permission-900',
+      edGrp: 'contributors',
+      ed: 'superdoc.dev\\author',
+    });
+    expect(result).toBe(true);
+
+    const tags = [];
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permStart' || node.type?.name === 'permEnd') {
+        tags.push(node);
+      }
+      return;
+    });
+
+    expect(tags).toHaveLength(2);
+    const [startNode, endNode] = tags;
+    expect(startNode.attrs.id).toBe('permission-900');
+    expect(endNode.attrs.id).toBe('permission-900');
+    expect(startNode.attrs.edGrp).toBe('contributors');
+    expect(endNode.attrs.edGrp).toBe('contributors');
+    expect(startNode.attrs.ed).toBe('superdoc.dev\\author');
+  });
+
+  it('wrapBetweenPermission accepts only ed and skips edGrp when provided', () => {
+    const instance = createEditor(docWithoutPermissionRange, { documentMode: 'editing' });
+    const startPos = findTextPos(instance.state.doc, 'No editable ranges.');
+    expect(startPos).toBeGreaterThanOrEqual(0);
+    const endPos = startPos + 'No editable ranges.'.length;
+    const selection = TextSelection.create(instance.state.doc, startPos, endPos);
+    instance.view.dispatch(instance.state.tr.setSelection(selection));
+
+    const result = instance.commands.wrapBetweenPermission({
+      id: 'permission-800',
+      ed: 'superdoc.dev\\author',
+    });
+    expect(result).toBe(true);
+
+    const tags = [];
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permStart' || node.type?.name === 'permEnd') {
+        tags.push(node);
+      }
+      return;
+    });
+    expect(tags).toHaveLength(2);
+    const [startNode, endNode] = tags;
+    expect(startNode.attrs.id).toBe('permission-800');
+    expect(endNode.attrs.id).toBe('permission-800');
+    expect(startNode.attrs.ed).toBe('superdoc.dev\\author');
+    expect(startNode.attrs.edGrp).toBeNull();
+    expect(endNode.attrs.edGrp).toBeNull();
   });
 });

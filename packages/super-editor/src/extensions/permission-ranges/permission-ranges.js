@@ -1,6 +1,7 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Mapping } from 'prosemirror-transform';
 import { Extension } from '@core/Extension.js';
+import { generateRandomSigned32BitIntStrId } from '@core/helpers/generateDocxRandomId.js';
 
 const PERMISSION_PLUGIN_KEY = new PluginKey('permissionRanges');
 const EVERYONE_GROUP = 'everyone';
@@ -52,6 +53,7 @@ const buildPermissionState = (doc, allowedIdentifiers = EMPTY_IDENTIFIER_SET) =>
   const ranges = [];
   /** @type {Map<string, { from: number, attrs: any }>} */
   const openRanges = new Map();
+  let hasAllowedRanges = false;
 
   doc.descendants((node, pos) => {
     if (node.type?.name === 'permStart') {
@@ -66,14 +68,19 @@ const buildPermissionState = (doc, allowedIdentifiers = EMPTY_IDENTIFIER_SET) =>
     if (node.type?.name === 'permEnd') {
       const id = getPermissionNodeId(node, pos, 'permEnd');
       const start = openRanges.get(id);
-      if (start && isRangeAllowedForUser(start.attrs, allowedIdentifiers)) {
+      if (start) {
         const to = Math.max(pos, start.from);
         if (to > start.from) {
-          ranges.push({
+          const range = {
             id,
             from: start.from,
             to,
-          });
+            attrs: start.attrs ?? {},
+          };
+          ranges.push(range);
+          if (!hasAllowedRanges && isRangeAllowedForUser(range.attrs, allowedIdentifiers)) {
+            hasAllowedRanges = true;
+          }
         }
       }
       if (start) {
@@ -85,7 +92,7 @@ const buildPermissionState = (doc, allowedIdentifiers = EMPTY_IDENTIFIER_SET) =>
 
   return {
     ranges,
-    hasAllowedRanges: ranges.length > 0,
+    hasAllowedRanges,
   };
 };
 
@@ -179,13 +186,19 @@ const collectChangedRanges = (tr) => {
 };
 
 /**
- * Checks if affected range is entirely within an allowed permission range.
+ * Checks if affected range is entirely within a permission range the user can edit.
  * @param {{ from: number, to: number }} range
- * @param {Array<{ from: number, to: number }>} allowedRanges
+ * @param {Array<{ from: number, to: number, attrs?: any }>} permissionRanges
+ * @param {Set<string>} allowedIdentifiers
  */
-const isRangeAllowed = (range, allowedRanges) => {
-  if (!allowedRanges?.length) return false;
-  return allowedRanges.some((allowed) => range.from >= allowed.from && range.to <= allowed.to);
+const isRangeAllowed = (range, permissionRanges, allowedIdentifiers) => {
+  if (!permissionRanges?.length) return false;
+  return permissionRanges.some((allowed) => {
+    if (range.from < allowed.from || range.to > allowed.to) {
+      return false;
+    }
+    return isRangeAllowedForUser(allowed.attrs, allowedIdentifiers);
+  });
 };
 
 /**
@@ -200,6 +213,54 @@ export const PermissionRanges = Extension.create({
     return {
       ranges: [],
       hasAllowedRanges: false,
+    };
+  },
+
+  addCommands() {
+    return {
+      /**
+       * Wrap the current selection with w:permStart/w:permEnd tags.
+       * Defaults new ranges to edGrp="everyone" so they're editable in viewing mode when no ed/edGrp provided.
+       * @param {Object} [options]
+       * @param {string} [options.id] Optional identifier for the permission range
+       * @param {string} [options.ed] Optional w:ed attribute applied to permStart
+       * @param {string} [options.edGrp] Optional w:edGrp attribute applied to both nodes
+       */
+      wrapBetweenPermission:
+        (options = {}) =>
+        ({ state, dispatch, tr }) => {
+          const permStartType = state.schema.nodes['permStart'];
+          const permEndType = state.schema.nodes['permEnd'];
+          if (!permStartType || !permEndType) {
+            return false;
+          }
+
+          const { selection } = state;
+          if (!selection || selection.empty) {
+            return false;
+          }
+
+          const resolvedId = options.id ?? generateRandomSigned32BitIntStrId();
+          const providedEd = options.ed ?? null;
+          const providedEdGrp = options.edGrp ?? null;
+          const sharedGroup = providedEdGrp ?? (providedEd ? null : EVERYONE_GROUP);
+
+          if (dispatch) {
+            const startAttrs = { id: resolvedId };
+            if (sharedGroup) startAttrs.edGrp = sharedGroup;
+            if (providedEd) startAttrs.ed = providedEd;
+
+            const endAttrs = { id: resolvedId };
+            if (sharedGroup) endAttrs.edGrp = sharedGroup;
+
+            const startNode = permStartType.create(startAttrs);
+            const endNode = permEndType.create(endAttrs);
+            tr.insert(selection.to, endNode);
+            tr.insert(selection.from, startNode);
+          }
+
+          return true;
+        },
     };
   },
 
@@ -353,9 +414,11 @@ export const PermissionRanges = Extension.create({
           const permEndType = state.schema.nodes['permEnd'];
           if (!permStartType || !permEndType) return true;
 
+          const allowedIdentifiers = getAllowedIdentifiers();
+          const permissionRanges = pluginState.ranges || [];
           const allRangesAllowed = changedRanges.every((range) => {
             const trimmed = trimPermissionTagsFromRange(state.doc, range, permStartType, permEndType);
-            return isRangeAllowed(trimmed, pluginState.ranges);
+            return isRangeAllowed(trimmed, permissionRanges, allowedIdentifiers);
           });
 
           return allRangesAllowed;

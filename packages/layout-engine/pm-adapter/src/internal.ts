@@ -178,28 +178,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     blockCounts[kind] = (blockCounts[kind] ?? 0) + 1;
   };
 
-  // Track B: List counter tracker for sequential numbering
-  // Maps "numId:ilvl" -> current counter value for that list/level
-  const listCounters = new Map<string, number>();
-
-  const getListCounter = (numId: number, ilvl: number): number => {
-    const key = `${numId}:${ilvl}`;
-    return listCounters.get(key) ?? 0;
-  };
-
-  const incrementListCounter = (numId: number, ilvl: number): number => {
-    const key = `${numId}:${ilvl}`;
-    const current = listCounters.get(key) ?? 0;
-    const next = current + 1;
-    listCounters.set(key, next);
-    return next;
-  };
-
-  const resetListCounter = (numId: number, ilvl: number): void => {
-    const key = `${numId}:${ilvl}`;
-    listCounters.set(key, 0);
-  };
-
   // Range-aware section analysis (matches toFlowBlocks semantics)
   const bodySectionProps = doc.attrs?.bodySectPr ?? doc.attrs?.sectPr;
   const sectionRanges = options?.emitSectionBreaks ? analyzeSectionRanges(doc, bodySectionProps) : [];

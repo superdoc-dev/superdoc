@@ -273,7 +273,7 @@ export interface NodeHandlerContext {
   defaultFont: string;
   defaultSize: number;
   styleContext: StyleContext;
-  converterContext?: ConverterContext;
+  converterContext: ConverterContext;
 
   // Tracked changes & hyperlinks
   trackedChangesConfig: TrackedChangesConfig;
@@ -293,7 +293,7 @@ export interface NodeHandlerContext {
   };
 
   // Converters for nested content
-  converters?: NestedConverters;
+  converters: NestedConverters;
 }
 
 /**
@@ -305,20 +305,23 @@ export type NodeHandler = (node: PMNode, context: NodeHandlerContext) => void;
 /**
  * List counter context for numbering
  */
+export type ParagraphToFlowBlocksParams = {
+  para: PMNode;
+  nextBlockId: BlockIdGenerator;
+  positions: PositionMap;
+  defaultFont: string;
+  defaultSize: number;
+  styleContext: StyleContext;
+  trackedChangesConfig?: TrackedChangesConfig;
+  hyperlinkConfig: HyperlinkConfig;
+  themeColors?: ThemeColorPalette;
+  bookmarks?: Map<string, number>;
+  converters: NestedConverters;
+  enableComments: boolean;
+  converterContext: ConverterContext;
+};
 
-export type ParagraphToFlowBlocksConverter = (
-  para: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  converterContext?: ConverterContext,
-) => FlowBlock[];
+export type ParagraphToFlowBlocksConverter = (params: ParagraphToFlowBlocksParams) => FlowBlock[];
 
 export type ImageNodeToBlockConverter = (
   node: PMNode,
@@ -338,31 +341,33 @@ export type TableNodeToBlockOptions = {
   converters?: NestedConverters;
 };
 
-export type TableNodeToBlockConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  paragraphToFlowBlocks?: ParagraphToFlowBlocksConverter,
-  converterContext?: ConverterContext,
-  options?: TableNodeToBlockOptions,
-) => FlowBlock | null;
+export type TableNodeToBlockParams = {
+  node: PMNode;
+  nextBlockId: BlockIdGenerator;
+  positions: PositionMap;
+  defaultFont: string;
+  defaultSize: number;
+  styleContext: StyleContext;
+  trackedChangesConfig?: TrackedChangesConfig;
+  bookmarks?: Map<string, number>;
+  hyperlinkConfig: HyperlinkConfig;
+  themeColors?: ThemeColorPalette;
+  converterContext: ConverterContext;
+  converters: NestedConverters;
+  enableComments: boolean;
+};
+
+export type TableNodeToBlockConverter = (params: TableNodeToBlockParams) => FlowBlock | null;
 
 export type NestedConverters = {
-  paragraphToFlowBlocks?: ParagraphToFlowBlocksConverter;
-  tableNodeToBlock?: TableNodeToBlockConverter;
-  contentBlockNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  imageNodeToBlock?: ImageNodeToBlockConverter;
-  vectorShapeNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeGroupNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeContainerNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeTextboxNodeToDrawingBlock?: DrawingNodeToBlockConverter;
+  paragraphToFlowBlocks: ParagraphToFlowBlocksConverter;
+  tableNodeToBlock: TableNodeToBlockConverter;
+  contentBlockNodeToDrawingBlock: DrawingNodeToBlockConverter;
+  imageNodeToBlock: ImageNodeToBlockConverter;
+  vectorShapeNodeToDrawingBlock: DrawingNodeToBlockConverter;
+  shapeGroupNodeToDrawingBlock: DrawingNodeToBlockConverter;
+  shapeContainerNodeToDrawingBlock: DrawingNodeToBlockConverter;
+  shapeTextboxNodeToDrawingBlock: DrawingNodeToBlockConverter;
 };
 
 /**

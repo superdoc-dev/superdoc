@@ -55,10 +55,7 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
     converters,
   } = context;
 
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
-  if (!paragraphToFlowBlocks) {
-    return;
-  }
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
   children.forEach((child) => {
     if (child.type !== 'paragraph') {
@@ -79,8 +76,8 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
       }
     }
 
-    const paragraphBlocks = paragraphToFlowBlocks(
-      child,
+    const paragraphBlocks = paragraphToFlowBlocks({
+      para: child,
       nextBlockId,
       positions,
       defaultFont,
@@ -89,9 +86,10 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
       trackedChangesConfig,
       bookmarks,
       hyperlinkConfig,
-      undefined, // themeColors - not available in NodeHandlerContext
-      context.converterContext,
-    );
+      converterContext: context.converterContext,
+      enableComments: context.enableComments,
+      converters,
+    });
 
     paragraphBlocks.forEach((block) => {
       blocks.push(block);

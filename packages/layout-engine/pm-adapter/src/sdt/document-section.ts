@@ -14,6 +14,8 @@ import type {
   HyperlinkConfig,
   NodeHandlerContext,
   TrackedChangesConfig,
+  NestedConverters,
+  ConverterContext,
 } from '../types.js';
 import {
   applySdtMetadataToParagraphBlocks,
@@ -76,8 +78,11 @@ interface ProcessingContext {
   defaultFont: string;
   defaultSize: number;
   styleContext: StyleContext;
+  trackedChangesConfig?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
+  enableComments: boolean;
+  converterContext: ConverterContext;
 }
 
 /**
@@ -86,15 +91,6 @@ interface ProcessingContext {
 interface ProcessingOutput {
   blocks: FlowBlock[];
   recordBlockKind: (kind: FlowBlock['kind']) => void;
-}
-
-/**
- * Collection of converter functions for different node types.
- */
-interface NodeConverters {
-  paragraphToFlowBlocks: ParagraphConverter;
-  tableNodeToBlock: TableConverter;
-  imageNodeToBlock: ImageConverter;
 }
 
 /**
@@ -112,19 +108,22 @@ function processParagraphChild(
   sectionMetadata: SdtMetadata | undefined,
   context: ProcessingContext,
   output: ProcessingOutput,
-  converters: NodeConverters,
+  converters: NestedConverters,
 ): void {
-  const paragraphBlocks = converters.paragraphToFlowBlocks(
-    child,
-    context.nextBlockId,
-    context.positions,
-    context.defaultFont,
-    context.defaultSize,
-    context.styleContext,
-    undefined, // trackedChanges
-    context.bookmarks,
-    context.hyperlinkConfig,
-  );
+  const paragraphBlocks = converters!.paragraphToFlowBlocks!({
+    para: child,
+    nextBlockId: context.nextBlockId,
+    positions: context.positions,
+    defaultFont: context.defaultFont,
+    defaultSize: context.defaultSize,
+    styleContext: context.styleContext,
+    trackedChangesConfig: undefined, // trackedChanges
+    bookmarks: context.bookmarks,
+    hyperlinkConfig: context.hyperlinkConfig,
+    converters,
+    enableComments: context.enableComments,
+    converterContext: context.converterContext,
+  });
   applySdtMetadataToParagraphBlocks(
     paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[],
     sectionMetadata,
@@ -150,19 +149,22 @@ function processTableChild(
   sectionMetadata: SdtMetadata | undefined,
   context: ProcessingContext,
   output: ProcessingOutput,
-  converters: NodeConverters,
+  converters: NestedConverters,
 ): void {
-  const tableBlock = converters.tableNodeToBlock(
-    child,
-    context.nextBlockId,
-    context.positions,
-    context.defaultFont,
-    context.defaultSize,
-    context.styleContext,
-    undefined,
-    undefined,
-    context.hyperlinkConfig,
-  );
+  const tableBlock = converters.tableNodeToBlock({
+    node: child,
+    nextBlockId: context.nextBlockId,
+    positions: context.positions,
+    defaultFont: context.defaultFont,
+    defaultSize: context.defaultSize,
+    styleContext: context.styleContext,
+    trackedChangesConfig: context.trackedChangesConfig,
+    bookmarks: context.bookmarks,
+    hyperlinkConfig: context.hyperlinkConfig,
+    enableComments: context.enableComments,
+    converters,
+    converterContext: context.converterContext,
+  });
   if (tableBlock) {
     applySdtMetadataToTableBlock(tableBlock, sectionMetadata);
     output.blocks.push(tableBlock);
@@ -185,7 +187,7 @@ function processImageChild(
   sectionMetadata: SdtMetadata | undefined,
   context: ProcessingContext,
   output: ProcessingOutput,
-  converters: NodeConverters,
+  converters: NestedConverters,
 ): void {
   const imageBlock = converters.imageNodeToBlock(child, context.nextBlockId, context.positions);
   if (imageBlock && imageBlock.kind === 'image') {
@@ -215,23 +217,26 @@ function processNestedStructuredContent(
   sectionMetadata: SdtMetadata | undefined,
   context: ProcessingContext,
   output: ProcessingOutput,
-  converters: NodeConverters,
+  converters: NestedConverters,
 ): void {
   // Nested structured content block inside section - unwrap and chain metadata
   const nestedMetadata = resolveNodeSdtMetadata(child, 'structuredContentBlock');
   child.content?.forEach((grandchild) => {
     if (grandchild.type === 'paragraph') {
-      const paragraphBlocks = converters.paragraphToFlowBlocks(
-        grandchild,
-        context.nextBlockId,
-        context.positions,
-        context.defaultFont,
-        context.defaultSize,
-        context.styleContext,
-        undefined, // trackedChanges
-        context.bookmarks,
-        context.hyperlinkConfig,
-      );
+      const paragraphBlocks = converters.paragraphToFlowBlocks({
+        para: grandchild,
+        nextBlockId: context.nextBlockId,
+        positions: context.positions,
+        defaultFont: context.defaultFont,
+        defaultSize: context.defaultSize,
+        styleContext: context.styleContext,
+        trackedChangesConfig: context.trackedChangesConfig,
+        bookmarks: context.bookmarks,
+        hyperlinkConfig: context.hyperlinkConfig,
+        converters,
+        enableComments: context.enableComments,
+        converterContext: context.converterContext,
+      });
       // Apply nested structured content metadata first, then section metadata
       const paraOnly = paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[];
       applySdtMetadataToParagraphBlocks(paraOnly, nestedMetadata);
@@ -241,17 +246,20 @@ function processNestedStructuredContent(
         output.recordBlockKind(block.kind);
       });
     } else if (grandchild.type === 'table') {
-      const tableBlock = converters.tableNodeToBlock(
-        grandchild,
-        context.nextBlockId,
-        context.positions,
-        context.defaultFont,
-        context.defaultSize,
-        context.styleContext,
-        undefined,
-        undefined,
-        context.hyperlinkConfig,
-      );
+      const tableBlock = converters.tableNodeToBlock({
+        node: grandchild,
+        nextBlockId: context.nextBlockId,
+        positions: context.positions,
+        defaultFont: context.defaultFont,
+        defaultSize: context.defaultSize,
+        styleContext: context.styleContext,
+        trackedChangesConfig: context.trackedChangesConfig,
+        bookmarks: context.bookmarks,
+        hyperlinkConfig: context.hyperlinkConfig,
+        enableComments: context.enableComments,
+        converters,
+        converterContext: context.converterContext,
+      });
       if (tableBlock) {
         if (nestedMetadata) applySdtMetadataToTableBlock(tableBlock, nestedMetadata);
         applySdtMetadataToTableBlock(tableBlock, sectionMetadata);
@@ -278,7 +286,7 @@ function processDocumentPartObject(
   sectionMetadata: SdtMetadata | undefined,
   context: ProcessingContext,
   output: ProcessingOutput,
-  converters: NodeConverters,
+  converters: NestedConverters,
 ): void {
   // Nested doc part (e.g., TOC) inside section
   const docPartGallery = getDocPartGallery(child);
@@ -301,9 +309,11 @@ function processDocumentPartObject(
         styleContext: context.styleContext,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
+        enableComments: context.enableComments,
+        converters,
+        converterContext: context.converterContext,
       },
       { blocks: output.blocks, recordBlockKind: output.recordBlockKind },
-      converters.paragraphToFlowBlocks,
     );
 
     // Apply section metadata to TOC paragraphs while preserving docPart metadata
@@ -347,7 +357,7 @@ export function processDocumentSectionChildren(
   sectionMetadata: SdtMetadata | undefined,
   context: ProcessingContext,
   output: ProcessingOutput,
-  converters: NodeConverters,
+  converters: NestedConverters,
 ): void {
   children.forEach((child) => {
     if (child.type === 'paragraph') {
@@ -386,15 +396,11 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
     bookmarks,
     hyperlinkConfig,
     converters,
+    enableComments,
+    converterContext,
+    trackedChangesConfig,
   } = context;
   const sectionMetadata = resolveNodeSdtMetadata(node, 'documentSection');
-
-  // Get converters from context
-  const convertersToUse: NodeConverters = {
-    paragraphToFlowBlocks: converters?.paragraphToFlowBlocks || ((): FlowBlock[] => []),
-    tableNodeToBlock: converters?.tableNodeToBlock || ((): FlowBlock | null => null),
-    imageNodeToBlock: converters?.imageNodeToBlock || ((): FlowBlock | null => null),
-  };
 
   processDocumentSectionChildren(
     node.content,
@@ -406,9 +412,12 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
       defaultSize,
       styleContext,
       bookmarks,
+      trackedChangesConfig,
       hyperlinkConfig,
+      enableComments,
+      converterContext,
     },
     { blocks, recordBlockKind },
-    convertersToUse,
+    converters,
   );
 }

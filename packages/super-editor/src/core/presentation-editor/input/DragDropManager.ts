@@ -270,12 +270,7 @@ export class DragDropManager {
   }
 
   destroy(): void {
-    if (this.#dragOverRaf !== null) {
-      const win = this.#deps?.getViewportHost()?.ownerDocument?.defaultView ?? window;
-      win.cancelAnimationFrame(this.#dragOverRaf);
-      this.#dragOverRaf = null;
-    }
-    this.#pendingDragOver = null;
+    this.#cancelPendingDragOverSelection();
     this.unbind();
     this.#deps = null;
   }
@@ -345,6 +340,15 @@ export class DragDropManager {
     });
   }
 
+  #cancelPendingDragOverSelection(): void {
+    if (this.#dragOverRaf !== null) {
+      const win = this.#deps?.getViewportHost()?.ownerDocument?.defaultView ?? window;
+      win.cancelAnimationFrame(this.#dragOverRaf);
+      this.#dragOverRaf = null;
+    }
+    this.#pendingDragOver = null;
+  }
+
   #applyDragOverSelection(clientX: number, clientY: number): void {
     if (!this.#deps) return;
     const activeEditor = this.#deps.getActiveEditor();
@@ -378,6 +382,8 @@ export class DragDropManager {
 
     event.preventDefault();
     event.stopPropagation();
+
+    this.#cancelPendingDragOverSelection();
 
     const activeEditor = this.#deps.getActiveEditor();
     if (!activeEditor?.isEditable) return;
@@ -507,6 +513,7 @@ export class DragDropManager {
   }
 
   #handleDragEnd(_event: DragEvent): void {
+    this.#cancelPendingDragOverSelection();
     // Remove visual feedback
     this.#deps?.getPainterHost()?.classList.remove('drag-over');
   }

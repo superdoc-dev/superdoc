@@ -235,6 +235,10 @@ export const PermissionRanges = Extension.create({
             return false;
           }
 
+          if (this.editor?.options?.documentMode === 'viewing') {
+            return false;
+          }
+
           const { selection } = state;
           if (!selection || selection.empty) {
             return false;
@@ -250,11 +254,8 @@ export const PermissionRanges = Extension.create({
             if (sharedGroup) startAttrs.edGrp = sharedGroup;
             if (providedEd) startAttrs.ed = providedEd;
 
-            const endAttrs = { id: resolvedId };
-            if (sharedGroup) endAttrs.edGrp = sharedGroup;
-
             const startNode = permStartType.create(startAttrs);
-            const endNode = permEndType.create(endAttrs);
+            const endNode = permEndType.create({ id: resolvedId });
             tr.insert(selection.to, endNode);
             tr.insert(selection.from, startNode);
           }

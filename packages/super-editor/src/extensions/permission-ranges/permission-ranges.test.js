@@ -317,7 +317,7 @@ describe('PermissionRanges extension', () => {
     expect(startNode.attrs.id).toBeTruthy();
     expect(startNode.attrs.id).toBe(endNode.attrs.id);
     expect(startNode.attrs.edGrp).toBe('everyone');
-    expect(endNode.attrs.edGrp).toBe('everyone');
+    expect(endNode.attrs.edGrp).toBeNull();
   });
 
   it('wrapBetweenPermission allows overriding id, edGrp, and ed', () => {
@@ -348,7 +348,7 @@ describe('PermissionRanges extension', () => {
     expect(startNode.attrs.id).toBe('permission-900');
     expect(endNode.attrs.id).toBe('permission-900');
     expect(startNode.attrs.edGrp).toBe('contributors');
-    expect(endNode.attrs.edGrp).toBe('contributors');
+    expect(endNode.attrs.edGrp).toBeNull();
     expect(startNode.attrs.ed).toBe('superdoc.dev\\author');
   });
 

@@ -17,6 +17,7 @@ import './image-commands.js';
 import './comment-commands.js';
 import './track-changes-commands.js';
 import './miscellaneous-commands.js';
+import './permission-commands.js';
 
 // Attribute augmentations
 import './node-attributes.js';

@@ -14,7 +14,6 @@ import type {
   HyperlinkConfig,
   TrackedChangesConfig,
   NodeHandlerContext,
-  ParagraphToFlowBlocksParams,
   NestedConverters,
   ConverterContext,
 } from '../types.js';

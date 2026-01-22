@@ -29,7 +29,6 @@ import type {
   HyperlinkConfig,
   ThemeColorPalette,
   ConverterContext,
-  TableNodeToBlockOptions,
   NestedConverters,
   TableNodeToBlockParams,
 } from '../types.js';

@@ -2,7 +2,7 @@
  * Type definitions for ProseMirror to FlowBlock adapter
  */
 
-import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta, Engines } from '@superdoc/contracts';
+import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta } from '@superdoc/contracts';
 import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
@@ -302,9 +302,6 @@ export interface NodeHandlerContext {
  */
 export type NodeHandler = (node: PMNode, context: NodeHandlerContext) => void;
 
-/**
- * List counter context for numbering
- */
 export type ParagraphToFlowBlocksParams = {
   para: PMNode;
   nextBlockId: BlockIdGenerator;
@@ -336,10 +333,6 @@ export type DrawingNodeToBlockConverter = (
   nextBlockId: BlockIdGenerator,
   positions: PositionMap,
 ) => FlowBlock | null;
-
-export type TableNodeToBlockOptions = {
-  converters?: NestedConverters;
-};
 
 export type TableNodeToBlockParams = {
   node: PMNode;
@@ -404,10 +397,3 @@ export interface OoxmlBorder {
  * Underline style type derived from TextRun contract
  */
 export type UnderlineStyle = NonNullable<import('@superdoc/contracts').TextRun['underline']>['style'];
-
-/**
- * Engine type aliases
- */
-export type NumberingLevelEngine = Engines.NumberingLevel;
-export type EngineParagraphSpacing = Engines.ParagraphSpacing;
-export type EngineParagraphIndent = Engines.ParagraphIndent;

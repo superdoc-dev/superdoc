@@ -28,48 +28,6 @@ import {
 import { processTocChildren } from './toc.js';
 
 /**
- * Type for paragraph converter function.
- * This is injected to avoid circular dependencies.
- */
-type ParagraphConverter = (
-  para: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-) => FlowBlock[];
-
-/**
- * Type for table converter function.
- */
-type TableConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-) => FlowBlock | null;
-
-/**
- * Type for image converter function.
- */
-type ImageConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  trackedMeta?: TrackedChangeMeta,
-  trackedChanges?: TrackedChangesConfig,
-) => FlowBlock | null;
-
-/**
  * Context object containing processing dependencies and configuration.
  */
 interface ProcessingContext {

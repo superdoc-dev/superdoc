@@ -13,25 +13,11 @@ import type {
   Run,
   TextRun,
   ImageRun,
-  ImageBlock,
-  TrackedChangeMeta,
   SdtMetadata,
   FieldAnnotationRun,
   FieldAnnotationMetadata,
 } from '@superdoc/contracts';
-import type {
-  PMNode,
-  PMMark,
-  BlockIdGenerator,
-  PositionMap,
-  StyleContext,
-  TrackedChangesConfig,
-  HyperlinkConfig,
-  NodeHandlerContext,
-  ThemeColorPalette,
-  NestedConverters,
-  ParagraphToFlowBlocksParams,
-} from '../types.js';
+import type { PMNode, PMMark, PositionMap, NodeHandlerContext, ParagraphToFlowBlocksParams } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
@@ -45,7 +31,7 @@ import {
 import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
-import { ptToPx, pickNumber, isPlainObject, twipsToPx } from '../utilities.js';
+import { pickNumber, isPlainObject } from '../utilities.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 

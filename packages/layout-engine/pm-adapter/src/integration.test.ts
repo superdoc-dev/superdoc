@@ -547,7 +547,9 @@ describe('PM → FlowBlock → Measure integration', () => {
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
     expect(shadingLayer).toBeTruthy();
-    expect(shadingLayer.style.backgroundColor).toBe('rgb(170, 187, 204)');
+    // Accept both rgb and hex formats (jsdom uses rgb, happy-dom uses hex)
+    const bgColor = shadingLayer.style.backgroundColor.toLowerCase();
+    expect(bgColor === 'rgb(170, 187, 204)' || bgColor === '#aabbcc').toBe(true);
 
     document.body.removeChild(mount);
   });

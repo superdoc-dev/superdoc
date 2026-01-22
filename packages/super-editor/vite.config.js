@@ -25,6 +25,8 @@ export default defineConfig(({ mode }) => {
       minWorkers,
       maxWorkers,
       globals: true,
+      // Keep jsdom for super-editor due to DOM API compatibility requirements
+      // (happy-dom has differences in HTML serialization and style computation)
       environment: 'jsdom',
       retry: 2,
       testTimeout: 20000,
@@ -32,6 +34,7 @@ export default defineConfig(({ mode }) => {
       exclude: [
         ...configDefaults.exclude,
         '**/*.spec.js',
+        '**/node-import-timing.test.js', // Slow test, run separately with test:slow
       ],
       coverage: {
         provider: 'v8',

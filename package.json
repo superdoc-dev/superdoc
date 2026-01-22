@@ -5,6 +5,8 @@
   "packageManager": "pnpm@10.25.0",
   "scripts": {
     "test": "vitest run",
+    "test:bench": "VITEST_BENCH=true vitest run",
+    "test:slow": "vitest run --root ./packages/super-editor src/tests/editor/node-import-timing.test.js",
     "test:debug": "pnpm --prefix packages/super-editor run test:debug",
     "test:inspect": "NODE_OPTIONS=\"--inspect-brk=9229\" vitest --pool threads --poolOptions.threads.singleThread",
     "test:all": "vitest run",
@@ -73,6 +75,7 @@
     "eslint-import-resolver-typescript": "catalog:",
     "eslint-plugin-import-x": "catalog:",
     "eslint-plugin-jsdoc": "catalog:",
+    "happy-dom": "catalog:",
     "husky": "catalog:",
     "jsdom": "catalog:",
     "lint-staged": "catalog:",

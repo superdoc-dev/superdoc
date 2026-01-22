@@ -1,6 +1,6 @@
 import { getInitialJSON } from '../docxHelper.js';
 import { carbonCopy } from '../../../utilities/carbonCopy.js';
-import { twipsToInches } from '../../helpers.js';
+import { twipsToInches, resolveOpcTargetPath } from '../../helpers.js';
 import { DEFAULT_LINKED_STYLES } from '../../exporter-docx-defs.js';
 import { drawingNodeHandlerEntity } from './imageImporter.js';
 import { trackChangeNodeHandlerEntity } from './trackChangesImporter.js';
@@ -755,7 +755,8 @@ const findSectPr = (obj, result = []) => {
 const getHeaderFooterSectionData = (sectionData, docx) => {
   const rId = sectionData.attributes.Id;
   const target = sectionData.attributes.Target;
-  const referenceFile = docx[`word/${target}`];
+  const filePath = resolveOpcTargetPath(target, 'word');
+  const referenceFile = filePath ? docx[filePath] : undefined;
   const currentFileName = target;
   return {
     rId,

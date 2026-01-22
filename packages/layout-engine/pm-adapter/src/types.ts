@@ -2,10 +2,20 @@
  * Type definitions for ProseMirror to FlowBlock adapter
  */
 
-import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta } from '@superdoc/contracts';
+import type { TrackedChangesMode, SectionMetadata, FlowBlock } from '@superdoc/contracts';
 import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
+import type { paragraphToFlowBlocks } from './converters/paragraph.js';
+import type { tableNodeToBlock } from './converters/table.js';
+import type { contentBlockNodeToDrawingBlock } from './converters/content-block.js';
+import type { imageNodeToBlock } from './converters/image.js';
+import type {
+  shapeContainerNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+  vectorShapeNodeToDrawingBlock,
+} from './converters/shapes.js';
 export type { ConverterContext } from './converter-context.js';
 
 export type StyleContext = StyleEngineContext;
@@ -319,22 +329,6 @@ export type ParagraphToFlowBlocksParams = {
   converterContext: ConverterContext;
 };
 
-export type ParagraphToFlowBlocksConverter = (params: ParagraphToFlowBlocksParams) => FlowBlock[];
-
-export type ImageNodeToBlockConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  trackedMeta?: TrackedChangeMeta,
-  trackedChanges?: TrackedChangesConfig,
-) => FlowBlock | null;
-
-export type DrawingNodeToBlockConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-) => FlowBlock | null;
-
 export type TableNodeToBlockParams = {
   node: PMNode;
   nextBlockId: BlockIdGenerator;
@@ -351,17 +345,15 @@ export type TableNodeToBlockParams = {
   enableComments: boolean;
 };
 
-export type TableNodeToBlockConverter = (params: TableNodeToBlockParams) => FlowBlock | null;
-
 export type NestedConverters = {
-  paragraphToFlowBlocks: ParagraphToFlowBlocksConverter;
-  tableNodeToBlock: TableNodeToBlockConverter;
-  contentBlockNodeToDrawingBlock: DrawingNodeToBlockConverter;
-  imageNodeToBlock: ImageNodeToBlockConverter;
-  vectorShapeNodeToDrawingBlock: DrawingNodeToBlockConverter;
-  shapeGroupNodeToDrawingBlock: DrawingNodeToBlockConverter;
-  shapeContainerNodeToDrawingBlock: DrawingNodeToBlockConverter;
-  shapeTextboxNodeToDrawingBlock: DrawingNodeToBlockConverter;
+  paragraphToFlowBlocks: typeof paragraphToFlowBlocks;
+  tableNodeToBlock: typeof tableNodeToBlock;
+  contentBlockNodeToDrawingBlock: typeof contentBlockNodeToDrawingBlock;
+  imageNodeToBlock: typeof imageNodeToBlock;
+  vectorShapeNodeToDrawingBlock: typeof vectorShapeNodeToDrawingBlock;
+  shapeGroupNodeToDrawingBlock: typeof shapeGroupNodeToDrawingBlock;
+  shapeContainerNodeToDrawingBlock: typeof shapeContainerNodeToDrawingBlock;
+  shapeTextboxNodeToDrawingBlock: typeof shapeTextboxNodeToDrawingBlock;
 };
 
 /**

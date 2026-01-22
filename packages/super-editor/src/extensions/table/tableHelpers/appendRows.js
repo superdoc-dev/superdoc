@@ -11,6 +11,18 @@ import { TextSelection } from 'prosemirror-state';
 const ZERO_WIDTH_SPACE = '\u200B';
 
 /**
+ * Offset from a row's start position to the first text position inside its first cell.
+ * Calculated as: row open (1) + cell open (1) + paragraph open (1) = 3
+ */
+const ROW_START_TO_TEXT_OFFSET = 3;
+
+/**
+ * Offset from a cell's position to the first text position inside it.
+ * Calculated as: cell open (1) + paragraph open (1) = 2
+ */
+const CELL_TO_TEXT_OFFSET = 2;
+
+/**
  * Row template formatting
  * @typedef {Object} RowTemplateFormatting
  * @property {import('prosemirror-model').NodeType} blockType - Node type used when building cell content
@@ -313,7 +325,7 @@ export function insertRowAtIndex({ tr, tablePos, tableNode, sourceRowIndex, inse
       tr.insert(insertPos, newRow);
 
       // Set cursor in first cell's paragraph and apply stored marks
-      const cursorPos = insertPos + 3; // row start + cell start + paragraph start
+      const cursorPos = insertPos + ROW_START_TO_TEXT_OFFSET;
       tr.setSelection(TextSelection.create(tr.doc, cursorPos));
 
       // Get formatting from the first CREATED cell, not sourceRow.firstChild
@@ -333,8 +345,7 @@ export function insertRowAtIndex({ tr, tablePos, tableNode, sourceRowIndex, inse
     // Instead, place cursor in one of the extended spanning cells.
     if (cellsToExtend.length > 0) {
       const spanningCellPos = cellsToExtend[0].pos;
-      // Position inside the spanning cell's paragraph (+2 for cell open + paragraph open)
-      const cursorPos = spanningCellPos + 2;
+      const cursorPos = spanningCellPos + CELL_TO_TEXT_OFFSET;
       tr.setSelection(TextSelection.create(tr.doc, cursorPos));
     }
     // No row inserted - the spanning cells already cover this space

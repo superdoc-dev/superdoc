@@ -367,6 +367,135 @@ describe('Table commands', async () => {
     });
   });
 
+  describe('addRow with colspan + rowspan combination', async () => {
+    /**
+     * Creates a table with a cell that has both colspan=2 AND rowspan=2.
+     * This is a common pattern in Word documents (e.g., a header spanning multiple rows and columns).
+     * Structure (3x3 table):
+     * | Cell A (colspan=2, rowspan=2) | Cell B |
+     * |                               | Cell C |
+     * | Cell D                | Cell E| Cell F |
+     */
+    const setupTableWithColspanAndRowspan = async () => {
+      let { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      const RowType = schema.nodes.tableRow;
+      const CellType = schema.nodes.tableCell;
+      const TableType = schema.nodes.table;
+
+      // First row: cell with colspan=2 AND rowspan=2, plus one normal cell
+      const cellA = CellType.create(
+        { rowspan: 2, colspan: 2 },
+        schema.nodes.paragraph.create(null, schema.text('Cell A')),
+      );
+      const cellB = CellType.create(
+        { rowspan: 1, colspan: 1 },
+        schema.nodes.paragraph.create(null, schema.text('Cell B')),
+      );
+      const row1 = RowType.create(null, [cellA, cellB]);
+
+      // Second row: only cell C (columns 0-1 occupied by Cell A's colspan+rowspan)
+      const cellC = CellType.create(
+        { rowspan: 1, colspan: 1 },
+        schema.nodes.paragraph.create(null, schema.text('Cell C')),
+      );
+      const row2 = RowType.create(null, [cellC]);
+
+      // Third row: three normal cells
+      const cellD = CellType.create(
+        { rowspan: 1, colspan: 1 },
+        schema.nodes.paragraph.create(null, schema.text('Cell D')),
+      );
+      const cellE = CellType.create(
+        { rowspan: 1, colspan: 1 },
+        schema.nodes.paragraph.create(null, schema.text('Cell E')),
+      );
+      const cellF = CellType.create(
+        { rowspan: 1, colspan: 1 },
+        schema.nodes.paragraph.create(null, schema.text('Cell F')),
+      );
+      const row3 = RowType.create(null, [cellD, cellE, cellF]);
+
+      table = TableType.create(null, [row1, row2, row3]);
+
+      const doc = schema.nodes.doc.create(null, [table]);
+      const nextState = EditorState.create({ schema, doc, plugins: editor.state.plugins });
+      editor.setState(nextState);
+    };
+
+    beforeEach(async () => {
+      await setupTableWithColspanAndRowspan();
+    });
+
+    it('addRowBefore: increases rowspan of cell with both colspan and rowspan', async () => {
+      const { TextSelection } = await import('prosemirror-state');
+      const { TableMap } = await import('prosemirror-tables');
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+      const map = TableMap.get(table);
+
+      // Cell C is at row 1, column 2 (columns 0-1 are occupied by Cell A)
+      // TableMap index: row 1 * width 3 + col 2 = 5
+      const cellCPosInTable = map.map[5];
+      const absoluteCellCPos = tablePos + 1 + cellCPosInTable;
+      const textPos = absoluteCellCPos + 2;
+
+      const sel = TextSelection.create(editor.state.doc, textPos);
+      const tr = editor.state.tr.setSelection(sel);
+      editor.view.dispatch(tr);
+
+      // Add row before the second row (which is within Cell A's rowspan)
+      const didAdd = editor.commands.addRowBefore();
+      expect(didAdd).toBe(true);
+
+      // Check the updated table
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      expect(updatedTable.childCount).toBe(4); // Now 4 rows
+
+      // Cell A should now have rowspan=3 (was 2, increased by 1)
+      const firstRow = updatedTable.child(0);
+      const cellA = firstRow.firstChild;
+      expect(cellA.attrs.rowspan).toBe(3);
+      expect(cellA.attrs.colspan).toBe(2); // colspan unchanged
+      expect(cellA.textContent).toBe('Cell A');
+
+      // Table should be structurally valid
+      expect(() => TableMap.get(updatedTable)).not.toThrow();
+    });
+
+    it('addRowAfter on row 1: inserts row within colspan+rowspan cell extent', async () => {
+      const { TableMap } = await import('prosemirror-tables');
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      // Position cursor in Cell B (row 0, col 2)
+      const map = TableMap.get(table);
+      const cellBPosInTable = map.map[2]; // row 0 * width 3 + col 2 = 2
+      const absoluteCellBPos = tablePos + 1 + cellBPosInTable;
+      const textPos = absoluteCellBPos + 2;
+      editor.commands.setTextSelection(textPos);
+
+      // Add row after the first row
+      const didAdd = editor.commands.addRowAfter();
+      expect(didAdd).toBe(true);
+
+      // Check the updated table
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      expect(updatedTable.childCount).toBe(4); // Now 4 rows
+
+      // Cell A should now have rowspan=3
+      const firstRow = updatedTable.child(0);
+      const cellA = firstRow.firstChild;
+      expect(cellA.attrs.rowspan).toBe(3);
+      expect(cellA.attrs.colspan).toBe(2);
+
+      // Table should be structurally valid
+      expect(() => TableMap.get(updatedTable)).not.toThrow();
+    });
+  });
+
   describe('deleteCellAndTableBorders', async () => {
     let table, tablePos;
 

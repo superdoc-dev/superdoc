@@ -124,6 +124,26 @@ describe('ooxml - resolveDocxFontFamily', () => {
 });
 
 describe('ooxml - resolveRunProperties', () => {
+  it('returns inline props when translatedLinkedStyles is null', () => {
+    const params = buildParams({ translatedLinkedStyles: null });
+    const result = resolveRunProperties(params, { bold: true }, null);
+    expect(result).toEqual({ bold: true });
+  });
+
+  it('returns inline props when translatedLinkedStyles.styles is undefined', () => {
+    const params = buildParams({
+      translatedLinkedStyles: { docDefaults: {}, latentStyles: {} } as never,
+    });
+    const result = resolveRunProperties(params, { bold: true }, null);
+    expect(result).toEqual({ bold: true });
+  });
+
+  it('returns empty object when both translatedLinkedStyles and inlineRpr are null', () => {
+    const params = buildParams({ translatedLinkedStyles: null });
+    const result = resolveRunProperties(params, null, null);
+    expect(result).toEqual({});
+  });
+
   it('returns resolved run properties with defaults', () => {
     const params = buildParams({
       translatedLinkedStyles: {
@@ -231,6 +251,26 @@ describe('ooxml - resolveRunProperties', () => {
 });
 
 describe('ooxml - resolveParagraphProperties', () => {
+  it('returns inline props when translatedLinkedStyles is null', () => {
+    const params = buildParams({ translatedLinkedStyles: null });
+    const result = resolveParagraphProperties(params, { styleId: 'test' }, null);
+    expect(result).toEqual({ styleId: 'test' });
+  });
+
+  it('returns inline props when translatedLinkedStyles.styles is undefined', () => {
+    const params = buildParams({
+      translatedLinkedStyles: { docDefaults: {}, latentStyles: {} } as never,
+    });
+    const result = resolveParagraphProperties(params, { styleId: 'test' }, null);
+    expect(result).toEqual({ styleId: 'test' });
+  });
+
+  it('returns empty object when both translatedLinkedStyles and inlineProps are null', () => {
+    const params = buildParams({ translatedLinkedStyles: null });
+    const result = resolveParagraphProperties(params, null, null);
+    expect(result).toEqual({});
+  });
+
   it('combines defaults, Normal, and inline props', () => {
     const params = buildParams({
       translatedLinkedStyles: {

@@ -37,6 +37,8 @@ describe('document-part-object', () => {
     const mockHyperlinkConfig = {
       enableRichHyperlinks: false,
     };
+    const mockConverterContext = { docx: {} } as never;
+    const mockEnableComments = true;
 
     const mockParagraphConverter = vi.fn((_node: PMNode) => [
       {
@@ -61,6 +63,8 @@ describe('document-part-object', () => {
         styleContext: mockStyleContext,
         bookmarks: new Map(),
         hyperlinkConfig: mockHyperlinkConfig,
+        enableComments: mockEnableComments,
+        converterContext: mockConverterContext,
         converters: {
           paragraphToFlowBlocks: mockParagraphConverter,
           tableNodeToBlock: vi.fn(),
@@ -120,9 +124,12 @@ describe('document-part-object', () => {
             docPartObjectId: 'toc-1',
             tocInstruction: 'TOC \\o "1-3"',
           }),
+          expect.objectContaining({
+            converters: mockContext.converters,
+            converterContext: mockConverterContext,
+            enableComments: mockEnableComments,
+          }),
           expect.any(Object),
-          expect.any(Object),
-          mockParagraphConverter,
         );
       });
     });
@@ -174,9 +181,12 @@ describe('document-part-object', () => {
             docPartObjectId: 'toc-123',
             tocInstruction: 'TOC \\o "1-3"',
           }),
+          expect.objectContaining({
+            converters: mockContext.converters,
+            converterContext: mockConverterContext,
+            enableComments: mockEnableComments,
+          }),
           expect.any(Object),
-          expect.any(Object),
-          mockParagraphConverter,
         );
       });
 
@@ -274,7 +284,7 @@ describe('document-part-object', () => {
 
     // ==================== Missing Dependencies Tests ====================
     describe('Missing dependencies', () => {
-      it('should not process when paragraphToFlowBlocks converter is missing', () => {
+      it('should still call processTocChildren even if paragraphToFlowBlocks is missing', () => {
         const node: PMNode = {
           type: 'documentPartObject',
           content: [
@@ -302,10 +312,10 @@ describe('document-part-object', () => {
 
         handleDocumentPartObjectNode(node, contextWithoutConverter);
 
-        expect(tocModule.processTocChildren).not.toHaveBeenCalled();
+        expect(tocModule.processTocChildren).toHaveBeenCalled();
       });
 
-      it('should not process when converters is missing entirely', () => {
+      it('should throw when converters is missing entirely', () => {
         const node: PMNode = {
           type: 'documentPartObject',
           content: [
@@ -323,9 +333,7 @@ describe('document-part-object', () => {
           converters: undefined as never,
         };
 
-        handleDocumentPartObjectNode(node, contextWithoutConverters);
-
-        expect(tocModule.processTocChildren).not.toHaveBeenCalled();
+        expect(() => handleDocumentPartObjectNode(node, contextWithoutConverters)).toThrow();
       });
     });
 
@@ -354,6 +362,9 @@ describe('document-part-object', () => {
             styleContext: mockStyleContext,
             bookmarks: mockContext.bookmarks,
             hyperlinkConfig: mockHyperlinkConfig,
+            converters: mockContext.converters,
+            converterContext: mockConverterContext,
+            enableComments: mockEnableComments,
           }),
         );
       });
@@ -378,7 +389,7 @@ describe('document-part-object', () => {
         });
       });
 
-      it('should pass paragraphToFlowBlocks converter as fifth argument', () => {
+      it('should pass converters in context', () => {
         const node: PMNode = {
           type: 'documentPartObject',
           content: [{ type: 'paragraph' }],
@@ -392,7 +403,7 @@ describe('document-part-object', () => {
         handleDocumentPartObjectNode(node, mockContext);
 
         const callArgs = vi.mocked(tocModule.processTocChildren).mock.calls[0];
-        expect(callArgs[4]).toBe(mockParagraphConverter);
+        expect(callArgs[2].converters).toBe(mockContext.converters);
       });
     });
 

@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  paragraphToFlowBlocks,
+  paragraphToFlowBlocks as baseParagraphToFlowBlocks,
   mergeAdjacentRuns,
   dataAttrsCompatible,
   commentsCompatible,
@@ -22,6 +22,8 @@ import type {
   TrackedChangesConfig,
   HyperlinkConfig,
   StyleContext,
+  ThemeColorPalette,
+  NestedConverters,
 } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import type { Run, TextRun, FlowBlock, ParagraphBlock, TrackedChangeMeta, ImageRun } from '@superdoc/contracts';
@@ -78,6 +80,76 @@ import {
   annotateBlockWithTrackedChange,
   applyTrackedChangesModeToRuns,
 } from '../tracked-changes.js';
+
+const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = { enableRichHyperlinks: false };
+let defaultConverterContext: ConverterContext = {
+  translatedNumbering: {},
+  translatedLinkedStyles: {
+    docDefaults: {
+      runProperties: {},
+      paragraphProperties: {},
+    },
+    styles: {},
+  },
+};
+
+const isConverters = (value: unknown): value is NestedConverters => {
+  if (!value || typeof value !== 'object') return false;
+  return (
+    'paragraphToFlowBlocks' in value ||
+    'tableNodeToBlock' in value ||
+    'imageNodeToBlock' in value ||
+    'contentBlockNodeToDrawingBlock' in value ||
+    'vectorShapeNodeToDrawingBlock' in value ||
+    'shapeGroupNodeToDrawingBlock' in value ||
+    'shapeContainerNodeToDrawingBlock' in value ||
+    'shapeTextboxNodeToDrawingBlock' in value
+  );
+};
+
+const paragraphToFlowBlocks = (
+  para: PMNode,
+  nextBlockId: BlockIdGenerator,
+  positions: PositionMap,
+  defaultFont: string,
+  defaultSize: number,
+  styleContext: StyleContext,
+  trackedChangesConfig?: TrackedChangesConfig,
+  bookmarks?: Map<string, number>,
+  hyperlinkConfig?: HyperlinkConfig,
+  themeColors?: ThemeColorPalette,
+  converterContextOrConverters?: ConverterContext | NestedConverters,
+  maybeConverters?: NestedConverters,
+) => {
+  let converterContext: ConverterContext | undefined;
+  let converters: NestedConverters | undefined;
+
+  if (isConverters(maybeConverters)) {
+    converters = maybeConverters;
+  }
+
+  if (isConverters(converterContextOrConverters)) {
+    converters = converterContextOrConverters;
+  } else if (converterContextOrConverters) {
+    converterContext = converterContextOrConverters as ConverterContext;
+  }
+
+  return baseParagraphToFlowBlocks({
+    para,
+    nextBlockId,
+    positions,
+    defaultFont,
+    defaultSize,
+    styleContext,
+    trackedChangesConfig,
+    bookmarks,
+    hyperlinkConfig: hyperlinkConfig ?? DEFAULT_HYPERLINK_CONFIG,
+    themeColors,
+    converters: converters as NestedConverters,
+    converterContext: converterContext ?? defaultConverterContext,
+    enableComments: true,
+  });
+};
 
 describe('paragraph converters', () => {
   describe('mergeAdjacentRuns', () => {
@@ -626,6 +698,7 @@ describe('paragraph converters', () => {
           styles: {},
         },
       };
+      defaultConverterContext = converterContext;
 
       // Setup default mock returns
       vi.mocked(computeParagraphAttrs).mockReturnValue({ paragraphAttrs: {}, resolvedParagraphProperties: {} });
@@ -1899,16 +1972,17 @@ describe('paragraph converters', () => {
         );
 
         expect(converters.tableNodeToBlock).toHaveBeenCalledWith(
-          tableNode,
-          nextBlockId,
-          positions,
-          'Arial',
-          16,
-          styleContext,
-          trackedChanges,
-          bookmarks,
-          hyperlinkConfig,
-          undefined,
+          expect.objectContaining({
+            node: tableNode,
+            nextBlockId,
+            positions,
+            defaultFont: 'Arial',
+            defaultSize: 16,
+            styleContext,
+            trackedChangesConfig: trackedChanges,
+            bookmarks,
+            hyperlinkConfig,
+          }),
         );
         expect(blocks.some((b) => b.kind === 'table')).toBe(true);
       });

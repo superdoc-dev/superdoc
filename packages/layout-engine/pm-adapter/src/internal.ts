@@ -24,7 +24,7 @@ import {
   createBlockIdGenerator,
 } from './utilities.js';
 import {
-  paragraphToFlowBlocks as paragraphToFlowBlocksImpl,
+  paragraphToFlowBlocks,
   contentBlockNodeToDrawingBlock,
   imageNodeToBlock,
   handleImageNode,
@@ -36,7 +36,7 @@ import {
   handleShapeGroupNode,
   handleShapeContainerNode,
   handleShapeTextboxNode,
-  tableNodeToBlock as tableNodeToBlockImpl,
+  tableNodeToBlock,
   handleTableNode,
   hydrateImageBlocks,
   handleParagraphNode,
@@ -54,20 +54,12 @@ import type {
   HyperlinkConfig,
   FlowBlocksResult,
   AdapterOptions,
-  BlockIdGenerator,
-  PositionMap,
   NodeHandlerContext,
   NodeHandler,
-  PMDocumentMap,
-  BatchAdapterOptions,
-  ThemeColorPalette,
+  NestedConverters,
   ConverterContext,
-  TableNodeToBlockOptions,
-  ParagraphToFlowBlocksConverter,
-  TableNodeToBlockConverter,
 } from './types.js';
 import { defaultDecimalSeparatorFor } from '@superdoc/locale-utils';
-import { DEFAULT_HYPERLINK_CONFIG } from './constants';
 
 const DEFAULT_FONT = 'Arial';
 const DEFAULT_SIZE = 16;
@@ -91,6 +83,17 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   shapeGroup: handleShapeGroupNode,
   shapeContainer: handleShapeContainerNode,
   shapeTextbox: handleShapeTextboxNode,
+};
+
+export const converters: NestedConverters = {
+  contentBlockNodeToDrawingBlock,
+  imageNodeToBlock,
+  vectorShapeNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeContainerNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+  tableNodeToBlock,
+  paragraphToFlowBlocks,
 };
 
 /**
@@ -159,8 +162,21 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     enableRichHyperlinks: options?.enableRichHyperlinks ?? false,
   };
   const enableComments = options?.enableComments ?? true;
-  const themeColors = options?.themeColors;
-  const converterContext = options?.converterContext;
+  const converterContext: ConverterContext = options?.converterContext ?? {
+    translatedNumbering: {},
+    translatedLinkedStyles: {
+      docDefaults: {
+        runProperties: {
+          fontFamily: {
+            ascii: defaultFont,
+          },
+          fontSize: pxToPt(defaultSize) ?? 12,
+        },
+      },
+      latentStyles: {},
+      styles: {},
+    },
+  };
 
   if (!doc.content) {
     return { blocks: [], bookmarks: new Map() };
@@ -178,28 +194,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     blockCounts[kind] = (blockCounts[kind] ?? 0) + 1;
   };
 
-  // Track B: List counter tracker for sequential numbering
-  // Maps "numId:ilvl" -> current counter value for that list/level
-  const listCounters = new Map<string, number>();
-
-  const getListCounter = (numId: number, ilvl: number): number => {
-    const key = `${numId}:${ilvl}`;
-    return listCounters.get(key) ?? 0;
-  };
-
-  const incrementListCounter = (numId: number, ilvl: number): number => {
-    const key = `${numId}:${ilvl}`;
-    const current = listCounters.get(key) ?? 0;
-    const next = current + 1;
-    listCounters.set(key, next);
-    return next;
-  };
-
-  const resetListCounter = (numId: number, ilvl: number): void => {
-    const key = `${numId}:${ilvl}`;
-    listCounters.set(key, 0);
-  };
-
   // Range-aware section analysis (matches toFlowBlocks semantics)
   const bodySectionProps = doc.attrs?.bodySectPr ?? doc.attrs?.sectPr;
   const sectionRanges = options?.emitSectionBreaks ? analyzeSectionRanges(doc, bodySectionProps) : [];
@@ -214,72 +208,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     blocks.push(sectionBreak);
     recordBlockKind(sectionBreak.kind);
   }
-
-  const paragraphConverter = (
-    para: PMNode,
-    nextBlockId: BlockIdGenerator,
-    positions: PositionMap,
-    defaultFont: string,
-    defaultSize: number,
-    context: StyleContext,
-    trackedChanges?: TrackedChangesConfig,
-    bookmarks?: Map<string, number>,
-    hyperlinkConfig?: HyperlinkConfig,
-    themeColorsParam?: ThemeColorPalette,
-    converterCtx?: ConverterContext,
-  ): FlowBlock[] =>
-    paragraphToFlowBlocks(
-      para,
-      nextBlockId,
-      positions,
-      defaultFont,
-      defaultSize,
-      context,
-      trackedChanges,
-      bookmarks,
-      hyperlinkConfig,
-      themeColorsParam ?? themeColors,
-      converterCtx ?? converterContext,
-      enableComments,
-    );
-
-  const tableConverter = (
-    node: PMNode,
-    nextBlockId: BlockIdGenerator,
-    positions: PositionMap,
-    defaultFont: string,
-    defaultSize: number,
-    context: StyleContext,
-    trackedChanges?: TrackedChangesConfig,
-    bookmarks?: Map<string, number>,
-    hyperlinkConfig?: HyperlinkConfig,
-    themeColorsParam?: ThemeColorPalette,
-    converterCtx?: ConverterContext,
-  ): FlowBlock | null =>
-    tableNodeToBlock(
-      node,
-      nextBlockId,
-      positions,
-      defaultFont,
-      defaultSize,
-      context,
-      trackedChanges,
-      bookmarks,
-      hyperlinkConfig,
-      themeColorsParam ?? themeColors,
-      paragraphConverter,
-      converterCtx ?? converterContext,
-      {
-        converters: {
-          paragraphToFlowBlocks: paragraphConverter,
-          imageNodeToBlock,
-          vectorShapeNodeToDrawingBlock,
-          shapeGroupNodeToDrawingBlock,
-          shapeContainerNodeToDrawingBlock,
-          shapeTextboxNodeToDrawingBlock,
-        },
-      },
-    );
 
   // Build handler context for node processing
   const handlerContext: NodeHandlerContext = {
@@ -300,16 +228,8 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
       currentSectionIndex: 0,
       currentParagraphIndex: 0,
     },
-    converters: {
-      // Type assertion needed due to signature mismatch between actual function and type definition
-      paragraphToFlowBlocks: paragraphConverter as unknown as ParagraphToFlowBlocksConverter,
-      tableNodeToBlock: tableConverter as unknown as TableNodeToBlockConverter,
-      imageNodeToBlock,
-      vectorShapeNodeToDrawingBlock,
-      shapeGroupNodeToDrawingBlock,
-      shapeContainerNodeToDrawingBlock,
-      shapeTextboxNodeToDrawingBlock,
-    },
+    converters,
+    themeColors: options?.themeColors,
   };
 
   // Process nodes using handler dispatch pattern
@@ -341,27 +261,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   const mergedBlocks = mergeDropCapParagraphs(hydratedBlocks);
 
   return { blocks: mergedBlocks, bookmarks };
-}
-
-export function toFlowBlocksMap(documents: PMDocumentMap, options?: BatchAdapterOptions): Record<string, FlowBlock[]> {
-  const { blockIdPrefixFactory, ...adapterOptions } = options ?? {};
-  const result: Record<string, FlowBlock[]> = {};
-  if (!documents) {
-    return result;
-  }
-
-  Object.entries(documents).forEach(([key, doc]) => {
-    if (!doc) return;
-    const prefix = blockIdPrefixFactory?.(key) ?? adapterOptions.blockIdPrefix ?? `${key}-`;
-    const perDocOptions: AdapterOptions = {
-      ...adapterOptions,
-      blockIdPrefix: prefix,
-    };
-    const { blocks } = toFlowBlocks(doc, perDocOptions);
-    result[key] = blocks;
-  });
-
-  return result;
 }
 
 /**
@@ -423,138 +322,4 @@ function mergeDropCapParagraphs(blocks: FlowBlock[]): FlowBlock[] {
   }
 
   return result;
-}
-
-/**
- * Wrapper for paragraphToFlowBlocks that injects block node converters.
- *
- * Paragraphs can contain inline images, shapes, and tables. This wrapper
- * injects those converters so the paragraph implementation can handle them.
- *
- * @see converters/paragraph.ts for the actual implementation
- */
-function paragraphToFlowBlocks(
-  para: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
-  themeColors?: ThemeColorPalette,
-  converterContext?: ConverterContext,
-  enableComments = true,
-): FlowBlock[] {
-  return paragraphToFlowBlocksImpl(
-    para,
-    nextBlockId,
-    positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    trackedChanges,
-    bookmarks,
-    hyperlinkConfig,
-    themeColors,
-    {
-      contentBlockNodeToDrawingBlock,
-      imageNodeToBlock,
-      vectorShapeNodeToDrawingBlock,
-      shapeGroupNodeToDrawingBlock,
-      shapeContainerNodeToDrawingBlock,
-      shapeTextboxNodeToDrawingBlock,
-      tableNodeToBlock: (
-        node: PMNode,
-        nextBlockId: BlockIdGenerator,
-        positions: PositionMap,
-        defaultFont: string,
-        defaultSize: number,
-        styleContext: StyleContext,
-        trackedChanges?: TrackedChangesConfig,
-        bookmarks?: Map<string, number>,
-        hyperlinkConfig?: HyperlinkConfig,
-        themeColors?: ThemeColorPalette,
-        converterCtx?: ConverterContext,
-      ) =>
-        tableNodeToBlockImpl(
-          node,
-          nextBlockId,
-          positions,
-          defaultFont,
-          defaultSize,
-          styleContext,
-          trackedChanges,
-          bookmarks,
-          hyperlinkConfig,
-          themeColors,
-          paragraphToFlowBlocks,
-          converterCtx ?? converterContext,
-          {
-            converters: {
-              // Type assertion needed due to signature mismatch between actual function and type definition
-              paragraphToFlowBlocks: paragraphToFlowBlocksImpl as unknown as ParagraphToFlowBlocksConverter,
-              imageNodeToBlock,
-              vectorShapeNodeToDrawingBlock,
-              shapeGroupNodeToDrawingBlock,
-              shapeContainerNodeToDrawingBlock,
-              shapeTextboxNodeToDrawingBlock,
-            },
-          },
-        ),
-    },
-    converterContext,
-    enableComments,
-  );
-}
-
-/**
- * Wrapper for tableNodeToBlock that injects the paragraph converter.
- *
- * Tables contain paragraphs in their cells. This wrapper injects the
- * paragraph converter so table cells can be properly converted.
- *
- * @see converters/table.ts for the actual implementation
- */
-function tableNodeToBlock(
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  _paragraphToFlowBlocksParam?: unknown,
-  converterContext?: ConverterContext,
-  options?: TableNodeToBlockOptions,
-): FlowBlock | null {
-  return tableNodeToBlockImpl(
-    node,
-    nextBlockId,
-    positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    trackedChanges,
-    bookmarks,
-    hyperlinkConfig,
-    themeColors,
-    paragraphToFlowBlocks,
-    converterContext,
-    options ?? {
-      converters: {
-        // Type assertion needed due to signature mismatch between actual function and type definition
-        paragraphToFlowBlocks: paragraphToFlowBlocksImpl as unknown as ParagraphToFlowBlocksConverter,
-        imageNodeToBlock,
-        vectorShapeNodeToDrawingBlock,
-        shapeGroupNodeToDrawingBlock,
-        shapeContainerNodeToDrawingBlock,
-        shapeTextboxNodeToDrawingBlock,
-      },
-    },
-  );
 }

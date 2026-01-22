@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { toFlowBlocks as baseToFlowBlocks, toFlowBlocksMap as baseToFlowBlocksMap } from './index.js';
-import type { PMNode, PMMark, AdapterOptions, BatchAdapterOptions, PMDocumentMap } from './index.js';
+import { toFlowBlocks as baseToFlowBlocks } from './index.js';
+import type { PMNode, PMMark, AdapterOptions } from './index.js';
 import type { FlowBlock, ImageBlock, TableBlock } from '@superdoc/contracts';
 import basicParagraphFixture from './fixtures/basic-paragraph.json';
 import edgeCasesFixture from './fixtures/edge-cases.json';
@@ -24,9 +24,6 @@ const DEFAULT_CONVERTER_CONTEXT = {
 
 const toFlowBlocks = (pmDoc: PMNode | object, options: AdapterOptions = {}) =>
   baseToFlowBlocks(pmDoc, { converterContext: DEFAULT_CONVERTER_CONTEXT, ...options });
-
-const toFlowBlocksMap = (docs: PMDocumentMap, options: BatchAdapterOptions = {}) =>
-  baseToFlowBlocksMap(docs, { converterContext: DEFAULT_CONVERTER_CONTEXT, ...options });
 
 const createTestBodySectPr = () => ({
   type: 'element',
@@ -1205,42 +1202,6 @@ describe('toFlowBlocks', () => {
       blocks.forEach((block) => {
         expect(block.id.startsWith('header-default-')).toBe(true);
       });
-    });
-  });
-
-  describe('batch conversion', () => {
-    it('converts a map of documents with unique prefixes', () => {
-      const docs = {
-        default: {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Default' }] }],
-        },
-        first: {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First' }] }],
-        },
-        empty: null,
-      };
-
-      const result = toFlowBlocksMap(docs, {
-        blockIdPrefixFactory: (key) => `header-${key}-`,
-      });
-
-      expect(Object.keys(result)).toEqual(['default', 'first']);
-      expect(result.default[0].id.startsWith('header-default-')).toBe(true);
-      expect(result.first[0].id.startsWith('header-first-')).toBe(true);
-    });
-
-    it('falls back to key-based prefixes when factory is absent', () => {
-      const docs = {
-        default: {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Default' }] }],
-        },
-      };
-
-      const result = toFlowBlocksMap(docs);
-      expect(result.default[0].id.startsWith('default-')).toBe(true);
     });
   });
 

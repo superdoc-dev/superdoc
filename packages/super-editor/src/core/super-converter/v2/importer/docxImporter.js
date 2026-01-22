@@ -810,10 +810,14 @@ export function filterOutRootInlineNodes(content = []) {
     const type = node.type;
     const preservableNodeName = PRESERVABLE_INLINE_XML_NAMES[type];
 
-    // Special case: anchored images should be preserved at root level
-    // because they're positioned absolutely and behave like block elements
+    // Anchored images are inline nodes; wrap them to satisfy doc's block-only root.
     if (type === 'image' && node.attrs?.isAnchor) {
-      result.push(node);
+      result.push({
+        type: 'paragraph',
+        content: [node],
+        attrs: {},
+        marks: [],
+      });
       return;
     }
 

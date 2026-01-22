@@ -207,6 +207,8 @@ export function insertRowsAtTableEnd({ tr, tablePos, tableNode, rows }) {
 
 /**
  * Insert a new row at a specific index, copying formatting from a source row.
+ * Handles rowspan cells properly by incrementing their rowspan when they span
+ * across the insertion point.
  * @param {Object} params - Insert parameters
  * @param {import('prosemirror-state').Transaction} params.tr - Transaction to mutate
  * @param {number} params.tablePos - Absolute position of the table
@@ -220,15 +222,83 @@ export function insertRowAtIndex({ tr, tablePos, tableNode, sourceRowIndex, inse
   const sourceRow = tableNode.child(sourceRowIndex);
   if (!sourceRow) return false;
 
-  // Build row with formatting using existing helper
-  const newRow = buildRowFromTemplateRow({
-    schema,
-    tableNode,
-    templateRow: sourceRow,
-    values: [],
-    copyRowStyle: true,
-  });
-  if (!newRow) return false;
+  const map = TableMap.get(tableNode);
+  const { width, height } = map;
+
+  // Track which columns are occupied by spanning cells from above
+  // and collect the cells we need to create for the new row
+  const newCells = [];
+  const cellsToExtend = []; // { pos: number, attrs: object }
+
+  const RowType = schema.nodes.tableRow;
+  const CellType = schema.nodes.tableCell;
+
+  // Get formatting from source row for new cells
+  const sourceFormatting = extractRowTemplateFormatting(sourceRow.firstChild, schema);
+
+  for (let col = 0; col < width; ) {
+    // Check if we're inserting within an existing table (not at the end)
+    // and if a cell from above spans into this row
+    if (insertIndex > 0 && insertIndex < height) {
+      const indexAbove = (insertIndex - 1) * width + col;
+      const indexAtInsert = insertIndex * width + col;
+
+      // If the cell position is the same, a cell from above spans into this position
+      if (map.map[indexAbove] === map.map[indexAtInsert]) {
+        const cellPos = map.map[indexAbove];
+        const cell = tableNode.nodeAt(cellPos);
+        if (cell) {
+          const attrs = cell.attrs;
+          // Record this cell needs its rowspan extended
+          cellsToExtend.push({
+            pos: tablePos + 1 + cellPos,
+            attrs: { ...attrs, rowspan: (attrs.rowspan || 1) + 1 },
+          });
+          // Skip the columns this cell spans
+          col += attrs.colspan || 1;
+          continue;
+        }
+      }
+    }
+
+    // Use TableMap to find the cell at this column in the source row
+    // This correctly handles cases where the source row has cells from rowspans above
+    const sourceMapIndex = sourceRowIndex * width + col;
+    const sourceCellPos = map.map[sourceMapIndex];
+    const sourceCell = tableNode.nodeAt(sourceCellPos);
+
+    if (!sourceCell) {
+      // Fallback: use the first cell of the source row
+      const fallbackCell = sourceRow.firstChild;
+      const formatting = extractRowTemplateFormatting(fallbackCell, schema);
+      const content = buildFormattedCellBlock(schema, '', formatting, true);
+      const newCell = CellType.createAndFill({ rowspan: 1, colspan: 1 }, content);
+      if (newCell) newCells.push(newCell);
+      col += 1;
+      continue;
+    }
+
+    const colspan = sourceCell.attrs.colspan || 1;
+    const formatting = extractRowTemplateFormatting(sourceCell, schema);
+
+    // Create a new cell with formatting but reset rowspan to 1
+    const cellAttrs = {
+      ...sourceCell.attrs,
+      rowspan: 1, // New cells always have rowspan 1
+    };
+
+    const content = buildFormattedCellBlock(schema, '', formatting, true);
+    const targetCellType = sourceCell.type.name === 'tableHeader' ? CellType : sourceCell.type;
+    const newCell = targetCellType.createAndFill(cellAttrs, content);
+    if (newCell) newCells.push(newCell);
+
+    col += colspan;
+  }
+
+  // Apply rowspan extensions to spanning cells (before insert to maintain positions)
+  for (const { pos, attrs } of cellsToExtend) {
+    tr.setNodeMarkup(pos, null, attrs);
+  }
 
   // Calculate insert position
   let insertPos = tablePos + 1;
@@ -236,14 +306,38 @@ export function insertRowAtIndex({ tr, tablePos, tableNode, sourceRowIndex, inse
     insertPos += tableNode.child(i).nodeSize;
   }
 
-  tr.insert(insertPos, newRow);
+  // Create and insert the new row (only if we have cells to add)
+  if (newCells.length > 0) {
+    const newRow = RowType.createAndFill(null, newCells);
+    if (newRow) {
+      tr.insert(insertPos, newRow);
 
-  // Set cursor in first cell's paragraph and apply stored marks
-  const formatting = extractRowTemplateFormatting(sourceRow.firstChild, schema);
-  const cursorPos = insertPos + 3; // row start + cell start + paragraph start
-  tr.setSelection(TextSelection.create(tr.doc, cursorPos));
-  if (formatting.textMarks?.length) {
-    tr.setStoredMarks(formatting.textMarks);
+      // Set cursor in first cell's paragraph and apply stored marks
+      const cursorPos = insertPos + 3; // row start + cell start + paragraph start
+      tr.setSelection(TextSelection.create(tr.doc, cursorPos));
+
+      // Get formatting from the first CREATED cell, not sourceRow.firstChild
+      // This fixes cursor marks when column 0 is spanned and cursor lands in a different column
+      const firstCellBlock = newCells[0].firstChild;
+      const firstTextNode = firstCellBlock?.firstChild;
+      if (firstTextNode?.marks?.length) {
+        tr.setStoredMarks(firstTextNode.marks);
+      } else if (sourceFormatting.textMarks?.length) {
+        tr.setStoredMarks(sourceFormatting.textMarks);
+      }
+    }
+  } else {
+    // Edge case: all columns are occupied by spanning cells from above.
+    // The rowspans have already been extended (cellsToExtend), so inserting
+    // a physical cell would create overlap/structural conflict.
+    // Instead, place cursor in one of the extended spanning cells.
+    if (cellsToExtend.length > 0) {
+      const spanningCellPos = cellsToExtend[0].pos;
+      // Position inside the spanning cell's paragraph (+2 for cell open + paragraph open)
+      const cursorPos = spanningCellPos + 2;
+      tr.setSelection(TextSelection.create(tr.doc, cursorPos));
+    }
+    // No row inserted - the spanning cells already cover this space
   }
 
   return true;

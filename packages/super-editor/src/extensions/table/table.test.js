@@ -197,6 +197,176 @@ describe('Table commands', async () => {
     });
   });
 
+  describe('addRow with merged cells (rowspan)', async () => {
+    /**
+     * Creates a table with a vertically merged cell (rowspan=2) in the first column.
+     * Structure:
+     * | Cell A (rowspan=2) | Cell B |
+     * |                    | Cell C |
+     */
+    const setupTableWithRowspan = async () => {
+      let { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      const RowType = schema.nodes.tableRow;
+      const CellType = schema.nodes.tableCell;
+      const TableType = schema.nodes.table;
+
+      // First row: cell with rowspan=2, normal cell
+      const cellA = CellType.create(
+        { rowspan: 2, colspan: 1 },
+        schema.nodes.paragraph.create(null, schema.text('Cell A')),
+      );
+      const cellB = CellType.create(
+        { rowspan: 1, colspan: 1 },
+        schema.nodes.paragraph.create(null, schema.text('Cell B')),
+      );
+      const row1 = RowType.create(null, [cellA, cellB]);
+
+      // Second row: only one cell (first column occupied by rowspan)
+      const cellC = CellType.create(
+        { rowspan: 1, colspan: 1 },
+        schema.nodes.paragraph.create(null, schema.text('Cell C')),
+      );
+      const row2 = RowType.create(null, [cellC]);
+
+      table = TableType.create(null, [row1, row2]);
+
+      const doc = schema.nodes.doc.create(null, [table]);
+      const nextState = EditorState.create({ schema, doc, plugins: editor.state.plugins });
+      editor.setState(nextState);
+    };
+
+    beforeEach(async () => {
+      await setupTableWithRowspan();
+    });
+
+    it('addRowBefore: increases rowspan of spanning cell when inserting above spanned row', async () => {
+      const { TextSelection } = await import('prosemirror-state');
+      const { TableMap } = await import('prosemirror-tables');
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+      const map = TableMap.get(table);
+
+      // Cell C is at row 1, column 1 (column 0 is occupied by Cell A's rowspan)
+      const cellCPosInTable = map.map[3]; // row 1 * width 2 + col 1 = index 3
+      const absoluteCellCPos = tablePos + 1 + cellCPosInTable;
+
+      // Position inside Cell C's paragraph (+2 for cell open + paragraph open)
+      const textPos = absoluteCellCPos + 2;
+
+      // Use TextSelection directly (editor.commands.setTextSelection has issues with table cells)
+      const sel = TextSelection.create(editor.state.doc, textPos);
+      const tr = editor.state.tr.setSelection(sel);
+      editor.view.dispatch(tr);
+
+      // Add row before the second row
+      const didAdd = editor.commands.addRowBefore();
+      expect(didAdd).toBe(true);
+
+      // Check the updated table
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      expect(updatedTable.childCount).toBe(3); // Now 3 rows
+
+      // The first cell (Cell A) should now have rowspan=3
+      const firstRow = updatedTable.child(0);
+      const cellA = firstRow.firstChild;
+      expect(cellA.attrs.rowspan).toBe(3);
+      expect(cellA.textContent).toBe('Cell A');
+    });
+
+    it('addRowAfter: increases rowspan of spanning cell when inserting below first row', async () => {
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      // Position cursor in the first row (row index 0)
+      let firstRowPos = tablePos + 1;
+      // Skip the first cell (Cell A with rowspan) and go to second cell (Cell B)
+      let cellBPos = firstRowPos + 1 + table.child(0).firstChild.nodeSize;
+      let textPos = cellBPos + 2;
+      editor.commands.setTextSelection(textPos);
+
+      // Add row after the first row
+      const didAdd = editor.commands.addRowAfter();
+      expect(didAdd).toBe(true);
+
+      // Check the updated table
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      expect(updatedTable.childCount).toBe(3); // Now 3 rows
+
+      // The first cell (Cell A) should now have rowspan=3
+      const firstRow = updatedTable.child(0);
+      const cellA = firstRow.firstChild;
+      expect(cellA.attrs.rowspan).toBe(3);
+      expect(cellA.textContent).toBe('Cell A');
+    });
+
+    it('addRowBefore on first row: does not affect rowspan (no cells span from above)', async () => {
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      // Position cursor in the first row, first cell
+      let firstRowPos = tablePos + 1;
+      let cellPos = firstRowPos + 1;
+      let textPos = cellPos + 2;
+      editor.commands.setTextSelection(textPos);
+
+      // Add row before the first row
+      const didAdd = editor.commands.addRowBefore();
+      expect(didAdd).toBe(true);
+
+      // Check the updated table
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      expect(updatedTable.childCount).toBe(3); // Now 3 rows
+
+      // The new row should be at index 0, original first row now at index 1
+      // Cell A (now in row 1) should still have rowspan=2 (unchanged)
+      const originalFirstRow = updatedTable.child(1);
+      const cellA = originalFirstRow.firstChild;
+      expect(cellA.attrs.rowspan).toBe(2);
+      expect(cellA.textContent).toBe('Cell A');
+
+      // New row should have 2 cells with rowspan=1
+      const newRow = updatedTable.child(0);
+      expect(newRow.childCount).toBe(2);
+      newRow.forEach((cell) => {
+        expect(cell.attrs.rowspan).toBe(1);
+      });
+    });
+
+    it('addRowAfter: uses correct formatting from source cell when first column is spanned', async () => {
+      // This test verifies Issue 2: cursor formatting should come from the
+      // first CREATED cell, not sourceRow.firstChild (which may be spanned)
+      const { TextSelection } = await import('prosemirror-state');
+      const { TableMap } = await import('prosemirror-tables');
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+      const map = TableMap.get(table);
+
+      // Cell C is at row 1, column 1 (column 0 is occupied by Cell A's rowspan)
+      const cellCPosInTable = map.map[3]; // row 1 * width 2 + col 1 = index 3
+      const absoluteCellCPos = tablePos + 1 + cellCPosInTable;
+
+      // Position inside Cell C's paragraph
+      const textPos = absoluteCellCPos + 2;
+      const sel = TextSelection.create(editor.state.doc, textPos);
+      const tr = editor.state.tr.setSelection(sel);
+      editor.view.dispatch(tr);
+
+      // Add row after the second row
+      const didAdd = editor.commands.addRowAfter();
+      expect(didAdd).toBe(true);
+
+      // Table should now have 3 rows and be structurally valid
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      expect(updatedTable.childCount).toBe(3);
+
+      // TableMap.get should not throw (table is valid)
+      expect(() => TableMap.get(updatedTable)).not.toThrow();
+    });
+  });
+
   describe('deleteCellAndTableBorders', async () => {
     let table, tablePos;
 

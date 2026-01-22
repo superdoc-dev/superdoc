@@ -109,6 +109,27 @@ describe('measureBlock', () => {
       }
     });
 
+    it('falls back when text runs are missing font size', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          // Intentionally omitting fontSize to test fallback behavior
+          {
+            text: 'Hello',
+            fontFamily: 'Arial',
+          } as unknown as TextRun,
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(Number.isFinite(measure.lines[0].lineHeight)).toBe(true);
+      expect(measure.lines[0].lineHeight).toBeGreaterThan(0);
+      expect(measure.lines[0].width).toBeGreaterThan(0);
+    });
+
     it('uses content width for wordLayout list first lines with standard hanging indent', async () => {
       // Standard hanging indent pattern: marker is positioned in the hanging area (left of text),
       // NOT inline with text. The marker doesn't consume horizontal space on the first line.

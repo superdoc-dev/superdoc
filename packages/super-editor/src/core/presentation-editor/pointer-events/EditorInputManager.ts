@@ -1382,9 +1382,10 @@ export class EditorInputManager {
     if (!editorDom) return;
 
     const active = document.activeElement as HTMLElement | null;
-    const activeIsEditor = active === editorDom || (!!active && editorDom.contains(active));
+    const activeIsEditor = active === editorDom || (!!active && editorDom.contains?.(active));
+    const hasFocus = typeof view.hasFocus === 'function' && view.hasFocus();
 
-    if (activeIsEditor || view.hasFocus()) {
+    if (activeIsEditor || hasFocus) {
       return;
     }
 

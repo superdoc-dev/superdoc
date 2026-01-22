@@ -46,8 +46,6 @@ import { TableProperties } from '@superdoc/style-engine/ooxml';
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  defaultFont: string;
-  defaultSize: number;
   trackedChangesConfig?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
@@ -249,8 +247,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         para: childNode,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -272,8 +268,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             para: nestedNode,
             nextBlockId: context.nextBlockId,
             positions: context.positions,
-            defaultFont: context.defaultFont,
-            defaultSize: context.defaultSize,
             trackedChangesConfig: context.trackedChangesConfig,
             bookmarks: context.bookmarks,
             hyperlinkConfig: context.hyperlinkConfig,
@@ -290,8 +284,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             node: nestedNode,
             nextBlockId: context.nextBlockId,
             positions: context.positions,
-            defaultFont: context.defaultFont,
-            defaultSize: context.defaultSize,
             trackedChangesConfig: context.trackedChangesConfig,
             bookmarks: context.bookmarks,
             hyperlinkConfig: context.hyperlinkConfig,
@@ -315,8 +307,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         node: childNode,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -655,8 +645,6 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
  * @param node - Table node to convert
  * @param nextBlockId - Block ID generator
  * @param positions - Position map for PM node tracking
- * @param defaultFont - Default font family
- * @param defaultSize - Default font size
  * @param _styleContext - Style context (unused in current implementation)
  * @param trackedChanges - Optional tracked changes configuration
  * @param bookmarks - Optional bookmark position map
@@ -668,8 +656,6 @@ export function tableNodeToBlock({
   node,
   nextBlockId,
   positions,
-  defaultFont,
-  defaultSize,
   trackedChangesConfig,
   bookmarks,
   hyperlinkConfig,
@@ -685,8 +671,6 @@ export function tableNodeToBlock({
   const parserDeps: TableParserDependencies = {
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -874,8 +858,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -888,8 +870,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     node,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

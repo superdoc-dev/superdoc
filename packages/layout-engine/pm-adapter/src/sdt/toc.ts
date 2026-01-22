@@ -94,8 +94,6 @@ export function processTocChildren(
   context: {
     nextBlockId: BlockIdGenerator;
     positions: PositionMap;
-    defaultFont: string;
-    defaultSize: number;
     bookmarks?: Map<string, number>;
     trackedChangesConfig?: TrackedChangesConfig;
     hyperlinkConfig: HyperlinkConfig;
@@ -120,8 +118,6 @@ export function processTocChildren(
         para: child,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -174,8 +170,6 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -193,8 +187,6 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
         para: child,
         nextBlockId,
         positions,
-        defaultFont,
-        defaultSize,
         trackedChangesConfig,
         bookmarks,
         themeColors,

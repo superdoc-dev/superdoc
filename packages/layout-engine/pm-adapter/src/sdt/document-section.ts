@@ -33,8 +33,6 @@ import { processTocChildren } from './toc.js';
 interface ProcessingContext {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  defaultFont: string;
-  defaultSize: number;
   trackedChangesConfig?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
@@ -72,8 +70,6 @@ function processParagraphChild(
     para: child,
     nextBlockId: context.nextBlockId,
     positions: context.positions,
-    defaultFont: context.defaultFont,
-    defaultSize: context.defaultSize,
     trackedChangesConfig: undefined, // trackedChanges
     bookmarks: context.bookmarks,
     hyperlinkConfig: context.hyperlinkConfig,
@@ -112,8 +108,6 @@ function processTableChild(
     node: child,
     nextBlockId: context.nextBlockId,
     positions: context.positions,
-    defaultFont: context.defaultFont,
-    defaultSize: context.defaultSize,
     trackedChangesConfig: context.trackedChangesConfig,
     bookmarks: context.bookmarks,
     hyperlinkConfig: context.hyperlinkConfig,
@@ -183,8 +177,6 @@ function processNestedStructuredContent(
         para: grandchild,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -206,8 +198,6 @@ function processNestedStructuredContent(
         node: grandchild,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -260,8 +250,6 @@ function processDocumentPartObject(
       {
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
         enableComments: context.enableComments,
@@ -346,8 +334,6 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
     bookmarks,
     hyperlinkConfig,
     converters,
@@ -364,8 +350,6 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
     {
       nextBlockId,
       positions,
-      defaultFont,
-      defaultSize,
       bookmarks,
       trackedChangesConfig,
       hyperlinkConfig,

@@ -32,6 +32,7 @@ catalog:
   eslint-plugin-import-x: ^4.16.1
   eslint-plugin-jsdoc: ^54.1.0
   eventemitter3: ^5.0.1
+  happy-dom: ^20.3.4
   he: ^1.2.0
   husky: ^9.1.7
   jimp: ^1.6.0

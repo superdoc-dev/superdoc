@@ -162,7 +162,7 @@ export type RunMarks = {
     style?: 'single' | 'double' | 'dotted' | 'dashed' | 'wavy';
     /** Underline color as hex string (defaults to text color). */
     color?: string;
-  };
+  } | null;
   /** Strikethrough text decoration. */
   strike?: boolean;
   /** Highlight (background) color as hex string. */

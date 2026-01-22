@@ -31,4 +31,4 @@ export type {
   FlowBlocksResult,
 } from './types.js';
 export { SectionType } from './types.js';
-export { toFlowBlocks, toFlowBlocksMap } from './internal.js';
+export { toFlowBlocks } from './internal.js';

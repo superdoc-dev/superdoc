@@ -781,18 +781,29 @@ class SuperConverter {
 
   getDocumentFonts() {
     const inlineDocumentFonts = [...new Set(this.inlineDocumentFonts || [])];
+    const defaults = this.getDocumentDefaultStyles?.() || {};
+    const defaultTypeface = typeof defaults.typeface === 'string' ? defaults.typeface : null;
+    const defaultFontFamilyCss = typeof defaults.fontFamilyCss === 'string' ? defaults.fontFamilyCss : null;
+    const fallbackFont =
+      defaultTypeface ||
+      (defaultFontFamilyCss ? defaultFontFamilyCss.split(',')[0]?.replace(/["']/g, '').trim() : null);
+    const withDefaultFont = (fonts) => {
+      const result = [...fonts];
+      if (fallbackFont && !result.includes(fallbackFont)) result.push(fallbackFont);
+      return result;
+    };
     const fontTable = this.convertedXml['word/fontTable.xml'];
     if (!fontTable) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     const wFonts = fontTable.elements?.find((element) => element.name === 'w:fonts');
     if (!wFonts) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     if (!wFonts.elements) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     const fontsInFontTable = wFonts.elements
@@ -800,7 +811,7 @@ class SuperConverter {
       .map((element) => element.attributes['w:name']);
 
     const allFonts = [...inlineDocumentFonts, ...fontsInFontTable];
-    return [...new Set(allFonts)];
+    return withDefaultFont([...new Set(allFonts)]);
   }
 
   getFontFaceImportString() {

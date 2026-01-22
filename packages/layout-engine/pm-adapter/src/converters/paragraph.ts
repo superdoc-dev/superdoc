@@ -13,23 +13,11 @@ import type {
   Run,
   TextRun,
   ImageRun,
-  ImageBlock,
-  TrackedChangeMeta,
   SdtMetadata,
   FieldAnnotationRun,
   FieldAnnotationMetadata,
 } from '@superdoc/contracts';
-import type {
-  PMNode,
-  PMMark,
-  BlockIdGenerator,
-  PositionMap,
-  StyleContext,
-  TrackedChangesConfig,
-  HyperlinkConfig,
-  NodeHandlerContext,
-  ThemeColorPalette,
-} from '../types.js';
+import type { PMNode, PMMark, PositionMap, NodeHandlerContext, ParagraphToFlowBlocksParams } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
@@ -43,7 +31,7 @@ import {
 import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
-import { ptToPx, pickNumber, isPlainObject, twipsToPx } from '../utilities.js';
+import { pickNumber, isPlainObject } from '../utilities.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
@@ -533,68 +521,21 @@ const applyInlineRunProperties = (
  * @param enableComments - Whether to include comment marks in the output (defaults to true). Set to false for viewing modes where comments should be hidden.
  * @returns Array of FlowBlocks (paragraphs, images, drawings, page breaks, etc.)
  */
-export function paragraphToFlowBlocks(
-  para: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
-  themeColors?: ThemeColorPalette,
-  // Converter dependencies injected to avoid circular imports
-  converters?: {
-    contentBlockNodeToDrawingBlock?: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    imageNodeToBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-      trackedMeta?: TrackedChangeMeta,
-      trackedChanges?: TrackedChangesConfig,
-    ) => ImageBlock | null;
-    vectorShapeNodeToDrawingBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    shapeGroupNodeToDrawingBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    shapeContainerNodeToDrawingBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    shapeTextboxNodeToDrawingBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    tableNodeToBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-      defaultFont: string,
-      defaultSize: number,
-      styleContext: StyleContext,
-      trackedChanges?: TrackedChangesConfig,
-      bookmarks?: Map<string, number>,
-      hyperlinkConfig?: HyperlinkConfig,
-      themeColors?: ThemeColorPalette,
-      converterContext?: ConverterContext,
-    ) => FlowBlock | null;
-  },
-  converterContext?: ConverterContext,
+export function paragraphToFlowBlocks({
+  para,
+  nextBlockId,
+  positions,
+  defaultFont,
+  defaultSize,
+  styleContext,
+  trackedChangesConfig,
+  bookmarks,
+  hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
+  themeColors,
+  converters,
+  converterContext,
   enableComments = true,
-): FlowBlock[] {
+}: ParagraphToFlowBlocksParams): FlowBlock[] {
   const paragraphProps =
     typeof para.attrs?.paragraphProperties === 'object' && para.attrs.paragraphProperties !== null
       ? (para.attrs.paragraphProperties as ParagraphProperties)
@@ -1033,14 +974,14 @@ export function paragraphToFlowBlocks(
       const anchorParagraphId = nextId();
       flushParagraph();
       const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
-      const trackedMeta = trackedChanges?.enabled ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
-      if (shouldHideTrackedNode(trackedMeta, trackedChanges)) {
+      const trackedMeta = trackedChangesConfig?.enabled ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
+      if (shouldHideTrackedNode(trackedMeta, trackedChangesConfig)) {
         return;
       }
       if (converters?.imageNodeToBlock) {
-        const imageBlock = converters.imageNodeToBlock(node, nextBlockId, positions, trackedMeta, trackedChanges);
+        const imageBlock = converters.imageNodeToBlock(node, nextBlockId, positions, trackedMeta, trackedChangesConfig);
         if (imageBlock && imageBlock.kind === 'image') {
-          annotateBlockWithTrackedChange(imageBlock, trackedMeta, trackedChanges);
+          annotateBlockWithTrackedChange(imageBlock, trackedMeta, trackedChangesConfig);
           blocks.push(attachAnchorParagraphId(imageBlock, anchorParagraphId));
         }
       }
@@ -1157,19 +1098,21 @@ export function paragraphToFlowBlocks(
       const anchorParagraphId = nextId();
       flushParagraph();
       if (converters?.tableNodeToBlock) {
-        const tableBlock = converters.tableNodeToBlock(
+        const tableBlock = converters.tableNodeToBlock({
           node,
           nextBlockId,
           positions,
           defaultFont,
           defaultSize,
           styleContext,
-          trackedChanges,
+          trackedChangesConfig,
           bookmarks,
           hyperlinkConfig,
           themeColors,
-          ...(converterContext !== undefined ? [converterContext] : []),
-        );
+          converterContext,
+          converters,
+          enableComments,
+        });
         if (tableBlock) {
           blocks.push(attachAnchorParagraphId(tableBlock, anchorParagraphId));
         }
@@ -1258,7 +1201,7 @@ export function paragraphToFlowBlocks(
     }
   });
 
-  if (!trackedChanges) {
+  if (!trackedChangesConfig) {
     return blocks;
   }
 
@@ -1270,20 +1213,20 @@ export function paragraphToFlowBlocks(
     }
     const filteredRuns = applyTrackedChangesModeToRuns(
       block.runs,
-      trackedChanges,
+      trackedChangesConfig,
       hyperlinkConfig,
       applyMarksToRun,
       themeColors,
       enableComments,
     );
-    if (trackedChanges.enabled && filteredRuns.length === 0) {
+    if (trackedChangesConfig.enabled && filteredRuns.length === 0) {
       return;
     }
     block.runs = filteredRuns;
     block.attrs = {
       ...(block.attrs ?? {}),
-      trackedChangesMode: trackedChanges.mode,
-      trackedChangesEnabled: trackedChanges.enabled,
+      trackedChangesMode: trackedChangesConfig.mode,
+      trackedChangesEnabled: trackedChangesConfig.enabled,
     };
     processedBlocks.push(block);
   });
@@ -1313,6 +1256,9 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     hyperlinkConfig,
     sectionState,
     converters,
+    converterContext,
+    themeColors,
+    enableComments,
   } = context;
   const { ranges: sectionRanges, currentSectionIndex, currentParagraphIndex } = sectionState;
 
@@ -1331,13 +1277,10 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     }
   }
 
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
-  if (!paragraphToFlowBlocks) {
-    return;
-  }
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
-  const paragraphBlocks = paragraphToFlowBlocks(
-    node,
+  const paragraphBlocks = paragraphToFlowBlocks({
+    para: node,
     nextBlockId,
     positions,
     defaultFont,
@@ -1346,9 +1289,11 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
-    undefined, // themeColors - not available in NodeHandlerContext
-    context.converterContext,
-  );
+    themeColors,
+    converterContext,
+    converters,
+    enableComments,
+  });
   paragraphBlocks.forEach((block) => {
     blocks.push(block);
     recordBlockKind(block.kind);

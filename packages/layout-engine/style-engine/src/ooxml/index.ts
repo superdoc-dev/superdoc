@@ -43,7 +43,7 @@ export function resolveRunProperties(
   isListNumber = false,
   numberingDefinedInline = false,
 ): RunProperties {
-  if (!params.translatedLinkedStyles) {
+  if (!params.translatedLinkedStyles?.styles) {
     return inlineRpr ?? {};
   }
   if (!inlineRpr) {
@@ -128,7 +128,7 @@ export function resolveParagraphProperties(
   if (!inlineProps) {
     inlineProps = {} as ParagraphProperties;
   }
-  if (!params.translatedLinkedStyles) {
+  if (!params.translatedLinkedStyles?.styles) {
     return inlineProps;
   }
 

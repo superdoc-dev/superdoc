@@ -1,6 +1,6 @@
 import { getInitialJSON } from '../docxHelper.js';
 import { carbonCopy } from '../../../utilities/carbonCopy.js';
-import { twipsToInches } from '../../helpers.js';
+import { twipsToInches, resolveOpcTargetPath } from '../../helpers.js';
 import { DEFAULT_LINKED_STYLES } from '../../exporter-docx-defs.js';
 import { drawingNodeHandlerEntity } from './imageImporter.js';
 import { trackChangeNodeHandlerEntity } from './trackChangesImporter.js';
@@ -755,7 +755,8 @@ const findSectPr = (obj, result = []) => {
 const getHeaderFooterSectionData = (sectionData, docx) => {
   const rId = sectionData.attributes.Id;
   const target = sectionData.attributes.Target;
-  const referenceFile = docx[`word/${target}`];
+  const filePath = resolveOpcTargetPath(target, 'word');
+  const referenceFile = filePath ? docx[filePath] : undefined;
   const currentFileName = target;
   return {
     rId,
@@ -810,10 +811,14 @@ export function filterOutRootInlineNodes(content = []) {
     const type = node.type;
     const preservableNodeName = PRESERVABLE_INLINE_XML_NAMES[type];
 
-    // Special case: anchored images should be preserved at root level
-    // because they're positioned absolutely and behave like block elements
+    // Anchored images are inline nodes; wrap them to satisfy doc's block-only root.
     if (type === 'image' && node.attrs?.isAnchor) {
-      result.push(node);
+      result.push({
+        type: 'paragraph',
+        content: [node],
+        attrs: {},
+        marks: [],
+      });
       return;
     }
 

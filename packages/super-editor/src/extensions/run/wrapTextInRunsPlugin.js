@@ -1,5 +1,5 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
-import { decodeRPrFromMarks, resolveRunProperties } from '@converter/styles.js';
+import { decodeRPrFromMarks, encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
 
 const mergeRanges = (ranges, docSize) => {
   if (!ranges.length) return [];
@@ -81,30 +81,17 @@ const getParagraphAtPos = (doc, pos) => {
  * @param {Object} editor.converter - The DOCX converter instance with style data.
  * @param {Object} editor.converter.convertedXml - The parsed DOCX XML structure for theme/font lookups.
  * @param {Object} editor.converter.numbering - The numbering definitions from DOCX.
- * @returns {Object} Simplified run properties object with character-level formatting.
- * @returns {string} [return.fontFamily] - Resolved font family name (extracted from complex font object).
- * @returns {string} [return.fontSize] - Font size in points (e.g., "12pt").
- * @returns {boolean} [return.bold] - Whether text should be bold.
- * @returns {boolean} [return.italic] - Whether text should be italic.
- * @returns {Object} [return.underline] - Underline properties from DOCX (contains w:val, w:color).
- * @returns {boolean} [return.strike] - Whether text should be struck through.
+ * @returns {{runProperties: Object, markDefs: Array<Object>}} Resolved run properties and mark definitions.
  *
  * @remarks
- * Font family extraction handles two cases:
- * 1. Complex font objects with 'ascii' property: extracts the ascii value
- * 2. Simple string values: uses the string directly
- * 3. Nested objects: attempts to extract 'ascii' property from the fontValue
- *
- * Font size conversion: DOCX uses half-points, so we divide by 2 to get points.
- *
- * Error handling: Returns empty object on any failure to prevent crashes during typing.
+ * Error handling: Returns empty objects on any failure to prevent crashes during typing.
  * This allows the plugin to gracefully degrade when converter data is unavailable.
  */
 const resolveRunPropertiesFromParagraphStyle = (paragraphNode, editor) => {
-  if (!paragraphNode || !editor?.converter) return {};
+  if (!paragraphNode || !editor?.converter) return { runProperties: {}, markDefs: [] };
 
   const styleId = paragraphNode.attrs?.paragraphProperties?.styleId;
-  if (!styleId) return {};
+  if (!styleId) return { runProperties: {}, markDefs: [] };
 
   try {
     const params = {
@@ -112,26 +99,12 @@ const resolveRunPropertiesFromParagraphStyle = (paragraphNode, editor) => {
       translatedLinkedStyles: editor.converter.translatedLinkedStyles,
     };
     const resolvedPpr = { styleId };
-    const runProps = resolveRunProperties(params, {}, resolvedPpr, false, false);
+    const runProperties = resolveRunProperties(params, {}, resolvedPpr, null, false, false);
+    const markDefs = encodeMarksFromRPr(runProperties, editor.converter.convertedXml);
 
-    const runProperties = {};
-    if (runProps.fontFamily) {
-      const fontValue = runProps.fontFamily.ascii || runProps.fontFamily;
-      if (fontValue) {
-        runProperties.fontFamily = typeof fontValue === 'string' ? fontValue : fontValue.ascii;
-      }
-    }
-    if (runProps.fontSize) {
-      runProperties.fontSize = `${runProps.fontSize / 2}pt`;
-    }
-    if (runProps.bold) runProperties.bold = true;
-    if (runProps.italic) runProperties.italic = true;
-    if (runProps.underline) runProperties.underline = runProps.underline;
-    if (runProps.strike) runProperties.strike = true;
-
-    return runProperties;
+    return { runProperties, markDefs: Array.isArray(markDefs) ? markDefs : [] };
   } catch (_e) {
-    return {};
+    return { runProperties: {}, markDefs: [] };
   }
 };
 
@@ -142,56 +115,6 @@ const createMarksFromDefs = (schema, markDefs = []) =>
       return markType ? markType.create(def.attrs) : null;
     })
     .filter(Boolean);
-
-/**
- * Creates mark definitions from pre-converted style run properties.
- * This is used when we already have CSS-formatted values (e.g., fontSize: "12pt")
- * and need to create marks without going through encodeMarksFromRPr which expects
- * raw OOXML values.
- *
- * @param {Object} styleRunProps - Pre-converted run properties from resolveRunPropertiesFromParagraphStyle
- * @returns {Array<Object>} Mark definitions ready for createMarksFromDefs
- */
-const createMarkDefsFromStyleRunProps = (styleRunProps) => {
-  const markDefs = [];
-  const textStyleAttrs = {};
-
-  if (styleRunProps.fontSize) {
-    textStyleAttrs.fontSize = styleRunProps.fontSize;
-  }
-  if (styleRunProps.fontFamily) {
-    textStyleAttrs.fontFamily = styleRunProps.fontFamily;
-  }
-
-  if (Object.keys(textStyleAttrs).length > 0) {
-    markDefs.push({ type: 'textStyle', attrs: textStyleAttrs });
-  }
-
-  if (styleRunProps.bold) {
-    markDefs.push({ type: 'bold', attrs: { value: true } });
-  }
-  if (styleRunProps.italic) {
-    markDefs.push({ type: 'italic', attrs: { value: true } });
-  }
-  if (styleRunProps.strike) {
-    markDefs.push({ type: 'strike', attrs: { value: true } });
-  }
-  if (styleRunProps.underline) {
-    const underlineType = styleRunProps.underline['w:val'];
-    if (underlineType) {
-      let underlineColor = styleRunProps.underline['w:color'];
-      if (underlineColor && underlineColor.toLowerCase() !== 'auto' && !underlineColor.startsWith('#')) {
-        underlineColor = `#${underlineColor}`;
-      }
-      markDefs.push({
-        type: 'underline',
-        attrs: { underlineType, underlineColor },
-      });
-    }
-  }
-
-  return markDefs;
-};
 
 // Keep collapsed selections inside run nodes so caret geometry maps to text positions.
 const normalizeSelectionIntoRun = (tr, runType) => {
@@ -237,11 +160,14 @@ const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta =
 
       if ((!node.marks || node.marks.length === 0) && editor?.converter) {
         const paragraphNode = getParagraphAtPos(state.doc, pos);
-        const styleRunProps = resolveRunPropertiesFromParagraphStyle(paragraphNode, editor);
+        const { runProperties: styleRunProps, markDefs: styleMarkDefs } = resolveRunPropertiesFromParagraphStyle(
+          paragraphNode,
+          editor,
+        );
         if (Object.keys(styleRunProps).length > 0) {
           runProperties = styleRunProps;
-          // Use metaStyleMarks if available, otherwise create marks from pre-converted style properties
-          const markDefs = metaStyleMarks.length ? markDefsFromMeta : createMarkDefsFromStyleRunProps(styleRunProps);
+          // Use metaStyleMarks if available, otherwise create marks from resolved OOXML run props
+          const markDefs = metaStyleMarks.length ? markDefsFromMeta : styleMarkDefs;
           const styleMarks = metaStyleMarks.length ? metaStyleMarks : createMarksFromDefs(state.schema, markDefs);
           if (styleMarks.length && typeof state.schema.text === 'function') {
             const textNode = state.schema.text(node.text || '', styleMarks);

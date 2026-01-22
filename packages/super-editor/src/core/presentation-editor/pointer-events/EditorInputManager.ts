@@ -1368,16 +1368,31 @@ export class EditorInputManager {
     this.#callbacks.scheduleSelectionUpdate?.();
   }
 
+  /**
+   * Focuses the editor DOM element if it doesn't already have focus.
+   *
+   * This method performs a focus check before calling blur/focus to prevent
+   * unnecessary focus cycles that can disrupt selection state during list
+   * operations with tracked changes.
+   */
   #focusEditor(): void {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
+    const editor = this.#deps?.getEditor();
+    const view = editor?.view;
+    const editorDom = view?.dom as HTMLElement | undefined;
+    if (!editorDom) return;
+
+    const active = document.activeElement as HTMLElement | null;
+    const activeIsEditor = active === editorDom || (!!active && editorDom.contains(active));
+
+    if (activeIsEditor || view.hasFocus()) {
+      return;
     }
 
-    const editor = this.#deps?.getEditor();
-    const editorDom = editor?.view?.dom as HTMLElement | undefined;
-    if (editorDom) {
-      editorDom.focus();
-      editor?.view?.focus();
+    if (active instanceof HTMLElement) {
+      active.blur();
     }
+
+    editorDom.focus();
+    view?.focus();
   }
 }

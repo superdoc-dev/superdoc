@@ -511,7 +511,6 @@ const applyInlineRunProperties = (
  * @param positions - Position map for PM node tracking
  * @param defaultFont - Default font family
  * @param defaultSize - Default font size
- * @param styleContext - Style resolution context
  * @param trackedChanges - Optional tracked changes configuration
  * @param bookmarks - Optional bookmark position map
  * @param hyperlinkConfig - Hyperlink configuration
@@ -527,7 +526,6 @@ export function paragraphToFlowBlocks({
   positions,
   defaultFont,
   defaultSize,
-  styleContext,
   trackedChangesConfig,
   bookmarks,
   hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
@@ -1104,7 +1102,6 @@ export function paragraphToFlowBlocks({
           positions,
           defaultFont,
           defaultSize,
-          styleContext,
           trackedChangesConfig,
           bookmarks,
           hyperlinkConfig,
@@ -1250,7 +1247,6 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -1285,7 +1281,6 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

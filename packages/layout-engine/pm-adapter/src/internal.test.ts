@@ -637,26 +637,6 @@ describe('internal', () => {
     });
 
     describe('options handling', () => {
-      it('should pass custom decimal separator to style context', () => {
-        const doc: PMNode = {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [] }],
-        };
-
-        toFlowBlocks(doc, { locale: { decimalSeparator: ',' } });
-
-        expect(handleParagraphNode).toHaveBeenCalledWith(
-          expect.any(Object),
-          expect.objectContaining({
-            styleContext: expect.objectContaining({
-              defaults: expect.objectContaining({
-                decimalSeparator: ',',
-              }),
-            }),
-          }),
-        );
-      });
-
       it('should extract lang from document attrs', () => {
         const doc: PMNode = {
           type: 'doc',
@@ -902,7 +882,6 @@ describe('internal', () => {
         positions: context.positions,
         defaultFont: context.defaultFont,
         defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,

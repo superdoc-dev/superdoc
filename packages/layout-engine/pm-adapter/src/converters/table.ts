@@ -24,7 +24,6 @@ import type {
   NodeHandlerContext,
   BlockIdGenerator,
   PositionMap,
-  StyleContext,
   TrackedChangesConfig,
   HyperlinkConfig,
   ThemeColorPalette,
@@ -49,7 +48,6 @@ type TableParserDependencies = {
   positions: PositionMap;
   defaultFont: string;
   defaultSize: number;
-  styleContext: StyleContext;
   trackedChangesConfig?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
@@ -253,7 +251,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         positions: context.positions,
         defaultFont: context.defaultFont,
         defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -277,7 +274,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             positions: context.positions,
             defaultFont: context.defaultFont,
             defaultSize: context.defaultSize,
-            styleContext: context.styleContext,
             trackedChangesConfig: context.trackedChangesConfig,
             bookmarks: context.bookmarks,
             hyperlinkConfig: context.hyperlinkConfig,
@@ -296,7 +292,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
             positions: context.positions,
             defaultFont: context.defaultFont,
             defaultSize: context.defaultSize,
-            styleContext: context.styleContext,
             trackedChangesConfig: context.trackedChangesConfig,
             bookmarks: context.bookmarks,
             hyperlinkConfig: context.hyperlinkConfig,
@@ -322,7 +317,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         positions: context.positions,
         defaultFont: context.defaultFont,
         defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -676,7 +670,6 @@ export function tableNodeToBlock({
   positions,
   defaultFont,
   defaultSize,
-  styleContext,
   trackedChangesConfig,
   bookmarks,
   hyperlinkConfig,
@@ -694,7 +687,6 @@ export function tableNodeToBlock({
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -884,7 +876,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -899,7 +890,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

@@ -5,12 +5,11 @@
  * Document sections can contain paragraphs, lists, tables, images, and nested SDTs.
  */
 
-import type { FlowBlock, ParagraphBlock, SdtMetadata, TrackedChangeMeta } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphBlock, SdtMetadata } from '@superdoc/contracts';
 import type {
   PMNode,
   BlockIdGenerator,
   PositionMap,
-  StyleContext,
   HyperlinkConfig,
   NodeHandlerContext,
   TrackedChangesConfig,
@@ -36,7 +35,6 @@ interface ProcessingContext {
   positions: PositionMap;
   defaultFont: string;
   defaultSize: number;
-  styleContext: StyleContext;
   trackedChangesConfig?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
@@ -76,7 +74,6 @@ function processParagraphChild(
     positions: context.positions,
     defaultFont: context.defaultFont,
     defaultSize: context.defaultSize,
-    styleContext: context.styleContext,
     trackedChangesConfig: undefined, // trackedChanges
     bookmarks: context.bookmarks,
     hyperlinkConfig: context.hyperlinkConfig,
@@ -117,7 +114,6 @@ function processTableChild(
     positions: context.positions,
     defaultFont: context.defaultFont,
     defaultSize: context.defaultSize,
-    styleContext: context.styleContext,
     trackedChangesConfig: context.trackedChangesConfig,
     bookmarks: context.bookmarks,
     hyperlinkConfig: context.hyperlinkConfig,
@@ -189,7 +185,6 @@ function processNestedStructuredContent(
         positions: context.positions,
         defaultFont: context.defaultFont,
         defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -213,7 +208,6 @@ function processNestedStructuredContent(
         positions: context.positions,
         defaultFont: context.defaultFont,
         defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -268,7 +262,6 @@ function processDocumentPartObject(
         positions: context.positions,
         defaultFont: context.defaultFont,
         defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
         enableComments: context.enableComments,
@@ -355,7 +348,6 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     bookmarks,
     hyperlinkConfig,
     converters,
@@ -374,7 +366,6 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
       positions,
       defaultFont,
       defaultSize,
-      styleContext,
       bookmarks,
       trackedChangesConfig,
       hyperlinkConfig,

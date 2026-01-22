@@ -21,7 +21,6 @@ import type {
   PositionMap,
   TrackedChangesConfig,
   HyperlinkConfig,
-  StyleContext,
   ThemeColorPalette,
   NestedConverters,
 } from '../types.js';
@@ -113,7 +112,6 @@ const paragraphToFlowBlocks = (
   positions: PositionMap,
   defaultFont: string,
   defaultSize: number,
-  styleContext: StyleContext,
   trackedChangesConfig?: TrackedChangesConfig,
   bookmarks?: Map<string, number>,
   hyperlinkConfig?: HyperlinkConfig,
@@ -140,7 +138,6 @@ const paragraphToFlowBlocks = (
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig: hyperlinkConfig ?? DEFAULT_HYPERLINK_CONFIG,
@@ -673,7 +670,6 @@ describe('paragraph converters', () => {
   describe('paragraphToFlowBlocks', () => {
     let nextBlockId: BlockIdGenerator;
     let positions: PositionMap;
-    let styleContext: StyleContext;
     let converterContext: ConverterContext;
 
     beforeEach(() => {
@@ -687,7 +683,6 @@ describe('paragraph converters', () => {
       positions = new WeakMap();
 
       // Setup style context (mock)
-      styleContext = {};
       converterContext = {
         translatedNumbering: {},
         translatedLinkedStyles: {
@@ -739,7 +734,7 @@ describe('paragraph converters', () => {
           content: [],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(1);
         expect(blocks[0].kind).toBe('paragraph');
@@ -764,7 +759,7 @@ describe('paragraph converters', () => {
           },
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(1);
         const paraBlock = blocks[0] as ParagraphBlock;
@@ -784,7 +779,7 @@ describe('paragraph converters', () => {
           content: [],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(0);
       });
@@ -802,7 +797,7 @@ describe('paragraph converters', () => {
           content: [{ type: 'text', text: 'Visible text' }],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(1);
         const paraBlock = blocks[0] as ParagraphBlock;
@@ -815,7 +810,7 @@ describe('paragraph converters', () => {
           type: 'paragraph',
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(1);
         expect(blocks[0].kind).toBe('paragraph');
@@ -834,7 +829,7 @@ describe('paragraph converters', () => {
           fontSize: 16,
         });
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(1);
         expect(blocks[0].kind).toBe('paragraph');
@@ -864,7 +859,7 @@ describe('paragraph converters', () => {
           resolvedParagraphProperties: {},
         });
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(2);
         expect(blocks[0].kind).toBe('pageBreak');
@@ -885,7 +880,7 @@ describe('paragraph converters', () => {
           ],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(1);
         const paraBlock = blocks[0] as ParagraphBlock;
@@ -913,7 +908,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -968,7 +962,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1005,7 +998,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1056,7 +1048,7 @@ describe('paragraph converters', () => {
         };
         vi.mocked(tabNodeToRun).mockReturnValue(mockTabRun);
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(vi.mocked(tabNodeToRun)).toHaveBeenCalledWith(tabNode, positions, 0, {}, []);
         const paraBlock = blocks[0] as ParagraphBlock;
@@ -1069,7 +1061,7 @@ describe('paragraph converters', () => {
           content: [{ type: 'tab' }, { type: 'tab' }, { type: 'tab' }],
         };
 
-        paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(1, expect.any(Object), positions, 0, {}, []);
         expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(2, expect.any(Object), positions, 1, {}, []);
@@ -1084,7 +1076,7 @@ describe('paragraph converters', () => {
 
         vi.mocked(tabNodeToRun).mockReturnValue(null);
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         const paraBlock = blocks[0] as ParagraphBlock;
         // Empty paragraph created because no runs were added
@@ -1109,7 +1101,7 @@ describe('paragraph converters', () => {
         };
         vi.mocked(tokenNodeToRun).mockReturnValue(mockTokenRun);
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(vi.mocked(tokenNodeToRun)).toHaveBeenCalledWith(
           tokenNode,
@@ -1137,7 +1129,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
         );
 
         expect(vi.mocked(tokenNodeToRun)).toHaveBeenCalledWith(
@@ -1173,7 +1164,7 @@ describe('paragraph converters', () => {
         };
         vi.mocked(tokenNodeToRun).mockReturnValue(mockTokenRun);
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         const paraBlock = blocks[0] as ParagraphBlock;
         const tokenRun = paraBlock.runs[0] as TextRun;
@@ -1193,7 +1184,7 @@ describe('paragraph converters', () => {
           ],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalled();
         const paraBlock = blocks[0] as ParagraphBlock;
@@ -1219,7 +1210,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
@@ -1249,7 +1239,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
         );
 
         expect(blocks).toHaveLength(1);
@@ -1279,7 +1268,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
         );
 
         expect(blocks).toHaveLength(1);
@@ -1309,7 +1297,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
         );
 
         expect(blocks).toHaveLength(1);
@@ -1339,7 +1326,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
         );
 
         expect(blocks).toHaveLength(1);
@@ -1376,7 +1362,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
         );
 
         expect(blocks).toHaveLength(1);
@@ -1411,7 +1396,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1445,7 +1429,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1477,7 +1460,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1510,7 +1492,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1549,7 +1530,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1589,7 +1569,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1636,7 +1615,7 @@ describe('paragraph converters', () => {
         positions.set(bookmarkNode, { start: 100, end: 100 });
         const bookmarks = new Map<string, number>();
 
-        paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext, undefined, bookmarks);
+        paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, undefined, bookmarks);
 
         expect(bookmarks.get('MyBookmark')).toBe(100);
       });
@@ -1654,7 +1633,7 @@ describe('paragraph converters', () => {
 
         // Should not throw
         expect(() => {
-          paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+          paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
         }).not.toThrow();
       });
 
@@ -1674,7 +1653,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalled();
@@ -1708,7 +1686,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1757,7 +1734,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           trackedChanges,
           undefined,
           undefined,
@@ -1792,7 +1768,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           { mode: 'final', enabled: true },
           undefined,
           undefined,
@@ -1827,7 +1802,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1860,7 +1834,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1892,7 +1865,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1924,7 +1896,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -1963,7 +1934,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           trackedChanges,
           bookmarks,
           hyperlinkConfig,
@@ -1978,7 +1948,6 @@ describe('paragraph converters', () => {
             positions,
             defaultFont: 'Arial',
             defaultSize: 16,
-            styleContext,
             trackedChangesConfig: trackedChanges,
             bookmarks,
             hyperlinkConfig,
@@ -1997,7 +1966,7 @@ describe('paragraph converters', () => {
           content: [{ type: 'text', text: 'Before' }, hardBreakNode, { type: 'text', text: 'After' }],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(3);
         expect(blocks[1].kind).toBe('pageBreak');
@@ -2014,7 +1983,7 @@ describe('paragraph converters', () => {
           content: [lineBreakNode],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks.some((b) => b.kind === 'columnBreak')).toBe(true);
       });
@@ -2029,7 +1998,7 @@ describe('paragraph converters', () => {
           content: [{ type: 'text', text: 'Text' }, lineBreakNode],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(1);
         expect(blocks[0].kind).toBe('paragraph');
@@ -2067,7 +2036,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           trackedChanges,
           undefined,
           undefined,
@@ -2100,7 +2068,7 @@ describe('paragraph converters', () => {
 
         vi.mocked(applyTrackedChangesModeToRuns).mockReturnValue([]);
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext, trackedChanges);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
 
         expect(blocks).toHaveLength(0);
       });
@@ -2111,7 +2079,7 @@ describe('paragraph converters', () => {
           content: [{ type: 'text', text: 'Test' }],
         };
 
-        paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(vi.mocked(applyTrackedChangesModeToRuns)).not.toHaveBeenCalled();
       });
@@ -2130,7 +2098,7 @@ describe('paragraph converters', () => {
 
         vi.mocked(applyTrackedChangesModeToRuns).mockReturnValue([]);
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext, trackedChanges);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
 
         expect(blocks.some((b) => b.kind === 'pageBreak')).toBe(true);
       });
@@ -2164,7 +2132,7 @@ describe('paragraph converters', () => {
 
         vi.mocked(trackedChangesCompatible).mockReturnValue(true);
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         const paraBlock = blocks[0] as ParagraphBlock;
         expect(paraBlock.runs).toHaveLength(1);
@@ -2181,7 +2149,7 @@ describe('paragraph converters', () => {
           content: [{ type: 'hardBreak', attrs: { pageBreakType: 'page' } }],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks.some((b) => b.kind === 'paragraph')).toBe(true);
         const paraBlock = blocks.find((b) => b.kind === 'paragraph') as ParagraphBlock;
@@ -2199,7 +2167,7 @@ describe('paragraph converters', () => {
           ],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks.length).toBeGreaterThan(1);
         expect(blocks.some((b) => b.kind === 'pageBreak')).toBe(true);
@@ -2216,7 +2184,7 @@ describe('paragraph converters', () => {
           ],
         };
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         const paraBlocks = blocks.filter((b) => b.kind === 'paragraph');
         expect(paraBlocks[0].id).not.toBe(paraBlocks[1].id);
@@ -2239,7 +2207,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -2272,7 +2239,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -2292,7 +2258,7 @@ describe('paragraph converters', () => {
         };
 
         // No converters provided
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         // Should create empty paragraph
         expect(blocks).toHaveLength(1);
@@ -2309,17 +2275,7 @@ describe('paragraph converters', () => {
           enableRichHyperlinks: true,
         };
 
-        paragraphToFlowBlocks(
-          para,
-          nextBlockId,
-          positions,
-          'Arial',
-          16,
-          styleContext,
-          undefined,
-          undefined,
-          customHyperlinkConfig,
-        );
+        paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, undefined, undefined, customHyperlinkConfig);
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.any(Object),
@@ -2345,7 +2301,6 @@ describe('paragraph converters', () => {
           positions,
           'Arial',
           16,
-          styleContext,
           undefined,
           undefined,
           undefined,
@@ -2374,7 +2329,7 @@ describe('paragraph converters', () => {
         });
         vi.mocked(deepClone).mockImplementation((attrs) => ({ ...attrs }));
 
-        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         const paraBlocks = blocks.filter((b) => b.kind === 'paragraph');
         // Should be called once per paragraph block (2 blocks in this case)
@@ -2961,7 +2916,6 @@ describe('paragraph converters', () => {
   describe('Integration: Inline images in paragraphs', () => {
     let nextBlockId: BlockIdGenerator;
     let positions: PositionMap;
-    let styleContext: StyleContext;
 
     beforeEach(() => {
       vi.clearAllMocks();
@@ -2969,7 +2923,6 @@ describe('paragraph converters', () => {
       let counter = 0;
       nextBlockId = vi.fn((kind: string) => `${kind}-${counter++}`);
       positions = new WeakMap();
-      styleContext = {};
 
       vi.mocked(computeParagraphAttrs).mockReturnValue({ paragraphAttrs: {}, resolvedParagraphProperties: {} });
       vi.mocked(cloneParagraphAttrs).mockReturnValue({});
@@ -3003,7 +2956,6 @@ describe('paragraph converters', () => {
         positions,
         'Arial',
         16,
-        styleContext,
         undefined,
         undefined,
         undefined,
@@ -3057,7 +3009,6 @@ describe('paragraph converters', () => {
         positions,
         'Arial',
         16,
-        styleContext,
         undefined,
         undefined,
         undefined,
@@ -3097,7 +3048,7 @@ describe('paragraph converters', () => {
         ],
       };
 
-      const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+      const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
       expect(blocks).toHaveLength(1);
       const paraBlock = blocks[0] as ParagraphBlock;
@@ -3131,7 +3082,7 @@ describe('paragraph converters', () => {
         ],
       };
 
-      const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, styleContext);
+      const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
       expect(blocks).toHaveLength(1);
       const paraBlock = blocks[0] as ParagraphBlock;

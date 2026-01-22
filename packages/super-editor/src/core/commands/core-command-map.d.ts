@@ -40,6 +40,7 @@ type CoreCommandNames =
   | 'insertContentAt'
   | 'undoInputRule'
   | 'setSectionPageMarginsAtSelection'
+  | 'setProtectionMode'
   | 'toggleList'
   | 'increaseListIndent'
   | 'decreaseListIndent'

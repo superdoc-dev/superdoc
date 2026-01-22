@@ -38,6 +38,7 @@ export * from './setBodyHeaderFooter.js';
 export * from './setSectionHeaderFooterAtSelection.js';
 export * from './setSectionPageMarginsAtSelection.js';
 export * from './insertSectionBreakAtSelection.js';
+export * from './setProtectionMode.js';
 
 // Paragraph
 export * from './textIndent.js';

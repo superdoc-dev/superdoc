@@ -93,6 +93,17 @@ export type DocumentStats = {
   paragraphs: number;
 };
 
+/** Supported document protection modes for document settings
+ *
+ *  Reference : https://learn.microsoft.com/pt-br/javascript/api/word/word.document?view=word-js-preview#word-word-document-protect-member(1)
+ */
+export type DocumentProtectionMode =
+  | 'noProtection'
+  | 'allowOnlyRevisions'
+  | 'allowOnlyComments'
+  | 'allowOnlyFormFields'
+  | 'allowOnlyReading';
+
 export interface MiscellaneousCommands {
   // ============================================
   // FIELD ANNOTATION COMMANDS
@@ -281,6 +292,11 @@ export interface MiscellaneousCommands {
    * console.log(`${stats.words} words`)
    */
   getDocumentStats: () => DocumentStats;
+
+  /**
+   * Set the document protection mode (updates docProtection in settings.xml)
+   */
+  setProtectionMode: (mode?: DocumentProtectionMode) => boolean;
 }
 
 declare module '../../core/types/ChainedCommands.js' {

@@ -2,6 +2,7 @@
 
 import { Node } from '@core/index.js';
 import { setSectionPageMarginsAtSelection } from '@core/commands/setSectionPageMarginsAtSelection.js';
+import { setProtectionMode } from '@core/commands/setProtectionMode.js';
 
 /**
  * Configuration options for Document
@@ -105,6 +106,11 @@ export const Document = Node.create({
        * Set section page margins (top/right/bottom/left) for the section at the current selection.
        */
       setSectionPageMarginsAtSelection,
+
+      /**
+       * Set document protection mode (updates word/settings.xml docProtection element).
+       */
+      setProtectionMode,
     };
   },
 });

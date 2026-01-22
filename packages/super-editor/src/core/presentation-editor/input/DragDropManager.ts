@@ -182,6 +182,8 @@ function extractDragData(event: DragEvent): FieldAnnotationDragData | null {
 
 export class DragDropManager {
   #deps: DragDropDependencies | null = null;
+  #dragOverRaf: number | null = null;
+  #pendingDragOver: { x: number; y: number } | null = null;
 
   // Bound handlers for cleanup
   #boundHandleDragStart: ((e: DragEvent) => void) | null = null;
@@ -268,6 +270,12 @@ export class DragDropManager {
   }
 
   destroy(): void {
+    if (this.#dragOverRaf !== null) {
+      const win = this.#deps?.getViewportHost()?.ownerDocument?.defaultView ?? window;
+      win.cancelAnimationFrame(this.#dragOverRaf);
+      this.#dragOverRaf = null;
+    }
+    this.#pendingDragOver = null;
     this.unbind();
     this.#deps = null;
   }
@@ -319,8 +327,30 @@ export class DragDropManager {
       event.dataTransfer.dropEffect = isInternalDrag(event) ? 'move' : 'copy';
     }
 
-    // Update cursor position
-    const hit = this.#deps.hitTest(event.clientX, event.clientY);
+    // Coalesce dragover selection updates to one per animation frame.
+    this.#scheduleDragOverSelection(event.clientX, event.clientY);
+  }
+
+  #scheduleDragOverSelection(clientX: number, clientY: number): void {
+    if (!this.#deps) return;
+    this.#pendingDragOver = { x: clientX, y: clientY };
+    if (this.#dragOverRaf !== null) return;
+    const win = this.#deps.getViewportHost()?.ownerDocument?.defaultView ?? window;
+    this.#dragOverRaf = win.requestAnimationFrame(() => {
+      this.#dragOverRaf = null;
+      const pending = this.#pendingDragOver;
+      this.#pendingDragOver = null;
+      if (!pending || !this.#deps) return;
+      this.#applyDragOverSelection(pending.x, pending.y);
+    });
+  }
+
+  #applyDragOverSelection(clientX: number, clientY: number): void {
+    if (!this.#deps) return;
+    const activeEditor = this.#deps.getActiveEditor();
+    if (!activeEditor?.isEditable) return;
+
+    const hit = this.#deps.hitTest(clientX, clientY);
     const doc = activeEditor.state?.doc;
     if (!hit || !doc) return;
 

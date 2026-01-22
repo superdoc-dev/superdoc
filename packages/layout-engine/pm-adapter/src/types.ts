@@ -294,6 +294,7 @@ export interface NodeHandlerContext {
 
   // Converters for nested content
   converters: NestedConverters;
+  themeColors?: ThemeColorPalette;
 }
 
 /**

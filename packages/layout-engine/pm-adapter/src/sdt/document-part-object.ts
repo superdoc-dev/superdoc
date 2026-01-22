@@ -34,6 +34,7 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
     converterContext,
     enableComments,
     trackedChangesConfig,
+    themeColors,
   } = context;
   const docPartGallery = getDocPartGallery(node);
   const docPartObjectId = getDocPartObjectId(node);
@@ -75,6 +76,7 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
           bookmarks,
           hyperlinkConfig,
           converters,
+          themeColors,
           enableComments,
           converterContext,
         });

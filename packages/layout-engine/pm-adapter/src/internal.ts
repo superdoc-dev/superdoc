@@ -229,6 +229,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
       currentParagraphIndex: 0,
     },
     converters,
+    themeColors: options?.themeColors,
   };
 
   // Process nodes using handler dispatch pattern

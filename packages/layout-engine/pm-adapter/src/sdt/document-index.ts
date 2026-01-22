@@ -53,6 +53,8 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
     hyperlinkConfig,
     sectionState,
     converters,
+    themeColors,
+    enableComments,
   } = context;
 
   const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
@@ -86,8 +88,9 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
       trackedChangesConfig,
       bookmarks,
       hyperlinkConfig,
+      themeColors,
       converterContext: context.converterContext,
-      enableComments: context.enableComments,
+      enableComments: enableComments,
       converters,
     });
 

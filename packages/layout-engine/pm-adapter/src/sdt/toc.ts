@@ -16,6 +16,7 @@ import type {
   NodeHandlerContext,
   NestedConverters,
   ConverterContext,
+  ThemeColorPalette,
 } from '../types.js';
 import { applySdtMetadataToParagraphBlocks, getNodeInstruction } from './metadata.js';
 
@@ -103,6 +104,7 @@ export function processTocChildren(
     enableComments: boolean;
     converters: NestedConverters;
     converterContext: ConverterContext;
+    themeColors?: ThemeColorPalette;
   },
   outputArrays: {
     blocks: FlowBlock[];
@@ -183,6 +185,8 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
     hyperlinkConfig,
     converters,
     converterContext,
+    themeColors,
+    enableComments,
   } = context;
   const tocInstruction = getNodeInstruction(node);
   const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
@@ -198,9 +202,10 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
         styleContext,
         trackedChangesConfig,
         bookmarks,
+        themeColors,
         hyperlinkConfig,
         converters,
-        enableComments: context.enableComments,
+        enableComments,
         converterContext,
       });
       paragraphBlocks.forEach((block) => {

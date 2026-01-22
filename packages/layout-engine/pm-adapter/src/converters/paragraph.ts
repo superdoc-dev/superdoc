@@ -1256,6 +1256,9 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     hyperlinkConfig,
     sectionState,
     converters,
+    converterContext,
+    themeColors,
+    enableComments,
   } = context;
   const { ranges: sectionRanges, currentSectionIndex, currentParagraphIndex } = sectionState;
 
@@ -1286,10 +1289,10 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
-    themeColors: undefined, // themeColors - not available in NodeHandlerContext
-    converterContext: context.converterContext,
+    themeColors,
+    converterContext,
     converters,
-    enableComments: context.enableComments,
+    enableComments,
   });
   paragraphBlocks.forEach((block) => {
     blocks.push(block);

@@ -33,6 +33,7 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     converters,
     converterContext,
     enableComments,
+    themeColors,
   } = context;
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
   const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
@@ -49,6 +50,7 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         trackedChangesConfig,
         bookmarks,
         hyperlinkConfig,
+        themeColors,
         enableComments,
         converters,
         converterContext,
@@ -74,7 +76,8 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
           trackedChangesConfig,
           bookmarks,
           hyperlinkConfig,
-          enableComments: context.enableComments,
+          themeColors,
+          enableComments,
           converters,
           converterContext,
         });

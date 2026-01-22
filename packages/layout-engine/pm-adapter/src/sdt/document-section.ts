@@ -16,6 +16,7 @@ import type {
   TrackedChangesConfig,
   NestedConverters,
   ConverterContext,
+  ThemeColorPalette,
 } from '../types.js';
 import {
   applySdtMetadataToParagraphBlocks,
@@ -41,6 +42,7 @@ interface ProcessingContext {
   hyperlinkConfig: HyperlinkConfig;
   enableComments: boolean;
   converterContext: ConverterContext;
+  themeColors?: ThemeColorPalette;
 }
 
 /**
@@ -194,6 +196,7 @@ function processNestedStructuredContent(
         converters,
         enableComments: context.enableComments,
         converterContext: context.converterContext,
+        themeColors: context.themeColors,
       });
       // Apply nested structured content metadata first, then section metadata
       const paraOnly = paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[];
@@ -215,6 +218,7 @@ function processNestedStructuredContent(
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
         enableComments: context.enableComments,
+        themeColors: context.themeColors,
         converters,
         converterContext: context.converterContext,
       });
@@ -268,6 +272,7 @@ function processDocumentPartObject(
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
         enableComments: context.enableComments,
+        themeColors: context.themeColors,
         converters,
         converterContext: context.converterContext,
       },
@@ -357,6 +362,7 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
     enableComments,
     converterContext,
     trackedChangesConfig,
+    themeColors,
   } = context;
   const sectionMetadata = resolveNodeSdtMetadata(node, 'documentSection');
 
@@ -372,6 +378,7 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
       bookmarks,
       trackedChangesConfig,
       hyperlinkConfig,
+      themeColors,
       enableComments,
       converterContext,
     },

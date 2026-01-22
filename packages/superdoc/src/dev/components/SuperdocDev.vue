@@ -459,6 +459,10 @@ const onEditorCreate = ({ editor }) => {
   editor.on('fieldAnnotationSelected', (params) => {
     console.log('fieldAnnotationSelected', { params });
   });
+
+  editor.on('fieldAnnotationDoubleClicked', (params) => {
+    console.log('fieldAnnotationDoubleClicked', { params });
+  });
 };
 
 const handleTitleChange = (e) => {

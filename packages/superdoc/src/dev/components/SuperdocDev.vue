@@ -15,6 +15,7 @@ import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
 import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.js';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
+import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 
 // note:
 // Or set worker globally outside the component.
@@ -459,6 +460,10 @@ const onEditorCreate = ({ editor }) => {
   editor.on('fieldAnnotationSelected', (params) => {
     console.log('fieldAnnotationSelected', { params });
   });
+
+  editor.on('fieldAnnotationDoubleClicked', (params) => {
+    console.log('fieldAnnotationDoubleClicked', { params });
+  });
 };
 
 const handleTitleChange = (e) => {
@@ -520,6 +525,11 @@ const sidebarOptions = [
     id: 'search',
     label: 'Search',
     component: SidebarSearch,
+  },
+  {
+    id: 'fields',
+    label: 'Field Annotations',
+    component: SidebarFieldAnnotations,
   },
 ];
 const activeSidebarId = ref('off');

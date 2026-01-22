@@ -2,10 +2,20 @@
  * Type definitions for ProseMirror to FlowBlock adapter
  */
 
-import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta, Engines } from '@superdoc/contracts';
+import type { TrackedChangesMode, SectionMetadata, FlowBlock } from '@superdoc/contracts';
 import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
+import type { paragraphToFlowBlocks } from './converters/paragraph.js';
+import type { tableNodeToBlock } from './converters/table.js';
+import type { contentBlockNodeToDrawingBlock } from './converters/content-block.js';
+import type { imageNodeToBlock } from './converters/image.js';
+import type {
+  shapeContainerNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+  vectorShapeNodeToDrawingBlock,
+} from './converters/shapes.js';
 export type { ConverterContext } from './converter-context.js';
 
 export type StyleContext = StyleEngineContext;
@@ -273,7 +283,7 @@ export interface NodeHandlerContext {
   defaultFont: string;
   defaultSize: number;
   styleContext: StyleContext;
-  converterContext?: ConverterContext;
+  converterContext: ConverterContext;
 
   // Tracked changes & hyperlinks
   trackedChangesConfig: TrackedChangesConfig;
@@ -293,7 +303,8 @@ export interface NodeHandlerContext {
   };
 
   // Converters for nested content
-  converters?: NestedConverters;
+  converters: NestedConverters;
+  themeColors?: ThemeColorPalette;
 }
 
 /**
@@ -302,67 +313,47 @@ export interface NodeHandlerContext {
  */
 export type NodeHandler = (node: PMNode, context: NodeHandlerContext) => void;
 
-/**
- * List counter context for numbering
- */
-
-export type ParagraphToFlowBlocksConverter = (
-  para: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  converterContext?: ConverterContext,
-) => FlowBlock[];
-
-export type ImageNodeToBlockConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  trackedMeta?: TrackedChangeMeta,
-  trackedChanges?: TrackedChangesConfig,
-) => FlowBlock | null;
-
-export type DrawingNodeToBlockConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-) => FlowBlock | null;
-
-export type TableNodeToBlockOptions = {
-  converters?: NestedConverters;
+export type ParagraphToFlowBlocksParams = {
+  para: PMNode;
+  nextBlockId: BlockIdGenerator;
+  positions: PositionMap;
+  defaultFont: string;
+  defaultSize: number;
+  styleContext: StyleContext;
+  trackedChangesConfig?: TrackedChangesConfig;
+  hyperlinkConfig: HyperlinkConfig;
+  themeColors?: ThemeColorPalette;
+  bookmarks?: Map<string, number>;
+  converters: NestedConverters;
+  enableComments: boolean;
+  converterContext: ConverterContext;
 };
 
-export type TableNodeToBlockConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  paragraphToFlowBlocks?: ParagraphToFlowBlocksConverter,
-  converterContext?: ConverterContext,
-  options?: TableNodeToBlockOptions,
-) => FlowBlock | null;
+export type TableNodeToBlockParams = {
+  node: PMNode;
+  nextBlockId: BlockIdGenerator;
+  positions: PositionMap;
+  defaultFont: string;
+  defaultSize: number;
+  styleContext: StyleContext;
+  trackedChangesConfig?: TrackedChangesConfig;
+  bookmarks?: Map<string, number>;
+  hyperlinkConfig: HyperlinkConfig;
+  themeColors?: ThemeColorPalette;
+  converterContext: ConverterContext;
+  converters: NestedConverters;
+  enableComments: boolean;
+};
 
 export type NestedConverters = {
-  paragraphToFlowBlocks?: ParagraphToFlowBlocksConverter;
-  tableNodeToBlock?: TableNodeToBlockConverter;
-  contentBlockNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  imageNodeToBlock?: ImageNodeToBlockConverter;
-  vectorShapeNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeGroupNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeContainerNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeTextboxNodeToDrawingBlock?: DrawingNodeToBlockConverter;
+  paragraphToFlowBlocks: typeof paragraphToFlowBlocks;
+  tableNodeToBlock: typeof tableNodeToBlock;
+  contentBlockNodeToDrawingBlock: typeof contentBlockNodeToDrawingBlock;
+  imageNodeToBlock: typeof imageNodeToBlock;
+  vectorShapeNodeToDrawingBlock: typeof vectorShapeNodeToDrawingBlock;
+  shapeGroupNodeToDrawingBlock: typeof shapeGroupNodeToDrawingBlock;
+  shapeContainerNodeToDrawingBlock: typeof shapeContainerNodeToDrawingBlock;
+  shapeTextboxNodeToDrawingBlock: typeof shapeTextboxNodeToDrawingBlock;
 };
 
 /**
@@ -399,10 +390,3 @@ export interface OoxmlBorder {
  * Underline style type derived from TextRun contract
  */
 export type UnderlineStyle = NonNullable<import('@superdoc/contracts').TextRun['underline']>['style'];
-
-/**
- * Engine type aliases
- */
-export type NumberingLevelEngine = Engines.NumberingLevel;
-export type EngineParagraphSpacing = Engines.ParagraphSpacing;
-export type EngineParagraphIndent = Engines.ParagraphIndent;

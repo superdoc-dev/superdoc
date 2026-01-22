@@ -3,10 +3,63 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { tableNodeToBlock, handleTableNode } from './table.js';
-import type { PMNode, BlockIdGenerator, PositionMap, StyleContext } from '../types.js';
+import { tableNodeToBlock as baseTableNodeToBlock, handleTableNode } from './table.js';
+import type {
+  PMNode,
+  BlockIdGenerator,
+  PositionMap,
+  StyleContext,
+  TrackedChangesConfig,
+  HyperlinkConfig,
+  ThemeColorPalette,
+  NestedConverters,
+} from '../types.js';
+import type { ConverterContext } from '../converter-context.js';
 import type { FlowBlock, ParagraphBlock, TableBlock, ImageBlock } from '@superdoc/contracts';
 import { twipsToPx } from '../utilities.js';
+
+const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = { enableRichHyperlinks: false };
+const DEFAULT_CONVERTER_CONTEXT: ConverterContext = {
+  translatedNumbering: {},
+  translatedLinkedStyles: {
+    docDefaults: {},
+    latentStyles: {},
+    styles: {},
+  },
+};
+
+const tableNodeToBlock = (
+  node: PMNode,
+  nextBlockId: BlockIdGenerator,
+  positions: PositionMap,
+  defaultFont: string,
+  defaultSize: number,
+  styleContext: StyleContext,
+  trackedChangesConfig?: TrackedChangesConfig,
+  bookmarks?: Map<string, number>,
+  hyperlinkConfig?: HyperlinkConfig,
+  themeColors?: ThemeColorPalette,
+  paragraphToFlowBlocks?: NestedConverters['paragraphToFlowBlocks'],
+  converterContext?: ConverterContext,
+) => {
+  const converters = paragraphToFlowBlocks ? ({ paragraphToFlowBlocks } as NestedConverters) : ({} as NestedConverters);
+
+  return baseTableNodeToBlock({
+    node,
+    nextBlockId,
+    positions,
+    defaultFont,
+    defaultSize,
+    styleContext,
+    trackedChangesConfig,
+    bookmarks,
+    hyperlinkConfig: hyperlinkConfig ?? DEFAULT_HYPERLINK_CONFIG,
+    themeColors,
+    converterContext: converterContext ?? DEFAULT_CONVERTER_CONTEXT,
+    converters,
+    enableComments: true,
+  });
+};
 
 describe('table converter', () => {
   const mockStyleContext: StyleContext = {
@@ -21,12 +74,12 @@ describe('table converter', () => {
     const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}`);
     const mockPositionMap: PositionMap = new Map();
 
-    const mockParagraphConverter = vi.fn((node) => {
+    const mockParagraphConverter = vi.fn((params) => {
       return [
         {
           kind: 'paragraph',
           id: 'p1',
-          runs: [{ text: node.content?.[0]?.text || 'text', fontFamily: 'Arial', fontSize: 12 }],
+          runs: [{ text: params.para.content?.[0]?.text || 'text', fontFamily: 'Arial', fontSize: 12 }],
         } as ParagraphBlock,
       ];
     });
@@ -228,10 +281,9 @@ describe('table converter', () => {
 
       const converterContext = { docx: { foo: 'bar' } } as never;
 
-      const paragraphSpy = vi.fn((para, ...args) => {
-        const [, , , , , , , , , passedConverterContext] = args;
-        expect(passedConverterContext).toBe(converterContext);
-        return mockParagraphConverter(para);
+      const paragraphSpy = vi.fn((params) => {
+        expect(params.converterContext).toBe(converterContext);
+        return mockParagraphConverter(params);
       });
 
       const result = tableNodeToBlock(
@@ -272,26 +324,24 @@ describe('table converter', () => {
       const imageBlock: ImageBlock = { kind: 'image', id: 'image-1', src: 'image.png' };
       const imageConverter = vi.fn().mockReturnValue(imageBlock);
 
-      const result = tableNodeToBlock(
+      const result = baseTableNodeToBlock({
         node,
-        mockBlockIdGenerator,
-        mockPositionMap,
-        'Arial',
-        16,
-        mockStyleContext,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        mockParagraphConverter,
-        undefined,
-        {
-          converters: {
-            imageNodeToBlock: imageConverter,
-            paragraphToFlowBlocks: mockParagraphConverter,
-          },
-        },
-      ) as TableBlock;
+        nextBlockId: mockBlockIdGenerator,
+        positions: mockPositionMap,
+        defaultFont: 'Arial',
+        defaultSize: 16,
+        styleContext: mockStyleContext,
+        trackedChangesConfig: undefined,
+        bookmarks: undefined,
+        hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+        themeColors: undefined,
+        converterContext: DEFAULT_CONVERTER_CONTEXT,
+        converters: {
+          paragraphToFlowBlocks: mockParagraphConverter,
+          imageNodeToBlock: imageConverter,
+        } as NestedConverters,
+        enableComments: true,
+      }) as TableBlock;
 
       expect(imageConverter).toHaveBeenCalled();
       expect(result.rows[0].cells[0].blocks?.[0]).toBe(imageBlock);
@@ -327,25 +377,23 @@ describe('table converter', () => {
         } as ParagraphBlock,
       ]);
 
-      const result = tableNodeToBlock(
+      const result = baseTableNodeToBlock({
         node,
-        mockBlockIdGenerator,
-        mockPositionMap,
-        'Arial',
-        16,
-        mockStyleContext,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        paragraphConverter,
-        undefined,
-        {
-          converters: {
-            paragraphToFlowBlocks: paragraphConverter,
-          },
-        },
-      ) as TableBlock;
+        nextBlockId: mockBlockIdGenerator,
+        positions: mockPositionMap,
+        defaultFont: 'Arial',
+        defaultSize: 16,
+        styleContext: mockStyleContext,
+        trackedChangesConfig: undefined,
+        bookmarks: undefined,
+        hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+        themeColors: undefined,
+        converterContext: DEFAULT_CONVERTER_CONTEXT,
+        converters: {
+          paragraphToFlowBlocks: paragraphConverter,
+        } as NestedConverters,
+        enableComments: true,
+      }) as TableBlock;
 
       const cellBlocks = result.rows[0].cells[0].blocks ?? [];
       expect(cellBlocks[0]?.kind).toBe('paragraph');
@@ -402,26 +450,24 @@ describe('table converter', () => {
 
       const tableConverter = vi.fn().mockReturnValue(nestedTableBlock);
 
-      const result = tableNodeToBlock(
+      const result = baseTableNodeToBlock({
         node,
-        mockBlockIdGenerator,
-        mockPositionMap,
-        'Arial',
-        16,
-        mockStyleContext,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        mockParagraphConverter,
-        undefined,
-        {
-          converters: {
-            paragraphToFlowBlocks: mockParagraphConverter,
-            tableNodeToBlock: tableConverter,
-          },
-        },
-      ) as TableBlock;
+        nextBlockId: mockBlockIdGenerator,
+        positions: mockPositionMap,
+        defaultFont: 'Arial',
+        defaultSize: 16,
+        styleContext: mockStyleContext,
+        trackedChangesConfig: undefined,
+        bookmarks: undefined,
+        hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+        themeColors: undefined,
+        converterContext: DEFAULT_CONVERTER_CONTEXT,
+        converters: {
+          paragraphToFlowBlocks: mockParagraphConverter,
+          tableNodeToBlock: tableConverter,
+        } as NestedConverters,
+        enableComments: true,
+      }) as TableBlock;
 
       const cellBlocks = result.rows[0].cells[0].blocks ?? [];
       const nestedTable = cellBlocks.find((block) => block.kind === 'table') as TableBlock | undefined;
@@ -1138,7 +1184,7 @@ describe('table converter', () => {
       expect(mockConverter).toHaveBeenCalled();
       // Verify tracked changes config was passed
       const callArgs = mockConverter.mock.calls[0];
-      expect(callArgs[6]).toEqual(trackedChangesConfig);
+      expect(callArgs[0].trackedChangesConfig).toEqual(trackedChangesConfig);
     });
 
     it('returns null when all rows have no cells', () => {

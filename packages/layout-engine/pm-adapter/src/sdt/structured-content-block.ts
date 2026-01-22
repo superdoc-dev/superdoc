@@ -31,18 +31,17 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     bookmarks,
     hyperlinkConfig,
     converters,
+    converterContext,
+    enableComments,
+    themeColors,
   } = context;
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
-
-  if (!paragraphToFlowBlocks) {
-    return;
-  }
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
   node.content.forEach((child) => {
     if (child.type === 'paragraph') {
-      const paragraphBlocks = paragraphToFlowBlocks(
-        child,
+      const paragraphBlocks = paragraphToFlowBlocks({
+        para: child,
         nextBlockId,
         positions,
         defaultFont,
@@ -51,7 +50,11 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         trackedChangesConfig,
         bookmarks,
         hyperlinkConfig,
-      );
+        themeColors,
+        enableComments,
+        converters,
+        converterContext,
+      });
       applySdtMetadataToParagraphBlocks(
         paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[],
         structuredContentMetadata,
@@ -63,8 +66,8 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     } else if (child.type === 'table') {
       const tableNodeToBlock = converters?.tableNodeToBlock;
       if (tableNodeToBlock) {
-        const tableBlock = tableNodeToBlock(
-          child,
+        const tableBlock = tableNodeToBlock({
+          node: child,
           nextBlockId,
           positions,
           defaultFont,
@@ -73,7 +76,11 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
           trackedChangesConfig,
           bookmarks,
           hyperlinkConfig,
-        );
+          themeColors,
+          enableComments,
+          converters,
+          converterContext,
+        });
         if (tableBlock) {
           applySdtMetadataToTableBlock(tableBlock as TableBlock, structuredContentMetadata);
           blocks.push(tableBlock);

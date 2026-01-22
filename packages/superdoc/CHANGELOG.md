@@ -1,3 +1,68 @@
+## [1.8.2-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.8.1...v1.8.2-next.1) (2026-01-22)
+
+
+### Bug Fixes
+
+* simplify paragraph and table converters in pm-adapter (SD-1587) ([#1806](https://github.com/superdoc-dev/superdoc/issues/1806)) ([fa009bb](https://github.com/superdoc-dev/superdoc/commit/fa009bbab0deab9853bc9fa70c0f5ce16a3ce0e1))
+
+## [1.8.1](https://github.com/superdoc-dev/superdoc/compare/v1.8.0...v1.8.1) (2026-01-22)
+
+
+### Bug Fixes
+
+* **importer:** wrap root-level inline nodes in paragraphs and disallow marks on passthroughInline ([#1804](https://github.com/superdoc-dev/superdoc/issues/1804)) ([7d0a752](https://github.com/superdoc-dev/superdoc/commit/7d0a7528493c2c7cea96ac72632db1f14f1f7fbc))
+* include doc default fonts and stabilize linked-style run properties ([b2d9fc9](https://github.com/superdoc-dev/superdoc/commit/b2d9fc977198ee3c131659ec312e0fdb4309af2e))
+* list indicators are not visible when list item is empty ([#1807](https://github.com/superdoc-dev/superdoc/issues/1807)) ([9197e85](https://github.com/superdoc-dev/superdoc/commit/9197e8558331d11b0c052a28f2fb8ff045e3c40f))
+
+## [1.8.1-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.8.1-next.2...v1.8.1-next.3) (2026-01-22)
+
+
+### Bug Fixes
+
+* include doc default fonts and stabilize linked-style run properties ([b2d9fc9](https://github.com/superdoc-dev/superdoc/commit/b2d9fc977198ee3c131659ec312e0fdb4309af2e))
+
+## [1.8.1-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.8.1-next.1...v1.8.1-next.2) (2026-01-22)
+
+
+### Bug Fixes
+
+* list indicators are not visible when list item is empty ([#1807](https://github.com/superdoc-dev/superdoc/issues/1807)) ([9197e85](https://github.com/superdoc-dev/superdoc/commit/9197e8558331d11b0c052a28f2fb8ff045e3c40f))
+
+## [1.8.1-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.8.0...v1.8.1-next.1) (2026-01-22)
+
+
+### Bug Fixes
+
+* **importer:** wrap root-level inline nodes in paragraphs and disallow marks on passthroughInline ([#1804](https://github.com/superdoc-dev/superdoc/issues/1804)) ([7d0a752](https://github.com/superdoc-dev/superdoc/commit/7d0a7528493c2c7cea96ac72632db1f14f1f7fbc))
+
+# [1.8.0](https://github.com/superdoc-dev/superdoc/compare/v1.7.0...v1.8.0) (2026-01-21)
+
+
+### Bug Fixes
+
+* add addToHistory to new insertTrackedChange command ([#1767](https://github.com/superdoc-dev/superdoc/issues/1767)) ([e5081be](https://github.com/superdoc-dev/superdoc/commit/e5081be4abdc108f348ea91b95092ae643567c91))
+* annotation drop ([#1789](https://github.com/superdoc-dev/superdoc/issues/1789)) ([f384213](https://github.com/superdoc-dev/superdoc/commit/f3842134ab2648fc46752688350dbebb88f58f5a))
+* annotation selection ([#1762](https://github.com/superdoc-dev/superdoc/issues/1762)) ([1c831cc](https://github.com/superdoc-dev/superdoc/commit/1c831cca106584d094f9d07c00f22fd51374ef1e))
+* annotation selection, applying formatting ([#1784](https://github.com/superdoc-dev/superdoc/issues/1784)) ([924af4b](https://github.com/superdoc-dev/superdoc/commit/924af4be941717c202821ba10d9372dbe78a1954))
+* guard against null editor ref in telemetry handler ([#1763](https://github.com/superdoc-dev/superdoc/issues/1763)) ([16b3a9a](https://github.com/superdoc-dev/superdoc/commit/16b3a9a2d4f5155ea967b4bbe6c2aadb996daef0))
+* **layout:** default missing lineRule to auto for OOXML line spacing ([d0fd582](https://github.com/superdoc-dev/superdoc/commit/d0fd582451e586b8423bf988b8fb9099b924c872))
+* preserve nested comment ranges on export (SD-1518) ([#1765](https://github.com/superdoc-dev/superdoc/issues/1765)) ([9b81f9a](https://github.com/superdoc-dev/superdoc/commit/9b81f9a3c265e3a22d6286fec7557d489287c798))
+* reorganize style resolution in the layout engine (SD-1411) ([#1786](https://github.com/superdoc-dev/superdoc/issues/1786)) ([1845b76](https://github.com/superdoc-dev/superdoc/commit/1845b76a2c1f8a00aa3aa2b1ca855dd7185d7aaa))
+* **search:** preserve leading/trailing whitespace in flexible matches ([#1788](https://github.com/superdoc-dev/superdoc/issues/1788)) ([c5d6751](https://github.com/superdoc-dev/superdoc/commit/c5d6751b6c37a7e01f86d97aec5a9e854c4d0cc9))
+* trigger release ([f826636](https://github.com/superdoc-dev/superdoc/commit/f826636a7e5fab8c1c5dadfb8509003690cca8b4))
+
+
+### Features
+
+* add insertTrackedChange programmatic shortcut ([#1761](https://github.com/superdoc-dev/superdoc/issues/1761)) ([cd0628e](https://github.com/superdoc-dev/superdoc/commit/cd0628e82c2a15de41895c3e073d2d516a88532c))
+* add visual indication for tracked change, comments and nested comments ([#1770](https://github.com/superdoc-dev/superdoc/issues/1770)) ([8eb07e4](https://github.com/superdoc-dev/superdoc/commit/8eb07e43a1a17a9c41d50ff24937832d4e191aa5))
+* comment anchor helpers ([#1796](https://github.com/superdoc-dev/superdoc/issues/1796)) ([595bdc6](https://github.com/superdoc-dev/superdoc/commit/595bdc68660a508dede2d1f58c8a29f609db7cac))
+* comment highlight config ([#1798](https://github.com/superdoc-dev/superdoc/issues/1798)) ([aa7e957](https://github.com/superdoc-dev/superdoc/commit/aa7e957dabbe8a6bec9f5e30801a3bafb8369b11))
+* **comments:** add position-ordered comments getter ([#1774](https://github.com/superdoc-dev/superdoc/issues/1774)) ([bdac914](https://github.com/superdoc-dev/superdoc/commit/bdac914cdb1a0d399b70ef46c13a7e6155372f01))
+* include non-breaking spaces in search ([#1768](https://github.com/superdoc-dev/superdoc/issues/1768)) ([d2784b9](https://github.com/superdoc-dev/superdoc/commit/d2784b941336037a63df8aa554318df22b653498))
+* search cross block anchor ([#1799](https://github.com/superdoc-dev/superdoc/issues/1799)) ([09efa63](https://github.com/superdoc-dev/superdoc/commit/09efa634bbbdcd821f3841fe6382c1d7a41b8cb7))
+* view options print and web ([#1793](https://github.com/superdoc-dev/superdoc/issues/1793)) ([82adcb1](https://github.com/superdoc-dev/superdoc/commit/82adcb1912c7703399b0aac394248bf23da4ce41))
+
 # [1.8.0-next.11](https://github.com/superdoc-dev/superdoc/compare/v1.8.0-next.10...v1.8.0-next.11) (2026-01-21)
 
 

@@ -109,6 +109,27 @@ describe('measureBlock', () => {
       }
     });
 
+    it('falls back when text runs are missing font size', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          // Intentionally omitting fontSize to test fallback behavior
+          {
+            text: 'Hello',
+            fontFamily: 'Arial',
+          } as unknown as TextRun,
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(Number.isFinite(measure.lines[0].lineHeight)).toBe(true);
+      expect(measure.lines[0].lineHeight).toBeGreaterThan(0);
+      expect(measure.lines[0].width).toBeGreaterThan(0);
+    });
+
     it('uses content width for wordLayout list first lines with standard hanging indent', async () => {
       // Standard hanging indent pattern: marker is positioned in the hanging area (left of text),
       // NOT inline with text. The marker doesn't consume horizontal space on the first line.
@@ -277,6 +298,44 @@ describe('measureBlock', () => {
       expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(16);
       expect(measure.lines[0].lineHeight).toBeLessThan(16 * 1.15);
       expect(measure.totalHeight).toBeGreaterThan(0);
+    });
+
+    it('preserves marker measurements for empty list paragraphs', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-list',
+        runs: [
+          {
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ],
+        attrs: {
+          indent: { left: 0, hanging: 18 },
+          wordLayout: {
+            indentLeftPx: 0,
+            marker: {
+              markerText: '1.',
+              gutterWidthPx: 8,
+              run: {
+                fontFamily: 'Arial',
+                fontSize: 16,
+                bold: false,
+                italic: false,
+                letterSpacing: 0,
+              },
+            },
+          },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 200));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.marker).toBeDefined();
+      expect(measure.marker?.markerWidth).toBeGreaterThan(0);
+      expect(measure.marker?.markerTextWidth).toBeGreaterThan(0);
     });
 
     it('creates a new line for explicit lineBreak runs', async () => {

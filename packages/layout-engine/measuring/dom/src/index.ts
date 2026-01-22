@@ -714,6 +714,36 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   const wordLayout: WordParagraphLayoutOutput | undefined = block.attrs?.wordLayout as
     | WordParagraphLayoutOutput
     | undefined;
+  const markerInfo: ParagraphMeasure['marker'] | undefined = wordLayout?.marker
+    ? (() => {
+        const markerRun = {
+          fontFamily: toCssFontFamily(wordLayout.marker.run.fontFamily) ?? wordLayout.marker.run.fontFamily,
+          fontSize: wordLayout.marker.run.fontSize,
+          bold: wordLayout.marker.run.bold,
+          italic: wordLayout.marker.run.italic,
+        };
+        const { font: markerFont } = buildFontString(markerRun);
+        const markerText = wordLayout.marker.markerText ?? '';
+        const glyphWidth = markerText ? measureText(markerText, markerFont, ctx) : 0;
+        const gutter =
+          typeof wordLayout.marker.gutterWidthPx === 'number' &&
+          isFinite(wordLayout.marker.gutterWidthPx) &&
+          wordLayout.marker.gutterWidthPx >= 0
+            ? wordLayout.marker.gutterWidthPx
+            : LIST_MARKER_GAP;
+
+        // Marker box should match Word's box width when provided; otherwise fall back to glyph + gap.
+        const markerBoxWidth = Math.max(0, glyphWidth + LIST_MARKER_GAP);
+
+        return {
+          markerWidth: markerBoxWidth,
+          markerTextWidth: glyphWidth,
+          indentLeft: wordLayout.indentLeftPx ?? 0,
+          // For tab sizing in the renderer: expose gutter for word-layout lists
+          gutterWidth: gutter,
+        } as ParagraphMeasure['marker'];
+      })()
+    : undefined;
 
   /**
    * Floating-point tolerance for line breaking decisions (0.5px).
@@ -887,6 +917,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       kind: 'paragraph',
       lines,
       totalHeight: metrics.lineHeight,
+      ...(markerInfo ? { marker: markerInfo } : {}),
     };
   }
 
@@ -907,6 +938,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       kind: 'paragraph',
       lines,
       totalHeight: metrics.lineHeight,
+      ...(markerInfo ? { marker: markerInfo } : {}),
     };
   }
 
@@ -2278,37 +2310,6 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   const totalHeight = lines.reduce((sum, line) => sum + line.lineHeight, 0);
-
-  let markerInfo: ParagraphMeasure['marker'];
-
-  if (wordLayout?.marker) {
-    const markerRun = {
-      fontFamily: toCssFontFamily(wordLayout.marker.run.fontFamily) ?? wordLayout.marker.run.fontFamily,
-      fontSize: wordLayout.marker.run.fontSize,
-      bold: wordLayout.marker.run.bold,
-      italic: wordLayout.marker.run.italic,
-    };
-    const { font: markerFont } = buildFontString(markerRun);
-    const markerText = wordLayout.marker.markerText ?? '';
-    const glyphWidth = markerText ? measureText(markerText, markerFont, ctx) : 0;
-    const gutter =
-      typeof wordLayout.marker.gutterWidthPx === 'number' &&
-      isFinite(wordLayout.marker.gutterWidthPx) &&
-      wordLayout.marker.gutterWidthPx >= 0
-        ? wordLayout.marker.gutterWidthPx
-        : LIST_MARKER_GAP;
-
-    // Marker box should match Word's box width when provided; otherwise fall back to glyph + gap.
-    const markerBoxWidth = Math.max(0, glyphWidth + LIST_MARKER_GAP);
-
-    markerInfo = {
-      markerWidth: markerBoxWidth,
-      markerTextWidth: glyphWidth,
-      indentLeft: wordLayout.indentLeftPx ?? 0,
-      // For tab sizing in the renderer: expose gutter for word-layout lists
-      gutterWidth: gutter,
-    } as ParagraphMeasure['marker'];
-  }
 
   return {
     kind: 'paragraph',

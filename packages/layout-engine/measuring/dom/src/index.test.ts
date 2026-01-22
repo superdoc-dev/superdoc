@@ -279,6 +279,44 @@ describe('measureBlock', () => {
       expect(measure.totalHeight).toBeGreaterThan(0);
     });
 
+    it('preserves marker measurements for empty list paragraphs', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-list',
+        runs: [
+          {
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ],
+        attrs: {
+          indent: { left: 0, hanging: 18 },
+          wordLayout: {
+            indentLeftPx: 0,
+            marker: {
+              markerText: '1.',
+              gutterWidthPx: 8,
+              run: {
+                fontFamily: 'Arial',
+                fontSize: 16,
+                bold: false,
+                italic: false,
+                letterSpacing: 0,
+              },
+            },
+          },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 200));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.marker).toBeDefined();
+      expect(measure.marker?.markerWidth).toBeGreaterThan(0);
+      expect(measure.marker?.markerTextWidth).toBeGreaterThan(0);
+    });
+
     it('creates a new line for explicit lineBreak runs', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

@@ -13,12 +13,6 @@ const isPermStartNode = (node) => PERM_START_NODE_NAMES.includes(getNodeName(nod
 const isPermEndNode = (node) => PERM_END_NODE_NAMES.includes(getNodeName(node));
 const isPermissionBoundaryNode = (node) => isPermStartNode(node) || isPermEndNode(node);
 const resolvePermissionNodeType = (schema, typeName) => schema?.nodes?.[typeName] ?? null;
-const hasPermissionNodeTypes = (schema) => {
-  if (!schema?.nodes) return false;
-  const hasStart = PERM_START_NODE_NAMES.some((name) => schema.nodes[name]);
-  const hasEnd = PERM_END_NODE_NAMES.some((name) => schema.nodes[name]);
-  return hasStart && hasEnd;
-};
 
 const normalizeIdentifier = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
 
@@ -287,7 +281,6 @@ export const PermissionRanges = Extension.create({
         // Appends transactions to the document to ensure permission ranges are updated.
         appendTransaction(transactions, oldState, newState) {
           if (!transactions.some((tr) => tr.docChanged)) return null;
-          if (!hasPermissionNodeTypes(newState.schema)) return null;
 
           const oldTags = collectPermissionTags(oldState.doc);
           if (!oldTags.size) {
@@ -360,7 +353,6 @@ export const PermissionRanges = Extension.create({
           }
           const changedRanges = collectChangedRanges(tr);
           if (!changedRanges.length) return true;
-          if (!hasPermissionNodeTypes(state.schema)) return true;
 
           const allRangesAllowed = changedRanges.every((range) => {
             const trimmed = trimPermissionTagsFromRange(state.doc, range);

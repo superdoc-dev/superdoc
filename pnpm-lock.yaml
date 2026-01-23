@@ -605,6 +605,9 @@ importers:
       '@superdoc/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@superdoc/font-utils':
+        specifier: workspace:*
+        version: link:../../../shared/font-utils
       '@superdoc/locale-utils':
         specifier: workspace:*
         version: link:../../../shared/locale-utils

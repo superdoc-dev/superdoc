@@ -229,41 +229,43 @@ export class ProseMirrorRenderer implements EditorRenderer {
    * @param proseMirror - The ProseMirror content element (.ProseMirror)
    */
   updateEditorStyles(editor: Editor, element: HTMLElement, proseMirror: HTMLElement): void {
-    const { pageSize, pageMargins } = editor.converter.pageStyles ?? {};
-
     if (!proseMirror || !element) {
       return;
     }
 
+    this.#applyBaseStyles(editor, element, proseMirror);
+
+    if (editor.isWebLayout()) {
+      this.#applyWebLayoutStyles(element, proseMirror);
+    } else {
+      this.#applyPrintLayoutStyles(editor, element, proseMirror);
+    }
+  }
+
+  /**
+   * Apply base styles common to both web and print layouts.
+   * Includes accessibility attributes, colors, typography, and mobile styles.
+   */
+  #applyBaseStyles(editor: Editor, element: HTMLElement, proseMirror: HTMLElement): void {
+    // Accessibility
     proseMirror.setAttribute('role', 'document');
     proseMirror.setAttribute('aria-multiline', 'true');
     proseMirror.setAttribute('aria-label', 'Main content area, start typing to enter text.');
     proseMirror.setAttribute('aria-description', '');
     proseMirror.classList.remove('view-mode');
 
-    // Set fixed dimensions and padding that won't change with scaling
-    if (pageSize) {
-      element.style.width = pageSize.width + 'in';
-      element.style.minWidth = pageSize.width + 'in';
-      element.style.minHeight = pageSize.height + 'in';
-    }
-
-    if (pageMargins) {
-      element.style.paddingLeft = pageMargins.left + 'in';
-      element.style.paddingRight = pageMargins.right + 'in';
-    }
-
+    // Box model
     element.style.boxSizing = 'border-box';
-    element.style.isolation = 'isolate'; // to create new stacking context.
+    element.style.isolation = 'isolate';
 
+    // Colors
     proseMirror.style.outline = 'none';
     proseMirror.style.border = 'none';
     element.style.backgroundColor = '#fff';
     proseMirror.style.backgroundColor = '#fff';
 
-    // Typeface and font size
+    // Typography from document defaults
     const { typeface, fontSizePt, fontFamilyCss } = editor.converter.getDocumentDefaultStyles() ?? {};
-
     const resolvedFontFamily = fontFamilyCss || typeface;
     if (resolvedFontFamily) {
       element.style.fontFamily = resolvedFontFamily;
@@ -272,36 +274,68 @@ export class ProseMirrorRenderer implements EditorRenderer {
       element.style.fontSize = `${fontSizePt}pt`;
     }
 
+    // Line height
+    proseMirror.style.lineHeight = String(DEFAULT_LINE_HEIGHT);
+
     // Mobile styles
     element.style.transformOrigin = 'top left';
     element.style.touchAction = 'auto';
-
-    // Safely set vendor-prefixed properties
-    // Type assertion is safe here because we're setting a valid CSS property
     const elementStyleWithVendor = element.style as CSSStyleDeclaration & {
       webkitOverflowScrolling?: string;
     };
     if ('webkitOverflowScrolling' in element.style || typeof elementStyleWithVendor === 'object') {
       elementStyleWithVendor.webkitOverflowScrolling = 'touch';
     }
+  }
 
-    // Calculate line height
-    proseMirror.style.lineHeight = String(DEFAULT_LINE_HEIGHT);
+  /**
+   * Apply styles for web layout mode (OOXML ST_View 'web').
+   * Content reflows to fit container width - CSS handles dimensions and text reflow.
+   * This method resets inline styles that print mode may have set.
+   */
+  #applyWebLayoutStyles(element: HTMLElement, proseMirror: HTMLElement): void {
+    // Reset dimension styles - CSS .web-layout class handles these
+    element.style.width = '';
+    element.style.minWidth = '';
+    element.style.minHeight = '';
 
-    // If we are not using pagination, we still need to add some padding for header/footer
-    // Always pad the body to the page top margin so the body baseline
-    // starts at pageTop + topMargin (Word parity). Pagination decorations
-    // will only reserve header overflow beyond this margin.
+    // Reset padding - consuming app controls via CSS
+    element.style.paddingLeft = '';
+    element.style.paddingRight = '';
+    proseMirror.style.paddingTop = '0';
+    proseMirror.style.paddingBottom = '0';
+  }
+
+  /**
+   * Apply styles for print layout mode (OOXML ST_View 'print').
+   * Fixed page dimensions with document margins for print fidelity.
+   */
+  #applyPrintLayoutStyles(editor: Editor, element: HTMLElement, proseMirror: HTMLElement): void {
+    const { pageSize, pageMargins } = editor.converter.pageStyles ?? {};
+
+    // Fixed page dimensions
+    if (pageSize?.width != null) {
+      element.style.width = `${pageSize.width}in`;
+      element.style.minWidth = `${pageSize.width}in`;
+      if (pageSize?.height != null) {
+        element.style.minHeight = `${pageSize.height}in`;
+      }
+    }
+
+    // Document margins as padding
+    if (pageMargins) {
+      element.style.paddingLeft = `${pageMargins.left}in`;
+      element.style.paddingRight = `${pageMargins.right}in`;
+    }
+
+    // Top padding for body baseline (presentation editor only)
     if (editor.presentationEditor && pageMargins?.top != null) {
       proseMirror.style.paddingTop = `${pageMargins.top}in`;
     } else if (editor.presentationEditor) {
-      // Fallback for missing margins
       proseMirror.style.paddingTop = `${DEFAULT_FALLBACK_MARGIN_INCHES}in`;
     } else {
       proseMirror.style.paddingTop = '0';
     }
-
-    // Keep footer padding managed by pagination; set to 0 here.
     proseMirror.style.paddingBottom = '0';
   }
 
@@ -338,6 +372,8 @@ export class ProseMirrorRenderer implements EditorRenderer {
    * Sets up viewport-based scaling to fit the editor within mobile screen widths.
    * Listens for orientation changes and window resize events to update scaling dynamically.
    *
+   * Note: Scaling is skipped in responsive layout mode since content reflows naturally.
+   *
    * Scaling calculation:
    * - Maintains minimum side margins (MIN_MOBILE_SIDE_MARGIN_PX)
    * - Scales editor down if viewport is narrower than content
@@ -350,6 +386,11 @@ export class ProseMirrorRenderer implements EditorRenderer {
    */
   initMobileStyles(editor: Editor, element: HTMLElement | null): void {
     if (!element) {
+      return;
+    }
+
+    // In web layout mode, content reflows naturally - no scaling needed
+    if (editor.isWebLayout()) {
       return;
     }
 

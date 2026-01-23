@@ -235,7 +235,6 @@ export interface NodeHandlerContext {
   defaultSize: number;
   styleContext: StyleContext;
   converterContext?: ConverterContext;
-  listCounterContext: ListCounterContext;
   trackedChangesConfig: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
   bookmarks: Map<string, number>;
@@ -252,7 +251,6 @@ export interface NodeHandlerContext {
       defaultFont: string,
       defaultSize: number,
       styleContext: StyleContext,
-      listCounterContext?: ListCounterContext,
       trackedChanges?: TrackedChangesConfig,
       bookmarks?: Map<string, number>,
       hyperlinkConfig?: HyperlinkConfig,

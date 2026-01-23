@@ -6,8 +6,9 @@ import {
   FileSystemNotAvailableError,
   DocumentLoadError,
 } from './errors/index.js';
-import { loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { loadTestDataForEditorTests, getMinimalTranslatedLinkedStyles } from '@tests/helpers/helpers.js';
 import { getStarterExtensions } from '@extensions/index.js';
+import { SuperConverter } from './super-converter/SuperConverter.js';
 
 /**
  * Comprehensive test suite for the Editor Document Lifecycle API.
@@ -303,10 +304,14 @@ describe('Editor Lifecycle API', () => {
       });
 
       it('should allow overriding mode', async () => {
+        const converter = new SuperConverter();
+        converter.translatedLinkedStyles = getMinimalTranslatedLinkedStyles();
+
         editor = await Editor.open(undefined, {
           extensions: getStarterExtensions(),
           suppressDefaultDocxStyles: true,
           mode: 'html',
+          converter,
         });
 
         expect(editor.options.mode).toBe('html');

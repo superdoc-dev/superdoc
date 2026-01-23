@@ -803,6 +803,16 @@ export class EditorInputManager {
     if (!this.#deps) return;
     if (event.button !== 0) return;
 
+    const target = event.target as HTMLElement | null;
+    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
+
+    if (annotationEl) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.#handleAnnotationDoubleClick(event, annotationEl);
+      return;
+    }
+
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) return;
 
@@ -831,6 +841,27 @@ export class EditorInputManager {
       this.#callbacks.activateHeaderFooterRegion?.(region);
     } else if ((this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body') !== 'body') {
       this.#callbacks.exitHeaderFooterMode?.();
+    }
+  }
+
+  #handleAnnotationDoubleClick(event: MouseEvent, annotationEl: HTMLElement): void {
+    const editor = this.#deps?.getEditor();
+    if (!editor?.isEditable) return;
+
+    const resolved = this.#callbacks.resolveFieldAnnotationSelectionFromElement?.(annotationEl);
+    if (resolved) {
+      try {
+        const tr = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, resolved.pos));
+        editor.view?.dispatch(tr);
+      } catch {}
+
+      editor.emit('fieldAnnotationDoubleClicked', {
+        editor,
+        node: resolved.node,
+        nodePos: resolved.pos,
+        event,
+        currentTarget: annotationEl,
+      });
     }
   }
 
@@ -1368,16 +1399,32 @@ export class EditorInputManager {
     this.#callbacks.scheduleSelectionUpdate?.();
   }
 
+  /**
+   * Focuses the editor DOM element if it doesn't already have focus.
+   *
+   * This method performs a focus check before calling blur/focus to prevent
+   * unnecessary focus cycles that can disrupt selection state during list
+   * operations with tracked changes.
+   */
   #focusEditor(): void {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
+    const editor = this.#deps?.getEditor();
+    const view = editor?.view;
+    const editorDom = view?.dom as HTMLElement | undefined;
+    if (!editorDom) return;
+
+    const active = document.activeElement as HTMLElement | null;
+    const activeIsEditor = active === editorDom || (!!active && editorDom.contains?.(active));
+    const hasFocus = typeof view.hasFocus === 'function' && view.hasFocus();
+
+    if (activeIsEditor || hasFocus) {
+      return;
     }
 
-    const editor = this.#deps?.getEditor();
-    const editorDom = editor?.view?.dom as HTMLElement | undefined;
-    if (editorDom) {
-      editorDom.focus();
-      editor?.view?.focus();
+    if (active instanceof HTMLElement) {
+      active.blur();
     }
+
+    editorDom.focus();
+    view?.focus();
   }
 }

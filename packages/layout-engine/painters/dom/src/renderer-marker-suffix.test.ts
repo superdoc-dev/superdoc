@@ -78,7 +78,7 @@ describe('DomPainter marker suffix rendering', () => {
   /**
    * Helper to create layout for a list paragraph with marker
    */
-  function createListLayout(blockId: string, markerWidth: number): Layout {
+  function createListLayout(blockId: string, markerWidth: number, markerTextWidth = markerWidth): Layout {
     return {
       pageSize: { w: 400, h: 500 },
       pages: [
@@ -94,6 +94,7 @@ describe('DomPainter marker suffix rendering', () => {
               y: 40,
               width: 300,
               markerWidth,
+              markerTextWidth,
               continuesFromPrev: false,
             },
           ],
@@ -126,9 +127,9 @@ describe('DomPainter marker suffix rendering', () => {
       expect(tabElement).toBeTruthy();
       expect(tabElement?.innerHTML).toBe('&nbsp;');
 
-      // Default gutter width should be used (8px from LIST_MARKER_GAP constant)
+      // Right-justified markers use hanging indent for tab width (no hanging => 0px).
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('8px');
+      expect(tabWidth).toBe('0px');
     });
 
     it('should render tab suffix with custom gutterWidthPx', () => {
@@ -149,7 +150,7 @@ describe('DomPainter marker suffix rendering', () => {
       expect(tabElement).toBeTruthy();
 
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe(`${customGutter}px`);
+      expect(tabWidth).toBe('0px');
     });
 
     it('should handle gutterWidthPx of 0', () => {
@@ -168,9 +169,9 @@ describe('DomPainter marker suffix rendering', () => {
       const tabElement = container.querySelector('.superdoc-tab');
       expect(tabElement).toBeTruthy();
 
-      // Should fall back to default (LIST_MARKER_GAP = 8px) when gutterWidthPx is 0
+      // Right-justified markers use hanging indent for tab width (no hanging => 0px).
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('8px');
+      expect(tabWidth).toBe('0px');
     });
 
     it('should handle negative gutterWidthPx', () => {
@@ -189,9 +190,9 @@ describe('DomPainter marker suffix rendering', () => {
       const tabElement = container.querySelector('.superdoc-tab');
       expect(tabElement).toBeTruthy();
 
-      // Should fall back to default when gutterWidthPx is negative
+      // Right-justified markers use hanging indent for tab width (no hanging => 0px).
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('8px');
+      expect(tabWidth).toBe('0px');
     });
 
     it('should handle Infinity gutterWidthPx', () => {
@@ -210,9 +211,9 @@ describe('DomPainter marker suffix rendering', () => {
       const tabElement = container.querySelector('.superdoc-tab');
       expect(tabElement).toBeTruthy();
 
-      // Should fall back to default when gutterWidthPx is not finite
+      // Right-justified markers use hanging indent for tab width (no hanging => 0px).
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('8px');
+      expect(tabWidth).toBe('0px');
     });
 
     it('should handle NaN gutterWidthPx', () => {
@@ -231,9 +232,9 @@ describe('DomPainter marker suffix rendering', () => {
       const tabElement = container.querySelector('.superdoc-tab');
       expect(tabElement).toBeTruthy();
 
-      // Should fall back to default when gutterWidthPx is NaN
+      // Right-justified markers use hanging indent for tab width (no hanging => 0px).
       const tabWidth = (tabElement as HTMLElement)?.style.width;
-      expect(tabWidth).toBe('8px');
+      expect(tabWidth).toBe('0px');
     });
   });
 
@@ -414,6 +415,7 @@ describe('DomPainter marker suffix rendering', () => {
                 y: 40,
                 width: 300,
                 markerWidth: 24,
+                markerTextWidth: 12,
                 continuesFromPrev: false,
               },
               {

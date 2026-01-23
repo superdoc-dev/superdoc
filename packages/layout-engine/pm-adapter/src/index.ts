@@ -31,11 +31,11 @@ export type {
   PMDocumentMap,
   BatchAdapterOptions,
   FlowBlocksResult,
-  ConverterContext
+  ConverterContext,
 } from './types.js';
 
 // Re-export enum as value
 export { SectionType } from './types.js';
 
 // Re-export public API functions from internal implementation
-export { toFlowBlocks, toFlowBlocksMap } from './internal.js';
+export { toFlowBlocks } from './internal.js';

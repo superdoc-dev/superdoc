@@ -48,20 +48,16 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
     defaultFont,
     defaultSize,
     styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     sectionState,
     converters,
+    themeColors,
+    enableComments,
   } = context;
 
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
-  if (!paragraphToFlowBlocks) {
-    return;
-  }
-
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
   children.forEach((child) => {
     if (child.type !== 'paragraph') {
@@ -82,20 +78,21 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
       }
     }
 
-    const paragraphBlocks = paragraphToFlowBlocks(
-      child,
+    const paragraphBlocks = paragraphToFlowBlocks({
+      para: child,
       nextBlockId,
       positions,
       defaultFont,
       defaultSize,
       styleContext,
-      { getListCounter, incrementListCounter, resetListCounter },
       trackedChangesConfig,
       bookmarks,
       hyperlinkConfig,
-      undefined, // themeColors - not available in NodeHandlerContext
-      context.converterContext,
-    );
+      themeColors,
+      converterContext: context.converterContext,
+      enableComments: enableComments,
+      converters,
+    });
 
     paragraphBlocks.forEach((block) => {
       blocks.push(block);

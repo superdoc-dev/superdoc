@@ -127,6 +127,32 @@ describe('w:r r-translator (node)', () => {
     expect(result.content[2].type).toBe('text');
   });
 
+  it('strips marks from passthroughInline child nodes', () => {
+    const passthroughChild = {
+      type: 'passthroughInline',
+      attrs: { originalName: 'w:custom' },
+      marks: [{ type: 'bold' }, { type: 'italic' }],
+    };
+    const runNode = {
+      name: 'w:r',
+      elements: [{ name: 'w:rPr', elements: [{ name: 'w:b', attributes: {} }] }],
+    };
+
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [passthroughChild]) },
+      docx: {},
+    };
+
+    const result = translator.encode(params);
+
+    expect(result.type).toBe('run');
+    const child = result.content[0];
+    expect(child.type).toBe('passthroughInline');
+    expect(child.marks).toEqual([]);
+    expect(child.attrs).toEqual({ originalName: 'w:custom' });
+  });
+
   it('does not wrap a comment range start and end in a run node', () => {
     const params = {
       node: {

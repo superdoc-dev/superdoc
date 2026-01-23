@@ -11,7 +11,7 @@ import { translator as wTop } from '../top';
 
 // Property translators for w:pBdr child elements
 // Each translator handles a specific property of the paragraph borders
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   mcAlternateContentTranslator,
   wBarTranslator,

@@ -980,7 +980,7 @@ export function clickToPosition(
       const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
       const isListItem = markerWidth > 0;
       const paraAlignment = block.attrs?.alignment;
-      const isJustified = paraAlignment === 'justify' || paraAlignment === 'both';
+      const isJustified = paraAlignment === 'justify';
       const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;
 
       const pos = mapPointToPm(block, line, pageRelativePoint.x - fragment.x, isRTL, availableWidth, alignmentOverride);
@@ -1089,7 +1089,7 @@ export function clickToPosition(
       const cellMarkerWidth = cellMeasure.marker?.markerWidth ?? 0;
       const isListItem = cellMarkerWidth > 0;
       const cellAlignment = cellBlock.attrs?.alignment;
-      const isJustified = cellAlignment === 'justify' || cellAlignment === 'both';
+      const isJustified = cellAlignment === 'justify';
       const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;
 
       const pos = mapPointToPm(cellBlock, line, localX, isRTL, availableWidth, alignmentOverride);
@@ -1412,7 +1412,7 @@ export function selectionToRects(
           // List items use textAlign: 'left' in the DOM for non-justify alignments.
           // For justify, we don't override so justify selection rectangles are calculated correctly.
           const blockAlignment = block.attrs?.alignment;
-          const isJustified = blockAlignment === 'justify' || blockAlignment === 'both';
+          const isJustified = blockAlignment === 'justify';
           const alignmentOverride = isListItemFlag && !isJustified ? 'left' : undefined;
           const startX = mapPmToX(block, line, charOffsetFrom, fragment.width, alignmentOverride);
           const endX = mapPmToX(block, line, charOffsetTo, fragment.width, alignmentOverride);

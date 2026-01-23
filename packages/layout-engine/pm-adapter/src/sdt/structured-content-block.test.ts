@@ -26,16 +26,13 @@ describe('structured-content-block', () => {
       styles: new Map(),
       numbering: new Map(),
     };
-    const mockListCounterContext = {
-      getListCounter: vi.fn(),
-      incrementListCounter: vi.fn(),
-      resetListCounter: vi.fn(),
-    };
     const mockHyperlinkConfig = {
       enableRichHyperlinks: false,
     };
     const mockTrackedChangesConfig = undefined;
     const mockBookmarks = new Map();
+    const mockEnableComments = true;
+    const mockConverterContext = { docx: {} } as never;
 
     const scbMetadata: SdtMetadata = {
       type: 'structuredContentBlock',
@@ -66,10 +63,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: vi.fn(),
           },
@@ -81,7 +79,7 @@ describe('structured-content-block', () => {
         expect(recordBlockKind).not.toHaveBeenCalled();
       });
 
-      it('should return early if paragraphToFlowBlocks is not provided', () => {
+      it('should throw if paragraphToFlowBlocks is not provided', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
@@ -99,17 +97,15 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: undefined,
         };
 
-        handleStructuredContentBlockNode(node, context);
-
-        expect(blocks).toHaveLength(0);
-        expect(recordBlockKind).not.toHaveBeenCalled();
+        expect(() => handleStructuredContentBlockNode(node, context)).toThrow();
       });
 
       it('should handle empty children array', () => {
@@ -132,10 +128,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: vi.fn(),
           },
@@ -175,10 +172,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -208,11 +206,11 @@ describe('structured-content-block', () => {
 
         vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
 
-        const mockParagraphConverter = vi.fn((para) => [
+        const mockParagraphConverter = vi.fn((params) => [
           {
             kind: 'paragraph',
-            id: `p-${para.content[0].text}`,
-            runs: [{ text: para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
+            id: `p-${params.para.content[0].text}`,
+            runs: [{ text: params.para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
           } as ParagraphBlock,
         ]);
 
@@ -224,10 +222,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -262,10 +261,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -301,10 +301,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -313,20 +314,19 @@ describe('structured-content-block', () => {
         handleStructuredContentBlockNode(node, context);
 
         expect(mockParagraphConverter).toHaveBeenCalledWith(
-          node.content[0],
-          mockBlockIdGenerator,
-          mockPositionMap,
-          'Arial',
-          12,
-          mockStyleContext,
           expect.objectContaining({
-            getListCounter: mockListCounterContext.getListCounter,
-            incrementListCounter: mockListCounterContext.incrementListCounter,
-            resetListCounter: mockListCounterContext.resetListCounter,
+            para: node.content[0],
+            nextBlockId: mockBlockIdGenerator,
+            positions: mockPositionMap,
+            defaultFont: 'Arial',
+            defaultSize: 12,
+            styleContext: mockStyleContext,
+            trackedChangesConfig: mockTrackedChangesConfig,
+            bookmarks: mockBookmarks,
+            hyperlinkConfig: mockHyperlinkConfig,
+            enableComments: mockEnableComments,
+            converterContext: mockConverterContext,
           }),
-          mockTrackedChangesConfig,
-          mockBookmarks,
-          mockHyperlinkConfig,
         );
       });
 
@@ -356,10 +356,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -396,10 +397,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -436,10 +438,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -482,10 +485,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -518,10 +522,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -562,10 +567,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -598,10 +604,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: vi.fn(),
           },
@@ -643,10 +650,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -687,10 +695,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -728,10 +737,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -765,10 +775,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: vi.fn(),
           },
@@ -801,10 +812,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -845,10 +857,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },
@@ -889,10 +902,11 @@ describe('structured-content-block', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           trackedChangesConfig: mockTrackedChangesConfig,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
           converters: {
             paragraphToFlowBlocks: mockParagraphConverter,
           },

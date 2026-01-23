@@ -162,7 +162,7 @@ export type RunMarks = {
     style?: 'single' | 'double' | 'dotted' | 'dashed' | 'wavy';
     /** Underline color as hex string (defaults to text color). */
     color?: string;
-  };
+  } | null;
   /** Strikethrough text decoration. */
   strike?: boolean;
   /** Highlight (background) color as hex string. */
@@ -1170,7 +1170,7 @@ export type WordLayoutConfig = {
 
 export type ParagraphAttrs = {
   styleId?: string;
-  alignment?: 'left' | 'center' | 'right' | 'justify' | 'both';
+  alignment?: 'left' | 'center' | 'right' | 'justify';
   spacing?: ParagraphSpacing;
   /**
    * Indicates which spacing properties were explicitly set on the paragraph.
@@ -1197,7 +1197,7 @@ export type ParagraphAttrs = {
    */
   dropCapDescriptor?: DropCapDescriptor;
   frame?: ParagraphFrame;
-  numberingProperties?: Record<string, unknown>;
+  numberingProperties?: { ilvl?: number; numId?: number } | null;
   borders?: ParagraphBorders;
   shading?: ParagraphShading;
   tabs?: TabStop[];
@@ -1205,6 +1205,7 @@ export type ParagraphAttrs = {
   tabIntervalTwips?: number;
   keepNext?: boolean;
   keepLines?: boolean;
+  pageBreakBefore?: boolean;
   trackedChangesMode?: TrackedChangesMode;
   trackedChangesEnabled?: boolean;
   /** Marks an empty paragraph that only exists to carry section properties. */

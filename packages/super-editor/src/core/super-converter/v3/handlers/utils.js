@@ -10,6 +10,9 @@ export const generateV2HandlerEntity = (handlerName, translator) => ({
   handlerName,
   handler: (params) => {
     const { nodes } = params;
+    if (!translator || !translator.xmlName) {
+      return { nodes: [], consumed: 0 };
+    }
     if (nodes.length === 0 || nodes[0].name !== translator.xmlName) {
       return { nodes: [], consumed: 0 };
     }
@@ -291,17 +294,79 @@ export function decodeProperties(params, translatorsBySdName, properties) {
 }
 
 /**
+ * Helper to encode properties by key (eg: w:style elements by styleId)
+ * @param {string} xmlName The XML element name (with namespace).
+ * @param {string} sdName The SuperDoc attribute name (without namespace).
+ * @param {import('@translator').NodeTranslator} translator The node translator to use for encoding.
+ * @param {import('@translator').SCEncoderConfig} params The encoding parameters containing the nodes to process.
+ * @param {object} node The XML node containing the elements to encode.
+ * @param {string} keyAttr The attribute name to use as the key in the resulting object.
+ * @returns {object} The encoded properties as an object keyed by the specified attribute.
+ */
+export function encodePropertiesByKey(xmlName, sdName, translator, params, node, keyAttr) {
+  const result = {};
+  const elements = node.elements?.filter((el) => el.name === xmlName) || [];
+  if (elements.length > 0) {
+    const items = elements.map((el) => translator.encode({ ...params, nodes: [el] })).filter(Boolean);
+    if (items.length > 0) {
+      result[sdName] = items.reduce((acc, item) => {
+        if (item[keyAttr] != null) {
+          acc[item[keyAttr]] = item;
+        }
+        return acc;
+      }, {});
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Helper to decode properties by key (eg: w:style elements by styleId)
+ * @param {string} xmlName The XML element name (with namespace).
+ * @param {string} sdName The SuperDoc attribute name (without namespace).
+ * @param {import('@translator').NodeTranslator} translator The node translator to use for decoding.
+ * @param {import('@translator').SCDecoderConfig} params The decoding parameters containing the node to process.
+ * @param {object} attrs The attributes object containing the properties to decode.
+ * @param {string} keyAttr The attribute name to use as the key in the resulting object.
+ * @returns {Array} An array of decoded elements.
+ */
+export function decodePropertiesByKey(xmlName, sdName, translator, params, attrs) {
+  const elements = [];
+  if (attrs[sdName] != null) {
+    Object.values(attrs[sdName]).forEach((item) => {
+      const decoded = translator.decode({
+        ...params,
+        node: { attrs: { [translator.sdNodeOrKeyName]: item } },
+      });
+      if (decoded) {
+        elements.push(decoded);
+      }
+    });
+  }
+  return elements;
+}
+
+/**
  * Helper to create property handlers for nested properties (eg: w:tcBorders => borders)
  * @param {string} xmlName The XML element name (with namespace).
  * @param {string} sdName The SuperDoc attribute name (without namespace).
- * @param {import('@translator').NodeTranslatorConfig[]} propertyTranslators An array of property translators to handle nested properties.
+ * @param {import('@translator').NodeTranslator[]} propertyTranslators An array of property translators to handle nested properties.
  * @param {object} [defaultEncodedAttrs={}] Optional default attributes to include during encoding.
+ * @param {import('@translator').AttrConfig[]} [attributeHandlers=[]] Optional additional attribute handlers for the nested element.
  * @returns {import('@translator').NodeTranslatorConfig} The nested property handler config with xmlName, sdName, encode, and decode functions.
  */
-export function createNestedPropertiesTranslator(xmlName, sdName, propertyTranslators, defaultEncodedAttrs = {}) {
+export function createNestedPropertiesTranslator(
+  xmlName,
+  sdName,
+  propertyTranslators,
+  defaultEncodedAttrs = {},
+  attributeHandlers = [],
+) {
   const propertyTranslatorsByXmlName = {};
   const propertyTranslatorsBySdName = {};
   propertyTranslators.forEach((translator) => {
+    if (!translator) return;
     propertyTranslatorsByXmlName[translator.xmlName] = translator;
     propertyTranslatorsBySdName[translator.sdNodeOrKeyName] = translator;
   });
@@ -310,20 +375,22 @@ export function createNestedPropertiesTranslator(xmlName, sdName, propertyTransl
     xmlName: xmlName,
     sdNodeOrKeyName: sdName,
     type: NodeTranslator.translatorTypes.NODE,
-    attributes: [],
-    encode: (params) => {
+    attributes: attributeHandlers,
+    encode: (params, encodedAttrs) => {
       const { nodes } = params;
       const node = nodes[0];
 
       // Process property translators
       const attributes = {
         ...defaultEncodedAttrs,
+        ...encodedAttrs,
         ...encodeProperties({ ...params, nodes: [node] }, propertyTranslatorsByXmlName),
       };
 
       return Object.keys(attributes).length > 0 ? attributes : undefined;
     },
-    decode: (params) => {
+    decode: function (params) {
+      const decodedAttrs = this.decodeAttributes({ node: { ...params.node, attrs: params.node.attrs[sdName] || {} } });
       const currentValue = params.node.attrs?.[sdName];
 
       // Process property translators
@@ -336,7 +403,7 @@ export function createNestedPropertiesTranslator(xmlName, sdName, propertyTransl
       const newNode = {
         name: xmlName,
         type: 'element',
-        attributes: {},
+        attributes: decodedAttrs,
         elements: elements,
       };
 

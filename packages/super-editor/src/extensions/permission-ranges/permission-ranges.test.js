@@ -2,7 +2,9 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 
 import { Editor } from '@core/index.js';
+import { SuperConverter } from '@core/super-converter/SuperConverter.js';
 import { getStarterExtensions } from '@extensions/index.js';
+import { getMinimalTranslatedLinkedStyles } from '@tests/helpers/helpers.js';
 
 const VIEWING_MODE = 'viewing';
 
@@ -83,11 +85,16 @@ describe('PermissionRanges extension', () => {
   });
 
   const createEditor = (content, extraOptions = {}) => {
+    const converter = new SuperConverter();
+    converter.translatedLinkedStyles = getMinimalTranslatedLinkedStyles();
+    converter.translatedNumbering = { abstracts: {}, definitions: {} };
+
     editor = new Editor({
       extensions: getStarterExtensions(),
-      jsonOverride: content,
+      content,
       loadFromSchema: true,
       documentMode: VIEWING_MODE,
+      converter,
       ...extraOptions,
     });
     return editor;

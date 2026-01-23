@@ -81,21 +81,63 @@ const showInputSection = computed(() => {
   );
 });
 
+const isRangeThreadedComment = (comment) => {
+  if (!comment) return false;
+  return (
+    comment.threadingStyleOverride === 'range-based' ||
+    comment.threadingMethod === 'range-based' ||
+    comment.originalXmlStructure?.hasCommentsExtended === false
+  );
+};
+
+const collectTrackedChangeThread = (parentComment, allComments) => {
+  const trackedChangeId = parentComment.commentId;
+  const threadIds = new Set([trackedChangeId]);
+  const queue = [];
+
+  allComments.forEach((comment) => {
+    if (comment.commentId === trackedChangeId) return;
+    const isDirectChild = comment.parentCommentId === trackedChangeId;
+    const isRangeBasedTrackedChangeComment =
+      comment.trackedChangeParentId === trackedChangeId && isRangeThreadedComment(comment);
+
+    if (isDirectChild || isRangeBasedTrackedChangeComment) {
+      threadIds.add(comment.commentId);
+      queue.push(comment.commentId);
+    }
+  });
+
+  for (let i = 0; i < queue.length; i += 1) {
+    const parentId = queue[i];
+    allComments.forEach((comment) => {
+      if (comment.parentCommentId === parentId && !threadIds.has(comment.commentId)) {
+        threadIds.add(comment.commentId);
+        queue.push(comment.commentId);
+      }
+    });
+  }
+
+  return allComments.filter((comment) => threadIds.has(comment.commentId));
+};
+
 const comments = computed(() => {
   const parentComment = props.comment;
-  return commentsStore.commentsList
-    .filter((c) => {
-      const isThreadedComment = c.parentCommentId === parentComment.commentId;
-      const isThisComment = c.commentId === props.comment.commentId;
-      return isThreadedComment || isThisComment;
-    })
-    .sort((a, b) => {
-      // Parent comment (the one passed as prop) should always be first
-      if (a.commentId === props.comment.commentId) return -1;
-      if (b.commentId === props.comment.commentId) return 1;
-      // Sort remaining comments (children) by creation time
-      return a.createdTime - b.createdTime;
-    });
+  const allComments = commentsStore.commentsList;
+  const threadComments = parentComment.trackedChange
+    ? collectTrackedChangeThread(parentComment, allComments)
+    : allComments.filter((comment) => {
+        const isThreadedComment = comment.parentCommentId === parentComment.commentId;
+        const isThisComment = comment.commentId === parentComment.commentId;
+        return isThreadedComment || isThisComment;
+      });
+
+  return threadComments.sort((a, b) => {
+    // Parent comment (the one passed as prop) should always be first
+    if (a.commentId === parentComment.commentId) return -1;
+    if (b.commentId === parentComment.commentId) return 1;
+    // Sort remaining comments (children) by creation time
+    return a.createdTime - b.createdTime;
+  });
 });
 
 const isInternalDropdownDisabled = computed(() => {

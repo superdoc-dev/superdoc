@@ -166,6 +166,11 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
     const trackedChangeParent = trackedChangeParentMap.get(comment.importedId);
     const isInsideTrackedChange = trackedChangeParent?.isTrackedChangeParent;
 
+    // Track whether comment has an entry in commentsExtended.xml
+    // If it has an entry but no paraIdParent, it's explicitly a top-level comment
+    // and we should NOT use range-based parenting as a fallback
+    const hasExtendedEntry = !!extendedDef;
+
     if (extendedDef) {
       const details = getExtendedDetails(extendedDef);
       isDone = details.isDone ?? false;
@@ -177,22 +182,34 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
             c.elements?.some((el) => el.attrs?.['w14:paraId'] === details.paraIdParent),
         );
         const rangeParent = rangeParentMap.get(comment.commentId);
-        if (parentComment?.trackedChange && rangeParent) {
-          threadingParentCommentId = rangeParent;
+        if (parentComment?.trackedChange) {
+          // Parent is a tracked change - use range parent if available, otherwise leave parentCommentId undefined
+          // (TC association is tracked separately via trackedChangeParentId, not parentCommentId)
+          if (rangeParent) {
+            threadingParentCommentId = rangeParent;
+            parentCommentId = threadingParentCommentId;
+          }
+          // If no rangeParent, we intentionally leave parentCommentId undefined
+          // so the comment appears as a separate bubble from the TC
         } else {
+          // Parent is a real comment (not a TC) - use it for threading
           threadingParentCommentId = parentComment?.commentId;
-        }
-        if (!isInsideTrackedChange) {
           parentCommentId = threadingParentCommentId;
         }
       }
     }
 
-    if (isInsideTrackedChange) {
-      parentCommentId = trackedChangeParent.trackedChangeId;
-    }
+    // Track the tracked change association but don't use it as parentCommentId
+    // This keeps comments and tracked changes as separate bubbles in the UI
+    // while preserving the relationship for export and visual purposes
+    const trackedChangeParentId = isInsideTrackedChange ? trackedChangeParent.trackedChangeId : undefined;
 
-    if (!parentCommentId && rangeParentMap.has(comment.commentId)) {
+    // Only use range-based parenting as fallback when:
+    // 1. parentCommentId is not set from commentsExtended.xml, AND
+    // 2. The comment has NO entry in commentsExtended.xml at all
+    // If a comment has an entry in commentsExtended.xml but no paraIdParent,
+    // it's explicitly a top-level comment - don't override with range-based parenting
+    if (!parentCommentId && !hasExtendedEntry && rangeParentMap.has(comment.commentId)) {
       parentCommentId = rangeParentMap.get(comment.commentId);
       if (threadingProfile?.defaultStyle === 'commentsExtended') {
         threadingStyleOverride = 'range-based';
@@ -205,6 +222,7 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
       parentCommentId,
       threadingStyleOverride,
       threadingParentCommentId,
+      trackedChangeParentId,
     };
   });
 };
@@ -594,23 +612,24 @@ const findCommentsWithSharedStartPosition = (comments, rangePositions) => {
 const applyParentRelationships = (comments, parentMap, trackedChangeParentMap = new Map()) => {
   return comments.map((comment) => {
     const trackedChangeParent = trackedChangeParentMap.get(comment.importedId);
-    if (trackedChangeParent && trackedChangeParent.isTrackedChangeParent) {
-      return {
-        ...comment,
-        parentCommentId: trackedChangeParent.trackedChangeId,
-      };
-    }
+    const updatedComment =
+      trackedChangeParent && trackedChangeParent.isTrackedChangeParent
+        ? {
+            ...comment,
+            trackedChangeParentId: trackedChangeParent.trackedChangeId,
+          }
+        : comment;
 
     const parentImportedId = parentMap.get(comment.importedId);
     if (parentImportedId) {
       const parentComment = comments.find((c) => c.importedId === parentImportedId);
       if (parentComment) {
         return {
-          ...comment,
+          ...updatedComment,
           parentCommentId: parentComment.commentId,
         };
       }
     }
-    return comment;
+    return updatedComment;
   });
 };

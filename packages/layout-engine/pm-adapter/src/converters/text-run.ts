@@ -7,7 +7,7 @@
  * - Token node conversion (page numbers, etc.)
  */
 
-import type { TextRun, Run, TabRun, TabStop, ParagraphIndent, SdtMetadata } from '@superdoc/contracts';
+import type { TextRun, Run, TabRun, TabStop, SdtMetadata, ParagraphAttrs } from '@superdoc/contracts';
 import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette } from '../types.js';
 import { applyMarksToRun } from '../marks/index.js';
 import { DEFAULT_HYPERLINK_CONFIG } from '../constants.js';
@@ -70,26 +70,13 @@ export function tabNodeToRun(
   node: PMNode,
   positions: PositionMap,
   tabIndex: number,
-  paragraph: PMNode,
+  paragraphAttrs: ParagraphAttrs,
   inheritedMarks: PMMark[] = [],
 ): Run | null {
   const pos = positions.get(node);
   if (!pos) return null;
-  const paragraphAttrs = paragraph.attrs ?? {};
-  const paragraphProps =
-    typeof paragraphAttrs.paragraphProperties === 'object' && paragraphAttrs.paragraphProperties !== null
-      ? (paragraphAttrs.paragraphProperties as Record<string, unknown>)
-      : {};
-  const tabStops =
-    Array.isArray(paragraphAttrs.tabStops) && paragraphAttrs.tabStops.length
-      ? (paragraphAttrs.tabStops as TabStop[])
-      : Array.isArray(paragraphProps.tabStops)
-        ? (paragraphProps.tabStops as TabStop[])
-        : undefined;
-  const indent =
-    (paragraphAttrs.indent as ParagraphIndent | undefined) ??
-    (paragraphProps.indent as ParagraphIndent | undefined) ??
-    undefined;
+  const tabStops: TabStop[] | undefined = paragraphAttrs.tabs;
+  const indent = paragraphAttrs.indent;
   const run: TabRun = {
     kind: 'tab',
     text: '\t',

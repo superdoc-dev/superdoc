@@ -13,6 +13,7 @@ import {
 } from '@superdoc/super-editor';
 import { DOCX, PDF, HTML, getFileObject, compareVersions } from '@superdoc/common';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
+import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
 // Beta channel note: keep this file touched so CI picks up prerelease runs
 export { SuperDoc } from './core/SuperDoc.js';
@@ -22,6 +23,7 @@ export {
   compareVersions,
   Editor,
   getRichTextExtensions,
+  getSchemaIntrospection,
 
   // Allowed types
   DOCX,

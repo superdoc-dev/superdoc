@@ -27,8 +27,9 @@ export interface MarkAttributesMap {}
 
 /**
  * Get all registered mark names.
+ * Uses mapped type to force TypeScript to expand the union in hover tooltips.
  */
-export type MarkName = keyof MarkAttributesMap;
+export type MarkName = { [K in keyof MarkAttributesMap]: K }[keyof MarkAttributesMap];
 
 /**
  * Get the attribute type for a mark by name.

@@ -13,7 +13,7 @@ const INLINE_NODE_NAME = SD_NODE_NAMES[0];
 const BLOCK_NODE_NAME = SD_NODE_NAMES[1];
 
 const resolveNodeType = (params) => {
-  const inlineContext = isInlineContext(params?.path, params?.nodes?.[0]?.name);
+  const inlineContext = isInlineContext(params?.path);
   return inlineContext ? INLINE_NODE_NAME : BLOCK_NODE_NAME;
 };
 

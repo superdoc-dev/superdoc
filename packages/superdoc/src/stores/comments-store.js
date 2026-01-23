@@ -674,41 +674,45 @@ export const useCommentsStore = defineStore('comments', () => {
 
     const groupedChanges = groupChanges(trackedChanges);
 
-    // Create comments for tracked changes
-    // that do not have a corresponding comment (created in Word).
-    const { tr } = editor.view.state;
-    const { dispatch } = editor.view;
+    // Collect all track changes that need comments
+    const trackChangesToProcess = [];
 
-    groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }, index) => {
-      console.debug(`Create comment for track change: ${index}`);
+    groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }) => {
       const foundComment = commentsList.value.find(
         (i) =>
           i.commentId === insertedMark?.mark.attrs.id ||
           i.commentId === deletionMark?.mark.attrs.id ||
           i.commentId === formatMark?.mark.attrs.id,
       );
-      const isLastIteration = trackedChanges.length === index + 1;
 
       if (foundComment) {
-        if (isLastIteration) {
-          tr.setMeta(CommentsPluginKey, { type: 'force' });
-        }
         return;
       }
 
       if (insertedMark || deletionMark || formatMark) {
-        const trackChangesPayload = {
-          ...(insertedMark && { insertedMark: insertedMark.mark }),
-          ...(deletionMark && { deletionMark: deletionMark.mark }),
-          ...(formatMark && { formatMark: formatMark.mark }),
-        };
-
-        if (isLastIteration) tr.setMeta(CommentsPluginKey, { type: 'force' });
-        tr.setMeta(CommentsPluginKey, { type: 'forceTrackChanges' });
-        tr.setMeta(TrackChangesBasePluginKey, trackChangesPayload);
+        trackChangesToProcess.push({
+          insertedMark: insertedMark?.mark,
+          deletionMark: deletionMark?.mark,
+          formatMark: formatMark?.mark,
+        });
       }
-      dispatch(tr);
     });
+
+    // If no track changes need processing, just force a UI refresh
+    if (trackChangesToProcess.length === 0) {
+      const { tr } = editor.view.state;
+      tr.setMeta(CommentsPluginKey, { type: 'force' });
+      editor.view.dispatch(tr);
+      return;
+    }
+
+    // Batch process all track changes with a single dispatch
+    const { tr } = editor.view.state;
+    tr.setMeta(CommentsPluginKey, { type: 'force' });
+    tr.setMeta(TrackChangesBasePluginKey, {
+      batchedTrackChanges: trackChangesToProcess,
+    });
+    editor.view.dispatch(tr);
   };
 
   const translateCommentsForExport = () => {

@@ -721,17 +721,73 @@ const findTrackedMark = ({
 };
 
 const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEditorState, editor) => {
-  const { insertedMark, deletionMark, formatMark, deletionNodes } = trackedChangeMeta;
+  // Handle batched track changes from DOCX import
+  if (trackedChangeMeta.batchedTrackChanges) {
+    const newTrackedChanges = { ...trackedChanges };
+    const emitParamsList = [];
+
+    trackedChangeMeta.batchedTrackChanges.forEach(({ insertedMark, deletionMark, formatMark }) => {
+      const result = processSingleTrackChange(
+        { insertedMark, deletionMark, formatMark },
+        newTrackedChanges,
+        newEditorState,
+        editor,
+      );
+      if (result.emitParams) {
+        emitParamsList.push(result.emitParams);
+      }
+    });
+
+    // Emit all comments in a single batch event
+    if (emitParamsList.length > 0) {
+      editor.emit('commentsUpdate', {
+        type: comments_module_events.BATCH_ADD,
+        comments: emitParamsList,
+      });
+    }
+
+    return newTrackedChanges;
+  }
+
+  // Handle single track change (original behavior for real-time changes)
+  const { insertedMark, deletionMark, formatMark } = trackedChangeMeta;
 
   if (!insertedMark && !deletionMark && !formatMark) {
-    return;
+    return trackedChanges;
   }
 
   const newTrackedChanges = { ...trackedChanges };
+  const result = processSingleTrackChange(
+    {
+      insertedMark,
+      deletionMark,
+      formatMark,
+      step: trackedChangeMeta.step,
+      deletionNodes: trackedChangeMeta.deletionNodes,
+    },
+    newTrackedChanges,
+    newEditorState,
+    editor,
+  );
+
+  if (result.emitParams) {
+    editor.emit('commentsUpdate', result.emitParams);
+  }
+
+  return newTrackedChanges;
+};
+
+const processSingleTrackChange = (trackChangeData, newTrackedChanges, newEditorState, editor) => {
+  const { insertedMark, deletionMark, formatMark, step, deletionNodes } = trackChangeData;
+
+  if (!insertedMark && !deletionMark && !formatMark) {
+    return { emitParams: null };
+  }
+
   let id = insertedMark?.attrs?.id || deletionMark?.attrs?.id || formatMark?.attrs?.id;
 
   if (!id) {
-    return trackedChanges;
+    return { emitParams: null };
   }
 
   // Maintain a map of tracked changes with their inserted/deleted ids
@@ -745,7 +801,6 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
   if (deletionMark) newTrackedChanges[id].deletion = deletionMark.attrs?.id;
   if (formatMark) newTrackedChanges[id].format = formatMark.attrs?.id;
 
-  const { step } = trackedChangeMeta;
   let nodes = step?.slice?.content?.content || [];
 
   // Track format has no nodes, we need to find the node
@@ -772,9 +827,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     newEditorState,
   });
 
-  if (emitParams) editor.emit('commentsUpdate', emitParams);
-
-  return newTrackedChanges;
+  return { emitParams };
 };
 
 const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsertion, marks }) => {

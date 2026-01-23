@@ -4379,6 +4379,154 @@ describe('measureBlock', () => {
       expect(measure.totalWidth).toBe(140);
       expect(measure.columnWidths[0]).toBe(140);
     });
+
+    it('does NOT scale up column widths for fixed layout tables with explicit width', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-layout-no-scale-up',
+        attrs: {
+          tableLayout: 'fixed',
+          tableWidth: { width: 600, type: 'px' }, // Explicit 600px width
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [100, 100], // Original: 200px total, explicit width is 600px
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      // Fixed layout should preserve original column widths, NOT scale up to 600px
+      // This is Word behavior: fixed layout tables honor the grid column widths exactly
+      expect(measure.totalWidth).toBe(200);
+      expect(measure.columnWidths[0]).toBe(100);
+      expect(measure.columnWidths[1]).toBe(100);
+    });
+
+    it('scales DOWN column widths for fixed layout tables when exceeding target width', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-layout-scale-down',
+        attrs: {
+          tableLayout: 'fixed',
+          tableWidth: { width: 300, type: 'px' }, // Explicit 300px width
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [300, 300], // Original: 600px total, exceeds explicit width of 300px
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      // Fixed layout SHOULD scale down when columns exceed the explicit width
+      expect(measure.totalWidth).toBe(300);
+      expect(measure.columnWidths[0]).toBe(150);
+      expect(measure.columnWidths[1]).toBe(150);
+    });
+
+    it('scales up column widths for auto layout tables with explicit pixel width', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'auto-layout-scale-up',
+        attrs: {
+          // No tableLayout means auto layout
+          tableWidth: { width: 400, type: 'px' }, // Explicit 400px width
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [100, 100], // Original: 200px total
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      // Auto layout with explicit width SHOULD scale up to fill the explicit width
+      expect(measure.totalWidth).toBe(400);
+      expect(measure.columnWidths[0]).toBe(200);
+      expect(measure.columnWidths[1]).toBe(200);
+    });
   });
 
   describe('table cell measurement with spacing.after', () => {

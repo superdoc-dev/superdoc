@@ -20,6 +20,7 @@ export function handleTableCellNode({
   rowIndex = 0,
   totalRows = 1,
   totalColumns,
+  preferTableGridWidths = false,
   _referencedStyles,
 }) {
   const { nodeListHandler } = params;
@@ -58,7 +59,10 @@ export function handleTableCellNode({
   if (colspan > 1) attributes['colspan'] = colspan;
 
   // Width
-  let width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
+  let width = null;
+  if (!preferTableGridWidths) {
+    width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
+  }
   const widthType = tableCellProperties.cellWidth?.type;
   if (widthType) attributes['widthType'] = widthType;
 

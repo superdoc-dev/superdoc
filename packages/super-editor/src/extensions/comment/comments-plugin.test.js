@@ -865,8 +865,107 @@ describe('internal helper functions', () => {
     const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
 
     const result = handleTrackedChangeTransaction({ deletionNodes: [] }, { existing: 'value' }, state, editor);
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ existing: 'value' });
     expect(editor.emit).not.toHaveBeenCalled();
+  });
+
+  it('handleTrackedChangeTransaction processes batched track changes and emits single BATCH_ADD event', () => {
+    const schema = createCommentSchema();
+    const insertMark1 = schema.marks[TrackInsertMarkName].create({
+      id: 'batch-change-1',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      date: 'today',
+    });
+    const insertMark2 = schema.marks[TrackInsertMarkName].create({
+      id: 'batch-change-2',
+      author: 'Bob',
+      authorEmail: 'bob@example.com',
+      date: 'today',
+    });
+    const textNode1 = schema.text('First', [insertMark1]);
+    const textNode2 = schema.text('Second', [insertMark2]);
+    const paragraph = schema.node('paragraph', null, [textNode1, textNode2]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+
+    const meta = {
+      batchedTrackChanges: [
+        { insertedMark: insertMark1, deletionMark: null, formatMark: null },
+        { insertedMark: insertMark2, deletionMark: null, formatMark: null },
+      ],
+    };
+
+    const result = handleTrackedChangeTransaction(meta, {}, state, editor);
+
+    // Should track both changes
+    expect(result['batch-change-1']).toMatchObject({ insertion: 'batch-change-1' });
+    expect(result['batch-change-2']).toMatchObject({ insertion: 'batch-change-2' });
+
+    // Should emit a single BATCH_ADD event, not individual ADD events
+    expect(editor.emit).toHaveBeenCalledTimes(1);
+    expect(editor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        type: comments_module_events.BATCH_ADD,
+        comments: expect.arrayContaining([
+          expect.objectContaining({ changeId: 'batch-change-1' }),
+          expect.objectContaining({ changeId: 'batch-change-2' }),
+        ]),
+      }),
+    );
+  });
+
+  it('handleTrackedChangeTransaction handles empty batchedTrackChanges array', () => {
+    const schema = createCommentSchema();
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Text')])]);
+    const state = EditorState.create({ schema, doc });
+    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+
+    const meta = {
+      batchedTrackChanges: [],
+    };
+
+    const result = handleTrackedChangeTransaction(meta, { existing: 'value' }, state, editor);
+
+    // Should return original state
+    expect(result).toEqual({ existing: 'value' });
+    // Should not emit any event when batch is empty
+    expect(editor.emit).not.toHaveBeenCalled();
+  });
+
+  it('handleTrackedChangeTransaction filters out invalid track changes in batch', () => {
+    const schema = createCommentSchema();
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'valid-change',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      date: 'today',
+    });
+    const textNode = schema.text('Valid', [insertMark]);
+    const paragraph = schema.node('paragraph', null, [textNode]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+
+    const meta = {
+      batchedTrackChanges: [
+        { insertedMark: insertMark, deletionMark: null, formatMark: null },
+        { insertedMark: null, deletionMark: null, formatMark: null }, // Invalid - no marks
+      ],
+    };
+
+    const result = handleTrackedChangeTransaction(meta, {}, state, editor);
+
+    // Should only track the valid change
+    expect(result['valid-change']).toBeDefined();
+
+    // Should still emit with only valid comments
+    expect(editor.emit).toHaveBeenCalledTimes(1);
+    const emitCall = editor.emit.mock.calls[0][1];
+    expect(emitCall.comments).toHaveLength(1);
+    expect(emitCall.comments[0].changeId).toBe('valid-change');
   });
 
   it('getTrackedChangeText extracts insertion, deletion, and format strings', () => {

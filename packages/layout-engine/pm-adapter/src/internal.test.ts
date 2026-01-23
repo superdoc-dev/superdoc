@@ -285,7 +285,7 @@ describe('internal', () => {
           expect.any(Object),
           expect.objectContaining({
             defaultFont: 'Times New Roman',
-            defaultSize: 10,
+            defaultSize: 10 / 0.75,
           }),
         );
       });

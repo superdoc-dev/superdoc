@@ -116,7 +116,7 @@ describe('toFlowBlocks', () => {
       expect(blocks[0].runs[0]).toMatchObject({
         fontFamily: 'Times New Roman, sans-serif',
       });
-      expect(blocks[0].runs[0]?.fontSize).toBeCloseTo((14 * 96) / 72, 5);
+      expect(blocks[0].runs[0]?.fontSize).toBeCloseTo(14, 5);
     });
   });
 

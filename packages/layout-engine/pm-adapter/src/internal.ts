@@ -52,7 +52,7 @@ import type {
 } from './types.js';
 
 const DEFAULT_FONT = 'Times New Roman';
-const DEFAULT_SIZE = 10;
+const DEFAULT_SIZE = 10 / 0.75; // 10pt in pixels
 
 /**
  * Dispatch map for node type handlers.
@@ -321,7 +321,7 @@ function normalizeConverterContext(
     context.translatedLinkedStyles.docDefaults.runProperties.fontFamily.ascii = defaultFont;
   }
   if (!context.translatedLinkedStyles.docDefaults.runProperties.fontSize) {
-    context.translatedLinkedStyles.docDefaults.runProperties.fontSize = defaultSize * 2; // size in half-points
+    context.translatedLinkedStyles.docDefaults.runProperties.fontSize = defaultSize * 0.75 * 2; // size in half-points
   }
 
   return context;

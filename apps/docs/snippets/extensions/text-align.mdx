@@ -1,0 +1,75 @@
+Control paragraph and heading alignment for professional document layouts.
+
+Perfect Word import/export compatibility for all alignment options.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>This is a regular paragraph. Select it and use the alignment buttons above to change how it aligns.</p><p>Here's another paragraph to test alignment. Try centering this one!</p><p>Justified text spreads evenly between both margins, creating clean edges on both sides of the paragraph. This creates a formal, professional appearance commonly used in books and official documents.</p><p>Right-aligned text can be useful for signatures, dates, or special formatting needs in your documents.</p>`}
+  height="300px"
+  customButtons={[
+    [
+      {
+        label: '⬅ Left',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setTextAlign('left')
+        }
+      },
+      {
+        label: '↔ Center',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setTextAlign('center')
+        }
+      },
+      {
+        label: '➡ Right',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setTextAlign('right')
+        }
+      },
+      {
+        label: '⬌ Justify',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setTextAlign('justify')
+        }
+      },
+      {
+        label: 'Reset',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetTextAlign()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:jc w:val="center"/>
+  </w:pPr>
+  <w:r>
+    <w:t>Centered text</w:t>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Titles & Headings** - Center important headings for emphasis
+- **Quotes** - Right-align attributions or center block quotes
+- **Formal Documents** - Justify body text for professional appearance
+- **Letters** - Right-align dates and signatures
+- **Poetry** - Center verses for artistic presentation

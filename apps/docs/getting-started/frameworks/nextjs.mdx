@@ -1,0 +1,126 @@
+---
+title: Next.js
+keywords: "nextjs docx editor, next word editor, superdoc nextjs, ssr document editor, dynamic import docx"
+---
+
+SuperDoc works with Next.js using dynamic imports to avoid SSR issues.
+
+## Installation
+
+```bash
+npm install @harbour-enterprises/superdoc
+```
+
+## Basic component
+
+```jsx
+// components/DocumentEditor.jsx
+import { useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+
+// Prevent SSR issues
+const DocumentEditor = dynamic(
+  () => Promise.resolve(DocumentEditorComponent),
+  { ssr: false }
+);
+
+function DocumentEditorComponent({ document }) {
+  const containerRef = useRef(null);
+  const superdocRef = useRef(null);
+
+  useEffect(() => {
+    const initEditor = async () => {
+      const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+      
+      if (containerRef.current) {
+        superdocRef.current = new SuperDoc({
+          selector: containerRef.current,
+          document
+        });
+      }
+    };
+
+    initEditor();
+
+    return () => {
+      superdocRef.current = null;
+    };
+  }, [document]);
+
+  return <div ref={containerRef} style={{ height: '700px' }} />;
+}
+
+export default DocumentEditor;
+```
+
+## App Router (Next.js 13+)
+
+```jsx
+// app/editor/page.jsx
+'use client';
+
+import dynamic from 'next/dynamic';
+
+const DocumentEditor = dynamic(
+  () => import('@/components/DocumentEditor'),
+  { 
+    ssr: false,
+    loading: () => <div>Loading editor...</div>
+  }
+);
+
+export default function EditorPage() {
+  return (
+    <main>
+      <DocumentEditor document="/sample.docx" />
+    </main>
+  );
+}
+```
+
+## API route for document handling
+
+```javascript
+// pages/api/documents/[id].js (Pages Router)
+// app/api/documents/[id]/route.js (App Router)
+
+export async function GET(request, { params }) {
+  const docId = params.id;
+  
+  // Fetch document from storage
+  const document = await fetchDocumentFromStorage(docId);
+  
+  return new Response(document, {
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    }
+  });
+}
+```
+
+## With authentication
+
+```jsx
+// components/SecureEditor.jsx
+import { useSession } from 'next-auth/react';
+import dynamic from 'next/dynamic';
+
+const DocumentEditor = dynamic(() => import('./DocumentEditor'), { ssr: false });
+
+export default function SecureEditor() {
+  const { data: session, status } = useSession();
+
+  if (status === 'loading') return <div>Loading...</div>;
+  if (!session) return <div>Please sign in</div>;
+
+  return (
+    <DocumentEditor 
+      document="/protected-doc.docx"
+      user={{
+        name: session.user.name,
+        email: session.user.email
+      }}
+    />
+  );
+}
+```

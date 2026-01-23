@@ -1,0 +1,130 @@
+---
+title: Nuxt.js
+keywords: "nuxt docx editor, nuxt word editor, superdoc nuxt, nuxt3 document editor, vue ssr docx"
+---
+
+SuperDoc requires client-side rendering in Nuxt due to DOM dependencies.
+
+## Installation
+
+```bash
+npm install @harbour-enterprises/superdoc
+```
+
+## Basic component
+
+```vue
+<!-- components/DocumentEditor.vue -->
+<template>
+  <ClientOnly>
+    <div ref="editor" class="editor-container" />
+    <template #fallback>
+      <div>Loading editor...</div>
+    </template>
+  </ClientOnly>
+</template>
+
+<script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+
+const editor = ref(null);
+let superdoc = null;
+
+onMounted(async () => {
+  const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+  
+  superdoc = new SuperDoc({
+    selector: editor.value,
+    document: '/api/documents/sample.docx'
+  });
+});
+
+onBeforeUnmount(() => {
+  superdoc = null;
+});
+</script>
+
+<style>
+.editor-container {
+  height: 700px;
+}
+</style>
+```
+
+## Plugin setup (Nuxt 3)
+
+```javascript
+// plugins/superdoc.client.js
+export default defineNuxtPlugin(() => {
+  return {
+    provide: {
+      initSuperDoc: async (element, options) => {
+        const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+        return new SuperDoc({ selector: element, ...options });
+      }
+    }
+  };
+});
+
+// Usage in component
+const { $initSuperDoc } = useNuxtApp();
+
+onMounted(async () => {
+  superdoc = await $initSuperDoc(editor.value, {
+    document: props.document
+  });
+});
+```
+
+## API endpoint
+
+```javascript
+// server/api/documents/[id].get.js
+import { readFile } from 'fs/promises';
+import { resolve } from 'path';
+
+export default defineEventHandler(async (event) => {
+  const id = getRouterParam(event, 'id');
+  const filePath = resolve('storage/documents', `${id}.docx`);
+  
+  try {
+    const file = await readFile(filePath);
+    setHeader(event, 'Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    return file;
+  } catch {
+    throw createError({ statusCode: 404, statusMessage: 'Document not found' });
+  }
+});
+```
+
+## With authentication (Nuxt 3)
+
+```vue
+<template>
+  <ClientOnly>
+    <div v-if="user" ref="editor" />
+    <div v-else>Please log in</div>
+  </ClientOnly>
+</template>
+
+<script setup>
+const { data: user } = await useFetch('/api/user');
+const editor = ref(null);
+let superdoc = null;
+
+onMounted(async () => {
+  if (user.value && editor.value) {
+    const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+    
+    superdoc = new SuperDoc({
+      selector: editor.value,
+      document: '/api/documents/protected.docx',
+      user: {
+        name: user.value.name,
+        email: user.value.email
+      }
+    });
+  }
+});
+</script>
+```

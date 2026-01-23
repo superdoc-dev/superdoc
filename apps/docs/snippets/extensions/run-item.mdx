@@ -1,0 +1,28 @@
+Low-level text run container.
+
+Internal node for managing text runs with consistent formatting.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Run items are internal nodes that group text with the same formatting. They're created automatically when importing Word documents.</p>`}
+  height="150px"
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <!-- Run properties -->
+  </w:rPr>
+  <w:t>Text content</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Word import** - Preserve exact run structure
+- **Format boundaries** - Maintain formatting breaks
+- **Internal structure** - Framework implementation detail
+- **OOXML fidelity** - Match Word's internal model

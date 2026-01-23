@@ -1,0 +1,89 @@
+---
+title: Underline extension
+sidebarTitle: "Underline"
+keywords: "Underline extension, superdoc Underline, word Underline, document Underline, docx Underline"
+---
+
+import Description from '/snippets/extensions/underline.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  HTML attributes for underline elements
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="underlineType" type="UnderlineConfig" default="single">
+  Style of underline
+</ParamField>
+
+## Commands
+
+### `setUnderline`
+
+Apply underline formatting
+
+**Example:**
+
+```javascript
+editor.commands.setUnderline()
+```
+
+**Returns:** `Function` Command
+
+### `unsetUnderline`
+
+Remove underline formatting
+
+**Example:**
+
+```javascript
+editor.commands.unsetUnderline()
+```
+
+**Returns:** `Function` Command
+
+### `toggleUnderline`
+
+Toggle underline formatting
+
+**Example:**
+
+```javascript
+editor.commands.toggleUnderline()
+```
+
+**Returns:** `Function` Command
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleUnderline() | `⌘/Ctrl-u` | Toggle underline formatting |
+| toggleUnderline() | `⌘/Ctrl-U` | Toggle underline formatting (uppercase) |
+
+## Types
+
+### `UnderlineConfig`
+
+Underline style configuration
+
+<Expandable title="Properties">
+<ResponseField name="value" type="any | any | any | any | any | any" required>
+  Style variant
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/underline/underline.js" />

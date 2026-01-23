@@ -1,0 +1,99 @@
+---
+title: Angular
+keywords: "angular docx editor, angular word component, superdoc angular, angular document editor, angular integration"
+---
+
+SuperDoc works with Angular through direct DOM manipulation.
+
+## Installation
+
+```bash
+npm install @harbour-enterprises/superdoc
+```
+
+## Basic component
+
+```typescript
+import { Component, ElementRef, ViewChild, OnInit, OnDestroy } from '@angular/core';
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+
+@Component({
+  selector: 'app-document-editor',
+  template: `
+    <div #editor class="editor-container"></div>
+  `,
+  styles: [`
+    .editor-container {
+      height: 700px;
+    }
+  `]
+})
+export class DocumentEditorComponent implements OnInit, OnDestroy {
+  @ViewChild('editor', { static: true }) editorElement!: ElementRef;
+  private superdoc: SuperDoc | null = null;
+
+  ngOnInit() {
+    this.superdoc = new SuperDoc({
+      selector: this.editorElement.nativeElement,
+      document: 'contract.docx'
+    });
+  }
+
+  ngOnDestroy() {
+    this.superdoc = null;
+  }
+
+  async exportDocument() {
+    if (this.superdoc) {
+      await this.superdoc.export();
+    }
+  }
+}
+```
+
+## With file input
+
+```typescript
+@Component({
+  selector: 'app-editor',
+  template: `
+    <input type="file" accept=".docx" (change)="onFileSelected($event)">
+    <div #editor></div>
+  `
+})
+export class EditorComponent {
+  @ViewChild('editor', { static: false }) editorElement!: ElementRef;
+  private superdoc: SuperDoc | null = null;
+
+  onFileSelected(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (file && this.editorElement) {
+      this.superdoc = new SuperDoc({
+        selector: this.editorElement.nativeElement,
+        document: file
+      });
+    }
+  }
+}
+```
+
+## Service pattern
+
+```typescript
+@Injectable({ providedIn: 'root' })
+export class DocumentService {
+  private superdoc: SuperDoc | null = null;
+
+  initialize(element: HTMLElement, document: File | string) {
+    this.superdoc = new SuperDoc({
+      selector: element,
+      document
+    });
+    return this.superdoc;
+  }
+
+  destroy() {
+    this.superdoc = null;
+  }
+}
+```

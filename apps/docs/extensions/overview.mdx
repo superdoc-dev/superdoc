@@ -1,0 +1,51 @@
+---
+title: Extensions API
+sidebarTitle: Overview
+---
+
+Extensions are the building blocks of SuperDoc. Every feature—from bold text to track changes—comes from an extension.
+
+## Understanding extensions
+
+Extensions provide:
+- **Commands** - Actions like `toggleBold()` or `insertTable()`
+- **Schema** - Define what can exist in documents
+- **Behavior** - Keyboard shortcuts, input rules, events
+
+## Using extensions
+
+You don't typically configure extensions directly. SuperDoc handles it:
+
+```javascript
+// These commands come from extensions
+editor.commands.toggleBold();        // Bold extension
+editor.commands.insertTable();       // Table extension  
+editor.commands.acceptAllChanges();  // TrackChanges extension
+```
+
+## Extension categories
+
+### Core editing
+Basic document capabilities:
+- **[Bold](/extensions/bold)**, **[Italic](/extensions/italic)**, **[Underline](/extensions/underline)**, **[Strike](/extensions/strike)**- Text formatting
+- **[Strike](/extensions/strike)**, **[Heading](/extensions/heading)** - Document structure
+- **[Lists](/extensions/bullet-list)**, **[Tables](/extensions/table)** - Bullet points and tables
+
+### Advanced features
+Complex functionality:
+- **[Track Changes](/extensions/track-changes)** - Revision tracking
+- **[Comments](/extensions/comments)** - Discussions
+- **[Field Annotation](/extensions/field-annotation)** - Form fields
+- **[Document Section](/extensions/document-section)** - Locked sections
+- **[Table](/extensions/table)** - Complex tables
+- **[Search](/extensions/search)** - Find and replace
+
+### Custom extensions
+**[Build your own →](/extensions/creating-extensions)**
+
+## How extensions work
+
+1. **Registration** - Extensions load with the editor
+2. **Schema definition** - Define nodes/marks
+3. **Command registration** - Add to `editor.commands`
+4. **Event handling** - React to changes

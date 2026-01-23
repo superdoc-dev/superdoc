@@ -1,0 +1,193 @@
+---
+title: CustomSelection extension
+sidebarTitle: "Custom Selection"
+keywords: "CustomSelection extension, superdoc CustomSelection, word CustomSelection, document CustomSelection, docx CustomSelection"
+---
+
+import Description from '/snippets/extensions/custom-selection.mdx'
+
+<Description />
+
+## Commands
+
+### `restorePreservedSelection`
+
+Restore the preserved selection
+
+<Note>
+Used internally to maintain selection when interacting with toolbar
+</Note>
+
+**Example:**
+
+```javascript
+// Restore selection after toolbar interaction
+editor.commands.restorePreservedSelection()
+```
+
+**Returns:** `Function` Command function
+
+### `setLinkedStyle`
+
+Apply a linked style to the selected paragraphs
+
+<Note>
+Works with custom selection preservation
+</Note>
+
+**Example:**
+
+```javascript
+const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+editor.commands.setLinkedStyle(style);
+```
+
+**Parameters:**
+
+<ParamField path="style" type="LinkedStyle" required>
+  The style object to apply
+</ParamField>
+
+### `toggleLinkedStyle`
+
+Toggle a linked style on the current selection
+
+<Note>
+Removes style if already applied, applies it if not
+</Note>
+
+**Example:**
+
+```javascript
+const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+editor.commands.toggleLinkedStyle(style)
+```
+
+**Parameters:**
+
+<ParamField path="style" type="LinkedStyle" required>
+  The linked style to apply (with id property)
+</ParamField>
+
+### `setStyleById`
+
+Apply a linked style by its ID
+
+<Note>
+Looks up the style from loaded Word styles
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.setStyleById('Heading1')
+editor.commands.setStyleById('Normal')
+```
+
+**Parameters:**
+
+<ParamField path="styleId" type="string" required>
+  The style ID to apply (e.g., 'Heading1')
+</ParamField>
+
+## Helpers
+
+### `getStyles`
+
+Get all available linked styles
+
+**Example:**
+
+```javascript
+const styles = editor.helpers.linkedStyles.getStyles();
+// Returns all styles from the Word document
+```
+
+**Returns:**
+
+<ResponseField name="return" type="Array" required>
+  Array of linked style objects
+</ResponseField>
+
+### `getStyleById`
+
+Get a specific style by ID
+
+**Example:**
+
+```javascript
+const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
+```
+
+**Parameters:**
+
+<ParamField path="styleId" type="string" required>
+  The style ID to find
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="Object" required>
+  The style object or undefined
+</ResponseField>
+
+## Types
+
+### `SelectionState`
+
+Selection state
+
+<Expandable title="Properties">
+<ResponseField name="focused" type="boolean" required>
+  Whether editor is focused
+</ResponseField>
+<ResponseField name="preservedSelection" type="Object | any" required>
+  Stored selection
+</ResponseField>
+<ResponseField name="showVisualSelection" type="boolean" required>
+  Whether to show selection decoration
+</ResponseField>
+<ResponseField name="skipFocusReset" type="boolean" required>
+  Whether to skip clearing selection on next focus
+</ResponseField>
+</Expandable>
+
+### `ParentNodeInfo`
+
+<Expandable title="Properties">
+<ResponseField name="pos" type="number" required>
+  The position of the parent node.
+</ResponseField>
+<ResponseField name="start" type="number" required>
+  The start position of the parent node.
+</ResponseField>
+<ResponseField name="depth" type="number" required>
+  The depth of the parent node.
+</ResponseField>
+<ResponseField name="node" type="any" required>
+  The parent node.
+</ResponseField>
+</Expandable>
+
+### `LinkedStyle`
+
+Style definition from Word document
+
+<Expandable title="Properties">
+<ResponseField name="id" type="string" required>
+  Style ID (e.g., 'Heading1', 'Normal')
+</ResponseField>
+<ResponseField name="type" type="string" required>
+  Style type ('paragraph' or 'character')
+</ResponseField>
+<ResponseField name="definition" type="Object" required>
+  Style definition from Word
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/custom-selection/custom-selection.js" />

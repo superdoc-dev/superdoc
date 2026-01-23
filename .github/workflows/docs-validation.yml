@@ -1,0 +1,34 @@
+name: Documentation Validation
+
+on:
+  pull_request:
+    paths:
+      - 'apps/docs/**'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Docs
+        run: pnpm --filter @superdoc/docs validate
+
+      - name: Check Broken Links
+        run: pnpm --filter @superdoc/docs check:links

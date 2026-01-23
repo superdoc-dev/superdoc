@@ -1,0 +1,65 @@
+Create hyperlinks with automatic formatting and Word compatibility.
+
+Links automatically get underline styling and proper color, with full export support.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Select any text to turn it into a link. For example, <a href="https://example.com" target="_blank">this is a link</a> to an external website.</p><p>You can also create links with custom display text or remove existing links.</p>`}
+  height="200px"
+  customButtons={[
+    [
+      {
+        label: 'Link Selection',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setLink({ 
+            href: 'https://www.example.com' 
+          })
+        }
+      },
+      {
+        label: 'Link with Text',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setLink({ 
+            href: 'https://docs.example.com',
+            text: 'View Documentation'
+          })
+        }
+      },
+      {
+        label: 'Remove Link',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetLink()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:hyperlink r:id="rId7">
+  <w:r>
+    <w:rPr>
+      <w:rStyle w:val="Hyperlink"/>
+      <w:u w:val="none"/>
+    </w:rPr>
+    <w:t>Link text</w:t>
+  </w:r>
+</w:hyperlink>
+```
+
+## Use Case
+
+- **External links** - Connect to websites and online resources
+- **Document navigation** - Create internal anchor links
+- **Email links** - Add mailto: links for contact information
+- **References** - Link to sources and citations
+- **Non-inclusive** - Links don't expand when typing at edges, preventing accidental link extension

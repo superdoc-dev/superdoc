@@ -1,0 +1,65 @@
+Adjust spacing between lines for better readability.
+
+Control line height for paragraphs and headings. Perfect for improving document readability and meeting formatting requirements.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p style="line-height: 1">Single spacing makes text compact but can be harder to read in long paragraphs.</p>
+    <p style="line-height: 1.5">Normal 1.5x spacing provides comfortable reading for most documents.</p>
+    <p style="line-height: 2">Double spacing is often required for academic papers and manuscripts.</p>
+  `}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: '1.0',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setLineHeight(1)
+        }
+      },
+      {
+        label: '1.5',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setLineHeight(1.5)
+        }
+      },
+      {
+        label: '2.0',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setLineHeight(2)
+        }
+      },
+      {
+        label: '2.5',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setLineHeight(2.5)
+        }
+      },
+      {
+        label: 'Reset',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetLineHeight()
+        }
+      }
+    ]
+  ]}
+/>
+
+## Use Case
+
+- **Readability** - Increase spacing for easier reading
+- **Academic requirements** - Double spacing for papers and theses  
+- **Accessibility** - Better spacing helps users with dyslexia
+- **Design control** - Match brand guidelines or style requirements

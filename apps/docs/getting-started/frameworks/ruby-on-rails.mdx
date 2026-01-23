@@ -1,0 +1,141 @@
+---
+title: Ruby on Rails
+keywords: "rails docx editor, ruby word editor, superdoc rails, ruby document editor, rails integration"
+---
+
+SuperDoc integrates with Rails for document storage and serving.
+
+## Installation
+
+Add to your layout:
+
+```erb
+<!-- app/views/layouts/application.html.erb -->
+<%= stylesheet_link_tag "https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" %>
+```
+
+## Basic view
+
+```erb
+<!-- app/views/documents/edit.html.erb -->
+<div id="editor" style="height: 700px"></div>
+
+<script type="module">
+  import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+  
+  new SuperDoc({
+    selector: '#editor',
+    document: '<%= document_path(@document) %>',
+    user: {
+      name: '<%= current_user.name %>',
+      email: '<%= current_user.email %>'
+    }
+  });
+</script>
+```
+
+## Active Storage integration
+
+```ruby
+# app/models/document.rb
+class Document < ApplicationRecord
+  has_one_attached :file
+  belongs_to :user
+  
+  validates :file, content_type: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+end
+
+# app/controllers/documents_controller.rb
+class DocumentsController < ApplicationController
+  before_action :authenticate_user!
+  
+  def show
+    @document = Document.find(params[:id])
+    
+    respond_to do |format|
+      format.html
+      format.docx { redirect_to rails_blob_path(@document.file, disposition: "inline") }
+    end
+  end
+  
+  def create
+    @document = current_user.documents.build(document_params)
+    
+    if @document.save
+      redirect_to edit_document_path(@document)
+    else
+      render :new
+    end
+  end
+  
+  private
+  
+  def document_params
+    params.require(:document).permit(:file)
+  end
+end
+```
+
+## Stimulus controller
+
+```javascript
+// app/javascript/controllers/document_editor_controller.js
+import { Controller } from "@hotwired/stimulus"
+
+export default class extends Controller {
+  static values = { 
+    url: String,
+    user: Object
+  }
+  
+  async connect() {
+    const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+    
+    this.superdoc = new SuperDoc({
+      selector: this.element,
+      document: this.urlValue,
+      user: this.userValue
+    });
+  }
+  
+  disconnect() {
+    this.superdoc = null;
+  }
+  
+  async export() {
+    if (this.superdoc) {
+      await this.superdoc.export();
+    }
+  }
+}
+```
+
+```erb
+<!-- Usage in view -->
+<div data-controller="document-editor"
+     data-document-editor-url-value="<%= rails_blob_path(@document.file) %>"
+     data-document-editor-user-value="<%= current_user.to_json %>"
+     style="height: 700px">
+</div>
+
+<button data-action="document-editor#export">Export</button>
+```
+
+## Upload handling
+
+```ruby
+# config/routes.rb
+resources :documents do
+  member do
+    post :upload
+  end
+end
+
+# app/controllers/documents_controller.rb
+def upload
+  @document = Document.find(params[:id])
+  @document.file.attach(params[:file])
+  
+  render json: { url: rails_blob_path(@document.file) }
+end
+```

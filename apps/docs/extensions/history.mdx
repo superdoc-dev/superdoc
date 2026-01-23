@@ -1,0 +1,66 @@
+---
+title: History extension
+sidebarTitle: "History"
+keywords: "History extension, superdoc History, word History, document History, docx History"
+---
+
+import Description from '/snippets/extensions/history.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="depth" type="number" default="100">
+  Maximum undo/redo steps to remember
+</ParamField>
+
+<ParamField path="newGroupDelay" type="number" default="500">
+  Milliseconds to wait before starting a new history group
+</ParamField>
+
+## Commands
+
+### `undo`
+
+Undo the last action
+
+<Note>
+Groups changes within the newGroupDelay window
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.undo()
+```
+
+### `redo`
+
+Redo the last undone action
+
+<Note>
+Only available after an undo action
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.redo()
+```
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| undo() | `⌘/Ctrl-z` | Undo last action |
+| redo() | `⌘/Ctrl-Shift-z` | Redo last action |
+| redo() | `⌘/Ctrl-y` | Redo last action (alternative) |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/history/history.js" />

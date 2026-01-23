@@ -1,0 +1,104 @@
+---
+title: Modules
+sidebarTitle: Overview
+keywords: "superdoc modules, editor modules, document features, modular architecture, plugin system"
+---
+
+SuperDoc ships with core DOCX editing. Modules add specialized features your users need.
+
+## What are modules?
+
+Modules are opt-in features that extend SuperDoc:
+- **Collaboration** - Multiple users editing simultaneously
+- **Comments** - Threaded discussions on document content  
+- **Toolbar** - Formatting controls and commands
+
+Each module is self-contained. Enable only what you need.
+
+## Basic usage
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  
+  // Enable modules you need
+  modules: {
+    toolbar: { selector: '#toolbar' },
+    comments: { allowResolve: true }
+  }
+});
+```
+
+## Available modules
+
+<CardGroup cols={3}>
+  <Card title="Collaboration" icon="users" href="/modules/collaboration">
+    Real-time editing with WebSockets
+  </Card>
+  <Card title="Comments" icon="message-square" href="/modules/comments">
+    Threaded discussions and annotations
+  </Card>
+  <Card title="Toolbar" icon="palette" href="/modules/toolbar">
+    Customizable formatting controls
+  </Card>
+</CardGroup>
+
+## Modules vs Methods
+
+**Modules** are features you configure at initialization:
+```javascript
+modules: {
+  collaboration: { url: 'wss://server.com' },
+  toolbar: { selector: '#toolbar' }
+}
+```
+
+**Methods** are actions you call after initialization:
+```javascript
+superdoc.search('contract');  // Not a module, just a method
+superdoc.export();            // Not a module, just a method
+```
+
+## Performance considerations
+
+Each module adds weight. For read-only viewing:
+
+```javascript
+// Minimal viewer - no modules
+const viewer = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  documentMode: 'viewing'
+  // No modules configured
+});
+```
+
+For full editing:
+
+```javascript
+// Full editor - all modules
+const editor = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  modules: {
+    toolbar: { selector: '#toolbar' },
+    comments: { allowResolve: true },
+    collaboration: { url: 'wss://server.com' }
+  }
+});
+```
+
+## Module interactions
+
+Some modules work together:
+
+- **Collaboration + Comments** = Comments sync across users
+
+## Next steps
+
+Pick the modules you need:
+
+- [Collaboration](/modules/collaboration) - Set up real-time editing
+- [Comments](/modules/comments) - Add discussions
+- [Toolbar](/modules/toolbar) - Add formatting controls

@@ -1,0 +1,295 @@
+---
+title: ListItem extension
+sidebarTitle: "List Item"
+keywords: "ListItem extension, superdoc ListItem, word ListItem, document ListItem, docx ListItem"
+---
+
+import Description from '/snippets/extensions/list-item.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for list item elements
+</ParamField>
+
+<ParamField path="bulletListTypeName" type="string" default="bulletList">
+  Name of bullet list node type
+</ParamField>
+
+<ParamField path="orderedListTypeName" type="string" default="orderedList">
+  Name of ordered list node type
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="markerType" type="string">
+  Virtual attribute for marker display
+</ParamField>
+
+<ParamField path="lvlText" type="string">
+  Level text template for numbering
+</ParamField>
+
+<ParamField path="listNumberingType" type="string">
+  Numbering format type
+</ParamField>
+
+<ParamField path="listLevel" type="Array">
+  List level hierarchy
+</ParamField>
+
+<ParamField path="lvlJc" type="string">
+  Level justification (left, right, center)
+</ParamField>
+
+<ParamField path="listParagraphProperties" type="Object">
+  Indentation and spacing info
+</ParamField>
+
+<ParamField path="listRunProperties" type="Object">
+  Run properties for list item
+</ParamField>
+
+<ParamField path="numId" type="string">
+  Numbering definition ID
+</ParamField>
+
+<ParamField path="numPrType" type="string" default="inline">
+  Numbering properties type
+</ParamField>
+
+<ParamField path="level" type="string">
+  Current nesting level
+</ParamField>
+
+<ParamField path="attributes" type="Object">
+  Additional attributes
+</ParamField>
+
+<ParamField path="spacing" type="Object">
+  Spacing configuration
+</ParamField>
+
+<ParamField path="indent" type="Object">
+  Indentation settings
+</ParamField>
+
+<ParamField path="markerStyle" type="Object">
+  Marker styling
+</ParamField>
+
+<ParamField path="styleId" type="string">
+  Linked style ID
+</ParamField>
+
+<ParamField path="customFormat" type="string">
+  Custom numbering format
+</ParamField>
+
+<ParamField path="importedFontFamily" type="string">
+  Font family from import
+</ParamField>
+
+<ParamField path="importedFontSize" type="string">
+  Font size from import
+</ParamField>
+
+## Commands
+
+### `setLinkedStyle`
+
+Apply a linked style to the selected paragraphs
+
+<Note>
+Works with custom selection preservation
+</Note>
+
+**Example:**
+
+```javascript
+const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+editor.commands.setLinkedStyle(style);
+```
+
+**Parameters:**
+
+<ParamField path="style" type="LinkedStyle" required>
+  The style object to apply
+</ParamField>
+
+### `toggleLinkedStyle`
+
+Toggle a linked style on the current selection
+
+<Note>
+Removes style if already applied, applies it if not
+</Note>
+
+**Example:**
+
+```javascript
+const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+editor.commands.toggleLinkedStyle(style)
+editor.commands.toggleLinkedStyle(style, 'paragraph')
+```
+
+**Parameters:**
+
+<ParamField path="style" type="LinkedStyle" required>
+  The linked style to apply (with id property)
+</ParamField>
+<ParamField path="nodeType" type="string | any" required>
+  Node type to restrict toggle to (e.g., 'paragraph')
+</ParamField>
+
+### `setStyleById`
+
+Apply a linked style by its ID
+
+<Note>
+Looks up the style from loaded Word styles
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.setStyleById('Heading1')
+editor.commands.setStyleById('Normal')
+```
+
+**Parameters:**
+
+<ParamField path="styleId" type="string" required>
+  The style ID to apply (e.g., 'Heading1')
+</ParamField>
+
+### `restorePreservedSelection`
+
+Restore the preserved selection
+
+<Note>
+Used internally to maintain selection when interacting with toolbar
+</Note>
+
+**Example:**
+
+```javascript
+// Restore selection after toolbar interaction
+editor.commands.restorePreservedSelection()
+```
+
+**Returns:** `Function` Command function
+
+## Helpers
+
+### `getStyles`
+
+Get all available linked styles
+
+**Example:**
+
+```javascript
+const styles = editor.helpers.linkedStyles.getStyles();
+// Returns all styles from the Word document
+```
+
+**Returns:**
+
+<ResponseField name="return" type="Array" required>
+  Array of linked style objects
+</ResponseField>
+
+### `getStyleById`
+
+Get a specific style by ID
+
+**Example:**
+
+```javascript
+const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
+```
+
+**Parameters:**
+
+<ParamField path="styleId" type="string" required>
+  The style ID to find
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="Object" required>
+  The style object or undefined
+</ResponseField>
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| splitListItem() | `Enter` | Split list item at cursor |
+| createParagraphNear() | `Shift-Enter` | Create paragraph in list |
+| increaseListIndent() | `Tab` | Increase list indentation |
+| decreaseListIndent() | `Shift-Tab` | Decrease list indentation |
+
+## Types
+
+### `IndentObject`
+
+<Expandable title="Properties">
+<ResponseField name="left" type="number">
+  The left indent value
+</ResponseField>
+<ResponseField name="right" type="number">
+  The right indent value
+</ResponseField>
+<ResponseField name="firstLine" type="number">
+  The first line indent value
+</ResponseField>
+<ResponseField name="hanging" type="number">
+  The hanging indent value
+</ResponseField>
+</Expandable>
+
+### `LinkedStyle`
+
+Style definition from Word document
+
+<Expandable title="Properties">
+<ResponseField name="id" type="string" required>
+  Style ID (e.g., 'Heading1', 'Normal')
+</ResponseField>
+<ResponseField name="type" type="string" required>
+  Style type ('paragraph' or 'character')
+</ResponseField>
+<ResponseField name="definition" type="Object" required>
+  Style definition from Word
+</ResponseField>
+</Expandable>
+
+### `SelectionState`
+
+Selection state
+
+<Expandable title="Properties">
+<ResponseField name="focused" type="boolean" required>
+  Whether editor is focused
+</ResponseField>
+<ResponseField name="preservedSelection" type="Object | any" required>
+  Stored selection
+</ResponseField>
+<ResponseField name="showVisualSelection" type="boolean" required>
+  Whether to show selection decoration
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/list-item/list-item.js" />

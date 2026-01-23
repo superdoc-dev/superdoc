@@ -1,0 +1,256 @@
+---
+title: Liveblocks
+sidebarTitle: Liveblocks
+keywords: "liveblocks collaboration, cloud collaboration, real-time editing, yjs liveblocks"
+---
+
+[Liveblocks](https://liveblocks.io/) is a cloud platform for real-time collaboration. It handles all the infrastructure so you can add collaboration without managing servers.
+
+## Setup
+
+### 1. Create Account
+
+1. Go to [liveblocks.io](https://liveblocks.io/)
+2. Sign up for free
+3. Create a new project
+4. Copy your **Public API Key** (`pk_...`)
+
+### 2. Install Dependencies
+
+```bash
+npm install @liveblocks/client @liveblocks/yjs yjs
+```
+
+### 3. Basic Implementation
+
+```javascript
+import { createClient } from "@liveblocks/client";
+import { LiveblocksYjsProvider } from "@liveblocks/yjs";
+import * as Y from "yjs";
+import { SuperDoc } from "superdoc";
+
+// Create Liveblocks client
+const client = createClient({
+  publicApiKey: "pk_your_public_key",
+});
+
+// Enter a room (each room = one collaborative document)
+const { room, leave } = client.enterRoom("document-123");
+
+// Create Yjs document and provider
+const ydoc = new Y.Doc();
+const provider = new LiveblocksYjsProvider(room, ydoc);
+
+// Wait for initial sync
+provider.on("sync", (synced) => {
+  if (!synced) return;
+
+  const superdoc = new SuperDoc({
+    selector: "#editor",
+    documentMode: "editing",
+    user: {
+      name: "John Smith",
+      email: "john@example.com",
+    },
+    modules: {
+      collaboration: { ydoc, provider },
+    },
+  });
+});
+```
+
+## Room Management
+
+Each **room** represents a collaborative session. Use unique room IDs for different documents:
+
+```javascript
+// Dynamic room based on document ID
+const documentId = route.params.id; // e.g., 'contract-abc-123'
+const { room, leave } = client.enterRoom(documentId);
+```
+
+### Room Naming Best Practices
+
+```javascript
+// Good: Unique, descriptive IDs
+client.enterRoom("contract-abc-123");
+client.enterRoom("proposal-2024-q1");
+client.enterRoom(`user-${userId}-draft`);
+
+// Avoid: Generic names that could conflict
+client.enterRoom("document"); // Too generic
+client.enterRoom("test"); // May conflict with other users
+```
+
+## User Presence
+
+### Showing Active Users
+
+```javascript
+const superdoc = new SuperDoc({
+  // ... config
+  onAwarenessUpdate: ({ states }) => {
+    const activeUsers = states
+      .filter((state) => state.user)
+      .map((state) => ({
+        name: state.user.name,
+        email: state.user.email,
+        color: state.user.color,
+        cursor: state.cursor,
+      }));
+
+    // Update your UI
+    renderUserAvatars(activeUsers);
+  },
+});
+```
+
+### Custom User Colors
+
+```javascript
+new SuperDoc({
+  colors: ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"],
+  // Users automatically get assigned colors from this palette
+  // ...
+});
+```
+
+## Authentication
+
+For production, use **secret keys** with your backend:
+
+### Frontend
+
+```javascript
+const client = createClient({
+  authEndpoint: "/api/liveblocks-auth",
+});
+```
+
+### Backend (Next.js API Route)
+
+```javascript
+// pages/api/liveblocks-auth.js
+import { Liveblocks } from "@liveblocks/node";
+
+const liveblocks = new Liveblocks({
+  secret: process.env.LIVEBLOCKS_SECRET_KEY,
+});
+
+export default async function handler(req, res) {
+  const user = await getUser(req); // Your auth logic
+
+  const session = liveblocks.prepareSession(user.id, {
+    userInfo: {
+      name: user.name,
+      email: user.email,
+    },
+  });
+
+  // Grant access to specific rooms
+  session.allow(`document-*`, session.FULL_ACCESS);
+
+  const { status, body } = await session.authorize();
+  res.status(status).json(body);
+}
+```
+
+## Persistence
+
+Liveblocks automatically persists your Yjs document. Data is stored securely and restored when users rejoin.
+
+<Note>
+  Free tier includes 30 days of storage. Paid plans include unlimited storage
+  with custom retention policies.
+</Note>
+
+## Error Handling
+
+```javascript
+const { room } = client.enterRoom("my-document");
+
+room.subscribe("error", (error) => {
+  console.error("Liveblocks error:", error);
+
+  if (error.code === 4001) {
+    // Authentication error
+    redirectToLogin();
+  }
+});
+
+room.subscribe("connection", (status) => {
+  // 'connecting' | 'open' | 'closed'
+  updateConnectionIndicator(status);
+});
+```
+
+## Cleanup
+
+Always clean up when the component unmounts:
+
+```javascript
+// React
+useEffect(() => {
+  const { room, leave } = client.enterRoom("document-id");
+  // ... setup
+
+  return () => {
+    superdoc?.destroy();
+    provider?.destroy();
+    leave(); // Important: leave the room
+  };
+}, []);
+```
+
+## Pricing
+
+| Tier    | MAU     | Price   |
+| ------- | ------- | ------- |
+| Free    | 250     | $0      |
+| Starter | 10,000  | $99/mo  |
+| Pro     | 100,000 | Contact |
+
+<Note>
+  MAU = Monthly Active Users. Each user who connects to a room counts once per
+  month.
+</Note>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Liveblocks Docs"
+    icon="book"
+    href="https://liveblocks.io/docs"
+  >
+    Official documentation
+  </Card>
+
+  <Card
+    title="Working Example"
+    icon="github"
+    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/liveblocks"
+  >
+    Complete source code
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Client Configuration"
+    icon="settings"
+    href="/modules/collaboration/configuration"
+  >
+    All SuperDoc collaboration options
+  </Card>
+
+  <Card
+    title="Self-Hosted Alternative"
+    icon="server"
+    href="/modules/collaboration/self-hosted/overview"
+  >
+    Run your own collaboration server
+  </Card>
+</CardGroup>

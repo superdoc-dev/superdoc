@@ -1,0 +1,102 @@
+Flexible inline blocks for horizontal rules, spacers, and custom dividers.
+
+Preserves special Word content like shapes and drawings through import/export.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Content blocks create visual breaks and spacing in your document.</p><div data-type="contentBlock" style="width: 100%; height: 2px; background-color: #e5e7eb;" data-horizontal-rule="true"></div><p>They can be horizontal rules, spacers, or custom dividers.</p><div data-type="contentBlock" style="width: 50%; height: 3px; background-color: #3b82f6;"></div><p>Use them to organize content visually.</p>`}
+  height="300px"
+  customButtons={[
+    [
+      {
+        label: '─ Horizontal Rule',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.insertHorizontalRule()
+        }
+      },
+      {
+        label: '▭ Spacer (20px)',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.insertContentBlock({ 
+            size: { height: 20, width: '100%' } 
+          })
+        }
+      },
+      {
+        label: '━ Thick Blue',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.insertContentBlock({
+            size: { width: '100%', height: 4 },
+            background: '#2563eb'
+          })
+        }
+      }
+    ],
+    [
+      {
+        label: '▬ 50% Red',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.insertContentBlock({
+            size: { width: '50%', height: 2 },
+            background: '#dc2626'
+          })
+        }
+      },
+      {
+        label: '■ Block (100x50)',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.insertContentBlock({
+            size: { width: 100, height: 50 },
+            background: '#f3f4f6'
+          })
+        }
+      },
+      {
+        label: '• • • Dotted',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.insertContentBlock({
+            size: { width: '100%', height: 1 },
+            background: 'repeating-linear-gradient(90deg, #6b7280 0px, #6b7280 5px, transparent 5px, transparent 10px)'
+          })
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<!-- Horizontal Rule -->
+<w:p>
+  <w:r>
+    <w:pict>
+      <v:rect style="width:100%;height:2px" 
+              fillcolor="#e5e7eb"
+              stroked="f"/>
+    </w:pict>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Section Breaks** - Visually separate different parts of your document
+- **Horizontal Rules** - Classic divider between content sections  
+- **Spacers** - Add precise vertical spacing without empty paragraphs
+- **Custom Dividers** - Brand-colored separators for professional documents
+- **Shape Preservation** - Maintains Word shapes and drawings through import/export
+- **Layout Control** - Fine-tune document appearance with inline blocks

@@ -1,0 +1,51 @@
+Copy and paste text formatting like Word's format painter.
+
+Select styled text, copy its format, then apply to other text - all in two clicks.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p><strong style="color: #dc2626; font-size: 18pt;">Styled source text</strong> with multiple formats.</p>
+    <p>Target text - select this to apply the format.</p>
+    <p>Another paragraph to test format painting.</p>
+  `}
+  height="200px"
+  customButtons={[
+    [
+      {
+        label: 'Format Painter',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          const isStoring = !editor.storage.formatCommands?.storedStyle
+          editor.commands.copyFormat()
+          if (isStoring) {
+            alert('Format copied! Select other text and click again to apply.')
+          }
+        }
+      },
+      {
+        label: 'Clear Format',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.clearFormat()
+        }
+      }
+    ]
+  ]}
+/>
+
+## How it works
+
+1. Select text with formatting you want to copy
+2. Click Format Painter (format is now stored)
+3. Select target text
+4. Click Format Painter again to apply
+
+## Use Case
+
+- **Consistency** - Apply the same styling across multiple sections
+- **Speed** - Faster than manually applying multiple formats
+- **Cleanup** - Use Clear Format to remove unwanted styling

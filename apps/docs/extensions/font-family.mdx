@@ -1,0 +1,75 @@
+---
+title: FontFamily extension
+sidebarTitle: "Font Family"
+keywords: "FontFamily extension, superdoc FontFamily, word FontFamily, document FontFamily, docx FontFamily"
+---
+
+import Description from '/snippets/extensions/font-family.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="types" type="Array<string>" default="['textStyle']">
+  Mark types to add font family support to
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="fontFamily" type="FontFamilyValue">
+  Font family for text
+</ParamField>
+
+## Commands
+
+### `setFontFamily`
+
+Set font family
+
+<Note>
+Preserves other text styling attributes
+</Note>
+
+**Example:**
+
+```javascript
+// Set to Arial
+editor.commands.setFontFamily('Arial')
+```
+
+**Parameters:**
+
+<ParamField path="fontFamily" type="FontFamilyValue" required>
+  Font family to apply
+</ParamField>
+
+### `unsetFontFamily`
+
+Remove font family
+
+<Note>
+Reverts to default document font
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.unsetFontFamily()
+```
+
+## Types
+
+### `FontFamilyValue`
+
+CSS font-family string (e.g., 'Arial', 'Times New Roman', 'sans-serif')
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/font-family/font-family.js" />

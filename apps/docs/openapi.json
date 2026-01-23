@@ -1,0 +1,2006 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SuperDoc API",
+    "version": "0.9.0",
+    "description": "## Quick Start\n\n1 - **Register**: https://api.superdoc.dev/v1/auth/register?email=you@email.com\n\n2 - **Verify**: Check email, then https://api.superdoc.dev/v1/auth/verify?email=you@email.com&code=123456\n\n3 - **Convert**\n```bash\ncurl -X POST https://api.superdoc.dev/v1/convert?from=docx \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -F \"file=@document.docx\" \\\n  -o converted.pdf\n```\n\n\nOr use our Playground:\nhttps://api.superdoc.dev/docs/#tag/documents/post/v1/convert\n\nThat's it! Your DOCX is now a PDF.\n\n---\n\n[Status](https://status.superdoc.dev) • [GitHub](https://github.com/Harbour-Enterprises/SuperDoc)",
+    "contact": {
+      "name": "Support",
+      "email": "api@superdoc.dev",
+      "url": "https://superdoc.dev/contact-us"
+    },
+    "license": {
+      "name": "Commercial",
+      "url": "https://superdoc.dev"
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "API Key",
+        "description": "API key authentication. Keys start with `sd_`"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "title": "Error Response",
+        "description": "Standard error response format used across all endpoints",
+        "required": ["code", "error", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Machine-readable error code for programmatic handling",
+            "example": "VALIDATION_ERROR"
+          },
+          "error": {
+            "type": "string",
+            "description": "HTTP error category",
+            "example": "Bad Request"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error description",
+            "example": "The provided document format is not supported"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "Unique request identifier for debugging",
+            "example": "b3d6a4f5-2c1e-4d5f-a6b7-8c9d0e1f2g3h"
+          },
+          "details": {
+            "type": "array",
+            "description": "Additional error details for validation errors",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "Field that caused the error"
+                },
+                "issue": {
+                  "type": "string",
+                  "description": "Description of the issue"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AnnotateRequest": {
+        "type": "object",
+        "required": ["document", "fields"],
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "type": "object",
+            "description": "DOCX input provided as either base64 or URL"
+          },
+          "fields": {
+            "type": "array",
+            "description": "Field entries containing id/group, type, value, and optional options",
+            "items": {
+              "type": "object",
+              "required": ["id/group", "value", "type"],
+              "properties": {
+                "id/group": {
+                  "type": "string",
+                  "description": "Field identifier. Use `id` to target a single specific field in the template, or use `group` to populate multiple fields with the same group identifier. Only one is required."
+                },
+                "value": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ],
+                  "description": "Value to populate the field with. String for text/image/signature fields, array of arrays for table type"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["text", "image", "signature", "table"],
+                  "description": "Type of field being populated"
+                },
+                "options": {
+                  "type": "object",
+                  "description": "Optional configuration for field rendering.\n\n**Options by field type:**\n\n| Field Type | Supported Options |\n|------------|------------------|\n| `text` | `keepTextNodeStyles` |\n| `image` | `dimensions` |\n| `signature` | `dimensions`, `arcElement`, `topLabel`, `bottomLabel` |\n| `table` | `copyRowStyle` |",
+                  "properties": {
+                    "keepTextNodeStyles": {
+                      "type": "boolean",
+                      "description": "For text fields: Whether to keep the existing text node styles when replacing content. Defaults to true.",
+                      "default": true
+                    },
+                    "copyRowStyle": {
+                      "type": "boolean",
+                      "description": "For table fields: Copy the style from the template row to populated rows"
+                    },
+                    "dimensions": {
+                      "type": "object",
+                      "description": "For image/signature fields: Specify the dimensions of the rendered element",
+                      "properties": {
+                        "width": {
+                          "type": "string",
+                          "description": "Width in pixels",
+                          "example": "180"
+                        },
+                        "height": {
+                          "type": "string",
+                          "description": "Height in pixels",
+                          "example": "250"
+                        }
+                      }
+                    },
+                    "arcElement": {
+                      "type": "object",
+                      "description": "For signature fields: Styling for the signature arc element",
+                      "properties": {
+                        "color": {
+                          "type": "string",
+                          "description": "Hex color code for the arc",
+                          "example": "#3bc0f1"
+                        }
+                      }
+                    },
+                    "topLabel": {
+                      "type": "object",
+                      "description": "For signature fields: Styling for the top label",
+                      "properties": {
+                        "color": {
+                          "type": "string",
+                          "description": "Hex color code for the top label text",
+                          "example": "#002fff"
+                        }
+                      }
+                    },
+                    "bottomLabel": {
+                      "type": "object",
+                      "description": "For signature fields: Styling and content for the bottom label",
+                      "properties": {
+                        "color": {
+                          "type": "string",
+                          "description": "Hex color code for the bottom label text",
+                          "example": "#ff0000"
+                        },
+                        "text": {
+                          "type": "string",
+                          "description": "Custom text for the bottom label",
+                          "example": "ip: 192.168.0.1"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SignRequest": {
+        "type": "object",
+        "title": "Sign Request",
+        "required": ["document", "signer", "auditTrail"],
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "Unique identifier for this signing event"
+          },
+          "document": {
+            "type": "object",
+            "description": "PDF or DOCX input provided as either base64 or URL"
+          },
+          "signer": {
+            "type": "object",
+            "description": "Signer details (name, email, etc.)"
+          },
+          "auditTrail": {
+            "type": "array",
+            "description": "Array of signing events and user interactions"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Optional metadata (IP, user agent, custom fields)"
+          }
+        }
+      },
+      "SignResponse": {
+        "type": "object",
+        "required": ["document"],
+        "properties": {
+          "document": {
+            "type": "object",
+            "required": ["base64", "contentType"],
+            "properties": {
+              "base64": {
+                "type": "string",
+                "description": "Signed PDF as base64"
+              },
+              "contentType": {
+                "type": "string",
+                "description": "Content type (application/pdf)"
+              }
+            }
+          }
+        }
+      },
+      "VerifyRequest": {
+        "type": "object",
+        "title": "Verify Request",
+        "required": ["document"],
+        "properties": {
+          "document": {
+            "type": "object",
+            "description": "Signed PDF provided as either base64 or URL"
+          }
+        }
+      },
+      "VerifyResponse": {
+        "type": "object",
+        "title": "Verify Response",
+        "required": ["valid"],
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "description": "Whether the signature is valid"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Explanation of verification result"
+          },
+          "signer": {
+            "description": "Primary signer information"
+          },
+          "signers": {
+            "type": "array",
+            "description": "All signers (only when valid)"
+          },
+          "document": {
+            "type": "object",
+            "description": "Document metadata (only when valid)"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Authentication required or invalid API key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": "AUTHENTICATION_ERROR",
+              "error": "Unauthorized",
+              "message": "Authentication required",
+              "requestId": "req_123abc"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": "RATE_LIMIT_ERROR",
+              "error": "Too Many Requests",
+              "message": "Rate limit exceeded. Try again in 60 seconds",
+              "requestId": "req_456def"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/openapi.json": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/documentation": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "API Information",
+        "tags": ["System"],
+        "description": "Returns basic API information and quick start guide.\n\n## Response format\n- **JSON**: For programmatic access\n- **Plain text**: When called with curl/wget (developer-friendly)",
+        "responses": {
+          "200": {
+            "description": "API information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["name", "version", "message", "endpoints", "authentication", "example", "links"],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "endpoints": {
+                      "type": "object",
+                      "properties": {
+                        "convert": {
+                          "type": "string"
+                        },
+                        "health": {
+                          "type": "string"
+                        },
+                        "docs": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["convert", "health", "docs"]
+                    },
+                    "authentication": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "type": "string"
+                    },
+                    "links": {
+                      "type": "object",
+                      "properties": {
+                        "documentation": {
+                          "type": "string"
+                        },
+                        "github": {
+                          "type": "string"
+                        },
+                        "support": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["documentation", "github", "support"]
+                    }
+                  }
+                },
+                "example": {
+                  "name": "SuperDoc API",
+                  "version": "v1",
+                  "message": "Document processing API for developers",
+                  "endpoints": {
+                    "convert": "POST /v1/convert",
+                    "health": "GET /v1/health",
+                    "docs": "GET /docs"
+                  },
+                  "quickstart": {
+                    "authentication": "Include your API key in the Authorization header",
+                    "example": "curl -H \"Authorization: Bearer YOUR_API_KEY\" https://api.superdoc.dev/v1/health"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "operationId": "checkHealth",
+        "summary": "Health Check",
+        "tags": ["System"],
+        "description": "Check API availability. No authentication required. Returns 200 when healthy.",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "timestamp", "version"],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["healthy"]
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "deployment": {
+                      "type": "object",
+                      "properties": {
+                        "service": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "configuration": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "instance": {
+                      "type": "object",
+                      "properties": {
+                        "startTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "uptime": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "status": "healthy",
+                  "timestamp": "2024-01-15T10:30:00Z",
+                  "version": "1.2.3",
+                  "deployment": {
+                    "region": "us-east1",
+                    "environment": "production"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/convert": {
+      "post": {
+        "operationId": "convertDocument",
+        "summary": "Convert",
+        "tags": ["Documents"],
+        "description": "Convert documents between formats.\n\n## Supported Conversions\n- **DOCX → PDF**: Convert Word documents to PDF\n- **Markdown → DOCX**: Convert Markdown to Word documents\n- **HTML → DOCX**: Convert HTML to Word documents\n\n## Examples\n```bash\n# Convert DOCX to PDF\ncurl -X POST \"https://api.superdoc.dev/v1/convert?from=docx&to=pdf\" \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -F \"file=@document.docx\" \\\n  -o output.pdf\n\n# Convert Markdown to DOCX\ncurl -X POST \"https://api.superdoc.dev/v1/convert?from=md&to=docx\" \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -F \"file=@document.md\" \\\n  -o output.docx\n\n# Convert HTML to DOCX\ncurl -X POST \"https://api.superdoc.dev/v1/convert?from=html&to=docx\" \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -F \"file=@document.html\" \\\n  -o output.docx\n```\n\n## Limitations\n- File size: 25MB maximum\n- Concurrent requests: 10 per API key",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["docx", "md", "html"]
+            },
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "description": "Format of the uploaded file"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["pdf", "docx"],
+              "default": "pdf"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "description": "Target format for conversion. Defaults to PDF for backward compatibility"
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-code-samples": [
+          {
+            "lang": "cURL",
+            "label": "Basic conversion",
+            "source": "curl -X POST https://api.superdoc.dev/v1/convert?from=docx \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -F \"file=@document.docx\" \\\n  -o output.pdf"
+          },
+          {
+            "lang": "JavaScript",
+            "label": "Browser upload",
+            "source": "const formData = new FormData();\nformData.append('file', fileInput.files[0]);\n\nconst response = await fetch('https://api.superdoc.dev/v1/convert?from=docx', {\n  method: 'POST',\n  headers: { 'Authorization': 'Bearer YOUR_API_KEY' },\n  body: formData\n});\n\nconst pdf = await response.blob();\ndownloadBlob(pdf, 'converted.pdf');"
+          },
+          {
+            "lang": "Python",
+            "label": "Python requests",
+            "source": "import requests\n\nwith open('document.docx', 'rb') as f:\n    response = requests.post(\n        'https://api.superdoc.dev/v1/convert?from=docx',\n        headers={'Authorization': 'Bearer YOUR_API_KEY'},\n        files={'file': f}\n    )\n    \nwith open('converted.pdf', 'wb') as pdf:\n    pdf.write(response.content)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Converted file",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sign": {
+      "post": {
+        "summary": "Sign",
+        "tags": ["Signature"],
+        "description": "Sign a PDF or DOCX document with a cryptographic signature.\n\nSend a JSON request body with:\n- `document`: object containing either `base64` or `url`\n- `signer`: object with signer details (name, email, etc.)\n- `auditTrail`: array of signing events\n- `eventId`: optional unique identifier\n- `metadata`: optional metadata (IP, user agent, custom fields)\n\nThe response returns the signed PDF as base64.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/verify": {
+      "post": {
+        "summary": "Verify",
+        "tags": ["Verification"],
+        "description": "Verify the signature and integrity of a signed PDF.\n\nSend a JSON request body with:\n- `document`: object containing either `base64` or `url`\n\nThe response includes verification status, signer information, and document metadata.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/verify/key": {
+      "get": {
+        "summary": "Get public signing key",
+        "tags": ["Verification"],
+        "description": "Returns the current public key used for document signing.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["version", "algorithm", "publicKey", "fingerprint", "validFrom", "validTo", "issuer"],
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "description": "Key version identifier",
+                      "example": "v2025"
+                    },
+                    "algorithm": {
+                      "type": "string",
+                      "description": "Signature algorithm",
+                      "example": "RSA-SHA256"
+                    },
+                    "publicKey": {
+                      "type": "string",
+                      "description": "PEM-encoded public key",
+                      "example": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+                    },
+                    "fingerprint": {
+                      "type": "string",
+                      "description": "SHA-256 fingerprint",
+                      "pattern": "^([A-F0-9]{2}:)+[A-F0-9]{2}$",
+                      "example": "A7:B9:C2:F4:E1:D8:6C:3A:..."
+                    },
+                    "validFrom": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "Start of validity period"
+                    },
+                    "validTo": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "End of validity period"
+                    },
+                    "issuer": {
+                      "type": "string",
+                      "description": "Issuing organization",
+                      "example": "SuperDoc, Inc."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/register": {
+      "get": {
+        "summary": "Register",
+        "tags": ["Authentication"],
+        "description": "Start here! Register with your email to get a verification code.\n\n## Flow\n1. Call this endpoint with your email\n2. Check your email for 6-digit code (expires in 15 minutes)\n3. Call [/verify](#tag/authentication/get/v1/auth/verify) with email and code to get your API key\n\n## No spam promise\nWe only send: verification codes, API keys, and critical service updates.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "in": "query",
+            "name": "email",
+            "required": true,
+            "description": "Email address for account registration"
+          }
+        ],
+        "x-code-samples": [
+          {
+            "lang": "cURL",
+            "source": "curl \"https://api.superdoc.dev/v1/auth/register?email=developer@company.com\""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Status message",
+                  "example": "Check your email for verification code."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/verify": {
+      "get": {
+        "summary": "Verify",
+        "tags": ["Authentication"],
+        "description": "Complete registration by submitting your verification code.\n        \n## Returns\nYour API key (also sent to your email for safekeeping)\n        \n## Security\nWe don't store keys in plain text - save yours securely.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "in": "query",
+            "name": "email",
+            "required": true,
+            "description": "Email address for verification"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{6}$"
+            },
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "description": "6-digit verification code"
+          }
+        ],
+        "x-code-samples": [
+          {
+            "lang": "cURL",
+            "source": "curl \"https://api.superdoc.dev/v1/auth/verify?email=developer@company.com&code=123456\""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Your API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Your API key",
+                  "example": "sd_sk_abc123xyz789..."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/annotate": {
+      "post": {
+        "operationId": "annotateDocument",
+        "summary": "Annotate",
+        "tags": ["Documents"],
+        "description": "Populate fields inside a DOCX template using SuperDoc annotations.\n\nSend a JSON request body with:\n- `document`: object containing either `base64` or `url`\n- `fields`: array of field objects (id/group, type, value, optional options)\n\n> **Note:** Each field requires either `id` or `group`:\n> - **id**: Targets a single specific field in the template\n> - **group**: Targets multiple fields with the same group identifier\n\nThe response returns the annotated DOCX/PDF file as a base64 data URI.\n\n## Example Request\n\n```json\n{\n  \"document\": {\n    \"url\": \"https://example.com/template.docx\"\n  },\n  \"fields\": [\n    {\n      \"id\": \"customer_name\",\n      \"type\": \"text\",\n      \"value\": \"John Doe\"\n    },\n    {\n      \"id\": \"author\",\n      \"type\": \"image\",\n      \"value\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...\",\n      \"options\": {\n        \"dimensions\": {\n          \"width\": 200,\n          \"height\": 100\n        }\n      }\n    }\n  ]\n}\n```\n\nAlternative using base64 document input:\n```json\n{\n  \"document\": {\n    \"base64\": \"UEsDBBQAAAAIAL+H...\"\n  },\n  \"fields\": [\n    {\n      \"id\": \"title\",\n      \"type\": \"text\",\n      \"value\": \"Annual Report 2024\"\n    }\n  ]\n}\n```\n\nUsing group to populate multiple fields:\n```json\n{\n  \"document\": {\n    \"url\": \"https://example.com/template.docx\"\n  },\n  \"fields\": [\n    {\n      \"group\": \"company_logo\",\n      \"type\": \"image\",\n      \"value\": \"https://example.com/logo.png\"\n    }\n  ]\n}\n```",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotateRequest"
+              },
+              "examples": {
+                "text-field": {
+                  "summary": "Text field",
+                  "value": {
+                    "document": {
+                      "url": "https://example.com/template.docx"
+                    },
+                    "fields": [
+                      {
+                        "id": "customer_name",
+                        "type": "text",
+                        "value": "John Doe"
+                      }
+                    ]
+                  }
+                },
+                "image-field": {
+                  "summary": "Image field with dimensions",
+                  "value": {
+                    "document": {
+                      "base64": "UEsDBBQAAAAIAL+H..."
+                    },
+                    "fields": [
+                      {
+                        "id": "author_photo",
+                        "type": "image",
+                        "value": "https://example.com/image.jpg",
+                        "options": {
+                          "dimensions": {
+                            "width": "180",
+                            "height": "250"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "signature-field": {
+                  "summary": "Signature field with styling",
+                  "value": {
+                    "document": {
+                      "url": "https://example.com/contract.docx"
+                    },
+                    "fields": [
+                      {
+                        "id": "client_signature",
+                        "type": "signature",
+                        "value": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+                        "options": {
+                          "dimensions": {
+                            "width": "150",
+                            "height": "80"
+                          },
+                          "arcElement": {
+                            "color": "#3bc0f1"
+                          },
+                          "topLabel": {
+                            "color": "#002fff"
+                          },
+                          "bottomLabel": {
+                            "color": "#ff0000",
+                            "text": "ip: 192.168.0.1"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "table-field": {
+                  "summary": "Table field with data",
+                  "value": {
+                    "document": {
+                      "url": "https://example.com/report.docx"
+                    },
+                    "fields": [
+                      {
+                        "id": "invoice_items",
+                        "type": "table",
+                        "value": [
+                          ["SuperDoc", "Frontend"],
+                          ["SuperDoc Services", "Backend"]
+                        ],
+                        "options": {
+                          "copyRowStyle": true
+                        }
+                      }
+                    ]
+                  }
+                },
+                "group-field": {
+                  "summary": "Group field affecting multiple elements",
+                  "value": {
+                    "document": {
+                      "url": "https://example.com/template.docx"
+                    },
+                    "fields": [
+                      {
+                        "group": "company_logo",
+                        "type": "image",
+                        "value": "https://example.com/logo.png",
+                        "options": {
+                          "dimensions": {
+                            "width": "150",
+                            "height": "150"
+                          }
+                        }
+                      },
+                      {
+                        "group": "footer_text",
+                        "type": "text",
+                        "value": "© 2024 Acme Corporation. All rights reserved."
+                      }
+                    ]
+                  }
+                },
+                "mixed-fields": {
+                  "summary": "Multiple field types",
+                  "value": {
+                    "document": {
+                      "url": "https://example.com/template.docx"
+                    },
+                    "fields": [
+                      {
+                        "group": "company_name",
+                        "type": "text",
+                        "value": "Acme Corporation"
+                      },
+                      {
+                        "id": "logo",
+                        "type": "image",
+                        "value": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+                        "options": {
+                          "dimensions": {
+                            "width": "200",
+                            "height": "100"
+                          }
+                        }
+                      },
+                      {
+                        "id": "items_table",
+                        "type": "table",
+                        "value": [
+                          ["Product A", "$100"],
+                          ["Product B", "$200"]
+                        ],
+                        "options": {
+                          "copyRowStyle": true
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["docx", "pdf"]
+            },
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "description": "Output format for the annotated document (defaults to docx)"
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Annotated DOCX output encoded as a base64 data URI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Annotated DOCX output encoded as a base64 data URI",
+                  "type": "object",
+                  "required": ["document"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "document": {
+                      "type": "object",
+                      "required": ["base64"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "base64": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Data URI containing the annotated file contents"
+                        },
+                        "contentType": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Content type of the annotated file"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Standard error format used across all API endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Error Response",
+                  "description": "Standard error format used across all API endpoints",
+                  "required": ["code", "error", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "Machine-readable error code for programmatic handling",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "HTTP error category",
+                      "example": "Bad Request"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable error description",
+                      "example": "The provided document format is not supported"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "Unique request ID for support",
+                      "example": "req_abc123"
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "Additional error details for validation errors",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "Field that caused the error"
+                          },
+                          "issue": {
+                            "type": "string",
+                            "description": "Description of the issue"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "code": "INVALID_FILE_FORMAT",
+                    "error": "Bad Request",
+                    "message": "File is not a valid DOCX",
+                    "requestId": "req_abc123"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.superdoc.dev",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Documents",
+      "description": "Document conversion and transformation"
+    },
+    {
+      "name": "Authentication",
+      "description": "Registration and API key management"
+    },
+    {
+      "name": "System",
+      "description": "Health and service information"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Core API",
+      "tags": ["Documents", "Authentication"]
+    },
+    {
+      "name": "System",
+      "tags": ["System"]
+    }
+  ]
+}

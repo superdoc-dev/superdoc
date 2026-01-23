@@ -1,0 +1,31 @@
+---
+title: Italic extension
+sidebarTitle: "Italic"
+keywords: "Italic extension, superdoc Italic, word Italic, document Italic, docx Italic"
+---
+
+import Description from '/snippets/extensions/italic.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  HTML attributes for italic elements
+</ParamField>
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleItalic() | `⌘/Ctrl-i` | Toggle italic formatting |
+| toggleItalic() | `⌘/Ctrl-I` | Toggle italic formatting (uppercase) |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/italic/italic.js" />

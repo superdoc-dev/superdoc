@@ -1,0 +1,388 @@
+---
+title: SuperDoc Yjs Collaboration
+sidebarTitle: SuperDoc Yjs
+keywords: "superdoc collaboration server, yjs server, self-hosted, websocket"
+---
+
+Our official collaboration package for self-hosted deployments. Purpose-built for SuperDoc with a simple builder API.
+
+## Installation
+
+```bash
+npm install @superdoc-dev/superdoc-yjs-collaboration
+```
+
+## Quick Start
+
+### Server
+
+```typescript
+import Fastify from 'fastify';
+import websocketPlugin from '@fastify/websocket';
+import { CollaborationBuilder } from '@superdoc-dev/superdoc-yjs-collaboration';
+
+const fastify = Fastify({ logger: true });
+fastify.register(websocketPlugin);
+
+// Build collaboration service
+const collaboration = new CollaborationBuilder()
+  .withName('My Collaboration Server')
+  .withDebounce(2000)  // Auto-save every 2 seconds
+  .onLoad(async ({ documentId }) => {
+    // Load document from your database
+    return await db.getDocument(documentId);
+  })
+  .onAutoSave(async ({ documentId, document }) => {
+    // Save document to your database
+    await db.saveDocument(documentId, document);
+  })
+  .build();
+
+// WebSocket endpoint
+fastify.register(async (app) => {
+  app.get('/doc/:documentId', { websocket: true }, (socket, request) => {
+    collaboration.welcome(socket, request);
+  });
+});
+
+fastify.listen({ port: 3050 });
+```
+
+### Client
+
+```javascript
+import { SuperDoc } from 'superdoc';
+
+new SuperDoc({
+  selector: '#editor',
+  document: {
+    id: 'document-123',
+    type: 'docx'
+  },
+  user: {
+    name: 'John Smith',
+    email: 'john@example.com'
+  },
+  modules: {
+    collaboration: {
+      url: 'ws://localhost:3050/doc',
+      token: 'auth-token'
+    }
+  }
+});
+```
+
+## Builder API
+
+The `CollaborationBuilder` provides a fluent interface:
+
+```javascript
+const collaboration = new CollaborationBuilder()
+  .withName('service-name')           // Service identifier
+  .withDebounce(2000)                  // Auto-save interval (ms)
+  .withDocumentExpiryMs(300000)        // Cache expiry after disconnect
+  .onAuthenticate(authHandler)         // Validate users
+  .onLoad(loadHandler)                 // Load documents
+  .onAutoSave(saveHandler)             // Save documents
+  .onChange(changeHandler)             // React to changes
+  .onConfigure(configHandler)          // Configure Yjs doc
+  .build();
+```
+
+## Hooks
+
+### onLoad (Required)
+
+Load document state from storage:
+
+```typescript
+.onLoad(async ({ documentId }) => {
+  const state = await db.query(
+    'SELECT state FROM documents WHERE id = $1',
+    [documentId]
+  );
+
+  if (!state) {
+    // Return null for new documents
+    return null;
+  }
+
+  // Return Uint8Array
+  return state;
+})
+```
+
+### onAutoSave (Required)
+
+Save document state to storage:
+
+```typescript
+import * as Y from 'yjs';
+
+.onAutoSave(async ({ documentId, document }) => {
+  const state = Y.encodeStateAsUpdate(document);
+
+  await db.query(
+    `INSERT INTO documents (id, state, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (id) DO UPDATE SET state = $2, updated_at = NOW()`,
+    [documentId, Buffer.from(state)]
+  );
+})
+```
+
+### onAuthenticate (Optional)
+
+Validate users connecting to documents:
+
+```typescript
+.onAuthenticate(async ({ token, documentId, request }) => {
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Check document permissions
+    const hasAccess = await checkAccess(payload.userId, documentId);
+    if (!hasAccess) {
+      throw new Error('Access denied');
+    }
+
+    return {
+      userId: payload.userId,
+      name: payload.name
+    };
+  } catch (error) {
+    throw new Error('Authentication failed');
+  }
+})
+```
+
+### onChange (Optional)
+
+React to document changes (fires on every edit):
+
+```typescript
+.onChange(({ documentId }) => {
+  // Use sparingly - fires frequently
+  metrics.increment('document.edits');
+})
+```
+
+## Storage Examples
+
+<Tabs>
+  <Tab title="PostgreSQL">
+    ```typescript
+    import { Pool } from 'pg';
+    const pool = new Pool();
+
+    // Load
+    .onLoad(async ({ documentId }) => {
+      const { rows } = await pool.query(
+        'SELECT state FROM documents WHERE id = $1',
+        [documentId]
+      );
+      return rows[0]?.state || null;
+    })
+
+    // Save
+    .onAutoSave(async ({ documentId, document }) => {
+      const state = Y.encodeStateAsUpdate(document);
+      await pool.query(
+        `INSERT INTO documents (id, state, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (id) DO UPDATE SET state = $2, updated_at = NOW()`,
+        [documentId, Buffer.from(state)]
+      );
+    })
+    ```
+  </Tab>
+
+  <Tab title="S3">
+    ```typescript
+    import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+
+    const s3 = new S3Client({ region: 'us-east-1' });
+
+    // Load
+    .onLoad(async ({ documentId }) => {
+      try {
+        const response = await s3.send(new GetObjectCommand({
+          Bucket: 'my-documents',
+          Key: `collab/${documentId}.yjs`
+        }));
+        return await response.Body.transformToByteArray();
+      } catch (error) {
+        if (error.Code === 'NoSuchKey') return null;
+        throw error;
+      }
+    })
+
+    // Save
+    .onAutoSave(async ({ documentId, document }) => {
+      const state = Y.encodeStateAsUpdate(document);
+      await s3.send(new PutObjectCommand({
+        Bucket: 'my-documents',
+        Key: `collab/${documentId}.yjs`,
+        Body: state
+      }));
+    })
+    ```
+  </Tab>
+
+  <Tab title="Redis">
+    ```typescript
+    import Redis from 'ioredis';
+    const redis = new Redis();
+
+    // Load
+    .onLoad(async ({ documentId }) => {
+      const data = await redis.getBuffer(`doc:${documentId}`);
+      return data || null;
+    })
+
+    // Save
+    .onAutoSave(async ({ documentId, document }) => {
+      const state = Y.encodeStateAsUpdate(document);
+      await redis.set(
+        `doc:${documentId}`,
+        Buffer.from(state),
+        'EX', 86400  // Expire after 24 hours
+      );
+    })
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+```typescript
+const errorHandlers = {
+  LoadError: (error, socket) => {
+    console.log('Document load failed:', error.message);
+    socket.close(1011, 'Document unavailable');
+  },
+  SaveError: (error, socket) => {
+    console.log('Save failed:', error.message);
+    // Don't close connection for save errors
+  },
+  default: (error, socket) => {
+    console.log('Unknown error:', error.message);
+    socket.close(1011, 'Server error');
+  }
+};
+
+app.get('/doc/:documentId', { websocket: true }, async (socket, request) => {
+  try {
+    await collaboration.welcome(socket, request);
+  } catch (error) {
+    const handler = errorHandlers[error.name] || errorHandlers.default;
+    handler(error, socket);
+  }
+});
+```
+
+## Production Deployment
+
+### Docker
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production
+
+COPY . .
+
+EXPOSE 3050
+CMD ["node", "server.js"]
+```
+
+### Environment Variables
+
+```bash
+NODE_ENV=production
+PORT=3050
+JWT_SECRET=your-secret-key
+DATABASE_URL=postgres://user:pass@localhost/db
+```
+
+### Health Check
+
+```typescript
+fastify.get('/health', (request, reply) => {
+  reply.send({
+    status: 'healthy',
+    documents: collaboration.getActiveDocumentCount(),
+    connections: collaboration.getConnectionCount()
+  });
+});
+```
+
+## Security
+
+<Steps>
+  <Step title="Use WSS in production">
+    Always use encrypted WebSocket (`wss://`) in production
+  </Step>
+
+  <Step title="Implement authentication">
+    Use the `onAuthenticate` hook to validate users
+  </Step>
+
+  <Step title="Validate document IDs">
+    ```typescript
+    .onLoad(async ({ documentId }) => {
+      // Prevent path traversal
+      if (!/^[a-zA-Z0-9-]+$/.test(documentId)) {
+        throw new Error('Invalid document ID');
+      }
+      // ... load document
+    })
+    ```
+  </Step>
+
+  <Step title="Rate limit connections">
+    Limit connections per user to prevent abuse
+  </Step>
+</Steps>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Production Example"
+    icon="github"
+    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/production"
+  >
+    Complete working example
+  </Card>
+
+  <Card
+    title="Fastify Example"
+    icon="github"
+    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/fastify-server"
+  >
+    Fastify server setup
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Configuration"
+    icon="settings"
+    href="/modules/collaboration/configuration"
+  >
+    Client-side options, events, and hooks
+  </Card>
+
+  <Card
+    title="Hocuspocus Alternative"
+    icon="server"
+    href="/modules/collaboration/self-hosted/hocuspocus"
+  >
+    Use TipTap's Yjs server instead
+  </Card>
+</CardGroup>

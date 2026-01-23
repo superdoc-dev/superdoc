@@ -1,0 +1,192 @@
+---
+title: Image extension
+sidebarTitle: "Image"
+keywords: "Image extension, superdoc Image, word Image, document Image, docx Image"
+---
+
+import Description from '/snippets/extensions/image.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="allowBase64" type="boolean" default="true">
+  Allow base64 encoded images
+</ParamField>
+
+<ParamField path="htmlAttributes" type="Object">
+  Default HTML attributes for image elements
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="src" type="string">
+  Image source URL or path
+</ParamField>
+
+<ParamField path="alt" type="string" default="Uploaded picture">
+  Alternative text for accessibility
+</ParamField>
+
+<ParamField path="title" type="string">
+  Image title/tooltip text
+</ParamField>
+
+<ParamField path="size" type="Object">
+  Image dimensions
+</ParamField>
+
+<ParamField path="size.width" type="number">
+  Width in pixels
+</ParamField>
+
+<ParamField path="size.height" type="number">
+  Height in pixels
+</ParamField>
+
+<ParamField path="padding" type="Object">
+  Image padding/margins
+</ParamField>
+
+<ParamField path="padding.left" type="number">
+  Left padding in pixels
+</ParamField>
+
+<ParamField path="padding.top" type="number">
+  Top padding in pixels
+</ParamField>
+
+<ParamField path="padding.bottom" type="number">
+  Bottom padding in pixels
+</ParamField>
+
+<ParamField path="padding.right" type="number">
+  Right padding in pixels
+</ParamField>
+
+<ParamField path="marginOffset" type="Object">
+  Margin offset for anchored images
+</ParamField>
+
+<ParamField path="marginOffset.horizontal" type="number">
+  Left/right margin offset
+</ParamField>
+
+<ParamField path="marginOffset.top" type="number">
+  Top margin offset
+</ParamField>
+
+<ParamField path="style" type="string">
+  Custom inline CSS styles
+</ParamField>
+
+## Commands
+
+### `setImage`
+
+Insert an image at the current position
+
+<Note>
+Supports URLs, relative paths, and base64 data URIs
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.setImage({ src: 'https://example.com/image.jpg' })
+editor.commands.setImage({
+  src: 'data:image/png;base64,...',
+  alt: 'Company logo',
+  size: { width: 200 }
+})
+```
+
+**Parameters:**
+
+<ParamField path="options" type="ImageInsertOptions" required>
+  Image insertion options
+</ParamField>
+
+### `setWrapping`
+
+Set the wrapping mode and attributes for the selected image
+
+**Example:**
+
+```javascript
+// No wrapping, behind document
+editor.commands.setWrapping({ type: 'None', attrs: {behindDoc: true} })
+
+// Square wrapping on both sides with distances
+editor.commands.setWrapping({
+  type: 'Square',
+  attrs: {
+    wrapText: 'bothSides',
+    distTop: 10,
+    distBottom: 10,
+    distLeft: 10,
+    distRight: 10
+  }
+})
+
+// Tight wrapping with polygon
+editor.commands.setWrapping({
+  type: 'Tight',
+  attrs: {
+    polygon: [[0, 0], [100, 0], [100, 100], [0, 100]]
+  }
+})
+
+// Top and bottom wrapping
+editor.commands.setWrapping({
+  type: 'TopAndBottom',
+  attrs: {
+    distTop: 15,
+    distBottom: 15
+  }
+})
+```
+
+**Parameters:**
+
+<ParamField path="options" type="Object" required>
+  Wrapping options
+</ParamField>
+
+## Types
+
+### `ImageInsertOptions`
+
+Options for inserting an image
+
+<Expandable title="Properties">
+<ResponseField name="src" type="string" required>
+  Image source URL or data URI
+</ResponseField>
+<ResponseField name="alt" type="string">
+  Alternative text
+</ResponseField>
+<ResponseField name="title" type="string">
+  Image title
+</ResponseField>
+<ResponseField name="size" type="Object">
+  Image dimensions
+</ResponseField>
+<ResponseField name="size.width" type="number">
+  Width in pixels
+</ResponseField>
+<ResponseField name="size.height" type="number">
+  Height in pixels
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/image/image.js" />

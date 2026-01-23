@@ -554,7 +554,15 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
 
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
-  let { activeCommentId, type, comment: commentPayload } = params;
+  let { activeCommentId, type, comment: commentPayload, comments: batchComments } = params;
+
+  if (COMMENT_EVENTS?.BATCH_ADD && type === COMMENT_EVENTS.BATCH_ADD && batchComments?.length) {
+    batchComments.forEach((trackedChangeParams) => {
+      handleTrackedChangeUpdate({ superdoc: proxy.$superdoc, params: trackedChangeParams });
+    });
+
+    return;
+  }
 
   if (COMMENT_EVENTS?.ADD && type === COMMENT_EVENTS.ADD && commentPayload) {
     if (!commentPayload.commentText && commentPayload.text) {

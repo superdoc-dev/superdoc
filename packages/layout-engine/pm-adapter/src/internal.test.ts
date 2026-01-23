@@ -284,8 +284,8 @@ describe('internal', () => {
         expect(handleParagraphNode).toHaveBeenCalledWith(
           expect.any(Object),
           expect.objectContaining({
-            defaultFont: 'Arial',
-            defaultSize: 16,
+            defaultFont: 'Times New Roman',
+            defaultSize: 10,
           }),
         );
       });

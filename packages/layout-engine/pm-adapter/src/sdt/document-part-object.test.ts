@@ -352,13 +352,12 @@ describe('document-part-object', () => {
           expect.objectContaining({
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
-            defaultFont: 'Arial',
-            defaultSize: 12,
             bookmarks: mockContext.bookmarks,
             hyperlinkConfig: mockHyperlinkConfig,
             converters: mockContext.converters,
             converterContext: mockConverterContext,
             enableComments: mockEnableComments,
+            trackedChangesConfig: undefined,
           }),
         );
       });

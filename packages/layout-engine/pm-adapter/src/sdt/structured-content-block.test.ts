@@ -307,13 +307,13 @@ describe('structured-content-block', () => {
             para: node.content[0],
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
-            defaultFont: 'Arial',
-            defaultSize: 12,
             trackedChangesConfig: mockTrackedChangesConfig,
             bookmarks: mockBookmarks,
             hyperlinkConfig: mockHyperlinkConfig,
             enableComments: mockEnableComments,
             converterContext: mockConverterContext,
+            converters: { paragraphToFlowBlocks: mockParagraphConverter },
+            themeColors: undefined,
           }),
         );
       });

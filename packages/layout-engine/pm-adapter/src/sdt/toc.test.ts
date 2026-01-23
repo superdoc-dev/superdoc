@@ -470,13 +470,12 @@ describe('toc', () => {
           para: children[0],
           nextBlockId: mockBlockIdGenerator,
           positions: mockPositionMap,
-          defaultFont: 'Calibri',
-          defaultSize: 14,
           trackedChangesConfig: mockTrackedChanges,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
           enableComments: false,
           converterContext: mockConverterContext,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter },
         }),
       );
     });

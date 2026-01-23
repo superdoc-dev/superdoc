@@ -81,6 +81,10 @@ import {
 } from '../tracked-changes.js';
 
 const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = { enableRichHyperlinks: false };
+const DEFAULT_TEST_FONT_FAMILY = 'Arial, sans-serif';
+const DEFAULT_TEST_FONT_SIZE_PX = (16 * 96) / 72;
+const FALLBACK_FONT_FAMILY = 'Times New Roman, sans-serif';
+const FALLBACK_FONT_SIZE_PX = 12;
 let defaultConverterContext: ConverterContext = {
   translatedNumbering: {},
   translatedLinkedStyles: {
@@ -124,6 +128,8 @@ const paragraphToFlowBlocks = (
 
   if (isConverters(maybeConverters)) {
     converters = maybeConverters;
+  } else if (maybeConverters) {
+    converterContext = maybeConverters as ConverterContext;
   }
 
   if (isConverters(converterContextOrConverters)) {
@@ -132,18 +138,36 @@ const paragraphToFlowBlocks = (
     converterContext = converterContextOrConverters as ConverterContext;
   }
 
+  const effectiveConverterContext =
+    converterContext ??
+    ({
+      ...defaultConverterContext,
+      translatedLinkedStyles: {
+        ...defaultConverterContext.translatedLinkedStyles,
+        docDefaults: {
+          ...defaultConverterContext.translatedLinkedStyles.docDefaults,
+          runProperties: {
+            ...(defaultConverterContext.translatedLinkedStyles.docDefaults?.runProperties ?? {}),
+            fontFamily: {
+              ...(defaultConverterContext.translatedLinkedStyles.docDefaults?.runProperties?.fontFamily ?? {}),
+              ascii: defaultFont,
+            },
+            fontSize: defaultSize * 2,
+          },
+        },
+      },
+    } as ConverterContext);
+
   return baseParagraphToFlowBlocks({
     para,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig: hyperlinkConfig ?? DEFAULT_HYPERLINK_CONFIG,
     themeColors,
     converters: converters as NestedConverters,
-    converterContext: converterContext ?? defaultConverterContext,
+    converterContext: effectiveConverterContext,
     enableComments: true,
   });
 };
@@ -839,8 +863,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           textNode,
           positions,
-          'Arial',
-          16,
+          DEFAULT_TEST_FONT_FAMILY,
+          DEFAULT_TEST_FONT_SIZE_PX,
           [],
           undefined,
           expect.any(Object),
@@ -922,8 +946,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           { type: 'text', text: 'Bold text' },
           positions,
-          'Arial',
-          16,
+          FALLBACK_FONT_FAMILY,
+          FALLBACK_FONT_SIZE_PX,
           [], // Empty marks - marks applied separately after linked styles
           undefined,
           expect.any(Object),
@@ -1010,8 +1034,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           { type: 'text', text: 'Bold italic' },
           positions,
-          'Arial',
-          16,
+          FALLBACK_FONT_FAMILY,
+          FALLBACK_FONT_SIZE_PX,
           [], // Empty marks - marks applied separately after linked styles
           undefined,
           { enableRichHyperlinks: false },
@@ -1106,8 +1130,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(tokenNodeToRun)).toHaveBeenCalledWith(
           tokenNode,
           positions,
-          'Arial',
-          16,
+          DEFAULT_TEST_FONT_FAMILY,
+          DEFAULT_TEST_FONT_SIZE_PX,
           [],
           'pageNumber',
           expect.any(Object),
@@ -1134,8 +1158,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(tokenNodeToRun)).toHaveBeenCalledWith(
           tokenNode,
           positions,
-          'Arial',
-          16,
+          DEFAULT_TEST_FONT_FAMILY,
+          DEFAULT_TEST_FONT_SIZE_PX,
           [],
           'totalPageCount',
           expect.any(Object),
@@ -1215,8 +1239,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.any(Object),
           positions,
-          'Arial',
-          16,
+          DEFAULT_TEST_FONT_FAMILY,
+          DEFAULT_TEST_FONT_SIZE_PX,
           [],
           sdtMetadata,
           expect.any(Object),
@@ -1471,8 +1495,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           { type: 'text', text: '42' },
           positions,
-          'Arial',
-          16,
+          FALLBACK_FONT_FAMILY,
+          FALLBACK_FONT_SIZE_PX,
           [],
           undefined,
           expect.any(Object),
@@ -1503,8 +1527,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           { type: 'text', text: '??' },
           positions,
-          'Arial',
-          16,
+          FALLBACK_FONT_FAMILY,
+          FALLBACK_FONT_SIZE_PX,
           [],
           undefined,
           expect.any(Object),
@@ -1541,8 +1565,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           { type: 'text', text: 'fallback' },
           positions,
-          'Arial',
-          16,
+          FALLBACK_FONT_FAMILY,
+          FALLBACK_FONT_SIZE_PX,
           [],
           undefined,
           expect.any(Object),
@@ -1581,8 +1605,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.any(Object),
           positions,
-          'Arial',
-          16,
+          FALLBACK_FONT_FAMILY,
+          FALLBACK_FONT_SIZE_PX,
           [], // Empty marks - applied separately to honor enableComments
           undefined,
           expect.any(Object),
@@ -1946,8 +1970,6 @@ describe('paragraph converters', () => {
             node: tableNode,
             nextBlockId,
             positions,
-            defaultFont: 'Arial',
-            defaultSize: 16,
             trackedChangesConfig: trackedChanges,
             bookmarks,
             hyperlinkConfig,
@@ -2280,8 +2302,8 @@ describe('paragraph converters', () => {
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.any(Object),
           positions,
-          'Arial',
-          16,
+          DEFAULT_TEST_FONT_FAMILY,
+          DEFAULT_TEST_FONT_SIZE_PX,
           [],
           undefined,
           customHyperlinkConfig,

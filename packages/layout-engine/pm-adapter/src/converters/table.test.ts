@@ -41,18 +41,35 @@ const tableNodeToBlock = (
   converterContext?: ConverterContext,
 ) => {
   const converters = paragraphToFlowBlocks ? ({ paragraphToFlowBlocks } as NestedConverters) : ({} as NestedConverters);
+  const effectiveConverterContext =
+    converterContext ??
+    ({
+      ...DEFAULT_CONVERTER_CONTEXT,
+      translatedLinkedStyles: {
+        ...DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles,
+        docDefaults: {
+          ...DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles.docDefaults,
+          runProperties: {
+            ...(DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles.docDefaults?.runProperties ?? {}),
+            fontFamily: {
+              ...(DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles.docDefaults?.runProperties?.fontFamily ?? {}),
+              ascii: defaultFont,
+            },
+            fontSize: defaultSize * 2,
+          },
+        },
+      },
+    } as ConverterContext);
 
   return baseTableNodeToBlock({
     node,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig: hyperlinkConfig ?? DEFAULT_HYPERLINK_CONFIG,
     themeColors,
-    converterContext: converterContext ?? DEFAULT_CONVERTER_CONTEXT,
+    converterContext: effectiveConverterContext,
     converters,
     enableComments: true,
   });
@@ -1049,7 +1066,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,

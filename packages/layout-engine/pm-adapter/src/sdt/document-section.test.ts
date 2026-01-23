@@ -264,8 +264,6 @@ describe('document-section', () => {
             para: children[0],
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
-            defaultFont: 'Arial',
-            defaultSize: 12,
             hyperlinkConfig: mockHyperlinkConfig,
           }),
         );
@@ -453,8 +451,6 @@ describe('document-section', () => {
             node: children[0],
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
-            defaultFont: 'Arial',
-            defaultSize: 12,
             hyperlinkConfig: mockHyperlinkConfig,
           }),
         );
@@ -1207,9 +1203,8 @@ describe('document-section', () => {
           expect.objectContaining({
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
-            defaultFont: 'Arial',
-            defaultSize: 12,
             converters: expect.any(Object),
+            hyperlinkConfig: mockHyperlinkConfig,
           }),
           { blocks, recordBlockKind },
         );
@@ -1435,8 +1430,6 @@ describe('document-section', () => {
             para: children[0],
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
-            defaultFont: 'Arial',
-            defaultSize: 12,
             bookmarks: mockBookmarks,
             hyperlinkConfig: mockHyperlinkConfig,
           }),

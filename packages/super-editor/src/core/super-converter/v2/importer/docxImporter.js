@@ -36,6 +36,7 @@ import bookmarkStartAttrConfigs from '@converter/v3/handlers/w/bookmark-start/at
 import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attributes/index.js';
 import { translator as wStylesTranslator } from '@converter/v3/handlers/w/styles/index.js';
 import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/numbering/index.js';
+import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -598,8 +599,7 @@ export function translateStyleDefinitions(docx) {
 }
 
 function translateNumberingDefinitions(docx) {
-  const numbering = docx['word/numbering.xml'];
-  if (!numbering) return null;
+  const numbering = docx['word/numbering.xml'] ?? baseNumbering;
   const numberingElement = numbering.elements[0];
   const parsedNumbering = wNumberingTranslator.encode({ nodes: [numberingElement] });
   return parsedNumbering;

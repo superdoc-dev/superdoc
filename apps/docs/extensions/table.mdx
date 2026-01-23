@@ -1,0 +1,832 @@
+---
+title: Table extension
+sidebarTitle: "Table"
+keywords: "Table extension, superdoc Table, word Table, document Table, docx Table"
+---
+
+import Description from '/snippets/extensions/table.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{'aria-label':'Table node'}">
+  Default HTML attributes for all tables
+</ParamField>
+
+<ParamField path="resizable" type="boolean" default="true">
+  Enable column resizing functionality
+</ParamField>
+
+<ParamField path="handleWidth" type="number" default="5">
+  Width of resize handles in pixels
+</ParamField>
+
+<ParamField path="cellMinWidth" type="number" default="10">
+  Minimum cell width constraint in pixels
+</ParamField>
+
+<ParamField path="lastColumnResizable" type="boolean" default="true">
+  Allow resizing of the last column
+</ParamField>
+
+<ParamField path="allowTableNodeSelection" type="boolean" default="false">
+  Enable selecting the entire table node
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="tableIndent" type="TableIndent">
+  Table indentation configuration
+</ParamField>
+
+<ParamField path="borders" type="any" required>
+  Border styling for this table
+</ParamField>
+
+<ParamField path="borderCollapse" type="string" default="collapse">
+  CSS border-collapse property
+</ParamField>
+
+<ParamField path="justification" type="string">
+  Table alignment ('left', 'center', 'right')
+</ParamField>
+
+<ParamField path="tableCellSpacing" type="number">
+  Cell spacing in pixels for this table
+</ParamField>
+
+## Commands
+
+### `insertTable`
+
+Insert a new table into the document
+
+**Example:**
+
+```javascript
+editor.commands.insertTable()
+editor.commands.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+```
+
+**Parameters:**
+
+<ParamField path="config" type="TableConfig" required>
+  Table configuration options
+</ParamField>
+
+### `deleteTable`
+
+Delete the entire table containing the cursor
+
+**Example:**
+
+```javascript
+editor.commands.deleteTable()
+```
+
+### `addColumnBefore`
+
+Add a column before the current column
+
+<Note>
+Preserves cell attributes from current column
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.addColumnBefore()
+```
+
+### `addColumnAfter`
+
+Add a column after the current column
+
+<Note>
+Preserves cell attributes from current column
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.addColumnAfter()
+```
+
+**Returns:** `Function` Command
+
+### `deleteColumn`
+
+Delete the column containing the cursor
+
+**Example:**
+
+```javascript
+editor.commands.deleteColumn()
+```
+
+**Returns:** `Function` Command
+
+### `addRowBefore`
+
+Add a row before the current row
+
+<Note>
+Preserves cell attributes from current row
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.addRowBefore()
+```
+
+**Returns:** `Function` Command
+
+### `addRowAfter`
+
+Add a row after the current row
+
+<Note>
+Preserves cell attributes from current row
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.addRowAfter()
+```
+
+**Returns:** `Function` Command
+
+### `deleteRow`
+
+Delete the row containing the cursor
+
+**Example:**
+
+```javascript
+editor.commands.deleteRow()
+```
+
+**Returns:** `Function` Command
+
+### `mergeCells`
+
+Merge selected cells into one
+
+<Note>
+Content from all cells is preserved
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.mergeCells()
+```
+
+**Returns:** `Function` Command
+
+### `splitCell`
+
+Split a merged cell back into individual cells
+
+**Example:**
+
+```javascript
+editor.commands.splitCell()
+```
+
+**Returns:** `Function` Command - true if split, false if position invalid
+
+### `splitSingleCell`
+
+Split a single unmerged cell into two cells horizontally
+
+<Note>
+Different from splitCell which splits merged cells back to original cells
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.splitSingleCell()
+```
+
+**Returns:** `Function` Command - true if split, false if position invalid
+
+### `mergeOrSplit`
+
+Toggle between merge and split cells based on selection
+
+<Note>
+Merges if multiple cells selected, splits if merged cell selected
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.mergeOrSplit()
+```
+
+**Returns:** `Function` Command
+
+### `toggleHeaderColumn`
+
+Toggle the first column as header column
+
+**Example:**
+
+```javascript
+editor.commands.toggleHeaderColumn()
+```
+
+**Returns:** `Function` Command
+
+### `toggleHeaderRow`
+
+Toggle the first row as header row
+
+**Example:**
+
+```javascript
+editor.commands.toggleHeaderRow()
+```
+
+**Returns:** `Function` Command
+
+### `toggleHeaderCell`
+
+Toggle current cell as header cell
+
+**Example:**
+
+```javascript
+editor.commands.toggleHeaderCell()
+```
+
+**Returns:** `Function` Command
+
+### `setCellAttr`
+
+Set an attribute on selected cells
+
+**Example:**
+
+```javascript
+editor.commands.setCellAttr('background', { color: 'ff0000' })
+setCellAttr('verticalAlign', 'middle')
+```
+
+**Parameters:**
+
+<ParamField path="name" type="string" required>
+  Attribute name
+</ParamField>
+<ParamField path="value" type="any" required>
+  Attribute value
+</ParamField>
+
+**Returns:** `Function` Command
+
+### `goToNextCell`
+
+Navigate to the next cell (Tab behavior)
+
+**Example:**
+
+```javascript
+editor.commands.goToNextCell()
+```
+
+**Returns:** `Function` Command
+
+### `goToPreviousCell`
+
+Navigate to the previous cell (Shift+Tab behavior)
+
+**Example:**
+
+```javascript
+editor.commands.goToPreviousCell()
+```
+
+**Returns:** `Function` Command
+
+### `fixTables`
+
+Fix table structure inconsistencies
+
+<Note>
+Repairs malformed tables and normalizes structure
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.fixTables()
+```
+
+**Returns:** `Function` Command
+
+### `setCellSelection`
+
+Set cell selection programmatically
+
+**Example:**
+
+```javascript
+editor.commands.setCellSelection({ anchorCell: 10, headCell: 15 })
+```
+
+**Parameters:**
+
+<ParamField path="pos" type="CellSelectionPosition" required>
+  Cell selection coordinates
+</ParamField>
+
+**Returns:** `Function` Command
+
+### `setCellBackground`
+
+Set background color for selected cells
+
+**Example:**
+
+```javascript
+editor.commands.setCellBackground('#ff0000')
+editor.commands.setCellBackground('ff0000')
+```
+
+**Parameters:**
+
+<ParamField path="value" type="string" required>
+  Color value (hex with or without #)
+</ParamField>
+
+### `deleteCellAndTableBorders`
+
+Remove all borders from table and its cells
+
+<Note>
+Sets all border sizes to 0
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.deleteCellAndTableBorders()
+```
+
+**Returns:** `Function` Command
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| goToNextCell/addRowAfter() | `Tab` | Navigate to next cell or add row |
+| goToPreviousCell() | `Shift-Tab` | Navigate to previous cell |
+| deleteTableWhenSelected() | `Backspace` | Delete table when all cells selected |
+| deleteTableWhenSelected() | `Delete` | Delete table when all cells selected |
+
+## Types
+
+### `ThemeColor`
+
+Theme color options
+
+### `ShadingPattern`
+
+Shading pattern options
+
+### `ShadingProperties`
+
+Shading properties
+
+<Expandable title="Properties">
+<ResponseField name="color" type="string | any">
+  Shading color (hex without # or "auto" for automatic)
+</ResponseField>
+<ResponseField name="fill" type="string | any">
+  Shading fill color (hex without # or "auto" for automatic)
+</ResponseField>
+<ResponseField name="themeColor" type="ThemeColor">
+  Theme color name
+</ResponseField>
+<ResponseField name="themeFill" type="ThemeColor">
+  Theme fill name
+</ResponseField>
+<ResponseField name="themeFillShade" type="string">
+  Theme fill shade (0-255 in hex format without #)
+</ResponseField>
+<ResponseField name="themeFillTint" type="string">
+  Theme fill tint (0-255 in hex format without #)
+</ResponseField>
+<ResponseField name="themeShade" type="string">
+  Theme shade (0-255 in hex format without #)
+</ResponseField>
+<ResponseField name="themeTint" type="string">
+  Theme tint (0-255 in hex format without #)
+</ResponseField>
+<ResponseField name="val" type="ShadingPattern">
+  Shading pattern
+</ResponseField>
+</Expandable>
+
+### `TableMeasurement`
+
+Table width options
+
+<Expandable title="Properties">
+<ResponseField name="value" type="number" required>
+  Width value in twips
+</ResponseField>
+<ResponseField name="type" type="any | any | any">
+  Table width type (dxa=twips, pct=percentage, auto=automatic)
+</ResponseField>
+</Expandable>
+
+### `TableLook`
+
+Table look options
+
+<Expandable title="Properties">
+<ResponseField name="firstColumn" type="boolean">
+  Specifies that the first column conditional formatting should be applied
+</ResponseField>
+<ResponseField name="firstRow" type="boolean">
+  Specifies that the first row conditional formatting should be applied
+</ResponseField>
+<ResponseField name="lastColumn" type="boolean">
+  Specifies that the last column conditional formatting should be applied
+</ResponseField>
+<ResponseField name="lastRow" type="boolean">
+  Specifies that the last row conditional formatting should be applied
+</ResponseField>
+<ResponseField name="noHBand" type="boolean">
+  Specifies that no horizontal banding conditional formatting should be applied
+</ResponseField>
+<ResponseField name="noVBand" type="boolean">
+  Specifies that no vertical banding conditional formatting should be applied
+</ResponseField>
+</Expandable>
+
+### `FloatingTableProperties`
+
+Floating table properties
+
+<Expandable title="Properties">
+<ResponseField name="leftFromText" type="number">
+  Specifies the minimum distance in twips which shall be maintained between the current floating table and the edge of text in the paragraph which is to the left of this floating table.
+</ResponseField>
+<ResponseField name="rightFromText" type="number">
+  Specifies the minimum distance in twips which shall be maintained between the current floating table and the edge of text in the paragraph which is to the right of this floating table.
+</ResponseField>
+<ResponseField name="topFromText" type="number">
+  Specifies the minimum distance in twips which shall be maintained between the current floating table and the bottom edge of text in the paragraph which is above this floating table.
+</ResponseField>
+<ResponseField name="bottomFromText" type="number">
+  Specifies the minimum distance in twips which shall be maintained between the current floating table and the top edge of text in the paragraph which is below this floating table.
+</ResponseField>
+<ResponseField name="tblpX" type="number">
+  Specifies and absolute horizontal position for the floating table. The position is measured from the horizontal anchor point (horzAnchor) in twips.
+</ResponseField>
+<ResponseField name="tblpY" type="number">
+  Specifies and absolute vertical position for the floating table. The position is measured from the vertical anchor point (vertAnchor) in twips.
+</ResponseField>
+<ResponseField name="horzAnchor" type="any | any | any">
+  Horizontal anchor point for tblpX
+</ResponseField>
+<ResponseField name="vertAnchor" type="any | any | any">
+  Vertical anchor point for tblpY
+</ResponseField>
+<ResponseField name="tblpXSpec" type="any | any | any | any | any">
+  Specifies a relative horizontal position for the floating table. Supercedes tblpX if both are specified.
+</ResponseField>
+<ResponseField name="tblpYSpec" type="any | any | any | any | any | any">
+  Specifies a relative vertical position for the floating table. Supercedes tblpY if both are specified.
+</ResponseField>
+</Expandable>
+
+### `TableBorderSpec`
+
+Table border specification
+
+<Expandable title="Properties">
+<ResponseField name="val" type="string">
+  Border style (e.g., 'single', 'double', 'dashed', etc.)
+</ResponseField>
+<ResponseField name="color" type="string">
+  Border color (hex without #, e.g., 'FF0000' for red)
+</ResponseField>
+<ResponseField name="themeColor" type="ThemeColor">
+  Theme color name
+</ResponseField>
+<ResponseField name="themeTint" type="string">
+  Theme tint (0-255 in hex format without #)
+</ResponseField>
+<ResponseField name="themeShade" type="string">
+  Theme shade (0-255 in hex format without #)
+</ResponseField>
+<ResponseField name="size" type="number">
+  Border size in eighths of a point (e.g., 8 = 1pt, 16 = 2pt)
+</ResponseField>
+<ResponseField name="space" type="number">
+  Space in points between border and text
+</ResponseField>
+<ResponseField name="shadow" type="boolean">
+  Whether the border has a shadow
+</ResponseField>
+<ResponseField name="frame" type="boolean">
+  Whether the border is a frame
+</ResponseField>
+</Expandable>
+
+### `TableBorders`
+
+Table borders properties
+
+<Expandable title="Properties">
+<ResponseField name="bottom" type="TableBorderSpec">
+  Bottom border specification
+</ResponseField>
+<ResponseField name="end" type="TableBorderSpec">
+  End (right in LTR, left in RTL) border specification
+</ResponseField>
+<ResponseField name="insideH" type="TableBorderSpec">
+  Inside horizontal border specification
+</ResponseField>
+<ResponseField name="insideV" type="TableBorderSpec">
+  Inside vertical border specification
+</ResponseField>
+<ResponseField name="left" type="TableBorderSpec">
+  Left border specification
+</ResponseField>
+<ResponseField name="right" type="TableBorderSpec">
+  Right border specification
+</ResponseField>
+<ResponseField name="start" type="TableBorderSpec">
+  Start (left in LTR, right in RTL) border specification
+</ResponseField>
+<ResponseField name="top" type="TableBorderSpec">
+  Top border specification
+</ResponseField>
+</Expandable>
+
+### `TableBorders`
+
+Table borders object
+
+<Expandable title="Properties">
+<ResponseField name="top" type="TableBorder">
+  Top border configuration
+</ResponseField>
+<ResponseField name="right" type="TableBorder">
+  Right border configuration
+</ResponseField>
+<ResponseField name="bottom" type="TableBorder">
+  Bottom border configuration
+</ResponseField>
+<ResponseField name="left" type="TableBorder">
+  Left border configuration
+</ResponseField>
+<ResponseField name="insideH" type="TableBorder">
+  Inside horizontal borders
+</ResponseField>
+<ResponseField name="insideV" type="TableBorder">
+  Inside vertical borders
+</ResponseField>
+</Expandable>
+
+### `TableCellMargins`
+
+Table cell margin properties
+
+<Expandable title="Properties">
+<ResponseField name="top" type="TableMeasurement">
+  Top cell margin
+</ResponseField>
+<ResponseField name="left" type="TableMeasurement">
+  Left cell margin
+</ResponseField>
+<ResponseField name="bottom" type="TableMeasurement">
+  Bottom cell margin
+</ResponseField>
+<ResponseField name="start" type="TableMeasurement">
+  Start cell margin (left in LTR, right in RTL)
+</ResponseField>
+<ResponseField name="end" type="TableMeasurement">
+  End cell margin (right in LTR, left in RTL)
+</ResponseField>
+<ResponseField name="right" type="TableMeasurement">
+  Right cell margin
+</ResponseField>
+</Expandable>
+
+### `TableProperties`
+
+Table properties
+
+<Expandable title="Properties">
+<ResponseField name="rightToLeft" type="boolean">
+  Specifies that the cells with this table shall be visually represented in a right to left direction
+</ResponseField>
+<ResponseField name="justification" type="any | any | any | any | any">
+  The alignment of the set of rows which are part of the current table.
+</ResponseField>
+<ResponseField name="shading" type="ShadingProperties">
+  Shading properties for the table
+</ResponseField>
+<ResponseField name="caption" type="string">
+  Caption text for the table
+</ResponseField>
+<ResponseField name="description" type="string">
+  Description text for the table
+</ResponseField>
+<ResponseField name="tableCellSpacing" type="TableMeasurement">
+  Cell spacing
+</ResponseField>
+<ResponseField name="tableIndent" type="TableMeasurement">
+  Table indentation
+</ResponseField>
+<ResponseField name="tableLayout" type="any | any">
+  Table layout algorithm
+</ResponseField>
+<ResponseField name="tableLook" type="TableLook">
+  Various boolean flags that affect the rendering of the table
+</ResponseField>
+<ResponseField name="overlap" type="any | any">
+  Specifies whether the current table should allow other floating tables to overlap its extents when the tables are displayed in a document
+</ResponseField>
+<ResponseField name="tableStyleId" type="string">
+  Reference to table style ID
+</ResponseField>
+<ResponseField name="tableStyleColBandSize" type="number">
+  Number of columns for which the table style is applied
+</ResponseField>
+<ResponseField name="tableStyleRowBandSize" type="number">
+  Number of rows for which the table style is applied
+</ResponseField>
+<ResponseField name="tableWidth" type="TableMeasurement">
+  Table width
+</ResponseField>
+<ResponseField name="floatingTableProperties" type="FloatingTableProperties">
+  Floating table properties
+</ResponseField>
+<ResponseField name="borders" type="TableBorders">
+  Table border configuration
+</ResponseField>
+</Expandable>
+
+### `ColWidth`
+
+Column width definition
+
+<Expandable title="Properties">
+<ResponseField name="col" type="number" required>
+  Column width in twips
+</ResponseField>
+</Expandable>
+
+### `TableGrid`
+
+Table grid definition
+
+<Expandable title="Properties">
+<ResponseField name="colWidths" type="Array<ColWidth>">
+  Array of column widths in twips
+</ResponseField>
+</Expandable>
+
+### `TableConfig`
+
+Table configuration options
+
+<Expandable title="Properties">
+<ResponseField name="rows" type="number">
+  Number of rows to create
+</ResponseField>
+<ResponseField name="cols" type="number">
+  Number of columns to create
+</ResponseField>
+<ResponseField name="withHeaderRow" type="boolean">
+  Create first row as header row
+</ResponseField>
+</Expandable>
+
+### `TableIndent`
+
+Table indentation configuration
+
+<Expandable title="Properties">
+<ResponseField name="width" type="number" required>
+  Indent width in pixels
+</ResponseField>
+<ResponseField name="type" type="string">
+  Indent type
+</ResponseField>
+</Expandable>
+
+### `CellSelectionPosition`
+
+Cell selection position
+
+<Expandable title="Properties">
+<ResponseField name="anchorCell" type="number" required>
+  Starting cell position
+</ResponseField>
+<ResponseField name="headCell" type="number" required>
+  Ending cell position
+</ResponseField>
+</Expandable>
+
+### `CurrentCellInfo`
+
+Current cell information
+
+<Expandable title="Properties">
+<ResponseField name="rect" type="Object" required>
+  Selected rectangle information
+</ResponseField>
+<ResponseField name="cell" type="any" required>
+  The cell node
+</ResponseField>
+<ResponseField name="attrs" type="Object" required>
+  Cell attributes
+</ResponseField>
+</Expandable>
+
+### `CellBorder`
+
+Cell border configuration
+
+<Expandable title="Properties">
+<ResponseField name="size" type="number">
+  Border width in pixels
+</ResponseField>
+<ResponseField name="color" type="string">
+  Border color
+</ResponseField>
+<ResponseField name="style" type="string">
+  Border style
+</ResponseField>
+</Expandable>
+
+### `CellBorders`
+
+Cell borders object
+
+<Expandable title="Properties">
+<ResponseField name="top" type="CellBorder">
+  Top border
+</ResponseField>
+<ResponseField name="right" type="CellBorder">
+  Right border
+</ResponseField>
+<ResponseField name="bottom" type="CellBorder">
+  Bottom border
+</ResponseField>
+<ResponseField name="left" type="CellBorder">
+  Left border
+</ResponseField>
+</Expandable>
+
+### `TableBorder`
+
+Table border configuration
+
+<Expandable title="Properties">
+<ResponseField name="size" type="number">
+  Border width in pixels
+</ResponseField>
+<ResponseField name="color" type="string">
+  Border color (hex or CSS color)
+</ResponseField>
+<ResponseField name="style" type="string">
+  Border style (solid, dashed, dotted)
+</ResponseField>
+</Expandable>
+
+### `BorderOptions`
+
+Border creation options
+
+<Expandable title="Properties">
+<ResponseField name="size" type="number">
+  Border width in pixels
+</ResponseField>
+<ResponseField name="color" type="string">
+  Border color (hex)
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/table/table.js" />

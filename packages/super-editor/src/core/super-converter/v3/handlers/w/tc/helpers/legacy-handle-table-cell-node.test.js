@@ -44,7 +44,7 @@ describe('legacy-handle-table-cell-node', () => {
           name: 'w:tcPr',
           elements: [
             { name: 'w:tcW', attributes: { 'w:w': '1440', 'w:type': 'dxa' } }, // 1in => 96px
-            { name: 'w:shd', attributes: { 'w:fill': '#ABCDEF' } },
+            { name: 'w:shd', attributes: { 'w:fill': 'ABCDEF' } },
             { name: 'w:gridSpan', attributes: { 'w:val': '2' } },
             {
               name: 'w:tcMar',
@@ -138,7 +138,7 @@ describe('legacy-handle-table-cell-node', () => {
     expect(out.attrs.widthType).toBe('dxa');
 
     expect(out.attrs.colspan).toBe(2);
-    expect(out.attrs.background).toEqual({ color: '#ABCDEF' });
+    expect(out.attrs.background).toEqual({ color: 'ABCDEF' });
     expect(out.attrs.verticalAlign).toBe('center');
     expect(out.attrs.fontSize).toBe('12pt');
     expect(out.attrs.fontFamily).toBe('Arial');
@@ -155,6 +155,40 @@ describe('legacy-handle-table-cell-node', () => {
 
     // rowspan derived from vertical merge (restart + 2 continuations)
     expect(out.attrs.rowspan).toBe(3);
+  });
+
+  it('blends percentage table shading into a solid background color', () => {
+    const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
+    const row = { name: 'w:tr', elements: [cellNode] };
+    const table = { name: 'w:tbl', elements: [row] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row,
+      tableProperties: {
+        shading: { val: 'pct50', color: '000000', fill: 'FFFFFF' },
+      },
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90],
+      rowIndex: 0,
+      totalRows: 1,
+      totalColumns: 1,
+      _referencedStyles: null,
+    });
+
+    expect(out.attrs.background).toEqual({ color: '808080' });
   });
 
   it('applies firstRow/firstCol conditional borders from referenced styles', () => {
@@ -207,6 +241,43 @@ describe('legacy-handle-table-cell-node', () => {
     expect(out.attrs.borders.top.size).toBeCloseTo(1.3333, 3);
     expect(out.attrs.borders.left).toEqual({ val: 'single', color: '#0000FF', size: expect.any(Number) });
     expect(out.attrs.borders.left.size).toBeCloseTo(2.6666, 3);
+  });
+
+  it('prefers table grid widths when requested', () => {
+    const cellNode = {
+      name: 'w:tc',
+      elements: [
+        {
+          name: 'w:tcPr',
+          elements: [{ name: 'w:tcW', attributes: { 'w:w': '1440', 'w:type': 'dxa' } }],
+        },
+        { name: 'w:p' },
+      ],
+    };
+    const row = { name: 'w:tr', elements: [cellNode] };
+    const table = { name: 'w:tbl', elements: [row] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: 50,
+      allColumnWidths: [50, 60],
+      preferTableGridWidths: true,
+    });
+
+    expect(out.attrs.colwidth).toEqual([50]);
   });
 
   it('skips firstRow conditional borders when tblLook disables it', () => {

@@ -1,0 +1,81 @@
+---
+title: AI Agents & LLMs
+sidebarTitle: AI Agents ✨
+keywords: "ai document editing, llm docx, chatgpt word documents, cursor integration, document automation ai, programmatic word editing"
+---
+
+SuperDoc works seamlessly with AI tools. From Cursor to ChatGPT to your own LLMs.
+
+## Programmatic Control
+
+Everything in the UI is available via code:
+
+- **Fine-grained manipulation** via commands
+- **Headless mode** - Run in Node.js  
+- **Document modes** - Track changes automatically
+
+```javascript
+// Headless document generation (Node/SSR-safe)
+import { JSDOM } from 'jsdom';
+import { Editor } from '@harbour-enterprises/super-editor';
+
+const { window } = new JSDOM('<!DOCTYPE html>');
+const { document } = window;
+
+const editor = new Editor({
+  fileSource: docxBuffer, // or initialize with options.html/markdown/json
+  documentId: 'doc-1',
+  options: {
+    isHeadless: true,
+    mockDocument: document,
+    mockWindow: window,
+    documentMode: 'suggesting',
+  }
+});
+
+editor.commands.insertContent(aiContent, { contentType: 'html' });
+```
+[See complete example →](https://github.com/Harbour-Enterprises/SuperDoc/tree/develop/examples/agentic-slack-redlining-example)
+
+## The AI Document Workflow
+
+Your AI generates content. Your users need Word documents. SuperDoc bridges the gap.
+
+### Simple Integration
+```javascript
+// AI generates content in any format
+const content = await ai.generate("Create a service agreement");
+
+// SuperDoc handles it
+editor.commands.insertContent(content, { 
+  contentType: 'html'  // or 'markdown', 'text', 'schema'
+});
+
+// Export as real Word document
+const docx = await editor.exportDocx();
+```
+
+### Three Ways to Work
+
+**1. Import AI Content** - HTML, Markdown, or plain text from any LLM  
+**2. Structured Documents** - JSON schema for precise control  
+**3. Programmatic Commands** - Full automation with headless mode  
+
+[See detailed import options →](/getting-started/import-export#ai-integration-pattern)
+
+## Quick access for AI assistants
+
+Working with Cursor, Claude, or ChatGPT? Give your assistant our docs:
+
+```javascript
+// Quick reference
+'https://docs.superdoc.dev/llms.txt'
+
+// Complete documentation
+'https://docs.superdoc.dev/llms-full.txt'  
+
+// MCP server
+'https://docs.superdoc.dev/mcp'
+```
+
+Drop these URLs into your AI's context. Now it knows SuperDoc.

@@ -1,0 +1,39 @@
+---
+title: Bold extension
+sidebarTitle: "Bold"
+keywords: "Bold extension, superdoc Bold, word Bold, document Bold, docx Bold"
+---
+
+import Description from '/snippets/extensions/bold.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for the strong element
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="value" type="string">
+  Bold weight value ('0' renders as normal)
+</ParamField>
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleBold() | `⌘/Ctrl-b` | Toggle bold formatting |
+| toggleBold() | `⌘/Ctrl-B` | Toggle bold formatting (uppercase) |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/bold/bold.js" />

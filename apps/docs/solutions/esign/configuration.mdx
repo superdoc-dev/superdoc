@@ -1,0 +1,349 @@
+---
+title: Configuration
+---
+
+All eSign options and customization
+
+## Document options
+
+Control how the document is displayed and what's required:
+
+```jsx
+document={{
+  // Required - the document to display
+  source: File | Blob | string,
+
+  // Display mode
+  mode: 'full',        // Default: full editor
+
+  // Layout mode (for mobile/accessibility)
+  layoutMode: 'responsive',  // 'paginated' (default) or 'responsive'
+  layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
+
+  // Requirements
+  validation: {
+    scroll: { required: true }  // Must scroll to bottom
+  }
+}}
+```
+
+### Layout modes
+
+Control how the document is displayed:
+
+- **`paginated`** (default) - Fixed page width with page breaks
+- **`responsive`** - 100% width, text reflows to fit container
+
+Use `responsive` for mobile devices or WCAG AA accessibility compliance. Optional `layoutMargins` sets custom margins (in pixels) for responsive mode.
+
+## Field system
+
+Fields use a unique `id` system for identifying and updating content:
+
+- **`id`** - Unique identifier for the field
+
+### Document fields (injected values)
+
+```jsx
+fields={{
+  document: [
+    { id: 'field_customer_name', value: 'Jane Smith' },
+    { id: 'field_contract_date', value: '2024-01-15' },
+    { id: 'field_amount', value: '$50,000' }
+  ]
+}}
+```
+
+These update fields with matching IDs in your document.
+
+### Signer fields (interactive)
+
+```jsx
+fields={{
+  signer: [
+    {
+      id: 'sig1',
+      type: 'signature',
+      label: 'Your Signature',
+      validation: { required: true }
+    },
+    {
+      id: 'accept_terms',
+      type: 'checkbox',
+      label: 'I accept the terms',
+      validation: { required: true }
+    },
+    {
+      id: 'newsletter',
+      type: 'checkbox',
+      label: 'Send me updates',
+      validation: { required: false }
+    }
+  ]
+}}
+```
+
+Field types:
+
+- `signature` - Text input or canvas (detects automatically)
+- `checkbox` - Checkbox field
+- `text` - Text input field
+
+## Custom components
+
+Three levels of customization:
+
+### Level 1: Use defaults
+
+```jsx
+<SuperDocESign document={{ source: "doc.pdf" }} onSubmit={handleSubmit} />
+```
+
+### Level 2: Customize labels
+
+```jsx
+submit={{ label: "I Agree" }}
+download={{ label: "Save Copy", fileName: "agreement.pdf" }}
+```
+
+### Level 3: Custom components
+
+```jsx
+// Custom submit button
+submit={{
+  component: ({ onClick, isValid, isDisabled, isSubmitting }) => (
+    <button
+      onClick={onClick}
+      disabled={!isValid || isDisabled}
+      className="my-custom-button"
+    >
+      {isSubmitting ? <Spinner /> : 'Sign Document'}
+    </button>
+  )
+}}
+
+// Custom signature field
+fields={{
+  signer: [{
+    id: 'sig',
+    type: 'signature',
+    component: ({ value, onChange, isDisabled, label }) => (
+      <SignaturePad
+        value={value}
+        onComplete={onChange}
+        disabled={isDisabled}
+        title={label}
+      />
+    )
+  }]
+}}
+```
+
+## Event handlers
+
+```jsx
+// Main submission
+onSubmit={async (data) => {
+  // data.eventId - Your session ID
+  // data.auditTrail - Complete interaction log
+  // data.signerFields - User inputs
+  await api.save(data);
+}}
+
+// Download handling
+onDownload={async (data) => {
+  // data.documentSource - Original .docx file
+  // data.fileName - Suggested filename
+  // Send to backend for PDF conversion
+  const response = await fetch('/api/generate-pdf', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+  const blob = await response.blob();
+  saveAs(blob, data.fileName);
+}}
+
+// State monitoring
+onStateChange={(state) => {
+  // state.scrolled - Has scrolled to bottom
+  // state.fields - Current field values
+  // state.isValid - Ready to submit
+  console.log('Ready:', state.isValid);
+}}
+
+// Field changes
+onFieldChange={(field) => {
+  // field.id - Field identifier
+  // field.value - New value
+  // field.previousValue - Old value
+  analytics.track('field_changed', field);
+}}
+
+// Document analysis
+onFieldsDiscovered={(fields) => {
+  // All fields found in document
+  console.log('Document has fields:', fields);
+}}
+```
+
+## Styling
+
+The component can be styled using standard CSS. Optionally import default styles:
+
+```jsx
+// Optional: import default styles
+import '@superdoc-dev/esign/styles.css';
+
+<SuperDocESign
+  className="my-esign-container"
+  style={{ maxWidth: "800px" }}
+  documentHeight="500px" // Height of document viewer
+/>
+```
+
+### CSS classes
+
+Target these classes to customize appearance:
+
+| Class                              | Description                                  |
+| ---------------------------------- | -------------------------------------------- |
+| `.superdoc-esign-container`        | Root container (also accepts `className` prop) |
+| `.superdoc-esign-document`         | Document section wrapper                     |
+| `.superdoc-esign-document-toolbar` | Toolbar with download button                 |
+| `.superdoc-esign-document-controls`| Control buttons container                    |
+| `.superdoc-esign-document-viewer`  | Scroll container (SuperDoc mounts inside)    |
+| `.superdoc-esign-controls`         | Fields and buttons area                      |
+| `.superdoc-esign-fields`           | Field container                              |
+| `.superdoc-esign-actions`          | Action buttons container                     |
+| `.superdoc-esign-form-actions`     | Form submit button container                 |
+
+### Customizing with CSS
+
+Style the component using standard CSS - no special variables needed:
+
+```css
+.superdoc-esign-document-viewer {
+  background: #f8fafc;
+}
+
+.superdoc-esign-controls {
+  margin-top: 0; /* Remove gap between viewer and controls */
+  padding: 20px 24px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.superdoc-esign-fields {
+  margin-bottom: 16px;
+}
+
+.superdoc-esign-actions {
+  gap: 12px;
+}
+```
+
+## Themed example
+
+Style the component to match your brand.
+
+### Structure
+
+```
+.superdoc-esign-container
+├── .superdoc-esign-document
+│   ├── .superdoc-esign-document-toolbar
+│   │   └── .superdoc-esign-document-controls
+│   └── .superdoc-esign-document-viewer
+│       └── .super-editor (the document)
+└── .superdoc-esign-controls
+    ├── .superdoc-esign-fields
+    └── .superdoc-esign-actions
+```
+
+### CSS
+
+```css
+/* Card-like container */
+.brand-signer {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Document viewer background */
+.brand-signer .superdoc-esign-document-viewer {
+  background: #f8fafc;
+}
+
+/* Controls area styling */
+.brand-signer .superdoc-esign-controls {
+  margin-top: 0;
+  padding: 20px 24px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Style the document editor */
+.brand-signer .super-editor {
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+```
+
+### Component
+
+```jsx
+<SuperDocESign
+  className="brand-signer"
+  documentHeight="500px"
+  // ... other props
+/>
+```
+
+## Complete example
+
+```jsx
+<SuperDocESign
+  eventId={`session-${Date.now()}`}
+  document={{
+    source: contractFile,
+    mode: "full",
+    layoutMode: "responsive",
+    layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
+    validation: {
+      scroll: { required: true },
+    },
+  }}
+  fields={{
+    document: [
+      { id: "field_company", value: companyName },
+      { id: "field_date", value: new Date().toLocaleDateString() },
+    ],
+    signer: [
+      {
+        id: "signature",
+        type: "signature",
+        validation: { required: true },
+        label: "Sign here",
+      },
+      {
+        id: "terms",
+        type: "checkbox",
+        validation: { required: true },
+        label: "I accept all terms",
+      },
+    ],
+  }}
+  download={{
+    fileName: "signed-contract.pdf",
+    label: "Download Copy",
+  }}
+  submit={{
+    label: "Complete Signing",
+  }}
+  onSubmit={handleSubmit}
+  onStateChange={updateUI}
+  className="contract-signer"
+  documentHeight="600px"
+/>
+```

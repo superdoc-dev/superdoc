@@ -1,0 +1,16 @@
+{
+  "name": "@superdoc/docs",
+  "private": true,
+  "scripts": {
+    "dev": "mintlify dev --port 3001",
+    "validate": "mintlify validate",
+    "gen:api": "node scripts/sync-api-docs.js",
+    "gen:docs": "node scripts/sync-sdk-docs.js",
+    "gen:all": "pnpm run gen:api && pnpm run gen:docs",
+    "check:links": "mintlify broken-links"
+  },
+  "devDependencies": {
+    "documentation": "^14.0.3",
+    "mintlify": "^4.2.295"
+  }
+}

@@ -1,0 +1,86 @@
+Create invisible navigation anchors for cross-references and document navigation.
+
+Essential for long documents, table of contents, and internal hyperlinks with perfect Word compatibility.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>This document demonstrates bookmark functionality. Bookmarks are invisible navigation anchors.</p><p><strong>Introduction</strong></p><p>This is the introduction section. Click "Add Bookmark Here" to place a bookmark at your cursor position.</p><p><strong>Chapter 1: Getting Started</strong></p><p>Content for chapter one goes here. Bookmarks enable quick navigation through long documents.</p><p><strong>Chapter 2: Advanced Topics</strong></p><p>More content here. You can create as many bookmarks as needed.</p><p><strong>Conclusion</strong></p><p>The conclusion wraps up the document. Use the navigation buttons after adding bookmarks to jump between them.</p>`}
+  height="400px"
+  customButtons={[
+    [
+      {
+        label: '📍 Add Bookmark Here',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          const name = prompt('Enter bookmark name:')
+          if (name) {
+            editor.commands.insertBookmark({ 
+              name, 
+              id: `${Date.now()}` 
+            })
+            alert(`Bookmark "${name}" added at current position`)
+          }
+        }
+      },
+      {
+        label: '🔍 List Bookmarks',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor) return
+          const bookmarks = []
+          editor.state.doc.descendants((node) => {
+            if (node.type.name === 'bookmarkStart') {
+              bookmarks.push(node.attrs.name)
+            }
+          })
+          if (bookmarks.length) {
+            alert('Bookmarks in document:\n' + bookmarks.join('\n'))
+          } else {
+            alert('No bookmarks found. Add some first!')
+          }
+        }
+      }
+    ],
+    [
+      {
+        label: '→ Go to Bookmark',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          const name = prompt('Enter bookmark name to navigate to:')
+          if (name) {
+            editor.commands.goToBookmark(name)
+          }
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<!-- Bookmark start and end tags -->
+<w:bookmarkStart w:id="0" w:name="chapter1"/>
+<w:r>
+  <w:t>Chapter content here</w:t>
+</w:r>
+<w:bookmarkEnd w:id="0"/>
+
+<!-- Hyperlink to bookmark -->
+<w:hyperlink w:anchor="chapter1">
+  <w:r>
+    <w:t>Go to Chapter 1</w:t>
+  </w:r>
+</w:hyperlink>
+```
+
+## Use Case
+
+- **Table of Contents** - Create clickable TOC entries that jump to chapters
+- **Cross-References** - Link to figures, tables, or sections elsewhere
+- **Navigation** - Quick jumps in long documents without scrolling
+- **Index Creation** - Mark important terms for automated index generation
+- **Document Automation** - Programmatic navigation and content updates

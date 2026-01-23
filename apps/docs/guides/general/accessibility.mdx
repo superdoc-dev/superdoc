@@ -1,0 +1,133 @@
+---
+title: Accessibility
+keywords: "wcag compliance, screen reader support, keyboard navigation, aria labels, accessible documents, ada compliance"
+---
+
+SuperDoc provides accessibility features for keyboard navigation and screen reader compatibility.
+
+## High contrast mode
+
+Enable high contrast for improved visibility:
+
+```javascript
+// During initialization
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  onReady: ({ superdoc }) => {
+    superdoc.setHighContrastMode(true);
+  }
+});
+
+// Or after initialization
+superdoc.setHighContrastMode(true);
+```
+
+## Keyboard navigation
+
+### Toolbar navigation
+
+Navigate the toolbar without a mouse:
+
+- **Tab** - Move between toolbar groups (left, center, right)
+- **Arrow keys** - Navigate within a group
+- **Enter** - Activate button or open dropdown
+- **Escape** - Close dropdowns
+
+### Return to toolbar
+
+Jump back to toolbar from anywhere in the document:
+
+- **Windows**: `Ctrl + Shift + Alt + M`
+- **macOS**: `Cmd + Shift + Option + M`
+
+### Document navigation
+
+Standard keyboard shortcuts work as expected:
+
+- **Tab** - Move to next field/element
+- **Shift+Tab** - Move to previous field/element
+- **Ctrl/Cmd + Arrow keys** - Navigate by word
+- **Home/End** - Beginning/end of line
+- **Ctrl/Cmd + Home/End** - Beginning/end of document
+
+## Screen reader support
+
+### ARIA implementation
+
+SuperDoc uses semantic ARIA roles for screen readers:
+
+| Role | Element | Purpose |
+|------|---------|---------|
+| `application` | Main container | Identifies the editor application |
+| `document` | Editor area | Document editing region |
+| `toolbar` | Toolbar component | Formatting controls |
+| `button` | Toolbar buttons | Individual controls |
+| `menuitem` | Dropdown items | Menu options |
+| `menu` | Dropdowns | Option containers |
+| `separator` | Dividers | Visual/logical separation |
+
+### ARIA attributes
+
+- **aria-label** - Describes the current focused item
+- **aria-description** - Provides additional context
+- **aria-pressed** - Indicates toggle button state
+- **aria-expanded** - Shows dropdown state
+
+## Semantic HTML
+
+Tables and lists use standard HTML elements that are accessible by default:
+
+```html
+<!-- Tables with proper headers -->
+<table>
+  <thead>
+    <tr>
+      <th>Column Header</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Data Cell</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- Semantic lists -->
+<ul>
+  <li>List item with meaning</li>
+</ul>
+```
+
+## Focus management
+
+- Focus indicators visible on all interactive elements
+- Tab order follows logical document flow
+- Focus trapped in modals/dropdowns when open
+- Focus returns to trigger element when modals close
+
+## Known limitations
+
+- Complex tables may require additional navigation
+- Some advanced formatting options only accessible via toolbar
+- Custom keyboard shortcuts not yet configurable
+
+## Testing your implementation
+
+```javascript
+// Check if high contrast is enabled
+if (superdoc.isHighContrastMode) {
+  console.log('High contrast active');
+}
+
+// Ensure toolbar is keyboard accessible
+document.querySelector('.super-toolbar').setAttribute('tabindex', '0');
+```
+
+## Browser compatibility
+
+Accessibility features tested with:
+- NVDA (Windows)
+- JAWS (Windows)
+- VoiceOver (macOS)
+- Chrome, Firefox, Safari, Edge (latest versions)

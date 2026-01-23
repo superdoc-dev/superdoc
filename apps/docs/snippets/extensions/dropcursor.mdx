@@ -1,0 +1,40 @@
+Visual indicator showing where dragged content will be inserted.
+
+The drop cursor appears as a vertical line when dragging content over the editor.
+
+<div style={{
+  padding: '20px',
+  background: '#f3f4f6',
+  borderRadius: '8px',
+  marginBottom: '16px',
+  border: '2px dashed rgb(156, 163, 175)',
+  textAlign: 'center'
+}}>
+  <img 
+    src="/public/images/extensions/dropcursor.svg" 
+    alt="Draggable demo image"
+    style={{
+      cursor: 'grab',
+      borderRadius: '8px',
+      margin: '0 auto'
+    }}
+    draggable="true"
+  />
+  <p style={{ marginTop: '12px', color: '#6b7280', fontSize: '14px' }}>
+    👆 Drag this image into the editor below to see the drop cursor
+  </p>
+</div>
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>As you drag the image above over different positions in this text, you'll see a vertical line (the drop cursor) indicating where the image would be inserted.</p><p>The drop cursor helps you position content precisely between words, at the start of paragraphs, or between paragraphs.</p><p>Try dragging the image to different positions to see how the cursor moves!</p>`}
+  height="250px"
+/>
+
+## Use Case
+
+- **Visual Feedback** - Shows exactly where content will drop
+- **Precision Placement** - Position images and files accurately
+- **Better UX** - Clear indicator prevents placement mistakes
+- **Professional Feel** - Matches modern editor behavior

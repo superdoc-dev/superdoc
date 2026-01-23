@@ -1,0 +1,127 @@
+---
+title: OrderedList extension
+sidebarTitle: "Ordered List"
+keywords: "OrderedList extension, superdoc OrderedList, word OrderedList, document OrderedList, docx OrderedList"
+---
+
+import Description from '/snippets/extensions/ordered-list.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="itemTypeName" type="string" default="listItem">
+  Name of list item node type
+</ParamField>
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for ordered list elements
+</ParamField>
+
+<ParamField path="keepMarks" type="boolean" default="true">
+  Whether to preserve marks when creating lists
+</ParamField>
+
+<ParamField path="keepAttributes" type="boolean" default="false">
+  Whether to preserve attributes
+</ParamField>
+
+<ParamField path="listStyleTypes" type="Array<string>" default="['decimal','lowerAlpha','lowerRoman']">
+  Available list style types
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="order" type="number" default="1">
+  Starting number for the list
+</ParamField>
+
+<ParamField path="sdBlockId" type="string">
+  Block identifier for tracking
+</ParamField>
+
+<ParamField path="syncId" type="string">
+  Synchronization identifier
+</ParamField>
+
+<ParamField path="listId" type="string">
+  List identifier
+</ParamField>
+
+<ParamField path="list-style-type" type="string" default="decimal">
+  List style type (decimal, lowerAlpha, lowerRoman)
+</ParamField>
+
+<ParamField path="attributes" type="Object">
+  Additional attributes
+</ParamField>
+
+## Commands
+
+### `toggleOrderedList`
+
+Toggle ordered list formatting
+
+<Note>
+Converts selection to ordered list or back to paragraphs
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.toggleOrderedList()
+```
+
+### `restartListNodes`
+
+Restart list node numbering
+
+<Note>
+Resets list numbering for specified nodes
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.restartListNodes(nodes, position)
+```
+
+**Parameters:**
+
+<ParamField path="followingNodes" type="Array" required>
+  Nodes to restart
+</ParamField>
+<ParamField path="pos" type="number" required>
+  Starting position
+</ParamField>
+
+### `updateOrderedListStyleType`
+
+Update ordered list style type based on nesting level
+
+<Note>
+Cycles through decimal -> lowerAlpha -> lowerRoman based on depth
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.updateOrderedListStyleType()
+```
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleOrderedList() | `⌘/Ctrl-Shift-7` | Toggle ordered list |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/ordered-list/ordered-list.js" />

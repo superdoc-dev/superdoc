@@ -1,0 +1,114 @@
+---
+title: ContentBlock extension
+sidebarTitle: "Content Block"
+keywords: "ContentBlock extension, superdoc ContentBlock, word ContentBlock, document ContentBlock, docx ContentBlock"
+---
+
+import Description from '/snippets/extensions/content-block.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for the block element
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="horizontalRule" type="boolean" default="false">
+  Whether this block is a horizontal rule
+</ParamField>
+
+<ParamField path="size" type="ContentBlockSize">
+  Size and position of the content block
+</ParamField>
+
+<ParamField path="background" type="string">
+  Background color for the block
+</ParamField>
+
+## Commands
+
+### `insertHorizontalRule`
+
+Insert a horizontal rule
+
+<Note>
+Creates a visual separator between content sections
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.insertHorizontalRule()
+```
+
+### `insertContentBlock`
+
+Insert a content block
+
+<Note>
+Used for spacing, dividers, and special inline content
+</Note>
+
+**Example:**
+
+```javascript
+// Insert a spacer block
+editor.commands.insertContentBlock({ size: { height: 20 } })
+```
+
+**Parameters:**
+
+<ParamField path="config" type="ContentBlockConfig" required>
+  Block configuration
+</ParamField>
+
+## Types
+
+### `ContentBlockSize`
+
+Size configuration for content blocks
+
+<Expandable title="Properties">
+<ResponseField name="top" type="number">
+  Top position in pixels
+</ResponseField>
+<ResponseField name="left" type="number">
+  Left position in pixels
+</ResponseField>
+<ResponseField name="width" type="number | string">
+  Width in pixels or percentage (e.g., "50%")
+</ResponseField>
+<ResponseField name="height" type="number | string">
+  Height in pixels or percentage
+</ResponseField>
+</Expandable>
+
+### `ContentBlockConfig`
+
+Content block configuration
+
+<Expandable title="Properties">
+<ResponseField name="horizontalRule" type="boolean">
+  Whether this is a horizontal rule
+</ResponseField>
+<ResponseField name="size" type="ContentBlockSize">
+  Size and position configuration
+</ResponseField>
+<ResponseField name="background" type="string">
+  Background color (hex, rgb, or named color)
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/content-block/content-block.js" />

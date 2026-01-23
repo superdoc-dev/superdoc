@@ -1,0 +1,268 @@
+---
+title: React Integration
+sidebarTitle: React
+keywords: "react docx editor, react word component, superdoc react, microsoft word react, document editor react hooks"
+---
+SuperDoc works with React 16.8+ (hooks) and React 18+ (concurrent features).
+
+## Install
+
+```bash
+npm install @harbour-enterprises/superdoc
+```
+
+## Basic Setup
+
+```jsx
+import { useEffect, useRef } from 'react';
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import '@harbour-enterprises/superdoc/style.css';
+
+function DocEditor({ document }) {
+  const containerRef = useRef(null);
+  const superdocRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    superdocRef.current = new SuperDoc({
+      selector: containerRef.current,
+      document
+    });
+
+    return () => {
+      superdocRef.current = null;
+    };
+  }, [document]);
+
+  return <div ref={containerRef} style={{ height: '700px' }} />;
+}
+```
+
+## Full Component
+
+Build a reusable editor with controls:
+
+```jsx
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import '@harbour-enterprises/superdoc/style.css';
+
+const DocEditor = forwardRef(({ document, user, onReady }, ref) => {
+  const containerRef = useRef(null);
+  const superdocRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    export: (options) => superdocRef.current?.export(options),
+    setMode: (mode) => superdocRef.current?.setDocumentMode(mode),
+    getHTML: () => superdocRef.current?.getHTML()
+  }));
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    superdocRef.current = new SuperDoc({
+      selector: containerRef.current,
+      document,
+      user,
+      onReady: () => onReady?.(superdocRef.current)
+    });
+
+    return () => {
+      superdocRef.current = null;
+    };
+  }, [document, user, onReady]);
+
+  return <div ref={containerRef} style={{ height: '700px' }} />;
+});
+
+// Usage
+function App() {
+  const editorRef = useRef();
+  
+  const handleExport = async () => {
+    await editorRef.current.export({ isFinalDoc: true });
+  };
+  
+  return (
+    <>
+      <button onClick={handleExport}>Export Final</button>
+      <button onClick={() => editorRef.current.setMode('suggesting')}>
+        Review Mode
+      </button>
+      <DocEditor 
+        ref={editorRef}
+        document="contract.docx"
+        user={{ name: 'John', email: 'john@company.com' }}
+        onReady={(editor) => console.log('Ready', editor)}
+      />
+    </>
+  );
+}
+```
+
+## File Upload
+
+```jsx
+function FileEditor() {
+  const [file, setFile] = useState(null);
+  const editorRef = useRef();
+
+  const handleFile = (e) => {
+    setFile(e.target.files[0]);
+  };
+
+  const handleExport = async () => {
+    const blob = await editorRef.current?.export({ 
+      isFinalDoc: true 
+    });
+    // Download blob...
+  };
+
+  return (
+    <>
+      <input type="file" accept=".docx" onChange={handleFile} />
+      {file && (
+        <>
+          <button onClick={handleExport}>Export</button>
+          <DocEditor 
+            ref={editorRef}
+            document={file}
+            user={{ name: 'User', email: 'user@company.com' }}
+          />
+        </>
+      )}
+    </>
+  );
+}
+```
+
+## TypeScript
+
+```tsx
+import { useEffect, useRef, forwardRef } from 'react';
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import type { SuperDocConfig } from '@harbour-enterprises/superdoc';
+
+interface EditorProps {
+  document: string | File | Blob;
+  userId: string;
+  onReady?: (editor: SuperDoc) => void;
+}
+
+interface EditorRef {
+  export: (options?: ExportOptions) => Promise<Blob>;
+  setMode: (mode: 'editing' | 'viewing' | 'suggesting') => void;
+  getHTML: () => string[];
+}
+
+const DocEditor = forwardRef<EditorRef, EditorProps>(
+  ({ document, userId, onReady }, ref) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const superdocRef = useRef<SuperDoc | null>(null);
+    
+    useImperativeHandle(ref, () => ({
+      export: async (options) => {
+        if (!superdocRef.current) throw new Error('Editor not ready');
+        return await superdocRef.current.export(options);
+      },
+      setMode: (mode) => {
+        superdocRef.current?.setDocumentMode(mode);
+      },
+      getHTML: () => {
+        return superdocRef.current?.getHTML() || [];
+      }
+    }));
+    
+    useEffect(() => {
+      if (!containerRef.current) return;
+      
+      const config: SuperDocConfig = {
+        selector: containerRef.current,
+        document,
+        user: {
+          name: userId,
+          email: `${userId}@company.com`
+        },
+        onReady: () => onReady?.(superdocRef.current!)
+      };
+      
+      superdocRef.current = new SuperDoc(config);
+      
+      return () => {
+        superdocRef.current = null;
+      };
+    }, [document, userId, onReady]);
+    
+    return <div ref={containerRef} style={{ height: '700px' }} />;
+  }
+);
+```
+
+## SSR Support
+
+For Next.js or other SSR frameworks:
+
+```jsx
+import dynamic from 'next/dynamic';
+
+const DocEditor = dynamic(
+  () => import('./DocEditor'),
+  { 
+    ssr: false,
+    loading: () => <div>Loading editor...</div>
+  }
+);
+
+// Or manually check for client-side
+function SafeEditor(props) {
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  if (!mounted) return <div>Loading...</div>;
+  
+  return <DocEditor {...props} />;
+}
+```
+
+## Custom Hook
+
+```jsx
+function useSuperDoc(config) {
+  const [ready, setReady] = useState(false);
+  const superdocRef = useRef(null);
+  
+  useEffect(() => {
+    if (!config.selector) return;
+    
+    superdocRef.current = new SuperDoc({
+      ...config,
+      onReady: () => {
+        setReady(true);
+        config.onReady?.();
+      }
+    });
+    
+    return () => {
+      superdocRef.current = null;
+      setReady(false);
+    };
+  }, [config.selector, config.document]);
+  
+  return {
+    editor: superdocRef.current,
+    ready,
+    export: (options) => superdocRef.current?.export(options),
+    setMode: (mode) => superdocRef.current?.setDocumentMode(mode)
+  };
+}
+```
+
+## Next Steps
+
+- [Vue Integration](/getting-started/frameworks/vue) - Vue setup
+- [API Reference](/core/superdoc/configuration) - Configuration options  
+- [Examples](https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/react-example) - Working examples

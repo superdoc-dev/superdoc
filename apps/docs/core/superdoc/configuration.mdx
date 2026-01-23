@@ -1,0 +1,357 @@
+---
+title: Configuration
+keywords: "superdoc configuration, editor config options, document settings, word editor setup, api configuration"
+---
+
+Configuration is passed when creating a SuperDoc instance. Only two fields are required.
+
+## Quick Start
+
+```javascript
+new SuperDoc({
+  selector: "#editor", // Required: Where to render
+  document: "contract.docx", // Required: What to load
+});
+```
+
+## Core Parameters
+
+<ParamField path="selector" type="string | HTMLElement" required>
+  DOM selector or element where SuperDoc will mount ```javascript selector:
+  '#editor' // or selector: document.querySelector('.my-editor') ```
+</ParamField>
+
+<ParamField path="document" type="Document | string | File" required>
+  Document to load.
+  
+  Can be a `Document (Object)`, `string` or `File`
+  
+  <Expandable title="Supported formats">
+    - `Document` Object
+    ```json
+    {
+      id: 'doc-123', // string
+      type: 'docx', // string, can be 'docx' or 'pdf'
+      data: File // File or Blob
+    }
+    ```
+    - `string` - URL to fetch
+    - `File` - From file input
+  </Expandable>
+  
+  <Note>Use `documents` array for multiple documents instead</Note>
+</ParamField>
+
+<ParamField path="documents" type="Document[]">
+  Multiple documents to load (alternative to single `document`)
+  
+  ```javascript
+  documents: [
+    { id: 'doc-1', type: 'docx', data: fileObject },
+    { id: 'doc-2', type: 'pdf', url: 'report.pdf' }
+  ]
+  ```
+  
+  <Expandable title="Supported formats">
+    - `File` - From file input (e.g., from `<input type="file">`)
+    - `string` (URL) - To fetch the document
+  </Expandable>
+</ParamField>
+
+<ParamField path="superdocId" type="string">
+  Unique identifier for this SuperDoc instance
+  <Note>Auto-generated UUID if not provided</Note>
+</ParamField>
+
+## User & Permissions
+
+<ParamField path="user" type="Object">
+  Current user information
+  <Expandable title="User properties">
+    <ParamField path="name" type="string" required>
+      Display name
+    </ParamField>
+    <ParamField path="email" type="string" required>
+      Email address
+    </ParamField>
+    <ParamField path="image" type="string">
+      Avatar URL
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="users" type="User[]" default="[]">
+  All users with document access. Used for @mentions and collaboration.
+</ParamField>
+
+<ParamField path="role" type="string" default="'editor'">
+  User permission level
+  <Expandable title="Available roles">
+    - `editor` - Full editing capabilities - `viewer` - Read-only access -
+    `suggester` - Can only suggest changes
+  </Expandable>
+  <Warning>Role overrides documentMode when more restrictive</Warning>
+</ParamField>
+
+<ParamField path="documentMode" type="string" default="'editing'">
+  Initial document mode
+  <Expandable title="Document modes">
+    - `editing` - Normal editing - `viewing` - Read-only display - `suggesting`
+    - Track changes enabled
+  </Expandable>
+</ParamField>
+
+<ParamField path="comments" type="Object">
+  Viewing-mode visibility controls for standard comments
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="comments.visible" type="boolean" default="false">
+      Show comment highlights and threads when `documentMode` is `viewing`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="trackChanges" type="Object">
+  Viewing-mode visibility controls for tracked changes
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="trackChanges.visible" type="boolean" default="false">
+      Show tracked-change markup and threads when `documentMode` is `viewing`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="permissionResolver" type="function">
+  Override permission checks for comments and tracked changes
+  
+  ```javascript
+  const superdoc = new SuperDoc({
+    user: { name: 'Alex Editor', email: 'alex@example.com' },
+    permissionResolver: ({ permission, trackedChange, defaultDecision }) => {
+      if (permission === 'RESOLVE_OTHER' && trackedChange) {
+        return false; // Block accepting suggestions from other authors
+      }
+      return defaultDecision;
+    },
+  });
+  ```
+  
+  <Note>Return `false` to block an action. Return `true` or `undefined` to fall back to the built-in permission matrix.</Note>
+</ParamField>
+
+## Modules
+
+<ParamField path="modules" type="Object">
+  Configure optional modules
+</ParamField>
+
+### Collaboration Module
+
+<ParamField path="modules.collaboration" type="Object">
+  Real-time collaboration settings
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="url" type="string" required>
+      WebSocket server URL
+    </ParamField>
+    <ParamField path="providerType" type="string" default="'hocuspocus'">
+      Provider implementation
+    </ParamField>
+    <ParamField path="token" type="string">
+      Authentication token
+    </ParamField>
+    <ParamField path="params" type="Object">
+      Additional connection parameters
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Comments Module
+
+<ParamField path="modules.comments" type="Object">
+  Comments system configuration
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="element" type="string | HTMLElement">
+      DOM element for comments list
+    </ParamField>
+    <ParamField path="allowResolve" type="boolean" default="true">
+      Allow resolving comments
+    </ParamField>
+    <ParamField path="useInternalExternalComments" type="boolean">
+      Dual comment system
+    </ParamField>
+    <ParamField path="permissionResolver" type="function">
+      Comments-only override for the permission resolver
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Toolbar Module
+
+<ParamField path="modules.toolbar" type="Object">
+  Toolbar configuration
+  
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="selector" type="string | HTMLElement">
+      Toolbar container
+    </ParamField>
+    <ParamField path="groups" type="string[]" default="['left', 'center', 'right']">
+      Layout groups
+    </ParamField>
+    <ParamField path="icons" type="Object">
+      Custom icon overrides
+    </ParamField>
+    <ParamField path="texts" type="Object">
+      Text label overrides
+    </ParamField>
+    <ParamField path="fonts" type="string[]">
+      Available font families. See [Toolbar fonts](/modules/toolbar#font-configuration) for details.
+
+      <Info>Custom fonts from DOCX files will display in the toolbar but won't be selectable unless loaded in your app and added here.</Info>
+    </ParamField>
+    <ParamField path="hideButtons" type="boolean" default="true">
+      Hide when inactive
+    </ParamField>
+    <ParamField path="responsiveToContainer" type="boolean" default="false">
+      Container-based responsive sizing
+    </ParamField>
+
+  </Expandable>
+</ParamField>
+
+## Appearance
+
+<ParamField path="title" type="string" default="'SuperDoc'">
+  Document title for exports and display
+</ParamField>
+
+<ParamField path="colors" type="string[]">
+  Colors for user awareness and highlighting
+  <Note>Built-in palette provided by default</Note>
+</ParamField>
+
+<ParamField path="pagination" type="boolean" default="false">
+  Enable page-based layout
+  <Note>Consider using `layoutMode` for more control over document layout</Note>
+</ParamField>
+
+<ParamField path="layoutMode" type="string" default="'paginated'">
+  Controls how the document is rendered
+  <Expandable title="Available modes">
+    - `paginated` - Fixed page width with page breaks (default)
+    - `responsive` - 100% width, text reflows to fit container
+  </Expandable>
+  <Note>Use `responsive` for mobile devices and WCAG AA accessibility compliance. When set to `responsive`, pagination is automatically disabled.</Note>
+</ParamField>
+
+<ParamField path="layoutMargins" type="Object">
+  Custom margins in pixels for responsive layout
+  <Expandable title="Margin properties">
+    <ParamField path="top" type="number">Top margin in pixels</ParamField>
+    <ParamField path="bottom" type="number">Bottom margin in pixels</ParamField>
+    <ParamField path="left" type="number">Left margin in pixels</ParamField>
+    <ParamField path="right" type="number">Right margin in pixels</ParamField>
+  </Expandable>
+  <Note>Only applies when `layoutMode` is set to `responsive`</Note>
+
+  ```javascript
+  layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 }
+  ```
+</ParamField>
+
+<ParamField path="rulers" type="boolean" default="false">
+  Show document rulers
+</ParamField>
+
+<ParamField path="toolbar" type="string | HTMLElement">
+  DOM element for toolbar
+  <Note>Alternative to `modules.toolbar.selector`</Note>
+</ParamField>
+
+## Advanced Options
+
+<ParamField path="editorExtensions" type="Extension[]" default="[]">
+  Additional SuperDoc extensions
+</ParamField>
+
+<Note>
+  Learn how to create your own extensions
+  [here](/extensions/creating-extensions).
+</Note>
+
+<ParamField path="handleImageUpload" type="function">
+  Custom image upload handler
+  
+  ```javascript
+  handleImageUpload: async (file) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    const response = await fetch('/upload', { 
+      method: 'POST', 
+      body: formData 
+    });
+    const { url } = await response.json();
+    return url;
+  }
+  ```
+</ParamField>
+
+<ParamField path="telemetry" type="Object">
+  Telemetry configuration
+  <Expandable title="properties">
+    <ParamField path="enabled" type="boolean">
+      Enable telemetry
+    </ParamField>
+    <ParamField path="licenseKey" type="string">
+      License key
+    </ParamField>
+    <ParamField path="endpoint" type="string">
+      Telemetry endpoint
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="suppressDefaultDocxStyles" type="boolean" default="false">
+  Prevent default DOCX styles from being applied
+</ParamField>
+
+<ParamField path="disableContextMenu" type="boolean" default="false">
+  Disable custom context menus
+</ParamField>
+
+<ParamField path="cspNonce" type="string">
+  Content Security Policy nonce
+</ParamField>
+
+## Event Handlers
+
+All handlers are optional functions in the configuration:
+
+<ParamField path="onReady" type="function">
+  Called when SuperDoc is ready
+  
+  ```javascript
+  onReady: ({ superdoc }) => {
+    console.log('Ready');
+  }
+  ```
+</ParamField>
+
+<ParamField path="onEditorCreate" type="function">
+  Called when editor is created
+  
+  ```javascript
+  onEditorCreate: ({ editor }) => {
+    editor.focus();
+  }
+  ```
+</ParamField>
+
+<ParamField path="onEditorUpdate" type="function">
+  Called on content changes
+  
+  ```javascript
+  onEditorUpdate: ({ editor }) => {
+    autoSave(editor.getJSON());
+  }
+  ```
+</ParamField>
+
+See [Events](/core/superdoc/events) for complete list.

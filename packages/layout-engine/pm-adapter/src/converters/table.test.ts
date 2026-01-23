@@ -1058,6 +1058,43 @@ describe('table converter', () => {
       expect(result.attrs?.cellSpacing).toBe(5);
     });
 
+    it('forwards tableIndent to table block attrs', () => {
+      const tableIndent = { width: 96, type: 'dxa' };
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableIndent,
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Indented cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        mockStyleContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.attrs?.tableIndent).toEqual(tableIndent);
+    });
+
     it('converts column widths from twips to pixels', () => {
       const node: PMNode = {
         type: 'table',

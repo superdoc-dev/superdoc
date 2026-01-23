@@ -1,3 +1,42 @@
+## [1.8.2-next.5](https://github.com/superdoc-dev/superdoc/compare/v1.8.2-next.4...v1.8.2-next.5) (2026-01-23)
+
+
+### Bug Fixes
+
+* issue indenting list items (SD-1594) ([#1816](https://github.com/superdoc-dev/superdoc/issues/1816)) ([3f84beb](https://github.com/superdoc-dev/superdoc/commit/3f84beb06b0daa47a613fe256f625d3157b6fbc0))
+
+## [1.8.2-next.4](https://github.com/superdoc-dev/superdoc/compare/v1.8.2-next.3...v1.8.2-next.4) (2026-01-23)
+
+
+### Bug Fixes
+
+* table indent ([#1794](https://github.com/superdoc-dev/superdoc/issues/1794)) ([fb0563e](https://github.com/superdoc-dev/superdoc/commit/fb0563eab536288c51ad2d3961570dad25aa09e1))
+
+## [1.8.2-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.8.2-next.2...v1.8.2-next.3) (2026-01-23)
+
+
+### Bug Fixes
+
+* cursor delay when dragging over a document ([#1802](https://github.com/superdoc-dev/superdoc/issues/1802)) ([58691f1](https://github.com/superdoc-dev/superdoc/commit/58691f1f1573fb18ad724a78db454d33d3c3e99f))
+* preserve original document namespace declarations during export ([#1812](https://github.com/superdoc-dev/superdoc/issues/1812)) ([4a3da75](https://github.com/superdoc-dev/superdoc/commit/4a3da7572bb37aadc9373cd4438a9fbc5add88e7))
+* table background/width and marker color fixes ([#1795](https://github.com/superdoc-dev/superdoc/issues/1795)) ([50fc3ad](https://github.com/superdoc-dev/superdoc/commit/50fc3ad9f4b5d7069673cee84b21570331eca374))
+
+## [1.8.2-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.8.2-next.1...v1.8.2-next.2) (2026-01-22)
+
+
+### Bug Fixes
+
+* add double click event for annotation ([#1803](https://github.com/superdoc-dev/superdoc/issues/1803)) ([509c882](https://github.com/superdoc-dev/superdoc/commit/509c8821d4222130c68d99ef65f22aaf4796159b))
+* handling absolute paths for relationships ([#1811](https://github.com/superdoc-dev/superdoc/issues/1811)) ([8647358](https://github.com/superdoc-dev/superdoc/commit/864735874e93a8570e83372213f6d7ae96557a32))
+* header/footer double click to edit ([#1814](https://github.com/superdoc-dev/superdoc/issues/1814)) ([b4041d5](https://github.com/superdoc-dev/superdoc/commit/b4041d55773d39feba3f3bb606f3723e63495a60))
+
+## [1.8.2-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.8.1...v1.8.2-next.1) (2026-01-22)
+
+
+### Bug Fixes
+
+* simplify paragraph and table converters in pm-adapter (SD-1587) ([#1806](https://github.com/superdoc-dev/superdoc/issues/1806)) ([fa009bb](https://github.com/superdoc-dev/superdoc/commit/fa009bbab0deab9853bc9fa70c0f5ce16a3ce0e1))
+
 ## [1.8.1](https://github.com/superdoc-dev/superdoc/compare/v1.8.0...v1.8.1) (2026-01-22)
 
 

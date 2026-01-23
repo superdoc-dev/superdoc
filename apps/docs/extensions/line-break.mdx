@@ -1,0 +1,46 @@
+---
+title: LineBreak extension
+sidebarTitle: "Line Break"
+keywords: "LineBreak extension, superdoc LineBreak, word LineBreak, document LineBreak, docx LineBreak"
+---
+
+import Description from '/snippets/extensions/line-break.mdx'
+
+<Description />
+
+## Commands
+
+### `insertLineBreak`
+
+Insert a line break
+
+<Note>
+Creates a soft break within the same paragraph
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.insertLineBreak()
+```
+
+### `insertPageBreak`
+
+Insert a page break
+
+<Note>
+Forces content to start on a new page when printed
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.insertPageBreak()
+```
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/line-break/line-break.js" />

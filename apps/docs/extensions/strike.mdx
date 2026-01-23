@@ -1,0 +1,62 @@
+---
+title: Strike extension
+sidebarTitle: "Strike"
+keywords: "Strike extension, superdoc Strike, word Strike, document Strike, docx Strike"
+---
+
+import Description from '/snippets/extensions/strike.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  HTML attributes for strikethrough elements
+</ParamField>
+
+## Commands
+
+### `setStrike`
+
+Apply strikethrough formatting
+
+**Example:**
+
+```javascript
+editor.commands.setStrike()
+```
+
+### `unsetStrike`
+
+Remove strikethrough formatting
+
+**Example:**
+
+```javascript
+editor.commands.unsetStrike()
+```
+
+### `toggleStrike`
+
+Toggle strikethrough formatting
+
+**Example:**
+
+```javascript
+editor.commands.toggleStrike()
+```
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleStrike() | `⌘/Ctrl-Shift-s` | Toggle strikethrough formatting |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/strike/strike.js" />

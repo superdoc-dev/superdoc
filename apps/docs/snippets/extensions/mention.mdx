@@ -1,0 +1,37 @@
+Add @mentions to tag people in documents.
+
+Creates inline references to users with automatic formatting and data attributes.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>You can mention team members in documents. For example, @John Smith reviewed this section and @jane.doe@example.com provided feedback.</p><p>Mentions are preserved through Word import/export cycles.</p>`}
+  height="200px"
+  customButtons={[
+    [
+      {
+        label: 'Add Mention',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // In real usage, this would be from a user selection UI
+          editor.commands.insertContent({
+            type: 'mention',
+            attrs: {
+              name: 'John Doe',
+              email: 'john@example.com'
+            }
+          })
+        }
+      }
+    ]
+  ]}
+/>
+
+## Use Case
+
+- **Document reviews** - Tag reviewers and approvers
+- **Collaboration** - Notify specific team members
+- **Task assignment** - Assign sections to individuals
+- **Comments** - Direct responses to specific people
+- **Audit trails** - Track who contributed what

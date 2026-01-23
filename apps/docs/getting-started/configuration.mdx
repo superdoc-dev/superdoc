@@ -1,0 +1,155 @@
+---
+title: Configuration
+keywords: "superdoc config, document editor setup, word editor options, docx api configuration, document modes, editor roles"
+---
+
+SuperDoc needs just two things to work:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',       // Where to render
+  document: 'contract.docx'  // What to load
+})
+```
+
+## Common configurations
+
+### Basic editing
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  toolbar: '#toolbar',
+  user: {
+    name: 'John Smith',
+    email: 'john@company.com'
+  }
+})
+```
+
+### Collaboration setup
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'proposal.docx',
+  user: {
+    name: 'Jane Doe',
+    email: 'jane@company.com'
+  },
+  modules: {
+    collaboration: {
+      url: 'wss://server.com'
+    },
+    comments: {
+      allowResolve: true
+    }
+  }
+})
+```
+
+### Review workflow
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  documentMode: 'suggesting',  // Track all changes
+  modules: {
+    comments: { allowResolve: false },
+    toolbar: {
+      groups: {
+        center: ['acceptChange', 'rejectChange']
+      }
+    }
+  }
+})
+```
+
+### Read-only viewer
+
+```javascript
+new SuperDoc({
+  selector: '#viewer',
+  document: 'report.docx',
+  documentMode: 'viewing',
+  role: 'viewer',
+  toolbar: false
+})
+```
+
+### Read-only viewer with comments
+
+```javascript
+new SuperDoc({
+  selector: '#viewer',
+  document: 'report.docx',
+  documentMode: 'viewing',
+  role: 'viewer',
+  comments: { visible: true },
+  trackChanges: { visible: false }
+})
+```
+
+## Configuration concepts
+
+### Document modes vs roles
+
+**Role** = what user can do (permanent)
+**Mode** = current editing state (changeable)
+
+```javascript
+role: 'editor'              // User CAN edit
+documentMode: 'viewing'     // Currently NOT editing
+
+// Role always wins:
+role: 'viewer'              // User CANNOT edit
+documentMode: 'editing'     // Ignored - still view-only
+```
+
+### Loading documents
+
+```javascript
+// From URL
+document: '/api/docs/123.docx'
+
+// From file upload
+document: fileInput.files[0]
+
+// From blob (requires conversion)
+const blob = await fetch('/api/doc').then(r => r.blob())
+const file = new File([blob], 'document.docx', { type: blob.type })
+document: file
+
+// With metadata
+document: {
+  id: 'doc-123',
+  type: 'docx',
+  data: fileObject  // File or Blob
+}
+```
+
+### Modules
+
+Modules add features. Enable only what you need:
+
+```javascript
+modules: {
+  collaboration: { /* settings */ },  // Real-time editing
+  comments: { /* settings */ },       // Discussions
+  toolbar: { /* settings */ }         // UI controls
+}
+```
+
+<Note>
+Track Changes is controlled by `documentMode` (set to `'suggesting'`). In
+`viewing` mode, tracked changes and comments are hidden unless you set
+`trackChanges.visible` and/or `comments.visible` to `true`.
+</Note>
+
+[Learn about modules →](/modules)
+
+## Full reference
+
+[Complete configuration API →](/core/superdoc/configuration)

@@ -1,0 +1,56 @@
+Apply bold emphasis to make text stand out.
+
+The most fundamental text formatting, preserving perfectly through Word import/export.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p><br/><br/><i>"Be <strong>bold</strong> and mighty forces will come to your aid."</i><br/><br/><b>Basil King</b></p>`}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'Toggle Bold',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleBold()
+        }
+      },
+      {
+        label: 'Set Bold',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setBold()
+        }
+      },
+      {
+        label: 'Unset Bold',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetBold()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:b/>
+  </w:rPr>
+  <w:t>Bold text</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Headings** - Visual hierarchy without changing size
+- **Key terms** - Highlight important concepts
+- **Warnings** - Draw immediate attention
+- **Emphasis** - Stronger than italic

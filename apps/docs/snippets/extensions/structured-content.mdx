@@ -1,0 +1,116 @@
+Native Word SDT (w:sdt) fields for documents. Supports inline and block structured content tags for dynamic templates with full Word compatibility.
+
+## Use Case
+
+- Form templates - Create fillable documents with inline text fields and block content areas
+- Contract generation - Dynamic clauses and terms that map to Word content controls
+- Document automation - Programmatically update specific sections while preserving structure
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p><br/><br/><i>"People will forget what you said, people will forget what you did, but 
+people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</b></p>`}
+  height="300px"
+  customButtons={[
+    [
+      {
+        label: 'Insert inline field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.insertStructuredContentInline({
+            attrs: {
+             id: '1',
+             alias: 'Customer Name',
+            },
+            text: 'Enter your name',
+          });
+        }
+      },
+      {
+        label: 'Insert block field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.insertStructuredContentBlock({
+            attrs: {
+              id: '2',
+              alias: 'Terms & Conditions',
+            },
+            json: { type: 'paragraph', content: [{ type: 'text', text: 'Legal content...' }] }
+          });
+        },
+      },
+      {
+        label: 'Update inline field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.updateStructuredContentById('1', { text: 'Jane Doe' });
+        }
+      },
+      {
+        label: 'Update block field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.updateStructuredContentById('2', {
+            json: { type: 'paragraph', content: [{ type: 'text', text: 'Updated legal content...' }] }
+          });
+        }
+      },
+      {
+        label: 'Delete all fields',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          const fields = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
+          editor.commands.deleteStructuredContent(fields);
+        }
+      },
+    ]
+  ]}
+/>
+
+## Quick Start
+
+```javascript
+// Insert inline field for customer name
+editor.commands.insertStructuredContentInline({
+  attrs: {
+    id: '1',
+    alias: 'Customer Name'
+  },
+  text: 'John Doe'
+});
+
+// Insert block field for terms section
+editor.commands.insertStructuredContentBlock({
+  attrs: {
+    id: '2',
+    alias: 'Terms & Conditions'
+  },
+  html: '<p>Please review the terms...</p>'
+});
+
+// Update inline field content
+editor.commands.updateStructuredContentById('1', {
+  text: 'Jane Smith'
+});
+
+// Update block field content and attributes
+editor.commands.updateStructuredContentById('2', {
+  html: '<p>Updated terms and conditions...</p>',
+  attrs: { alias: 'Legal Terms' }
+});
+
+// Get all structured content tags
+const allTags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
+console.log(`Document contains ${allTags.length} SDT fields`);
+```

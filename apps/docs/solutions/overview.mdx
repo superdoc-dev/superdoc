@@ -1,0 +1,42 @@
+---
+title: Solutions
+sidebarTitle: Overview
+---
+
+SuperDoc Solutions are production-ready components that handle specific document workflows. They're built on SuperDoc but abstract away the complexity for common use cases.
+
+## Available Solutions
+
+### SuperDoc eSign
+Complete document signing workflows with audit trails, field management, and compliance tracking. Perfect for terms of service, employment agreements, and consent forms.
+
+[Get started with eSign →](/solutions/esign/introduction)
+
+### SuperDoc Template Builder
+Create and manage document templates with structured fields using Word's SDT system.
+
+[Get started with Template Builder →](/solutions/template-builder/introduction)
+
+
+## When to Use Solutions vs Core SuperDoc
+
+| Use Case | Recommended | Why |
+|----------|------------|-----|
+| Document signing workflow | eSign Solution | Handles audit trails and compliance automatically |
+| Custom editor with unique features | Core SuperDoc | Need full control over functionality |
+| Simple document viewer | Core SuperDoc | Solutions add unnecessary overhead |
+| Template creation system | Template Builder | SDT field management built-in |
+
+## Installation
+
+Solutions are published as separate npm packages:
+
+```bash
+# For eSign
+npm install @superdoc-dev/esign
+
+# For Template Builder
+npm install @superdoc-dev/template-builder
+```
+
+SuperDoc is a dependency and is installed automatically.

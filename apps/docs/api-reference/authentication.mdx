@@ -1,0 +1,28 @@
+---
+title: Authentication
+keywords: "superdoc auth, api authentication, bearer token, api key management, secure api access"
+---
+
+Bearer tokens. Every request needs one.
+
+```bash
+Authorization: Bearer sd_sk_abc123xyz789
+```
+
+[Get Your Key - Takes 2 minutes](/api-reference/quickstart)
+
+## Production Setup
+
+<Warning>
+Client-side JavaScript? Stop. Keys belong in environment variables.
+</Warning>
+
+```bash
+# .env
+SUPERDOC_API_KEY=sd_sk_production_key
+
+# Your backend
+const apiKey = process.env.SUPERDOC_API_KEY
+```
+
+Different keys for dev and production. Rotate quarterly.

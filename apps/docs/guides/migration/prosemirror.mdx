@@ -1,0 +1,65 @@
+---
+title: Migrate from ProseMirror to SuperDoc
+sidebarTitle: Migrate from ProseMirror
+keywords: "migrate from prosemirror, migrate from tiptap, switch to superdoc, document editor migration, upgrade guide"
+---
+
+SuperDoc is built on ProseMirror but provides a complete document editing solution rather than a framework.
+
+### Key differences
+
+| ProseMirror                         | SuperDoc                         |
+| ----------------------------------- | -------------------------------- |
+| Framework requiring extensive setup | Ready-to-use DOCX editor         |
+| Manual schema definition            | Pre-built Word-compatible schema |
+| DIY file format support             | Native DOCX import/export        |
+| Custom plugin system                | Module-based features            |
+
+### What changes
+
+```javascript
+// ProseMirror
+import { EditorState } from "prosemirror-state";
+import { EditorView } from "prosemirror-view";
+import { Schema } from "prosemirror-model";
+// ... 100+ lines of setup
+
+// SuperDoc
+import { SuperDoc } from "@harbour-enterprises/superdoc";
+const superdoc = new SuperDoc({
+  selector: "#editor",
+  document: "document.docx",
+});
+```
+
+### Accessing ProseMirror internals
+
+While SuperDoc doesn't support custom ProseMirror plugins, you can access the underlying instances:
+
+```javascript
+superdoc.on("editorCreate", ({ editor }) => {
+  const view = editor.view; // ProseMirror EditorView
+  const state = view.state; // ProseMirror EditorState
+  const schema = state.schema; // ProseMirror Schema
+});
+```
+
+### Limitations
+
+- **No custom plugins**: SuperDoc modules aren't ProseMirror plugins
+- **Fixed schema**: Can't modify the document schema
+- **Controlled commands**: Use SuperDoc's command set, not raw transactions
+
+### Custom functionality
+
+If you need features SuperDoc doesn't provide, you have limited options:
+
+- Use SuperEditor for lower-level access
+- Request features via GitHub issues
+- Consider if SuperDoc is the right fit
+
+## Need help?
+
+- [GitHub Issues](https://github.com/Harbour-Enterprises/SuperDoc/issues)
+- [Discord Community](https://discord.com/invite/b9UuaZRyaB)
+- Email: q@superdoc.dev

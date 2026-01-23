@@ -1,0 +1,40 @@
+---
+title: TableHeader extension
+sidebarTitle: "Table Header"
+keywords: "TableHeader extension, superdoc TableHeader, word TableHeader, document TableHeader, docx TableHeader"
+---
+
+import Description from '/snippets/extensions/table-header.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{'aria-label':'Table head node'}">
+  HTML attributes for table headers
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="colspan" type="number" default="1">
+  Number of columns this header spans
+</ParamField>
+
+<ParamField path="rowspan" type="number" default="1">
+  Number of rows this header spans
+</ParamField>
+
+<ParamField path="colwidth" type="Array<number>">
+  Column widths array in pixels
+</ParamField>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/table-header/table-header.js" />

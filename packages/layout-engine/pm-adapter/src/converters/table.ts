@@ -762,6 +762,10 @@ export function tableNodeToBlock({
     tableAttrs.tableWidth = hydratedTableStyle.tableWidth;
   }
 
+  if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
+    tableAttrs.tableIndent = { ...node.attrs.tableIndent };
+  }
+
   // Pass tableLayout through (extracted by tblLayout-translator.js)
   const tableLayout = node.attrs?.tableLayout;
   if (tableLayout) {

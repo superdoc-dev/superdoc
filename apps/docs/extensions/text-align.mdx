@@ -1,0 +1,86 @@
+---
+title: TextAlign extension
+sidebarTitle: "Text Align"
+keywords: "TextAlign extension, superdoc TextAlign, word TextAlign, document TextAlign, docx TextAlign"
+---
+
+import Description from '/snippets/extensions/text-align.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="types" type="Array<string>" default="['heading','paragraph']">
+  Node types to apply alignment to
+</ParamField>
+
+<ParamField path="alignments" type="Array<string>" default="['left','center','right','justify']">
+  Available alignment options
+</ParamField>
+
+<ParamField path="defaultAlignment" type="string" default="left">
+  Default text alignment
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="textAlign" type="string" default="left">
+  Text alignment value (left, center, right, justify)
+</ParamField>
+
+## Commands
+
+### `setTextAlign`
+
+Set text alignment
+
+<Note>
+Applies to all configured node types (heading, paragraph by default)
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.setTextAlign('center')
+editor.commands.setTextAlign('justify')
+```
+
+**Parameters:**
+
+<ParamField path="alignment" type="string" required>
+  Alignment value (left, center, right, justify)
+</ParamField>
+
+### `unsetTextAlign`
+
+Remove text alignment (reset to default)
+
+<Note>
+Resets alignment to the default value
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.unsetTextAlign()
+```
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| setTextAlign('left')() | `⌘/Ctrl-Shift-l` | Align text left |
+| setTextAlign('center')() | `⌘/Ctrl-Shift-e` | Align text center |
+| setTextAlign('right')() | `⌘/Ctrl-Shift-r` | Align text right |
+| setTextAlign('justify')() | `⌘/Ctrl-Shift-j` | Justify text |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/text-align/text-align.js" />

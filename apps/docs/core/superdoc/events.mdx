@@ -1,0 +1,328 @@
+---
+title: Events
+keywords: "superdoc events, document events, editor callbacks, word editor listeners, event handling"
+---
+
+SuperDoc uses an event system for lifecycle hooks and change notifications.
+
+## Event Methods
+
+### Subscribe to Events
+
+<ParamField path="event" type="string" required>
+  Event name to listen for
+</ParamField>
+
+<ParamField path="handler" type="function" required>
+  Callback function
+</ParamField>
+
+```javascript
+// Regular subscription
+superdoc.on('ready', handler);
+
+// One-time listener
+superdoc.once('ready', handler);
+
+// Unsubscribe
+superdoc.off('ready', handler);
+```
+
+## Event Categories
+
+<CardGroup cols={2}>
+  <Card title="Lifecycle" icon="rocket">
+    Initialization and teardown
+  </Card>
+  <Card title="Content" icon="file-text">
+    Document changes
+  </Card>
+  <Card title="Collaboration" icon="users">
+    Multi-user events
+  </Card>
+  <Card title="UI" icon="palette">
+    Interface changes
+  </Card>
+</CardGroup>
+
+## Lifecycle Events
+
+### `ready`
+
+Fired when SuperDoc is fully initialized.
+
+<ResponseField name="superdoc" type="SuperDoc" required>
+  SuperDoc instance
+</ResponseField>
+
+```javascript
+superdoc.on('ready', ({ superdoc }) => {
+  console.log('SuperDoc ready');
+  // Safe to use all features
+});
+```
+
+### `editorCreate`
+
+When an editor is created.
+
+<ResponseField name="editor" type="Editor" required>
+  Created editor instance
+</ResponseField>
+
+```javascript
+superdoc.on('editorCreate', ({ editor }) => {
+  console.log('Editor created');
+  editor.focus();
+});
+```
+
+### `editorDestroy`
+
+When an editor is destroyed.
+
+<Note>No parameters passed</Note>
+
+```javascript
+superdoc.on('editorDestroy', () => {
+  console.log('Editor destroyed');
+  cleanup();
+});
+```
+
+## Content Events
+
+### `editor-update`
+
+When editor content changes.
+
+<ResponseField name="editor" type="Editor" required>
+  Editor with updated content
+</ResponseField>
+
+```javascript
+superdoc.on('editor-update', ({ editor }) => {
+  const content = editor.getJSON();
+  autoSave(content);
+});
+```
+
+### `content-error`
+
+When content processing fails.
+
+<ResponseField name="error" type="Error" required>
+  Error details
+</ResponseField>
+
+<ResponseField name="editor" type="Editor">
+  Related editor instance
+</ResponseField>
+
+<ResponseField name="documentId" type="string">
+  Document identifier
+</ResponseField>
+
+<ResponseField name="file" type="File">
+  Original file
+</ResponseField>
+
+```javascript
+superdoc.on('content-error', ({ error, editor }) => {
+  console.error('Content error:', error);
+  handleError(error);
+});
+```
+
+### `fonts-resolved`
+
+When the document fonts are resolved.
+
+<ResponseField name="resolvedFonts" type="{ documentFonts: string[], unsupportedFonts: string[] }" required>
+  Object with document fonts and unsupported fonts
+</ResponseField>
+
+```javascript
+superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
+  if (unsupportedFonts.length > 0) {
+    console.warn('Some fonts in the document are not supported.', unsupportedFonts.join(', '))
+  }
+})
+```
+
+## Comments Events
+
+### `comments-update`
+
+When comments are modified.
+
+<ResponseField name="type" type="string" required>
+  Event type: 'add', 'update', 'deleted', 'resolved'
+</ResponseField>
+
+<ResponseField name="data" type="Object">
+  Comment data
+</ResponseField>
+
+```javascript
+superdoc.on('comments-update', ({ type, data }) => {
+  console.log('Comment event:', type);
+  refreshCommentsList();
+});
+```
+
+## Collaboration Events
+
+### `collaboration-ready`
+
+When collaboration is initialized.
+
+<ResponseField name="editor" type="Editor" required>
+  Editor with collaboration
+</ResponseField>
+
+```javascript
+superdoc.on('collaboration-ready', ({ editor }) => {
+  console.log('Collaboration active');
+  showOnlineUsers();
+});
+```
+
+### `awareness-update`
+
+When user presence changes.
+
+<ResponseField name="context" type="Object" required>
+  Awareness context
+</ResponseField>
+
+<ResponseField name="states" type="Map" required>
+  User states map
+</ResponseField>
+
+```javascript
+superdoc.on('awareness-update', ({ context, states }) => {
+  const users = Array.from(states.values());
+  updateUserCursors(users);
+});
+```
+
+### `locked`
+
+When document lock state changes.
+
+<ResponseField name="isLocked" type="boolean" required>
+  Lock state
+</ResponseField>
+
+<ResponseField name="lockedBy" type="User">
+  User who locked the document
+</ResponseField>
+
+```javascript
+superdoc.on('locked', ({ isLocked, lockedBy }) => {
+  if (isLocked) {
+    showLockBanner(`Locked by ${lockedBy.name}`);
+  }
+});
+```
+
+## Configuration-Based Events
+
+<Note>
+Events can also be configured during initialization
+</Note>
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'document.docx',
+  
+  // Event handlers in config
+  onReady: ({ superdoc }) => {
+    console.log('Ready from config');
+  },
+  
+  onEditorUpdate: ({ editor }) => {
+    autoSave(editor.getJSON());
+  },
+
+  onFontsResolved: ({ documentFonts, unsupportedFonts }) => {
+    console.log(`Found ${documentFonts.length} in the document`)
+  }
+});
+```
+
+## Common Patterns
+
+### Auto-save with Debouncing
+
+```javascript
+import { debounce } from 'lodash';
+
+const save = debounce(async (content) => {
+  await api.saveDocument(content);
+}, 1000);
+
+superdoc.on('editor-update', ({ editor }) => {
+  save(editor.getJSON());
+});
+```
+
+### Track Multiple Editors
+
+```javascript
+const editors = new Map();
+
+superdoc.on('editorCreate', ({ editor }) => {
+  const id = editor.options.documentId;
+  editors.set(id, editor);
+});
+
+superdoc.on('editorDestroy', () => {
+  editors.clear();
+});
+```
+
+### Clean Up Pattern
+
+```javascript
+const handlers = {
+  ready: () => console.log('Ready'),
+  update: () => console.log('Updated')
+};
+
+// Subscribe
+Object.entries(handlers).forEach(([event, handler]) => {
+  superdoc.on(event, handler);
+});
+
+// Later: Unsubscribe all
+Object.entries(handlers).forEach(([event, handler]) => {
+  superdoc.off(event, handler);
+});
+```
+
+## Event Order
+
+<Warning>
+Understanding event order helps with initialization:
+
+1. `editorBeforeCreate` - Setup phase
+2. `editorCreate` - Editor ready
+3. `ready` - All editors ready
+4. `collaboration-ready` - If enabled
+5. Runtime events
+6. `editorDestroy` - Cleanup
+</Warning>
+
+## Performance Tips
+
+<Note>
+**Best practices:**
+- Use `once()` for one-time setup
+- Debounce expensive handlers
+- Clean up with `off()` when done
+- Avoid heavy work in `awareness-update`
+- Batch updates in `editor-update`
+</Note>

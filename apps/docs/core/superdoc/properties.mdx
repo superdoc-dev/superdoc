@@ -1,0 +1,273 @@
+---
+title: Properties
+keywords: "superdoc properties, editor state, document properties, word editor attributes, api properties"
+---
+
+Properties provide read-only access to SuperDoc's internal state and subsystems.
+
+## Core Properties
+
+### `superdocId`
+
+<ResponseField name="superdocId" type="string">
+  Unique identifier for this SuperDoc instance
+  
+  ```javascript
+  console.log(superdoc.superdocId);
+  // "550e8400-e29b-41d4-a716-446655440000"
+  ```
+</ResponseField>
+
+### `version`
+
+<ResponseField name="version" type="string">
+  SuperDoc version number
+  
+  ```javascript
+  console.log(superdoc.version);
+  // "2.1.0"
+  ```
+</ResponseField>
+
+## Editor Access
+
+### `activeEditor`
+
+<ResponseField name="activeEditor" type="Editor | null">
+  Currently active editor instance
+  
+  <Warning>Always check for null before accessing</Warning>
+  
+  ```javascript
+  if (superdoc.activeEditor) {
+    // Direct ProseMirror access
+    superdoc.activeEditor.commands.toggleBold();
+    
+    // Access state
+    const { doc, selection } = superdoc.activeEditor.state;
+    
+    // Access view
+    superdoc.activeEditor.view.focus();
+  }
+  ```
+</ResponseField>
+
+## State Properties
+
+### Document State
+
+<ResponseField name="isLocked" type="boolean">
+  Whether the document is locked
+</ResponseField>
+
+<ResponseField name="lockedBy" type="User | null">
+  User who locked the document
+</ResponseField>
+
+<ResponseField name="isCollaborative" type="boolean">
+  Whether collaboration is enabled
+</ResponseField>
+
+<ResponseField name="isDev" type="boolean">
+  Whether in development mode
+</ResponseField>
+
+```javascript
+if (superdoc.isLocked) {
+  console.log(`Locked by ${superdoc.lockedBy.name}`);
+}
+
+if (superdoc.isCollaborative) {
+  showCollaboratorsList();
+}
+```
+
+## User Properties
+
+### Current User
+
+<ResponseField name="user" type="User">
+  Current user information
+  
+  <Expandable title="User properties">
+    <ResponseField name="name" type="string">
+      Display name
+    </ResponseField>
+    <ResponseField name="email" type="string">
+      Email address
+    </ResponseField>
+    <ResponseField name="image" type="string">
+      Avatar URL
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### All Users
+
+<ResponseField name="users" type="User[]">
+  All users with document access
+</ResponseField>
+
+<ResponseField name="colors" type="string[]">
+  Available colors for awareness
+</ResponseField>
+
+```javascript
+superdoc.users.forEach(user => {
+  console.log(`${user.name} (${user.email})`);
+});
+```
+
+## Subsystem Access
+
+### Toolbar
+
+<ResponseField name="toolbar" type="SuperToolbar | null">
+  Toolbar instance if configured
+  
+  ```javascript
+  if (superdoc.toolbar) {
+    superdoc.toolbar.updateToolbarState();
+  }
+  ```
+</ResponseField>
+
+### Collaboration
+
+<ResponseField name="provider" type="HocuspocusProvider | undefined">
+  Collaboration provider for the SuperDoc level
+</ResponseField>
+
+<ResponseField name="ydoc" type="Y.Doc | undefined">
+  Yjs document for collaboration
+</ResponseField>
+
+<ResponseField name="socket" type="HocuspocusProviderWebsocket | null">
+  WebSocket connection
+</ResponseField>
+
+```javascript
+if (superdoc.provider) {
+  superdoc.provider.on('synced', () => {
+    console.log('Synced with server');
+  });
+}
+```
+
+## Store Access
+
+### Document Store
+
+<ResponseField name="superdocStore" type="Object">
+  Pinia store for document management
+  
+  ```javascript
+  const documents = superdoc.superdocStore.documents;
+  documents.forEach(doc => {
+    console.log(doc.id, doc.type);
+  });
+  ```
+</ResponseField>
+
+### Comments Store
+
+<ResponseField name="commentsStore" type="Object">
+  Pinia store for comments
+  
+  ```javascript
+  const comments = superdoc.commentsStore.comments;
+  console.log(`${comments.length} comments`);
+  ```
+</ResponseField>
+
+### High Contrast Store
+
+<ResponseField name="highContrastModeStore" type="Object">
+  Store for high contrast mode state
+  
+  ```javascript
+  const isHighContrast = superdoc.highContrastModeStore.isEnabled;
+  ```
+</ResponseField>
+
+## Internal Properties
+
+<Note>
+These properties are for advanced use cases
+</Note>
+
+<ResponseField name="config" type="Object">
+  Full configuration object
+</ResponseField>
+
+<ResponseField name="app" type="Vue.App">
+  Vue application instance
+</ResponseField>
+
+<ResponseField name="pinia" type="Pinia">
+  Pinia store instance
+</ResponseField>
+
+<ResponseField name="commentsList" type="SuperComments | null">
+  Comments list component
+</ResponseField>
+
+## Property Usage
+
+<Warning>
+Properties are read-only. Use methods to modify state:
+
+```javascript
+// ❌ Don't modify directly
+superdoc.isLocked = true;
+superdoc.activeEditor = newEditor;
+
+// ✅ Use methods
+superdoc.lockSuperdoc(true);
+superdoc.setActiveEditor(newEditor);
+```
+</Warning>
+
+## Common Patterns
+
+### Check Before Access
+
+```javascript
+// Always check nullable properties
+if (superdoc.activeEditor) {
+  superdoc.activeEditor.focus();
+}
+
+if (superdoc.toolbar) {
+  superdoc.toolbar.updateState();
+}
+```
+
+### Wait for Ready
+
+<Note>Some properties only available after ready event</Note>
+
+```javascript
+superdoc.once('ready', () => {
+  // Now safe to access
+  console.log(superdoc.activeEditor);
+  console.log(superdoc.toolbar);
+});
+```
+
+### Direct Editor Access
+
+```javascript
+// Get ProseMirror state
+const getSelection = () => {
+  if (!superdoc.activeEditor) return null;
+  
+  const { from, to } = superdoc.activeEditor.state.selection;
+  return { from, to };
+};
+
+// Execute commands
+const makeBold = () => {
+  superdoc.activeEditor?.commands.toggleBold();
+};
+```

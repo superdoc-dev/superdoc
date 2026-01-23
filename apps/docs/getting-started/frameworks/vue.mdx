@@ -1,0 +1,209 @@
+---
+title: Vue Integration
+sidebarTitle: Vue
+keywords: "vue docx editor, vue word component, superdoc vue, vue document editor, vue composition api"
+---
+SuperDoc works with Vue 3.0+ using Composition API, Options API, or `<script setup>` syntax.
+
+## Install
+
+```bash
+npm install @harbour-enterprises/superdoc
+```
+
+## Basic Setup
+
+The fastest way to get a DOCX editor running in Vue:
+
+<CodeGroup>
+
+```vue Composition API
+<template>
+  <div ref="container" style="height: 700px" />
+</template>
+
+<script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import '@harbour-enterprises/superdoc/style.css';
+
+const container = ref(null);
+let superdoc = null;
+
+onMounted(() => {
+  superdoc = new SuperDoc({
+    selector: container.value,
+    document: 'contract.docx'
+  });
+});
+
+onBeforeUnmount(() => {
+  superdoc = null;
+});
+</script>
+```
+
+```vue Options API
+<template>
+  <div ref="container" style="height: 700px" />
+</template>
+
+<script>
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import '@harbour-enterprises/superdoc/style.css';
+
+export default {
+  mounted() {
+    this.superdoc = new SuperDoc({
+      selector: this.$refs.container,
+      document: 'contract.docx'
+    });
+  },
+  beforeUnmount() {
+    this.superdoc = null;
+  }
+};
+</script>
+```
+
+</CodeGroup>
+
+## Full Component
+
+Build a reusable DOCX editor component with controls:
+
+```vue
+<template>
+  <div>
+    <div class="controls">
+      <button @click="setMode('editing')">Edit</button>
+      <button @click="setMode('suggesting')">Review</button>
+      <button @click="setMode('viewing')">View</button>
+      <button @click="exportFinal">Export Final</button>
+    </div>
+    <div ref="editor" class="editor-container" />
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import '@harbour-enterprises/superdoc/style.css';
+
+const props = defineProps({
+  document: [String, File, Blob],
+  user: Object
+});
+
+const emit = defineEmits(['ready', 'update']);
+
+const editor = ref(null);
+let superdoc = null;
+
+onMounted(() => {
+  superdoc = new SuperDoc({
+    selector: editor.value,
+    document: props.document,
+    user: props.user,
+    onReady: () => emit('ready'),
+    onEditorUpdate: () => emit('update')
+  });
+});
+
+const setMode = (mode) => superdoc?.setDocumentMode(mode);
+
+const exportFinal = async () => {
+  await superdoc?.export({ isFinalDoc: true });
+};
+</script>
+
+<style scoped>
+.editor-container {
+  height: 700px;
+  border: 1px solid #e2e8f0;
+}
+.controls {
+  padding: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+</style>
+```
+
+## Handle File Uploads
+
+```vue
+<template>
+  <div>
+    <input 
+      type="file" 
+      accept=".docx"
+      @change="handleFile"
+    >
+    <DocEditor 
+      v-if="file"
+      :document="file"
+      :user="{ name: 'Vue User', email: 'user@company.com' }"
+    />
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+import DocEditor from './DocEditor.vue';
+
+const file = ref(null);
+
+const handleFile = (event) => {
+  file.value = event.target.files[0];
+};
+</script>
+```
+
+## TypeScript Support
+
+```vue
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import type { SuperDocConfig } from '@harbour-enterprises/superdoc';
+
+interface Props {
+  document: string | File | Blob;
+  userId: string;
+}
+
+const props = defineProps<Props>();
+
+const container = ref<HTMLDivElement>();
+let superdoc: SuperDoc | null = null;
+
+onMounted(() => {
+  if (!container.value) return;
+  
+  const config: SuperDocConfig = {
+    selector: container.value,
+    document: props.document,
+    user: {
+      name: props.userId,
+      email: `${props.userId}@company.com`
+    }
+  };
+  
+  superdoc = new SuperDoc(config);
+});
+
+defineExpose({
+  export: (options?: any) => superdoc?.export(options),
+  setMode: (mode: 'editing' | 'viewing' | 'suggesting') => {
+    superdoc?.setDocumentMode(mode);
+  }
+});
+</script>
+```
+
+## Next Steps
+
+- [React Integration](/getting-started/frameworks/react) - React setup  
+- [API Reference](/core/superdoc/configuration) - Configuration options
+- [Examples](https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/vue-example) - Working examples

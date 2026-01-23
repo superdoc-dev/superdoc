@@ -1,0 +1,86 @@
+---
+title: Heading extension
+sidebarTitle: "Heading"
+keywords: "Heading extension, superdoc Heading, word Heading, document Heading, docx Heading"
+---
+
+import Description from '/snippets/extensions/heading.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="levels" type="Array<number>" default="[1,2,3,4,5,6]">
+  Supported heading levels
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="level" type="number" required>
+  Heading level (1-6)
+</ParamField>
+
+## Commands
+
+### `setHeading`
+
+Set a heading with specified level
+
+<Note>
+Converts current block to heading
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.setHeading({ level: 2 })
+```
+
+**Parameters:**
+
+<ParamField path="attributes" type="HeadingAttributes" required>
+  Heading attributes including level
+</ParamField>
+
+### `toggleHeading`
+
+Toggle between heading and paragraph
+
+<Note>
+Switches between heading and paragraph for the same level
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.toggleHeading({ level: 1 })
+editor.commands.toggleHeading({ level: 3 })
+```
+
+**Parameters:**
+
+<ParamField path="attributes" type="HeadingAttributes" required>
+  Heading attributes including level
+</ParamField>
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleHeading() | `⌘/Ctrl-Alt-1` | Toggle heading level 1 |
+| toggleHeading() | `⌘/Ctrl-Alt-2` | Toggle heading level 2 |
+| toggleHeading() | `⌘/Ctrl-Alt-3` | Toggle heading level 3 |
+| toggleHeading() | `⌘/Ctrl-Alt-4` | Toggle heading level 4 |
+| toggleHeading() | `⌘/Ctrl-Alt-5` | Toggle heading level 5 |
+| toggleHeading() | `⌘/Ctrl-Alt-6` | Toggle heading level 6 |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/heading/heading.js" />

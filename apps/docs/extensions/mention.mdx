@@ -1,0 +1,36 @@
+---
+title: Mention extension
+sidebarTitle: "Mention"
+keywords: "Mention extension, superdoc Mention, word Mention, document Mention, docx Mention"
+---
+
+import Description from '/snippets/extensions/mention.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for mention elements
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="name" type="string" default="null">
+  Display name of the mentioned person
+</ParamField>
+
+<ParamField path="email" type="string" default="null">
+  Email address of the mentioned person
+</ParamField>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/mention/mention.js" />

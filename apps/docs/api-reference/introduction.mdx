@@ -1,0 +1,73 @@
+---
+title: Meet our API
+sidebarTitle: Introduction
+keywords: "superdoc api, docx api reference, word editor api, document editor sdk, api documentation"
+---
+
+Your documents are never persisted. Every API call is stateless—we process and forget. That's the point.
+
+Convert contracts to PDF. Add signatures to agreements. Merge quarterly reports. Everything preserves—tracked changes, complex tables, nested lists, headers. Real document operations via REST API.
+
+## Why Stateless Matters
+
+Enterprise documents contain sensitive data. NDAs, financial reports, legal contracts. SuperDoc's API processes them in memory and returns results immediately. No storage. No persistence. No risk.
+
+## Base URL
+```
+https://api.superdoc.dev
+```
+
+## Authentication
+
+Bearer token in every request (except `/v1/health`):
+
+```bash
+Authorization: Bearer sd_sk_abc123xyz789
+```
+
+## What's Working Now
+
+**Convert** - DOCX to PDF with perfect fidelity. That 50-page contract with tracked changes? Converts flawlessly.
+
+```bash
+POST /v1/convert?from=docx
+```
+
+**Annotate** - Programmatically populate fields in your DOCX templates. Insert text, images, signatures, and tables.
+
+```bash
+POST /v1/annotate
+```
+
+**Sign** - Add cryptographic signatures to PDFs and DOCX documents with full audit trail support.
+
+```bash
+POST /v1/sign
+```
+
+**Verify** - Validate the authenticity and integrity of signed PDFs.
+
+```bash
+POST /v1/verify
+```
+
+## What's Coming
+
+`/merge` - Combine documents with formatting intact. <br />
+
+## Built for Real Documents
+
+This isn't a wrapper around LibreOffice. We built custom document processing that handles:
+
+- Tables spanning multiple pages
+- Tracked changes from multiple reviewers  
+- Embedded images and charts
+- Complex numbered lists and cross-references
+- Headers/footers with dynamic fields
+
+Your Word documents work because we built for Word documents. Not markdown. Not HTML - Actual DOCX files.
+
+## Resources
+
+**[Status Page](https://status.superdoc.dev)** - Uptime and incidents  
+**[GitHub](https://github.com/Harbour-Enterprises/SuperDoc)** - Examples and issues

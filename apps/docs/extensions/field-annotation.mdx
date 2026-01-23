@@ -1,0 +1,1093 @@
+---
+title: Field Annotation
+description: "Interactive form fields for documents. It can be used when variable content is needed inside the document. Supports text, signature, image, checkbox, link, and HTML field types."
+---
+
+<Note>Available since v0.10.0</Note>
+
+<Warning>Field Annotation use is not recommended because of its limited support for advanced document content (e.g., tables, advanced styling). We instead recommend using the more versatile [Structured Content Fields](/extensions/structured-content).</Warning>
+
+## Configuration
+
+<ParamField path="handleDropOutside" type="boolean" default="false">
+  Handle drops outside editor viewport
+</ParamField>
+
+<ParamField path="annotationClass" type="string" default="'field-annotation'">
+  CSS class for field styling
+</ParamField>
+
+<ParamField path="defaultColor" type="string" default="'#980043'">
+  Default field background color
+</ParamField>
+
+<ParamField path="maxAnnotations" type="number" default="1000">
+  Maximum annotations per document
+</ParamField>
+
+
+
+## Usage
+
+**Basic Setup:**
+
+```javascript
+import { FieldAnnotationPlugin } from '@superdoc/field-annotation';
+
+const plugin = FieldAnnotationPlugin({
+  editor: myEditor,
+  handleDropOutside: true
+});
+```
+
+**Form Template Workflow:**
+
+```javascript
+// 1. Create form fields
+const fields = [
+  { id: 'name', label: 'Full Name', type: 'text' },
+  { id: 'date', label: 'Date', type: 'text' },
+  { id: 'signature', label: 'Sign Here', type: 'signature' }
+];
+
+// 2. Insert fields into document
+fields.forEach((field, i) => {
+  editor.commands.addFieldAnnotation(i * 100, {
+    fieldId: field.id,
+    displayLabel: field.label,
+    type: field.type
+  });
+});
+
+// 3. Handle user interactions
+editor.on('fieldAnnotationClicked', ({ node }) => {
+  openFieldEditor(node.attrs.fieldId);
+});
+
+// 4. Fill and export
+editor.annotate([
+  { input_id: 'name', input_value: 'John Doe' },
+  { input_id: 'date', input_value: '2024-01-15' }
+]);
+```
+
+## Commands
+
+### Find & Search
+
+#### `findFieldAnnotations`
+
+Find field annotations matching a predicate function
+
+<Note>Added in v0.10.3</Note>
+
+```javascript
+// Find all signature fields
+const signatureFields = findFieldAnnotations(
+  node => node.attrs.type === 'signature',
+  state
+);
+```
+
+```javascript
+// Find fields with specific color
+const redFields = findFieldAnnotations(
+  node => node.attrs.fieldColor === '#FF0000',
+  state
+);
+```
+
+**Parameters:**
+
+<ParamField path="predicate" type="function" required>
+  Function to test each annotation node
+</ParamField>
+
+<ParamField path="state" type="EditorState" required>
+  ProseMirror editor state
+</ParamField>
+
+
+
+**Returns:**
+
+<ResponseField name="result" type="Array">
+  Matching field annotations
+  <Expandable title="Object properties">
+    <ResponseField name="pos" type="number" required>
+      pos of each object
+    </ResponseField>
+    <ResponseField name="node" type="Node" required>
+      node of each object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### `findFieldAnnotationsBetween`
+
+Find all field annotations between two positions
+
+```javascript
+// Find fields in selection
+const { from, to } = state.selection;
+const selectedFields = findFieldAnnotationsBetween(from, to, state.doc);
+```
+
+```javascript
+// Find fields in specific range
+const rangeFields = findFieldAnnotationsBetween(100, 500, state.doc);
+console.log(`Found ${rangeFields.length} fields in range`);
+```
+
+**Parameters:**
+
+<ParamField path="from" type="number" required>
+  Start position
+</ParamField>
+
+<ParamField path="to" type="number" required>
+  End position
+</ParamField>
+
+<ParamField path="doc" type="Node" required>
+  ProseMirror document node
+</ParamField>
+
+
+
+**Returns:**
+
+<ResponseField name="result" type="Array">
+  Field annotations in range
+  <Expandable title="Object properties">
+    <ResponseField name="pos" type="number" required>
+      pos of each object
+    </ResponseField>
+    <ResponseField name="node" type="Node" required>
+      node of each object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### `findFieldAnnotationsByFieldId`
+
+Find field annotations by field ID(s)
+
+```javascript
+// Find single field
+const fields = findFieldAnnotationsByFieldId('field-123', state);
+```
+
+```javascript
+// Find multiple fields
+const fields = findFieldAnnotationsByFieldId(['field-1', 'field-2'], state);
+fields.forEach(({ pos, node }) => {
+  console.log(`Found ${node.attrs.fieldId} at position ${pos}`);
+});
+```
+
+**Parameters:**
+
+<ParamField path="fieldIdOrArray" type="string | Array.<string>" required>
+  Single field ID or array of field IDs
+</ParamField>
+
+<ParamField path="state" type="EditorState" required>
+  ProseMirror editor state
+</ParamField>
+
+
+
+**Returns:**
+
+<ResponseField name="result" type="Array">
+  Matching field annotations
+  <Expandable title="Object properties">
+    <ResponseField name="pos" type="number" required>
+      pos of each object
+    </ResponseField>
+    <ResponseField name="node" type="Node" required>
+      node of each object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### `findFirstFieldAnnotationByFieldId`
+
+Find the first field annotation matching a field ID
+
+<Note>Added in v0.10.2</Note>
+
+```javascript
+const firstField = findFirstFieldAnnotationByFieldId('field-123', state);
+if (firstField) {
+  console.log(`First occurrence at position ${firstField.pos}`);
+}
+```
+
+**Parameters:**
+
+<ParamField path="fieldId" type="string" required>
+  Field ID to search for
+</ParamField>
+
+<ParamField path="state" type="EditorState" required>
+  ProseMirror editor state
+</ParamField>
+
+
+
+**Returns:**
+
+<ResponseField name="result" type="Object | null">
+  First matching annotation or null
+</ResponseField>
+
+#### `findHeaderFooterAnnotationsByFieldId`
+
+Find field annotations in headers and footers by field ID or array of field IDs.
+
+<Note>Added in v0.11.2</Note>
+
+```javascript
+const headerFooterAnnotations = findHeaderFooterAnnotationsByFieldId('field-123', editor, activeSectionEditor);
+headerFooterAnnotations.forEach(({ node, pos }) => {
+  console.log(`Field ${node.attrs.fieldId} at position ${pos}`);
+});
+```
+
+**Parameters:**
+
+<ParamField path="fieldIdOrArray" type="string | Array.<string>" required>
+  The field ID or array of field IDs
+</ParamField>
+
+<ParamField path="editor" type="Editor" required>
+  The main editor instance
+</ParamField>
+
+<ParamField path="activeSectionEditor" type="Editor" required>
+  The currently active section editor
+</ParamField>
+
+
+
+**Returns:**
+
+<ResponseField name="result" type="Array">
+  Array of field annotations with their positions
+  <Expandable title="Object properties">
+    <ResponseField name="node" type="Node" required>
+      node of each object
+    </ResponseField>
+    <ResponseField name="pos" type="number" required>
+      pos of each object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### `getAllFieldAnnotations`
+
+Get all field annotations in the document
+
+```javascript
+import { getAllFieldAnnotations } from './fieldAnnotationHelpers';
+
+const annotations = getAllFieldAnnotations(editor.state);
+console.log(`Document contains ${annotations.length} field annotations`);
+
+annotations.forEach(({ pos, node }) => {
+  console.log(`Field ${node.attrs.fieldId} at position ${pos}`);
+});
+```
+
+**Parameters:**
+
+<ParamField path="state" type="EditorState" required>
+  ProseMirror editor state
+</ParamField>
+
+
+
+**Returns:**
+
+<ResponseField name="result" type="Array">
+  Array of field annotations with positions
+  <Expandable title="Object properties">
+    <ResponseField name="pos" type="number" required>
+      pos of each object
+    </ResponseField>
+    <ResponseField name="node" type="Node" required>
+      node of each object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### `getAllFieldAnnotationsWithRect`
+
+Get all field annotations with their bounding rectangles
+
+<Note>Added in v0.11.0</Note>
+
+```javascript
+const annotationsWithRects = getAllFieldAnnotationsWithRect(view, state);
+annotationsWithRects.forEach(({ node, rect }) => {
+  console.log(`Field ${node.attrs.fieldId} at ${rect.left}, ${rect.top}`);
+});
+```
+
+**Parameters:**
+
+<ParamField path="view" type="EditorView" required>
+  ProseMirror editor view
+</ParamField>
+
+<ParamField path="state" type="EditorState" required>
+  ProseMirror editor state
+</ParamField>
+
+
+
+**Returns:**
+
+<ResponseField name="result" type="Array">
+  Annotations with positions and rectangles
+  <Expandable title="Object properties">
+    <ResponseField name="pos" type="number" required>
+      pos of each object
+    </ResponseField>
+    <ResponseField name="node" type="Node" required>
+      node of each object
+    </ResponseField>
+    <ResponseField name="rect" type="DOMRect" required>
+      rect of each object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Delete & Remove
+
+#### `findRemovedFieldAnnotations`
+
+Find field annotation nodes that were removed in a transaction
+
+<Note>Added in v0.11.2</Note>
+
+```javascript
+const removedFields = findRemovedFieldAnnotations(transaction);
+removedFields.forEach(({ node, pos }) => {
+  console.log(`Field ${node.attrs.fieldId} at position ${pos}`);
+});
+```
+
+**Parameters:**
+
+<ParamField path="tr" type="Transaction" required>
+  ProseMirror transaction to analyze
+</ParamField>
+
+
+
+**Returns:**
+
+<ResponseField name="result" type="Array">
+  Array of removed field annotation nodes with their positions
+  <Expandable title="Object properties">
+    <ResponseField name="node" type="Node" required>
+      node of each object
+    </ResponseField>
+    <ResponseField name="pos" type="number" required>
+      pos of each object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### `deleteFieldAnnotations`
+
+Delete field annotations by field ID
+
+```javascript
+// Delete single field annotation
+editor.commands.deleteFieldAnnotations('field-123')
+```
+
+```javascript
+// Delete multiple field annotations
+editor.commands.deleteFieldAnnotations(['field-1', 'field-2'])
+```
+
+**Parameters:**
+
+<ParamField path="fieldIdOrArray" type="string | Array.<string>" required>
+  Field ID or array of field IDs to delete
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `deleteFieldAnnotationsByNode`
+
+Delete field annotations by node references
+
+```javascript
+const annotations = editor.helpers.fieldAnnotation.getAllFieldAnnotations();
+editor.commands.deleteFieldAnnotationsByNode(annotations.slice(0, 2));
+```
+
+**Parameters:**
+
+<ParamField path="annotations" type="Array.<{pos: number, node: Node}>" required>
+  Array of annotation objects to delete
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `deleteFieldAnnotation`
+
+Delete a single field annotation
+
+```javascript
+const annotation = editor.helpers.fieldAnnotation.findFieldAnnotationsByFieldId('field-123')[0];
+editor.commands.deleteFieldAnnotation(annotation);
+```
+
+**Parameters:**
+
+<ParamField path="annotation" type="Object" required>
+  Annotation object to delete
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `sliceFieldAnnotations`
+
+Delete a portion of annotations associated with a field
+
+```javascript
+// Remove annotations starting from index 6
+editor.commands.sliceFieldAnnotations('field-123', 5)
+```
+
+```javascript
+// Remove from multiple fields
+editor.commands.sliceFieldAnnotations(['field-1', 'field-2'], 5)
+```
+
+**Parameters:**
+
+<ParamField path="fieldIdOrArray" type="string | Array.<string>" required>
+  The field ID or array of field IDs
+</ParamField>
+
+<ParamField path="end" type="number" required>
+  Index at which to end extraction
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+### Create & Add
+
+#### `addFieldAnnotation`
+
+Add field annotation at specified position
+
+```javascript
+editor.commands.addFieldAnnotation(10, {
+  fieldId: 'field-123',
+  displayLabel: 'Enter your name',
+  fieldType: 'TEXTINPUT',
+  fieldColor: '#980043'
+})
+```
+
+**Parameters:**
+
+<ParamField path="pos" type="number" required>
+  Document position to insert annotation
+</ParamField>
+
+<ParamField path="attrs" type="Object" required>
+  Field annotation attributes
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="fieldId" type="string" required>
+      Unique field identifier
+    </ParamField>
+    <ParamField path="displayLabel" type="string" required>
+      Text to display in annotation
+    </ParamField>
+    <ParamField path="fieldType" type="string">
+      Type of field (TEXTINPUT, CHECKBOX, etc.)
+    </ParamField>
+    <ParamField path="fieldColor" type="string">
+      Background color for annotation
+    </ParamField>
+    <ParamField path="type" type="string" default="'text'">
+      Annotation type (text, image, signature, etc.)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="editorFocus" type="boolean">
+  Whether to focus editor after insertion
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `addFieldAnnotationAtSelection`
+
+Add field annotation at current selection position
+
+```javascript
+editor.commands.addFieldAnnotationAtSelection({
+  fieldId: 'field-456',
+  displayLabel: 'Signature here'
+}, true)
+```
+
+**Parameters:**
+
+<ParamField path="attrs" type="Object" default="{}">
+  Field annotation attributes
+</ParamField>
+
+<ParamField path="editorFocus" type="boolean">
+  Whether to focus editor after insertion
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+### Update & Edit
+
+#### `replaceWithFieldAnnotation`
+
+Replace text ranges with field annotations
+
+```javascript
+editor.commands.replaceWithFieldAnnotation([{
+  from: 20,
+  to: 45,
+  attrs: {
+    fieldId: 'field-789',
+    fieldType: 'TEXTINPUT',
+    fieldColor: '#980043'
+  }
+}])
+```
+
+**Parameters:**
+
+<ParamField path="fieldsArray" type="Array.<Object>" required>
+  Array of field replacement objects
+</ParamField>
+
+<ParamField path="fieldsArray[]" type="object" required>
+  Options object
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="from" type="number" required>
+      Start position
+    </ParamField>
+    <ParamField path="to" type="number" required>
+      End position
+    </ParamField>
+    <ParamField path="attrs" type="Object" required>
+      Field annotation attributes
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `replaceFieldAnnotationsWithLabelInSelection`
+
+Replace field annotations with text labels in current selection
+
+<Note>Added in v0.11.0</Note>
+
+```javascript
+// Replace all annotations in selection with their labels
+editor.commands.replaceFieldAnnotationsWithLabelInSelection()
+```
+
+**Parameters:**
+
+<ParamField path="options" type="Object" default="{}">
+  Additional options
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `replaceFieldAnnotationsWithLabel`
+
+Replace field annotations with text labels
+
+<Note>Added in v0.11.0</Note>
+
+```javascript
+// Replace specific fields with labels
+editor.commands.replaceFieldAnnotationsWithLabel(['field-1', 'field-2'])
+```
+
+```javascript
+// Replace only text annotations in selection
+editor.commands.replaceFieldAnnotationsWithLabel(null, {
+  isInSelection: true,
+  types: ['text']
+})
+```
+
+**Parameters:**
+
+<ParamField path="fieldIdOrArray" type="string | Array.<string>" required>
+  Field ID(s) to replace
+</ParamField>
+
+<ParamField path="options" type="Object" default="{}">
+  Replace options
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="isInSelection" type="boolean">
+      Replace only in selection
+    </ParamField>
+    <ParamField path="addToHistory" type="boolean">
+      Add operation to undo history
+    </ParamField>
+    <ParamField path="types" type="Array.<string>">
+      Annotation types to replace
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `resetFieldAnnotations`
+
+Reset all field annotations to their default values
+
+```javascript
+// Reset all annotations in document
+editor.commands.resetFieldAnnotations()
+```
+
+**Returns:** `boolean` Command success status
+
+#### `updateFieldAnnotations`
+
+Update field annotations by field ID
+
+```javascript
+// Update single field
+editor.commands.updateFieldAnnotations('field-123', {
+  displayLabel: 'Updated label',
+  fieldColor: '#FF0000'
+})
+```
+
+```javascript
+// Update multiple fields
+editor.commands.updateFieldAnnotations(['field-1', 'field-2'], {
+  hidden: true
+})
+```
+
+**Parameters:**
+
+<ParamField path="fieldIdOrArray" type="string | Array.<string>" required>
+  Field ID or array of field IDs
+</ParamField>
+
+<ParamField path="attrs" type="Object" default="{}">
+  Attributes to update
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="displayLabel" type="string">
+      New display label
+    </ParamField>
+    <ParamField path="fieldColor" type="string">
+      New field color
+    </ParamField>
+    <ParamField path="hidden" type="boolean">
+      Hide/show annotation
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `updateFieldAnnotation`
+
+Update a specific field annotation instance
+
+```javascript
+// Update specific annotation instance
+const annotation = editor.helpers.fieldAnnotation.findFirstFieldAnnotationByFieldId('field-123', state);
+editor.commands.updateFieldAnnotation(annotation, {
+  displayLabel: 'New label'
+})
+```
+
+**Parameters:**
+
+<ParamField path="annotation" type="Object" required>
+  Annotation object with pos and node
+</ParamField>
+
+<ParamField path="attrs" type="Object" default="{}">
+  Attributes to update
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `updateFieldAnnotationsAttributes`
+
+Update the attributes of annotations
+
+```javascript
+const annotations = editor.helpers.fieldAnnotation.getAllFieldAnnotations();
+editor.commands.updateFieldAnnotationsAttributes(annotations, {
+  fieldColor: '#FF0000',
+  hidden: false
+});
+```
+
+**Parameters:**
+
+<ParamField path="annotations" type="Array.<{pos: number, node: Node}>" required>
+  Array of annotations to update
+</ParamField>
+
+<ParamField path="attrs" type="object" default="{}">
+  Attributes to update
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `setFieldAnnotationsHiddenByCondition`
+
+Hide field annotations based on a condition
+
+```javascript
+// Hide specific field IDs
+editor.commands.setFieldAnnotationsHiddenByCondition(node => {
+  const targetIds = ['field-1', 'field-2', 'field-3'];
+  return targetIds.includes(node.attrs.fieldId);
+})
+```
+
+```javascript
+// Hide signature fields and show others
+editor.commands.setFieldAnnotationsHiddenByCondition(
+  node => node.attrs.type === 'signature',
+  true
+)
+```
+
+**Parameters:**
+
+<ParamField path="predicate" type="function">
+  Function to test each annotation
+</ParamField>
+
+<ParamField path="unsetFromOthers" type="boolean">
+  Whether to show non-matching annotations
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `unsetFieldAnnotationsHidden`
+
+Show all hidden field annotations
+
+```javascript
+// Make all annotations visible
+editor.commands.unsetFieldAnnotationsHidden()
+```
+
+**Returns:** `boolean` Command success status
+
+#### `setFieldAnnotationsVisibility`
+
+Set visibility for all field annotations
+
+```javascript
+// Make all annotations visible
+editor.commands.setFieldAnnotationsVisibility('visible')
+```
+
+```javascript
+// Hide all annotations (preserves layout)
+editor.commands.setFieldAnnotationsVisibility('hidden')
+```
+
+**Parameters:**
+
+<ParamField path="visibility" type="string" default="'visible'">
+  Visibility value ('visible' or 'hidden')
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `setFieldAnnotationsHighlighted`
+
+Set highlighted status for annotations matching predicate
+
+```javascript
+// Highlight specific field IDs
+editor.commands.setFieldAnnotationsHighlighted((node) => {
+  const targetIds = ['field-1', 'field-2', 'field-3'];
+  return targetIds.includes(node.attrs.fieldId);
+}, true)
+```
+
+```javascript
+// Remove highlighting from all annotations
+editor.commands.setFieldAnnotationsHighlighted(() => true, false)
+```
+
+**Parameters:**
+
+<ParamField path="predicate" type="function">
+  Function to test each annotation node
+</ParamField>
+
+<ParamField path="highlighted" type="boolean" default="true">
+  Whether to highlight matching annotations
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `toggleFieldAnnotationsFormat`
+
+Toggle formatting for field annotations in selection
+
+```javascript
+// Toggle bold formatting on selected annotations
+editor.commands.toggleFieldAnnotationsFormat('bold');
+```
+
+```javascript
+// Toggle italic and update selection
+editor.commands.toggleFieldAnnotationsFormat('italic', true);
+```
+
+**Parameters:**
+
+<ParamField path="name" type="string" required>
+  Format name (bold, italic, underline)
+</ParamField>
+
+<ParamField path="setSelection" type="boolean">
+  Whether to set selection after toggle
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `setFieldAnnotationsFontFamily`
+
+Set font family for field annotations in current selection
+
+```javascript
+editor.commands.setFieldAnnotationsFontFamily('Arial', true)
+```
+
+**Parameters:**
+
+<ParamField path="fontFamily" type="string" required>
+  Font family name to apply
+</ParamField>
+
+<ParamField path="setSelection" type="boolean">
+  Whether to set node selection after update
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `setFieldAnnotationsFontSize`
+
+Set font size for field annotations in current selection
+
+```javascript
+editor.commands.setFieldAnnotationsFontSize('14pt')
+```
+
+**Parameters:**
+
+<ParamField path="fontSize" type="string" required>
+  Font size value (e.g., '12pt', '14px')
+</ParamField>
+
+<ParamField path="setSelection" type="boolean">
+  Whether to set node selection after update
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `setFieldAnnotationsTextHighlight`
+
+Set text highlight color for field annotations in current selection
+
+```javascript
+editor.commands.setFieldAnnotationsTextHighlight('#ffff00')
+```
+
+**Parameters:**
+
+<ParamField path="color" type="string" required>
+  Highlight color value (e.g., '#ffff00', 'yellow')
+</ParamField>
+
+<ParamField path="setSelection" type="boolean">
+  Whether to set node selection after update
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+#### `setFieldAnnotationsTextColor`
+
+Set text color for field annotations in current selection
+
+```javascript
+editor.commands.setFieldAnnotationsTextColor('#0066cc')
+```
+
+**Parameters:**
+
+<ParamField path="color" type="string" required>
+  Text color value (e.g., '#000000', 'black')
+</ParamField>
+
+<ParamField path="setSelection" type="boolean">
+  Whether to set node selection after update
+</ParamField>
+
+
+
+**Returns:** `boolean` Command success status
+
+## Helpers
+
+#### `transactionDeletedAnything`
+
+Check if a transaction contains any deletion operations
+
+**Parameters:**
+
+<ParamField path="tr" type="Transaction" required>
+  ProseMirror transaction to check
+</ParamField>
+
+
+
+**Returns:** `boolean` True if transaction contains deletions
+
+#### `trackFieldAnnotationsDeletion`
+
+Track field annotation deletions in a transaction and emit events
+
+<Note>Added in v0.11.2</Note>
+
+```javascript
+// Listen for field deletions
+editor.on('fieldAnnotationDeleted', ({ removedNodes }) => {
+  removedNodes.forEach(({ node }) => {
+    console.log(`Field ${node.attrs.fieldId} was deleted`);
+    // Clean up external references
+    removeFieldFromDatabase(node.attrs.fieldId);
+  });
+});
+```
+
+**Parameters:**
+
+<ParamField path="editor" type="Editor" required>
+  SuperDoc editor instance
+</ParamField>
+
+<ParamField path="tr" type="Transaction" required>
+  ProseMirror transaction
+</ParamField>
+
+
+
+**Returns:** `void` 
+
+#### `handleDropOutside`
+
+Handle field annotation drops outside editor boundaries
+
+**Parameters:**
+
+<ParamField path="params" type="object" required>
+  Drop handling parameters
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="fieldAnnotation" type="string" required>
+      Serialized field data
+    </ParamField>
+    <ParamField path="editor" type="object" required>
+      SuperDoc editor instance
+    </ParamField>
+    <ParamField path="view" type="object" required>
+      ProseMirror editor view
+    </ParamField>
+    <ParamField path="event" type="object" required>
+      Browser drag event
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+
+
+## Events
+
+#### `fieldAnnotationClicked`
+
+Field annotation clicked event
+
+**Event Data:**
+
+
+- `node` (Node) - The clicked annotation node
+- `nodePos` (number) - Position of the node in the document
+
+#### `fieldAnnotationDropped`
+
+Field annotation dropped event
+
+**Event Data:**
+
+
+- `sourceField` (object) - The dropped field attributes

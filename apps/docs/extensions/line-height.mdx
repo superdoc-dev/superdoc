@@ -1,0 +1,84 @@
+---
+title: LineHeight extension
+sidebarTitle: "Line Height"
+keywords: "LineHeight extension, superdoc LineHeight, word LineHeight, document LineHeight, docx LineHeight"
+---
+
+import Description from '/snippets/extensions/line-height.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="types" type="Array<string>" default="['heading','paragraph']">
+  Block types to add line height support to
+</ParamField>
+
+<ParamField path="defaults" type="Object">
+  Default configuration
+</ParamField>
+
+<ParamField path="defaults.unit" type="string">
+  Default unit for line height values
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="lineHeight" type="LineHeightValue">
+  Line height value
+</ParamField>
+
+## Commands
+
+### `setLineHeight`
+
+Set line height for blocks
+
+<Note>
+Applies to paragraphs and headings
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.setLineHeight(1.5)
+editor.commands.setLineHeight('24px')
+editor.commands.setLineHeight(2)
+```
+
+**Parameters:**
+
+<ParamField path="lineHeight" type="LineHeightValue" required>
+  Line height to apply
+</ParamField>
+
+### `unsetLineHeight`
+
+Remove line height
+
+<Note>
+Reverts to default line spacing
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.unsetLineHeight()
+```
+
+## Types
+
+### `LineHeightValue`
+
+Line height as number (1.5) or string with unit ('1.5em', '24px')
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/line-height/line-height.js" />

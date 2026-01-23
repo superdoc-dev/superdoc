@@ -592,6 +592,7 @@ describe('DomPainter hanging indent with tabs', () => {
                 pmStart: 0,
                 pmEnd: 14,
                 markerWidth: 24,
+                markerTextWidth: 12,
               },
             ],
           },
@@ -612,7 +613,7 @@ describe('DomPainter hanging indent with tabs', () => {
       expect(marker?.textContent).toBe('1.');
     });
 
-    it('should use LIST_MARKER_GAP for tab width in firstLine mode', () => {
+    it('uses default tab interval for tab width in firstLine mode', () => {
       const blockId = 'firstline-mode-tab-gap';
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -694,7 +695,7 @@ describe('DomPainter hanging indent with tabs', () => {
       // Tab element should exist and have width equal to LIST_MARKER_GAP (8px)
       const tabEl = lineEl.querySelector('.superdoc-tab') as HTMLElement;
       expect(tabEl).toBeTruthy();
-      expect(tabEl.style.width).toBe('8px');
+      expect(tabEl.style.width).toBe('10px');
     });
 
     it('should position right-justified marker correctly in firstLine mode', () => {
@@ -760,6 +761,7 @@ describe('DomPainter hanging indent with tabs', () => {
                 pmStart: 0,
                 pmEnd: 9,
                 markerWidth: 30,
+                markerTextWidth: 20,
               },
             ],
           },
@@ -781,8 +783,8 @@ describe('DomPainter hanging indent with tabs', () => {
       // For right-justified markers, container should be absolutely positioned
       expect(markerContainer.style.position).toBe('absolute');
 
-      // Marker left position should be: markerStartPos (600) - markerWidth (30) = 570px
-      expect(markerContainer.style.left).toBe('570px');
+      // Marker left position should be: markerStartPos (600) - markerTextWidth (20) = 580px
+      expect(markerContainer.style.left).toBe('580px');
     });
 
     it('should handle firstLineIndentMode with zero left indent', () => {
@@ -848,6 +850,7 @@ describe('DomPainter hanging indent with tabs', () => {
                 pmStart: 0,
                 pmEnd: 4,
                 markerWidth: 20,
+                markerTextWidth: 12,
               },
             ],
           },
@@ -934,6 +937,7 @@ describe('DomPainter hanging indent with tabs', () => {
                 pmStart: 0,
                 pmEnd: 18,
                 markerWidth: 24, // Indicates list item
+                markerTextWidth: 12,
               },
             ],
           },
@@ -981,7 +985,7 @@ describe('DomPainter hanging indent with tabs', () => {
   });
 
   describe('FirstLineIndentMode with firstLine=0 style override', () => {
-    it('should use markerX for positioning when firstLine=0 cancels numbering level indent', () => {
+    it('uses left + firstLine when firstLine=0 even if markerX is provided', () => {
       const blockId = 'firstline-zero-override';
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -1059,8 +1063,8 @@ describe('DomPainter hanging indent with tabs', () => {
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
       expect(lineEl).toBeTruthy();
 
-      // paddingLeft should use markerX (720) from word-layout, not left + firstLine (360 + 0 = 360)
-      expect(lineEl.style.paddingLeft).toBe('720px');
+      // paddingLeft uses left + firstLine (markerX is not used in renderer)
+      expect(lineEl.style.paddingLeft).toBe('360px');
 
       const marker = lineEl.querySelector('.superdoc-paragraph-marker');
       expect(marker).toBeTruthy();
@@ -1131,6 +1135,7 @@ describe('DomPainter hanging indent with tabs', () => {
                 pmStart: 0,
                 pmEnd: 9,
                 markerWidth: 20,
+                markerTextWidth: 16,
               },
             ],
           },
@@ -1236,7 +1241,7 @@ describe('DomPainter hanging indent with tabs', () => {
       expect(tabEl.style.width).toBe('180px');
     });
 
-    it('should use textStartX when no explicit tab stops are past current position', () => {
+    it('uses default tab interval when no explicit tab stops are past current position', () => {
       const blockId = 'use-textstartx';
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -1316,16 +1321,16 @@ describe('DomPainter hanging indent with tabs', () => {
       expect(lineEl).toBeTruthy();
 
       // currentPos = markerStartPos (600) + markerTextWidth (20) = 620
-      // No tab stops past 620, so use textStartX (720)
-      // tabWidth should be 720 - 620 = 100
+      // No tab stops past 620, so advance to next default tab interval (48px)
+      // next tab: 48 - (620 % 48) = 4
       const tabEl = lineEl.querySelector('.superdoc-tab') as HTMLElement;
       expect(tabEl).toBeTruthy();
-      expect(tabEl.style.width).toBe('100px');
+      expect(tabEl.style.width).toBe('4px');
     });
   });
 
-  describe('TextStartX fallback to LIST_MARKER_GAP', () => {
-    it('should use LIST_MARKER_GAP when textStartX is behind current position', () => {
+  describe('TextStartX fallback to default tab interval', () => {
+    it('uses default tab interval when textStartX is behind current position', () => {
       const blockId = 'textstartx-behind';
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -1404,13 +1409,13 @@ describe('DomPainter hanging indent with tabs', () => {
       expect(lineEl).toBeTruthy();
 
       // currentPos = markerStartPos (600) + markerTextWidth (140) = 740
-      // textStartX (620) is behind currentPos (740), so should fall back to LIST_MARKER_GAP (8)
+      // textStartX (620) is behind currentPos (740), so advance to next default tab interval
       const tabEl = lineEl.querySelector('.superdoc-tab') as HTMLElement;
       expect(tabEl).toBeTruthy();
-      expect(tabEl.style.width).toBe('8px');
+      expect(tabEl.style.width).toBe('28px');
     });
 
-    it('should use LIST_MARKER_GAP when textStartX is undefined', () => {
+    it('uses default tab interval when textStartX is undefined', () => {
       const blockId = 'no-textstartx';
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -1489,10 +1494,10 @@ describe('DomPainter hanging indent with tabs', () => {
       const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
       expect(lineEl).toBeTruthy();
 
-      // No textStartX or textStartPx, so should use LIST_MARKER_GAP (8)
+      // No textStartX or textStartPx, so advance to next default tab interval
       const tabEl = lineEl.querySelector('.superdoc-tab') as HTMLElement;
       expect(tabEl).toBeTruthy();
-      expect(tabEl.style.width).toBe('8px');
+      expect(tabEl.style.width).toBe('4px');
     });
   });
 

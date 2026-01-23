@@ -149,14 +149,10 @@ describe('toc', () => {
       styles: new Map(),
       numbering: new Map(),
     };
-    const mockListCounterContext = {
-      getListCounter: vi.fn(),
-      incrementListCounter: vi.fn(),
-      resetListCounter: vi.fn(),
-    };
     const mockHyperlinkConfig = {
       mode: 'preserve' as const,
     };
+    const mockConverterContext = { docx: {} } as never;
 
     it('processes direct paragraph children', () => {
       const children: PMNode[] = [
@@ -173,12 +169,12 @@ describe('toc', () => {
       const blocks: FlowBlock[] = [];
       const recordBlockKind = vi.fn();
 
-      const mockParagraphConverter = vi.fn((para) => {
+      const mockParagraphConverter = vi.fn((params) => {
         return [
           {
             kind: 'paragraph',
-            id: `p-${para.content[0].text}`,
-            runs: [{ text: para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
+            id: `p-${params.para.content[0].text}`,
+            runs: [{ text: params.para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
           },
         ];
       });
@@ -197,11 +193,12 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: true,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
+          converterContext: mockConverterContext,
         },
         { blocks, recordBlockKind },
-        mockParagraphConverter as never,
       );
 
       expect(blocks).toHaveLength(2);
@@ -229,12 +226,12 @@ describe('toc', () => {
       const blocks: FlowBlock[] = [];
       const recordBlockKind = vi.fn();
 
-      const mockParagraphConverter = vi.fn((para) => {
+      const mockParagraphConverter = vi.fn((params) => {
         return [
           {
             kind: 'paragraph',
-            id: `p-${para.content[0].text}`,
-            runs: [{ text: para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
+            id: `p-${params.para.content[0].text}`,
+            runs: [{ text: params.para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
           },
         ];
       });
@@ -253,11 +250,12 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: true,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
+          converterContext: mockConverterContext,
         },
         { blocks, recordBlockKind },
-        mockParagraphConverter as never,
       );
 
       expect(blocks).toHaveLength(1);
@@ -283,12 +281,12 @@ describe('toc', () => {
       const blocks: FlowBlock[] = [];
       const recordBlockKind = vi.fn();
 
-      const mockParagraphConverter = vi.fn((para) => {
+      const mockParagraphConverter = vi.fn((params) => {
         return [
           {
             kind: 'paragraph',
-            id: `p-${para.content[0].text}`,
-            runs: [{ text: para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
+            id: `p-${params.para.content[0].text}`,
+            runs: [{ text: params.para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
           },
         ];
       });
@@ -307,11 +305,12 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: true,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
+          converterContext: mockConverterContext,
         },
         { blocks, recordBlockKind },
-        mockParagraphConverter as never,
       );
 
       expect(blocks).toHaveLength(1);
@@ -336,12 +335,12 @@ describe('toc', () => {
         uniqueId: 'toc-123',
       };
 
-      const mockParagraphConverter = vi.fn((para) => {
+      const mockParagraphConverter = vi.fn((params) => {
         return [
           {
             kind: 'paragraph',
-            id: `p-${para.content[0].text}`,
-            runs: [{ text: para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
+            id: `p-${params.para.content[0].text}`,
+            runs: [{ text: params.para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
           },
         ];
       });
@@ -359,11 +358,12 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: true,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
+          converterContext: mockConverterContext,
         },
         { blocks, recordBlockKind },
-        mockParagraphConverter as never,
       );
 
       expect(blocks).toHaveLength(1);
@@ -394,12 +394,12 @@ describe('toc', () => {
       const blocks: FlowBlock[] = [];
       const recordBlockKind = vi.fn();
 
-      const mockParagraphConverter = vi.fn((para) => {
+      const mockParagraphConverter = vi.fn((params) => {
         return [
           {
             kind: 'paragraph',
-            id: `p-${para.content[0].text}`,
-            runs: [{ text: para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
+            id: `p-${params.para.content[0].text}`,
+            runs: [{ text: params.para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
           },
         ];
       });
@@ -416,11 +416,12 @@ describe('toc', () => {
           defaultFont: 'Arial',
           defaultSize: 12,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: true,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
+          converterContext: mockConverterContext,
         },
         { blocks, recordBlockKind },
-        mockParagraphConverter as never,
       );
 
       expect(blocks).toHaveLength(3);
@@ -442,7 +443,7 @@ describe('toc', () => {
       const mockBookmarks = new Map([['bookmark1', 42]]);
       const mockTrackedChanges = { enabled: true };
 
-      const mockParagraphConverter = vi.fn((_para) => {
+      const mockParagraphConverter = vi.fn((_params) => {
         return [
           {
             kind: 'paragraph',
@@ -464,26 +465,30 @@ describe('toc', () => {
           defaultFont: 'Calibri',
           defaultSize: 14,
           styleContext: mockStyleContext,
-          listCounterContext: mockListCounterContext,
           bookmarks: mockBookmarks,
-          trackedChanges: mockTrackedChanges,
+          trackedChangesConfig: mockTrackedChanges,
           hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: false,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
+          converterContext: mockConverterContext,
         },
         { blocks, recordBlockKind },
-        mockParagraphConverter as never,
       );
 
       expect(mockParagraphConverter).toHaveBeenCalledWith(
-        children[0],
-        mockBlockIdGenerator,
-        mockPositionMap,
-        'Calibri',
-        14,
-        mockStyleContext,
-        mockListCounterContext,
-        mockTrackedChanges,
-        mockBookmarks,
-        mockHyperlinkConfig,
+        expect.objectContaining({
+          para: children[0],
+          nextBlockId: mockBlockIdGenerator,
+          positions: mockPositionMap,
+          defaultFont: 'Calibri',
+          defaultSize: 14,
+          styleContext: mockStyleContext,
+          trackedChangesConfig: mockTrackedChanges,
+          bookmarks: mockBookmarks,
+          hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: false,
+          converterContext: mockConverterContext,
+        }),
       );
     });
   });

@@ -16,7 +16,7 @@ import type { PMNode, FlowBlock, SectionBreakBlock } from '@superdoc/contracts';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { measureBlock } from '@superdoc/measuring-dom';
-import { resetBlockIdCounter, PAGE_SIZES } from './test-helpers/section-test-utils.js';
+import { DEFAULT_CONVERTER_CONTEXT, resetBlockIdCounter, PAGE_SIZES } from './test-helpers/section-test-utils.js';
 
 /**
  * Header/footer ref types for testing.
@@ -233,7 +233,7 @@ function createPMDocWithSectionRefs(
  * Convert PM doc to flow blocks with section breaks enabled.
  */
 function pmToFlowBlocks(pmDoc: PMNode): { blocks: FlowBlock[]; bookmarks: Map<string, number> } {
-  return toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+  return toFlowBlocks(pmDoc, { emitSectionBreaks: true, converterContext: DEFAULT_CONVERTER_CONTEXT });
 }
 
 /**

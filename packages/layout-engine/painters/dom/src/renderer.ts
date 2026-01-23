@@ -382,7 +382,8 @@ const DEFAULT_PAGE_HEIGHT_PX = 1056;
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
 const COMMENT_EXTERNAL_COLOR = '#B1124B';
 const COMMENT_INTERNAL_COLOR = '#078383';
-const COMMENT_INACTIVE_ALPHA = '22';
+const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
+const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
 
 type LinkRenderData = {
   href?: string;
@@ -820,6 +821,8 @@ export class DomPainter {
   private onScrollHandler: ((e: Event) => void) | null = null;
   private onWindowScrollHandler: ((e: Event) => void) | null = null;
   private onResizeHandler: ((e: Event) => void) | null = null;
+  /** The currently active/selected comment ID for highlighting */
+  private activeCommentId: string | null = null;
 
   constructor(blocks: FlowBlock[], measures: Measure[], options: PainterOptions = {}) {
     this.options = options;
@@ -870,6 +873,37 @@ export class DomPainter {
     if (this.virtualEnabled && this.mount) {
       this.updateVirtualWindow();
     }
+  }
+
+  /**
+   * Sets the active comment ID for highlighting.
+   * When set, only the active comment's range is highlighted.
+   * When null, all comments show depth-based highlighting.
+   */
+  public setActiveComment(commentId: string | null): void {
+    if (this.activeCommentId !== commentId) {
+      this.activeCommentId = commentId;
+      // Force re-render of all pages by incrementing layout version
+      // This bypasses the virtualization cache check
+      this.layoutVersion += 1;
+      // Clear page states to force full re-render (activeCommentId affects run rendering)
+      // For virtualized mode: remove existing page elements before clearing state
+      // to prevent duplicate pages in the DOM
+      for (const state of this.pageIndexToState.values()) {
+        state.element.remove();
+      }
+      this.pageIndexToState.clear();
+      this.virtualMountedKey = '';
+      // For non-virtualized mode:
+      this.pageStates = [];
+    }
+  }
+
+  /**
+   * Gets the currently active comment ID.
+   */
+  public getActiveComment(): string | null {
+    return this.activeCommentId;
   }
 
   /**
@@ -1968,7 +2002,7 @@ export class DomPainter {
       // Otherwise, fall back to slicing from the original measure.
       const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
 
-      applyParagraphBlockStyles(fragmentEl, block.attrs, { includeBorders: false, includeShading: false });
+      applyParagraphBlockStyles(fragmentEl, block.attrs);
       const { shadingLayer, borderLayer } = createParagraphDecorationLayers(this.doc, fragment.width, block.attrs);
       if (shadingLayer) {
         fragmentEl.appendChild(shadingLayer);
@@ -2005,7 +2039,7 @@ export class DomPainter {
       const paraIndent = block.attrs?.indent;
       const paraIndentLeft = paraIndent?.left ?? 0;
       const paraIndentRight = paraIndent?.right ?? 0;
-      // Word quirk: justified paragraphs ignore first-line indent. The pm-adapter sets
+      // Word quirk: justified paragraphs ignore first-line indent. The pm-adapter sets // => This is not true
       // suppressFirstLineIndent=true for these cases.
       const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
       const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
@@ -2021,86 +2055,40 @@ export class DomPainter {
       // The measurer uses textStartPx to calculate line.maxWidth, but the painter renders
       // marker+tab as inline elements that may consume MORE space than textStartPx indicates.
       // This causes justify overflow when line.maxWidth > (fragment.width - actualMarkerTabWidth).
-      let listFirstLineMarkerTabWidth: number | undefined;
+      let listFirstLineMarkerTabEndPx: number | null = null;
+      let listTabWidth = 0;
+      let markerStartPos: number;
       if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
-        // IMPORTANT: Use the same markerTextWidth source as the marker rendering section (lines ~1997-2000)
-        // to ensure the pre-calculated width matches the actual rendered width.
-        const markerBoxWidth = fragment.markerWidth;
-        const markerTextWidth =
-          fragment.markerTextWidth != null && isFinite(fragment.markerTextWidth) && fragment.markerTextWidth >= 0
-            ? fragment.markerTextWidth
-            : markerBoxWidth;
+        const markerTextWidth = fragment.markerTextWidth!;
+        const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
+        const markerJustification = wordLayout.marker.justification ?? 'left';
+        let currentPos: number;
+        if (markerJustification === 'left') {
+          markerStartPos = anchorPoint;
+          currentPos = markerStartPos + markerTextWidth;
+        } else if (markerJustification === 'right') {
+          markerStartPos = anchorPoint - markerTextWidth;
+          currentPos = anchorPoint;
+        } else {
+          markerStartPos = anchorPoint - markerTextWidth / 2;
+          currentPos = markerStartPos + markerTextWidth;
+        }
 
         // Calculate tab width using same logic as marker rendering section
         const suffix = wordLayout.marker.suffix ?? 'tab';
         if (suffix === 'tab') {
-          const markerJustification = wordLayout.marker.justification ?? 'left';
-          const isFirstLineIndentMode = wordLayout.firstLineIndentMode === true;
-
-          // IMPORTANT: Must match the render section's logic (lines ~2009-2023).
-          // markerX is ONLY used when isFirstLineIndentMode is true.
-          let markerStartPos: number;
-          if (
-            isFirstLineIndentMode &&
-            wordLayout.marker.markerX !== undefined &&
-            Number.isFinite(wordLayout.marker.markerX)
-          ) {
-            markerStartPos = wordLayout.marker.markerX;
-          } else {
-            const hanging = paraIndent?.hanging ?? 0;
-            const firstLine = paraIndent?.firstLine ?? 0;
-            markerStartPos = paraIndentLeft - hanging + firstLine;
-          }
-          const validMarkerStartPos = Number.isFinite(markerStartPos) ? markerStartPos : 0;
-
-          let tabWidth: number;
-          if (markerJustification === 'left') {
-            const currentPos = validMarkerStartPos + markerTextWidth;
-
-            if (isFirstLineIndentMode) {
-              const textStartTarget =
-                wordLayout.marker.textStartX !== undefined && Number.isFinite(wordLayout.marker.textStartX)
-                  ? wordLayout.marker.textStartX
-                  : wordLayout.textStartPx;
-              if (textStartTarget !== undefined && Number.isFinite(textStartTarget) && textStartTarget > currentPos) {
-                tabWidth = textStartTarget - currentPos;
-              } else {
-                tabWidth = LIST_MARKER_GAP;
-              }
-            } else {
-              // Standard hanging mode
-              const firstLine = paraIndent?.firstLine ?? 0;
-              const textStart = paraIndentLeft + firstLine;
-              tabWidth = textStart - currentPos;
-              if (tabWidth <= 0) {
-                tabWidth = DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
-              } else if (tabWidth < LIST_MARKER_GAP) {
-                tabWidth = LIST_MARKER_GAP;
-              }
-            }
-          } else {
-            // Non-left justified markers use gutter width
-            const gutterWidth = fragment.markerGutter ?? wordLayout.marker.gutterWidthPx;
-            tabWidth =
-              gutterWidth !== undefined && Number.isFinite(gutterWidth) && gutterWidth > 0
-                ? gutterWidth
-                : LIST_MARKER_GAP;
-          }
-          if (tabWidth < LIST_MARKER_GAP) {
-            tabWidth = LIST_MARKER_GAP;
-          }
-          // textStartX is where text actually starts (from fragment's left edge)
-          // This must include markerStartPos to match measurer's calculation
-          listFirstLineMarkerTabWidth = validMarkerStartPos + markerTextWidth + tabWidth;
+          listTabWidth = computeTabWidth(
+            currentPos,
+            markerJustification,
+            wordLayout.tabsPx,
+            paraIndent?.hanging,
+            paraIndent?.firstLine,
+            paraIndentLeft,
+          );
         } else if (suffix === 'space') {
-          // Space suffix: marker + ~4px for the non-breaking space
-          // Need to include markerStartPos here too
-          const hanging = paraIndent?.hanging ?? 0;
-          const firstLine = paraIndent?.firstLine ?? 0;
-          const markerStartPos = paraIndentLeft - hanging + firstLine;
-          const validMarkerStartPos = Number.isFinite(markerStartPos) ? markerStartPos : 0;
-          listFirstLineMarkerTabWidth = validMarkerStartPos + markerTextWidth + 4;
+          listTabWidth = 4;
         }
+        listFirstLineMarkerTabEndPx = currentPos + listTabWidth;
       }
 
       lines.forEach((line, index) => {
@@ -2120,8 +2108,8 @@ export class DomPainter {
         // Must also subtract paraIndentRight to match measurer's calculation:
         // initialAvailableWidth = maxWidth - textStartPx - indentRight
         // Only subtract positive paraIndentRight - negative indents already expand fragment.width
-        if (index === 0 && listFirstLineMarkerTabWidth != null) {
-          availableWidthOverride = fragment.width - listFirstLineMarkerTabWidth - Math.max(0, paraIndentRight);
+        if (index === 0 && listFirstLineMarkerTabEndPx != null) {
+          availableWidthOverride = fragment.width - listFirstLineMarkerTabEndPx - Math.max(0, paraIndentRight);
         }
 
         // Determine if this is the true last line of the paragraph that should skip justification.
@@ -2147,7 +2135,11 @@ export class DomPainter {
         // List first lines handle indentation via marker positioning and tab stops,
         // not CSS padding/text-indent. This matches Word's rendering model.
         const isListFirstLine =
-          index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+          index === 0 &&
+          !fragment.continuesFromPrev &&
+          fragment.markerWidth &&
+          fragment.markerTextWidth &&
+          wordLayout?.marker;
 
         /**
          * Determines if this line contains segments with explicit X positioning (typically from tabs).
@@ -2239,33 +2231,9 @@ export class DomPainter {
           lineEl.style.textIndent = '0px';
         }
 
-        if (isListFirstLine && wordLayout?.marker && fragment.markerWidth) {
-          // Position marker based on indent pattern:
-          // - FirstLine mode: use pre-calculated markerX from word-layout (essential because
-          //   paraIndent may have style overrides that zero out firstLine)
-          // - Standard hanging: calculate from paraIndent (works because hanging isn't overridden)
-          const isFirstLineIndentMode = wordLayout.firstLineIndentMode === true;
-
-          let markerStartPos: number;
-          if (
-            isFirstLineIndentMode &&
-            wordLayout.marker.markerX !== undefined &&
-            Number.isFinite(wordLayout.marker.markerX)
-          ) {
-            // FirstLine mode: use pre-calculated marker position from word-layout
-            markerStartPos = wordLayout.marker.markerX;
-          } else {
-            // OOXML marker position: left - hanging + firstLine
-            // - hanging: outdents the first line (marker moves left)
-            // - firstLine: indents the first line (marker moves right)
-            const hanging = paraIndent?.hanging ?? 0;
-            const firstLine = paraIndent?.firstLine ?? 0;
-            markerStartPos = paraIndentLeft - hanging + firstLine;
-          }
-
-          // Validate markerStartPos to handle NaN/Infinity values gracefully
-          const validMarkerStartPos = Number.isFinite(markerStartPos) ? markerStartPos : 0;
-          lineEl.style.paddingLeft = `${validMarkerStartPos}px`;
+        if (isListFirstLine) {
+          const marker = wordLayout.marker!;
+          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`; // HERE CONTROLS WHERE TAB STARTS - I think this will vary with justification
 
           const markerContainer = this.doc!.createElement('span');
           markerContainer.style.display = 'inline-block';
@@ -2276,171 +2244,44 @@ export class DomPainter {
 
           const markerEl = this.doc!.createElement('span');
           markerEl.classList.add('superdoc-paragraph-marker');
-          markerEl.textContent = wordLayout.marker.markerText ?? '';
+          markerEl.textContent = marker.markerText ?? '';
           markerEl.style.pointerEvents = 'none';
 
           // Left-justified markers stay inline to share flow with the tab spacer.
           // Other justifications use absolute positioning.
-          const markerJustification = wordLayout.marker.justification ?? 'left';
+          const markerJustification = marker.justification ?? 'left';
 
-          // For left-justified markers, don't set a fixed width - let the text flow naturally
-          // and the tab will fill to the next tab stop. For other justifications, use the
-          // box width for alignment purposes.
-          if (markerJustification !== 'left') {
-            markerEl.style.width = `${fragment.markerWidth}px`;
-            markerEl.style.textAlign = wordLayout.marker.justification ?? 'right';
-            markerEl.style.paddingRight = `${LIST_MARKER_GAP}px`;
-          }
-          if (markerJustification === 'left') {
-            markerContainer.style.position = 'relative';
-          } else {
-            // For right/center-justified markers, position relative to the first-line start.
-            // First-line starts at: left - hanging + firstLine (same as markerStartPos).
-            // The marker's right edge aligns near this position.
-            // Using validMarkerStartPos ensures consistent alignment with left-justified markers.
-            const markerLeftX = validMarkerStartPos - fragment.markerWidth;
+          markerContainer.style.position = 'relative';
+          if (markerJustification === 'right') {
             markerContainer.style.position = 'absolute';
-            markerContainer.style.left = `${markerLeftX}px`;
-            markerContainer.style.top = '0';
+            markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+          } else if (markerJustification === 'center') {
+            markerContainer.style.position = 'absolute';
+            markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+            lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
           }
 
           // Apply marker run styling with font fallback chain
-          markerEl.style.fontFamily =
-            toCssFontFamily(wordLayout.marker.run.fontFamily) ?? wordLayout.marker.run.fontFamily;
-          markerEl.style.fontSize = `${wordLayout.marker.run.fontSize}px`;
-          markerEl.style.fontWeight = wordLayout.marker.run.bold ? 'bold' : '';
-          markerEl.style.fontStyle = wordLayout.marker.run.italic ? 'italic' : '';
-          if (wordLayout.marker.run.color) {
-            markerEl.style.color = wordLayout.marker.run.color;
+          markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
+          markerEl.style.fontSize = `${marker.run.fontSize}px`;
+          markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
+          markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
+          if (marker.run.color) {
+            markerEl.style.color = marker.run.color;
           }
-          if (wordLayout.marker.run.letterSpacing != null) {
-            markerEl.style.letterSpacing = `${wordLayout.marker.run.letterSpacing}px`;
+          if (marker.run.letterSpacing != null) {
+            markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
           }
           markerContainer.appendChild(markerEl);
 
-          const suffix = wordLayout.marker.suffix ?? 'tab';
+          const suffix = marker.suffix ?? 'tab';
           if (suffix === 'tab') {
             const tabEl = this.doc!.createElement('span');
             tabEl.className = 'superdoc-tab';
             tabEl.innerHTML = '&nbsp;';
-
-            /**
-             * Calculate the tab width to align the paragraph text after the list marker.
-             *
-             * For left-justified markers:
-             * - Word places an implicit tab stop at indentLeft (where continuation lines align).
-             * - The tab width is calculated to reach this implicit stop from the current position.
-             * - If the marker extends past the implicit stop, we advance to the next default tab
-             *   interval (48px = 0.5 inch at 96 DPI), matching Word's behavior.
-             *
-             * For right-justified or centered markers:
-             * - Use the gutter width from the layout measurement (fragment.markerGutter or
-             *   wordLayout.marker.gutterWidthPx).
-             * - This gutter value is pre-calculated during measurement to match Word's spacing.
-             * - Falls back to LIST_MARKER_GAP if gutter is not available.
-             *
-             * This ensures list marker alignment matches Word and super-editor rendering exactly.
-             */
-            let tabWidth: number;
-            const markerBoxWidth = fragment.markerWidth;
-            // Use actual marker text width for position calculation (not box width)
-            // This matches Word's behavior where tabs extend from the end of the marker text
-            // Validate that markerTextWidth is a valid positive number before using it
-            const markerTextWidth =
-              fragment.markerTextWidth != null && isFinite(fragment.markerTextWidth) && fragment.markerTextWidth >= 0
-                ? fragment.markerTextWidth
-                : markerBoxWidth;
-
-            if ((wordLayout.marker.justification ?? 'left') === 'left') {
-              const currentPos = validMarkerStartPos + markerTextWidth;
-
-              if (isFirstLineIndentMode) {
-                // FirstLine pattern: find the appropriate tab stop for text alignment.
-                // Priority:
-                // 1. First explicit tab stop past currentPos
-                // 2. marker.textStartX (pre-calculated, consistent with marker.markerX)
-                // 3. textStartPx from word-layout
-                // 4. Minimum gap (LIST_MARKER_GAP) to ensure some separation
-
-                // Check for explicit tab stops past current position
-                const explicitTabs = wordLayout.tabsPx;
-                let targetTabStop: number | undefined;
-
-                if (Array.isArray(explicitTabs) && explicitTabs.length > 0) {
-                  // Find the first tab stop that's past the current position
-                  for (const tab of explicitTabs) {
-                    if (typeof tab === 'number' && tab > currentPos) {
-                      targetTabStop = tab;
-                      break;
-                    }
-                  }
-                }
-
-                // Get text start position - prefer marker.textStartX as it's consistent with markerX
-                const textStartTarget =
-                  wordLayout.marker.textStartX !== undefined && Number.isFinite(wordLayout.marker.textStartX)
-                    ? wordLayout.marker.textStartX
-                    : wordLayout.textStartPx;
-
-                if (targetTabStop !== undefined) {
-                  // Use explicit tab stop
-                  tabWidth = targetTabStop - currentPos;
-                } else if (
-                  textStartTarget !== undefined &&
-                  Number.isFinite(textStartTarget) &&
-                  textStartTarget > currentPos
-                ) {
-                  // Use pre-calculated text start position
-                  tabWidth = textStartTarget - currentPos;
-                } else {
-                  // Fallback: use minimum gap
-                  tabWidth = LIST_MARKER_GAP;
-                }
-
-                // Ensure minimum gap for readability
-                if (tabWidth < LIST_MARKER_GAP) {
-                  tabWidth = LIST_MARKER_GAP;
-                }
-              } else {
-                // Standard hanging mode: tab fills from marker end to text start position.
-                // In OOXML:
-                //   - markerStartPos = left - hanging + firstLine
-                //   - currentPos = markerStartPos + markerTextWidth
-                //   - textStart = left + firstLine (where first-line text begins)
-                //   - tabWidth = textStart - currentPos = hanging - markerTextWidth
-                // This positions text correctly at `left + firstLine` regardless of marker width.
-                const firstLine = paraIndent?.firstLine ?? 0;
-                const textStart = paraIndentLeft + firstLine;
-                tabWidth = textStart - currentPos;
-
-                // If marker extends past implicit tab stop (negative/zero tabWidth),
-                // advance to next default 48px tab interval, matching Word behavior.
-                if (tabWidth <= 0) {
-                  tabWidth = DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
-                } else if (tabWidth < LIST_MARKER_GAP) {
-                  tabWidth = LIST_MARKER_GAP;
-                }
-              }
-            } else {
-              // For non-left justified markers (right/center), use the pre-calculated gutter width
-              // from layout measurement, which matches Word's spacing exactly.
-              const gutterWidth = fragment.markerGutter ?? wordLayout.marker.gutterWidthPx;
-              if (gutterWidth !== undefined && Number.isFinite(gutterWidth) && gutterWidth > 0) {
-                tabWidth = gutterWidth;
-              } else {
-                // Fallback: calculate from positions
-                const firstLine = paraIndent?.firstLine ?? 0;
-                const textStart = paraIndentLeft + firstLine;
-                tabWidth = textStart - validMarkerStartPos;
-              }
-              if (tabWidth < LIST_MARKER_GAP) {
-                tabWidth = LIST_MARKER_GAP;
-              }
-            }
-
             tabEl.style.display = 'inline-block';
             tabEl.style.wordSpacing = '0px';
-            tabEl.style.width = `${tabWidth}px`;
+            tabEl.style.width = `${listTabWidth}px`;
 
             lineEl.prepend(tabEl);
           } else if (suffix === 'space') {
@@ -2647,7 +2488,7 @@ export class DomPainter {
       const lines = itemMeasure.paragraph.lines.slice(fragment.fromLine, fragment.toLine);
       // Track B: preserve indent for wordLayout-based lists to show hierarchy
       const contentAttrs = wordLayout ? item.paragraph.attrs : stripListIndent(item.paragraph.attrs);
-      applyParagraphBlockStyles(contentEl, contentAttrs, { includeBorders: false, includeShading: false });
+      applyParagraphBlockStyles(contentEl, contentAttrs);
       const { shadingLayer, borderLayer } = createParagraphDecorationLayers(this.doc, fragment.width, contentAttrs);
       if (shadingLayer) {
         contentEl.appendChild(shadingLayer);
@@ -3915,11 +3756,18 @@ export class DomPainter {
     const textRun = run as TextRun;
     const commentAnnotations = textRun.comments;
     const hasAnyComment = !!commentAnnotations?.length;
-    const hasHighlightableComment = !!commentAnnotations?.some((c) => !c.trackedChange);
-    const commentColor = getCommentHighlight(textRun);
+    const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
 
-    if (commentColor && !textRun.highlight && hasHighlightableComment) {
-      (elem as HTMLElement).style.backgroundColor = commentColor;
+    if (commentHighlight.color && !textRun.highlight && hasAnyComment) {
+      (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
+      // Add thin visual indicator for nested comments when outer comment is selected
+      // Use box-shadow instead of border to avoid affecting text layout
+      if (commentHighlight.hasNestedComments && commentHighlight.baseColor) {
+        const borderColor = `${commentHighlight.baseColor}99`; // Semi-transparent for subtlety
+        (elem as HTMLElement).style.boxShadow = `inset 1px 0 0 ${borderColor}, inset -1px 0 0 ${borderColor}`;
+      } else {
+        (elem as HTMLElement).style.boxShadow = '';
+      }
     }
     // We still need to preserve the comment ids
     if (hasAnyComment) {
@@ -5928,12 +5776,47 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
   }
 };
 
-const getCommentHighlight = (run: TextRun): string | undefined => {
+interface CommentHighlightResult {
+  color?: string;
+  baseColor?: string;
+  hasNestedComments?: boolean;
+}
+
+const getCommentHighlight = (run: TextRun, activeCommentId: string | null): CommentHighlightResult => {
   const comments = run.comments;
-  if (!comments || comments.length === 0) return undefined;
+  if (!comments || comments.length === 0) return {};
+
+  // Helper to match comment by ID or importedId
+  const matchesId = (c: { commentId: string; importedId?: string }, id: string) =>
+    c.commentId === id || c.importedId === id;
+
+  // When a comment is selected, only highlight that comment's range
+  if (activeCommentId != null) {
+    const activeComment = comments.find((c) =>
+      matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
+    );
+    if (activeComment) {
+      const base = activeComment.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+      // Check if there are OTHER comments besides the active one (nested comments)
+      const nestedComments = comments.filter(
+        (c) => !matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
+      );
+      return {
+        color: `${base}${COMMENT_ACTIVE_ALPHA}`,
+        baseColor: base,
+        hasNestedComments: nestedComments.length > 0,
+      };
+    }
+    // This run doesn't contain the active comment - still show light highlight for its own comments
+    const primary = comments[0];
+    const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+    return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
+  }
+
+  // No active comment - show uniform light highlight (like Word/Google Docs)
   const primary = comments[0];
   const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-  return `${base}${COMMENT_INACTIVE_ALPHA}`;
+  return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
 };
 
 /**
@@ -5966,18 +5849,14 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
   });
 };
 
-const applyParagraphBlockStyles = (
-  element: HTMLElement,
-  attrs?: ParagraphAttrs,
-  options: { includeBorders?: boolean; includeShading?: boolean } = {},
-): void => {
+const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
   if (!attrs) return;
   if (attrs.styleId) {
     element.setAttribute('styleid', attrs.styleId);
   }
   if (attrs.alignment) {
     // Avoid native CSS justify: DomPainter applies justify via per-line word-spacing.
-    element.style.textAlign = attrs.alignment === 'justify' || attrs.alignment === 'both' ? 'left' : attrs.alignment;
+    element.style.textAlign = attrs.alignment === 'justify' ? 'left' : attrs.alignment;
   }
   if ((attrs as Record<string, unknown>).dropCap) {
     element.classList.add('sd-editor-dropcap');
@@ -6001,12 +5880,6 @@ const applyParagraphBlockStyles = (
         element.style.textIndent = `${textIndent}px`;
       }
     }
-  }
-  if (options.includeBorders ?? true) {
-    applyParagraphBorderStyles(element, attrs.borders);
-  }
-  if (options.includeShading ?? true) {
-    applyParagraphShadingStyles(element, attrs.shading);
   }
 };
 
@@ -6299,4 +6172,58 @@ const resolveRunText = (run: Run, context: FragmentRenderContext): string => {
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   return run.text ?? '';
+};
+
+const computeTabWidth = (
+  currentPos: number,
+  justification: string,
+  tabs: number[] | undefined,
+  hangingIndent: number | undefined,
+  firstLineIndent: number | undefined,
+  leftIndent: number,
+): number => {
+  const nextDefaultTabStop = currentPos + DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
+  let tabWidth: number;
+  if ((justification ?? 'left') === 'left') {
+    // Check for explicit tab stops past current position
+    const explicitTabs = [...(tabs ?? [])];
+    if (hangingIndent && hangingIndent > 0) {
+      // Account for hanging indent by adding an implicit tab stop at (left + hanging)
+      const implicitTabPos = leftIndent; // paraIndentLeft already accounts for hanging
+      explicitTabs.push(implicitTabPos);
+      // Sort tab stops to maintain order
+      explicitTabs.sort((a, b) => {
+        if (typeof a === 'number' && typeof b === 'number') {
+          return a - b;
+        }
+        return 0;
+      });
+    }
+    let targetTabStop: number | undefined;
+
+    if (Array.isArray(explicitTabs) && explicitTabs.length > 0) {
+      // Find the first tab stop that's past the current position
+      for (const tab of explicitTabs) {
+        if (typeof tab === 'number' && tab > currentPos) {
+          targetTabStop = tab;
+          break;
+        }
+      }
+    }
+
+    if (targetTabStop === undefined) {
+      // advance to next default 48px tab interval, matching Word behavior.
+      targetTabStop = nextDefaultTabStop;
+    }
+    tabWidth = targetTabStop - currentPos;
+  } else if (justification === 'right') {
+    if (firstLineIndent != null && firstLineIndent > 0) {
+      tabWidth = nextDefaultTabStop - currentPos;
+    } else {
+      tabWidth = hangingIndent ?? 0;
+    }
+  } else {
+    tabWidth = nextDefaultTabStop - currentPos;
+  }
+  return tabWidth;
 };

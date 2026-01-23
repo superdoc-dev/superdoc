@@ -15,6 +15,7 @@ import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
 import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.js';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
+import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 
 // note:
 // Or set worker globally outside the component.
@@ -39,6 +40,7 @@ const testUserEmail = urlParams.get('email') || 'user@superdoc.com';
 const testUserName = urlParams.get('name') || `SuperDoc ${Math.floor(1000 + Math.random() * 9000)}`;
 const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
+const useWebLayout = ref(urlParams.get('view') === 'web');
 const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
@@ -172,7 +174,10 @@ const init = async () => {
       visible: true,
     },
     toolbarGroups: ['left', 'center', 'right'],
-    pagination: useLayoutEngine.value,
+    pagination: useLayoutEngine.value && !useWebLayout.value,
+    viewOptions: { layout: useWebLayout.value ? 'web' : 'print' },
+    // Web layout mode requires Layout Engine to be OFF (uses ProseMirror's native rendering)
+    useLayoutEngine: useLayoutEngine.value && !useWebLayout.value,
     rulers: true,
     rulerContainer: '#ruler-container',
     annotations: true,
@@ -196,7 +201,6 @@ const init = async () => {
     //   },
     // ],
     // cspNonce: 'testnonce123',
-    useLayoutEngine: useLayoutEngine.value,
     modules: {
       comments: {
         // comments: sampleComments,
@@ -456,6 +460,10 @@ const onEditorCreate = ({ editor }) => {
   editor.on('fieldAnnotationSelected', (params) => {
     console.log('fieldAnnotationSelected', { params });
   });
+
+  editor.on('fieldAnnotationDoubleClicked', (params) => {
+    console.log('fieldAnnotationDoubleClicked', { params });
+  });
 };
 
 const handleTitleChange = (e) => {
@@ -495,6 +503,13 @@ const toggleLayoutEngine = () => {
   window.location.href = url.toString();
 };
 
+const toggleViewLayout = () => {
+  const nextValue = !useWebLayout.value;
+  const url = new URL(window.location.href);
+  url.searchParams.set('view', nextValue ? 'web' : 'print');
+  window.location.href = url.toString();
+};
+
 const showExportMenu = ref(false);
 const closeExportMenu = () => {
   showExportMenu.value = false;
@@ -510,6 +525,11 @@ const sidebarOptions = [
     id: 'search',
     label: 'Search',
     component: SidebarSearch,
+  },
+  {
+    id: 'fields',
+    label: 'Field Annotations',
+    component: SidebarFieldAnnotations,
   },
 ];
 const activeSidebarId = ref('off');
@@ -567,7 +587,8 @@ if (scrollTestMode.value) {
           <div class="dev-app__brand-meta">
             <div class="dev-app__meta-row">
               <span class="dev-app__pill">SUPERDOC LABS</span>
-              <span class="badge">Layout Engine: {{ useLayoutEngine ? 'ON' : 'OFF' }}</span>
+              <span class="badge">Layout Engine: {{ useLayoutEngine && !useWebLayout ? 'ON' : 'OFF' }}</span>
+              <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
               <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
             </div>
             <h2 class="dev-app__title">SuperDoc Dev</h2>
@@ -680,6 +701,9 @@ if (scrollTestMode.value) {
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
             </button>
+            <button class="dev-app__header-export-btn" @click="toggleViewLayout">
+              Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)
+            </button>
           </div>
         </div>
       </div>
@@ -703,7 +727,7 @@ if (scrollTestMode.value) {
       <div class="dev-app__main">
         <div class="dev-app__view">
           <div class="dev-app__content" v-if="currentFile">
-            <div class="dev-app__content-container">
+            <div class="dev-app__content-container" :class="{ 'dev-app__content-container--web-layout': useWebLayout }">
               <div id="superdoc"></div>
             </div>
           </div>
@@ -1190,6 +1214,28 @@ if (scrollTestMode.value) {
   width: auto;
 }
 
+/* Web layout mode: dev app container styling */
+.dev-app__content-container--web-layout {
+  width: 100%;
+  max-width: 100%;
+  padding: 0 16px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+/* Web layout mode: prevent centering to allow full-width layout */
+.dev-app__content:has(.dev-app__content-container--web-layout) {
+  align-items: stretch;
+}
+
+.dev-app__view:has(.dev-app__content-container--web-layout) {
+  width: 100%;
+}
+
+.dev-app__main:has(.dev-app__content-container--web-layout) {
+  overflow-x: hidden;
+}
+
 .dev-app__inputs-panel {
   display: grid;
   height: calc(100vh - var(--header-height) - var(--toolbar-height));
@@ -1248,5 +1294,81 @@ if (scrollTestMode.value) {
   font-size: 14px;
   line-height: 1.5;
   color: #fde68a;
+}
+
+/* Mobile responsive styles */
+@media screen and (max-width: 768px) {
+  .dev-app {
+    --header-height: auto;
+    overflow-x: hidden;
+  }
+
+  .dev-app__layout {
+    overflow-x: hidden;
+  }
+
+  .dev-app__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .dev-app__brand {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .dev-app__logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .dev-app__title {
+    font-size: 18px;
+  }
+
+  .dev-app__meta-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .dev-app__header-actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .dev-app__header-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dev-app__header-export-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .dev-app__upload-control {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dev-app__url-form {
+    flex-direction: column;
+  }
+
+  .dev-app__url-input {
+    width: 100%;
+  }
+
+  .dev-app__main {
+    overflow-x: hidden;
+  }
+
+  .dev-app__view {
+    padding-top: 10px;
+    overflow-x: hidden;
+  }
 }
 </style>

@@ -307,6 +307,57 @@ const getContentTypesFromXml = (contentTypesXml) => {
   }
 };
 
+/**
+ * Resolves an OPC relationship target URI to its ZIP entry path.
+ *
+ * Implements URI resolution per:
+ * - ECMA-376 Part 2: Open Packaging Conventions (OPC)
+ *   https://www.ecma-international.org/publications-and-standards/standards/ecma-376/
+ * - RFC 3986 Section 5: Reference Resolution
+ *   https://datatracker.ietf.org/doc/html/rfc3986#section-5
+ *
+ * Path resolution rules:
+ * - Absolute paths (starting with '/') resolve from the package root
+ * - Relative paths resolve from the relationship file's parent directory (baseDir)
+ * - Supports '..' and '.' path segments per RFC 3986 Section 5.2.4
+ *
+ * @param {string} target - The relationship target URI from the XML
+ * @param {string} [baseDir='word'] - The base directory for relative path resolution
+ * @returns {string|null} The resolved ZIP entry path, or null if target is empty/external
+ *
+ * @example
+ * resolveOpcTargetPath('styles.xml', 'word')             // → 'word/styles.xml'
+ * resolveOpcTargetPath('./styles.xml', 'word')           // → 'word/styles.xml'
+ * resolveOpcTargetPath('/word/styles.xml', 'word')       // → 'word/styles.xml'
+ * resolveOpcTargetPath('../customXml/item.xml', 'word')  // → 'customXml/item.xml'
+ * resolveOpcTargetPath('media/image.png', 'word')        // → 'word/media/image.png'
+ */
+const resolveOpcTargetPath = (target, baseDir = 'word') => {
+  if (!target) return null;
+
+  // Skip external URLs
+  if (target.includes('://')) return null;
+
+  // Absolute path: resolve from package root
+  if (target.startsWith('/')) {
+    return target.slice(1);
+  }
+
+  // Relative path: merge with baseDir, remove dot segments per RFC 3986 Section 5.2.4
+  const segments = `${baseDir}/${target}`.split('/');
+  const resolved = [];
+
+  for (const seg of segments) {
+    if (seg === '..') {
+      resolved.pop();
+    } else if (seg !== '.' && seg !== '') {
+      resolved.push(seg);
+    }
+  }
+
+  return resolved.join('/');
+};
+
 const DOCX_HIGHLIGHT_KEYWORD_MAP = new Map([
   ['yellow', 'FFFF00'],
   ['green', '00FF00'],
@@ -519,4 +570,5 @@ export {
   polygonUnitsToPixels,
   pixelsToPolygonUnits,
   convertSizeToCSS,
+  resolveOpcTargetPath,
 };

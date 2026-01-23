@@ -890,4 +890,90 @@ describe('SuperDoc core', () => {
       });
     });
   });
+
+  describe('Web layout mode configuration', () => {
+    it('auto-disables layout engine when web layout is enabled', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: { layout: 'web' },
+        useLayoutEngine: true,
+      });
+      await flushMicrotasks();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[SuperDoc] Web layout mode requires useLayoutEngine: false. Automatically disabling layout engine.',
+      );
+      expect(instance.config.useLayoutEngine).toBe(false);
+      warnSpy.mockRestore();
+    });
+
+    it('does not warn when web layout with layout engine already disabled', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: { layout: 'web' },
+        useLayoutEngine: false,
+      });
+      await flushMicrotasks();
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(instance.config.useLayoutEngine).toBe(false);
+      warnSpy.mockRestore();
+    });
+
+    it('preserves layout engine setting for print layout', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: { layout: 'print' },
+        useLayoutEngine: true,
+      });
+      await flushMicrotasks();
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(instance.config.useLayoutEngine).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('uses default print layout when viewOptions not specified', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      expect(instance.config.viewOptions).toEqual({ layout: 'print' });
+      expect(instance.config.useLayoutEngine).toBe(true);
+    });
+
+    it('handles undefined viewOptions.layout gracefully', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: {},
+        useLayoutEngine: true,
+      });
+      await flushMicrotasks();
+
+      // Should not trigger web layout warning
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(instance.config.useLayoutEngine).toBe(true);
+      warnSpy.mockRestore();
+    });
+  });
 });

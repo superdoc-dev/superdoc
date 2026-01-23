@@ -126,7 +126,10 @@ describe('w:commentRangeStart and w:commentRangeEnd', () => {
   });
 
   describe('decode:range-based tracked change wrappers', () => {
-    test('wraps range markers with w:ins when trackInsert mark is present', () => {
+    // SD-1519: Comment markers with tracked change marks should NOT be wrapped in their own
+    // <w:ins>/<w:del> elements. The ECMA-376 spec allows comment markers inside tracked changes,
+    // so they should be output as bare nodes and naturally sit inside/around the text's TC wrapper.
+    test('does NOT wrap range markers when trackInsert mark is present', () => {
       const result = commentRangeStartTranslator.decode({
         node: {
           type: 'commentRangeStart',
@@ -148,19 +151,14 @@ describe('w:commentRangeStart and w:commentRangeEnd', () => {
         commentsExportType: 'external',
       });
 
+      // Should return bare comment marker, not wrapped in w:ins
       expect(result).toStrictEqual({
-        name: 'w:ins',
-        attributes: {
-          'w:id': 'tc-1',
-          'w:author': 'Author A',
-          'w:authorEmail': 'author@example.com',
-          'w:date': '2025-01-01T00:00:00Z',
-        },
-        elements: [{ attributes: { 'w:id': '0' }, name: 'w:commentRangeStart' }],
+        name: 'w:commentRangeStart',
+        attributes: { 'w:id': '0' },
       });
     });
 
-    test('wraps range markers with w:del when trackDelete mark is present', () => {
+    test('does NOT wrap range markers when trackDelete mark is present', () => {
       const result = commentRangeEndTranslator.decode({
         node: {
           type: 'commentRangeEnd',
@@ -182,19 +180,14 @@ describe('w:commentRangeStart and w:commentRangeEnd', () => {
         commentsExportType: 'external',
       });
 
-      expect(result.name).toBe('w:del');
-      expect(result.attributes).toStrictEqual({
-        'w:id': 'tc-2',
-        'w:author': 'Author B',
-        'w:authorEmail': 'authorb@example.com',
-        'w:date': '2025-01-02T00:00:00Z',
-      });
-      expect(result.elements[0]).toStrictEqual({ attributes: { 'w:id': '0' }, name: 'w:commentRangeEnd' });
-      expect(result.elements[1].name).toBe('w:r');
-      expect(result.elements[1].elements[0]).toStrictEqual({
-        attributes: { 'w:id': '0' },
-        name: 'w:commentReference',
-      });
+      // Should return bare comment markers, not wrapped in w:del
+      expect(result).toStrictEqual([
+        { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:commentReference', attributes: { 'w:id': '0' } }],
+        },
+      ]);
     });
 
     test('wraps replace threading with w:ins for start and w:del for end', () => {

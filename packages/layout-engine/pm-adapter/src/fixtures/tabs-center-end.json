@@ -4,7 +4,9 @@
     {
       "type": "paragraph",
       "attrs": {
-        "tabs": [{ "pos": 96, "align": "center", "leader": "none" }]
+        "paragraphProperties": {
+          "tabStops": [{ "pos": 96, "align": "center", "leader": "none" }]
+        }
       },
       "content": [
         { "type": "text", "text": "Title" },
@@ -14,7 +16,9 @@
     {
       "type": "paragraph",
       "attrs": {
-        "tabs": [{ "pos": 120, "align": "right", "leader": "none" }]
+        "paragraphProperties": {
+          "tabStops": [{ "pos": 120, "align": "right", "leader": "none" }]
+        }
       },
       "content": [
         { "type": "text", "text": "Amount" },
@@ -24,11 +28,13 @@
     {
       "type": "paragraph",
       "attrs": {
-        "tabs": [
-          { "pos": 60, "align": "left", "leader": "none" },
-          { "pos": 120, "align": "center", "leader": "none" },
-          { "pos": 180, "align": "right", "leader": "none" }
-        ]
+        "paragraphProperties": {
+          "tabStops": [
+            { "pos": 60, "align": "left", "leader": "none" },
+            { "pos": 120, "align": "center", "leader": "none" },
+            { "pos": 180, "align": "right", "leader": "none" }
+          ]
+        }
       },
       "content": [
         { "type": "text", "text": "\tLeft" },

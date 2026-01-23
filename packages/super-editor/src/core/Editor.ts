@@ -57,6 +57,13 @@ declare const __APP_VERSION__: string;
 declare const version: string | undefined;
 
 /**
+ * Constants for layout calculations
+ */
+const PIXELS_PER_INCH = 96;
+const MAX_HEIGHT_BUFFER_PX = 50;
+const MAX_WIDTH_BUFFER_PX = 20;
+
+/**
  * Image storage structure used by the image extension
  */
 interface ImageStorage {
@@ -261,6 +268,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     isCommentsEnabled: false,
     isNewFile: false,
     scale: 1,
+    viewOptions: { layout: 'print' },
     annotations: false,
     isInternal: false,
     externalExtensions: [],
@@ -1009,6 +1017,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
       );
       (global as typeof globalThis).window = options.mockWindow as Window & typeof globalThis;
     }
+  }
+
+  /**
+   * Check if web layout mode is enabled (OOXML ST_View 'web')
+   */
+  isWebLayout(): boolean {
+    return this.options.viewOptions?.layout === 'web';
   }
 
   /**
@@ -1831,19 +1846,38 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get the maximum content size
+   * Get the maximum content size based on page dimensions and margins
+   * @returns Size object with width and height in pixels, or empty object if no page size
+   * @note In web layout mode, returns empty object to skip content constraints.
+   *       CSS max-width: 100% handles responsive display while preserving full resolution.
    */
   getMaxContentSize(): { width?: number; height?: number } {
     if (!this.converter) return {};
+
+    // In web layout mode: skip constraints, let CSS handle responsive sizing
+    // This preserves full image resolution while CSS max-width: 100% handles display
+    if (this.isWebLayout()) {
+      return {};
+    }
+
     const { pageSize = {}, pageMargins = {} } = this.converter.pageStyles ?? {};
     const { width, height } = pageSize;
-    const { top = 0, bottom = 0, left = 0, right = 0 } = pageMargins;
 
-    // All sizes are in inches so we multiply by 96 to get pixels
     if (!width || !height) return {};
 
-    const maxHeight = height * 96 - top * 96 - bottom * 96 - 50;
-    const maxWidth = width * 96 - left * 96 - right * 96 - 20;
+    // Print layout mode: use document margins (inches converted to pixels)
+    const getMarginPx = (side: 'top' | 'bottom' | 'left' | 'right'): number => {
+      return (pageMargins?.[side] ?? 0) * PIXELS_PER_INCH;
+    };
+
+    const topPx = getMarginPx('top');
+    const bottomPx = getMarginPx('bottom');
+    const leftPx = getMarginPx('left');
+    const rightPx = getMarginPx('right');
+
+    // All sizes are in inches so we multiply by PIXELS_PER_INCH to get pixels
+    const maxHeight = height * PIXELS_PER_INCH - topPx - bottomPx - MAX_HEIGHT_BUFFER_PX;
+    const maxWidth = width * PIXELS_PER_INCH - leftPx - rightPx - MAX_WIDTH_BUFFER_PX;
     return {
       width: maxWidth,
       height: maxHeight,

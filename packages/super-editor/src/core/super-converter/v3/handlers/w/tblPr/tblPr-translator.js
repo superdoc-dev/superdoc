@@ -22,7 +22,7 @@ import { translator as tblCellMarTranslator } from '../tblCellMar';
 
 // Property translators for w:tblPr child elements
 // Each translator handles a specific property of the table
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   bidiVisualTranslator,
   jcTranslator,

@@ -13,10 +13,10 @@ describe('document-index', () => {
     let mockParagraphToFlowBlocks: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
-      mockParagraphToFlowBlocks = vi.fn().mockImplementation((para) => [
+      mockParagraphToFlowBlocks = vi.fn().mockImplementation((params) => [
         {
           kind: 'paragraph',
-          id: `block-${para.attrs?.id || 'unknown'}`,
+          id: `block-${params.para.attrs?.id || 'unknown'}`,
           runs: [{ text: 'test', fontFamily: 'Arial', fontSize: 12 }],
         },
       ]);
@@ -35,8 +35,8 @@ describe('document-index', () => {
           resetListCounter: vi.fn(),
         },
         trackedChangesConfig: {},
-        bookmarks: {},
-        hyperlinkConfig: {},
+        bookmarks: new Map(),
+        hyperlinkConfig: { enableRichHyperlinks: false },
         sectionState: {
           ranges: [],
           currentSectionIndex: 0,
@@ -46,6 +46,7 @@ describe('document-index', () => {
           paragraphToFlowBlocks: mockParagraphToFlowBlocks,
         },
         converterContext: {},
+        enableComments: true,
       };
     });
 
@@ -103,7 +104,7 @@ describe('document-index', () => {
       expect(mockContext.blocks).toHaveLength(0);
     });
 
-    it('returns early if paragraphToFlowBlocks converter is not available', () => {
+    it('throws if paragraphToFlowBlocks converter is not available', () => {
       const indexNode: PMNode = {
         type: 'index',
         content: [{ type: 'paragraph', attrs: { id: 'p1' } }],
@@ -111,9 +112,7 @@ describe('document-index', () => {
 
       mockContext.converters = {};
 
-      handleIndexNode(indexNode, mockContext);
-
-      expect(mockContext.blocks).toHaveLength(0);
+      expect(() => handleIndexNode(indexNode, mockContext)).toThrow();
     });
 
     it('increments currentParagraphIndex for each paragraph', () => {

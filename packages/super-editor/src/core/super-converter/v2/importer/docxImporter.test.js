@@ -64,6 +64,21 @@ describe('filterOutRootInlineNodes', () => {
     expect(filterOutRootInlineNodes([])).toEqual([]);
   });
 
+  it('wraps anchored images in a paragraph node', () => {
+    const anchoredImage = { type: 'image', attrs: { isAnchor: true, src: 'test.png' }, marks: [] };
+    const inlineImage = { type: 'image', attrs: { isAnchor: false, src: 'inline.png' }, marks: [] };
+    const input = [anchoredImage, inlineImage, n('paragraph')];
+
+    const result = filterOutRootInlineNodes(input);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].type).toBe('paragraph');
+    expect(result[0].content).toEqual([anchoredImage]);
+    expect(result[0].attrs).toEqual({});
+    expect(result[0].marks).toEqual([]);
+    expect(result[1].type).toBe('paragraph');
+  });
+
   it('derives inline types from schema when provided', () => {
     // Build a minimal fake schema map using Map with forEach(name, nodeType)
     const nodes = new Map();

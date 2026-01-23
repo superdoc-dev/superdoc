@@ -105,9 +105,31 @@ const commentsModuleConfig = computed(() => {
   return config;
 });
 
-const superdocStyleVars = computed(() => ({
-  '--sd-ui-font-family': uiFontFamily.value,
-}));
+const superdocStyleVars = computed(() => {
+  const vars = {
+    '--sd-ui-font-family': uiFontFamily.value,
+  };
+
+  const commentsConfig = proxy.$superdoc.config.modules?.comments;
+  if (!commentsConfig || commentsConfig === false) return vars;
+
+  if (commentsConfig.highlightHoverColor) {
+    vars['--sd-comment-highlight-hover'] = commentsConfig.highlightHoverColor;
+  }
+
+  const trackChangeColors = commentsConfig.trackChangeHighlightColors || {};
+  const activeTrackChangeColors = {
+    ...trackChangeColors,
+    ...(commentsConfig.trackChangeActiveHighlightColors || {}),
+  };
+  if (activeTrackChangeColors.insertBorder) vars['--sd-track-insert-border'] = activeTrackChangeColors.insertBorder;
+  if (activeTrackChangeColors.insertBackground) vars['--sd-track-insert-bg'] = activeTrackChangeColors.insertBackground;
+  if (activeTrackChangeColors.deleteBorder) vars['--sd-track-delete-border'] = activeTrackChangeColors.deleteBorder;
+  if (activeTrackChangeColors.deleteBackground) vars['--sd-track-delete-bg'] = activeTrackChangeColors.deleteBackground;
+  if (activeTrackChangeColors.formatBorder) vars['--sd-track-format-border'] = activeTrackChangeColors.formatBorder;
+
+  return vars;
+});
 
 // Refs
 const layers = ref(null);
@@ -448,6 +470,10 @@ const editorOptions = (doc) => {
     isCommentsEnabled: Boolean(commentsModuleConfig.value),
     isAiEnabled: proxy.$superdoc.config.modules?.ai,
     slashMenuConfig: proxy.$superdoc.config.modules?.slashMenu,
+    comments: {
+      highlightColors: commentsModuleConfig.value?.highlightColors,
+      highlightOpacity: commentsModuleConfig.value?.highlightOpacity,
+    },
     editorCtor: useLayoutEngine ? PresentationEditor : undefined,
     onBeforeCreate: onEditorBeforeCreate,
     onCreate: onEditorCreate,
@@ -473,6 +499,7 @@ const editorOptions = (doc) => {
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
     disableContextMenu: proxy.$superdoc.config.disableContextMenu,
     jsonOverride: proxy.$superdoc.config.jsonOverride,
+    viewOptions: proxy.$superdoc.config.viewOptions,
     layoutEngineOptions: useLayoutEngine
       ? {
           ...(proxy.$superdoc.config.layoutEngineOptions || {}),
@@ -824,7 +851,11 @@ watch(getFloatingComments, () => {
   <n-config-provider abstract preflight-style-disabled>
     <div
       class="superdoc"
-      :class="{ 'superdoc--with-sidebar': showCommentsSidebar, 'high-contrast': isHighContrastMode }"
+      :class="{
+        'superdoc--with-sidebar': showCommentsSidebar,
+        'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
+        'high-contrast': isHighContrastMode,
+      }"
       :style="superdocStyleVars"
     >
       <div class="superdoc__layers layers" ref="layers" role="group">

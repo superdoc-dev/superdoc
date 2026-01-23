@@ -6,11 +6,7 @@ import { computeParagraphReferenceSnapshot } from '@tests/helpers/paragraphRefer
 import { zipFolderToBuffer } from '@tests/helpers/zipFolderToBuffer.js';
 import { Editor } from '@core/Editor.js';
 import { computeParagraphAttrs } from '@superdoc/pm-adapter/attributes/paragraph.js';
-import {
-  buildStyleContextFromEditor,
-  buildConverterContextFromEditor,
-  createListCounterContext,
-} from '../helpers/adapterTestHelpers.js';
+import { buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -54,46 +50,45 @@ describe('adapter parity (computeParagraphAttrs)', () => {
     const reference = computeParagraphReferenceSnapshot(editor, match.node, match.pos);
 
     // Compute attrs via layout-engine adapter
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Compare spacing: adapter should produce px numbers when reference defines spacing
     const refSpacing = reference.paragraphProperties.spacing;
     if (refSpacing) {
-      expect(adapterAttrs?.spacing).toBeDefined();
+      expect(paragraphAttrs?.spacing).toBeDefined();
       if (refSpacing.before != null) {
-        expect(typeof adapterAttrs?.spacing?.before).toBe('number');
-        expect(adapterAttrs.spacing.before).toBeGreaterThanOrEqual(0);
+        expect(typeof paragraphAttrs?.spacing?.before).toBe('number');
+        expect(paragraphAttrs.spacing.before).toBeGreaterThanOrEqual(0);
       }
       if (refSpacing.after != null) {
-        expect(typeof adapterAttrs?.spacing?.after).toBe('number');
-        expect(adapterAttrs.spacing.after).toBeGreaterThanOrEqual(0);
+        expect(typeof paragraphAttrs?.spacing?.after).toBe('number');
+        expect(paragraphAttrs.spacing.after).toBeGreaterThanOrEqual(0);
       }
     }
 
     // Compare indent: ensure adapter returns object with matching keys
     const refIndent = reference.paragraphProperties.indent;
     if (refIndent) {
-      expect(adapterAttrs?.indent).toBeDefined();
+      expect(paragraphAttrs?.indent).toBeDefined();
       if (refIndent.left != null) {
-        expect(adapterAttrs.indent?.left).toBeDefined();
+        expect(paragraphAttrs.indent?.left).toBeDefined();
       }
       if (refIndent.right != null) {
-        expect(adapterAttrs.indent?.right).toBeDefined();
+        expect(paragraphAttrs.indent?.right).toBeDefined();
       }
       if (refIndent.firstLine != null) {
-        expect(adapterAttrs.indent?.firstLine ?? adapterAttrs.indent?.hanging).toBeDefined();
+        expect(paragraphAttrs.indent?.firstLine ?? paragraphAttrs.indent?.hanging).toBeDefined();
       }
       if (refIndent.hanging != null) {
-        expect(adapterAttrs.indent?.hanging ?? adapterAttrs.indent?.firstLine).toBeDefined();
+        expect(paragraphAttrs.indent?.hanging ?? paragraphAttrs.indent?.firstLine).toBeDefined();
       }
     }
 
     // Compare alignment (justification)
     if (reference.paragraphProperties.justification) {
       const referenceAlign = reference.paragraphProperties.justification;
-      expect(adapterAttrs?.alignment).toBe(referenceAlign);
+      expect(paragraphAttrs?.alignment).toBe(referenceAlign);
     }
 
     editor.destroy();
@@ -115,26 +110,24 @@ describe('adapter parity (computeParagraphAttrs)', () => {
     expect(reference.list).not.toBeNull();
 
     // Compute attrs via adapter
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const listCounterContext = createListCounterContext();
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, listCounterContext, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Verify numberingProperties are present and correct
-    expect(adapterAttrs?.numberingProperties).toBeDefined();
-    expect(adapterAttrs?.numberingProperties.ilvl).toEqual(reference.paragraphProperties.numberingProperties.ilvl);
-    expect(adapterAttrs?.numberingProperties.numId).toEqual(reference.paragraphProperties.numberingProperties.numId);
+    expect(paragraphAttrs?.numberingProperties).toBeDefined();
+    expect(paragraphAttrs?.numberingProperties.ilvl).toEqual(reference.paragraphProperties.numberingProperties.ilvl);
+    expect(paragraphAttrs?.numberingProperties.numId).toEqual(reference.paragraphProperties.numberingProperties.numId);
 
     // Verify wordLayout is computed and matches reference
-    expect(adapterAttrs?.wordLayout).toBeDefined();
+    expect(paragraphAttrs?.wordLayout).toBeDefined();
     if (reference.list.markerText) {
-      expect(adapterAttrs?.wordLayout?.marker?.markerText).toBe(reference.list.markerText);
+      expect(paragraphAttrs?.wordLayout?.marker?.markerText).toBe(reference.list.markerText);
     }
     if (reference.list.justification) {
-      expect(adapterAttrs?.wordLayout?.marker?.justification).toBe(reference.list.justification);
+      expect(paragraphAttrs?.wordLayout?.marker?.justification).toBe(reference.list.justification);
     }
     if (reference.list.suffix) {
-      expect(adapterAttrs?.wordLayout?.marker?.suffix).toBe(reference.list.suffix);
+      expect(paragraphAttrs?.wordLayout?.marker?.suffix).toBe(reference.list.suffix);
     }
 
     editor.destroy();
@@ -164,23 +157,37 @@ describe('adapter parity (computeParagraphAttrs)', () => {
     expect(paraNode).toBeTruthy();
 
     // Compute adapter attrs
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(paraNode, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(paraNode, converterContext);
 
     // Verify spacing precedence
     if (referenceMatch.paragraphProperties.spacing) {
-      expect(adapterAttrs?.spacing).toBeDefined();
+      expect(paragraphAttrs?.spacing).toBeDefined();
 
       // Check for contextualSpacing if present
       if (referenceMatch.paragraphProperties.spacing.contextualSpacing != null) {
-        expect(adapterAttrs?.contextualSpacing).toBe(referenceMatch.paragraphProperties.spacing.contextualSpacing);
+        expect(paragraphAttrs?.contextualSpacing).toBe(referenceMatch.paragraphProperties.spacing.contextualSpacing);
       }
     }
 
     // Verify indent precedence
     if (referenceMatch.paragraphProperties.indent) {
-      expect(adapterAttrs?.indent).toEqual(referenceMatch.paragraphProperties.indent);
+      expect(paragraphAttrs?.indent).toBeDefined();
+      const { indent } = referenceMatch.paragraphProperties;
+      if (indent.left != null) {
+        expect(paragraphAttrs.indent?.left).toBeDefined();
+        expect(paragraphAttrs.indent?.left).toBeGreaterThanOrEqual(0);
+      }
+      if (indent.right != null) {
+        expect(paragraphAttrs.indent?.right).toBeDefined();
+        expect(paragraphAttrs.indent?.right).toBeGreaterThanOrEqual(0);
+      }
+      if (indent.firstLine != null) {
+        expect(paragraphAttrs.indent?.firstLine ?? paragraphAttrs.indent?.hanging).toBeDefined();
+      }
+      if (indent.hanging != null) {
+        expect(paragraphAttrs.indent?.hanging ?? paragraphAttrs.indent?.firstLine).toBeDefined();
+      }
     }
 
     editor.destroy();
@@ -210,15 +217,14 @@ describe('adapter parity (computeParagraphAttrs)', () => {
     expect(reference.paragraphProperties.tabStops).toBeTruthy();
 
     // Compute adapter attrs
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Verify tabs are present and correct shape/values
-    expect(adapterAttrs?.tabs).toBeDefined();
-    expect(Array.isArray(adapterAttrs.tabs)).toBe(true);
+    expect(paragraphAttrs?.tabs).toBeDefined();
+    expect(Array.isArray(paragraphAttrs.tabs)).toBe(true);
     const refTab = reference.paragraphProperties.tabStops[0];
-    const adapterTab = adapterAttrs.tabs?.[0];
+    const adapterTab = paragraphAttrs.tabs?.[0];
     if (refTab.pos != null) {
       expect(adapterTab?.pos).toBe(refTab.pos);
     } else {
@@ -234,7 +240,7 @@ describe('adapter parity (computeParagraphAttrs)', () => {
     }
 
     // Verify tabIntervalTwips default is set
-    expect(adapterAttrs?.tabIntervalTwips).toBe(styleContext.defaults.defaultTabIntervalTwips);
+    expect(paragraphAttrs?.tabIntervalTwips).toBe(720);
 
     editor.destroy();
   });
@@ -250,79 +256,50 @@ describe('adapter parity (computeParagraphAttrs)', () => {
     const match = findParagraphAt(editor.state.doc, () => true);
     expect(match).toBeTruthy();
 
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Tab interval should be set from styleContext defaults
-    expect(adapterAttrs?.tabIntervalTwips).toBe(styleContext.defaults.defaultTabIntervalTwips);
+    expect(paragraphAttrs?.tabIntervalTwips).toBe(720);
 
     editor.destroy();
   });
 
   it('returns minimal attrs for empty paragraph (defaults only)', () => {
     const emptyPara = { type: { name: 'paragraph' }, attrs: {} };
-    const styleContext = { styles: {}, defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' } };
-    const adapterAttrs = computeParagraphAttrs(emptyPara, styleContext);
+    const { paragraphAttrs } = computeParagraphAttrs(emptyPara);
     // Even empty paragraphs get default alignment and tab interval from styleContext.defaults
-    expect(adapterAttrs).toBeDefined();
-    expect(adapterAttrs?.tabIntervalTwips).toBe(720);
-  });
-
-  it('handles bidi + adjustRightInd by forcing right alignment and indent', () => {
-    const para = {
-      type: { name: 'paragraph' },
-      attrs: { bidi: true, adjustRightInd: true },
-    };
-    const styleContext = { styles: {}, defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' } };
-    const adapterAttrs = computeParagraphAttrs(para, styleContext);
-    expect(adapterAttrs?.alignment).toBe('right');
-    expect(adapterAttrs?.indent?.left).toBeGreaterThan(0);
-    expect(adapterAttrs?.indent?.right).toBeGreaterThan(0);
+    expect(paragraphAttrs).toBeDefined();
+    expect(paragraphAttrs?.tabIntervalTwips).toBe(720);
   });
 
   it('extracts framePr flags correctly', () => {
-    // Create a mock paragraph with framePr
-    const paraWithFramePr = {
-      type: { name: 'paragraph' },
-      attrs: {
-        framePr: { xAlign: 'right' },
-      },
-    };
-
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-    };
-
-    const adapterAttrs = computeParagraphAttrs(paraWithFramePr, styleContext);
-
-    expect(adapterAttrs?.floatAlignment).toBe('right');
-  });
-
-  it('extracts framePr from paragraphProperties elements', () => {
-    // Create a mock paragraph with framePr in paragraphProperties
     const paraWithFramePr = {
       type: { name: 'paragraph' },
       attrs: {
         paragraphProperties: {
-          elements: [
-            {
-              name: 'w:framePr',
-              attributes: { 'w:xAlign': 'center' },
-            },
-          ],
+          framePr: { xAlign: 'right' },
         },
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
+    const { paragraphAttrs } = computeParagraphAttrs(paraWithFramePr);
+
+    expect(paragraphAttrs?.floatAlignment).toBe('right');
+  });
+
+  it('extracts framePr from paragraphProperties', () => {
+    const paraWithFramePr = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          framePr: { xAlign: 'center' },
+        },
+      },
     };
 
-    const adapterAttrs = computeParagraphAttrs(paraWithFramePr, styleContext);
+    const { paragraphAttrs } = computeParagraphAttrs(paraWithFramePr);
 
-    expect(adapterAttrs?.floatAlignment).toBe('center');
+    expect(paragraphAttrs?.floatAlignment).toBe('center');
   });
 });

@@ -6,6 +6,9 @@ permissions:
 on:
   pull_request:
     branches: [main, 'release/**']
+    paths-ignore:
+      - 'apps/docs/**'
+      - '**/*.md'
 
 concurrency:
   group: pr-${{ github.event.pull_request.number }}

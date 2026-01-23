@@ -230,16 +230,6 @@ export type Position = { start: number; end: number };
 export type PositionMap = WeakMap<PMNode, Position>;
 
 /**
- * Bookmark pair tracking
- */
-export type BookmarkPair = number;
-
-/**
- * Block position data
- */
-export type BlockPositionData = Position;
-
-/**
  * PM document map for batch processing
  */
 export type PMDocumentMap = Record<string, PMNode | object | null | undefined>;
@@ -343,27 +333,6 @@ export type NestedConverters = {
   shapeGroupNodeToDrawingBlock: typeof shapeGroupNodeToDrawingBlock;
   shapeContainerNodeToDrawingBlock: typeof shapeContainerNodeToDrawingBlock;
   shapeTextboxNodeToDrawingBlock: typeof shapeTextboxNodeToDrawingBlock;
-};
-
-/**
- * List rendering attributes
- */
-export type ListRenderingAttrs = {
-  markerText: string;
-  justification: 'left' | 'right' | 'center';
-  path: number[];
-  numberingType: string;
-  suffix: 'tab' | 'space' | 'nothing';
-};
-
-/**
- * Marker parameters for list items
- */
-export type MarkerParams = {
-  listType: 'bullet' | 'ordered';
-  listNode: PMNode;
-  itemNode: PMNode;
-  fallbackOrder: number;
 };
 
 /**

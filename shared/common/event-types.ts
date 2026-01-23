@@ -2,6 +2,7 @@ export const comments_module_events = {
   RESOLVED: 'resolved',
   NEW: 'new',
   ADD: 'add',
+  BATCH_ADD: 'batch-add',
   UPDATE: 'update',
   DELETED: 'deleted',
   PENDING: 'pending',

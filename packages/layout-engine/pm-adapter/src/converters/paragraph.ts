@@ -7,7 +7,7 @@
  * - Tracked changes processing
  */
 
-import type { DocDefaults, ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
+import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
 import type {
   FlowBlock,
   Run,
@@ -31,7 +31,7 @@ import {
 import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
-import { pickNumber, isPlainObject, ptToPx } from '../utilities.js';
+import { pickNumber, isPlainObject } from '../utilities.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 

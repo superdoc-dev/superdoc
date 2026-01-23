@@ -1,0 +1,5 @@
+{
+  "name": "XLSX to Table",
+  "description": "Import spreadsheet data and insert as tables in SuperDoc",
+  "category": "advanced"
+}

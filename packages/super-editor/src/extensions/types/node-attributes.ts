@@ -1036,8 +1036,32 @@ export interface PermStartAttrs extends InlineNodeAttributes {
   colLast?: number | null;
 }
 
+/** Block-level permission start node attributes */
+export interface PermStartBlockAttrs extends BlockNodeAttributes {
+  /** Permission identifier */
+  id?: string | null;
+  /** Editor group */
+  edGrp?: string | null;
+  /** Editor */
+  ed?: string | null;
+  /** First column reference */
+  colFirst?: number | null;
+  /** Last column reference */
+  colLast?: number | null;
+}
+
 /** Permission end node attributes */
 export interface PermEndAttrs extends InlineNodeAttributes {
+  /** Permission identifier */
+  id?: string | null;
+  /** Editor group */
+  edGrp?: string | null;
+  /** Indicates if displaced by custom XML */
+  displacedByCustomXml?: string | null;
+}
+
+/** Block-level permission end node attributes */
+export interface PermEndBlockAttrs extends BlockNodeAttributes {
   /** Permission identifier */
   id?: string | null;
   /** Editor group */
@@ -1124,7 +1148,9 @@ declare module '../../core/types/NodeAttributesMap.js' {
 
     // Permissions
     permStart: PermStartAttrs;
+    permStartBlock: PermStartBlockAttrs;
     permEnd: PermEndAttrs;
+    permEndBlock: PermEndBlockAttrs;
 
     // Page elements
     pageReference: PageReferenceAttrs;

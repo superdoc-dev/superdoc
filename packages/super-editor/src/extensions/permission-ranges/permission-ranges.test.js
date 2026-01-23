@@ -21,6 +21,22 @@ const docWithPermissionRange = {
   ],
 };
 
+const docWithBlockPermissionRange = {
+  type: 'doc',
+  content: [
+    { type: 'permStartBlock', attrs: { id: 'b1', edGrp: 'everyone' } },
+    {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Block editable section. ' }],
+    },
+    { type: 'permEndBlock', attrs: { id: 'b1', edGrp: 'everyone' } },
+    {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Locked block section.' }],
+    },
+  ],
+};
+
 const docWithoutPermissionRange = {
   type: 'doc',
   content: [
@@ -107,6 +123,27 @@ describe('PermissionRanges extension', () => {
     expect(instance.isEditable).toBe(false);
   });
 
+  it('honors block-level permission nodes', () => {
+    const instance = createEditor(docWithBlockPermissionRange);
+    expect(instance.isEditable).toBe(true);
+    const storedRanges = instance.storage.permissionRanges?.ranges ?? [];
+    expect(storedRanges.length).toBeGreaterThan(0);
+
+    const lockedPos = findTextPos(instance.state.doc, 'Locked block');
+    expect(lockedPos).toBeGreaterThan(0);
+    instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, lockedPos)));
+    const lockedTr = instance.state.tr.insertText('X', lockedPos, lockedPos);
+    instance.view.dispatch(lockedTr);
+    expect(instance.state.doc.textBetween(lockedPos, lockedPos + 1)).not.toContain('X');
+
+    const editablePos = findTextPos(instance.state.doc, 'Block editable');
+    expect(editablePos).toBeGreaterThan(0);
+    instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, editablePos)));
+    const allowedTr = instance.state.tr.insertText('Y', editablePos, editablePos);
+    instance.view.dispatch(allowedTr);
+    expect(instance.state.doc.textBetween(editablePos, editablePos + 2)).toContain('Y');
+  });
+
   it('blocks edits outside the permission range but allows edits inside it', () => {
     const instance = createEditor(docWithPermissionRange);
     const initialJson = instance.state.doc.toJSON();
@@ -157,6 +194,33 @@ describe('PermissionRanges extension', () => {
       return;
     });
 
+    expect(permEndCount).toBe(1);
+  });
+
+  it('reconstructs permEnd block nodes removed at the boundary', () => {
+    const instance = createEditor(docWithBlockPermissionRange);
+    let permEndPos = null;
+    let permEndSize = null;
+    instance.state.doc.descendants((node, pos) => {
+      if (node.type?.name === 'permEndBlock') {
+        permEndPos = pos;
+        permEndSize = node.nodeSize;
+        return false;
+      }
+      return;
+    });
+    expect(permEndPos).toBeGreaterThan(0);
+
+    const deleteTr = instance.state.tr.delete(permEndPos, permEndPos + permEndSize);
+    instance.view.dispatch(deleteTr);
+
+    let permEndCount = 0;
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permEndBlock') {
+        permEndCount += 1;
+      }
+      return;
+    });
     expect(permEndCount).toBe(1);
   });
 

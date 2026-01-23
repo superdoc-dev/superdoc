@@ -11,26 +11,30 @@ import { Node } from '@core/index.js';
  * @sidebarTitle PermEnd
  * @snippetPath /snippets/extensions/perm-end.mdx
  */
-export const PermEnd = Node.create({
-  name: 'permEnd',
-  group: 'inline',
-  inline: true,
+const hiddenRender = () => ['span', { style: 'display: none;' }];
 
-  renderDOM() {
-    return ['span', { style: 'display: none;' }];
+const sharedAttributes = () => ({
+  id: {
+    default: null,
   },
-
-  addAttributes() {
-    return {
-      id: {
-        default: null,
-      },
-      edGrp: {
-        default: null,
-      },
-      displacedByCustomXml: {
-        default: null,
-      },
-    };
+  edGrp: {
+    default: null,
+  },
+  displacedByCustomXml: {
+    default: null,
   },
 });
+
+const createPermEndNode = ({ name, group, inline }) =>
+  Node.create({
+    name,
+    group,
+    ...(inline ? { inline: true } : {}),
+
+    renderDOM: hiddenRender,
+
+    addAttributes: sharedAttributes,
+  });
+
+export const PermEnd = createPermEndNode({ name: 'permEnd', group: 'inline', inline: true });
+export const PermEndBlock = createPermEndNode({ name: 'permEndBlock', group: 'block', inline: false });

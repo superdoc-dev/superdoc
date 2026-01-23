@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { handlePassthroughNode, isInlineContext } from './passthroughNodeImporter.js';
+import { handlePassthroughNode } from './passthroughNodeImporter.js';
+import { isInlineContext } from '../../helpers/node-context.js';
 
 const createParams = (node, extra = {}) => ({
   nodes: [node],

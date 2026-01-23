@@ -70,8 +70,8 @@ import { CustomSelection } from './custom-selection/index.js';
 import { PermissionRanges } from './permission-ranges/index.js';
 
 // Permissions
-import { PermStart } from './perm-start/index.js';
-import { PermEnd } from './perm-end/index.js';
+import { PermStart, PermStartBlock } from './perm-start/index.js';
+import { PermEnd, PermEndBlock } from './perm-end/index.js';
 
 // Helpers
 import { trackChangesHelpers } from './track-changes/index.js';
@@ -189,6 +189,8 @@ const getStarterExtensions = () => {
     ShapeGroup,
     PermStart,
     PermEnd,
+    PermStartBlock,
+    PermEndBlock,
     PermissionRanges,
     PassthroughInline,
     PassthroughBlock,

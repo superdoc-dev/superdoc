@@ -1,6 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { fileURLToPath } from 'node:url';
-import { dirname } from 'path';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import { twipsToPixels } from '@core/super-converter/helpers.js';
 

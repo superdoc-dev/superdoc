@@ -118,31 +118,6 @@ function isObject(item: unknown): item is PropertyObject {
 // ---------------------------------------------------------------------------
 
 /**
- * Determines the correct ordering for defaults and Normal style in the cascade.
- *
- * Per OOXML spec, when Normal style is marked as w:default="1", it should
- * come AFTER document defaults in the cascade (so Normal values override defaults).
- * When Normal is NOT the default style, defaults should come after Normal.
- *
- * @param defaultProps - Document default properties.
- * @param normalProps - Normal style properties.
- * @param isNormalDefault - Whether Normal style has w:default="1".
- * @returns Ordered array [first, second] for the cascade.
- */
-export function orderDefaultsAndNormal<T extends PropertyObject>(
-  defaultProps: T,
-  normalProps: T,
-  isNormalDefault: boolean,
-): [T, T] {
-  if (isNormalDefault) {
-    // Normal is default: [defaults, Normal] - Normal wins when both exist
-    return [defaultProps, normalProps];
-  } else {
-    // Normal is NOT default: [Normal, defaults] - defaults win when both exist
-    return [normalProps, defaultProps];
-  }
-}
-/**
  * Combines run property objects while fully overriding certain keys.
  * This is a convenience wrapper for run properties (w:rPr).
  *

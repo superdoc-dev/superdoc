@@ -5,18 +5,13 @@
  * This module is format-aware (docx), but translator-agnostic.
  */
 
-import {
-  combineIndentProperties,
-  combineProperties,
-  combineRunProperties,
-  orderDefaultsAndNormal,
-} from '../cascade.js';
+import { combineIndentProperties, combineProperties, combineRunProperties } from '../cascade.js';
 import type { PropertyObject } from '../cascade.js';
 import type { ParagraphProperties, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';
 import type { StylesDocumentProperties, TableStyleType, TableProperties, TableLookProperties } from './styles-types.ts';
 
-export { combineIndentProperties, combineProperties, combineRunProperties, orderDefaultsAndNormal };
+export { combineIndentProperties, combineProperties, combineRunProperties };
 export type { PropertyObject };
 export type * from './types.ts';
 export type * from './numbering-types.ts';
@@ -57,7 +52,6 @@ export function resolveRunProperties(
   const defaultProps = params.translatedLinkedStyles.docDefaults?.runProperties ?? {};
   const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
   const normalProps = (normalStyleDef?.runProperties ?? {}) as RunProperties;
-  const isNormalDefault = normalStyleDef?.default ?? false;
 
   // Getting table style run properties
   const tableStyleProps = (
@@ -81,7 +75,12 @@ export function resolveRunProperties(
     ) as RunProperties;
   }
 
-  const defaultsChain = orderDefaultsAndNormal(defaultProps, normalProps, isNormalDefault);
+  let defaultsChain;
+  if (!paragraphStyleId) {
+    defaultsChain = [defaultProps, normalProps];
+  } else {
+    defaultsChain = [defaultProps];
+  }
   let styleChain: RunProperties[];
 
   if (isListNumber) {
@@ -136,7 +135,6 @@ export function resolveParagraphProperties(
   const defaultProps = params.translatedLinkedStyles.docDefaults?.paragraphProperties ?? {};
   const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
   const normalProps = (normalStyleDef?.paragraphProperties ?? {}) as ParagraphProperties;
-  const isNormalDefault = normalStyleDef?.default ?? false;
 
   // Properties from styles
   let styleId = inlineProps.styleId as string | undefined;
@@ -187,7 +185,12 @@ export function resolveParagraphProperties(
 
   // Resolve property chain - regular properties are treated differently from indentation
   //   Chain for regular properties
-  const defaultsChain = orderDefaultsAndNormal(defaultProps, normalProps, isNormalDefault);
+  let defaultsChain;
+  if (!styleId) {
+    defaultsChain = [defaultProps, normalProps];
+  } else {
+    defaultsChain = [defaultProps];
+  }
   const propsChain = [...defaultsChain, tableProps, ...cellStyleProps, numberingProps, styleProps, inlineProps];
 
   //   Chain for indentation properties

@@ -187,6 +187,10 @@ export type SdtBoundaryOptions = {
   isEnd?: boolean;
   /** Optional width override for the SDT container element */
   widthOverride?: number;
+  /** Optional padding bottom override for filling gaps between fragments */
+  paddingBottomOverride?: number;
+  /** Whether to show the label (overrides isStart check if provided) */
+  showLabel?: boolean;
 };
 
 /**
@@ -208,6 +212,7 @@ export type SdtBoundaryOptions = {
  * - Data attributes for continuation detection (`data-sdt-container-start/end`)
  * - Overflow visible to allow labels to appear above content
  * - Label/tooltip element created and appended to container when isStart=true
+ * - Padding bottom applied if paddingBottomOverride is provided (for filling gaps)
  *
  * **Label Element Structure:**
  * ```html
@@ -261,8 +266,21 @@ export function applySdtContainerStyling(
     container.style.width = `${boundaryOptions.widthOverride}px`;
   }
 
+  if (boundaryOptions?.paddingBottomOverride != null && boundaryOptions.paddingBottomOverride > 0) {
+    container.style.paddingBottom = `${boundaryOptions.paddingBottomOverride}px`;
+    // Only log for structured content blocks
+    if (config.className === 'superdoc-structured-content-block') {
+      console.log('[SDT Debug] Applied paddingBottom:', boundaryOptions.paddingBottomOverride, 'to element:', container.className);
+    }
+  } else if (config.className === 'superdoc-structured-content-block') {
+    console.log('[SDT Debug] No paddingBottom applied. boundaryOptions:', boundaryOptions);
+  }
+
   // Only create label on the first fragment of a multi-fragment container
-  if (isStart) {
+  // Or if showLabel is explicitly true (for cross-page support)
+  const shouldShowLabel = boundaryOptions?.showLabel ?? isStart;
+
+  if (shouldShowLabel) {
     const labelEl = doc.createElement('div');
     labelEl.className = config.labelClassName;
     const labelText = doc.createElement('span');

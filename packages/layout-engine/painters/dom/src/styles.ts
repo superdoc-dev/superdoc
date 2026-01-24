@@ -361,6 +361,12 @@ const SDT_CONTAINER_STYLES = `
   border-color: transparent;
 }
 
+/* Group hover (JavaScript-coordinated) */
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
 .superdoc-structured-content-block.ProseMirror-selectednode {
   border-color: #629be7;
   outline: none;

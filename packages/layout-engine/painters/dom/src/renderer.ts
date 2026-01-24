@@ -787,6 +787,7 @@ export class DomPainter {
   private footerProvider?: PageDecorationProvider;
   private totalPages = 0;
   private linkIdCounter = 0; // Counter for generating unique link IDs
+  private sdtLabelsRendered = new Set<string>(); // Tracks SDT labels rendered across pages
 
   /**
    * WeakMap storing tooltip data for hyperlink elements before DOM insertion.
@@ -1007,6 +1008,7 @@ export class DomPainter {
       throw new Error('DomPainter.paint requires a DOM-like document');
     }
     this.doc = doc;
+    this.sdtLabelsRendered.clear(); // Reset SDT label tracking for new render cycle
 
     // Simple transaction gate: only use position mapping optimization for single-step transactions.
     // Complex transactions (paste, multi-step replace, etc.) fall back to full rebuild.
@@ -1440,7 +1442,7 @@ export class DomPainter {
       pageNumberText: page.numberText,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup);
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
 
     page.fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
@@ -1747,7 +1749,7 @@ export class DomPainter {
 
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup);
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -1883,7 +1885,7 @@ export class DomPainter {
       section: 'body',
     };
 
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup);
+    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
 
     const fragments: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
@@ -5175,9 +5177,55 @@ const getFragmentSdtContainerKey = (fragment: Fragment, blockLookup: BlockLookup
   return null;
 };
 
+/**
+ * Calculate the height of a fragment.
+ * For para/list-item fragments, this must be computed from the measure's line data.
+ * For other fragment types, the height property is directly available.
+ */
+const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number => {
+  if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
+    return fragment.height;
+  }
+
+  const lookup = blockLookup.get(fragment.blockId);
+  if (!lookup) {
+    console.log('[SDT Debug] getFragmentHeight: No lookup for blockId', fragment.blockId);
+    return 0;
+  }
+
+  if (fragment.kind === 'para' && lookup.measure.kind === 'paragraph') {
+    const measure = lookup.measure;
+    const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
+    if (lines.length === 0) return 0;
+    // Sum up lineHeight for all lines in this fragment
+    let totalHeight = 0;
+    for (const line of lines) {
+      totalHeight += line.lineHeight ?? 0;
+    }
+    return totalHeight;
+  }
+
+  if (fragment.kind === 'list-item' && lookup.measure.kind === 'list') {
+    const listMeasure = lookup.measure as ListMeasure;
+    const item = listMeasure.items.find((it) => it.id === fragment.itemId);
+    if (!item) return 0;
+    const lines = item.measure.lines.slice(fragment.fromLine, fragment.toLine);
+    if (lines.length === 0) return 0;
+    // Sum up lineHeight for all lines in this fragment
+    let totalHeight = 0;
+    for (const line of lines) {
+      totalHeight += line.lineHeight ?? 0;
+    }
+    return totalHeight;
+  }
+
+  return 0;
+};
+
 const computeSdtBoundaries = (
   fragments: readonly Fragment[],
   blockLookup: BlockLookup,
+  sdtLabelsRendered: Set<string>,
 ): Map<number, SdtBoundaryOptions> => {
   const boundaries = new Map<number, SdtBoundaryOptions>();
   const containerKeys = fragments.map((fragment) => getFragmentSdtContainerKey(fragment, blockLookup));
@@ -5201,12 +5249,65 @@ const computeSdtBoundaries = (
       }
     }
 
+    // Only debug log for structuredContent blocks (not documentSections)
+    const isStructuredContentBlock = currentKey.startsWith('structuredContent:');
+
+    if (isStructuredContentBlock) {
+      console.log('[SDT Debug] Processing SDT group:', { currentKey, startIdx: i, endIdx: j, fragmentCount: j - i + 1 });
+    }
+
     for (let k = i; k <= j; k += 1) {
       const fragment = fragments[k];
+      const isStart = k === i;
+      const isEnd = k === j;
+      
+      // Calculate padding bottom to fill gap to next fragment
+      let paddingBottomOverride: number | undefined;
+      if (!isEnd) {
+        const nextFragment = fragments[k + 1];
+        const currentHeight = getFragmentHeight(fragment, blockLookup);
+        const currentBottom = fragment.y + currentHeight;
+        const gapToNext = nextFragment.y - currentBottom;
+        
+        if (isStructuredContentBlock) {
+          console.log('[SDT Debug] Gap calculation for fragment', k, ':', {
+            fragmentKind: fragment.kind,
+            fragmentY: fragment.y,
+            currentHeight,
+            currentBottom,
+            nextFragmentY: nextFragment.y,
+            gapToNext,
+          });
+        }
+        
+        // Only apply padding if there is a positive gap
+        if (gapToNext > 0) {
+          paddingBottomOverride = gapToNext;
+        }
+      }
+
+      // Determine if label should be shown
+      const showLabel = isStart && !sdtLabelsRendered.has(currentKey);
+      if (showLabel) {
+        sdtLabelsRendered.add(currentKey);
+      }
+
+      if (isStructuredContentBlock) {
+        console.log('[SDT Debug] Setting boundary for fragment', k, ':', {
+          isStart,
+          isEnd,
+          widthOverride: groupRight - fragment.x,
+          paddingBottomOverride,
+          showLabel,
+        });
+      }
+
       boundaries.set(k, {
-        isStart: k === i,
-        isEnd: k === j,
+        isStart,
+        isEnd,
         widthOverride: groupRight - fragment.x,
+        paddingBottomOverride,
+        showLabel,
       });
     }
 

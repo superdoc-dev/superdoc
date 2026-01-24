@@ -301,6 +301,10 @@ export class PresentationEditor extends EventEmitter {
     id: string | null;
     elements: HTMLElement[];
   } | null = null;
+  #lastHoveredStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
@@ -386,6 +390,11 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.className = 'presentation-editor__pages';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
+
+    // Add event listeners for structured content hover coordination
+    this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
+    this.#painterHost.addEventListener('mouseout', this.#handleStructuredContentBlockMouseLeave);
+
     const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
     this.#domIndexObserverManager = new DomPositionIndexObserverManager({
       windowRoot: win,
@@ -3264,6 +3273,73 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#setSelectedStructuredContentBlockClass(elements, id);
+  }
+
+  #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block');
+    
+    if (!block || !(block instanceof HTMLElement)) return;
+    
+    // Don't show hover effect if already selected
+    if (block.classList.contains('ProseMirror-selectednode')) return;
+
+    const rawId = block.dataset.sdtId;
+    if (!rawId) return;
+
+    this.#setHoveredStructuredContentBlockClass(rawId);
+  };
+
+  #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block');
+    
+    if (!block) return;
+    
+    // Only clear if we're leaving the block entirely or moving to a non-SDT element
+    // However, since we're using mouseenter/leave on the elements themselves, 
+    // simply clearing on leave is correct because the next enter will trigger if moving between fragments
+    // But we want to avoid flickering if moving between fragments of same SDT.
+    // Actually, checking relatedTarget is better.
+    
+    const relatedTarget = event.relatedTarget as HTMLElement;
+    if (relatedTarget && relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)) {
+      return;
+    }
+
+    this.#clearHoveredStructuredContentBlockClass();
+  };
+
+  #clearHoveredStructuredContentBlockClass() {
+    if (!this.#lastHoveredStructuredContentBlock) return;
+    this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('sdt-group-hover');
+    });
+    this.#lastHoveredStructuredContentBlock = null;
+  }
+
+  #setHoveredStructuredContentBlockClass(id: string) {
+    if (this.#lastHoveredStructuredContentBlock?.id === id) return;
+
+    this.#clearHoveredStructuredContentBlockClass();
+
+    if (!this.#painterHost) return;
+
+    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+    const elements = Array.from(
+      this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+    ) as HTMLElement[];
+
+    if (elements.length === 0) return;
+
+    elements.forEach((element) => {
+      // Don't apply hover class if selected (CSS handles this too, but good to be explicit)
+      if (!element.classList.contains('ProseMirror-selectednode')) {
+        element.classList.add('sdt-group-hover');
+      }
+    });
+
+    this.#lastHoveredStructuredContentBlock = { id, elements };
   }
 
   #clearSelectedStructuredContentInlineClass() {

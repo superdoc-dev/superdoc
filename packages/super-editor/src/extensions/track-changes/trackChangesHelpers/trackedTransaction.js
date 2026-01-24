@@ -110,12 +110,13 @@ export const trackedTransaction = ({ tr, state, user }) => {
     ) {
       const caretPos = map.map(tr.selection.from, -1);
       newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
+    } else if (trackMeta?.insertedTo !== undefined) {
+      // SD-1624: When content was inserted after a deletion span, position cursor after the insertion.
+      // This must be checked before the deletionMark branch to handle fully-deleted content correctly.
+      newTr.setSelection(new TextSelection(newTr.doc.resolve(trackMeta.insertedTo)));
     } else if (tr.selection.from > state.selection.from && deletionMark) {
       const caretPos = map.map(deletionMark.to + 1, 1);
       newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
-    } else if (trackMeta?.insertedTo !== undefined) {
-      // SD-1624: When content was inserted after a deletion span, position cursor after the insertion.
-      newTr.setSelection(new TextSelection(newTr.doc.resolve(trackMeta.insertedTo)));
     } else {
       newTr.setSelection(tr.selection.map(newTr.doc, map));
     }

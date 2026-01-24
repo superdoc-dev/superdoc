@@ -229,31 +229,37 @@ new SuperDoc({
 
 <ParamField path="pagination" type="boolean" default="false">
   Enable page-based layout
-  <Note>Consider using `layoutMode` for more control over document layout</Note>
+  <Note>Consider using `viewOptions` for more control over document layout</Note>
 </ParamField>
 
-<ParamField path="layoutMode" type="string" default="'paginated'">
-  Controls how the document is rendered
-  <Expandable title="Available modes">
-    - `paginated` - Fixed page width with page breaks (default)
-    - `responsive` - 100% width, text reflows to fit container
+<ParamField path="viewOptions" type="Object">
+  Document view options for controlling layout
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="viewOptions.layout" type="string" default="'print'">
+      Document view layout mode
+      - `'print'` - Fixed page width, displays document as it prints (default)
+      - `'web'` - Content reflows to fit container width
+    </ParamField>
   </Expandable>
-  <Note>Use `responsive` for mobile devices and WCAG AA accessibility compliance. When set to `responsive`, pagination is automatically disabled.</Note>
-</ParamField>
-
-<ParamField path="layoutMargins" type="Object">
-  Custom margins in pixels for responsive layout
-  <Expandable title="Margin properties">
-    <ParamField path="top" type="number">Top margin in pixels</ParamField>
-    <ParamField path="bottom" type="number">Bottom margin in pixels</ParamField>
-    <ParamField path="left" type="number">Left margin in pixels</ParamField>
-    <ParamField path="right" type="number">Right margin in pixels</ParamField>
-  </Expandable>
-  <Note>Only applies when `layoutMode` is set to `responsive`</Note>
+  <Note>Use `'web'` for mobile devices and WCAG AA reflow compliance (Success Criterion 1.4.10). When set to `'web'`, the layout engine is automatically disabled.</Note>
 
   ```javascript
-  layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 }
+  viewOptions: { layout: 'web' }
   ```
+</ParamField>
+
+<ParamField path="layoutMode" type="string" deprecated>
+  <Warning>**Deprecated in v1.0** - Use `viewOptions.layout` instead.</Warning>
+
+  Legacy layout mode option from v0.x. Mapped values:
+  - `'paginated'` → `viewOptions: { layout: 'print' }`
+  - `'responsive'` → `viewOptions: { layout: 'web' }`
+</ParamField>
+
+<ParamField path="layoutMargins" type="Object" deprecated>
+  <Warning>**Deprecated in v1.0** - No longer supported. Use CSS to control margins in web layout mode.</Warning>
+
+  Legacy margin configuration from v0.x.
 </ParamField>
 
 <ParamField path="rulers" type="boolean" default="false">

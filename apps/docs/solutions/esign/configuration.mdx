@@ -16,9 +16,8 @@ document={{
   // Display mode
   mode: 'full',        // Default: full editor
 
-  // Layout mode (for mobile/accessibility)
-  layoutMode: 'responsive',  // 'paginated' (default) or 'responsive'
-  layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
+  // View options (for mobile/accessibility)
+  viewOptions: { layout: 'web' },  // 'print' (default) or 'web'
 
   // Requirements
   validation: {
@@ -27,14 +26,18 @@ document={{
 }}
 ```
 
-### Layout modes
+### View options
 
 Control how the document is displayed:
 
-- **`paginated`** (default) - Fixed page width with page breaks
-- **`responsive`** - 100% width, text reflows to fit container
+- **`print`** (default) - Fixed page width with page breaks
+- **`web`** - 100% width, text reflows to fit container
 
-Use `responsive` for mobile devices or WCAG AA accessibility compliance. Optional `layoutMargins` sets custom margins (in pixels) for responsive mode.
+Use `web` layout for mobile devices or WCAG AA accessibility compliance (Success Criterion 1.4.10).
+
+<Warning>
+**Migrating from v0.x?** The `layoutMode` and `layoutMargins` options are deprecated. Use `viewOptions: { layout: 'web' }` instead of `layoutMode: 'responsive'`.
+</Warning>
 
 ## Field system
 
@@ -308,8 +311,7 @@ Style the component to match your brand.
   document={{
     source: contractFile,
     mode: "full",
-    layoutMode: "responsive",
-    layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
+    viewOptions: { layout: "web" },
     validation: {
       scroll: { required: true },
     },

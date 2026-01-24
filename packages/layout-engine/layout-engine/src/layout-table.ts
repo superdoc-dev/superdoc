@@ -169,35 +169,17 @@ function resolveTableFrame(
 }
 
 /**
- * Calculate minimum width for a table column based on cell content.
+ * Calculate minimum width for a table column.
  *
- * For now, uses a conservative minimum of 25px per column as the layout engine
- * doesn't yet track word-level measurements. Future enhancement: scan cell
- * paragraph measures for longest unbreakable word or image width.
+ * Uses a conservative minimum of 10px per column to match PM's
+ * columnResizing behavior.
  *
- * Edge cases handled:
- * - Out of bounds column index: Returns DEFAULT_MIN_WIDTH (25px)
- * - Negative or zero widths: Returns DEFAULT_MIN_WIDTH (25px)
- * - Very wide columns (>200px): Capped at 200px for better UX
- * - Empty columnWidths array: Returns DEFAULT_MIN_WIDTH (25px)
- *
- * @param columnIndex - Column index to calculate minimum for (0-based)
- * @param measure - Table measurement data containing columnWidths array
- * @returns Minimum width in pixels, guaranteed to be between 25px and 200px
+ * @returns Minimum width in pixels (10px)
  */
-function calculateColumnMinWidth(columnIndex: number, measure: TableMeasure): number {
-  const DEFAULT_MIN_WIDTH = 25; // Minimum usable column width in pixels
+function calculateColumnMinWidth(): number {
+  const DEFAULT_MIN_WIDTH = 10; // Minimum usable column width in pixels
 
-  // Future enhancement: compute actual minimum based on cell content
-  // For now, use measured width but constrain to reasonable minimum
-  const measuredWidth = measure.columnWidths[columnIndex] || DEFAULT_MIN_WIDTH;
-
-  // Don't allow columns to shrink below absolute minimum, but cap at reasonable max
-  // The 200px cap prevents overly wide minimum widths from making columns too rigid.
-  // This allows columns that are initially wide to still be resizable down to more
-  // reasonable widths. For example, a 500px column can be resized down to 200px minimum
-  // rather than being locked at 500px. This provides better UX for table editing.
-  return Math.max(DEFAULT_MIN_WIDTH, Math.min(measuredWidth, 200));
+  return DEFAULT_MIN_WIDTH;
 }
 
 /**
@@ -227,7 +209,7 @@ function generateColumnBoundaries(measure: TableMeasure): TableColumnBoundary[] 
 
   for (let i = 0; i < measure.columnWidths.length; i++) {
     const width = measure.columnWidths[i];
-    const minWidth = calculateColumnMinWidth(i, measure);
+    const minWidth = calculateColumnMinWidth();
 
     const boundary = {
       index: i,

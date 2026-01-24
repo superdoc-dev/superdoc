@@ -23,6 +23,26 @@ const superdoc = new SuperDoc({
 superdoc.setHighContrastMode(true);
 ```
 
+## Responsive layout (WCAG AA Reflow)
+
+SuperDoc supports [WCAG 2.1 Success Criterion 1.4.10 (Reflow)](https://www.w3.org/WAI/WCAG21/Understanding/reflow.html) through the web layout mode:
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  viewOptions: { layout: 'web' }
+});
+```
+
+This enables:
+- Content reflows to fit any viewport width (down to 320px)
+- No horizontal scrolling required
+- Document structure (headings, lists, tables) remains intact
+- Ideal for mobile devices and responsive web applications
+
+<Note>When using web layout mode, the layout engine is automatically disabled to allow content reflow.</Note>
+
 ## Keyboard navigation
 
 ### Toolbar navigation

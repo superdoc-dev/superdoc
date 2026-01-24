@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'path';
-import { Editor } from '@core/Editor.js';
-import { initTestEditor } from '@tests/helpers/helpers.js';
-import { zipFolderToBuffer } from '@tests/helpers/zipFolderToBuffer.js';
+import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import { twipsToPixels } from '@core/super-converter/helpers.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const findFirstTable = (doc) => {
   let tableNode = null;
@@ -22,8 +16,7 @@ const findFirstTable = (doc) => {
 
 describe('table indent grid widths', () => {
   it('uses tblGrid widths when tableIndent shrinks the grid', async () => {
-    const buffer = await zipFolderToBuffer(join(__dirname, '../data/sd_1494_table_left_indent'));
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('sd_1494_table_left_indent.docx');
     const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     try {

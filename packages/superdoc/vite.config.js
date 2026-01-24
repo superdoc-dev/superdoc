@@ -117,6 +117,7 @@ export default defineConfig(({ mode, command}) => {
         input: {
           'superdoc': 'src/index.js',
           'super-editor': 'src/super-editor.js',
+          'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',
           'super-editor/converter': '@core/super-converter/SuperConverter',
           'super-editor/file-zipper': '@core/super-converter/zipper.js',

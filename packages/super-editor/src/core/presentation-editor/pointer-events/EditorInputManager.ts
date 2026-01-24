@@ -713,6 +713,10 @@ export class EditorInputManager {
           nextSelection = Selection.near(doc.resolve(hit.pos), 1);
         }
         const tr = editor.state.tr.setSelection(nextSelection);
+        // Preserve stored marks (e.g., formatting selected from toolbar before clicking)
+        if (nextSelection instanceof TextSelection && nextSelection.empty && editor.state.storedMarks) {
+          tr.setStoredMarks(editor.state.storedMarks);
+        }
         editor.view?.dispatch(tr);
       } catch {
         // Position may be invalid during layout updates

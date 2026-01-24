@@ -81,6 +81,9 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   if (insertion.insertedFrom !== insertion.insertedTo) {
     meta.insertedMark = insertedMark;
     meta.step = condensedStep;
+    // Store the actual insertion end position for cursor placement.
+    // This is needed when insertion was moved after a deletion span (SD-1624).
+    meta.insertedTo = map.map(positionTo + (insertion.insertedTo - insertion.insertedFrom), 1);
   }
 
   if (!newTr.selection.eq(trTemp.selection)) {

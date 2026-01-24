@@ -1,0 +1,50 @@
+---
+title: DropCursor extension
+sidebarTitle: "Drop Cursor"
+keywords: "DropCursor extension, superdoc DropCursor, word DropCursor, document DropCursor, docx DropCursor"
+---
+
+import Description from '/snippets/extensions/dropcursor.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="color" type="string" default="currentColor">
+  CSS color for the drop cursor indicator
+</ParamField>
+
+<ParamField path="width" type="number" default="2">
+  Width of the drop cursor line in pixels
+</ParamField>
+
+<ParamField path="class" type="string">
+  Optional CSS class to apply to the drop cursor element
+</ParamField>
+
+**Example:**
+
+```javascript
+// Customize drop cursor appearance
+const ConfiguredDropCursor = DropCursor.configure({
+  color: '#3b82f6',
+  width: 3,
+  class: 'custom-drop-cursor'
+});
+
+// Use in SuperDoc
+new SuperDoc({
+  selector: '#editor',
+  document: 'document.docx',
+  editorExtensions: [ConfiguredDropCursor]
+});
+```
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/dropcursor/dropcursor.js" />

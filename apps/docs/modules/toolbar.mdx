@@ -1,0 +1,711 @@
+---
+title: Toolbar
+keywords: "word toolbar, document formatting controls, custom toolbar, editor ui components, formatting buttons"
+---
+
+The toolbar provides a customizable UI for document editing with support for custom buttons, responsive layouts, and role-based controls.
+
+## Quick Start
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  toolbar: '#toolbar'  // Simple toolbar with defaults
+});
+```
+
+## Module Configuration
+
+<ParamField path="modules.toolbar.selector" type="string | HTMLElement">
+  Container element for toolbar
+</ParamField>
+
+<ParamField path="modules.toolbar.toolbarGroups" type="string[]" default="['left', 'center', 'right']">
+  Layout regions for button placement
+</ParamField>
+
+<ParamField path="modules.toolbar.groups" type="Object">
+  Custom button arrangement by group
+  
+  <Expandable title="Example configuration">
+    ```javascript
+    groups: {
+      left: ['undo', 'redo'],
+      center: ['bold', 'italic', 'underline'],
+      right: ['documentMode', 'export']
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.toolbar.excludeItems" type="string[]" default="[]">
+  Button names to exclude from toolbar
+</ParamField>
+
+<ParamField path="modules.toolbar.icons" type="Object" default="{}">
+  Custom SVG icons for buttons
+</ParamField>
+
+<ParamField path="modules.toolbar.texts" type="Object" default="{}">
+  Custom tooltips and labels
+</ParamField>
+
+<ParamField path="modules.toolbar.fonts" type="Array" default="[]">
+  Available font options in font dropdown
+</ParamField>
+
+<ParamField path="modules.toolbar.hideButtons" type="boolean" default="true">
+  Auto-hide buttons on small screens
+</ParamField>
+
+<ParamField path="modules.toolbar.responsiveToContainer" type="boolean" default="false">
+  Size relative to container instead of window
+</ParamField>
+
+<ParamField path="modules.toolbar.customButtons" type="Array" default="[]">
+  Custom button definitions
+</ParamField>
+
+## Button Categories
+
+<CardGroup cols={2}>
+  <Card title="Text Formatting" icon="text">
+    Bold, italic, underline, strikethrough
+  </Card>
+  <Card title="Font Controls" icon="palette">
+    Font family, size, color, highlight
+  </Card>
+  <Card title="Paragraph" icon="align-left">
+    Alignment, lists, indentation
+  </Card>
+  <Card title="Document Tools" icon="file">
+    Undo, redo, search, links, tables
+  </Card>
+</CardGroup>
+
+## Available Buttons
+
+### Text Formatting
+
+<ResponseField name="bold" type="button">
+  Toggle bold formatting (`Ctrl+B`)
+</ResponseField>
+
+<ResponseField name="italic" type="button">
+  Toggle italic formatting (`Ctrl+I`)
+</ResponseField>
+
+<ResponseField name="underline" type="button">
+  Toggle underline formatting (`Ctrl+U`)
+</ResponseField>
+
+<ResponseField name="strikethrough" type="button">
+  Toggle strikethrough formatting
+</ResponseField>
+
+### Font Controls
+
+<ResponseField name="fontFamily" type="dropdown">
+  Font family selector
+</ResponseField>
+
+<ResponseField name="fontSize" type="dropdown">
+  Font size selector
+</ResponseField>
+
+<ResponseField name="color" type="colorpicker">
+  Text color picker
+</ResponseField>
+
+<ResponseField name="highlight" type="colorpicker">
+  Background highlight color
+</ResponseField>
+
+### Paragraph Formatting
+
+<ResponseField name="alignLeft" type="button">
+  Align text left
+</ResponseField>
+
+<ResponseField name="alignCenter" type="button">
+  Center align text
+</ResponseField>
+
+<ResponseField name="alignRight" type="button">
+  Align text right
+</ResponseField>
+
+<ResponseField name="justify" type="button">
+  Justify text
+</ResponseField>
+
+<ResponseField name="list" type="button">
+  Toggle bullet list
+</ResponseField>
+
+<ResponseField name="numberedlist" type="button">
+  Toggle numbered list
+</ResponseField>
+
+<ResponseField name="indentleft" type="button">
+  Decrease indent
+</ResponseField>
+
+<ResponseField name="indentright" type="button">
+  Increase indent
+</ResponseField>
+
+### Feature Buttons
+
+<Note>These buttons appear when their respective modules are enabled</Note>
+
+<ResponseField name="addComment" type="button">
+  Add comment (requires Comments module)
+</ResponseField>
+
+<ResponseField name="acceptChange" type="button">
+  Accept tracked change (requires Track Changes)
+</ResponseField>
+
+<ResponseField name="rejectChange" type="button">
+  Reject tracked change (requires Track Changes)
+</ResponseField>
+
+<ResponseField name="documentMode" type="dropdown">
+  Switch between editing/viewing/suggesting modes
+</ResponseField>
+
+## Custom Buttons
+
+### Basic Button
+
+<ParamField path="type" type="string" required>
+  Button type: `'button'` or `'dropdown'`
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Unique button identifier
+</ParamField>
+
+<ParamField path="tooltip" type="string">
+  Hover text
+</ParamField>
+
+<ParamField path="icon" type="string">
+  SVG icon string
+</ParamField>
+
+<ParamField path="group" type="string" default="'center'">
+  Layout group: 'left', 'center', or 'right'
+</ParamField>
+
+<ParamField path="command" type="string | function(CommandItem)" required>
+  Command name or handler function. 
+  See [CommandItem](#commanditem) type definition.
+</ParamField>
+
+```javascript
+modules: {
+  toolbar: {
+    customButtons: [{
+      type: 'button',
+      name: 'myButton',
+      tooltip: 'My Custom Button',
+      icon: '<svg>...</svg>',
+      group: 'center',
+      command: ({ item, argument, option }) => {
+        superdoc.activeEditor.commands.myCommand();
+      }
+    }]
+  }
+}
+```
+
+To implement a custom command that can be called as shown above, [you'll need to create an extension](/extensions/creating-extensions).
+
+### Dropdown Button
+
+<ParamField path="options" type="Array" required>
+  Dropdown menu options
+  
+  <Expandable title="Option properties">
+    <ParamField path="label" type="string" required>
+      Display text
+    </ParamField>
+    <ParamField path="key" type="any" required>
+      Option value
+    </ParamField>
+    <ParamField path="icon" type="string">
+      Optional icon
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="hasCaret" type="boolean" default="true">
+  Show dropdown arrow
+</ParamField>
+
+```javascript
+customButtons: [{
+  type: 'dropdown',
+  name: 'templates',
+  tooltip: 'Insert Template',
+  icon: templateIcon,
+  hasCaret: true,
+  options: [
+    { label: 'Contract', key: 'contract' },
+    { label: 'Invoice', key: 'invoice' }
+  ],
+  command: ({ option }) => {
+    if (option) loadTemplate(option.key);
+  }
+}]
+```
+
+### Toggle Button
+
+<ParamField path="active" type="boolean" default="false">
+  Initial active state
+</ParamField>
+
+<ParamField path="activeIcon" type="string">
+  Icon when active (optional)
+</ParamField>
+
+```javascript
+customButtons: [{
+  type: 'button',
+  name: 'darkMode',
+  tooltip: 'Toggle Dark Mode',
+  icon: moonIcon,
+  activeIcon: sunIcon,
+  active: false,
+  command: ({ item }) => {
+    const isActive = !item.active.value;
+    item.active.value = isActive;
+    setDarkMode(isActive);
+  }
+}]
+```
+
+## Command System
+
+### Command Handler
+
+Commands receive these parameters:
+
+<ParamField path="item" type="Object">
+  The toolbar button object
+</ParamField>
+
+<ParamField path="argument" type="any">
+  Value passed (e.g., color hex, font name)
+</ParamField>
+
+<ParamField path="option" type="Object">
+  Selected dropdown option (dropdowns only)
+</ParamField>
+
+```javascript
+command: ({ item, argument, option }) => {
+  const editor = superdoc.activeEditor;
+  
+  // Color button passes hex
+  if (item.name === 'color') {
+    editor.commands.setColor(argument); // #FF0000
+  }
+  
+  // Dropdown passes selected option
+  if (option) {
+    handleOption(option.key);
+  }
+}
+```
+
+### Built-in Command Names
+
+<Note>Use string command names for standard operations</Note>
+
+```javascript
+// Text formatting
+command: 'toggleBold'
+command: 'toggleItalic'
+command: 'toggleUnderline'
+
+// Paragraph
+command: 'setTextAlign'
+command: 'toggleBulletList'
+
+// Special handlers
+command: 'setZoom'         // Handled by SuperDoc
+command: 'setDocumentMode' // Changes editing state
+```
+
+## Icon Customization
+
+### Replace Built-in Icons
+
+<ParamField path="modules.toolbar.icons" type="Object">
+  Map of button names to SVG strings
+</ParamField>
+
+```javascript
+modules: {
+  toolbar: {
+    icons: {
+      bold: '<svg viewBox="0 0 24 24">...</svg>',
+      italic: '<svg viewBox="0 0 24 24">...</svg>',
+      // Function for dynamic icons
+      darkMode: () => isDark ? sunIcon : moonIcon
+    }
+  }
+}
+```
+
+<Warning>
+Icons should be 24x24 viewBox SVGs with `fill="currentColor"` for proper theming
+</Warning>
+
+## Font Configuration
+
+<ParamField path="fonts" type="Array">
+  Available font options
+  
+  <Expandable title="Font object properties">
+    <ParamField path="label" type="string" required>
+      Display name
+    </ParamField>
+    <ParamField path="key" type="string" required>
+      Font-family CSS value
+    </ParamField>
+    <ParamField path="fontWeight" type="number">
+      Font weight (optional)
+    </ParamField>
+    <ParamField path="props" type="Object">
+      Additional properties
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<Info>
+SuperDoc does not load fonts automatically. Custom fonts from imported DOCX files will display in the toolbar, but won't be selectable unless you load them in your application (via CSS `@font-face`, Google Fonts, etc.) and add them to the `fonts` array.
+</Info>
+
+```javascript
+fonts: [
+  // System fonts
+  { label: 'Arial', key: 'Arial' },
+  { label: 'Times', key: 'Times New Roman' },
+  
+  // Custom web font
+  {
+    label: 'Brand Font',
+    key: 'BrandFont, sans-serif',
+    fontWeight: 400,
+    props: {
+      style: { fontFamily: 'BrandFont' }
+    }
+  }
+]
+```
+
+## Responsive Behavior
+
+### Breakpoints
+
+The toolbar adapts at these widths:
+
+<ResponseField name="xl" type="1410px+">
+  All buttons visible
+</ResponseField>
+
+<ResponseField name="lg" type="1280px+">
+  Hide: styles, format painter
+</ResponseField>
+
+<ResponseField name="md" type="1024px+">
+  Hide: separators
+</ResponseField>
+
+<ResponseField name="sm" type="768px+">
+  Hide: zoom, font, redo
+</ResponseField>
+
+<ResponseField name="xs" type="<768px">
+  Show overflow menu
+</ResponseField>
+
+### Container-Based Sizing
+
+```javascript
+modules: {
+  toolbar: {
+    responsiveToContainer: true, // Size based on container
+    hideButtons: true            // Auto-hide on small screens
+  }
+}
+```
+
+## Role-Based Controls
+
+<Tabs>
+  <Tab title="Viewer" icon="eye">
+    ```javascript
+    role: 'viewer'
+    // Shows: zoom, search, print, export
+    // All editing disabled
+    ```
+  </Tab>
+  
+  <Tab title="Suggester" icon="comment">
+    ```javascript
+    role: 'suggester'
+    // Track changes enabled
+    // Regular formatting available
+    // Cannot accept others' changes
+    ```
+  </Tab>
+  
+  <Tab title="Editor" icon="edit">
+    ```javascript
+    role: 'editor'
+    // All buttons available
+    // Full editing capabilities
+    ```
+  </Tab>
+</Tabs>
+
+## Common Configurations
+
+### Contract Review
+
+```javascript
+modules: {
+  toolbar: {
+    groups: {
+      left: ['undo', 'redo', 'search'],
+      center: ['addComment', 'acceptChange', 'rejectChange'],
+      right: ['documentMode', 'export']
+    },
+    customButtons: [{
+      name: 'approve',
+      icon: checkIcon,
+      tooltip: 'Approve Document',
+      group: 'right',
+      command: () => approveDocument()
+    }]
+  }
+}
+```
+
+### Minimal Editor
+
+```javascript
+modules: {
+  toolbar: {
+    groups: {
+      center: [
+        'bold', 'italic',
+        'link', 'image',
+        'list', 'numberedlist'
+      ]
+    },
+    excludeItems: ['zoom', 'ruler', 'pageBreak']
+  }
+}
+```
+
+### AI-Enhanced
+
+```javascript
+modules: {
+  toolbar: {
+    customButtons: [{
+      type: 'dropdown',
+      name: 'aiTools',
+      icon: aiIcon,
+      tooltip: 'AI Tools',
+      options: [
+        { label: 'Improve Writing', key: 'improve' },
+        { label: 'Fix Grammar', key: 'grammar' },
+        { label: 'Make Concise', key: 'concise' }
+      ],
+      command: ({ option }) => {
+        const selection = editor.getSelectedText();
+        aiProcess(option.key, selection);
+      }
+    }]
+  }
+}
+```
+
+## Toolbar State
+
+### Accessing Toolbar
+
+<ResponseField name="superdoc.toolbar" type="SuperToolbar | null">
+  Toolbar instance when configured
+</ResponseField>
+
+```javascript
+// Get toolbar instance
+const toolbar = superdoc.toolbar;
+
+// Get specific button
+const boldButton = toolbar.getToolbarItemByName('bold');
+
+// Update button state
+boldButton.active.value = true;
+boldButton.disabled.value = false;
+
+// Update entire toolbar
+toolbar.updateToolbarState();
+```
+
+## Events
+
+### Toolbar Commands
+
+```javascript
+toolbar.on('superdoc-command', ({ item, argument }) => {
+  console.log(`Command: ${item.command}`);
+  console.log(`Argument: ${argument}`);
+});
+```
+
+### State Changes
+
+```javascript
+toolbar.on('state-update', () => {
+  const boldActive = toolbar
+    .getToolbarItemByName('bold')
+    .active.value;
+    
+  updateUIIndicator(boldActive);
+});
+```
+
+## Styling
+
+### CSS Variables
+
+```css
+:root {
+  --toolbar-height: 48px;
+  --toolbar-bg: white;
+  --toolbar-border: #e0e0e0;
+  --toolbar-button-size: 32px;
+  --toolbar-button-hover: #f5f5f5;
+  --toolbar-button-active: #e3f2fd;
+}
+
+[data-theme="dark"] {
+  --toolbar-bg: #1e1e1e;
+  --toolbar-border: #444;
+  --toolbar-button-hover: #2a2a2a;
+}
+```
+
+## Performance Tips
+
+<Note>
+**Best practices:**
+- Use functions for dynamic icons (lazy loading)
+- Use `responsiveToContainer` for embedded editors
+- Keep command functions lightweight
+- Remove unused buttons via `excludeItems`
+</Note>
+
+## Troubleshooting
+
+### Toolbar Not Showing
+
+```javascript
+// Check selector exists
+if (!document.querySelector('#toolbar')) {
+  console.error('Toolbar container not found');
+}
+
+// Wait for ready event
+superdoc.once('ready', () => {
+  console.log(superdoc.toolbar); // Now available
+});
+```
+
+### Buttons Not Working
+
+```javascript
+// Check role permissions
+if (superdoc.config.role === 'viewer') {
+  // Editing buttons disabled
+}
+
+// Check editor connection
+if (!superdoc.activeEditor) {
+  // No editor to execute commands on
+}
+```
+
+
+## Types
+
+### `CommandItem`
+
+<Expandable title="Properties">
+  <ParamField path="item" type="ToolbarItem">
+    The item that was clicked. See [ToolbarItem](#toolbaritem).
+  </ParamField>
+  <ParamField path="title" type="Object">
+    Any parameters passed to the command
+  </ParamField>
+</Expandable>
+
+### `ToolbarItem`
+
+<Expandable title="Properties">
+  <ParamField path="id.value" type="string">The unique ID of the toolbar item</ParamField>
+  <ParamField path="name.value" type="string">The name of the toolbar item</ParamField>
+  <ParamField path="type" type="string">The type of toolbar item (button, options, separator, dropdown, overflow)</ParamField>
+  <ParamField path="group.value" type="string">The group the item belongs to</ParamField>
+  <ParamField path="command" type="string | CommandCallback">The command to execute</ParamField>
+  <ParamField path="noArgumentCommand" type="string">The command to execute when no argument is provided (optional)</ParamField>
+  <ParamField path="icon.value" type="any">The icon for the item</ParamField>
+  <ParamField path="tooltip.value" type="any">The tooltip for the item</ParamField>
+  <ParamField path="attributes.value" type="Object">Additional attributes for the item</ParamField>
+  <ParamField path="disabled.value" type="boolean">Whether the item is disabled</ParamField>
+  <ParamField path="active.value" type="boolean">Whether the item is active</ParamField>
+  <ParamField path="expand.value" type="boolean">Whether the item is expanded</ParamField>
+  <ParamField path="nestedOptions.value" type="Array">Nested options for the item</ParamField>
+  <ParamField path="style.value" type="any">Custom style for the item</ParamField>
+  <ParamField path="isNarrow.value" type="boolean">Whether the item has narrow styling</ParamField>
+  <ParamField path="isWide.value" type="boolean">Whether the item has wide styling</ParamField>
+  <ParamField path="minWidth.value" type="any">Minimum width of the item</ParamField>
+  <ParamField path="argument.value" type="any">The argument to pass to the command</ParamField>
+  <ParamField path="parentItem.value" type="any">The parent of this item if nested</ParamField>
+  <ParamField path="childItem.value" type="any">The child of this item if it has one</ParamField>
+  <ParamField path="iconColor.value" type="any">The color of the icon</ParamField>
+  <ParamField path="hasCaret.value" type="boolean">Whether the item has a dropdown caret</ParamField>
+  <ParamField path="dropdownStyles.value" type="any">Custom styles for dropdown</ParamField>
+  <ParamField path="tooltipVisible.value" type="boolean">Whether the tooltip is visible</ParamField>
+  <ParamField path="tooltipTimeout.value" type="any">Timeout for the tooltip</ParamField>
+  <ParamField path="defaultLabel.value" type="any">The default label for the item</ParamField>
+  <ParamField path="label.value" type="any">The label for the item</ParamField>
+  <ParamField path="hideLabel.value" type="boolean">Whether to hide the label</ParamField>
+  <ParamField path="inlineTextInputVisible.value" type="boolean">Whether inline text input is visible</ParamField>
+  <ParamField path="hasInlineTextInput.value" type="boolean">Whether the item has inline text input</ParamField>
+  <ParamField path="markName.value" type="any">The name of the mark</ParamField>
+  <ParamField path="labelAttr.value" type="any">The attribute for the label</ParamField>
+  <ParamField path="allowWithoutEditor.value" type="boolean">Whether the item can be used without an editor</ParamField>
+  <ParamField path="dropdownValueKey.value" type="any">The key for dropdown value</ParamField>
+  <ParamField path="selectedValue.value" type="any">The selected value for the item</ParamField>
+  <ParamField path="inputRef.value" type="any">Reference to an input element</ParamField>
+  <ParamField path="unref" type="Function">Function to get unreferenced values</ParamField>
+  <ParamField path="activate" type="Function">Function to activate the item</ParamField>
+  <ParamField path="deactivate" type="Function">Function to deactivate the item</ParamField>
+  <ParamField path="setDisabled" type="Function">Function to set the disabled state</ParamField>
+  <ParamField path="resetDisabled" type="Function">Function to reset the disabled state</ParamField>
+  <ParamField path="onActivate" type="Function">Function called when the item is activated</ParamField>
+  <ParamField path="onDeactivate" type="Function">Function called when the item is deactivated</ParamField>
+</Expandable>
+

@@ -1,0 +1,122 @@
+---
+title: TableCell extension
+sidebarTitle: "Table Cell"
+keywords: "TableCell extension, superdoc TableCell, word TableCell, document TableCell, docx TableCell"
+---
+
+import Description from '/snippets/extensions/table-cell.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{'aria-label':'Table cell node'}">
+  HTML attributes for table cells
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="colspan" type="number" default="1">
+  Number of columns this cell spans
+</ParamField>
+
+<ParamField path="rowspan" type="number" default="1">
+  Number of rows this cell spans
+</ParamField>
+
+<ParamField path="colwidth" type="Array<number>" default="[100]">
+  Column widths array in pixels
+</ParamField>
+
+<ParamField path="background" type="CellBackground">
+  Cell background color configuration
+</ParamField>
+
+<ParamField path="verticalAlign" type="string">
+  Vertical content alignment (top, middle, bottom)
+</ParamField>
+
+<ParamField path="cellMargins" type="CellMargins">
+  Internal cell padding
+</ParamField>
+
+<ParamField path="borders" type="any" required>
+  Cell border configuration
+</ParamField>
+
+## Types
+
+### `CellBorder`
+
+Cell border configuration
+
+<Expandable title="Properties">
+<ResponseField name="size" type="number">
+  Border width in pixels
+</ResponseField>
+<ResponseField name="color" type="string">
+  Border color
+</ResponseField>
+<ResponseField name="style" type="string">
+  Border style
+</ResponseField>
+</Expandable>
+
+### `CellBorders`
+
+Cell borders object
+
+<Expandable title="Properties">
+<ResponseField name="top" type="CellBorder">
+  Top border
+</ResponseField>
+<ResponseField name="right" type="CellBorder">
+  Right border
+</ResponseField>
+<ResponseField name="bottom" type="CellBorder">
+  Bottom border
+</ResponseField>
+<ResponseField name="left" type="CellBorder">
+  Left border
+</ResponseField>
+</Expandable>
+
+### `CellMargins`
+
+Cell margins configuration
+
+<Expandable title="Properties">
+<ResponseField name="top" type="number">
+  Top margin in pixels
+</ResponseField>
+<ResponseField name="right" type="number">
+  Right margin in pixels
+</ResponseField>
+<ResponseField name="bottom" type="number">
+  Bottom margin in pixels
+</ResponseField>
+<ResponseField name="left" type="number">
+  Left margin in pixels
+</ResponseField>
+</Expandable>
+
+### `CellBackground`
+
+Cell background configuration
+
+<Expandable title="Properties">
+<ResponseField name="color" type="string" required>
+  Background color (hex without #)
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/table-cell/table-cell.js" />

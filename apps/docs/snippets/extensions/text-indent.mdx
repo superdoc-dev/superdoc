@@ -1,0 +1,76 @@
+Add professional first-line indentation to paragraphs.
+
+Essential for academic papers, books, and formal documents with perfect Word compatibility.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>This paragraph has no indentation. It starts flush with the left margin like most modern web content.</p><p style="margin-left: 0.5in;">This paragraph has a half-inch first-line indent. This is the standard for most printed books and academic papers, making it easy to identify where new paragraphs begin.</p><p style="margin-left: 1in;">This paragraph has a full inch indent. Larger indents can be used for special formatting like block quotes or nested content structures.</p><p style="margin-left: 0.25in;">This paragraph uses a quarter-inch indent. Smaller indents work well for documents with narrow columns or when space is at a premium.</p>`}
+  height="350px"
+  customButtons={[
+    [
+      {
+        label: '↑ Increase',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.increaseTextIndent()
+        }
+      },
+      {
+        label: '↓ Decrease',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.decreaseTextIndent()
+        }
+      },
+      {
+        label: 'Set 0.5"',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setTextIndent('0.5in')
+        }
+      },
+      {
+        label: 'Set 1cm',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setTextIndent('1cm')
+        }
+      },
+      {
+        label: 'Remove',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetTextIndent()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:ind w:firstLine="720"/>
+    <!-- 720 = 0.5 inches in twips -->
+  </w:pPr>
+  <w:r>
+    <w:t>Indented paragraph text</w:t>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Academic Papers** - MLA/APA format requires 0.5" first-line indents
+- **Books & Novels** - Standard typography for fiction and non-fiction
+- **Business Letters** - Professional correspondence formatting
+- **Block Quotes** - Distinguish quoted material with deeper indents
+- **Outlines** - Create visual hierarchy with progressive indentation

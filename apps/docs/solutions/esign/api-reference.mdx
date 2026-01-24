@@ -1,0 +1,304 @@
+---
+title: API Reference
+---
+
+Complete eSign component API
+
+## Component Props
+
+### Required Props
+
+<ParamField path="eventId" type="string" required>
+  Unique identifier for this signing session
+</ParamField>
+
+<ParamField path="document" type="object" required>
+  Document configuration
+  
+  <Expandable title="Properties">
+    <ParamField path="source" type="string | File | Blob" required>
+      Document to display
+    </ParamField>
+    
+    <ParamField path="mode" type="string">
+      Display mode: `'full'`
+    </ParamField>
+    
+    <ParamField path="validation.scroll.required" type="boolean">
+      Require scrolling to bottom before signing
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="onSubmit" type="function" required>
+  Called when document is signed
+  
+  ```typescript
+  (data: SubmitData) => void | Promise<void>
+  ```
+</ParamField>
+
+### Optional Props
+
+<ParamField path="fields" type="object">
+  Field configuration
+  
+  <Expandable title="Properties">
+    <ParamField path="document" type="DocumentField[]">
+      Values to inject into document
+    </ParamField>
+    
+    <ParamField path="signer" type="SignerField[]">
+      Interactive fields for user to complete
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="download" type="object">
+  Download button configuration
+  
+  <Expandable title="Properties">
+    <ParamField path="fileName" type="string">
+      Filename for download
+    </ParamField>
+    
+    <ParamField path="label" type="string">
+      Button text
+    </ParamField>
+    
+    <ParamField path="component" type="React.Component">
+      Custom button component
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="submit" type="object">
+  Submit button configuration
+  
+  <Expandable title="Properties">
+    <ParamField path="label" type="string">
+      Button text
+    </ParamField>
+    
+    <ParamField path="component" type="React.Component">
+      Custom button component
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="onDownload" type="function">
+  Handle download action
+  
+  ```typescript
+  (data: DownloadData) => void | Promise<void>
+  ```
+</ParamField>
+
+<ParamField path="onStateChange" type="function">
+  Monitor state changes
+  
+  ```typescript
+  (state: SigningState) => void
+  ```
+</ParamField>
+
+<ParamField path="onFieldChange" type="function">
+  Track field changes
+  
+  ```typescript
+  (field: FieldChange) => void
+  ```
+</ParamField>
+
+<ParamField path="onFieldsDiscovered" type="function">
+  Called when document fields are found
+  
+  ```typescript
+  (fields: FieldInfo[]) => void
+  ```
+</ParamField>
+
+<ParamField path="isDisabled" type="boolean">
+  Disable all interactions
+</ParamField>
+
+<ParamField path="className" type="string">
+  CSS class for container
+</ParamField>
+
+<ParamField path="style" type="React.CSSProperties">
+  Inline styles for container
+</ParamField>
+
+<ParamField path="documentHeight" type="string">
+  Height of document viewer (default: `'600px'`)
+</ParamField>
+
+## Types
+
+### SubmitData
+
+Data passed to `onSubmit`:
+
+```typescript
+interface SubmitData {
+  eventId: string;           // Your session ID
+  timestamp: string;         // ISO timestamp
+  duration: number;          // Time spent in ms
+  auditTrail: AuditEvent[];  // All events
+  documentFields: DocumentField[];  // Injected values
+  signerFields: SignerFieldValue[]; // User inputs
+  isFullyCompleted: boolean; // All requirements met
+}
+```
+
+### DownloadData
+
+Data passed to `onDownload`:
+
+```typescript
+interface DownloadData {
+  eventId: string;                   // Your session ID
+  documentSource: string | File | Blob;  // Original .docx file
+  fileName: string;                  // Suggested filename
+}
+```
+
+### DocumentField
+
+Values injected into document:
+
+```typescript
+interface DocumentField {
+  id: string;         // Unique field ID
+  value: FieldValue;  // The value
+}
+```
+
+### SignerField
+
+Interactive field definition:
+
+```typescript
+interface SignerField {
+  id: string;                            // Required unique ID
+  type: 'signature' | 'checkbox' | 'text';
+  label?: string;                         // Display label
+  validation?: {
+    required?: boolean;
+  };
+  component?: React.ComponentType<FieldComponentProps>;
+}
+```
+
+### SigningState
+
+Current state passed to `onStateChange`:
+
+```typescript
+interface SigningState {
+  scrolled: boolean;               // Has scrolled
+  fields: Map<string, FieldValue>; // Current values
+  isValid: boolean;                // Can submit
+  isSubmitting: boolean;            // Currently submitting
+}
+```
+
+### AuditEvent
+
+Timestamped interaction log:
+
+```typescript
+interface AuditEvent {
+  timestamp: string;
+  type: 'ready' | 'scroll' | 'field_change' | 'submit';
+  data?: Record<string, unknown>;
+}
+```
+
+## Ref Methods
+
+Access via ref:
+
+```jsx
+const ref = useRef();
+
+// Get current state
+const state = ref.current.getState();
+
+// Get audit trail
+const audit = ref.current.getAuditTrail();
+
+// Reset everything
+ref.current.reset();
+
+return <SuperDocESign ref={ref} ... />
+```
+
+### Available methods
+
+- `getState()` - Returns current SigningState
+- `getAuditTrail()` - Returns audit events array
+- `reset()` - Clear all state and start over
+
+## Field Components
+
+### Default Components
+
+The component provides default implementations for all field types. You can import and extend them:
+
+```jsx
+import { SignatureInput, CheckboxInput } from '@superdoc-dev/esign';
+
+// Use directly
+<SignatureInput 
+  value={value}
+  onChange={handleChange}
+  isDisabled={false}
+  label="Sign here"
+/>
+```
+
+### Custom Component Props
+
+All custom field components receive:
+
+```typescript
+interface FieldComponentProps {
+  value: FieldValue;           // Current value
+  onChange: (value: FieldValue) => void;
+  isDisabled: boolean;         // Disabled state
+  isValid?: boolean;           // Validation state
+  label?: string;              // Field label
+  error?: string;              // Error message
+}
+```
+
+## CSS Classes
+
+Target these classes for styling:
+
+- `.superdoc-esign-container` - Main wrapper
+- `.superdoc-esign-document` - Document viewer area
+- `.superdoc-esign-controls` - Controls section
+- `.superdoc-esign-fields` - Field container
+- `.superdoc-esign-actions` - Button container
+- `.superdoc-esign-btn` - Default buttons
+
+## Import Types
+
+All types are exported:
+
+```typescript
+import type {
+  SuperDocESignProps,
+  SubmitData,
+  DownloadData,
+  SigningState,
+  DocumentField,
+  SignerField,
+  FieldChange,
+  AuditEvent,
+  FieldComponentProps
+} from '@superdoc-dev/esign';
+```

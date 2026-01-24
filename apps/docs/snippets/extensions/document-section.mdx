@@ -1,0 +1,68 @@
+Break documents into discrete, lockable parts.
+
+Each section is an independent Word SDT (`w:sdt`) element that preserves state through import/export.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p><br/><br/><i>"People will forget what you said, people will forget what you did, but 
+people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</b></p>`}
+  height="300px"
+  customButtons={[
+    [
+      {
+        label: 'Add Section',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.createDocumentSection({
+            title: `Section`,
+            id: 'legal-1',
+            description: 'This is a new section created from the button click from mock html data.',
+            html: '<p>Content...</p>'
+          })
+        }
+      },
+      {
+        label: 'Toggle Lock',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.lockSectionById({ id: 'legal-1' })
+        }
+      },
+      {
+        label: 'Remove Section',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.removeSectionAtSelection()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:sdt>
+  <w:sdtPr>
+    <w:alias w:val="Legal Terms"/>
+    <w:lock w:val="sdtContentLocked"/>
+    <w:tag w:val='{"id":"legal-1","type":"documentSection"}'/>
+  </w:sdtPr>
+  <w:sdtContent>
+    <!-- Your content as OOXML -->
+  </w:sdtContent>
+</w:sdt>
+```
+
+## Use Case
+
+- Contract management - Lock legal clauses, leave business terms editable
+- Multi-team documents - Each team owns their section
+- Form templates - Some parts fixed, some parts fillable

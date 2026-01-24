@@ -1,0 +1,133 @@
+Automatically tracks block-level nodes with unique IDs for precise document manipulation.
+
+Essential for collaborative editing, change tracking, and programmatic document updates.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<h1>Document Title</h1><p>First paragraph with some content.</p><p>Second paragraph to demonstrate block operations.</p><h2>Section Heading</h2><p>Another paragraph in the section.</p>`}
+  height="400px"
+  onReady={(superdoc) => {
+    // Make editor accessible for console experiments
+    window.testEditor = superdoc?.activeEditor || superdoc?.editor;
+  }}
+  customButtons={[
+    [
+      {
+        label: 'Show Block IDs',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.helpers) return
+          
+          const blocks = editor.helpers.blockNode.getBlockNodes()
+          const info = blocks.map((b, i) => 
+            `${i + 1}. ${b.node.type.name}: "${b.node.textContent.substring(0, 30)}..." (ID: ${b.node.attrs.sdBlockId?.substring(0, 8)}...)`
+          ).join('\n')
+          
+          alert(`Found ${blocks.length} blocks:\n\n${info}`)
+        }
+      },
+      {
+        label: 'Count by Type',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.helpers) return
+          
+          const paragraphs = editor.helpers.blockNode.getBlockNodesByType('paragraph')
+          const headings = editor.helpers.blockNode.getBlockNodesByType('heading')
+          
+          alert(`Document structure:\n• ${paragraphs.length} paragraphs\n• ${headings.length} headings`)
+        }
+      }
+    ],
+    [
+      {
+        label: 'Center First Block',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.helpers || !editor?.commands) return
+          
+          const blocks = editor.helpers.blockNode.getBlockNodes()
+          if (!blocks.length) return
+          
+          const firstId = blocks[0].node.attrs.sdBlockId
+          editor.commands.updateBlockNodeAttributes(firstId, { 
+            textAlign: 'center' 
+          })
+        }
+      },
+      {
+        label: 'Delete Last Block',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.helpers || !editor?.commands) return
+          
+          const blocks = editor.helpers.blockNode.getBlockNodes()
+          if (!blocks.length) return
+          
+          const lastId = blocks[blocks.length - 1].node.attrs.sdBlockId
+          if (confirm('Delete the last block?')) {
+            editor.commands.deleteBlockNodeById(lastId)
+          }
+        }
+      },
+      {
+        label: 'Replace Second Block',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.helpers || !editor?.commands) return
+          
+          const blocks = editor.helpers.blockNode.getBlockNodes()
+          if (blocks.length < 2) return
+          
+          const secondBlock = blocks[1]
+          const id = secondBlock.node.attrs.sdBlockId
+          const type = secondBlock.node.type.name
+          
+          const newNode = editor.schema.nodes[type].create(
+            { sdBlockId: id + '-new' },
+            editor.schema.text('✨ This block was replaced programmatically!')
+          )
+          
+          editor.commands.replaceBlockNodeById(id, newNode)
+        }
+      }
+    ],
+    [
+      {
+        label: 'Blocks in Selection',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.helpers) return
+          
+          const { from, to } = editor.state.selection
+          const blocks = editor.helpers.blockNode.getBlockNodesInRange(from, to)
+          
+          if (blocks.length) {
+            const types = blocks.map(b => b.node.type.name).join(', ')
+            alert(`${blocks.length} blocks in selection:\n${types}`)
+          } else {
+            alert('No blocks in current selection')
+          }
+        }
+      }
+    ]
+  ]}
+/>
+
+## How It Works
+
+Every block-level node (paragraphs, headings, etc.) automatically receives a unique `sdBlockId` attribute. This enables:
+
+1. **Precise targeting** - Manipulate specific blocks even as document changes
+2. **Change tracking** - Know exactly which blocks were modified
+3. **Collaborative editing** - Reference blocks consistently across clients
+4. **Programmatic updates** - Update document structure via APIs
+
+## Use Case
+
+- **Document APIs** - Build REST APIs that manipulate specific blocks
+- **Collaboration** - Track who edited which blocks in real-time
+- **Comments & Annotations** - Attach metadata to specific blocks
+- **Version Control** - Diff documents at the block level
+- **Templates** - Replace placeholder blocks with dynamic content

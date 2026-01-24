@@ -1,0 +1,95 @@
+Create document structure with six heading levels.
+
+Use headings to organize content hierarchically. Press <kbd>Cmd+Option+1-6</kbd> for quick heading shortcuts.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <h1>Heading 1 - Main Title</h1>
+    <h2>Heading 2 - Section</h2>
+    <h3>Heading 3 - Subsection</h3>
+    <p>Regular paragraph text. Select this line and apply different heading levels.</p>
+  `}
+  height="300px"
+  customButtons={[
+    [
+      {
+        label: 'H1',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleHeading({ level: 1 })
+        }
+      },
+      {
+        label: 'H2',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleHeading({ level: 2 })
+        }
+      },
+      {
+        label: 'H3',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleHeading({ level: 3 })
+        }
+      },
+      {
+        label: 'H4',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleHeading({ level: 4 })
+        }
+      },
+      {
+        label: 'H5',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleHeading({ level: 5 })
+        }
+      },
+      {
+        label: 'H6',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleHeading({ level: 6 })
+        }
+      },
+      {
+        label: 'Normal',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setParagraph()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:pStyle w:val="Heading1"/>
+  </w:pPr>
+  <w:r>
+    <w:t>Heading text</w:t>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Document structure** - Create logical hierarchy and navigation
+- **Accessibility** - Screen readers use headings for navigation
+- **SEO** - Search engines parse heading structure
+- **Table of contents** - Auto-generate from heading levels

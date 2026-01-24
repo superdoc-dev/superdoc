@@ -1,0 +1,165 @@
+---
+title: PHP
+keywords: "php docx editor, php word editor, superdoc php, server side docx, php document editor"
+---
+
+SuperDoc runs client-side but PHP can handle document storage and serving.
+
+## Basic HTML template
+
+```php
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" 
+          rel="stylesheet">
+</head>
+<body>
+    <div id="editor"></div>
+    
+    <script type="module">
+        import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+        
+        new SuperDoc({
+            selector: '#editor',
+            document: '/documents/<?php echo $documentId; ?>.docx'
+        });
+    </script>
+</body>
+</html>
+```
+
+## Serving documents
+
+```php
+// document.php
+<?php
+session_start();
+
+// Check authentication
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(401);
+    exit('Unauthorized');
+}
+
+$documentId = $_GET['id'];
+$filePath = __DIR__ . '/storage/' . $documentId . '.docx';
+
+if (!file_exists($filePath)) {
+    http_response_code(404);
+    exit('Document not found');
+}
+
+// Serve the document
+header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+header('Content-Length: ' . filesize($filePath));
+readfile($filePath);
+```
+
+## Upload handling
+
+```php
+// upload.php
+<?php
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $uploadedFile = $_FILES['document'];
+    
+    // Validate file type
+    $allowedTypes = [
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    
+    if (!in_array($uploadedFile['type'], $allowedTypes)) {
+        exit('Invalid file type');
+    }
+    
+    // Save file
+    $documentId = uniqid();
+    $destination = __DIR__ . '/storage/' . $documentId . '.docx';
+    move_uploaded_file($uploadedFile['tmp_name'], $destination);
+    
+    // Return document ID
+    echo json_encode(['documentId' => $documentId]);
+}
+?>
+```
+
+## Complete PHP example
+
+```php
+<?php
+session_start();
+$user = $_SESSION['user'] ?? ['name' => 'Guest', 'email' => 'guest@example.com'];
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Document Editor</title>
+    <link href="https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" 
+          rel="stylesheet">
+</head>
+<body>
+    <input type="file" id="file-input" accept=".docx">
+    <div id="editor"></div>
+    
+    <script type="module">
+        import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+        
+        let superdoc = null;
+        
+        // Handle file upload
+        document.getElementById('file-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Upload to server
+            const formData = new FormData();
+            formData.append('document', file);
+            
+            const response = await fetch('/upload.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const { documentId } = await response.json();
+            
+            // Initialize editor
+            superdoc = new SuperDoc({
+                selector: '#editor',
+                document: `/document.php?id=${documentId}`,
+                user: <?php echo json_encode($user); ?>
+            });
+        });
+    </script>
+</body>
+</html>
+```
+
+## Laravel integration
+
+```php
+// routes/web.php
+Route::get('/editor/{document}', function ($documentId) {
+    return view('editor', ['documentId' => $documentId]);
+})->middleware('auth');
+
+// resources/views/editor.blade.php
+@extends('layout')
+
+@section('content')
+<div id="editor"></div>
+
+<script type="module">
+    import { SuperDoc } from '/js/superdoc.es.js';
+    
+    new SuperDoc({
+        selector: '#editor',
+        document: '/api/documents/{{ $documentId }}',
+        user: {
+            name: '{{ Auth::user()->name }}',
+            email: '{{ Auth::user()->email }}'
+        }
+    });
+</script>
+@endsection
+```

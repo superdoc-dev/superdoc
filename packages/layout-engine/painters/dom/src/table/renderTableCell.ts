@@ -506,6 +506,8 @@ type TableCellRenderDependencies = {
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Table-level SDT metadata for suppressing duplicate container styling in cells */
   tableSdt?: SdtMetadata | null;
+  /** Table indent in pixels (applied to table fragment positioning) */
+  tableIndent?: number;
   /** Starting line index for partial row rendering (inclusive) */
   fromLine?: number;
   /** Ending line index for partial row rendering (exclusive), -1 means render to end */
@@ -590,6 +592,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     context,
     applySdtDataset,
     tableSdt,
+    tableIndent,
     fromLine,
     toLine,
   } = deps;
@@ -1052,7 +1055,9 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       const objectWidth = anchoredMeasure.width;
       const objectHeight = anchoredMeasure.height;
 
-      const left = anchor.offsetH ?? 0;
+      const baseLeft = anchor.offsetH ?? 0;
+      const indentOffset = typeof tableIndent === 'number' && Number.isFinite(tableIndent) ? tableIndent : 0;
+      const left = anchor.hRelativeFrom === 'column' ? baseLeft - x - indentOffset : baseLeft;
       const top = anchor.offsetV ?? 0;
 
       const behindDoc =

@@ -1,0 +1,66 @@
+Create numbered lists with automatic sequencing.
+
+Full support for nested lists, custom numbering styles, and Word list definitions.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Type "1. " to start a numbered list:</p>
+<ol>
+  <li>First item</li>
+  <li>Second item</li>
+  <li>Third item with nested list:
+    <ol>
+      <li>Nested item a</li>
+      <li>Nested item b</li>
+    </ol>
+  </li>
+  <li>Fourth item continues numbering</li>
+</ol>`}
+  height="300px"
+  customButtons={[
+    [
+      {
+        label: 'Toggle List',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleOrderedList()
+        }
+      },
+      {
+        label: 'Restart Numbering',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // This would restart numbering at current position
+          editor.commands.restartListNodes([], 0)
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:numPr>
+      <w:ilvl w:val="0"/>
+      <w:numId w:val="1"/>
+    </w:numPr>
+  </w:pPr>
+  <w:r>
+    <w:t>List item text</w:t>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Instructions** - Step-by-step procedures
+- **Legal documents** - Numbered clauses and sections
+- **Outlines** - Hierarchical document structure
+- **Requirements** - Enumerated specifications
+- **Nested lists** - Multi-level organization with a, b, c or i, ii, iii

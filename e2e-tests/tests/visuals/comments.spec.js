@@ -2,12 +2,11 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import { goToPageAndWaitForEditor, sleep } from '../helpers';
 import config from '../../test-config';
+import { filterDocxFiles } from './doc-loader.js';
 
 // Run this test with each file on the test-data/comments-documents folder
 // and compare the screenshot with the reference image
-const testData = fs
-  .readdirSync(config.commentsDocumentsFolder)
-  .filter((file) => !config.ignoreDocuments.includes(file));
+const testData = filterDocxFiles(fs.readdirSync(config.commentsDocumentsFolder), new Set(config.ignoreDocuments || []));
 
 test.describe('documents with comments', () => {
   testData.forEach((fileName) => {

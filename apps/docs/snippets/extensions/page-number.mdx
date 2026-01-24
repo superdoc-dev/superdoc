@@ -1,0 +1,60 @@
+Insert automatic page numbers in headers and footers.
+
+Dynamic page numbering that updates as document changes, with total page count support.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Page numbers automatically update in headers/footers:</p>
+<p>Page <span data-id="auto-page-number">1</span> of <span data-id="auto-total-pages">5</span></p>
+<p>These special fields maintain formatting from surrounding text and update during pagination.</p>`}
+  height="200px"
+  customButtons={[
+    [
+      {
+        label: 'Insert Page Number',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // Note: Only works in header/footer context
+          editor.commands.addAutoPageNumber()
+        }
+      },
+      {
+        label: 'Insert Total Pages',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // Note: Only works in header/footer context
+          editor.commands.addTotalPageCount()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<!-- Page number field -->
+<w:fldSimple w:instr="PAGE">
+  <w:r>
+    <w:t>1</w:t>
+  </w:r>
+</w:fldSimple>
+
+<!-- Total pages field -->
+<w:fldSimple w:instr="NUMPAGES">
+  <w:r>
+    <w:t>10</w:t>
+  </w:r>
+</w:fldSimple>
+```
+
+## Use Case
+
+- **Professional documents** - Standard page numbering
+- **Reports** - Page X of Y format
+- **Legal documents** - Required pagination
+- **Print layouts** - Automatic page tracking
+- **Dynamic updates** - Numbers adjust as content changes

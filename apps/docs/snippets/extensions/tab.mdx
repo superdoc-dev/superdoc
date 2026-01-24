@@ -1,0 +1,43 @@
+Insert and control tab stops in documents.
+
+Advanced tab support including leaders, decimal alignment, and custom positions.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Name<span class="sd-editor-tab"></span>Position<span class="sd-editor-tab"></span>Department</p>
+<p>John Doe<span class="sd-editor-tab"></span>Manager<span class="sd-editor-tab"></span>Sales</p>
+<p>Jane Smith<span class="sd-editor-tab"></span>Developer<span class="sd-editor-tab"></span>Engineering</p>
+<p><br/>Tabs provide precise alignment without using tables.</p>`}
+  height="250px"
+/>
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:tabs>
+      <w:tab w:val="left" w:pos="2880"/>
+      <w:tab w:val="right" w:pos="5760"/>
+    </w:tabs>
+  </w:pPr>
+  <w:r>
+    <w:t>Text</w:t>
+  </w:r>
+  <w:r>
+    <w:tab/>
+  </w:r>
+  <w:r>
+    <w:t>After tab</w:t>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Lists without bullets** - Align text in columns
+- **Forms** - Create fill-in areas with dot leaders
+- **Tables of contents** - Page numbers with dot leaders
+- **Financial documents** - Decimal-aligned numbers
+- **Headers/footers** - Left, center, right alignment

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { combineProperties, combineRunProperties, orderDefaultsAndNormal, combineIndentProperties } from './cascade.js';
+import { combineProperties, combineRunProperties, combineIndentProperties } from './cascade.js';
 
 describe('cascade - combineProperties', () => {
   it('returns empty object when propertiesArray is empty', () => {
@@ -151,47 +151,6 @@ describe('cascade - combineRunProperties', () => {
       fontSize: 22,
       bold: true,
     });
-  });
-});
-
-describe('cascade - orderDefaultsAndNormal', () => {
-  const defaultProps = { fontSize: 22, bold: true };
-  const normalProps = { fontSize: 20, italic: true };
-
-  it('returns [defaults, Normal] when isNormalDefault is true', () => {
-    const [first, second] = orderDefaultsAndNormal(defaultProps, normalProps, true);
-    expect(first).toBe(defaultProps);
-    expect(second).toBe(normalProps);
-  });
-
-  it('returns [Normal, defaults] when isNormalDefault is false', () => {
-    const [first, second] = orderDefaultsAndNormal(defaultProps, normalProps, false);
-    expect(first).toBe(normalProps);
-    expect(second).toBe(defaultProps);
-  });
-
-  it('preserves object references without cloning', () => {
-    const [first, second] = orderDefaultsAndNormal(defaultProps, normalProps, true);
-    expect(first).toBe(defaultProps); // Same reference
-    expect(second).toBe(normalProps); // Same reference
-  });
-
-  it('handles empty objects', () => {
-    const [first, second] = orderDefaultsAndNormal({}, {}, true);
-    expect(first).toEqual({});
-    expect(second).toEqual({});
-  });
-
-  it('affects cascade order when used with combineProperties', () => {
-    // When Normal is default (true), Normal should override defaults
-    const [first, second] = orderDefaultsAndNormal(defaultProps, normalProps, true);
-    const result = combineProperties([first, second]);
-    expect(result.fontSize).toBe(20); // normalProps wins
-
-    // When Normal is NOT default (false), defaults should override Normal
-    const [first2, second2] = orderDefaultsAndNormal(defaultProps, normalProps, false);
-    const result2 = combineProperties([first2, second2]);
-    expect(result2.fontSize).toBe(22); // defaultProps wins
   });
 });
 

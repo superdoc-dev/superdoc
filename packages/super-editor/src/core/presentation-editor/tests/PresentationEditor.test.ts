@@ -3018,6 +3018,7 @@ describe('PresentationEditor', () => {
   describe('Field annotation drag-and-drop handlers', () => {
     let mockHitTest: Mock;
     let mockGetActiveEditor: Mock;
+    let rafSpy: ReturnType<typeof vi.spyOn> | null = null;
     let mockActiveEditor: {
       isEditable: boolean;
       state: {
@@ -3078,6 +3079,12 @@ describe('PresentationEditor', () => {
     };
 
     beforeEach(() => {
+      // Mock requestAnimationFrame to execute immediately (for RAF-based dragover coalescing)
+      rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+
       // Create a container element for the presentation editor
       container = document.createElement('div');
       document.body.appendChild(container);
@@ -3127,6 +3134,10 @@ describe('PresentationEditor', () => {
       // Mock getActiveEditor method
       mockGetActiveEditor = vi.fn(() => mockActiveEditor);
       editor.getActiveEditor = mockGetActiveEditor;
+    });
+
+    afterEach(() => {
+      rafSpy?.mockRestore();
     });
 
     describe('#handleDragOver', () => {

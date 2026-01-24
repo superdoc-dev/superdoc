@@ -1,0 +1,131 @@
+The foundation node for both bullet and numbered lists with Word-compatible formatting.
+
+Handles numbering, indentation, styling, and keyboard navigation for professional list creation.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <ul>
+      <li>Basic bullet list item with standard formatting</li>
+      <li>Second item - press Tab to indent, Shift-Tab to outdent</li>
+      <li>Press Enter to create a new item, Shift-Enter for line break within item</li>
+    </ul>
+    <ol>
+      <li>Numbered lists automatically track numbering</li>
+      <li>Supports multiple numbering formats from Word:
+        <ol>
+          <li>Decimal numbers (1, 2, 3)</li>
+          <li>Letters (a, b, c) or (A, B, C)</li>
+          <li>Roman numerals (i, ii, iii) or (I, II, III)</li>
+        </ol>
+      </li>
+      <li>Maintains Word numbering definitions and styles</li>
+    </ol>
+  `}
+  height="400px"
+  customButtons={[
+    [
+      {
+        label: 'Bullet List',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleBulletList()
+        }
+      },
+      {
+        label: 'Numbered List',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleOrderedList()
+        }
+      },
+      {
+        label: 'Indent →',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.increaseListIndent()
+        }
+      },
+      {
+        label: '← Outdent',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.decreaseListIndent()
+        }
+      }
+    ]
+  ]}
+/>
+
+## Key Features
+
+### Custom Node View
+The list item uses a custom node view that provides:
+- **Visual numbering/bullets** - Rendered separately from content
+- **Smart indentation** - Calculates proper spacing based on Word styles
+- **Font inheritance** - Respects document and paragraph styles
+- **Marker alignment** - Handles left, right, and centered numbering
+
+### Word Compatibility Attributes
+
+The list item maintains numerous Word-specific attributes:
+- `numId` - Links to Word numbering definition
+- `level` - Tracks nesting depth (0-8)
+- `lvlText` - Format string for numbering
+- `listNumberingType` - decimal, upperRoman, lowerAlpha, etc.
+- `indent` - Precise indentation values
+- `spacing` - Line and paragraph spacing
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:numPr>
+      <w:ilvl w:val="0"/>
+      <w:numId w:val="1"/>
+    </w:numPr>
+  </w:pPr>
+  <w:r>
+    <w:t>List item content</w:t>
+  </w:r>
+</w:p>
+```
+
+## Keyboard Shortcuts
+
+| Action | Shortcut | Description |
+|--------|----------|-------------|
+| New Item | `Enter` | Creates a new list item at the same level |
+| Line Break | `Shift+Enter` | Adds a line break within the current item |
+| Indent | `Tab` | Increases nesting level |
+| Outdent | `Shift+Tab` | Decreases nesting level |
+| Exit List | `Enter` twice | Creates a paragraph after the list |
+
+## Numbering Formats
+
+### Standard Formats
+- **Decimal** - 1, 2, 3, 4...
+- **Lower Alpha** - a, b, c, d...  
+- **Upper Alpha** - A, B, C, D...
+- **Lower Roman** - i, ii, iii, iv...
+- **Upper Roman** - I, II, III, IV...
+
+### Custom Formats
+Word supports complex numbering like:
+- **Legal** - 1.1, 1.2, 1.2.1, 1.2.2...
+- **Outline** - I.A.1.a.i...
+- **Custom** - Chapter 1, Section A, Article i...
+
+## Use Case
+
+- **Document Structure** - Organize content hierarchically
+- **Instructions** - Step-by-step procedures
+- **Outlines** - Multi-level document planning
+- **Legal Documents** - Complex numbered sections
+- **Word Import/Export** - Perfect numbering preservation

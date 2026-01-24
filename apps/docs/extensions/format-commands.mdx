@@ -1,0 +1,95 @@
+---
+title: FormatCommands extension
+sidebarTitle: "Format Commands"
+keywords: "FormatCommands extension, superdoc FormatCommands, word FormatCommands, document FormatCommands, docx FormatCommands"
+---
+
+import Description from '/snippets/extensions/format-commands.mdx'
+
+<Description />
+
+## Commands
+
+### `clearFormat`
+
+Clear all formatting (nodes and marks)
+
+<Note>
+Removes all marks and resets nodes to default paragraph
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.clearFormat()
+```
+
+### `clearMarksFormat`
+
+Clear only mark formatting
+
+<Note>
+Removes bold, italic, underline, colors, etc. but preserves block structure
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.clearMarksFormat()
+```
+
+### `clearNodesFormat`
+
+Clear only node formatting
+
+<Note>
+Converts headings, lists, etc. to paragraphs but preserves text marks
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.clearNodesFormat()
+```
+
+### `copyFormat`
+
+Copy format from selection or apply copied format
+
+<Note>
+Works like format painter - first click copies, second click applies
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.copyFormat()
+```
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| clearFormat() | `⌘/Ctrl-Alt-c` | Clear all formatting |
+
+## Types
+
+### `StoredStyle`
+
+Stored format style
+
+<Expandable title="Properties">
+<ResponseField name="name" type="string" required>
+  Mark name
+</ResponseField>
+<ResponseField name="attrs" type="Object" required>
+  Mark attributes
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/format-commands/format-commands.js" />

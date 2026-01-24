@@ -1,0 +1,275 @@
+---
+title: Y-Sweet
+sidebarTitle: Y-Sweet
+keywords: "y-sweet collaboration, jamsocket yjs, self-hosted collaboration, yjs sync server"
+---
+
+[Y-Sweet](https://docs.jamsocket.com/y-sweet) is a standalone Yjs sync server built by [Jamsocket](https://jamsocket.com/). It's designed for high performance and easy deployment.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Client["Client (React):3000"] --> Auth["Auth Server (Express):3001"]
+    Auth --> YSweet["Y-Sweet Server:8080"]
+```
+
+- **Y-Sweet Server** (port 8080): Handles real-time Yjs sync
+- **Auth Server** (port 3001): Issues client tokens via Y-Sweet SDK
+- **Client** (port 3000): Your app with SuperDoc
+
+## Setup
+
+### 1. Start Y-Sweet Server
+
+The easiest way to run Y-Sweet locally:
+
+```bash
+npx y-sweet@latest serve
+```
+
+To persist data to disk:
+
+```bash
+npx y-sweet@latest serve ./data
+```
+
+### 2. Create Auth Server
+
+Y-Sweet requires a backend to issue authentication tokens.
+
+```bash
+npm install @y-sweet/sdk express cors
+```
+
+```javascript
+import express from "express";
+import cors from "cors";
+import { DocumentManager } from "@y-sweet/sdk";
+
+const CONNECTION_STRING =
+  process.env.CONNECTION_STRING || "ys://127.0.0.1:8080";
+const PORT = process.env.PORT || 3001;
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const manager = new DocumentManager(CONNECTION_STRING);
+
+app.post("/api/auth", async (req, res) => {
+  try {
+    const { docId } = req.body;
+    const clientToken = await manager.getOrCreateDocAndToken(docId);
+    res.json(clientToken);
+  } catch (error) {
+    console.error("Auth error:", error);
+    res.status(500).json({ error: "Failed to get auth token" });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Auth server running on http://localhost:${PORT}`);
+});
+```
+
+### 3. Client Setup
+
+```bash
+npm install @y-sweet/client yjs
+```
+
+```javascript
+import { createYjsProvider } from "@y-sweet/client";
+import * as Y from "yjs";
+import { SuperDoc } from "superdoc";
+
+const AUTH_ENDPOINT = "http://localhost:3001/api/auth";
+const DOC_ID = "my-document";
+
+const ydoc = new Y.Doc();
+const provider = createYjsProvider(ydoc, DOC_ID, AUTH_ENDPOINT);
+
+provider.on("sync", (synced) => {
+  if (!synced) return;
+
+  const superdoc = new SuperDoc({
+    selector: "#editor",
+    documentMode: "editing",
+    user: {
+      name: "John Smith",
+      email: "john@example.com",
+    },
+    modules: {
+      collaboration: { ydoc, provider },
+    },
+  });
+});
+```
+
+## React Example
+
+```tsx
+import { useEffect, useRef, useState } from "react";
+import { createYjsProvider } from "@y-sweet/client";
+import * as Y from "yjs";
+import { SuperDoc } from "superdoc";
+import "superdoc/style.css";
+
+const AUTH_ENDPOINT = "http://localhost:3001/api/auth";
+const DOC_ID = "my-document";
+
+export default function Editor() {
+  const superdocRef = useRef<SuperDoc | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const ydoc = new Y.Doc();
+    const provider = createYjsProvider(ydoc, DOC_ID, AUTH_ENDPOINT);
+
+    provider.on("sync", (synced: boolean) => {
+      if (!synced) return;
+
+      superdocRef.current = new SuperDoc({
+        selector: "#superdoc",
+        documentMode: "editing",
+        user: {
+          name: `User ${Math.floor(Math.random() * 1000)}`,
+          email: "user@example.com",
+        },
+        modules: {
+          collaboration: { ydoc, provider },
+        },
+        onAwarenessUpdate: ({ states }) => {
+          setUsers(states.filter((s) => s.user));
+        },
+      });
+    });
+
+    return () => {
+      superdocRef.current?.destroy();
+      provider.destroy();
+    };
+  }, []);
+
+  return (
+    <div>
+      <div className="users">
+        {users.map((u, i) => (
+          <span key={i} style={{ background: u.user?.color }}>
+            {u.user?.name}
+          </span>
+        ))}
+      </div>
+      <div id="superdoc" style={{ height: "100vh" }} />
+    </div>
+  );
+}
+```
+
+## Configuration
+
+### Environment Variables
+
+**Auth Server:**
+
+```bash
+CONNECTION_STRING=ys://127.0.0.1:8080  # Y-Sweet server URL
+PORT=3001                               # Auth server port
+```
+
+**Client:**
+
+```bash
+VITE_Y_SWEET_AUTH_ENDPOINT=http://localhost:3001/api/auth
+VITE_DOC_ID=my-document
+```
+
+## Events
+
+```javascript
+// Sync status
+provider.on("sync", (synced) => {
+  if (synced) {
+    console.log("Document synced");
+  }
+});
+
+// Connection status
+provider.on("status", ({ status }) => {
+  // 'connecting' | 'connected' | 'disconnected'
+  console.log("Connection:", status);
+});
+```
+
+## Cleanup
+
+```javascript
+// Always clean up
+provider.destroy();
+superdoc.destroy();
+```
+
+## Production Deployment
+
+### Docker
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production
+
+COPY . .
+
+EXPOSE 3001
+CMD ["node", "server.js"]
+```
+
+### Running Y-Sweet in Production
+
+For production, consider:
+
+1. **Self-hosted**: Run Y-Sweet on your own infrastructure
+2. **Jamsocket Cloud**: Use [Jamsocket's managed Y-Sweet](https://jamsocket.com/) for automatic scaling
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Y-Sweet Docs"
+    icon="book"
+    href="https://docs.jamsocket.com/y-sweet"
+  >
+    Official documentation
+  </Card>
+
+  <Card
+    title="Working Example"
+    icon="github"
+    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/y-sweet"
+  >
+    Complete source code
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Client Configuration"
+    icon="settings"
+    href="/modules/collaboration/configuration"
+  >
+    All SuperDoc collaboration options
+  </Card>
+
+  <Card
+    title="Cloud Providers"
+    icon="cloud"
+    href="/modules/collaboration/cloud/liveblocks"
+  >
+    Managed collaboration solutions
+  </Card>
+</CardGroup>

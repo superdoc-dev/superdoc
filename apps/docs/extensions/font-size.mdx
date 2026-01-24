@@ -1,0 +1,99 @@
+---
+title: FontSize extension
+sidebarTitle: "Font Size"
+keywords: "FontSize extension, superdoc FontSize, word FontSize, document FontSize, docx FontSize"
+---
+
+import Description from '/snippets/extensions/font-size.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="types" type="Array<string>" default="['textStyle','tableCell']">
+  Node/mark types to add font size support to
+</ParamField>
+
+<ParamField path="defaults" type="FontSizeDefaults">
+  Default size configuration
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="fontSize" type="FontSizeValue">
+  Font size with unit
+</ParamField>
+
+## Commands
+
+### `setFontSize`
+
+Set font size
+
+<Note>
+Automatically clamps to min/max values
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.setFontSize('14pt')
+editor.commands.setFontSize('18px')
+editor.commands.setFontSize(16)
+```
+
+**Parameters:**
+
+<ParamField path="fontSize" type="FontSizeValue" required>
+  Size to apply (with optional unit)
+</ParamField>
+
+### `unsetFontSize`
+
+Remove font size
+
+<Note>
+Reverts to default document size
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.unsetFontSize()
+```
+
+## Types
+
+### `FontSizeDefaults`
+
+Font size configuration
+
+<Expandable title="Properties">
+<ResponseField name="value" type="number">
+  Default font size value
+</ResponseField>
+<ResponseField name="unit" type="string">
+  Default unit (pt, px, em, rem)
+</ResponseField>
+<ResponseField name="min" type="number">
+  Minimum allowed size
+</ResponseField>
+<ResponseField name="max" type="number">
+  Maximum allowed size
+</ResponseField>
+</Expandable>
+
+### `FontSizeValue`
+
+Size with optional unit (e.g., '12pt', '16px', 14)
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/font-size/font-size.js" />

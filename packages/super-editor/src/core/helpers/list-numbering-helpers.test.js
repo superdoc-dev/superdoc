@@ -40,6 +40,10 @@ describe('getListDefinitionDetails', () => {
           definitions: mockDefinitions,
           abstracts: mockAbstracts,
         },
+        translatedNumbering: {
+          definitions: {},
+          abstracts: {},
+        },
         convertedXml: '<mock>xml</mock>',
       },
       emit: vi.fn(), // Add mock emit function

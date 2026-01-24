@@ -1,0 +1,82 @@
+---
+title: BulletList extension
+sidebarTitle: "Bullet List"
+keywords: "BulletList extension, superdoc BulletList, word BulletList, document BulletList, docx BulletList"
+---
+
+import Description from '/snippets/extensions/bullet-list.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="itemTypeName" type="string" default="listItem">
+  Name of the list item node type
+</ParamField>
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for the ul element
+</ParamField>
+
+<ParamField path="keepAttributes" type="boolean" default="false">
+  Whether to preserve attributes when splitting
+</ParamField>
+
+<ParamField path="keepMarks" type="boolean" default="true">
+  Whether to preserve marks when splitting
+</ParamField>
+
+**Example:**
+
+```javascript
+const ConfiguredBulletList = BulletList.configure({
+  itemTypeName: 'customItem',
+  keepMarks: false
+});
+
+new SuperDoc({
+  selector: '#editor',
+  document: 'document.docx',
+  editorExtensions: [ConfiguredBulletList]
+});
+```
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="list-style-type" type="string" default="bullet">
+  List style type for this list
+</ParamField>
+
+## Commands
+
+### `toggleBulletList`
+
+Toggle a bullet list at the current selection
+
+<Note>
+Converts selected paragraphs to list items or removes list formatting
+</Note>
+
+**Example:**
+
+```javascript
+// Toggle bullet list on selected text
+editor.commands.toggleBulletList()
+```
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleBulletList() | `⌘/Ctrl-Shift-8` | Toggle bullet list |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/bullet-list/bullet-list.js" />

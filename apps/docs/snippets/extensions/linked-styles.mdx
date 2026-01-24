@@ -1,0 +1,129 @@
+Apply Word document styles to maintain consistent formatting across your document.
+
+Linked styles preserve the original Word styling system, including style inheritance and formatting rules.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<Note>
+**Important:** Linked Styles work with Word documents. This demo simulates the visual effect.
+</Note>
+
+<SuperDocEditor
+  html={`<p>Select text and apply Word styles. Each style clears existing formatting and applies its complete definition.</p><p style="font-weight: bold; color: red;">This paragraph has inline styles that will be replaced when you apply a style.</p><p>Try different styles to see how they transform the text appearance.</p>`}
+  height="350px"
+  customButtons={[
+    [
+      {
+        label: 'Normal',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // Clear all formatting to simulate Normal style
+          editor.commands.clearNodes()
+          editor.commands.unsetAllMarks()
+          editor.commands.setNodeAttributes('paragraph', { styleId: 'Normal' })
+        }
+      },
+      {
+        label: 'Heading 1', 
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // Simulate Heading 1 style
+          editor.commands.clearNodes()
+          editor.commands.unsetAllMarks()
+          editor.commands.setHeading({ level: 1 })
+          editor.commands.setNodeAttributes('heading', { styleId: 'Heading1' })
+        }
+      },
+      {
+        label: 'Heading 2',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // Simulate Heading 2 style
+          editor.commands.clearNodes()
+          editor.commands.unsetAllMarks()
+          editor.commands.setHeading({ level: 2 })
+          editor.commands.setNodeAttributes('heading', { styleId: 'Heading2' })
+        }
+      }
+    ],
+    [
+      {
+        label: 'Title',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // Simulate Title style with large text
+          editor.commands.clearNodes()
+          editor.commands.unsetAllMarks()
+          editor.commands.setHeading({ level: 1 })
+          editor.commands.updateAttributes('heading', { 
+            styleId: 'Title',
+            level: 1
+          })
+          // Apply visual formatting
+          editor.chain()
+            .setMark('textStyle', { fontSize: '28pt' })
+            .run()
+        }
+      },
+      {
+        label: 'Subtitle',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          // Simulate Subtitle style
+          editor.commands.clearNodes()
+          editor.commands.unsetAllMarks()
+          editor.commands.setHeading({ level: 2 })
+          editor.commands.updateAttributes('heading', { 
+            styleId: 'Subtitle',
+            level: 2
+          })
+          editor.chain()
+            .setMark('textStyle', { fontSize: '15pt', color: '#5A5A5A' })
+            .run()
+        }
+      }
+    ]
+  ]}
+/>
+
+## Real-World Usage
+
+When a Word document is loaded:
+
+```javascript
+// Styles are automatically imported from styles.xml
+const styles = editor.helpers.linkedStyles.getStyles()
+
+// Apply a style by ID
+editor.commands.setStyleById('Heading1')
+
+// Or with the style object
+const titleStyle = editor.helpers.linkedStyles.getStyleById('Title')
+editor.commands.setLinkedStyle(titleStyle)
+```
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:pStyle w:val="Heading1"/>
+  </w:pPr>
+  <w:r>
+    <w:t>Text with Heading 1 style</w:t>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Document Templates** - Maintain corporate style guides
+- **Consistency** - Uniform formatting across large documents  
+- **Quick Formatting** - One-click style application
+- **Word Compatibility** - Preserves Word's style system
+- **Style Updates** - Change all instances by updating the style definition

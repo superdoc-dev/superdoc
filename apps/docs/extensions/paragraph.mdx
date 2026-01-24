@@ -1,0 +1,68 @@
+---
+title: Paragraph extension
+sidebarTitle: "Paragraph"
+keywords: "Paragraph extension, superdoc Paragraph, word Paragraph, document Paragraph, docx Paragraph"
+---
+
+import Description from '/snippets/extensions/paragraph.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="headingLevels" type="Array<number>" default="[1,2,3,4,5,6]">
+  Supported heading levels
+</ParamField>
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  HTML attributes for paragraph elements
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="spacing" type="Object">
+  Paragraph spacing configuration
+</ParamField>
+
+<ParamField path="extraAttrs" type="Object" default="{}">
+  Additional HTML attributes
+</ParamField>
+
+<ParamField path="marksAttrs" type="Array">
+  Text formatting marks
+</ParamField>
+
+<ParamField path="indent" type="Object">
+  Indentation settings
+</ParamField>
+
+<ParamField path="borders" type="Object">
+  Paragraph borders
+</ParamField>
+
+<ParamField path="class" type="string">
+  CSS class name
+</ParamField>
+
+<ParamField path="styleId" type="string">
+  Linked style identifier
+</ParamField>
+
+<ParamField path="justify" type="Object">
+  Text justification
+</ParamField>
+
+<ParamField path="tabStops" type="Array">
+  Tab stop positions
+</ParamField>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/paragraph/paragraph.js" />

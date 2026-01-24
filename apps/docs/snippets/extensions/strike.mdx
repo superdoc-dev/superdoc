@@ -1,0 +1,60 @@
+Show deletions and changes with strikethrough text.
+
+Visual indication of removed content while maintaining readability.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p><br/><br/>Original price: <s>$99.99</s> Now only $49.99!<br/><br/>Tasks: <s>Write documentation</s> ✓ <s>Review code</s> ✓ Deploy to production</p>`}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'Toggle Strike',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.toggleStrike()
+        }
+      },
+      {
+        label: 'Set Strike',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.setStrike()
+        }
+      },
+      {
+        label: 'Unset Strike',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.unsetStrike()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:strike/>
+  </w:rPr>
+  <w:t>Struck through text</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Price changes** - Show original vs sale price
+- **Task lists** - Mark completed items
+- **Legal documents** - Show deleted clauses
+- **Editing** - Track changes visually
+- **Humor** - ~~Bad ideas~~ Good ideas

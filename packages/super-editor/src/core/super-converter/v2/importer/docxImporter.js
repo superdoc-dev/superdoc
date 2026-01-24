@@ -1,6 +1,6 @@
 import { getInitialJSON } from '../docxHelper.js';
 import { carbonCopy } from '../../../utilities/carbonCopy.js';
-import { twipsToInches } from '../../helpers.js';
+import { twipsToInches, resolveOpcTargetPath } from '../../helpers.js';
 import { DEFAULT_LINKED_STYLES } from '../../exporter-docx-defs.js';
 import { drawingNodeHandlerEntity } from './imageImporter.js';
 import { trackChangeNodeHandlerEntity } from './trackChangesImporter.js';
@@ -36,6 +36,7 @@ import bookmarkStartAttrConfigs from '@converter/v3/handlers/w/bookmark-start/at
 import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attributes/index.js';
 import { translator as wStylesTranslator } from '@converter/v3/handlers/w/styles/index.js';
 import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/numbering/index.js';
+import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -598,8 +599,7 @@ export function translateStyleDefinitions(docx) {
 }
 
 function translateNumberingDefinitions(docx) {
-  const numbering = docx['word/numbering.xml'];
-  if (!numbering) return null;
+  const numbering = docx['word/numbering.xml'] ?? baseNumbering;
   const numberingElement = numbering.elements[0];
   const parsedNumbering = wNumberingTranslator.encode({ nodes: [numberingElement] });
   return parsedNumbering;
@@ -755,7 +755,8 @@ const findSectPr = (obj, result = []) => {
 const getHeaderFooterSectionData = (sectionData, docx) => {
   const rId = sectionData.attributes.Id;
   const target = sectionData.attributes.Target;
-  const referenceFile = docx[`word/${target}`];
+  const filePath = resolveOpcTargetPath(target, 'word');
+  const referenceFile = filePath ? docx[filePath] : undefined;
   const currentFileName = target;
   return {
     rId,

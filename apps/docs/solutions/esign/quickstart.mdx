@@ -1,0 +1,147 @@
+---
+title: Quick Start
+---
+
+Get eSign running in 5 minutes
+
+## Installation
+
+```bash
+npm install @superdoc-dev/esign
+```
+
+## Basic implementation
+
+```jsx
+import SuperDocESign from '@superdoc-dev/esign';
+import 'superdoc/dist/style.css';
+
+function AgreementForm() {
+  const handleSubmit = async (data) => {
+    console.log('Signed:', data);
+    // Save to your backend
+    await api.saveAgreement(data);
+  };
+
+  return (
+    <SuperDocESign
+      eventId="agreement-001"
+      document={{ source: "terms.pdf" }}
+      onSubmit={handleSubmit}
+    />
+  );
+}
+```
+
+That's it! This displays the document and provides a submit button.
+
+## Adding requirements
+
+Make users scroll and provide a signature:
+
+```jsx
+<SuperDocESign
+  eventId="agreement-002"
+  
+  document={{
+    source: "contract.pdf",
+    validation: {
+      scroll: { required: true }  // Must scroll to bottom
+    }
+  }}
+  
+  fields={{
+    signer: [
+      {
+        id: 'signature',
+        type: 'signature',
+        validation: { required: true },
+        label: 'Type your full name'
+      }
+    ]
+  }}
+  
+  onSubmit={handleSubmit}
+/>
+```
+
+## Populating document fields
+
+Replace placeholders in your document using field IDs:
+
+```jsx
+// Document contains fields with IDs: field_client_name, field_company
+
+<SuperDocESign
+  eventId="contract-003"
+  document={{ source: contractFile }}
+  
+  fields={{
+    document: [
+      { id: 'field_client_name', value: 'John Doe' },
+      { id: 'field_company', value: 'Acme Corp' }
+    ]
+  }}
+  
+  onSubmit={handleSubmit}
+/>
+```
+
+## Adding consent checkboxes
+
+```jsx
+fields={{
+  signer: [
+    {
+      id: 'terms',
+      type: 'checkbox',
+      validation: { required: true },
+      label: 'I accept the terms and conditions'
+    },
+    {
+      id: 'privacy',
+      type: 'checkbox', 
+      validation: { required: true },
+      label: 'I acknowledge the privacy policy'
+    }
+  ]
+}}
+```
+
+## Handling the response
+
+The submit handler receives comprehensive data:
+
+```jsx
+const handleSubmit = async (data) => {
+  // data contains:
+  // - eventId: Your unique session ID
+  // - timestamp: When submitted
+  // - duration: Time spent (ms)
+  // - auditTrail: Array of timestamped events
+  // - signerFields: Values from interactive fields
+  // - isFullyCompleted: All requirements met
+  
+  console.log('Audit trail:', data.auditTrail);
+  console.log('Signature:', data.signerFields.find(f => f.id === 'signature'));
+  
+  await saveToDatabase(data);
+};
+```
+
+## TypeScript
+
+Full TypeScript support included:
+
+```typescript
+import SuperDocESign from '@superdoc-dev/esign';
+import type { SubmitData } from '@superdoc-dev/esign';
+
+const handleSubmit = async (data: SubmitData) => {
+  // Fully typed data structure
+};
+```
+
+## Next: Configuration
+
+Learn about all configuration options in the [Configuration guide →](/solutions/esign/configuration)

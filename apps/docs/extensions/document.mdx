@@ -1,0 +1,48 @@
+---
+title: Document extension
+sidebarTitle: "Document"
+keywords: "Document extension, superdoc Document, word Document, document Document, docx Document"
+---
+
+import Description from '/snippets/extensions/document.mdx'
+
+<Description />
+
+## Commands
+
+### `getDocumentStats`
+
+Get document statistics
+
+<Note>
+Returns word count, character count, and paragraph count
+</Note>
+
+**Example:**
+
+```javascript
+// Get word and character count
+const stats = editor.commands.getDocumentStats()
+console.log(`${stats.words} words, ${stats.characters} characters`)
+```
+
+### `clearDocument`
+
+Clear entire document
+
+<Note>
+Replaces all content with an empty paragraph
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.clearDocument()
+```
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/document/document.js" />

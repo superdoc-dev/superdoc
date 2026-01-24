@@ -70,7 +70,7 @@ import {
   DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
   SPACE_SUFFIX_GAP_PX,
 } from '@superdoc/common/layout-constants';
-import { resolveListTextStartPx } from '@superdoc/common/list-marker-utils';
+import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
 export { installNodeCanvasPolyfill } from './setup.js';
@@ -895,7 +895,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     indentLeft,
     firstLine,
     hanging,
-    (markerText, marker) => {
+    (markerText: string, marker: MinimalMarker) => {
       const markerRun = {
         fontFamily: toCssFontFamily(marker.run?.fontFamily) ?? marker.run?.fontFamily ?? 'Arial',
         fontSize: marker.run?.fontSize ?? fallbackFontSize,
@@ -2550,9 +2550,17 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
     // For tables with explicit/percentage width or fixed layout, scale to target width
     if (hasExplicitWidth || hasFixedLayout) {
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
+      const tableWidthType = (block.attrs?.tableWidth as TableWidthAttr | undefined)?.type;
+      const shouldScaleDown = totalWidth > effectiveTargetWidth;
+      const shouldScaleUp =
+        totalWidth < effectiveTargetWidth &&
+        effectiveTargetWidth > 0 &&
+        (tableWidthType === 'pct' || (hasExplicitWidth && !hasFixedLayout));
+
       // Scale to effectiveTargetWidth (resolved percentage or explicit width)
-      // This handles both scaling down (too wide) and scaling up (percentage-based)
-      if (totalWidth !== effectiveTargetWidth && effectiveTargetWidth > 0) {
+      // - Always scale down if too wide
+      // - Only scale up for percentage widths or auto-layout tables
+      if ((shouldScaleDown || shouldScaleUp) && effectiveTargetWidth > 0 && totalWidth > 0) {
         const scale = effectiveTargetWidth / totalWidth;
         columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
         // Normalize to exact target width (handle rounding errors)

@@ -1,4 +1,4 @@
-import { eighthPointsToPixels, twipsToPixels } from '@converter/helpers';
+import { eighthPointsToPixels, twipsToPixels, resolveShadingFillColor } from '@converter/helpers';
 import { translator as tcPrTranslator } from '../../tcPr';
 
 /**
@@ -10,6 +10,7 @@ export function handleTableCellNode({
   node,
   table,
   row,
+  tableProperties,
   rowBorders,
   baseTableBorders,
   tableLook,
@@ -20,6 +21,7 @@ export function handleTableCellNode({
   rowIndex = 0,
   totalRows = 1,
   totalColumns,
+  preferTableGridWidths = false,
   _referencedStyles,
 }) {
   const { nodeListHandler } = params;
@@ -58,7 +60,10 @@ export function handleTableCellNode({
   if (colspan > 1) attributes['colspan'] = colspan;
 
   // Width
-  let width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
+  let width = null;
+  if (!preferTableGridWidths) {
+    width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
+  }
   const widthType = tableCellProperties.cellWidth?.type;
   if (widthType) attributes['widthType'] = widthType;
 
@@ -91,9 +96,10 @@ export function handleTableCellNode({
   }
 
   // Background
-  const background = {
-    color: tableCellProperties.shading?.fill,
-  };
+  const backgroundColor =
+    resolveShadingFillColor(tableCellProperties.shading) ?? resolveShadingFillColor(tableProperties?.shading);
+  const background = { color: backgroundColor };
+
   // TODO: Do we need other background attrs?
   if (background.color) attributes['background'] = background;
 

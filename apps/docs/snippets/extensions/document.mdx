@@ -1,0 +1,50 @@
+The root container for all document content.
+
+Every editor starts with a Document node that contains all blocks like paragraphs, headings, and lists.
+
+{/* <SuperDocEditor
+  html={`
+    <p>The Document node is the top-level container that holds all your content.</p>
+    <p>It ensures at least one block element exists and provides document-level operations.</p>
+  `}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'Document Stats',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          const stats = editor.commands.getDocumentStats()
+          alert(`Words: ${stats.words}\nCharacters: ${stats.characters}\nParagraphs: ${stats.paragraphs}`)
+        }
+      },
+      {
+        label: 'Clear Document',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          if (confirm('Clear all content?')) {
+            editor.commands.clearDocument()
+          }
+        }
+      }
+    ]
+  ]}
+/> */}
+
+## Structure
+
+```xml
+<doc>
+  <p>First paragraph</p>
+  <p>Second paragraph</p>
+  <!-- All block content -->
+</doc>
+```
+
+## Why it's essential
+
+- **Required root** - Every editor needs exactly one document node
+- **Content validation** - Ensures at least one block element exists
+- **Document operations** - Enables document-level commands and queries

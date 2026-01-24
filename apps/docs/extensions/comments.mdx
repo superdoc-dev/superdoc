@@ -1,0 +1,81 @@
+---
+title: Comments Extension
+sidebarTitle: Comments
+---
+
+The Comments extension enables Word-style commenting with threads, replies, and resolution.
+
+## Usage
+
+Comments work through the module configuration:
+
+```javascript
+modules: {
+  comments: {
+    readOnly: false,
+    allowResolve: true
+  }
+}
+```
+
+## Commands
+
+```javascript
+// Add comment at selection
+editor.commands.insertComment({ 
+  content: 'Please review' 
+});
+
+// Work with comments
+editor.commands.replyToComment(commentId, { content: 'Done' });
+editor.commands.resolveComment(commentId);
+editor.commands.deleteComment(commentId);
+
+// Navigate
+editor.commands.goToNextComment();
+editor.commands.goToPreviousComment();
+```
+
+## Events
+
+```javascript
+superdoc.on('commentsUpdate', ({ type, comment }) => {
+  switch(type) {
+    case 'add':      // Comment created
+    case 'update':   // Comment edited
+    case 'deleted':  // Comment removed
+    case 'resolved': // Comment resolved
+  }
+});
+```
+
+## Working with comment data
+
+```javascript
+// Access all comments
+const comments = editor.storage.comments.items;
+
+// Filter comments
+const active = comments.filter(c => !c.resolved);
+const byUser = comments.filter(c => c.user.email === email);
+```
+
+## Export behavior
+
+Comments export to DOCX as native Word comments:
+
+```javascript
+// Include comments
+await superdoc.export({ commentsType: 'external' });
+
+// Clean export
+await superdoc.export({ commentsType: 'clean' });
+```
+
+## Styling
+
+```css
+.comment-mark { background: #fff3cd; }
+.comment-mark.resolved { opacity: 0.6; }
+.comment-mark.active { background: #ffd700; }
+```

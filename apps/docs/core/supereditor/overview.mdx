@@ -1,0 +1,87 @@
+---
+title: SuperEditor API
+sidebarTitle: Overview
+keywords: "supereditor class, prosemirror docx, tiptap alternative, editor commands, document manipulation api"
+---
+
+SuperEditor is the core DOCX editing engine that powers SuperDoc. Use it directly when you need fine-grained control.
+
+## When to use SuperEditor vs SuperDoc
+
+**Use SuperDoc (recommended):**
+
+- Standard DOCX editing needs
+- Built-in UI and modules
+- Collaboration and comments
+- Quick integration
+
+**Use SuperEditor directly:**
+
+- Custom UI implementation
+- Framework-specific integrations
+- [Headless/server-side processing](/core/supereditor/configuration#headless-converter-nodejs)
+- Custom extension development
+
+## Quick Start
+
+```javascript
+import "superdoc/style.css";
+import { Editor, getStarterExtensions } from "superdoc/super-editor";
+
+async function initEditor() {
+  // 1. Load and prepare the DOCX file
+  const response = await fetch("/document.docx");
+  const blob = await response.blob();
+  const file = new File([blob], "document.docx", {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+
+  // 2. Parse the DOCX file
+  const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(file);
+
+  // 3. Create the editor
+  const editor = new Editor({
+    mode: "docx",
+    documentMode: "editing",
+    element: document.getElementById("editor"),
+    documentId: "doc-123",
+    extensions: getStarterExtensions(),
+    fileSource: file,
+    content,
+    media,
+    mediaFiles,
+    fonts,
+  });
+}
+
+initEditor();
+```
+
+## Key Initialization Steps
+
+1. **Import styles and modules** - Import the CSS and the Editor class with extensions
+2. **Parse the DOCX** - Use `Editor.loadXmlData(file)` to extract content, media, and fonts
+3. **Create the Editor** - Pass all parsed data plus required options like `extensions`
+
+## Direct ProseMirror access
+
+SuperEditor gives you full ProseMirror access:
+
+```javascript
+// Access ProseMirror directly
+editor.view; // EditorView
+editor.state; // EditorState
+editor.schema; // Schema
+editor.commands; // All commands
+
+// Do anything ProseMirror can do
+editor.state.doc.forEach((node) => {
+  console.log(node.type.name);
+});
+```
+
+## API structure
+
+- **[Configuration](/core/supereditor/configuration)** - Initialization options
+- **[Methods](/core/supereditor/methods)** - Control the editor
+- **[Hooks](/core/supereditor/hooks)** - React to changes

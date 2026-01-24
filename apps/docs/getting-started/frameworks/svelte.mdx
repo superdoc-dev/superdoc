@@ -1,0 +1,104 @@
+---
+title: Svelte
+keywords: "svelte docx editor, svelte word component, superdoc svelte, svelte document editor, svelte integration"
+---
+
+SuperDoc integrates with Svelte through lifecycle functions.
+
+## Installation
+
+```bash
+npm install @harbour-enterprises/superdoc
+```
+
+## Basic component
+
+```svelte
+<script>
+  import { onMount, onDestroy } from 'svelte';
+  import { SuperDoc } from '@harbour-enterprises/superdoc';
+  import '@harbour-enterprises/superdoc/style.css';
+  
+  let container;
+  let superdoc = null;
+  
+  onMount(() => {
+    superdoc = new SuperDoc({
+      selector: container,
+      document: 'contract.docx'
+    });
+  });
+  
+  onDestroy(() => {
+    superdoc = null;
+  });
+  
+  async function handleExport() {
+    if (superdoc) {
+      await superdoc.export();
+    }
+  }
+</script>
+
+<button on:click={handleExport}>Export</button>
+<div bind:this={container} class="editor"></div>
+
+<style>
+  .editor {
+    height: 700px;
+  }
+</style>
+```
+
+## With props
+
+```svelte
+<script>
+  import { onMount, onDestroy } from 'svelte';
+  import { SuperDoc } from '@harbour-enterprises/superdoc';
+  
+  export let document;
+  export let user = { name: 'User', email: 'user@example.com' };
+  export let mode = 'editing';
+  
+  let container;
+  let superdoc = null;
+  
+  onMount(() => {
+    superdoc = new SuperDoc({
+      selector: container,
+      document,
+      user,
+      documentMode: mode
+    });
+  });
+  
+  onDestroy(() => {
+    superdoc = null;
+  });
+</script>
+
+<div bind:this={container}></div>
+```
+
+## Store integration
+
+```javascript
+// documentStore.js
+import { writable } from 'svelte/store';
+
+export const superdocInstance = writable(null);
+
+// Component.svelte
+<script>
+  import { superdocInstance } from './documentStore';
+  
+  onMount(() => {
+    const instance = new SuperDoc({
+      selector: container,
+      document: 'document.docx'
+    });
+    $superdocInstance = instance;
+  });
+</script>
+```

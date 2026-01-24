@@ -1,0 +1,194 @@
+---
+title: BlockNode extension
+sidebarTitle: "Block Node"
+keywords: "BlockNode extension, superdoc BlockNode, word BlockNode, document BlockNode, docx BlockNode"
+---
+
+import Description from '/snippets/extensions/block-node.mdx'
+
+<Description />
+
+## Commands
+
+### `replaceBlockNodeById`
+
+Replace a block node by its ID with new content
+
+<Note>
+The replacement node should have the same type as the original
+</Note>
+
+**Example:**
+
+```javascript
+const newParagraph = editor.schema.nodes.paragraph.create({}, editor.schema.text('New content'))
+editor.commands.replaceBlockNodeById('block-123', newParagraph)
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  The sdBlockId of the node to replace
+</ParamField>
+<ParamField path="contentNode" type="ProseMirrorNode" required>
+  The replacement ProseMirror node
+</ParamField>
+
+### `deleteBlockNodeById`
+
+Delete a block node by its ID
+
+<Note>
+Completely removes the node from the document
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.deleteBlockNodeById('block-123')
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  The sdBlockId of the node to delete
+</ParamField>
+
+### `updateBlockNodeAttributes`
+
+Update attributes of a block node by its ID
+
+<Note>
+Merges new attributes with existing ones
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.updateBlockNodeAttributes('block-123', { textAlign: 'center' })
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  The sdBlockId of the node to update
+</ParamField>
+<ParamField path="attrs" type="Object" required>
+  Attributes to update
+</ParamField>
+
+## Helpers
+
+### `getBlockNodes`
+
+Get all block nodes in the document
+
+**Example:**
+
+```javascript
+const blocks = editor.helpers.blockNode.getBlockNodes()
+console.log(`Found ${blocks.length} block nodes`)
+```
+
+**Returns:**
+
+<ResponseField name="return" type="Array<BlockNodeInfo>" required>
+  See [BlockNodeInfo](#blocknodeinfo) type definition
+</ResponseField>
+
+### `getBlockNodeById`
+
+Get a specific block node by its ID
+
+**Example:**
+
+```javascript
+const block = editor.helpers.blockNode.getBlockNodeById('block-123')
+if (block.length) console.log('Found:', block[0].node.type.name)
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  The sdBlockId to search for
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="Array<BlockNodeInfo>" required>
+  See [BlockNodeInfo](#blocknodeinfo) type definition
+</ResponseField>
+
+### `getBlockNodesByType`
+
+Get all block nodes of a specific type
+
+**Example:**
+
+```javascript
+const paragraphs = editor.helpers.blockNode.getBlockNodesByType('paragraph')
+const headings = editor.helpers.blockNode.getBlockNodesByType('heading')
+```
+
+**Parameters:**
+
+<ParamField path="type" type="string" required>
+  The node type name (e.g., 'paragraph', 'heading')
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="Array<BlockNodeInfo>" required>
+  See [BlockNodeInfo](#blocknodeinfo) type definition
+</ResponseField>
+
+### `getBlockNodesInRange`
+
+Get all block nodes within a position range
+
+**Example:**
+
+```javascript
+const selection = editor.state.selection
+const blocksInSelection = editor.helpers.blockNode.getBlockNodesInRange(
+  selection.from,
+  selection.to
+)
+```
+
+**Parameters:**
+
+<ParamField path="from" type="number" required>
+  Start position
+</ParamField>
+<ParamField path="to" type="number" required>
+  End position
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="Array<BlockNodeInfo>" required>
+  See [BlockNodeInfo](#blocknodeinfo) type definition
+</ResponseField>
+
+## Types
+
+### `BlockNodeInfo`
+
+Block node information object
+
+<Expandable title="Properties">
+<ResponseField name="node" type="ProseMirrorNode" required>
+  The block node
+</ResponseField>
+<ResponseField name="pos" type="number" required>
+  Position in the document
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/block-node/block-node.js" />

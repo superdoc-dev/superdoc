@@ -1,0 +1,78 @@
+Foundation mark for applying multiple text formatting attributes.
+
+Enables combining font, color, and other text properties while maintaining Word compatibility.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Select text and apply multiple styles at once. The text style mark is the foundation that enables all text formatting.</p><p>Try combining different styles on this text to see how they work together.</p><p>Text style ensures clean markup by managing all formatting attributes in a single span element.</p>`}
+  height="300px"
+  customButtons={[
+    [
+      {
+        label: 'Red + Large',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setMark('textStyle', { color: '#dc2626', fontSize: '18pt' })
+        }
+      },
+      {
+        label: 'Blue + Mono',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setMark('textStyle', { color: '#2563eb', fontFamily: 'monospace' })
+        }
+      },
+      {
+        label: 'Green + Small',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setMark('textStyle', { color: '#16a34a', fontSize: '10pt' })
+        }
+      }
+    ],
+    [
+      {
+        label: 'Custom Style ID',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setMark('textStyle', { styleId: 'Heading1Char' })
+        }
+      },
+      {
+        label: 'Clear Styles',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetMark('textStyle')
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:rStyle w:val="CustomStyle1"/>
+    <!-- Additional properties handled by other extensions -->
+    <w:color w:val="0000FF"/>
+    <w:sz w:val="36"/>
+  </w:rPr>
+  <w:t>Styled text</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Style Foundation** - Base layer for combining multiple text properties
+- **Clean Markup** - Prevents empty span elements in your HTML
+- **Style References** - Apply predefined Word styles via styleId
+- **Extension Bridge** - Enables font, color, and size extensions to work together
+- **Word Compatibility** - Maps directly to Word's character styles

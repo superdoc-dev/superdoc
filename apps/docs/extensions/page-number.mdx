@@ -1,0 +1,64 @@
+---
+title: PageNumber extension
+sidebarTitle: "Page Number"
+keywords: "PageNumber extension, superdoc PageNumber, word PageNumber, document PageNumber, docx PageNumber"
+---
+
+import Description from '/snippets/extensions/page-number.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for page number elements
+</ParamField>
+
+## Commands
+
+### `addAutoPageNumber`
+
+Insert an automatic page number
+
+<Note>
+Only works in header/footer contexts
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.addAutoPageNumber()
+```
+
+**Returns:** `Function` Command function
+
+### `addTotalPageCount`
+
+Insert total page count
+
+<Note>
+Only works in header/footer contexts
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.addTotalPageCount()
+```
+
+**Returns:** `Function` Command function
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| addAutoPageNumber() | `⌘/Ctrl-Shift-alt-p` | Insert page number |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/page-number/page-number.js" />

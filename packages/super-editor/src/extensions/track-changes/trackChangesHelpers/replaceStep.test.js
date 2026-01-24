@@ -89,6 +89,87 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(insertedText).toBe('xy');
   });
 
+  it('should map insertedTo through deletionMap when replacing own insertions near deletion spans', () => {
+    // Edge case: User has their own prior insertion adjacent to a deletion span.
+    // When selecting across both and replacing, markDeletion removes the user's own
+    // insertion (shifting positions), but insertedTo was calculated before this shift.
+    // The cursor would land too far to the right if insertedTo isn't remapped.
+    //
+    // Document: [inserted:"XY"][deleted:"ABC"]
+    // User selects "XY" + part of "ABC" and types "Q"
+    // Expected: cursor lands right after "Q"
+    // Bug: cursor lands 2 positions too far right (length of removed "XY")
+
+    const insertionMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ins-own',
+      author: user.name,
+      authorEmail: user.email,
+      date: '2024-01-01T00:00:00.000Z',
+    });
+
+    const deletionMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'del-existing',
+      author: user.name,
+      authorEmail: user.email,
+      date: '2024-01-01T00:00:00.000Z',
+    });
+
+    // "XY" with insertion mark, "ABC" with deletion mark
+    const run = schema.nodes.run.create({}, [schema.text('XY', [insertionMark]), schema.text('ABC', [deletionMark])]);
+    const doc = schema.nodes.doc.create({}, schema.nodes.paragraph.create({}, run));
+    let state = createState(doc);
+
+    const posXY = findTextPos(state.doc, 'XY');
+    const posABC = findTextPos(state.doc, 'ABC');
+
+    // Select from start of "XY" into the deletion span (selecting "XY" + "A")
+    // This triggers positionAdjusted=true because selection ends inside deletion span.
+    const from = posXY;
+    const to = posABC + 1;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, from, to)));
+
+    // Replace selection with "Q"
+    let tr = state.tr.replaceWith(from, to, schema.text('Q'));
+    tr.setSelection(TextSelection.create(tr.doc, from + 1)); // Browser would place cursor after "Q"
+    tr.setMeta('inputType', 'insertText');
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    // After the transaction:
+    // - "XY" (user's own insertion) is removed entirely by markDeletion
+    // - "A" already has delete mark, stays as deleted
+    // - "Q" is inserted after the deletion span
+    // - Final doc should be: [deleted:"ABC"][inserted:"Q"]
+    //
+    // The cursor should be right after "Q"
+    // Bug would place it 2 positions too far right (length of removed "XY")
+
+    // Verify the document structure
+    let deletedText = '';
+    let insertedText = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText) {
+        if (node.marks.some((mark) => mark.type.name === TrackDeleteMarkName)) {
+          deletedText += node.text;
+        }
+        if (node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+          insertedText += node.text;
+        }
+      }
+    });
+
+    expect(deletedText).toBe('ABC'); // Already-deleted text is preserved
+    expect(insertedText).toBe('Q');
+
+    // The critical assertion: cursor position
+    // With the bug, this would fail because cursor is at wrong position
+    const cursorPos = finalState.selection.from;
+    const expectedCursorPos = findTextPos(finalState.doc, 'Q') + 1; // Right after "Q"
+
+    expect(cursorPos).toBe(expectedCursorPos);
+  });
+
   it('handles multi-step transactions without losing content (SD-1624 fix)', () => {
     // Multi-step transactions (like input rules) should preserve all content.
     // The position adjustment for insertion after deletion spans is only applied

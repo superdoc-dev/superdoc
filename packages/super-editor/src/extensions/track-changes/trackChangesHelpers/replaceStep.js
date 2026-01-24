@@ -120,6 +120,12 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
     meta.deletionNodes = deletionNodes;
     meta.deletionMark = deletionMark;
 
+    // Map insertedTo through deletionMap to account for position shifts from removing
+    // the user's own prior insertions (which markDeletion deletes instead of marking).
+    if (meta.insertedTo !== undefined) {
+      meta.insertedTo = deletionMap.map(meta.insertedTo, 1);
+    }
+
     map.appendMapping(deletionMap);
   }
 

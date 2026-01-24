@@ -25,11 +25,19 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
 
   // Default: insert replacement after the selected range (Word-like replace behavior).
   // If the selection ends inside an existing deletion, move insertion to after that deletion span.
+  // NOTE: Only adjust position for single-step transactions. Multi-step transactions (like input rules)
+  // have subsequent steps that depend on original positions, and adjusting breaks their mapping.
   let positionTo = step.to;
-  const probePos = Math.max(step.from, step.to - 1);
-  const deletionSpan = findMarkPosition(trTemp.doc, probePos, TrackDeleteMarkName);
-  if (deletionSpan && deletionSpan.to > positionTo) {
-    positionTo = deletionSpan.to;
+  let positionAdjusted = false;
+  const isSingleStep = tr.steps.length === 1;
+
+  if (isSingleStep) {
+    const probePos = Math.max(step.from, step.to - 1);
+    const deletionSpan = findMarkPosition(trTemp.doc, probePos, TrackDeleteMarkName);
+    if (deletionSpan && deletionSpan.to > positionTo) {
+      positionTo = deletionSpan.to;
+      positionAdjusted = true;
+    }
   }
 
   const tryInsert = (slice) => {
@@ -81,9 +89,14 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   if (insertion.insertedFrom !== insertion.insertedTo) {
     meta.insertedMark = insertedMark;
     meta.step = condensedStep;
-    // Store the actual insertion end position for cursor placement.
-    // This is needed when insertion was moved after a deletion span (SD-1624).
-    meta.insertedTo = map.map(positionTo + (insertion.insertedTo - insertion.insertedFrom), 1);
+    // Store the actual insertion end position for cursor placement (SD-1624).
+    // Only needed when position was adjusted to insert after a deletion span.
+    // For single-step transactions, positionTo is in newTr.doc coordinates after our condensedStep,
+    // so we just add the insertion length to get the cursor position.
+    if (positionAdjusted) {
+      const insertionLength = insertion.insertedTo - insertion.insertedFrom;
+      meta.insertedTo = positionTo + insertionLength;
+    }
   }
 
   if (!newTr.selection.eq(trTemp.selection)) {

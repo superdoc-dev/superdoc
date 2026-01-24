@@ -89,6 +89,43 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(insertedText).toBe('xy');
   });
 
+  it('handles multi-step transactions without losing content (SD-1624 fix)', () => {
+    // Multi-step transactions (like input rules) should preserve all content.
+    // The position adjustment for insertion after deletion spans is only applied
+    // to single-step transactions to avoid breaking multi-step mapping.
+    const deletionMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'del-existing',
+      author: user.name,
+      authorEmail: user.email,
+      date: '2024-01-01T00:00:00.000Z',
+    });
+
+    const run = schema.nodes.run.create({}, [schema.text('AB', [deletionMark])]);
+    const doc = schema.nodes.doc.create({}, schema.nodes.paragraph.create({}, run));
+    let state = createState(doc);
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, 2)));
+
+    // Two steps in one transaction (like input rules or batched typing)
+    let tr = state.tr;
+    tr = tr.replaceWith(2, 2, schema.text('x'));
+    tr = tr.replaceWith(3, 3, schema.text('y'));
+    tr.setSelection(TextSelection.create(tr.doc, 4));
+    tr.setMeta('inputType', 'insertText');
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertedText += node.text;
+      }
+    });
+
+    // Both characters should be tracked
+    expect(insertedText).toBe('xy');
+  });
+
   it('tracks replace even when selection contains existing deletions and links', () => {
     const linkMark = schema.marks.link.create({ href: 'https://example.com' });
     const existingDeletion = schema.marks[TrackDeleteMarkName].create({

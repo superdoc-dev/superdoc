@@ -352,8 +352,18 @@ const SDT_CONTAINER_STYLES = `
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+.superdoc-structured-content-block.ProseMirror-selectednode {
+  border-color: #629be7;
+  outline: none;
 }
 
 /* Structured content drag handle/label - positioned above */
@@ -376,7 +386,9 @@ const SDT_CONTAINER_STYLES = `
   box-sizing: border-box;
   z-index: 10;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
 }
 
 .superdoc-structured-content__label span {
@@ -386,8 +398,12 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-.superdoc-structured-content-block:hover .superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label {
   display: inline-flex;
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover .superdoc-structured-content__label {
+  display: none;
 }
 
 /* Continuation styling for structured content blocks */
@@ -420,16 +436,22 @@ const SDT_CONTAINER_STYLES = `
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
   display: inline;
   z-index: 10;
 }
 
 /* Hover effect for inline structured content */
-.superdoc-structured-content-inline:hover {
-  background-color: rgba(98, 155, 231, 0.15);
-  border-color: #4a8ad9;
+.superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+.superdoc-structured-content-inline.ProseMirror-selectednode {
+  border-color: #629be7;
+  outline: none;
+  background-color: transparent;
 }
 
 /* Inline structured content label - shown on hover */
@@ -446,11 +468,17 @@ const SDT_CONTAINER_STYLES = `
   white-space: nowrap;
   z-index: 100;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
 }
 
-.superdoc-structured-content-inline:hover .superdoc-structured-content-inline__label {
+.superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-structured-content-inline__label {
   display: block;
+}
+
+.superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover .superdoc-structured-content-inline__label {
+  display: none;
 }
 
 /* Viewing mode: remove structured content affordances */
@@ -459,6 +487,11 @@ const SDT_CONTAINER_STYLES = `
   background: none;
   border: none;
   padding: 0;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-block:hover {
+  background: none;
+  border: none;
 }
 
 .presentation-editor--viewing .superdoc-structured-content-inline:hover {

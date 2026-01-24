@@ -293,6 +293,14 @@ export class PresentationEditor extends EventEmitter {
     element: HTMLElement;
     pmStart: number;
   } | null = null;
+  #lastSelectedStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastSelectedStructuredContentInline: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
@@ -3191,6 +3199,161 @@ export class PresentationEditor extends EventEmitter {
     this.#setSelectedFieldAnnotationClass(element, pmStart);
   }
 
+  #clearSelectedStructuredContentBlockClass() {
+    if (!this.#lastSelectedStructuredContentBlock) return;
+    this.#lastSelectedStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentBlock = null;
+  }
+
+  #setSelectedStructuredContentBlockClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentBlock &&
+      this.#lastSelectedStructuredContentBlock.id === id &&
+      this.#lastSelectedStructuredContentBlock.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentBlock.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentBlockClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentBlock = { id, elements };
+  }
+
+  #syncSelectedStructuredContentBlockClass(selection: Selection | null | undefined) {
+    if (!selection || !(selection instanceof NodeSelection)) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    const node = selection.node;
+    if (!node || node.type?.name !== 'structuredContentBlock') {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    const id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentBlockClass(elements, id);
+  }
+
+  #clearSelectedStructuredContentInlineClass() {
+    if (!this.#lastSelectedStructuredContentInline) return;
+    this.#lastSelectedStructuredContentInline.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentInline = null;
+  }
+
+  #setSelectedStructuredContentInlineClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentInline &&
+      this.#lastSelectedStructuredContentInline.id === id &&
+      this.#lastSelectedStructuredContentInline.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentInline.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentInlineClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentInline = { id, elements };
+  }
+
+  #syncSelectedStructuredContentInlineClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+    let pos: number | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContent') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+      node = selection.node;
+      pos = selection.from;
+    } else {
+      const $pos = selection.$from;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContent') {
+          node = candidate;
+          pos = $pos.before(depth);
+          break;
+        }
+      }
+      if (!node || pos == null) {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-inline[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentInlineClass(elements, id);
+  }
+
   /**
    * Updates the visual cursor/selection overlay to match the current editor selection.
    *
@@ -3251,6 +3414,8 @@ export class PresentationEditor extends EventEmitter {
     if (!selection) {
       try {
         this.#clearSelectedFieldAnnotationClass();
+        this.#clearSelectedStructuredContentBlockClass();
+        this.#clearSelectedStructuredContentInlineClass();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -3274,6 +3439,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#syncSelectedFieldAnnotationClass(selection);
+    this.#syncSelectedStructuredContentBlockClass(selection);
+    this.#syncSelectedStructuredContentInlineClass(selection);
 
     // Ensure selection endpoints remain mounted under virtualization so DOM-first
     // caret/selection rendering stays available during cross-page selection.

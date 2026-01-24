@@ -57,6 +57,13 @@ export type LayoutState = {
   measures: Measure[];
 };
 
+type StructuredContentSelection = {
+  node: ProseMirrorNode;
+  pos: number;
+  start: number;
+  end: number;
+};
+
 /**
  * Dependencies injected from PresentationEditor.
  */
@@ -617,6 +624,38 @@ export class EditorInputManager {
       event.preventDefault();
     }
 
+    const inlineStructuredContentLabel = target?.closest?.(
+      '.superdoc-structured-content-inline__label',
+    ) as HTMLElement | null;
+    if (inlineStructuredContentLabel && doc) {
+      const resolved = this.#resolveStructuredContentInlineFromElement(doc, inlineStructuredContentLabel);
+      if (resolved) {
+        try {
+          const tr = editor.state.tr.setSelection(TextSelection.create(doc, resolved.start, resolved.end));
+          editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return;
+      }
+    }
+
+    const structuredContentLabel = target?.closest?.('.superdoc-structured-content__label') as HTMLElement | null;
+    if (structuredContentLabel && doc) {
+      const resolved = this.#resolveStructuredContentBlockFromElement(doc, structuredContentLabel);
+      if (resolved) {
+        try {
+          const tr = editor.state.tr.setSelection(TextSelection.create(doc, resolved.start, resolved.end));
+          editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return;
+      }
+    }
+
     // Handle click outside text content
     if (!rawHit) {
       this.#focusEditorAtFirstPosition();
@@ -708,9 +747,16 @@ export class EditorInputManager {
     // Set selection for single click
     if (!handledByDepth) {
       try {
-        let nextSelection: Selection = TextSelection.create(doc, hit.pos);
-        if (!nextSelection.$from.parent.inlineContent) {
-          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+        const structuredInline = this.#findStructuredContentInlineAtPos(doc, hit.pos);
+        const structuredBlock = structuredInline ? null : this.#findStructuredContentBlockAtPos(doc, hit.pos);
+        let nextSelection: Selection;
+        if (structuredBlock) {
+          nextSelection = NodeSelection.create(doc, structuredBlock.pos);
+        } else {
+          nextSelection = TextSelection.create(doc, hit.pos);
+          if (!nextSelection.$from.parent.inlineContent) {
+            nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+          }
         }
         const tr = editor.state.tr.setSelection(nextSelection);
         editor.view?.dispatch(tr);
@@ -926,6 +972,124 @@ export class EditorInputManager {
         currentTarget: annotationEl,
       });
     }
+  }
+
+  #findStructuredContentBlockAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
+    if (!Number.isFinite(pos)) return null;
+
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type?.name === 'structuredContentBlock') {
+        return {
+          node,
+          pos: $pos.before(depth),
+          start: $pos.start(depth),
+          end: $pos.end(depth),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #findStructuredContentBlockById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
+    let found: StructuredContentSelection | null = null;
+    doc.descendants((node, pos) => {
+      if (node.type?.name !== 'structuredContentBlock') return true;
+      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+      if (String(nodeId ?? '') !== id) return true;
+
+      found = {
+        node,
+        pos,
+        start: pos + 1,
+        end: pos + node.nodeSize - 1,
+      };
+      return false;
+    });
+    return found;
+  }
+
+  #findStructuredContentInlineAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
+    if (!Number.isFinite(pos)) return null;
+
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type?.name === 'structuredContent') {
+        return {
+          node,
+          pos: $pos.before(depth),
+          start: $pos.start(depth),
+          end: $pos.end(depth),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #findStructuredContentInlineById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
+    let found: StructuredContentSelection | null = null;
+    doc.descendants((node, pos) => {
+      if (node.type?.name !== 'structuredContent') return true;
+      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+      if (String(nodeId ?? '') !== id) return true;
+
+      found = {
+        node,
+        pos,
+        start: pos + 1,
+        end: pos + node.nodeSize - 1,
+      };
+      return false;
+    });
+    return found;
+  }
+
+  #resolveStructuredContentBlockFromElement(
+    doc: ProseMirrorNode,
+    element: HTMLElement,
+  ): StructuredContentSelection | null {
+    const container = element.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+    if (!container) return null;
+
+    const sdtId = container.dataset?.sdtId;
+    if (sdtId) {
+      const match = this.#findStructuredContentBlockById(doc, sdtId);
+      if (match) return match;
+    }
+
+    const pmStartRaw = container.dataset?.pmStart;
+    const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
+    if (Number.isFinite(pmStart)) {
+      return this.#findStructuredContentBlockAtPos(doc, pmStart);
+    }
+
+    return null;
+  }
+
+  #resolveStructuredContentInlineFromElement(
+    doc: ProseMirrorNode,
+    element: HTMLElement,
+  ): StructuredContentSelection | null {
+    const container = element.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+    if (!container) return null;
+
+    const sdtId = container.dataset?.sdtId;
+    if (sdtId) {
+      const match = this.#findStructuredContentInlineById(doc, sdtId);
+      if (match) return match;
+    }
+
+    const pmStartRaw = container.dataset?.pmStart;
+    const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
+    if (Number.isFinite(pmStart)) {
+      return this.#findStructuredContentInlineAtPos(doc, pmStart);
+    }
+
+    return null;
   }
 
   #handleClickWithoutLayout(event: PointerEvent, isDraggableAnnotation: boolean): void {

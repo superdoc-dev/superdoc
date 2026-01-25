@@ -1638,7 +1638,8 @@ export async function incrementalLayout(
 
         // Pass 2: recompute assignment and reserves for the updated pagination.
         ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
-        ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
+        let blocks;
+        ({ blocks, measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
         plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
         reserves = plan.reserves;
 
@@ -1651,62 +1652,55 @@ export async function incrementalLayout(
           remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
             remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         });
-        let { columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout);
-        let { blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
-          collectFootnoteIdsByColumn(finalIdsByColumn),
-        );
-        let finalPlan = computeFootnoteLayoutPlan(
-          layout,
-          finalIdsByColumn,
-          finalMeasuresById,
-          reserves,
-          finalPageColumns,
-        );
-        const finalReserves = finalPlan.reserves;
-        let reservesAppliedToLayout = reserves;
-        const reservesDiffer =
-          finalReserves.length !== reserves.length ||
-          finalReserves.some((h, i) => (reserves[i] ?? 0) !== h) ||
-          reserves.some((h, i) => (finalReserves[i] ?? 0) !== h);
-        if (reservesDiffer) {
-          layout = layoutDocument(currentBlocks, currentMeasures, {
-            ...options,
-            footnoteReservedByPageIndex: finalReserves,
-            headerContentHeights,
-            footerContentHeights,
-            remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
-              remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
-          });
-          reservesAppliedToLayout = finalReserves;
-          ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
-          ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
-            collectFootnoteIdsByColumn(finalIdsByColumn),
-          ));
-          finalPlan = computeFootnoteLayoutPlan(
-            layout,
-            finalIdsByColumn,
-            finalMeasuresById,
-            reservesAppliedToLayout,
-            finalPageColumns,
-          );
-        }
+        // let { columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout);
+        // let { blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
+        //   collectFootnoteIdsByColumn(finalIdsByColumn),
+        // );
+        // let finalPlan = computeFootnoteLayoutPlan(
+        //   layout,
+        //   finalIdsByColumn,
+        //   finalMeasuresById,
+        //   reserves,
+        //   finalPageColumns,
+        // );
+        // const finalReserves = finalPlan.reserves;
+        // let reservesAppliedToLayout = reserves;
+        // const reservesDiffer =
+        //   finalReserves.length !== reserves.length ||
+        //   finalReserves.some((h, i) => (reserves[i] ?? 0) !== h) ||
+        //   reserves.some((h, i) => (finalReserves[i] ?? 0) !== h);
+        // if (reservesDiffer) {
+        //   layout = layoutDocument(currentBlocks, currentMeasures, {
+        //     ...options,
+        //     footnoteReservedByPageIndex: finalReserves,
+        //     headerContentHeights,
+        //     footerContentHeights,
+        //     remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
+        //       remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
+        //   });
+        //   reservesAppliedToLayout = finalReserves;
+        //   ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
+        //   ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
+        //     collectFootnoteIdsByColumn(finalIdsByColumn),
+        //   ));
+        //   finalPlan = computeFootnoteLayoutPlan(
+        //     layout,
+        //     finalIdsByColumn,
+        //     finalMeasuresById,
+        //     reservesAppliedToLayout,
+        //     finalPageColumns,
+        //   );
+        // }
         const blockById = new Map<string, FlowBlock>();
-        finalBlocks.forEach((block) => {
+        blocks.forEach((block) => {
           blockById.set(block.id, block);
         });
-        const injected = injectFragments(
-          layout,
-          finalPlan,
-          finalMeasuresById,
-          reservesAppliedToLayout,
-          blockById,
-          finalPageColumns,
-        );
+        const injected = injectFragments(layout, plan, measuresById, reserves, blockById, pageColumns);
 
         const alignedBlocks: FlowBlock[] = [];
         const alignedMeasures: Measure[] = [];
-        finalBlocks.forEach((block) => {
-          const measure = finalMeasuresById.get(block.id);
+        blocks.forEach((block) => {
+          const measure = measuresById.get(block.id);
           if (!measure) return;
           alignedBlocks.push(block);
           alignedMeasures.push(measure);

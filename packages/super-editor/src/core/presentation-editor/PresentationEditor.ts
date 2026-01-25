@@ -3232,15 +3232,35 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #syncSelectedStructuredContentBlockClass(selection: Selection | null | undefined) {
-    if (!selection || !(selection instanceof NodeSelection)) {
+    if (!selection) {
       this.#clearSelectedStructuredContentBlockClass();
       return;
     }
 
-    const node = selection.node;
-    if (!node || node.type?.name !== 'structuredContentBlock') {
-      this.#clearSelectedStructuredContentBlockClass();
-      return;
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+
+    if (selection instanceof NodeSelection) {
+      // NodeSelection directly on a structuredContentBlock
+      if (selection.node?.type?.name !== 'structuredContentBlock') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+      node = selection.node;
+    } else {
+      // TextSelection - check if cursor is inside a structuredContentBlock
+      const $pos = selection.$from;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContentBlock') {
+          node = candidate;
+          break;
+        }
+      }
+      if (!node) {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
     }
 
     if (!this.#painterHost) {
@@ -3249,7 +3269,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
-    const id = rawId != null ? String(rawId) : null;
+    id = rawId != null ? String(rawId) : null;
     let elements: HTMLElement[] = [];
 
     if (id) {

@@ -268,12 +268,6 @@ export function applySdtContainerStyling(
 
   if (boundaryOptions?.paddingBottomOverride != null && boundaryOptions.paddingBottomOverride > 0) {
     container.style.paddingBottom = `${boundaryOptions.paddingBottomOverride}px`;
-    // Only log for structured content blocks
-    if (config.className === 'superdoc-structured-content-block') {
-      console.log('[SDT Debug] Applied paddingBottom:', boundaryOptions.paddingBottomOverride, 'to element:', container.className);
-    }
-  } else if (config.className === 'superdoc-structured-content-block') {
-    console.log('[SDT Debug] No paddingBottom applied. boundaryOptions:', boundaryOptions);
   }
 
   // Only create label on the first fragment of a multi-fragment container

@@ -5188,10 +5188,7 @@ const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number
   }
 
   const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) {
-    console.log('[SDT Debug] getFragmentHeight: No lookup for blockId', fragment.blockId);
-    return 0;
-  }
+  if (!lookup) return 0;
 
   if (fragment.kind === 'para' && lookup.measure.kind === 'paragraph') {
     const measure = lookup.measure;
@@ -5249,13 +5246,6 @@ const computeSdtBoundaries = (
       }
     }
 
-    // Only debug log for structuredContent blocks (not documentSections)
-    const isStructuredContentBlock = currentKey.startsWith('structuredContent:');
-
-    if (isStructuredContentBlock) {
-      console.log('[SDT Debug] Processing SDT group:', { currentKey, startIdx: i, endIdx: j, fragmentCount: j - i + 1 });
-    }
-
     for (let k = i; k <= j; k += 1) {
       const fragment = fragments[k];
       const isStart = k === i;
@@ -5269,17 +5259,6 @@ const computeSdtBoundaries = (
         const currentBottom = fragment.y + currentHeight;
         const gapToNext = nextFragment.y - currentBottom;
         
-        if (isStructuredContentBlock) {
-          console.log('[SDT Debug] Gap calculation for fragment', k, ':', {
-            fragmentKind: fragment.kind,
-            fragmentY: fragment.y,
-            currentHeight,
-            currentBottom,
-            nextFragmentY: nextFragment.y,
-            gapToNext,
-          });
-        }
-        
         // Only apply padding if there is a positive gap
         if (gapToNext > 0) {
           paddingBottomOverride = gapToNext;
@@ -5290,16 +5269,6 @@ const computeSdtBoundaries = (
       const showLabel = isStart && !sdtLabelsRendered.has(currentKey);
       if (showLabel) {
         sdtLabelsRendered.add(currentKey);
-      }
-
-      if (isStructuredContentBlock) {
-        console.log('[SDT Debug] Setting boundary for fragment', k, ':', {
-          isStart,
-          isEnd,
-          widthOverride: groupRight - fragment.x,
-          paddingBottomOverride,
-          showLabel,
-        });
       }
 
       boundaries.set(k, {

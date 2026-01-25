@@ -747,16 +747,10 @@ export class EditorInputManager {
     // Set selection for single click
     if (!handledByDepth) {
       try {
-        const structuredInline = this.#findStructuredContentInlineAtPos(doc, hit.pos);
-        const structuredBlock = structuredInline ? null : this.#findStructuredContentBlockAtPos(doc, hit.pos);
-        let nextSelection: Selection;
-        if (structuredBlock) {
-          nextSelection = NodeSelection.create(doc, structuredBlock.pos);
-        } else {
-          nextSelection = TextSelection.create(doc, hit.pos);
-          if (!nextSelection.$from.parent.inlineContent) {
-            nextSelection = Selection.near(doc.resolve(hit.pos), 1);
-          }
+        // Place cursor at click position for all content (including structured content blocks)
+        let nextSelection: Selection = TextSelection.create(doc, hit.pos);
+        if (!nextSelection.$from.parent.inlineContent) {
+          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
         }
         const tr = editor.state.tr.setSelection(nextSelection);
         editor.view?.dispatch(tr);

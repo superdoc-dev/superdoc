@@ -1278,7 +1278,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const lines = paragraphMeasure.lines;
         const blockLineCount = lines?.length || 0;
 
-        paragraphTopById.set(block.id, flowCursorY);
         /**
          * Extract Word layout information from paragraph attributes.
          * This contains computed marker positioning and indent details from the word-layout engine.
@@ -1344,6 +1343,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         // These were previously missing, causing paragraph borders to not render in table cells
         applyParagraphBorderStyles(paraWrapper, block.attrs?.borders);
         applyParagraphShadingStyles(paraWrapper, block.attrs?.shading);
+
+        // Apply paragraph spacing.before when rendering from the top of the paragraph.
+        const spacingBefore = (block as ParagraphBlock).attrs?.spacing?.before;
+        if (localStartLine === 0 && typeof spacingBefore === 'number' && spacingBefore > 0) {
+          paraWrapper.style.marginTop = `${spacingBefore}px`;
+          flowCursorY += spacingBefore;
+        }
+        paragraphTopById.set(block.id, flowCursorY);
 
         // Calculate height of rendered content for proper block accumulation
         let renderedHeight = 0;

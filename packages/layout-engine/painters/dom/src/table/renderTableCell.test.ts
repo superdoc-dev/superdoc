@@ -1111,6 +1111,147 @@ describe('renderTableCell', () => {
     });
   });
 
+  describe('spacing.before margin-top rendering', () => {
+    const baseMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 10,
+          width: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    it('applies margin-top only for positive spacing.before', () => {
+      const para1: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-before-zero',
+        runs: [{ text: 'Zero spacing', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { spacing: { before: 0 } },
+      };
+
+      const para2: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-before-negative',
+        runs: [{ text: 'Negative spacing', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { spacing: { before: -6 } },
+      };
+
+      const para3: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-before-positive',
+        runs: [{ text: 'Positive spacing', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { spacing: { before: 9 } },
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [baseMeasure, baseMeasure, baseMeasure],
+        width: 120,
+        height: 80,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-spacing-before-conditional',
+        blocks: [para1, para2, para3],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrappers = contentElement.children;
+
+      expect((paraWrappers[0] as HTMLElement).style.marginTop).toBe('');
+      expect((paraWrappers[1] as HTMLElement).style.marginTop).toBe('');
+      expect((paraWrappers[2] as HTMLElement).style.marginTop).toBe('9px');
+    });
+
+    it('skips spacing.before for partial renders', () => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-before-partial',
+        runs: [{ text: 'Partial render test', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { spacing: { before: 11 } },
+      };
+
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 10,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 0,
+            fromChar: 10,
+            toRun: 0,
+            toChar: 19,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 40,
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 120,
+        height: 60,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-before-partial',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement: partialCell } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+        fromLine: 1,
+        toLine: 2,
+      });
+
+      const partialWrapper = (partialCell.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
+      expect(partialWrapper.style.marginTop).toBe('');
+
+      const { cellElement: fullCell } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const fullWrapper = (fullCell.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
+      expect(fullWrapper.style.marginTop).toBe('11px');
+    });
+  });
+
   describe('list marker rendering', () => {
     const createParagraphWithMarker = (markerText: string, markerWidth = 20, gutterWidth = 8, indentLeft = 30) => {
       const para: ParagraphBlock = {

@@ -37,6 +37,7 @@ import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
 import { applyInlineRunProperties } from './inline-converters/common.js';
 import { runNodeChildrenToRuns, HiddenByVanishError } from './inline-converters/run.js';
+import { structuredContentNodeToBlocks } from './inline-converters/structured-content.js';
 
 // ============================================================================
 // Constants
@@ -662,43 +663,31 @@ export function paragraphToFlowBlocks({
       return;
     }
 
+    const inlineConverterParams = {
+      node: node,
+      positions,
+      defaultFont,
+      defaultSize,
+      inheritedMarks: inheritedMarks ?? [],
+      sdtMetadata: activeSdt,
+      hyperlinkConfig,
+      themeColors,
+      enableComments,
+      runProperties: activeRunProperties,
+      paragraphProperties: resolvedParagraphProperties,
+      converterContext,
+      visitNode,
+    };
+
     if (node.type === 'footnoteReference') {
-      const run = footnoteReferenceToBlock({
-        node,
-        positions,
-        inheritedMarks,
-        defaultFont,
-        defaultSize,
-        sdtMetadata: activeSdt,
-        hyperlinkConfig,
-        themeColors,
-        runProperties: activeRunProperties,
-        paragraphProperties: resolvedParagraphProperties,
-        converterContext,
-        enableComments,
-        visitNode,
-      });
+      const run = footnoteReferenceToBlock(inlineConverterParams);
 
       currentRuns.push(run);
       return;
     }
 
     if (node.type === 'text' && node.text) {
-      const run = textNodeToRun({
-        node: node,
-        positions,
-        defaultFont,
-        defaultSize,
-        inheritedMarks: inheritedMarks ?? [],
-        sdtMetadata: activeSdt,
-        hyperlinkConfig,
-        themeColors,
-        enableComments,
-        runProperties: activeRunProperties,
-        paragraphProperties: resolvedParagraphProperties,
-        converterContext,
-        visitNode,
-      });
+      const run = textNodeToRun(inlineConverterParams);
 
       currentRuns.push(run);
       return;
@@ -706,21 +695,7 @@ export function paragraphToFlowBlocks({
 
     if (node.type === 'run' && Array.isArray(node.content)) {
       try {
-        runNodeChildrenToRuns({
-          node: node,
-          positions,
-          defaultFont,
-          defaultSize,
-          inheritedMarks: inheritedMarks ?? [],
-          sdtMetadata: activeSdt,
-          hyperlinkConfig,
-          themeColors,
-          enableComments,
-          runProperties: activeRunProperties,
-          paragraphProperties: resolvedParagraphProperties,
-          converterContext,
-          visitNode,
-        });
+        runNodeChildrenToRuns(inlineConverterParams);
       } catch (error) {
         if (error instanceof HiddenByVanishError) {
           suppressedByVanish = true;
@@ -733,9 +708,7 @@ export function paragraphToFlowBlocks({
 
     // SDT inline structured content: treat as transparent container
     if (node.type === 'structuredContent' && Array.isArray(node.content)) {
-      const inlineMetadata = resolveNodeSdtMetadata(node, 'structuredContent');
-      const nextSdt = inlineMetadata ?? activeSdt;
-      node.content.forEach((child) => visitNode(child, inheritedMarks, nextSdt, activeRunProperties, activeHidden));
+      structuredContentNodeToBlocks(inlineConverterParams);
       return;
     }
 

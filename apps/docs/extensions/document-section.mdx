@@ -1,0 +1,295 @@
+---
+title: Document Section Extension
+sidebarTitle: Document Section
+---
+
+Encapsulate and manage discrete parts of documents. Legal clauses stay locked while sales updates pricing.
+
+## Installation
+
+Included by default in SuperDoc.
+
+```javascript
+import { DocumentSection } from '@harbour-enterprises/superdoc/extensions';
+```
+
+## Configuration
+
+```javascript
+// Configure during initialization
+DocumentSection.configure({
+  // Configuration options
+  allowNested: false,  // Don't allow nested sections
+  maxSize: 100000,     // Maximum characters per section
+  defaultLocked: false // Default lock state
+});
+```
+
+## Commands
+
+All commands available on `editor.commands`:
+
+### Section Creation
+
+```javascript
+editor.commands.createDocumentSection({
+  id: 'legal-1',
+  title: 'Terms & Conditions',
+  description: 'Legal terms',
+  isLocked: true,
+  html: '<p>Content...</p>'
+})
+```
+
+### Section Manipulation
+
+```javascript
+editor.commands.removeSectionAtSelection()
+editor.commands.removeSectionById('legal-1')
+editor.commands.lockSectionById('legal-1')
+editor.commands.updateSectionById({
+  id: 'legal-1',
+  html: '<p>Updated...</p>',
+  attrs: { title: 'New Title' }
+})
+```
+
+## Helper Functions
+
+Import helpers:
+
+```javascript
+import { SectionHelpers } from '@harbour-enterprises/superdoc';
+```
+
+### Available Helpers
+
+```javascript
+// Get all sections
+const sections = SectionHelpers.getAllSections(editor);
+
+// Export sections
+const html = SectionHelpers.exportSectionsToHTML(editor);
+const json = SectionHelpers.exportSectionsToJSON(editor);
+
+// Create linked editor
+const childEditor = SectionHelpers.getLinkedSectionEditor(
+  'section-id',
+  { element: '#editor' },
+  parentEditor
+);
+```
+
+## Attributes
+
+Section nodes have these attributes:
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `id` | string/number | auto | Unique identifier |
+| `title` | string | '' | Section label (w:alias in Word) |
+| `description` | string | '' | Metadata (w:tag in Word) |
+| `sectionType` | string | '' | Business classification |
+| `isLocked` | boolean | false | Edit prevention |
+
+## Events
+
+The extension emits these events:
+
+```javascript
+editor.on('section:created', ({ section }) => {
+  console.log('Section created:', section.id);
+});
+
+editor.on('section:updated', ({ section, changes }) => {
+  console.log('Section updated:', section.id);
+});
+
+editor.on('section:removed', ({ sectionId }) => {
+  console.log('Section removed:', sectionId);
+});
+
+editor.on('section:locked', ({ sectionId, locked }) => {
+  console.log('Lock changed:', sectionId, locked);
+});
+```
+
+## Schema
+
+### Node Definition
+
+```javascript
+{
+  name: 'documentSection',
+  group: 'block',
+  content: 'block*',
+  atom: true,
+  isolating: true,
+  attrs: {
+    id: { default: null },
+    title: { default: '' },
+    description: { default: '' },
+    sectionType: { default: '' },
+    isLocked: { default: false }
+  }
+}
+```
+
+### HTML Structure
+
+```html
+<!-- Parsed from -->
+<div class="sd-document-section-block" data-id="section-123">
+  <p>Section content...</p>
+</div>
+
+<!-- Rendered as -->
+<div class="sd-document-section-block" 
+     data-id="section-123"
+     data-locked="true">
+  <div class="section-header">Terms & Conditions</div>
+  <div class="section-content">
+    <p>Section content...</p>
+  </div>
+</div>
+```
+
+## Word Export
+
+Sections export as Word content controls:
+
+```xml
+<w:sdt>
+  <w:sdtPr>
+    <w:alias w:val="Terms & Conditions"/>
+    <w:tag w:val="Legal terms"/>
+    <w:lock w:val="sdtContentLocked"/>
+  </w:sdtPr>
+  <w:sdtContent>
+    <!-- Section content -->
+  </w:sdtContent>
+</w:sdt>
+```
+
+## Common Patterns
+
+### Contract Structure
+
+```javascript
+const contractSections = [
+  { id: 'parties', title: '1. Parties', isLocked: false },
+  { id: 'terms', title: '2. Terms', isLocked: true },
+  { id: 'pricing', title: '3. Pricing', isLocked: false },
+  { id: 'signatures', title: '4. Signatures', isLocked: true }
+];
+
+contractSections.forEach(section => {
+  editor.commands.createDocumentSection({
+    ...section,
+    html: loadTemplate(section.id)
+  });
+});
+```
+
+### Role-Based Locking
+
+```javascript
+function applyRolePermissions(userRole) {
+  const sections = SectionHelpers.getAllSections(editor);
+  
+  sections.forEach(({ node }) => {
+    const { id, sectionType } = node.attrs;
+    
+    if (sectionType === 'legal' && userRole !== 'legal') {
+      editor.commands.lockSectionById(id);
+    } else if (sectionType === 'pricing' && userRole === 'viewer') {
+      editor.commands.lockSectionById(id);
+    }
+  });
+}
+```
+
+### Section Templates
+
+```javascript
+const templates = {
+  header: {
+    title: 'Document Header',
+    sectionType: 'header',
+    html: '<h1>Agreement</h1><p>Date: [DATE]</p>'
+  },
+  legalTerms: {
+    title: 'Legal Terms',
+    sectionType: 'legal',
+    isLocked: true,
+    html: loadLegalTemplate()
+  }
+};
+
+function insertTemplate(templateId) {
+  const template = templates[templateId];
+  editor.commands.createDocumentSection({
+    ...template,
+    id: generateId()
+  });
+}
+```
+
+### Conditional Content
+
+```javascript
+// Show/hide sections based on conditions
+function updateSectionsForRegion(region) {
+  const sections = SectionHelpers.getAllSections(editor);
+  
+  sections.forEach(({ node, pos }) => {
+    if (node.attrs.sectionType === 'regional') {
+      if (!node.attrs.regions?.includes(region)) {
+        editor.commands.removeSectionById(node.attrs.id);
+      }
+    }
+  });
+  
+  // Add region-specific sections
+  if (region === 'EU') {
+    editor.commands.createDocumentSection({
+      id: 'gdpr',
+      title: 'GDPR Compliance',
+      sectionType: 'regional',
+      html: gdprTemplate
+    });
+  }
+}
+```
+
+## Limitations
+
+- Cannot nest sections
+- Maximum 100K characters per section
+- Locked sections still selectable
+- Section IDs must be unique
+
+## Performance
+
+For documents with many sections:
+
+```javascript
+// Batch updates
+editor.chain()
+  .command(() => {
+    sections.forEach(s => {
+      editor.commands.updateSectionById(s);
+    });
+    return true;
+  })
+  .run();
+
+// Lazy loading
+const visibleSections = getVisibleSections();
+visibleSections.forEach(loadSectionContent);
+```
+
+## Related
+
+- [Field Annotation](/extensions/field-annotation) - Form fields
+- [Table Extension](/extensions/table) - Tables

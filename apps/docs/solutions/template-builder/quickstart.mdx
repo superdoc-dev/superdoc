@@ -1,0 +1,167 @@
+---
+title: Quick Start Guide
+sidebarTitle: Quick Start
+---
+
+Get your template builder up and running in 5 minutes.
+
+## Installation
+
+```bash
+npm install @superdoc-dev/template-builder
+```
+
+## Basic usage
+
+Import the component and styles, then render with minimal props:
+
+```jsx
+import SuperDocTemplateBuilder from "@superdoc-dev/template-builder";
+import "superdoc/dist/style.css";
+
+function App() {
+  return (
+    <SuperDocTemplateBuilder
+      fields={{
+        available: [
+          { id: "1", label: "Customer Name" },
+          { id: "2", label: "Contract Date" },
+        ],
+      }}
+    />
+  );
+}
+```
+
+That displays an empty document. Type `{{` to open the field menu and insert fields.
+
+## Load an existing document
+
+Most templates start from an existing document:
+
+```jsx
+<SuperDocTemplateBuilder
+  document={{
+    source: "my-template.docx",
+    mode: "editing",
+  }}
+  fields={{
+    available: [
+      { id: "1", label: "Customer Name" },
+      { id: "2", label: "Invoice Date" },
+      { id: "3", label: "Amount Due" },
+    ],
+  }}
+/>
+```
+
+The component loads the document and discovers any existing fields.
+
+## Add the field list sidebar
+
+Show all template fields in a sidebar:
+
+```jsx
+<SuperDocTemplateBuilder
+  document={{ source: "template.docx", mode: "editing" }}
+  fields={{
+    available: [
+      { id: "1", label: "Customer Name" },
+      { id: "2", label: "Invoice Date" },
+    ],
+  }}
+  list={{ position: "right" }} // Add this
+/>
+```
+
+Users can click fields in the list to jump to them in the document.
+
+## Handle field changes
+
+Track when fields are inserted, updated, or deleted:
+
+```jsx
+function App() {
+  const [templateFields, setTemplateFields] = useState([]);
+
+  return (
+    <SuperDocTemplateBuilder
+      document={{ source: "template.docx", mode: "editing" }}
+      fields={{ available: myFields }}
+      list={{ position: "right" }}
+      onFieldsChange={(fields) => {
+        console.log("Template now has", fields.length, "fields");
+        setTemplateFields(fields);
+      }}
+    />
+  );
+}
+```
+
+The `onFieldsChange` callback receives the complete list of fields in the template whenever they change.
+
+## Export the template
+
+Use a ref to programmatically export:
+
+```jsx
+import { useRef } from "react";
+
+function App() {
+  const builderRef = useRef(null);
+
+  const handleExport = async () => {
+    await builderRef.current?.exportTemplate({
+      fileName: "my-template.docx",
+      triggerDownload: true,
+    });
+  };
+
+  return (
+    <>
+      <button onClick={handleExport}>Export Template</button>
+      <SuperDocTemplateBuilder
+        ref={builderRef}
+        document={{ source: "template.docx", mode: "editing" }}
+        fields={{ available: myFields }}
+        list={{ position: "right" }}
+      />
+    </>
+  );
+}
+```
+
+The exported document contains all field definitions embedded as Structured Document Tags.
+
+## TypeScript support
+
+Full TypeScript definitions are included:
+
+```tsx
+import SuperDocTemplateBuilder, {
+  SuperDocTemplateBuilderHandle,
+  FieldDefinition,
+  TemplateField,
+} from "@superdoc-dev/template-builder";
+
+const builderRef = useRef<SuperDocTemplateBuilderHandle>(null);
+
+const availableFields: FieldDefinition[] = [
+  { id: "1", label: "Customer Name", defaultValue: "John Doe" },
+  { id: "2", label: "Contract Date", defaultValue: new Date().toISOString() },
+];
+
+const handleFieldInsert = (field: TemplateField) => {
+  console.log(`Inserted field: ${field.alias}`);
+};
+```
+
+## Next steps
+
+<Card
+  title="Configuration Options"
+  icon="cog"
+  href="/solutions/template-builder/configuration"
+>
+  Learn about custom components, field creation, and advanced features
+</Card>

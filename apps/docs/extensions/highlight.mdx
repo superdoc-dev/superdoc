@@ -1,0 +1,77 @@
+---
+title: Highlight extension
+sidebarTitle: "Highlight"
+keywords: "Highlight extension, superdoc Highlight, word Highlight, document Highlight, docx Highlight"
+---
+
+import Description from '/snippets/extensions/highlight.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  HTML attributes for highlight elements
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="color" type="string">
+  Background color (CSS color value)
+</ParamField>
+
+## Commands
+
+### `setHighlight`
+
+Apply highlight with specified color
+
+**Example:**
+
+```javascript
+editor.commands.setHighlight('#FFEB3B')
+editor.commands.setHighlight('rgba(255, 235, 59, 0.5)')
+```
+
+**Parameters:**
+
+<ParamField path="color" type="string" required>
+  CSS color value
+</ParamField>
+
+### `unsetHighlight`
+
+Remove highlight formatting
+
+**Example:**
+
+```javascript
+editor.commands.unsetHighlight()
+```
+
+### `toggleHighlight`
+
+Toggle highlight formatting
+
+**Example:**
+
+```javascript
+editor.commands.toggleHighlight()
+```
+
+## Keyboard Shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleHighlight() | `⌘/Ctrl-Shift-h` | Toggle highlighted formatting |
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/highlight/highlight.js" />

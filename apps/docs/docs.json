@@ -1,0 +1,405 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "willow",
+  "name": "SuperDoc",
+  "description": "Web-based DOCX editor with full Microsoft Word compatibility. Handle tracked changes, complex tables, and document automation. Works with any framework and AI agents.",
+  "colors": {
+    "primary": "#0055FF",
+    "light": "#0085FF",
+    "dark": "#003ACC"
+  },
+  "logo": {
+    "light": "/public/images/logo-light.png",
+    "dark": "/public/images/logo-dark.png"
+  },
+  "favicon": "/public/images/favicon.png",
+  "icons": {
+    "library": "lucide"
+  },
+  "fonts": {
+    "family": "Plus Jakarta Sans",
+    "body": {
+      "family": "Inter"
+    },
+    "heading": {
+      "font-size": "2.5rem !important"
+    }
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "chatgpt",
+      "claude",
+      {
+        "title": "Ask on Discord",
+        "description": "Join our support channel",
+        "icon": "discord",
+        "href": "https://discord.com/channels/1299087524056010902/1299436491839246409"
+      }
+    ]
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Editor",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/introduction",
+              "getting-started/ai-agents",
+              "getting-started/installation",
+              "getting-started/configuration",
+              "getting-started/import-export",
+              "getting-started/fonts",
+              {
+                "group": "Frameworks",
+                "pages": [
+                  "getting-started/frameworks/react",
+                  "getting-started/frameworks/vue",
+                  "getting-started/frameworks/vanilla-js",
+                  "getting-started/frameworks/angular",
+                  "getting-started/frameworks/nextjs",
+                  "getting-started/frameworks/svelte",
+                  "getting-started/frameworks/php",
+                  "getting-started/frameworks/nuxt",
+                  "getting-started/frameworks/ruby-on-rails",
+                  "getting-started/frameworks/blazor"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Core",
+            "pages": [
+              {
+                "group": "SuperDoc",
+                "pages": [
+                  "core/superdoc/overview",
+                  "core/superdoc/configuration",
+                  "core/superdoc/methods",
+                  "core/superdoc/events",
+                  "core/superdoc/properties",
+                  "core/superdoc/types"
+                ]
+              },
+              {
+                "group": "SuperEditor",
+                "pages": [
+                  "core/supereditor/overview",
+                  "core/supereditor/configuration",
+                  "core/supereditor/methods",
+                  "core/supereditor/hooks"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "AI",
+            "tag": "NEW",
+            "pages": [
+              {
+                "group": "AI Actions",
+                "pages": [
+                  "ai/ai-actions/overview",
+                  "ai/ai-actions/configuration",
+                  "ai/ai-actions/methods",
+                  "ai/ai-actions/hooks"
+                ]
+              },
+              {
+                "group": "AI Builder",
+                "pages": ["ai/ai-builder/overview"]
+              }
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "modules/overview",
+              {
+                "group": "Collaboration",
+                "pages": [
+                  "modules/collaboration/overview",
+                  "modules/collaboration/quickstart",
+                  "modules/collaboration/configuration",
+                  {
+                    "group": "Cloud Providers",
+                    "pages": ["modules/collaboration/cloud/liveblocks", "modules/collaboration/cloud/tiptap-cloud"]
+                  },
+                  {
+                    "group": "Self-Hosted",
+                    "pages": [
+                      "modules/collaboration/self-hosted/overview",
+                      "modules/collaboration/self-hosted/superdoc-yjs",
+                      "modules/collaboration/self-hosted/hocuspocus",
+                      "modules/collaboration/self-hosted/y-sweet"
+                    ]
+                  }
+                ]
+              },
+              "modules/comments",
+              "modules/toolbar"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "pages": [
+              "extensions/overview",
+              "extensions/creating-extensions",
+              {
+                "group": "All",
+                "pages": [
+                  "extensions/block-node",
+                  "extensions/bold",
+                  "extensions/bullet-list",
+                  "extensions/color",
+                  "extensions/content-block",
+                  "extensions/custom-selection",
+                  "extensions/document",
+                  "extensions/dropcursor",
+                  "extensions/font-family",
+                  "extensions/font-size",
+                  "extensions/format-commands",
+                  "extensions/gapcursor",
+                  "extensions/heading",
+                  "extensions/highlight",
+                  "extensions/history",
+                  "extensions/image",
+                  "extensions/italic",
+                  "extensions/line-break",
+                  "extensions/line-height",
+                  "extensions/link",
+                  "extensions/linked-styles",
+                  "extensions/list-item",
+                  "extensions/mention",
+                  "extensions/noderesizer",
+                  "extensions/ordered-list",
+                  "extensions/page-number",
+                  "extensions/paragraph",
+                  "extensions/placeholder",
+                  "extensions/popover-plugin",
+                  "extensions/run-item",
+                  "extensions/search",
+                  "extensions/shape-container",
+                  "extensions/shape-textbox",
+                  "extensions/slash-menu",
+                  "extensions/strike",
+                  "extensions/structured-content",
+                  "extensions/tab",
+                  "extensions/table",
+                  "extensions/table-cell",
+                  "extensions/table-header",
+                  "extensions/table-row",
+                  "extensions/text-align",
+                  "extensions/text-indent",
+                  "extensions/text-style",
+                  "extensions/text-transform",
+                  "extensions/underline"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Solutions",
+            "pages": [
+              "solutions/overview",
+              {
+                "group": "eSign",
+                "pages": [
+                  "solutions/esign/introduction",
+                  "solutions/esign/quickstart",
+                  "solutions/esign/configuration",
+                  "solutions/esign/api-reference",
+                  "solutions/esign/backend"
+                ]
+              },
+              {
+                "group": "Template Builder",
+                "tag": "NEW",
+                "pages": [
+                  "solutions/template-builder/introduction",
+                  "solutions/template-builder/quickstart",
+                  "solutions/template-builder/configuration",
+                  "solutions/template-builder/api-reference"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": ["resources/guides", "resources/license"]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "General",
+            "pages": ["guides/general/storage", "guides/general/accessibility", "guides/general/security"]
+          },
+          {
+            "group": "Migration",
+            "pages": ["guides/migration/prosemirror", "guides/breaking-changes-v1", "guides/typescript-migration"]
+          }
+        ]
+      },
+      {
+        "tab": "Documents API",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["api-reference/introduction", "api-reference/quickstart", "api-reference/authentication"]
+          },
+          {
+            "group": "Authentication",
+            "openapi": "openapi.json",
+            "pages": ["GET /v1/auth/register", "GET /v1/auth/verify"]
+          },
+          {
+            "group": "Document Operations",
+            "openapi": "openapi.json",
+            "pages": ["POST /v1/convert", "POST /v1/annotate", "POST /v1/sign", "POST /v1/verify"]
+          },
+          {
+            "group": "System",
+            "openapi": "openapi.json",
+            "pages": ["GET /v1/health"]
+          }
+        ]
+      }
+    ]
+  },
+  "api": {
+    "playground": {
+      "display": "interactive"
+    }
+  },
+  "navbar": {
+    "primary": {
+      "type": "button",
+      "href": "https://superdoc.dev/meetings/caio-pizzol",
+      "label": "Talk to an engineer"
+    },
+    "links": [
+      {
+        "type": "button",
+        "href": "https://github.com/Harbour-Enterprises/SuperDoc",
+        "label": "",
+        "icon": "github"
+      },
+      {
+        "type": "button",
+        "href": "https://discord.com/invite/b9UuaZRyaB",
+        "label": "",
+        "icon": "discord"
+      }
+    ]
+  },
+  "redirects": [
+    {
+      "source": "/guide/quick-start",
+      "destination": "/getting-started/installation"
+    },
+    {
+      "source": "/guide/modes-roles",
+      "destination": "/core/superdoc/configuration#setting-priority"
+    },
+    {
+      "source": "/guide/components",
+      "destination": "/core/superdoc/overview"
+    },
+    {
+      "source": "/guide/field-annotation",
+      "destination": "/core/extensions/field-annotation"
+    },
+    {
+      "source": "/guide/modules",
+      "destination": "/modules/overview"
+    },
+    {
+      "source": "/guide/integration",
+      "destination": "/getting-started/installation"
+    },
+    {
+      "source": "/guide/collaboration",
+      "destination": "/modules/collaboration"
+    },
+    {
+      "source": "/guide/accessibility",
+      "destination": "/guides/general/accessibility"
+    },
+    {
+      "source": "/resources/accessibility",
+      "destination": "/guides/general/accessibility"
+    },
+    {
+      "source": "/resources/security",
+      "destination": "/guides/general/security"
+    },
+    {
+      "source": "/resources/storage",
+      "destination": "/guides/general/storage"
+    },
+    {
+      "source": "/resources/migration",
+      "destination": "/guides/migration/prosemirror"
+    },
+    {
+      "source": "/resources/guides",
+      "destination": "/guides/general"
+    },
+    {
+      "source": "/guide/resources#migrate-from-prosemirror",
+      "destination": "/guides/migration/prosemirror"
+    },
+    {
+      "source": "/guide/advanced",
+      "destination": "/core/supereditor/overview"
+    },
+    {
+      "source": "/getting-started/ai-ready",
+      "destination": "/getting-started/ai-agents"
+    },
+    {
+      "source": "/api-reference/documents/sign",
+      "destination": "/api-reference/signature/sign"
+    },
+    {
+      "source": "/modules/collaboration/backend",
+      "destination": "/modules/collaboration/self-hosted/overview"
+    },
+    {
+      "source": "/modules/collaboration/client",
+      "destination": "/modules/collaboration/configuration"
+    }
+  ],
+  "integrations": {
+    "posthog": {
+      "apiHost": "https://us.i.posthog.com",
+      "apiKey": "phc_jBYwMLryemk0X6RErATTY6I5GSSIzmErvfMIakkfh24"
+    },
+    "gtm": {
+      "tagId": "GTM-PHNMQSDL"
+    }
+  },
+  "seo": {
+    "indexing": "all",
+    "metatags": {
+      "description": "Web-based DOCX editor with full Microsoft Word compatibility. Handle tracked changes, complex tables, and document automation. Works with any framework and AI agents.",
+      "keywords": "DOCX editor, Microsoft Word web editor, document automation, tracked changes, contract management, document API, Word compatibility, LLM document editing, AI document processing",
+      "author": "SuperDoc",
+      "og:type": "website",
+      "og:url": "https://docs.superdoc.dev",
+      "og:image": "public/images/og-image.png",
+      "og:description": "DOCX editor that handles real Microsoft Word documents on the web. Tracked changes, complex tables, full Word compatibility. Built for contract management and document automation.",
+      "og:site_name": "SuperDoc Documentation",
+      "twitter:card": "summary_large_image",
+      "twitter:site": "@superdocdev",
+      "twitter:title": "SuperDoc - Real Microsoft Word Documents on the Web",
+      "twitter:description": "DOCX editor with full Word compatibility. Handle tracked changes, complex tables, and document automation with AI support.",
+      "twitter:image": "public/images/twitter-card.png"
+    }
+  }
+}

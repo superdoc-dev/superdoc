@@ -161,6 +161,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const block = lookup.block as TableBlock;
   const measure = lookup.measure as TableMeasure;
   const tableBorders = block.attrs?.borders;
+  const tableIndentValue = (block.attrs?.tableIndent as { width?: unknown } | null | undefined)?.width;
+  const tableIndent = typeof tableIndentValue === 'number' && Number.isFinite(tableIndentValue) ? tableIndentValue : 0;
   // Note: We don't use createTableBorderOverlay because we implement single-owner
   // border model where cells handle all borders (including outer table borders)
   // to prevent double borders when rendering with absolutely-positioned divs.
@@ -301,6 +303,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         tableBorders,
         columnWidths: measure.columnWidths,
         allRowHeights,
+        tableIndent,
         context,
         renderLine,
         renderDrawingContent,
@@ -338,6 +341,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       tableBorders,
       columnWidths: measure.columnWidths,
       allRowHeights,
+      tableIndent,
       context,
       renderLine,
       renderDrawingContent,

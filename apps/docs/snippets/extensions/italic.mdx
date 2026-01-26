@@ -1,0 +1,60 @@
+Add subtle emphasis with italic styling.
+
+Classic slanted text for emphasis, thoughts, or citations.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p><br/><br/>The word <em>emphasis</em> comes from Greek, meaning <i>"appearance" or "showing"</i>.<br/><br/>Use italics for <em>subtle stress</em> rather than bold assertion.</p>`}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'Toggle Italic',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.toggleItalic()
+        }
+      },
+      {
+        label: 'Set Italic',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.setItalic()
+        }
+      },
+      {
+        label: 'Unset Italic',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.unsetItalic()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:i/>
+  </w:rPr>
+  <w:t>Italic text</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Emphasis** - Softer than bold
+- **Foreign words** - *Lorem ipsum*, *c'est la vie*
+- **Thoughts** - Internal dialogue or asides
+- **Citations** - Book titles, publications
+- **Technical terms** - First usage of terminology

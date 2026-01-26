@@ -1,0 +1,334 @@
+---
+title: Methods
+keywords: "superdoc methods, document api methods, editor functions, word document api, programmatic control"
+---
+
+Methods are functions you call on the SuperDoc instance to perform actions.
+
+## Document Operations
+
+### `export`
+
+Export the document with various options.
+
+<ParamField path="options" type="Object">
+  Export configuration
+  
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="exportType" type="string[]" default="['docx']">
+      Export formats
+    </ParamField>
+    <ParamField path="isFinalDoc" type="boolean" default="false">
+      Replace fields with values
+    </ParamField>
+    <ParamField path="commentsType" type="string" default="'external'">
+      Comment handling: 'external', 'clean', or custom
+    </ParamField>
+    <ParamField path="exportedName" type="string" default="'document'">
+      Base filename
+    </ParamField>
+    <ParamField path="triggerDownload" type="boolean" default="true">
+      Auto-download file
+    </ParamField>
+    <ParamField path="fieldsHighlightColor" type="string" default="'#FFFF00'">
+      Field highlight color
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<Blob>` - Document blob
+
+```javascript
+const blob = await superdoc.export({
+  isFinalDoc: true,
+  commentsType: 'clean'
+});
+```
+
+### `save`
+
+Save document if in collaboration mode.
+
+**Returns:** `Promise<void>`
+
+```javascript
+await superdoc.save();
+```
+
+### `getHTML`
+
+Get HTML content of all editors.
+
+<ParamField path="options" type="Object">
+  HTML options
+  
+  <Expandable title="properties">
+    <ParamField path="unflattenLists" type="boolean" default="false">
+      Preserve nested list structure
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `string[]` - Array of HTML strings, one per editor
+
+```javascript
+const htmlArray = superdoc.getHTML();
+```
+
+## Mode Control
+
+### `setDocumentMode`
+
+Change the document mode.
+
+<ParamField path="mode" type="string" required>
+  New document mode
+  
+  <Expandable title="Available modes">
+    - `'viewing'` - Read-only
+    - `'suggesting'` - Track changes
+    - `'editing'` - Normal editing
+  </Expandable>
+</ParamField>
+
+```javascript
+superdoc.setDocumentMode('suggesting');
+```
+
+### `lockSuperdoc`
+
+Lock or unlock the document.
+
+<ParamField path="isLocked" type="boolean" required>
+  Lock state
+</ParamField>
+
+<ParamField path="lockedBy" type="User">
+  User who locked the document
+</ParamField>
+
+```javascript
+superdoc.lockSuperdoc(true, currentUser);
+```
+
+### `setHighContrastMode`
+
+Enable/disable high contrast mode.
+
+<ParamField path="enabled" type="boolean" required>
+  High contrast state
+</ParamField>
+
+```javascript
+superdoc.setHighContrastMode(true);
+```
+
+## UI Methods
+
+### `toggleRuler`
+
+Toggle ruler visibility.
+
+```javascript
+superdoc.toggleRuler();
+```
+
+### `togglePagination`
+
+Toggle pagination mode.
+
+```javascript
+superdoc.togglePagination();
+```
+
+### `focus`
+
+Focus the active editor or first available.
+
+```javascript
+superdoc.focus();
+```
+
+## Search Methods
+
+### `search`
+
+Search for text or regex in active editor.
+
+<ParamField path="query" type="string | RegExp" required>
+  Search query
+</ParamField>
+
+**Returns:** `Array<SearchResult>` - Search matches
+
+```javascript
+const results = superdoc.search('contract');
+const results = superdoc.search(/section \d+/gi);
+```
+
+### `goToSearchResult`
+
+Navigate to a search result.
+
+<ParamField path="match" type="SearchResult" required>
+  Search result to navigate to
+</ParamField>
+
+```javascript
+superdoc.goToSearchResult(results[0]);
+```
+
+## Comments Methods
+
+### `addCommentsList`
+
+Add a comments list to the specified element.
+
+<ParamField path="element" type="string | HTMLElement" required>
+  Container for comments list
+</ParamField>
+
+```javascript
+superdoc.addCommentsList('#comments-sidebar');
+```
+
+### `removeCommentsList`
+
+Remove the comments list.
+
+```javascript
+superdoc.removeCommentsList();
+```
+
+## User Management
+
+### `addSharedUser`
+
+Add a user to the shared users list.
+
+<ParamField path="user" type="User" required>
+  User to add
+  
+  <Expandable title="User properties">
+    <ParamField path="name" type="string" required>
+      Display name
+    </ParamField>
+    <ParamField path="email" type="string" required>
+      Email address
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```javascript
+superdoc.addSharedUser({
+  name: 'Jane Smith',
+  email: 'jane@example.com'
+});
+```
+
+### `removeSharedUser`
+
+Remove a user from shared users.
+
+<ParamField path="email" type="string" required>
+  Email of user to remove
+</ParamField>
+
+```javascript
+superdoc.removeSharedUser('jane@example.com');
+```
+
+## Lifecycle Methods
+
+### `destroy`
+
+Completely destroy the SuperDoc instance.
+
+<Warning>This is irreversible. Cleans up all resources, events, and DOM.</Warning>
+
+```javascript
+superdoc.destroy();
+```
+
+## Event Methods
+
+### `on`
+
+Subscribe to an event.
+
+<ParamField path="event" type="string" required>
+  Event name
+</ParamField>
+
+<ParamField path="handler" type="function" required>
+  Event handler
+</ParamField>
+
+```javascript
+superdoc.on('ready', ({ superdoc }) => {
+  console.log('SuperDoc ready');
+});
+```
+
+### `once`
+
+Subscribe to an event once.
+
+<ParamField path="event" type="string" required>
+  Event name
+</ParamField>
+
+<ParamField path="handler" type="function" required>
+  Event handler
+</ParamField>
+
+```javascript
+superdoc.once('ready', () => {
+  // Only called once
+});
+```
+
+### `off`
+
+Unsubscribe from an event.
+
+<ParamField path="event" type="string" required>
+  Event name
+</ParamField>
+
+<ParamField path="handler" type="function" required>
+  Handler to remove
+</ParamField>
+
+```javascript
+superdoc.off('ready', handler);
+```
+
+## Method Patterns
+
+### Async Operations
+
+```javascript
+async function exportDocument() {
+  try {
+    const blob = await superdoc.export({
+      isFinalDoc: true
+    });
+    saveToFile(blob);
+  } catch (error) {
+    console.error('Export failed:', error);
+  }
+}
+```
+
+### Waiting for Ready
+
+<Note>Some methods require SuperDoc to be ready</Note>
+
+```javascript
+superdoc.once('ready', () => {
+  // Now safe to use all methods
+  superdoc.search('term');
+  superdoc.setDocumentMode('suggesting');
+});
+```

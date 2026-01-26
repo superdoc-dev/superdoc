@@ -1,0 +1,85 @@
+Adjust text size for emphasis and readability.
+
+Select text and apply different sizes. Supports pt, px, em, and rem units with automatic min/max clamping.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p style="font-size: 10pt">Small text for footnotes and captions.</p>
+    <p style="font-size: 14pt">Regular body text for comfortable reading.</p>
+    <p style="font-size: 18pt">Large text for headings and emphasis.</p>
+    <p>Select any text and resize it using the buttons below.</p>
+  `}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: '10pt',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontSize('10pt')
+        }
+      },
+      {
+        label: '12pt',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontSize('12pt')
+        }
+      },
+      {
+        label: '14pt',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontSize('14pt')
+        }
+      },
+      {
+        label: '18pt',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontSize('18pt')
+        }
+      },
+      {
+        label: '24pt',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontSize('24pt')
+        }
+      },
+      {
+        label: 'Reset',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetFontSize()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:sz w:val="28"/> <!-- Half-points: 14pt = 28 -->
+  </w:rPr>
+  <w:t>14pt text</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Visual hierarchy** - Different sizes for headers, body, and footnotes
+- **Emphasis** - Larger text draws attention without bold
+- **Readability** - Adjust size for screen distance and user preference  
+- **Professional documents** - Match specific formatting requirements

@@ -1,0 +1,302 @@
+---
+title: StructuredContent extension
+sidebarTitle: "Structured Content"
+keywords: "StructuredContent extension, superdoc StructuredContent, word StructuredContent, document StructuredContent, docx StructuredContent"
+---
+
+import Description from "/snippets/extensions/structured-content.mdx";
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField
+  path="structuredContentClass"
+  type="string"
+  default="sd-structured-content-block-tag"
+>
+  CSS class for the block
+</ParamField>
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for structured content blocks
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="id" type="string">
+  Unique identifier for the structured content block
+  <Info>
+    The `id` attribute must be a **numeric string** for valid DOCX output (per
+    ECMA-376
+    [§17.5.2.18](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oe376/9bf45b56-eb07-4978-af7a-57548641667d)).
+    Use `Date.now().toString()` or sequential integers instead of UUIDs.
+  </Info>
+</ParamField>
+
+<ParamField path="tag" type="string">
+  Content control tag (e.g., 'block_table_sdt')
+</ParamField>
+
+<ParamField path="alias" type="string" default="Structured content">
+  Display name for the block
+</ParamField>
+
+## Commands
+
+### `insertStructuredContentInline`
+
+Inserts a structured content inline at selection.
+
+**Parameters:**
+
+<ParamField
+  path="options"
+  type="StructuredContentInlineInsert"
+  required
+></ParamField>
+
+### `insertStructuredContentBlock`
+
+Inserts a structured content block at selection.
+
+**Parameters:**
+
+<ParamField
+  path="options"
+  type="StructuredContentBlockInsert"
+  required
+></ParamField>
+
+### `updateStructuredContentById`
+
+Updates a single structured content field by its unique ID.
+IDs are unique identifiers, so this will update at most one field.
+If the updated node does not match the schema, it will not be updated.
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  Unique identifier of the field
+</ParamField>
+<ParamField path="options" type="StructuredContentUpdate" required></ParamField>
+
+### `deleteStructuredContent`
+
+Removes a structured content.
+
+**Parameters:**
+
+<ParamField
+  path="structuredContentTags"
+  type="Array<any>"
+  required
+></ParamField>
+
+### `deleteStructuredContentById`
+
+Removes a structured content by ID.
+
+**Parameters:**
+
+<ParamField path="idOrIds" type="string | Array<string>" required></ParamField>
+
+### `deleteStructuredContentAtSelection`
+
+Removes a structured content at cursor, preserving its content.
+
+### `appendRowsToStructuredContentTable`
+
+Append multiple rows to the end of a table inside a structured content block.
+Each inner array represents the cell values for one new row.
+
+**Example:**
+
+```javascript
+editor.commands.appendRowsToStructuredContentTable({
+  id: "block-123",
+  tableIndex: 0,
+  rows: [
+    ["A", "B"],
+    ["C", "D"],
+  ],
+  copyRowStyle: true,
+});
+```
+
+**Parameters:**
+
+<ParamField
+  path="options"
+  type="StructuredContentTableAppendRowsOptions"
+  required
+>
+  Append configuration
+</ParamField>
+
+## Helpers
+
+### `getStructuredContentBlockTags`
+
+Get all block-level structured content tags in the document
+
+**Example:**
+
+```javascript
+const blocks = editor.helpers.getStructuredContentBlockTags(editor.state);
+console.log(`Found ${blocks.length} structured content blocks`);
+```
+
+**Parameters:**
+
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentInlineTags`
+
+Get all inline structured content tags in the document
+
+**Example:**
+
+```javascript
+const inlines = editor.helpers.getStructuredContentInlineTags(editor.state);
+console.log(`Found ${inlines.length} inline fields`);
+```
+
+**Parameters:**
+
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentTablesById`
+
+Find all tables inside a structured content block by ID
+
+**Example:**
+
+```javascript
+const tables = editor.helpers.getStructuredContentTablesById(
+  "block-123",
+  editor.state
+);
+console.log(`Block contains ${tables.length} table(s)`);
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  Structured content block ID
+</ParamField>
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentTags`
+
+Get all structured content tags (inline and block) in the document
+
+**Example:**
+
+```javascript
+const allTags = editor.helpers.getStructuredContentTags(editor.state);
+console.log(`Found ${allTags.length} structured content elements`);
+```
+
+**Parameters:**
+
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentTagsById`
+
+Get structured content tag(s) by ID
+
+**Example:**
+
+```javascript
+const field = editor.helpers.getStructuredContentTagsById(
+  "field-123",
+  editor.state
+);
+if (field.length) console.log("Found field:", field[0].node.attrs);
+```
+
+**Parameters:**
+
+<ParamField path="idOrIds" type="string | Array<string>" required>
+  Single ID or array of IDs to find
+</ParamField>
+<ParamField path="state" type="any" required></ParamField>
+
+## Types
+
+### `StructuredContentInlineInsert`
+
+<Expandable title="Properties">
+  <ResponseField name="text" type="string">
+    Text content to insert
+  </ResponseField>
+  <ResponseField name="json" type="Object">
+    ProseMirror JSON
+  </ResponseField>
+  <ResponseField name="attrs" type="Object">
+    Node attributes
+  </ResponseField>
+</Expandable>
+
+### `StructuredContentBlockInsert`
+
+<Expandable title="Properties">
+  <ResponseField name="html" type="string">
+    HTML content to insert
+  </ResponseField>
+  <ResponseField name="json" type="Object">
+    ProseMirror JSON
+  </ResponseField>
+  <ResponseField name="attrs" type="Object">
+    Node attributes
+  </ResponseField>
+</Expandable>
+
+### `StructuredContentUpdate`
+
+<Expandable title="Properties">
+  <ResponseField name="text" type="string">
+    Replace content with text (only for structured content inline)
+  </ResponseField>
+  <ResponseField name="html" type="string">
+    Replace content with HTML (only for structured content block)
+  </ResponseField>
+  <ResponseField name="json" type="Object">
+    Replace content with ProseMirror JSON (overrides html)
+  </ResponseField>
+  <ResponseField name="attrs" type="Object">
+    Update attributes only (preserves content)
+  </ResponseField>
+</Expandable>
+
+### `StructuredContentTableAppendRowsOptions`
+
+<Expandable title="Properties">
+  <ResponseField name="id" type="string" required>
+    Structured content block identifier
+  </ResponseField>
+  <ResponseField name="tableIndex" type="number">
+    Index of the table inside the block
+  </ResponseField>
+  <ResponseField
+    name="rows"
+    type="Array<Array<string>> | Array<string>"
+    required
+  >
+    Cell values to append
+  </ResponseField>
+  <ResponseField name="copyRowStyle" type="boolean">
+    Clone the last row's styling when true
+  </ResponseField>
+</Expandable>
+
+## Source Code
+
+import { SourceCodeLink } from "/snippets/components/source-code-link.jsx";
+
+<SourceCodeLink path="packages/super-editor/src/extensions/structured-content/structured-content.js" />

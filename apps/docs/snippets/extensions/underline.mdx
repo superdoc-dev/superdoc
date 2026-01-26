@@ -1,0 +1,60 @@
+Draw attention with underlined text.
+
+Traditional emphasis technique, automatically applied to links.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p><br/><br/><u>Important:</u> Underlines traditionally indicate hyperlinks on the web.<br/><br/>In documents, use underlines to <u>emphasize key points</u> or <u>indicate blank fields</u>.</p>`}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'Toggle Underline',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.toggleUnderline()
+        }
+      },
+      {
+        label: 'Set Underline',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.setUnderline()
+        }
+      },
+      {
+        label: 'Unset Underline',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.unsetUnderline()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:u w:val="single"/>
+  </w:rPr>
+  <w:t>Underlined text</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Legal documents** - Emphasize terms and conditions
+- **Forms** - Indicate fill-in areas: _____________
+- **Headings** - Alternative to bold
+- **Links** - Automatic with hyperlinks
+- **Emphasis** - Triple emphasis with bold + italic + underline

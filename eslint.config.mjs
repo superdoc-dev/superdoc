@@ -29,8 +29,8 @@ export default [
       '**/*.spec.js',
       '**/tests/**',
       '**/test/**',
-      // Docs generated files
-      'docs/.vitepress/cache/**',
+      // Docs (Mintlify site with its own conventions)
+      'apps/docs/**',
       // Examples (different environments and coding styles)
       'examples/**',
       '**/examples/**',

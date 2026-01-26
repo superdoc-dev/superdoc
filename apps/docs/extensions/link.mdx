@@ -1,0 +1,160 @@
+---
+title: Link extension
+sidebarTitle: "Link"
+keywords: "Link extension, superdoc Link, word Link, document Link, docx Link"
+---
+
+import Description from '/snippets/extensions/link.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="protocols" type="Array<string>" default="['http','https']">
+  Allowed URL protocols
+</ParamField>
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for link elements
+</ParamField>
+
+<ParamField path="htmlAttributes.target" type="string" default="null">
+  Default link target
+</ParamField>
+
+<ParamField path="htmlAttributes.rel" type="string" default="noopener noreferrer nofollow">
+  Default rel attribute
+</ParamField>
+
+<ParamField path="htmlAttributes.class" type="string" default="null">
+  CSS class
+</ParamField>
+
+<ParamField path="htmlAttributes.title" type="string" default="null">
+  Title attribute
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="href" type="string">
+  URL or anchor reference
+</ParamField>
+
+<ParamField path="target" type="TargetFrameOptions" default="_blank">
+  Link target window
+</ParamField>
+
+<ParamField path="rel" type="string" default="noopener noreferrer nofollow">
+  Relationship attributes
+</ParamField>
+
+<ParamField path="text" type="string">
+  Display text for the link
+</ParamField>
+
+<ParamField path="name" type="string">
+  Anchor name for internal references
+</ParamField>
+
+<ParamField path="history" type="boolean" default="true">
+  Whether to add to viewed hyperlinks list
+</ParamField>
+
+<ParamField path="anchor" type="string">
+  Bookmark target name (ignored if rId and href specified)
+</ParamField>
+
+<ParamField path="docLocation" type="string">
+  Location in target hyperlink
+</ParamField>
+
+<ParamField path="tooltip" type="string">
+  Tooltip for the link
+</ParamField>
+
+## Commands
+
+### `setLink`
+
+Create or update a link
+
+<Note>
+Automatically adds underline formatting and trims whitespace from link boundaries
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.setLink({ href: 'https://example.com' })
+editor.commands.setLink({
+  href: 'https://example.com',
+  text: 'Visit Example'
+})
+```
+
+**Parameters:**
+
+<ParamField path="options" type="SetLinkOptions" required>
+  Link configuration
+</ParamField>
+
+### `unsetLink`
+
+Remove link and associated formatting
+
+<Note>
+Also removes underline and text color
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.unsetLink()
+```
+
+### `toggleLink`
+
+Toggle link on selection
+
+**Example:**
+
+```javascript
+editor.commands.toggleLink({ href: 'https://example.com' })
+editor.commands.toggleLink()
+```
+
+**Parameters:**
+
+<ParamField path="options" type="SetLinkOptions" required>
+  Link configuration
+</ParamField>
+
+## Types
+
+### `TargetFrameOptions`
+
+Target frame options
+
+### `SetLinkOptions`
+
+Link options for setLink command
+
+<Expandable title="Properties">
+<ResponseField name="href" type="string">
+  URL for the link
+</ResponseField>
+<ResponseField name="text" type="string">
+  Display text (uses selection if omitted)
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/link/link.js" />

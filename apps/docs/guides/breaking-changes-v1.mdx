@@ -1,0 +1,221 @@
+---
+title: Breaking Changes v1.0.0
+sidebarTitle: "Breaking Changes v1"
+---
+
+# SuperDoc v1.0.0 — Breaking Changes & Migration Guide
+
+This document describes all **breaking changes** between SuperDoc `v0.x` and `v1.0.0`. It is intended for **customers upgrading to v1**.
+
+---
+
+## TL;DR
+
+**SuperDoc v1.0.0 is a major architectural release.**
+
+Key impacts:
+
+* A new **layout engine** is now the default rendering system  
+* **Pagination, lists, and paragraph formatting were reimplemented**  
+* Several **extensions, commands, and configuration options were removed**  
+* **Selection, comments, and tracked-changes behavior changed**
+
+Most applications will require **explicit migration work**.
+
+---
+
+## 1. Version & Packaging
+
+* **Version jump:** `0.35.3 → 1.0.0`  
+* This release intentionally includes breaking API and behavior changes  
+* v0 will continue to be supported as a "long term support" (LTS) line for some time
+
+### Bundler Requirements (ESM)
+
+SuperDoc v1 introduces a new internal layout engine stack (packages under `@superdoc/*`). You do not need to install these directly—they are dependencies of `superdoc`.
+
+Bundlers must support ESM modules (or be configured to transpile ESM dependencies from `node_modules`).
+
+---
+
+## 2. Layout Engine Is Now Default (CRITICAL)
+
+```ts
+new SuperDoc(); // layout engine enabled by default
+```
+
+Removed in v1:
+
+* `pagination` config option  
+* `togglePagination()` helper  
+* Pagination toolbar controls
+
+Pagination is now handled entirely by the layout engine; use `layoutEngineOptions` to customize page size, margins, zoom, and other layout behavior.
+
+---
+
+## 3. Pagination Extension Removed
+
+The v0 `Pagination` extension was **removed**. If you were explicitly including it, remove it from your extensions list.
+
+---
+
+## 4. Lists Reimplemented (HIGH IMPACT)
+
+### Removed Extensions
+
+* `BulletList`  
+* `OrderedList`  
+* `ListItem`
+
+Lists are now modeled via paragraph properties (`paragraphProperties.numberingProperties`).
+
+**Why this changed:** In Microsoft Word, lists are paragraph-level numbering properties (not separate list nodes). v1 adopts the same model so lists behave like Word and match DOCX semantics.
+
+### Removed Commands
+
+* `wrapInList`  
+* `sinkListItem`  
+* `liftListItem`  
+* `splitListItem`  
+* `deleteListItem`
+
+### Replacement Commands
+
+```ts
+editor.commands.toggleList('orderedList');
+editor.commands.toggleList('bulletList');
+editor.commands.increaseListIndent();
+editor.commands.decreaseListIndent();
+editor.commands.removeNumberingProperties();
+```
+
+---
+
+## 5. Paragraph Model Changes (HIGH IMPACT)
+
+### Attribute Location Changed
+
+Most paragraph formatting that previously lived on `node.attrs.*` is now under `node.attrs.paragraphProperties`, including:
+
+* `indent`, `spacing`, `borders`, `justify`  
+* `tabStops`, `keepLines`, `keepNext`  
+* `styleId`
+
+### New Access Pattern
+
+```ts
+// v0
+node.attrs.styleId;
+
+// v1
+node.attrs.paragraphProperties?.styleId;
+```
+
+Paragraph layout is now computed by the layout engine.
+
+---
+
+## 6. Commands & Formatting Changes
+
+### Removed Extensions
+
+* `TextIndent`  
+* `LineHeight`
+
+### Replacement Commands
+
+* Indent: `increaseTextIndent()`, `decreaseTextIndent()`, `setTextIndentation(points)`, `unsetTextIndentation()`  
+* Line height: `setLineHeight(multiplier)`, `unsetLineHeight()`
+
+---
+
+## 7. TypeScript Support
+
+* Core editor code migrated to TypeScript  
+* Strongly typed commands, events, and schema
+
+No runtime behavior change, but imports may need updating.
+
+## 8. CSS & Styling Removals
+
+Removed:
+
+* Pagination CSS  
+* List-item CSS  
+* Header/footer editor CSS
+
+Rendering is now handled by the layout engine painter.
+
+---
+
+## 9. Ruler Placement Requires a Container
+
+The ruler now teleports into a host element instead of always rendering inline. Pass a container selector/element via `rulerContainer` and enable it with `rulers: true`:
+
+```ts
+new SuperDoc({
+  rulerContainer: '#ruler-host', // required/strongly recommended
+  modules: {
+    toolbar: { /* ... */ },
+  },
+});
+```
+
+If no `rulerContainer` is provided, the ruler renders inline, but providing a dedicated container is the supported path going forward.
+
+## 10. DOM Data Attributes for Lists Changed
+
+In v0, list `<li>` nodes emitted many `data-*` attributes (e.g., `data-num-id`, `data-level`, `data-indent`, `data-num-fmt`, `data-font-size`, `data-font-family`, `data-marker-type`, `data-list-level`). In v1, lists are paragraphs with numbering properties, and only these remain on list paragraphs:
+
+* `data-marker-type`  
+* `data-list-level` (JSON)  
+* `data-list-numbering-type`
+
+All other numbering metadata now lives in `paragraphProperties.numberingProperties` (not in `data-*`). If you scraped DOM attributes for integrations or overlays, read the paragraph attributes/resolved properties instead.
+
+## 11. Stored Document Migration (JSON & Yjs)
+
+Persisted documents created on v0 need migration to load cleanly in v1 because schema and layout defaults changed.
+
+### Yjs collaboration docs (recommended flow)
+
+1. Add your own migration flag (e.g., a string in your document metadata) and check it before running.
+2. Export/import to force the v1 importer to rebuild structure:
+   - Export DOCX from the v0 document.
+   - Import that DOCX with the v1 editor (headless/Node) to produce a new YDoc.
+3. Validate the migrated doc.
+4. Persist the migration flag in your metadata so it doesn’t rerun.
+5. We recommend you keep a pre-migration snapshot for rollback.
+6. Store the migrated Yjs update
+
+### Plain JSON docs (non-collab)
+
+If you store ProseMirror JSON, run an export/import pipeline to re-hydrate with the v1 importer:
+
+1. Keep a v0 editor runtime (headless/Node). Load the stored v0 JSON into the v0 editor.
+2. Export DOCX from the v0 editor.
+3. Instantiate a v1 editor and import that DOCX.
+4. Export the new v1 JSON with editor.getJSON()
+
+### Why DOCX export/import?
+
+Using DOCX as the source of truth is the best way to perform this migration. The DOCX data structure is stable and using our import/export is the most reliable way to "upgrade" documents.
+
+## 12. Migration Checklist
+
+1. Upgrade to `superdoc@^1.0.0`  
+2. Update TypeScript imports/types if you rely on editor typings  
+3. Remove legacy pagination/list/header-footer CSS overrides you no longer need  
+4. If you have custom extensions, verify they work correctly  
+5. If you have customized any library styles, verify they work correctly
+
+---
+
+## Final Notes
+
+* **v1.0.0 is not a drop-in upgrade**  
+* Most breaking changes are architectural and intentional  
+* The new layout engine enables accurate pagination, better performance, and long-term stability
+
+If you encounter migration issues, please open an issue with a minimal reproduction.

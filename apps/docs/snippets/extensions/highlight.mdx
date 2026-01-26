@@ -1,0 +1,81 @@
+Apply background colors to emphasize important text.
+
+Color-coded highlighting for review, categorization, and emphasis.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p><br/><mark style="background-color: #FFEB3B">Key point: Highlights draw attention</mark><br/><br/>
+<mark style="background-color: #81C784">✓ Approved content</mark><br/>
+<mark style="background-color: #FF8A65">⚠ Needs review</mark><br/>
+<mark style="background-color: #64B5F6">ℹ Additional information</mark></p>`}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'Yellow',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.setHighlight('#FFEB3B')
+        }
+      },
+      {
+        label: 'Green',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.setHighlight('#81C784')
+        }
+      },
+      {
+        label: 'Blue',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.setHighlight('#64B5F6')
+        }
+      },
+      {
+        label: 'Orange',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.setHighlight('#FF8A65')
+        }
+      },
+      {
+        label: 'Clear',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          
+          editor.commands.unsetHighlight()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:highlight w:val="yellow"/>
+  </w:rPr>
+  <w:t>Highlighted text</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Document review** - Color-code feedback
+- **Study notes** - Highlight key concepts
+- **Status tracking** - Visual progress indicators
+- **Multi-reviewer** - Each person uses different color
+- **Categorization** - Group related content by color

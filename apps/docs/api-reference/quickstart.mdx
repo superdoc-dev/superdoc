@@ -1,0 +1,32 @@
+---
+title: Quick Start
+keywords: "superdoc quickstart, api quick start, docx api tutorial, word editor guide, getting started api"
+---
+
+Three minutes to your first response.
+
+<Steps>
+  <Step title="Get your API key">
+    ```bash
+    curl "https://api.superdoc.dev/v1/auth/register?email=you@email.com"
+    ```
+    Check email. Get code.
+  </Step>
+
+  <Step title="Verify">
+    ```bash
+    curl "https://api.superdoc.dev/v1/auth/verify?email=you@email.com&code=123456"
+    ```
+    Save this key. We can't recover it.
+  </Step>
+
+  <Step title="Convert">
+    ```bash
+    curl -X POST https://api.superdoc.dev/v1/convert?from=docx \
+      -H "Authorization: Bearer YOUR_API_KEY" \
+      -F "file=@contract.docx" \
+      -o contract.pdf
+    ```
+    Your DOCX is now a PDF. Tables intact. Formatting preserved.
+  </Step>
+</Steps>

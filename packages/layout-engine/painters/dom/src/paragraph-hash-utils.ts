@@ -164,6 +164,9 @@ export const getRunBooleanProp = (run: Run, prop: string): boolean => {
  * @returns The underline style or empty string if not present
  */
 export const getRunUnderlineStyle = (run: Run): string => {
+  if ('underline' in run && typeof run.underline === 'boolean') {
+    return run.underline ? 'single' : '';
+  }
   if ('underline' in run && run.underline && typeof run.underline === 'object') {
     return (run.underline as { style?: string }).style ?? '';
   }

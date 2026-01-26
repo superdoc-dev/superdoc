@@ -1,0 +1,671 @@
+---
+title: Comments
+keywords: "word comments api, document annotations, threaded discussions, comment resolution, docx comments"
+---
+
+Add Word-style commenting to documents with threaded discussions, replies, and resolution workflows.
+
+## Quick Start
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: "#editor",
+  document: "contract.docx",
+  user: {
+    name: "John Smith",
+    email: "john@company.com",
+  },
+  modules: {
+    comments: {
+      readOnly: false,
+      allowResolve: true,
+      element: "#comments",
+    },
+  },
+  onCommentsUpdate: ({ type, comment }) => {
+    console.log("Comment event:", type);
+  },
+});
+```
+
+<Note>
+The comments module is **enabled by default**. To disable it entirely, set `modules.comments` to `false`:
+
+```javascript
+modules: {
+  comments: false;
+}
+```
+
+</Note>
+
+## Module Configuration
+
+<ParamField path="modules.comments.readOnly" type="boolean" default="false">
+  View-only mode, prevents new comments
+</ParamField>
+
+<ParamField path="modules.comments.allowResolve" type="boolean" default="true">
+  Allow marking comments as resolved
+</ParamField>
+
+<ParamField path="modules.comments.element" type="string | HTMLElement">
+  Container for comments sidebar
+</ParamField>
+
+<ParamField
+  path="modules.comments.useInternalExternalComments"
+  type="boolean"
+  default="false"
+>
+  Enable dual internal/external comment system
+</ParamField>
+
+<ParamField
+  path="modules.comments.suppressInternalExternalComments"
+  type="boolean"
+  default="false"
+>
+  Hide internal comments from view
+</ParamField>
+
+<ParamField path="modules.comments.permissionResolver" type="function">
+  Comments-only override for permission checks
+</ParamField>
+
+## Viewing Mode Visibility
+
+Comments are hidden by default when `documentMode` is `viewing`. Use the
+top-level `comments.visible` and `trackChanges.visible` flags to control what
+renders in read-only mode.
+
+```javascript
+new SuperDoc({
+  selector: "#viewer",
+  document: "contract.docx",
+  documentMode: "viewing",
+  comments: { visible: true },      // Standard comment threads
+  trackChanges: { visible: false }, // Tracked-change markup + threads
+});
+```
+
+When `trackChanges.visible` is enabled, tracked-change threads render even if
+standard comments remain hidden.
+
+## Setting Up Comments UI
+
+During initialization
+
+```javascript
+modules: {
+  comments: {
+    element: "#comments-sidebar";
+  }
+}
+```
+
+After initialization
+
+```javascript
+superdoc.on("ready", () => {
+  const sidebar = document.querySelector("#comments-sidebar");
+  superdoc.addCommentsList(sidebar);
+});
+```
+
+## Comment Events
+
+### `onCommentsUpdate`
+
+Fired for all comment changes.
+
+<ParamField path="type" type="string" required>
+  Event type
+  <Expandable title="Event types">
+    - `pending` - User selected text, about to add comment - `add` - New comment
+    created - `update` - Comment text edited - `deleted` - Comment removed -
+    `resolved` - Comment marked resolved - `selected` - Comment clicked/selected
+  </Expandable>
+</ParamField>
+
+<ParamField path="comment" type="Comment" required>
+  Comment object
+</ParamField>
+
+<ParamField path="meta" type="Object">
+  Additional metadata
+</ParamField>
+
+```javascript
+onCommentsUpdate: ({ type, comment, meta }) => {
+  switch(type) {
+    case 'pending':
+      showCommentDialog();
+      break;
+    case 'add':
+      await saveComment(comment);
+      break;
+    case 'resolved':
+      await markResolved(comment.id);
+      break;
+  }
+}
+```
+
+## Comment Data Structure
+
+<ResponseField name="comment" type="Object">
+  Comment object
+
+  <Expandable title="properties" defaultOpen>
+    ### Core properties
+    <ResponseField name="commentId" type="string" required>
+      Unique identifier
+    </ResponseField>
+    <ResponseField name="commentText" type="string" required>
+      HTML content
+    </ResponseField>
+    <ResponseField name="parentCommentId" type="string | null">
+      Parent for replies
+    </ResponseField>
+    <ResponseField name="fileType" type="string">
+      Document MIME type
+    </ResponseField>
+    <ResponseField name="mentions" type="array">
+      Array of mentioned users
+    </ResponseField>
+    <ResponseField name="commentJSON" type="object">
+      Full JSON representation of comment content with ProseMirror schema
+      <Expandable title="example">
+      ```json
+      {
+        "type": "paragraph",
+        "attrs": {
+          "lineHeight": null,
+          "textIndent": null,
+          "paraId": null,
+          "textId": null,
+          "rsidR": null,
+          "rsidRDefault": null,
+          "rsidP": null,
+          "rsidRPr": null,
+          "rsidDel": null,
+          "spacing": {
+            "lineSpaceAfter": 0,
+            "lineSpaceBefore": 0,
+            "line": 0,
+            "lineRule": null
+          },
+          "extraAttrs": {},
+          "marksAttrs": null,
+          "indent": null,
+          "borders": null,
+          "class": null,
+          "styleId": null,
+          "sdBlockId": null,
+          "attributes": null,
+          "filename": null,
+          "keepLines": null,
+          "keepNext": null,
+          "paragraphProperties": null,
+          "dropcap": null,
+          "pageBreakSource": null,
+          "justify": null,
+          "tabStops": null
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Could you elaborate on this?"
+          }
+        ]
+      }
+      ```
+      </Expandable>
+    </ResponseField>
+    
+    ### Author information
+    <ResponseField name="creatorName" type="string" required>
+      Author display name
+    </ResponseField>
+    <ResponseField name="creatorEmail" type="string" required>
+      Author email
+    </ResponseField>
+    <ResponseField name="createdTime" type="number" required>
+      Unix timestamp
+    </ResponseField>
+    
+    ### Position
+    <ResponseField name="fileId" type="string">
+      Document ID
+    </ResponseField>
+    <ResponseField name="selection" type="Object">
+      Position in document
+
+      <Expandable title="Properties">
+        <ResponseField name="selectionBounds" type="Object">
+          Visual bounds (top, left, bottom, right)
+          ```json
+          {
+            "top": 96,
+            "left": 201.9296875,
+            "right": 241.9609375,
+            "bottom": 19.5
+          }
+          ```
+        </ResponseField>
+        <ResponseField name="page" type="Number">
+        Number of page comment belongs to
+        </ResponseField>
+        <ResponseField name="source" type="String">
+        Origin of comment
+        </ResponseField>
+        <ResponseField name="documentId" type="String">
+        ID of document
+        </ResponseField>
+      </Expandable>
+
+    </ResponseField>
+
+    ### State
+    <ResponseField name="isInternal" type="boolean">
+      Internal/external flag
+    </ResponseField>
+    <ResponseField name="resolvedTime" type="number | null">
+      Resolution timestamp
+    </ResponseField>
+    <ResponseField name="resolvedByEmail" type="string | null">
+      Resolver email
+    </ResponseField>
+    <ResponseField name="resolvedByName" type="string | null">
+      Resolver name
+    </ResponseField>
+
+    ### Track changes
+    <ResponseField name="trackedChange" type="boolean | null">
+      Is track change comment
+    </ResponseField>
+    <ResponseField name="trackedChangeType" type="string | null">
+      'trackInsert', 'trackDelete', or 'trackFormat'
+    </ResponseField>
+    <ResponseField name="deletedText" type="string | null">
+      Text that was deleted
+    </ResponseField>
+    <ResponseField name="trackedChangeText" type="string | null">
+      Text content of tracked changes
+    </ResponseField>
+
+    ### Import metadata
+    <ResponseField name="importedId" type="string | null">
+      Original Word comment ID
+    </ResponseField>
+    <ResponseField name="importedAuthor" type="Object | null">
+      Original author info
+    </ResponseField>
+
+  </Expandable>
+</ResponseField>
+
+<Expandable title="example">
+```json
+{
+  // Core properties
+  "commentId": "a41eaa19-feb6-4e17-8bf3-d9fbf80e9f06",
+  "commentText": "Could you elaborate on this?",
+  "parentCommentId": null,
+  "fileType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "mentions": [],
+  "commentJSON": { ... }, // see commentJSON under "Core properties" section
+  
+  // Author information
+  "creatorName": "Demo User",
+  "creatorEmail": "demo@example.com",
+  "createdTime": 1762458019942,
+  
+  // Position
+  "fileId": "9c4ba8e0-6740-4531-ac8e-b2e8d30c2ffc",
+  "selection": {
+    "selectionBounds": {
+      "top": 369.9765625,
+      "left": 532.21875,
+      "right": 661.7890625,
+      "bottom": 404.875
+    },
+    "page": 1,
+    "source": "super-editor",
+    "documentId": "9c4ba8e0-6740-4531-ac8e-b2e8d30c2ffc"
+  },
+  
+  // State
+  "isInternal": false,
+  "resolvedTime": null,
+  "resolvedByEmail": null,
+  "resolvedByName": null,
+  
+  // Track changes
+  "trackedChange": null,
+  "trackedChangeType": null,
+  "deletedText": null,
+  "trackedChangeText": null,
+  
+  // Import metadata
+  "importedId": null,
+  "importedAuthor": null
+}
+```
+</Expandable>
+
+## Threaded Replies
+
+Comments support nested discussions:
+
+```javascript
+// Parent comment
+const parent = {
+  commentId: "parent-123",
+  commentText: "Should we change this?",
+  parentCommentId: null,
+};
+
+// Reply
+const reply = {
+  commentId: "reply-456",
+  commentText: "Yes, let's update",
+  parentCommentId: "parent-123",
+};
+
+// Nested reply
+const nested = {
+  commentId: "reply-789",
+  commentText: "Done",
+  parentCommentId: "reply-456",
+};
+```
+
+## Resolution Workflow
+
+### Marking Comments Resolved
+
+```javascript
+onCommentsUpdate: ({ type, comment }) => {
+  if (type === 'resolved') {
+    const resolution = {
+      commentId: comment.commentId,
+      resolvedTime: comment.resolvedTime,
+      resolvedByName: comment.resolvedByName,
+      resolvedByEmail: comment.resolvedByEmail
+    };
+
+    await api.resolveComment(resolution);
+    notifyParticipants(comment);
+  }
+}
+```
+
+### Permission Control
+
+```javascript
+const canResolve = (comment, user, role) => {
+  // Document owners can always resolve
+  if (role === "editor") return true;
+
+  // Authors can resolve their own
+  if (comment.creatorEmail === user.email) return true;
+
+  return false;
+};
+```
+
+## Word Import/Export
+
+### Importing Comments
+
+<Note>
+  Word comments are automatically imported with the document and marked with
+  `importedId`
+</Note>
+
+```javascript
+const importedComment = {
+  commentId: "uuid-generated",
+  importedId: "w15:123", // Original Word ID
+  importedAuthor: {
+    name: "John Smith (imported)",
+    email: "john@company.com",
+  },
+  parentCommentId: "parent-uuid", // Relationships preserved
+};
+```
+
+### Exporting Comments
+
+<ParamField path="commentsType" type="string" required>
+  Export mode
+  <Expandable title="Options">
+    - `external` - Include comments in DOCX - `clean` - Remove all comments -
+    Custom function for filtering
+  </Expandable>
+</ParamField>
+
+```javascript
+// With comments
+const blob = await superdoc.export({
+  commentsType: "external",
+  isFinalDoc: false,
+});
+
+// Clean version
+const cleanBlob = await superdoc.export({
+  commentsType: "clean",
+  isFinalDoc: true,
+});
+```
+
+## Permission Resolver
+
+Customize who can resolve comments or accept tracked changes by returning `false` from a resolver function. The resolver receives the active permission (`RESOLVE_OWN`, `RESOLVE_OTHER`, `REJECT_OWN`, `REJECT_OTHER`), the current user, and any tracked-change metadata linked to the comment.
+
+This controls the Resolve buttons in the comments panel and the Accept/Reject actions shown in tracked-change menus.
+
+```javascript
+const superdoc = new SuperDoc({
+  user: { name: "Alex Editor", email: "alex@example.com" },
+  modules: {
+    comments: {
+      permissionResolver: ({
+        permission,
+        trackedChange,
+        currentUser,
+        defaultDecision,
+      }) => {
+        const authorEmail = trackedChange?.attrs?.authorEmail;
+        const activeUserEmail = currentUser?.email;
+        if (
+          permission === "RESOLVE_OTHER" &&
+          authorEmail &&
+          activeUserEmail !== authorEmail
+        ) {
+          return false; // Hide Accept button for suggestions from other authors
+        }
+        return defaultDecision;
+      },
+    },
+  },
+});
+```
+
+<Note>
+  You can set a global resolver with the top-level `permissionResolver` config.
+  Module-level resolvers win when both are defined.
+</Note>
+
+## Track Changes Integration
+
+Comments automatically generate for tracked changes:
+
+<ResponseField name="trackChangeComment" type="Object">
+  Special comment for track changes
+  <Expandable title="properties">
+    <ResponseField name="trackedChange" type="boolean" required>
+      Always `true`
+    </ResponseField>
+    <ResponseField name="trackedChangeType" type="string" required>
+      'trackInsert', 'trackDelete', or 'trackFormat'
+    </ResponseField>
+    <ResponseField name="readOnly" type="boolean" required>
+      Cannot be edited
+    </ResponseField>
+    <ResponseField name="onAccept" type="function">
+      Accept change handler
+    </ResponseField>
+    <ResponseField name="onReject" type="function">
+      Reject change handler
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## API Methods
+
+### Adding Comments
+
+#### `insertComment`
+
+Add comment to selected text.
+
+<ParamField path="options" type="Object" required>
+  Comment options
+  <Expandable title="properties">
+    <ParamField path="commentText" type="string" required>
+      Comment HTML content
+    </ParamField>
+    <ParamField path="creatorName" type="string" required>
+      Author name
+    </ParamField>
+    <ParamField path="creatorEmail" type="string" required>
+      Author email
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```javascript
+superdoc.activeEditor.commands.insertComment({
+  commentText: "Review this section",
+  creatorName: "John Smith",
+  creatorEmail: "john@company.com",
+});
+```
+
+### Managing Comments
+
+#### `removeComment`
+
+<ParamField path="options.commentId" type="string" required>
+  Comment to remove
+</ParamField>
+
+```javascript
+superdoc.activeEditor.commands.removeComment({
+  commentId: "comment-123",
+});
+```
+
+#### `setActiveComment`
+
+<ParamField path="options.commentId" type="string" required>
+  Comment to highlight
+</ParamField>
+
+```javascript
+superdoc.activeEditor.commands.setActiveComment({
+  commentId: "comment-123",
+});
+```
+
+#### `resolveComment`
+
+<ParamField path="options.commentId" type="string" required>
+  Comment to resolve
+</ParamField>
+
+```javascript
+superdoc.activeEditor.commands.resolveComment({
+  commentId: "comment-123",
+});
+```
+
+## Common Patterns
+
+### Contract Review Workflow
+
+```javascript
+modules: {
+  comments: {
+    allowResolve: false, // Only owner resolves
+    element: '#legal-comments'
+  }
+}
+
+onCommentsUpdate: ({ type, comment }) => {
+  // Track progress
+  if (type === 'add') stats.total++;
+  if (type === 'resolved') stats.resolved++;
+
+  // Auto-assign
+  if (comment.commentText.match(/\bprice|cost\b/i)) {
+    assignToFinanceTeam(comment);
+  }
+}
+```
+
+### Internal Review System
+
+```javascript
+modules: {
+  comments: {
+    useInternalExternalComments: true;
+  }
+}
+
+onCommentsUpdate: ({ comment }) => {
+  if (comment.isInternal) {
+    syncToInternalTeam(comment);
+  } else {
+    syncToAllUsers(comment);
+  }
+};
+```
+
+### Auto-save Comments
+
+```javascript
+import { debounce } from "lodash";
+
+const saveComment = debounce(async (comment) => {
+  await api.updateComment(comment.commentId, comment);
+}, 1000);
+
+onCommentsUpdate: ({ type, comment }) => {
+  if (type === "update") {
+    saveComment(comment);
+  }
+};
+```
+
+## Performance Considerations
+
+<Warning>
+  For documents with many comments: - Implement viewport-based loading -
+  Virtualize comment lists - Set reasonable limits (e.g., 500 comments max) -
+  Limit comment length (e.g., 10,000 characters)
+</Warning>
+
+```javascript
+const MAX_COMMENTS = 500;
+
+onCommentsUpdate: ({ type }) => {
+  if (type === "add" && commentCount >= MAX_COMMENTS) {
+    showWarning("Maximum comments reached");
+    return false;
+  }
+};
+```

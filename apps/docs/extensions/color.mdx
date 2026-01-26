@@ -1,0 +1,75 @@
+---
+title: Color extension
+sidebarTitle: "Color"
+keywords: "Color extension, superdoc Color, word Color, document Color, docx Color"
+---
+
+import Description from '/snippets/extensions/color.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="types" type="Array<string>" default="['textStyle']">
+  Mark types to add color support to
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="color" type="ColorValue">
+  Text color value
+</ParamField>
+
+## Commands
+
+### `setColor`
+
+Set text color
+
+<Note>
+Preserves other text styling attributes
+</Note>
+
+**Example:**
+
+```javascript
+// Set to red using hex
+editor.commands.setColor('#ff0000')
+```
+
+**Parameters:**
+
+<ParamField path="color" type="ColorValue" required>
+  Color value to apply
+</ParamField>
+
+### `unsetColor`
+
+Remove text color
+
+<Note>
+Removes color while preserving other text styles
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.unsetColor()
+```
+
+## Types
+
+### `ColorValue`
+
+Accepts hex colors (#ff0000), rgb(255,0,0), or named colors (red)
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/color/color.js" />

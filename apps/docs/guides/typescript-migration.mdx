@@ -1,0 +1,234 @@
+---
+title: TypeScript Migration Guide
+sidebarTitle: "TypeScript Migration"
+---
+
+# TypeScript Migration Guide
+
+This guide covers the gradual migration of the SuperDoc monorepo from JavaScript to TypeScript.
+
+## Quick Start
+
+**Infrastructure is ready.** You can now:
+
+- Create new files as `.ts` or `.vue` with `<script lang="ts">`
+- Migrate existing `.js` files when making significant changes
+- Mix `.js` and `.ts` files freely - they work together
+
+**Type checking:** `npm run types:check --workspace=packages/super-editor`
+
+---
+
+## When to Migrate a File
+
+Convert to TypeScript when:
+
+1. **Making significant changes** - Refactoring or adding major features
+2. **Creating new files** - All new files should be `.ts` (or `.vue` with TypeScript)
+3. **Working on core logic** - Prioritize type safety in critical paths
+4. **Fixing type-related bugs** - Convert to prevent similar issues
+
+**Don't migrate:** Files you're not actively working on. Let migration happen naturally.
+
+---
+
+## How to Migrate
+
+### 1. Basic Function
+
+**Before** (`helper.js`):
+
+```javascript
+export function formatDate(date) {
+  return date.toISOString();
+}
+```
+
+**After** (`helper.ts`):
+
+```typescript
+export function formatDate(date: Date): string {
+  return date.toISOString();
+}
+```
+
+### 2. Vue Components
+
+**Before**:
+
+```vue
+<script>
+export default {
+  props: {
+    title: String,
+  },
+};
+</script>
+```
+
+**After with `<script setup>`** (recommended):
+
+```vue
+<script setup lang="ts">
+defineProps<{
+  title: string;
+}>();
+</script>
+```
+
+**After with Options API**:
+
+```vue
+<script lang="ts">
+export default {
+  props: {
+    title: {
+      type: String,
+      required: true,
+    },
+  },
+};
+</script>
+```
+
+### 3. Prefer `unknown` over `any`
+
+```typescript
+// Instead of this
+function process(data: any) {
+  return data.value;
+}
+
+// Do this
+function process(data: unknown) {
+  if (typeof data === 'object' && data !== null && 'value' in data) {
+    return (data as { value: any }).value;
+  }
+}
+```
+
+---
+
+## Type Checking
+
+### Package-specific (recommended)
+
+```bash
+npm run types:check --workspace=packages/super-editor
+```
+
+### Root level
+
+```bash
+npm run type-check
+```
+
+**Note:** Root-level checking may show path alias errors during migration. Use package-specific checking for accurate results.
+
+---
+
+## Common Issues
+
+### Type errors in JavaScript files
+
+Ensure `checkJs: false` in your tsconfig. We only type-check `.ts` files during migration.
+
+### Build fails after migrating a file
+
+Run a clean build:
+
+```bash
+npm run clean:packages && npm run build
+```
+
+---
+
+## Migration Priority
+
+Suggested order:
+
+1. **Utilities and helpers** - Pure functions, easy to type
+2. **Core types** - Type definitions and interfaces
+3. **Extensions** - Self-contained modules
+4. **Commands** - Clear input/output
+5. **Components** - Vue components (can stay JS longer)
+
+---
+
+## Testing
+
+- Tests can stay as `.js` files initially
+- They'll import TypeScript modules normally
+- Run tests as usual: `npm test`
+
+---
+
+## Advanced Patterns
+
+### ProseMirror Types
+
+```typescript
+import { Node as PMNode, Mark } from 'prosemirror-model';
+import { EditorState, Transaction } from 'prosemirror-state';
+
+export function updateNodeAttrs(node: PMNode, attrs: Record<string, any>): PMNode {
+  return node.type.create({ ...node.attrs, ...attrs }, node.content);
+}
+```
+
+### Extension Pattern
+
+```typescript
+import { Extension } from '@core/Extension';
+
+export interface MyExtensionOptions {
+  enabled?: boolean;
+  customValue?: string;
+}
+
+export class MyExtension extends Extension<MyExtensionOptions> {
+  name = 'myExtension';
+
+  defaultOptions: MyExtensionOptions = {
+    enabled: true,
+    customValue: 'default',
+  };
+
+  // Implementation
+}
+```
+
+### Discriminated Unions
+
+```typescript
+type CommandResult = { success: true; data: any } | { success: false; error: string };
+
+function handleResult(result: CommandResult) {
+  if (result.success) {
+    console.log(result.data); // TypeScript knows this exists
+  } else {
+    console.error(result.error); // TypeScript knows this exists
+  }
+}
+```
+
+---
+
+## Resources
+
+- [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/intro.html)
+- [Vue 3 + TypeScript](https://vuejs.org/guide/typescript/overview.html)
+- [ProseMirror TypeScript Examples](https://github.com/ProseMirror/prosemirror-view/blob/master/src/index.ts)
+
+---
+
+## Questions?
+
+1. Check this guide first
+2. Look at `packages/ai` for a fully migrated example
+3. Ask in team chat
+4. Update this guide with new learnings
+
+---
+
+**Last Updated**: Phase 0 Complete (Infrastructure Setup)

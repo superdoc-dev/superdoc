@@ -3,6 +3,8 @@ import { getStyleTagFromStyleId } from '@core/super-converter/v2/importer/listIm
 import { baseBulletList, baseOrderedListDef } from './baseListDefinitions';
 import { updateNumberingProperties } from '@core/commands/changeListLevel';
 import { findParentNode } from './findParentNode.js';
+import { translator as wAbstractNumTranslator } from '@converter/v3/handlers/w/abstractNum';
+import { translator as wNumTranslator } from '@converter/v3/handlers/w/num';
 
 /**
  * Generate a new list definition for the given list type.
@@ -114,6 +116,18 @@ export const generateNewListDefinition = ({ numId, listType, level, start, text,
   const newNumDef = getBasicNumIdTag(numId, newAbstractId);
   newNumbering.definitions[numId] = newNumDef;
 
+  const newTranslatedNumbering = { ...editor.converter.translatedNumbering };
+  if (!newTranslatedNumbering.definitions) newTranslatedNumbering.definitions = {};
+  if (!newTranslatedNumbering.abstracts) newTranslatedNumbering.abstracts = {};
+  // @ts-expect-error Remaining parameters are not needed for this translator
+  newTranslatedNumbering.definitions[numId] = wNumTranslator.encode({
+    nodes: [newNumDef],
+  });
+  // @ts-expect-error Remaining parameters are not needed for this translator
+  newTranslatedNumbering.abstracts[newAbstractId] = wAbstractNumTranslator.encode({
+    nodes: [newAbstractDef],
+  });
+  editor.converter.translatedNumbering = newTranslatedNumbering;
   // Update the editor's numbering with the new definition
   editor.converter.numbering = newNumbering;
 

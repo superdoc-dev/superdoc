@@ -1,0 +1,105 @@
+Organize content with clean, structured bullet points.
+
+Type `- `, `* `, or `+ ` to start a list automatically. Create nested lists with Tab/Shift+Tab. Lists preserve perfectly through Word import/export.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p>Essential project tasks:</p>
+    <ul>
+      <li>Define clear objectives
+        <ul>
+          <li>Set measurable goals</li>
+          <li>Align with strategy</li>
+        </ul>
+      </li>
+      <li>Set realistic deadlines</li>
+      <li>Allocate resources wisely</li>
+      <li>Track progress regularly</li>
+    </ul>
+    <p>Try selecting text and using the buttons below to modify the list.</p>
+  `}
+  height="350px"
+  customButtons={[
+    [
+      {
+        label: 'Toggle Bullet List',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.toggleBulletList()
+        }
+      },
+      {
+        label: 'Split List Item',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.splitListItem('listItem')
+        }
+      },
+      {
+        label: 'Indent (Tab)',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.view) return
+          
+          // Simulate Tab key press
+          const event = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            code: 'Tab',
+            keyCode: 9,
+            which: 9,
+            bubbles: true,
+            cancelable: true
+          })
+          editor.view.dom.dispatchEvent(event)
+        }
+      },
+      {
+        label: 'Outdent (Shift+Tab)', 
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.view) return
+          
+          // Simulate Shift+Tab key press
+          const event = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            code: 'Tab',
+            keyCode: 9,
+            which: 9,
+            shiftKey: true,
+            bubbles: true,
+            cancelable: true
+          })
+          editor.view.dom.dispatchEvent(event)
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:pStyle w:val="ListParagraph"/>
+    <w:numPr>
+      <w:ilvl w:val="0"/>
+      <w:numId w:val="1"/>
+    </w:numPr>
+  </w:pPr>
+  <w:r>
+    <w:t>List item text</w:t>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Action items** - Track tasks and responsibilities
+- **Feature lists** - Showcase product capabilities  
+- **Key points** - Summarize important information
+- **Requirements** - Document specifications clearly

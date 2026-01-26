@@ -1,0 +1,120 @@
+---
+title: TextIndent extension
+sidebarTitle: "Text Indent"
+keywords: "TextIndent extension, superdoc TextIndent, word TextIndent, document TextIndent, docx TextIndent"
+---
+
+import Description from '/snippets/extensions/text-indent.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="types" type="Array<string>" default="['heading','paragraph']">
+  Node types to apply indentation to
+</ParamField>
+
+<ParamField path="defaults" type="Object">
+  Default indentation settings
+</ParamField>
+
+<ParamField path="defaults.unit" type="string" default="in">
+  Default unit for indentation (in, cm, px, etc.)
+</ParamField>
+
+<ParamField path="defaults.increment" type="number" default="0.125">
+  Default increment/decrement value
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="textIndent" type="string">
+  Text indentation value with unit (e.g., '0.5in')
+</ParamField>
+
+## Commands
+
+### `setTextIndent`
+
+Set text indentation
+
+<Note>
+Accepts any valid CSS unit (in, cm, px, em, etc.)
+</Note>
+
+**Example:**
+
+```javascript
+// Set to 0.5 inches
+setTextIndent('0.5in')
+
+// Set to 2 centimeters
+setTextIndent('2cm')
+```
+
+**Parameters:**
+
+<ParamField path="indent" type="string" required>
+  Indentation value with unit (e.g., '0.5in', '2cm')
+</ParamField>
+
+**Returns:** `Function` Command function
+
+### `unsetTextIndent`
+
+Remove text indentation
+
+<Note>
+Removes all indentation from the selected nodes
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.unsetTextIndent()
+```
+
+**Returns:** `Function` Command function
+
+### `increaseTextIndent`
+
+Increase text indentation
+
+<Note>
+Creates initial indent if none exists
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.increaseTextIndent()
+```
+
+**Returns:** `Function` Command function
+
+### `decreaseTextIndent`
+
+Decrease text indentation
+
+<Note>
+Removes indentation completely if it reaches 0 or below
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.decreaseTextIndent()
+```
+
+**Returns:** `Function` Command function
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/text-indent/text-indent.js" />

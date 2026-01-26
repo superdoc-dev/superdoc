@@ -52,6 +52,8 @@ import { buildSchemaSummary } from './schema-summary.js';
 import { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
+import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
+import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -680,13 +682,41 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       } else {
         // Blank document (source is undefined or null)
-        // Use pre-parsed content from options if provided, otherwise create minimal structure
-        resolvedOptions.content = (options?.content ?? []) as string | Record<string, unknown> | DocxFileEntry[];
-        resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
-        resolvedOptions.fonts = options?.fonts ?? {};
-        resolvedOptions.fileSource = null;
-        resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
-        this.#sourcePath = null;
+        // For docx mode without pre-parsed content, load the blank.docx template
+        const shouldLoadBlankDocx =
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+
+        if (shouldLoadBlankDocx) {
+          // Decode base64 blank.docx without fetch
+          const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
+          const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
+          const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
+          // Use Uint8Array to ensure compatibility with both Node Buffer and browser Blob
+          const uint8Array = new Uint8Array(arrayBuffer);
+          let fileSource: File | Blob | Buffer;
+          if (canUseBuffer) {
+            fileSource = Buffer.from(uint8Array);
+          } else if (typeof Blob !== 'undefined') {
+            fileSource = new Blob([uint8Array as BlobPart]);
+          } else {
+            throw new Error('Blob is not available to create blank DOCX');
+          }
+          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
+          resolvedOptions.content = docx;
+          resolvedOptions.mediaFiles = mediaFiles;
+          resolvedOptions.fonts = fonts;
+          resolvedOptions.fileSource = fileSource;
+          resolvedOptions.isNewFile = true;
+          this.#sourcePath = null;
+        } else {
+          // Use pre-parsed content from options if provided, otherwise create minimal structure
+          resolvedOptions.content = (options?.content ?? []) as string | Record<string, unknown> | DocxFileEntry[];
+          resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
+          resolvedOptions.fonts = options?.fonts ?? {};
+          resolvedOptions.fileSource = null;
+          resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
+          this.#sourcePath = null;
+        }
       }
 
       // Update options

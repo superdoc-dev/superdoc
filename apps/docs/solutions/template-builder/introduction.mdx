@@ -1,0 +1,87 @@
+---
+title: Template Builder
+sidebarTitle: Introduction
+---
+
+A React component for creating document templates with dynamic fields that can be populated with data at merge time.
+
+## What it does
+
+- Load Word documents and convert them into reusable templates
+- Insert dynamic fields using a simple trigger pattern (`{{`)
+- Organize fields with grouping for repeating data structures
+- Export templates with embedded field definitions
+- Navigate between fields using keyboard shortcuts
+
+## Common use cases
+
+- **Contract templates** - Customer names, dates, terms that change per agreement
+- **Invoice templates** - Line items, totals, and customer information
+- **Form letters** - Personalized content with consistent structure
+- **Report templates** - Dynamic data sections with repeating groups
+- **Proposal documents** - Client-specific information in standardized layouts
+
+## How it works
+
+```jsx
+import SuperDocTemplateBuilder from "@superdoc-dev/template-builder";
+import "superdoc/dist/style.css";
+
+function TemplateEditor() {
+  return (
+    <SuperDocTemplateBuilder
+      document={{
+        source: "contract-template.docx",
+        mode: "editing",
+      }}
+      fields={{
+        available: [
+          { id: "1", label: "Customer Name" },
+          { id: "2", label: "Contract Date" },
+          { id: "3", label: "Payment Amount" },
+        ],
+      }}
+      list={{ position: "right" }}
+      onFieldInsert={(field) => console.log("Field inserted:", field)}
+    />
+  );
+}
+```
+
+That's it! Users type `{{` anywhere in the document to insert fields. The sidebar shows all fields in the template.
+
+## Key concepts
+
+**Fields** - Placeholders in the document that get replaced with actual data during merge operations. Each field has a unique identifier.
+
+**Structured Document Tags (SDT)** - The underlying Word standard used to mark field locations. Ensures compatibility with Microsoft Word.
+
+**Field grouping** - Multiple instances of the same field that create a logical group, useful for repeating sections like line items.
+
+**Trigger pattern** - The character sequence (default `{{`) that opens the field insertion menu.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/solutions/template-builder/quickstart"
+  >
+    Get running in 5 minutes
+  </Card>
+  <Card
+    title="Configuration"
+    icon="cog"
+    href="/solutions/template-builder/configuration"
+  >
+    Learn all available options
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/solutions/template-builder/api-reference"
+  >
+    Complete technical reference
+  </Card>
+</CardGroup>

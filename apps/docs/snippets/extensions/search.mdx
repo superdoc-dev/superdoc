@@ -1,0 +1,56 @@
+Search for text/pattern in SuperEditor content.
+
+Select text and apply different sizes. Supports pt, px, em, and rem units with automatic min/max clamping.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p>The editor is where your ideas take shape.</p>
+    <p>You can type freely, format your text, and structure content the way you need.</p>
+    <p>But once the document grows larger, it becomes harder to find what you are looking for.  </p>
+    <p>That is where the search feature helps.</p>
+    <br/>
+    <p>With search, you can jump directly to a word or phrase without scrolling line by line.  </p>
+    <p>Imagine you are reviewing a long draft and want to find every place the word "editor" appears. </p>
+    <p>Instead of scanning manually, the search function highlights each match.  </p>
+    <p>From there, you can quickly navigate through results or replace the text with a new term.  </p>
+    <br/>
+    <p>This makes editing faster and more reliable.  </p>
+    <p>Writers use search to replace names across a story.  </p>
+    <p>Developers use search to verify that a technical term is consistent.  </p>
+    <p>All of these tasks become easier when the editor supports search and replace.  </p>
+  `}
+  maxHeight="300px"
+  customButtons={[
+    [
+      {
+        label: 'Search',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.search('search');
+        }
+      },
+      {
+        label: 'Go to match',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          const result = editor.commands.search('search');
+          editor.commands.goToSearchResult(result[5]);
+        }
+      }
+    ]
+  ]}
+/>
+
+
+## Use Case
+
+- Find and replace: quickly locate words or phrases and replace them.
+- Content navigation: jump to the next or previous match without scrolling manually.
+- Highlighting: visually emphasize search results for the user.
+- Custom workflows: integrate search into toolbars, command palettes, or keyboard shortcuts.

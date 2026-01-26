@@ -1,0 +1,38 @@
+The foundation of document structure.
+
+Paragraphs support extensive styling including spacing, indentation, borders, and Word styles.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p style="text-indent: 48px; margin-bottom: 12px;">This paragraph has custom indentation and spacing. It demonstrates how paragraph-level formatting is preserved through Word import/export.</p>
+<p style="text-align: center; border-bottom: 1px solid #000; padding-bottom: 8px;">Centered paragraph with bottom border</p>
+<p style="text-align: justify;">Justified text fills the entire width of the line by adjusting word spacing. This creates clean edges on both left and right sides of the paragraph.</p>`}
+  height="250px"
+/>
+
+## OOXML Structure
+
+```xml
+<w:p>
+  <w:pPr>
+    <w:jc w:val="center"/>
+    <w:spacing w:before="240" w:after="120"/>
+    <w:ind w:firstLine="720"/>
+    <w:pBdr>
+      <w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/>
+    </w:pBdr>
+  </w:pPr>
+  <w:r>
+    <w:t>Paragraph content</w:t>
+  </w:r>
+</w:p>
+```
+
+## Use Case
+
+- **Document structure** - Basic building blocks of content
+- **Formatting control** - Spacing, alignment, indentation
+- **Style application** - Heading styles, body text styles
+- **Borders & shading** - Visual separation and emphasis
+- **Keep with next** - Control page breaks between paragraphs

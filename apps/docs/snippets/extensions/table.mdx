@@ -1,0 +1,120 @@
+Create structured data with full Word table compatibility.
+
+Professional tables with merge/split capabilities, preserving all formatting through Word import/export.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<table>
+    <tr>
+      <th>Product</th>
+      <th>Q1</th>
+      <th>Q2</th>
+      <th>Total</th>
+    </tr>
+    <tr>
+      <td>Revenue</td>
+      <td>$45,000</td>
+      <td>$52,000</td>
+      <td><strong>$97,000</strong></td>
+    </tr>
+    <tr>
+      <td>Costs</td>
+      <td>$30,000</td>
+      <td>$28,000</td>
+      <td><strong>$58,000</strong></td>
+    </tr>
+  </table>`}
+  height="350px"
+  customButtons={[
+    [
+        {
+        label: 'Insert 3x3',
+        onClick: (superdoc) => {
+            const editor = superdoc?.activeEditor || superdoc?.editor
+            if (!editor?.commands) return
+
+            editor.commands.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+        }
+        },
+        {
+        label: 'Add Row',
+        onClick: (superdoc) => {
+            const editor = superdoc?.activeEditor || superdoc?.editor
+            if (!editor?.commands) return
+            
+            editor.commands.addRowAfter()
+        }
+        },
+        {
+        label: 'Add Column',
+        onClick: (superdoc) => {
+            const editor = superdoc?.activeEditor || superdoc?.editor
+            if (!editor?.commands) return
+            
+            editor.commands.addColumnAfter()
+        }
+        },
+        {
+        label: 'Merge Cells',
+        onClick: (superdoc) => {
+            const editor = superdoc?.activeEditor || superdoc?.editor
+            if (!editor?.commands) return
+            
+            editor.commands.mergeCells()
+        }
+        },
+        {
+        label: 'Split Cell',
+        onClick: (superdoc) => {
+            const editor = superdoc?.activeEditor || superdoc?.editor
+            if (!editor?.commands) return
+            
+            editor.commands.splitCell()
+        }
+        },
+        {
+        label: 'Color Cell',
+        onClick: (superdoc) => {
+            const editor = superdoc?.activeEditor || superdoc?.editor
+            if (!editor?.commands) return
+            
+            editor.commands.setCellBackground('#E3F2FD')
+        }
+        }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:tbl>
+  <w:tblPr>
+    <w:tblBorders>
+      <w:top w:val="single" w:sz="4"/>
+      <w:left w:val="single" w:sz="4"/>
+      <w:bottom w:val="single" w:sz="4"/>
+      <w:right w:val="single" w:sz="4"/>
+      <w:insideH w:val="single" w:sz="4"/>
+      <w:insideV w:val="single" w:sz="4"/>
+    </w:tblBorders>
+  </w:tblPr>
+  <w:tr>
+    <w:tc>
+      <w:tcPr>
+        <w:tcW w:w="2880" w:type="dxa"/>
+      </w:tcPr>
+      <w:p><w:r><w:t>Cell content</w:t></w:r></w:p>
+    </w:tc>
+  </w:tr>
+</w:tbl>
+```
+
+## Use Case
+
+- **Financial reports** - Quarterly data with totals
+- **Comparison matrices** - Feature/pricing tables
+- **Schedules** - Time-based planning with merged headers
+- **Data organization** - Structured content that needs alignment
+- **Complex layouts** - Merged cells for sophisticated designs

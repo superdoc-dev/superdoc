@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import config from '../../test-config';
+import { filterDocxFiles } from './doc-loader.js';
 
-const testData = fs.readdirSync(config.basicDocumentsFolder).filter((file) => !config.ignoreDocuments.includes(file));
+const testData = filterDocxFiles(fs.readdirSync(config.basicDocumentsFolder), new Set(config.ignoreDocuments || []));
 
 // Run this test with each file on the test-data/basic-documents folder
 // and compare the screenshot with the reference image

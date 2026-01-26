@@ -1,0 +1,564 @@
+---
+title: Methods
+keywords: "supereditor methods, editor commands, prosemirror commands, document manipulation, editor api"
+---
+
+SuperEditor exposes both high-level methods and direct ProseMirror access.
+
+## Content Methods
+
+### `getHTML`
+
+Get document as HTML string.
+
+<ParamField path="options" type="Object">
+  Configuration options
+  
+  <Expandable title="properties">
+    <ParamField path="unflattenLists" type="boolean" default="false">
+      Preserve nested list structure
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `string` - HTML representation
+
+```javascript
+const html = editor.getHTML();
+// With nested lists preserved
+const html = editor.getHTML({ unflattenLists: true });
+```
+
+### `getJSON`
+
+Get document as ProseMirror JSON.
+
+**Returns:** `Object` - ProseMirror document JSON
+
+```javascript
+const json = editor.getJSON();
+```
+
+### `getUpdatedJson`
+
+Get JSON prepared for export with comment processing.
+
+**Returns:** `Object` - Export-ready JSON
+
+```javascript
+const json = editor.getUpdatedJson();
+```
+
+## Export Methods
+
+### `exportDocx`
+
+Export document as DOCX file.
+
+<ParamField path="options" type="Object">
+  Export configuration
+  
+  <Expandable title="properties">
+    <ParamField path="isFinalDoc" type="boolean" default="false">
+      Replace fields with values
+    </ParamField>
+    <ParamField path="commentsType" type="string" default="'external'">
+      Comment handling: 'external', 'clean', or custom
+    </ParamField>
+    <ParamField path="comments" type="Array">
+
+      Comments to include
+
+      [Data structure](/modules/comments#comment-data-structure)
+    </ParamField>
+    <ParamField path="fieldsHighlightColor" type="string" default="'#FFFF00'">
+      Field highlight color
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<Blob>` - DOCX file blob
+
+```javascript
+const blob = await editor.exportDocx({
+  isFinalDoc: true,
+  commentsType: 'clean'
+});
+```
+
+### `loadXmlData`
+
+Load and parse DOCX file data.
+
+<ParamField path="fileSource" type="File | Blob | string" required>
+  DOCX file source
+</ParamField>
+
+<ParamField path="isNode" type="boolean" default="false">
+  Whether running in Node.js
+</ParamField>
+
+**Returns:** `Promise<[xmlFiles, mediaUrls, mediaBase64, fonts]>`
+
+```javascript
+const [xmlFiles, mediaUrls, mediaBase64, fonts] = 
+  await Editor.loadXmlData(docxFile);
+```
+
+## Editor Control
+
+### `mount`
+
+Mount editor to DOM element.
+
+<ParamField path="element" type="HTMLElement" required>
+  Target DOM element
+</ParamField>
+
+```javascript
+editor.mount(document.querySelector('#new-container'));
+```
+
+### `unmount`
+
+Unmount editor from DOM (keeps instance alive).
+
+```javascript
+editor.unmount();
+```
+
+### `destroy`
+
+Completely destroy editor and clean up.
+
+<Warning>This is irreversible. The editor instance cannot be used after calling destroy.</Warning>
+
+```javascript
+editor.destroy();
+```
+
+### `focus`
+
+Focus the editor.
+
+```javascript
+editor.focus();
+```
+
+### `setEditable`
+
+Set editor editability.
+
+<ParamField path="editable" type="boolean" required>
+  Whether editor should be editable
+</ParamField>
+
+<ParamField path="emitUpdate" type="boolean" default="true">
+  Whether to emit update event
+</ParamField>
+
+```javascript
+editor.setEditable(false); // Read-only
+editor.setEditable(true, false); // Editable without event
+```
+
+## Mode Control
+
+### `setDocumentMode`
+
+Change document editing mode.
+
+<ParamField path="mode" type="string" required>
+  Document mode
+  
+  <Expandable title="Available modes">
+    - `'viewing'` - Read-only
+    - `'suggesting'` - Track changes
+    - `'editing'` - Full editing
+  </Expandable>
+</ParamField>
+
+```javascript
+editor.setDocumentMode('suggesting');
+```
+
+## Command Methods
+
+### `chain`
+
+Create a command chain.
+
+**Returns:** `ChainedCommands` - Chainable command object
+
+```javascript
+editor.chain()
+  .focus()
+  .selectAll()
+  .toggleBold()
+  .run();
+```
+
+### `can`
+
+Check if commands can run without executing.
+
+**Returns:** `Commands` - Commands in check mode
+
+```javascript
+if (editor.can().toggleBold()) {
+  // Bold button should be enabled
+}
+```
+
+### Direct Commands
+
+Access all commands directly.
+
+```javascript
+editor.commands.toggleBold();
+editor.commands.insertTable({ rows: 3, cols: 3 });
+editor.commands.setTextSelection({ from: 10, to: 20 });
+```
+
+### `insertContent`
+
+Insert content into the document with automatic format detection.
+
+<ParamField path="content" type="string | Object" required>
+  Content to insert (HTML, Markdown, text, or JSON)
+</ParamField>
+
+<ParamField path="options" type="Object">
+  Insert options
+  
+  <Expandable title="properties">
+    <ParamField path="contentType" type="string">
+      Content format: 'html', 'markdown', 'text', or 'schema'
+      
+      - `'html'` - HTML string (AI-generated, web content)
+      - `'markdown'` - Markdown text
+      - `'text'` - Plain text
+      - `'schema'` - ProseMirror JSON
+    </ParamField>
+    <ParamField path="position" type="number | Object">
+      Where to insert (defaults to current position)
+    </ParamField>
+    <ParamField path="updateSelection" type="boolean" default="true">
+      Update selection after insert
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `boolean` - Success status
+
+```javascript
+// Insert HTML from AI
+editor.commands.insertContent(htmlContent, { 
+  contentType: 'html' 
+});
+
+// Insert Markdown
+editor.commands.insertContent(markdownText, { 
+  contentType: 'markdown' 
+});
+
+// Insert plain text
+editor.commands.insertContent('Simple text', { 
+  contentType: 'text' 
+});
+
+// Insert structured JSON
+editor.commands.insertContent(documentSchema, { 
+  contentType: 'schema' 
+});
+
+// Insert at specific position
+editor.commands.insertContent(content, {
+  contentType: 'html',
+  position: { from: 100, to: 150 }
+});
+```
+
+**AI Integration Example:**
+```javascript
+// From any LLM
+const aiResponse = await llm.generate(prompt);
+editor.commands.insertContent(aiResponse, {
+  contentType: 'html'  // LLMs typically output HTML or Markdown
+});
+```
+
+<Note>
+When importing HTML or Markdown, all inline styles are removed to ensure Word compatibility.
+</Note>
+
+## Content Manipulation
+
+### `replaceContent`
+
+Replace entire editor content.
+
+<ParamField path="content" type="Object" required>
+  ProseMirror JSON content
+</ParamField>
+
+```javascript
+editor.replaceContent(newJsonContent);
+```
+
+### `replaceNodeWithHTML`
+
+Replace specific node with HTML.
+
+<ParamField path="node" type="Node" required>
+  ProseMirror node to replace
+</ParamField>
+
+<ParamField path="html" type="string" required>
+  HTML replacement
+</ParamField>
+
+```javascript
+const tableNode = editor.getNodesOfType('table')[0];
+editor.replaceNodeWithHTML(tableNode, '<table>...</table>');
+```
+
+### `replaceFile`
+
+Replace current DOCX file.
+
+<ParamField path="newFile" type="File | Blob" required>
+  New DOCX file
+</ParamField>
+
+**Returns:** `Promise<void>`
+
+```javascript
+await editor.replaceFile(newDocxFile);
+```
+
+## Annotation Methods
+<Note> These methods are available with the [field-annotation](/extensions/field-annotation) extension. </Note>
+
+### `annotate`
+
+Apply field annotations to document.
+
+<ParamField path="values" type="Array" required>
+  Annotation values
+  
+  <Expandable title="Value object">
+    <ParamField path="input_id" type="string" required>
+      Field ID
+    </ParamField>
+    <ParamField path="input_value" type="any" required>
+      Field value
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="hiddenIds" type="Array<string>" default="[]">
+  Field IDs to hide
+</ParamField>
+
+<ParamField path="removeEmpty" type="boolean" default="false">
+  Remove empty fields
+</ParamField>
+
+```javascript
+editor.annotate([
+  { input_id: 'field1', input_value: 'John Doe' },
+  { input_id: 'field2', input_value: 'CEO' }
+], ['field3'], true);
+```
+
+### `previewAnnotations`
+
+Preview annotations (reversible).
+
+<ParamField path="values" type="Array" required>
+  Annotation values
+</ParamField>
+
+<ParamField path="hiddenIds" type="Array<string>">
+  Field IDs to hide
+</ParamField>
+
+```javascript
+editor.previewAnnotations(values, hiddenIds);
+```
+
+### `closePreview`
+
+Revert annotation preview.
+
+```javascript
+editor.closePreview();
+```
+
+## Search Methods
+
+### `search`
+
+Search for text or regex.
+
+<ParamField path="query" type="string | RegExp" required>
+  Search query
+</ParamField>
+
+**Returns:** `Array<SearchResult>` - Search matches
+
+```javascript
+const results = editor.commands.search('hello');
+const results = editor.commands.search(/\d{3}-\d{2}-\d{4}/gi); // SSN pattern
+```
+
+```javascript
+const matches = editor.commands.search('hello');
+editor.commands.goToSearchResult(matches[0]);
+```
+
+## Utility Methods
+
+### `getNodesOfType`
+
+Get all nodes of specific type.
+
+<ParamField path="type" type="string" required>
+  Node type name
+</ParamField>
+
+**Returns:** `Array<Node>` - Matching nodes
+
+```javascript
+const tables = editor.getNodesOfType('table');
+```
+
+### `isActive`
+
+Check if node or mark is active.
+
+<ParamField path="name" type="string | Object" required>
+  Node/mark name or attributes
+</ParamField>
+
+<ParamField path="attributes" type="Object">
+  Additional attributes to check
+</ParamField>
+
+**Returns:** `boolean` - Whether active
+
+```javascript
+editor.isActive('bold');
+editor.isActive('heading', { level: 2 });
+editor.isActive({ textAlign: 'center' });
+```
+
+### `getAttributes`
+
+Get attributes of active node or mark.
+
+<ParamField path="nameOrType" type="string | NodeType | MarkType" required>
+  Name or type to get attributes for
+</ParamField>
+
+**Returns:** `Object` - Attributes
+
+```javascript
+const attrs = editor.getAttributes('link');
+console.log(attrs.href);
+```
+
+### `getElementAtPos`
+
+<Info>Available in versions greater than 1.5.0-next.1.</Info>
+
+Get the DOM element at a document position. In presentation/layout mode, returns the painted element from the rendered page.
+
+<ParamField path="pos" type="number" required>
+  Document position
+</ParamField>
+
+<ParamField path="options" type="Object">
+  Configuration options (presentation mode only)
+
+  <Expandable title="properties">
+    <ParamField path="forceRebuild" type="boolean" default="false">
+      Rebuild the DOM position index before lookup
+    </ParamField>
+    <ParamField path="fallbackToCoords" type="boolean" default="false">
+      Use coordinate-based lookup (`elementFromPoint`) if index lookup fails
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `HTMLElement | null` - DOM element at position, or `null` if unavailable
+
+```javascript
+// Get element at cursor position
+const element = editor.getElementAtPos(editor.state.selection.from);
+
+// With fallback for edge cases
+const element = editor.getElementAtPos(pos, { fallbackToCoords: true });
+```
+
+<Note>
+**Virtualization:** In presentation mode with page virtualization enabled (default), elements on offscreen pages are not mounted in the DOM. If `getElementAtPos` returns `null`, scroll the position into view first:
+
+```javascript
+editor.presentationEditor.scrollToPosition(pos);
+const element = editor.getElementAtPos(pos);
+```
+
+To disable virtualization, use `layoutEngineOptions` when creating SuperDoc:
+
+```javascript
+const superdoc = new SuperDoc({
+  layoutEngineOptions: {
+    virtualization: { enabled: false }
+  }
+});
+```
+</Note>
+
+<Warning>
+In presentation mode, this method only works in body mode. It returns `null` when editing headers or footers.
+</Warning>
+
+## Properties
+
+<ResponseField name="state" type="EditorState">
+  ProseMirror EditorState
+</ResponseField>
+
+<ResponseField name="view" type="EditorView">
+  ProseMirror EditorView
+</ResponseField>
+
+<ResponseField name="schema" type="Schema">
+  ProseMirror Schema
+</ResponseField>
+
+<ResponseField name="commands" type="Commands">
+  All available commands
+</ResponseField>
+
+<ResponseField name="helpers" type="Object">
+  Extension helper methods
+</ResponseField>
+
+<ResponseField name="storage" type="Object">
+  Extension storage
+</ResponseField>
+
+<ResponseField name="isEditable" type="boolean">
+  Whether editor is editable
+</ResponseField>
+
+<ResponseField name="isDestroyed" type="boolean">
+  Whether editor is destroyed
+</ResponseField>
+
+<ResponseField name="isFocused" type="boolean">
+  Whether editor has focus
+</ResponseField>

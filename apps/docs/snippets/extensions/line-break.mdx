@@ -1,0 +1,46 @@
+Insert soft line breaks and page breaks in your document.
+
+Use line breaks to control text flow without creating new paragraphs. Page breaks force new pages when printing.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p>First line<br/>Second line in same paragraph<br/>Third line still together</p>
+    <p>This is a separate paragraph after pressing Enter.</p>
+    <span linebreaktype="page"><!-- Page break here --></span>
+    <p>This content starts on a new page when printed.</p>
+  `}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: '↵ Line Break',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.insertLineBreak()
+        }
+      },
+      {
+        label: '📄 Page Break',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.insertPageBreak()
+        }
+      }
+    ]
+  ]}
+/>
+
+## Types of breaks
+
+- **Line Break** - Moves to next line within same paragraph (Shift+Enter)
+- **Page Break** - Forces content to start on new page when printing
+
+## Use Case
+
+- **Address formatting** - Multiple lines without paragraph spacing
+- **Poetry/verses** - Maintain line structure without gaps
+- **Print control** - Start chapters or sections on new pages

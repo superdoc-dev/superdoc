@@ -1,0 +1,73 @@
+---
+title: eSign
+sidebarTitle: Introduction
+---
+
+The eSign component wraps SuperDoc to provide a complete document acceptance workflow with audit trails, field management, and signature capture.
+
+## What it does
+
+- **Document display** - Shows DOCX, Markdown, or HTML documents
+- **Requirement tracking** - Monitors scroll, signature, and consent status
+- **Field management** - Populates document placeholders and collects signer input
+- **Audit trail** - Records all interactions for compliance
+- **UI agnostic** - Bring your own buttons and components
+
+## Common use cases
+
+### Terms of Service
+
+Track that users scrolled through and accepted your terms.
+
+### Employment Agreements
+
+Capture signatures on offer letters with personalized fields.
+
+### Consent Forms
+
+Manage multiple checkboxes for GDPR, medical, or marketing consent.
+
+### Embedded Workflows
+
+Add document signing to larger forms like onboarding flows.
+
+## How it works
+
+```jsx
+<SuperDocESign
+  eventId="session-123"
+  document={{
+    source: "agreement.pdf",
+    validation: { scroll: { required: true } },
+  }}
+  fields={{
+    document: [{ id: "company_name", value: "Acme Corp" }],
+    signer: [{ id: "sig1", type: "signature", label: "Your Signature" }],
+  }}
+  onSubmit={async (data) => {
+    // data includes audit trail, field values, timestamps
+    await api.saveSignature(data);
+  }}
+/>
+```
+
+## Key concepts
+
+**Document fields** - Values injected into the document (like mail merge)
+
+**Signer fields** - Interactive elements the user completes (signature, checkboxes)
+
+**Audit trail** - Timestamped log of all user actions
+
+**Progressive enhancement** - Start simple, add customization as needed
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/solutions/esign/quickstart">
+    Get running in 5 minutes
+  </Card>
+  <Card title="Configuration" icon="cog" href="/solutions/esign/configuration">
+    Explore all options
+  </Card>
+</CardGroup>

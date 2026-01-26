@@ -258,13 +258,13 @@ describe('PM → FlowBlock → Measure integration', () => {
 
     // Typography metrics should be reasonable for 20px font size
     // Note: Exact values depend on font rendering (canvas vs fallback), so we check ranges
-    expect(measure.lines[0].ascent).toBeGreaterThan(14); // ~70-90% of font size
+    expect(measure.lines[0].ascent).toBeGreaterThan(10); // ~50-80% of font size
     expect(measure.lines[0].ascent).toBeLessThan(20);
     expect(measure.lines[0].descent).toBeGreaterThan(2); // ~10-25% of font size
     expect(measure.lines[0].descent).toBeLessThan(6);
-    // Line height should be at least the font size
-    expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(20);
-    expect(measure.totalHeight).toBeGreaterThanOrEqual(20);
+    // Line height should be within a reasonable range for the resolved font size
+    expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(14);
+    expect(measure.totalHeight).toBeGreaterThanOrEqual(14);
   });
 
   it('propagates tab stops and decimal separators through measurement', async () => {

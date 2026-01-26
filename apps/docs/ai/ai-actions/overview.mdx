@@ -1,0 +1,181 @@
+---
+title: AI Actions
+sidebarTitle: Overview
+keywords: "ai actions, ai document automation, high-level ai operations, intelligent docx automation, ai-driven editing"
+---
+
+AI Actions provides ready-to-use AI operations for SuperDoc. Run natural-language commands to find, replace, insert tracked changes, and add comments while preserving the formatting of the content being edited—including heading levels and paragraph styles. Works with OpenAI, Anthropic, or custom providers. Includes the AI Planner for multi-step workflows and lower-level utilities for advanced use cases.
+
+## Quick start
+
+```ts
+import { SuperDoc } from 'superdoc';
+import { AIActions, HttpProviderConfig } from '@superdoc-dev/ai';
+
+const superdoc = new SuperDoc({ /* editor config */ });
+
+const providerConfig: HttpProviderConfig = {
+  type: 'http',
+  url: '/api/ai/complete', // Your backend endpoint
+  headers: {
+    'Authorization': `Bearer ${userAuthToken}`, // Your user's session token
+  },
+};
+
+const ai = new AIActions(superdoc, {
+  user: { displayName: 'RedlineBot', userId: 'ai-assistant' },
+  provider: providerConfig,
+});
+
+await ai.waitUntilReady();
+
+// Use AI actions
+await ai.action.find('GDPR clause');
+await ai.action.replace('Rewrite as bullet points');
+await ai.action.insertTrackedChange('Add legal disclaimer');
+```
+
+Real-world examples:
+
+```ts
+await ai.action.insertTrackedChange(
+  "Replace all occurrences of 'Acme Corp' with 'Acme Corporation' throughout the document"
+);
+```
+
+```ts
+await ai.action.replace(
+  'Rewrite this section to improve clarity while preserving the existing formatting'
+);
+```
+
+Formatting results depend on the source DOCX styles; list indentation may vary and may require follow-up instructions.
+
+## What it is
+
+AI Actions is SuperDoc's **high-level AI offering**. It provides pre-built operations for common document automation tasks:
+
+Use `insertTrackedChange` when edits should be reviewed (e.g. legal or branding updates); use `replace` for final text changes.
+
+- AI-powered search, rewrites, and summaries
+- Tracked changes and comments created by an AI assistant
+- Bulk edits and repetitive automation
+- Multi-provider support (OpenAI, Anthropic, custom)
+
+For low-level control and custom AI workflows, [AI Builder](/ai/ai-builder/overview) is coming soon.
+
+## Capabilities
+
+- **Natural-language operations** - Find, replace, highlight, and manipulate content using plain English
+- **Formatting-safe edits** - Keeps existing Word headings, custom styles, and document structure intact while modifying text
+- **Tracked changes & comments** - AI-generated edits attributed to your configured AI user
+- **Summaries & completions** - Generate summaries or free-form content with streaming support
+- **Provider-agnostic** - Works with OpenAI, Anthropic, custom HTTP gateways, or custom providers
+- **Lifecycle hooks** - Real-time callbacks for streaming, errors, and readiness
+- **AI Planner** - Multi-step AI workflows with planning and execution capabilities
+- **Advanced utilities** - Lower-level exports for custom implementations and tool management
+
+AI Actions operate on the document’s semantic structure (paragraphs, headings, lists) rather than regenerating layout, so existing styles are preserved unless explicitly changed by the instruction.
+
+## Lifecycle & readiness
+
+```ts
+const ai = new AIActions(superdoc, { user, provider });
+
+await ai.waitUntilReady();
+
+if (!ai.getIsReady()) {
+  // surface UI state, retry later
+}
+```
+
+Each action internally calls `waitUntilReady`, so explicit checks are only required when guarding UI or retry flows.
+
+## Error handling
+
+```ts
+try {
+  await ai.action.replace('Make the GDPR clause bullet pointed');
+} catch (error) {
+  if (/not ready/i.test((error as Error).message)) {
+    await ai.waitUntilReady();
+  } else {
+    console.error('[AIActions] replace failed', error);
+  }
+}
+```
+
+Enable verbose logging by setting `enableLogging: true`. The package will emit parsing and traversal issues to `console.error`.
+
+## Advanced Exports
+
+The package exports additional utilities for advanced use cases:
+
+### Provider Factory
+
+```ts
+import { createAIProvider } from '@superdoc-dev/ai';
+
+// Create a provider from configuration
+const provider = createAIProvider({
+  type: 'openai',
+  apiKey: 'sk-...',
+  model: 'gpt-4',
+});
+
+// Or pass an already-instantiated provider
+const customProvider = createAIProvider(myCustomProvider);
+```
+
+### AI Planner
+
+For multi-step AI workflows with planning capabilities:
+
+```ts
+import { AIActions, AIPlannerConfig } from '@superdoc-dev/ai';
+
+const ai = new AIActions(superdoc, { user, provider });
+
+// Use the built-in planner
+const result = await ai.planner.execute('Review the document and add comments to all legal terms');
+```
+
+### Service Classes
+
+For custom implementations, you can use the lower-level service classes:
+
+- **`AIActionsService`** - Core service class that provides AI-powered document actions
+- **`EditorAdapter`** - Adapter for SuperDoc editor operations, encapsulating editor-specific API calls
+
+### Tool Utilities
+
+Utilities for working with AI tools:
+
+```ts
+import { createToolRegistry, getToolDescriptions, isValidTool } from '@superdoc-dev/ai';
+
+const registry = createToolRegistry(toolDefinitions);
+const descriptions = getToolDescriptions(registry);
+
+// Validate a tool definition object
+const myTool = {
+  name: 'myCustomTool',
+  description: 'My custom tool description',
+  handler: async ({ instruction }) => ({ success: true })
+};
+const isValid = isValidTool(myTool);
+```
+
+### Type Exports
+
+The package exports comprehensive TypeScript types including:
+- `AIPlannerConfig`, `AIPlannerExecutionResult`, `AIPlan` - Planner types
+- `AIToolActions`, `SelectionRange`, `SelectionSnapshot` - Tool and selection types
+- `AIProviderInput`, `OpenAIProviderConfig`, `AnthropicProviderConfig`, `HttpProviderConfig` - Provider configuration types
+- `PlannerContextSnapshot`, `BuilderPlanResult` - Advanced workflow types
+
+## Documentation
+
+- **[Configuration](./configuration)** - Provider setup and configuration options
+- **[Methods](./methods)** - Instance methods and AI actions
+- **[Hooks](./hooks)** - Lifecycle and streaming callbacks

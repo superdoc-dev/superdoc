@@ -1,0 +1,56 @@
+Enables cursor placement at normally unreachable positions.
+
+Shows a horizontal line cursor before/after tables, images, and other block elements where text cursors can't normally go.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p>Use arrow keys to navigate around this table:</p>
+    <table>
+      <tr>
+        <td>Cell 1</td>
+        <td>Cell 2</td>
+      </tr>
+      <tr>
+        <td>Cell 3</td>
+        <td>Cell 4</td>
+      </tr>
+    </table>
+    <p>When you reach the edge of the table, the gap cursor appears as a horizontal line, allowing you to add content before or after the table.</p>
+    <hr/>
+    <p>Gap cursors also appear around other block elements like horizontal rules (above) or images where normal text selection isn't possible.</p>
+  `}
+  height="350px"
+/>
+
+<Note>
+**How to see it:** Use arrow keys to navigate to the edges of tables or around block elements. The gap cursor appears as a thin horizontal line where normal cursors can't go.
+</Note>
+
+## When Gap Cursor Appears
+
+The gap cursor activates at positions that are:
+- **Before/after tables** - Add content outside table boundaries
+- **Around images** - Insert text before or after inline images
+- **Near horizontal rules** - Place cursor at hard-to-reach positions
+- **Between void blocks** - Navigate between non-editable elements
+- **Document boundaries** - Start/end of document near block elements
+
+## Visual Appearance
+
+```
+Normal cursor (vertical):      Gap cursor (horizontal):
+                              
+    Text here|                 ━━━━━━━━━━━━
+                               [Table here]
+    More text                  ━━━━━━━━━━━━
+```
+
+## Use Case
+
+- **Table Navigation** - Add content before/after tables without complex workarounds
+- **Image Positioning** - Insert text around images and media
+- **Better UX** - Eliminate "stuck cursor" frustrations
+- **Document Structure** - Navigate complex layouts with nested blocks
+- **Accessibility** - Keyboard-only users can reach all document positions

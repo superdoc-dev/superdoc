@@ -1,0 +1,45 @@
+Undo and redo document changes with familiar keyboard shortcuts.
+
+Track up to 100 editing actions. Press <kbd>Cmd+Z</kbd> to undo, <kbd>Cmd+Shift+Z</kbd> to redo.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p>Make some edits to this text, then use undo/redo to navigate through your changes.</p>
+    <p>Try typing, deleting, or formatting text to build up a history.</p>
+  `}
+  height="200px"
+  customButtons={[
+    [
+      {
+        label: '↶ Undo',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.undo()
+        }
+      },
+      {
+        label: '↷ Redo',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.redo()
+        }
+      }
+    ]
+  ]}
+/>
+
+## How it works
+
+- **Automatic grouping** - Changes within 500ms are grouped as one action
+- **Deep history** - Stores up to 100 undo steps by default
+- **Smart tracking** - Preserves selection and cursor position
+
+## Use Case
+
+- **Mistake recovery** - Quickly undo accidental deletions or changes
+- **Experimentation** - Try different edits knowing you can revert
+- **User confidence** - Standard feature users expect in any editor

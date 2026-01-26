@@ -1,0 +1,110 @@
+Apply custom text colors for emphasis, branding, and visual hierarchy.
+
+Colors preserve perfectly through Word import/export, maintaining your document's visual design across formats.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p>Color enhances communication through visual hierarchy:</p>
+    <ul>
+      <li><span style="color: #dc2626">Red text for warnings and critical information</span></li>
+      <li><span style="color: #059669">Green text for success and positive outcomes</span></li>
+      <li><span style="color: #2563eb">Blue text for links and references</span></li>
+      <li><span style="color: #7c3aed">Purple text for special terminology</span></li>
+      <li><span style="color: #ea580c">Orange text for important notes</span></li>
+    </ul>
+    <p>Select any text and apply colors using the buttons below.</p>
+  `}
+  height="350px"
+  customButtons={[
+    [
+      {
+        label: '🔴 Red',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setColor('#dc2626')
+        }
+      },
+      {
+        label: '🟢 Green',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setColor('#059669')
+        }
+      },
+      {
+        label: '🔵 Blue',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setColor('#2563eb')
+        }
+      },
+      {
+        label: '🟣 Purple',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setColor('#7c3aed')
+        }
+      },
+      {
+        label: '🟠 Orange',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setColor('#ea580c')
+        }
+      },
+      {
+        label: 'Remove Color',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetColor()
+        }
+      },
+      {
+        label: 'Custom Color',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          const color = prompt('Enter color (hex, rgb, or name):', '#000000')
+          if (color) {
+            editor.commands.setColor(color)
+          }
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:color w:val="FF0000"/>
+  </w:rPr>
+  <w:t>Red colored text</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Status indicators** - Red for errors, green for success, yellow for warnings
+- **Document sections** - Color-code different types of content
+- **Emphasis** - Draw attention without changing font size or weight
+- **Brand consistency** - Match company colors in documents
+- **Legal markup** - Highlight changes, additions, deletions
+
+## Best practices
+
+- **Accessibility** - Ensure sufficient contrast ratios (WCAG 2.1 AA: 4.5:1)
+- **Print-friendly** - Test colors in both digital and printed formats
+- **Consistency** - Use the same color for the same meaning throughout
+- **Restraint** - Too many colors reduce effectiveness
+- **Fallbacks** - Don't rely solely on color to convey meaning

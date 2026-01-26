@@ -1,0 +1,79 @@
+Insert and manage images with perfect Word compatibility.
+
+Supports URLs, base64 data, and maintains positioning for Word export.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Images can be inserted inline with text.</p><p><img src="/public/images/extensions/image-landscape.png" alt="Sample landscape" style="width: 300px; height: auto;"></p><p>Images automatically scale and position correctly in both the editor and Word export.</p>`}
+  height="350px"
+  customButtons={[
+    [
+      {
+        label: 'Add from URL',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setImage({
+            src: 'https://picsum.photos/id/237/200/150',
+            alt: 'External image from URL',
+            size: { width: 200 }
+          })
+        }
+      },
+      {
+        label: 'Add Local Image',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setImage({
+            src: '/public/images/extensions/image-chart.png',
+            alt: 'Chart visualization',
+            size: { width: 250 }
+          })
+        }
+      },
+      {
+        label: 'Add with Padding',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setImage({
+            src: '/public/images/extensions/image-icon.png',
+            alt: 'Document icon',
+            size: { width: 100 },
+            padding: { left: 20, right: 20, top: 10, bottom: 10 }
+          })
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:drawing>
+  <wp:inline distT="0" distB="0" distL="0" distR="0">
+    <wp:extent cx="5715000" cy="3810000"/>
+    <wp:docPr id="1" name="Picture 1"/>
+    <a:graphic>
+      <a:graphicData>
+        <pic:pic>
+          <pic:blipFill>
+            <a:blip r:embed="rId7"/>
+          </pic:blipFill>
+        </pic:pic>
+      </a:graphicData>
+    </a:graphic>
+  </wp:inline>
+</w:drawing>
+```
+
+## Use Case
+
+- **Document illustrations** - Add diagrams, charts, and screenshots
+- **Product documentation** - Include product images and UI screenshots
+- **Reports** - Embed data visualizations and infographics
+- **Branding** - Insert logos and company graphics
+- **Base64 support** - Embed images directly without external files

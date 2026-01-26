@@ -1,0 +1,79 @@
+---
+title: Track Changes Extension
+sidebarTitle: Track Changes
+---
+
+Track Changes records all edits with author attribution and timestamps, exactly like Microsoft Word.
+
+## Usage
+
+Enable through document mode:
+
+```javascript
+// Start tracking
+superdoc.setDocumentMode('suggesting');
+```
+
+## Commands
+
+```javascript
+// Switch modes (controls tracking)
+superdoc.setDocumentMode('suggesting'); // Enable tracking
+superdoc.setDocumentMode('editing');    // Disable tracking
+
+// Review changes
+editor.commands.acceptChange();
+editor.commands.rejectChange();
+editor.commands.acceptAllChanges();
+editor.commands.rejectAllChanges();
+
+// Navigate
+editor.commands.goToNextChange();
+editor.commands.goToPreviousChange();
+
+// View modes
+editor.commands.toggleTrackChangesShowOriginal();
+editor.commands.toggleTrackChangesShowFinal();
+```
+
+## Working with changes
+
+```javascript
+import { trackChangesHelpers } from '@harbour-enterprises/superdoc';
+
+// Get all changes
+const changes = trackChangesHelpers.getAllChanges(editor.state);
+
+// Filter by user
+const userChanges = trackChangesHelpers.getChangesByUser(
+  editor.state,
+  'john@company.com'
+);
+
+// Check state
+const isTracking = trackChangesHelpers.isTrackingEnabled(editor.state);
+```
+
+## Change types
+
+- **Insertions** - Green underline
+- **Deletions** - Red strikethrough  
+- **Format changes** - Yellow highlight
+
+Each change includes:
+- User information
+- Timestamp
+- Unique ID
+
+## Export behavior
+
+Changes export to DOCX as Word revisions:
+
+```javascript
+// With changes
+await superdoc.export();
+
+// Accept all first
+editor.commands.acceptAllChanges();
+await superdoc.export();
+```

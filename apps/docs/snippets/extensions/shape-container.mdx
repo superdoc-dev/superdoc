@@ -1,0 +1,40 @@
+Container for Word shapes and drawing objects.
+
+Preserves shape formatting and positioning from Word documents.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<div class="sd-editor-shape-container" style="background-color: #f3f4f6; padding: 20px;">
+  <p>This container preserves Word shape properties including:</p>
+  <ul>
+    <li>Background colors and gradients</li>
+    <li>Borders and effects</li>
+    <li>Positioning and wrapping</li>
+  </ul>
+</div>`}
+  height="250px"
+/>
+
+## OOXML Structure
+
+```xml
+<w:pict>
+  <v:shape style="width:100pt;height:50pt" 
+           fillcolor="#f3f4f6">
+    <v:textbox>
+      <w:txbxContent>
+        <!-- Content here -->
+      </w:txbxContent>
+    </v:textbox>
+  </v:shape>
+</w:pict>
+```
+
+## Use Case
+
+- **Callout boxes** - Highlight important information
+- **Diagrams** - Preserve complex Word drawings
+- **Text boxes** - Floating or anchored content
+- **Decorative elements** - Shapes and backgrounds
+- **Layout control** - Position content precisely

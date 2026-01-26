@@ -265,13 +265,18 @@ export function measureRangeWidth(view, from, to, coordCache = null, domPosCache
     range.setEnd(toRef.node, toRef.offset);
     const rect = range.getBoundingClientRect();
     range.detach?.();
-    return rect.width || 0;
+    // If getBoundingClientRect returns 0 (e.g., HappyDOM), fall back to coordsAtPos
+    if (rect.width > 0) {
+      return rect.width;
+    }
   } catch {
-    const startLeft = getLeftCoord(view, from, coordCache, domPosCache);
-    const endLeft = getLeftCoord(view, to, coordCache, domPosCache);
-    if (startLeft == null || endLeft == null) return 0;
-    return Math.max(0, endLeft - startLeft);
+    // Fall through to coordsAtPos fallback
   }
+  // Fallback: use view.coordsAtPos difference (works in test mocks and when Range fails)
+  const startLeft = getLeftCoord(view, from, coordCache, domPosCache);
+  const endLeft = getLeftCoord(view, to, coordCache, domPosCache);
+  if (startLeft == null || endLeft == null) return 0;
+  return Math.max(0, endLeft - startLeft);
 }
 
 export function getIndentWidth(view, paragraphStartPos, indentAttrs = {}, coordCache = null, domPosCache = null) {

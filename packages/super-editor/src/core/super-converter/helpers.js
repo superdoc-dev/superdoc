@@ -307,6 +307,57 @@ const getContentTypesFromXml = (contentTypesXml) => {
   }
 };
 
+/**
+ * Resolves an OPC relationship target URI to its ZIP entry path.
+ *
+ * Implements URI resolution per:
+ * - ECMA-376 Part 2: Open Packaging Conventions (OPC)
+ *   https://www.ecma-international.org/publications-and-standards/standards/ecma-376/
+ * - RFC 3986 Section 5: Reference Resolution
+ *   https://datatracker.ietf.org/doc/html/rfc3986#section-5
+ *
+ * Path resolution rules:
+ * - Absolute paths (starting with '/') resolve from the package root
+ * - Relative paths resolve from the relationship file's parent directory (baseDir)
+ * - Supports '..' and '.' path segments per RFC 3986 Section 5.2.4
+ *
+ * @param {string} target - The relationship target URI from the XML
+ * @param {string} [baseDir='word'] - The base directory for relative path resolution
+ * @returns {string|null} The resolved ZIP entry path, or null if target is empty/external
+ *
+ * @example
+ * resolveOpcTargetPath('styles.xml', 'word')             // → 'word/styles.xml'
+ * resolveOpcTargetPath('./styles.xml', 'word')           // → 'word/styles.xml'
+ * resolveOpcTargetPath('/word/styles.xml', 'word')       // → 'word/styles.xml'
+ * resolveOpcTargetPath('../customXml/item.xml', 'word')  // → 'customXml/item.xml'
+ * resolveOpcTargetPath('media/image.png', 'word')        // → 'word/media/image.png'
+ */
+const resolveOpcTargetPath = (target, baseDir = 'word') => {
+  if (!target) return null;
+
+  // Skip external URLs
+  if (target.includes('://')) return null;
+
+  // Absolute path: resolve from package root
+  if (target.startsWith('/')) {
+    return target.slice(1);
+  }
+
+  // Relative path: merge with baseDir, remove dot segments per RFC 3986 Section 5.2.4
+  const segments = `${baseDir}/${target}`.split('/');
+  const resolved = [];
+
+  for (const seg of segments) {
+    if (seg === '..') {
+      resolved.pop();
+    } else if (seg !== '.' && seg !== '') {
+      resolved.push(seg);
+    }
+  }
+
+  return resolved.join('/');
+};
+
 const DOCX_HIGHLIGHT_KEYWORD_MAP = new Map([
   ['yellow', 'FFFF00'],
   ['green', '00FF00'],
@@ -378,6 +429,54 @@ const componentToHex = (val) => {
 
 const rgbToHex = (rgb) => {
   return '#' + rgb.match(/\d+/g).map(componentToHex).join('');
+};
+
+const DEFAULT_SHADING_FOREGROUND_COLOR = '#000000';
+
+const hexToRgb = (hex) => {
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) return null;
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+};
+
+const clamp01 = (value) => {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+};
+
+const blendHexColors = (backgroundHex, foregroundHex, foregroundRatio) => {
+  const background = hexToRgb(backgroundHex);
+  const foreground = hexToRgb(foregroundHex);
+  if (!background || !foreground) return null;
+  const ratio = clamp01(foregroundRatio);
+
+  const r = Math.round(background.r * (1 - ratio) + foreground.r * ratio);
+  const g = Math.round(background.g * (1 - ratio) + foreground.g * ratio);
+  const b = Math.round(background.b * (1 - ratio) + foreground.b * ratio);
+
+  const toByte = (n) => n.toString(16).padStart(2, '0').toUpperCase();
+  return `${toByte(r)}${toByte(g)}${toByte(b)}`;
+};
+
+const resolveShadingFillColor = (shading) => {
+  if (!shading || typeof shading !== 'object') return null;
+
+  const fill = normalizeHexColor(shading.fill);
+  if (!fill) return null;
+
+  const val = typeof shading.val === 'string' ? shading.val.trim().toLowerCase() : '';
+  const pctMatch = val.match(/^pct(\d{1,3})$/);
+  if (!pctMatch) return fill;
+
+  const pct = Number.parseInt(pctMatch[1], 10);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return fill;
+
+  const foreground = normalizeHexColor(shading.color) ?? DEFAULT_SHADING_FOREGROUND_COLOR;
+  return blendHexColors(fill, foreground, pct / 100) ?? fill;
 };
 
 const getLineHeightValueString = (lineHeight, defaultUnit, lineRule = '', isObject = false) => {
@@ -519,4 +618,6 @@ export {
   polygonUnitsToPixels,
   pixelsToPolygonUnits,
   convertSizeToCSS,
+  resolveShadingFillColor,
+  resolveOpcTargetPath,
 };

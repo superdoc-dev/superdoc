@@ -11,13 +11,7 @@
  */
 
 // Re-export cascade utilities - these are the SINGLE SOURCE OF TRUTH for property merging
-export {
-  combineProperties,
-  combineRunProperties,
-  orderDefaultsAndNormal,
-  combineIndentProperties,
-  type PropertyObject,
-} from './cascade.js';
+export { combineProperties, combineRunProperties, combineIndentProperties, type PropertyObject } from './cascade.js';
 import type {
   TabStop,
   FieldAnnotationMetadata,

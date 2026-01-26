@@ -11,18 +11,9 @@
  */
 
 import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
-import type { StyleContext } from '@superdoc/style-engine';
 import { isValidTrackedMode } from './tracked-changes.js';
 import { analyzeSectionRanges, createSectionBreakBlock, publishSectionMetadata } from './sections/index.js';
-import {
-  pxToPt,
-  pickNumber,
-  pickDecimalSeparator,
-  pickLang,
-  normalizePrefix,
-  buildPositionMap,
-  createBlockIdGenerator,
-} from './utilities.js';
+import { normalizePrefix, buildPositionMap, createBlockIdGenerator } from './utilities.js';
 import {
   paragraphToFlowBlocks,
   contentBlockNodeToDrawingBlock,
@@ -59,11 +50,9 @@ import type {
   NestedConverters,
   ConverterContext,
 } from './types.js';
-import { defaultDecimalSeparatorFor } from '@superdoc/locale-utils';
 
-const DEFAULT_FONT = 'Arial';
-const DEFAULT_SIZE = 16;
-const DEFAULT_DECIMAL_SEPARATOR = '.';
+const DEFAULT_FONT = 'Times New Roman';
+const DEFAULT_SIZE = 10 / 0.75; // 10pt in pixels
 
 /**
  * Dispatch map for node type handlers.
@@ -131,27 +120,10 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
 
   const doc = pmDoc as PMNode;
 
-  const docAttrs = (typeof doc.attrs === 'object' && doc.attrs !== null ? doc.attrs : {}) as Record<string, unknown>;
-  const docDecimalSeparator = pickDecimalSeparator(doc.attrs?.decimalSeparator);
-  const docLang = pickLang(docAttrs.lang ?? docAttrs.language ?? docAttrs.locale);
-  const derivedSeparator = docLang ? defaultDecimalSeparatorFor(docLang) : undefined;
-  const docTabIntervalTwips =
-    pickNumber(docAttrs.defaultTabIntervalTwips ?? docAttrs.tabIntervalTwips ?? undefined) ??
-    ((): number | undefined => {
-      const px = pickNumber(docAttrs.defaultTabIntervalPx ?? docAttrs.tabIntervalPx);
-      return px != null ? Math.round(px * 15) : undefined;
-    })();
-  const optionDecimalSeparator = pickDecimalSeparator(options?.locale?.decimalSeparator);
-  const decimalSeparator =
-    optionDecimalSeparator ?? docDecimalSeparator ?? derivedSeparator ?? DEFAULT_DECIMAL_SEPARATOR;
-  const styleContext: StyleContext = {
-    defaults: {
-      paragraphFont: defaultFont,
-      fontSize: pxToPt(defaultSize) ?? 12,
-      decimalSeparator,
-      defaultTabIntervalTwips: docTabIntervalTwips,
-    },
-  };
+  if (!doc.content) {
+    return { blocks: [], bookmarks: new Map() };
+  }
+
   const trackedChangesMode = isValidTrackedMode(options?.trackedChangesMode) ? options.trackedChangesMode : 'review';
   const enableTrackedChanges = options?.enableTrackedChanges ?? true;
   const trackedChangesConfig: TrackedChangesConfig = {
@@ -162,25 +134,11 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     enableRichHyperlinks: options?.enableRichHyperlinks ?? false,
   };
   const enableComments = options?.enableComments ?? true;
-  const converterContext: ConverterContext = options?.converterContext ?? {
-    translatedNumbering: {},
-    translatedLinkedStyles: {
-      docDefaults: {
-        runProperties: {
-          fontFamily: {
-            ascii: defaultFont,
-          },
-          fontSize: pxToPt(defaultSize) ?? 12,
-        },
-      },
-      latentStyles: {},
-      styles: {},
-    },
-  };
-
-  if (!doc.content) {
-    return { blocks: [], bookmarks: new Map() };
-  }
+  const converterContext: ConverterContext = normalizeConverterContext(
+    options?.converterContext,
+    defaultFont,
+    defaultSize,
+  );
 
   const blocks: FlowBlock[] = [];
   const bookmarks = new Map<string, number>();
@@ -217,7 +175,6 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     converterContext,
     trackedChangesConfig,
     hyperlinkConfig,
@@ -322,4 +279,50 @@ function mergeDropCapParagraphs(blocks: FlowBlock[]): FlowBlock[] {
   }
 
   return result;
+}
+
+/**
+ * Normalize and populate the converter context with defaults.
+ *
+ * Ensures that essential properties like default font and size
+ * are set in the converter context for consistent styling.
+ *
+ * @param context - Existing converter context (may be undefined)
+ * @param defaultFont - Default font family to use
+ * @param defaultSize - Default font size in pixels
+ * @returns Normalized converter context
+ */
+function normalizeConverterContext(
+  context: ConverterContext | undefined,
+  defaultFont: string,
+  defaultSize: number,
+): ConverterContext {
+  if (!context) {
+    context = {
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: {},
+        latentStyles: {},
+        styles: {},
+      },
+    };
+  }
+
+  if (!context.translatedLinkedStyles.docDefaults) {
+    context.translatedLinkedStyles.docDefaults = {};
+  }
+  if (!context.translatedLinkedStyles.docDefaults.runProperties) {
+    context.translatedLinkedStyles.docDefaults.runProperties = {};
+  }
+  if (!context.translatedLinkedStyles.docDefaults.runProperties.fontFamily) {
+    context.translatedLinkedStyles.docDefaults.runProperties.fontFamily = {};
+  }
+  if (!context.translatedLinkedStyles.docDefaults.runProperties.fontFamily.ascii) {
+    context.translatedLinkedStyles.docDefaults.runProperties.fontFamily.ascii = defaultFont;
+  }
+  if (!context.translatedLinkedStyles.docDefaults.runProperties.fontSize) {
+    context.translatedLinkedStyles.docDefaults.runProperties.fontSize = defaultSize * 0.75 * 2; // size in half-points
+  }
+
+  return context;
 }

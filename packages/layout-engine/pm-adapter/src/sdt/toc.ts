@@ -10,7 +10,6 @@ import type {
   PMNode,
   BlockIdGenerator,
   PositionMap,
-  StyleContext,
   HyperlinkConfig,
   TrackedChangesConfig,
   NodeHandlerContext,
@@ -95,9 +94,6 @@ export function processTocChildren(
   context: {
     nextBlockId: BlockIdGenerator;
     positions: PositionMap;
-    defaultFont: string;
-    defaultSize: number;
-    styleContext: StyleContext;
     bookmarks?: Map<string, number>;
     trackedChangesConfig?: TrackedChangesConfig;
     hyperlinkConfig: HyperlinkConfig;
@@ -122,9 +118,6 @@ export function processTocChildren(
         para: child,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -177,9 +170,6 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -197,9 +187,6 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
         para: child,
         nextBlockId,
         positions,
-        defaultFont,
-        defaultSize,
-        styleContext,
         trackedChangesConfig,
         bookmarks,
         themeColors,

@@ -5,12 +5,11 @@
  * Document sections can contain paragraphs, lists, tables, images, and nested SDTs.
  */
 
-import type { FlowBlock, ParagraphBlock, SdtMetadata, TrackedChangeMeta } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphBlock, SdtMetadata } from '@superdoc/contracts';
 import type {
   PMNode,
   BlockIdGenerator,
   PositionMap,
-  StyleContext,
   HyperlinkConfig,
   NodeHandlerContext,
   TrackedChangesConfig,
@@ -34,9 +33,6 @@ import { processTocChildren } from './toc.js';
 interface ProcessingContext {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  defaultFont: string;
-  defaultSize: number;
-  styleContext: StyleContext;
   trackedChangesConfig?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
@@ -74,9 +70,6 @@ function processParagraphChild(
     para: child,
     nextBlockId: context.nextBlockId,
     positions: context.positions,
-    defaultFont: context.defaultFont,
-    defaultSize: context.defaultSize,
-    styleContext: context.styleContext,
     trackedChangesConfig: undefined, // trackedChanges
     bookmarks: context.bookmarks,
     hyperlinkConfig: context.hyperlinkConfig,
@@ -115,9 +108,6 @@ function processTableChild(
     node: child,
     nextBlockId: context.nextBlockId,
     positions: context.positions,
-    defaultFont: context.defaultFont,
-    defaultSize: context.defaultSize,
-    styleContext: context.styleContext,
     trackedChangesConfig: context.trackedChangesConfig,
     bookmarks: context.bookmarks,
     hyperlinkConfig: context.hyperlinkConfig,
@@ -187,9 +177,6 @@ function processNestedStructuredContent(
         para: grandchild,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -211,9 +198,6 @@ function processNestedStructuredContent(
         node: grandchild,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -266,9 +250,6 @@ function processDocumentPartObject(
       {
         nextBlockId: context.nextBlockId,
         positions: context.positions,
-        defaultFont: context.defaultFont,
-        defaultSize: context.defaultSize,
-        styleContext: context.styleContext,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
         enableComments: context.enableComments,
@@ -353,9 +334,6 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
     bookmarks,
     hyperlinkConfig,
     converters,
@@ -372,9 +350,6 @@ export function handleDocumentSectionNode(node: PMNode, context: NodeHandlerCont
     {
       nextBlockId,
       positions,
-      defaultFont,
-      defaultSize,
-      styleContext,
       bookmarks,
       trackedChangesConfig,
       hyperlinkConfig,

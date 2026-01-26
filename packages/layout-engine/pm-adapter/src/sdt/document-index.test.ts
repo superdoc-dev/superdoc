@@ -28,7 +28,6 @@ describe('document-index', () => {
         positions: [],
         defaultFont: 'Arial',
         defaultSize: 12,
-        styleContext: {},
         listCounterContext: {
           getListCounter: vi.fn().mockReturnValue(1),
           incrementListCounter: vi.fn(),

@@ -30,10 +30,6 @@ describe('document-part-object', () => {
   describe('handleDocumentPartObjectNode', () => {
     const mockBlockIdGenerator = vi.fn((kind: string) => `${kind}-test-id`);
     const mockPositionMap = new Map();
-    const mockStyleContext = {
-      styles: new Map(),
-      numbering: new Map(),
-    };
     const mockHyperlinkConfig = {
       enableRichHyperlinks: false,
     };
@@ -60,7 +56,6 @@ describe('document-part-object', () => {
         positions: mockPositionMap,
         defaultFont: 'Arial',
         defaultSize: 12,
-        styleContext: mockStyleContext,
         bookmarks: new Map(),
         hyperlinkConfig: mockHyperlinkConfig,
         enableComments: mockEnableComments,
@@ -339,7 +334,7 @@ describe('document-part-object', () => {
 
     // ==================== Context Passing Tests ====================
     describe('Context passing to processTocChildren', () => {
-      it('should pass correct style context', () => {
+      it('should pass correct context parameters', () => {
         const node: PMNode = {
           type: 'documentPartObject',
           content: [{ type: 'paragraph' }],
@@ -357,14 +352,12 @@ describe('document-part-object', () => {
           expect.objectContaining({
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
-            defaultFont: 'Arial',
-            defaultSize: 12,
-            styleContext: mockStyleContext,
             bookmarks: mockContext.bookmarks,
             hyperlinkConfig: mockHyperlinkConfig,
             converters: mockContext.converters,
             converterContext: mockConverterContext,
             enableComments: mockEnableComments,
+            trackedChangesConfig: undefined,
           }),
         );
       });

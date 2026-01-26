@@ -9,7 +9,7 @@ import imageFixture from './fixtures/image-inline-and-block.json';
 import hummingbirdFixture from './fixtures/hummingbird.json';
 import boldDemoFixture from './fixtures/bold-demo.json';
 
-const DEFAULT_CONVERTER_CONTEXT = {
+const createDefaultConverterContext = () => ({
   docx: {},
   translatedLinkedStyles: {
     docDefaults: {},
@@ -20,10 +20,10 @@ const DEFAULT_CONVERTER_CONTEXT = {
     abstracts: {},
     definitions: {},
   },
-};
+});
 
 const toFlowBlocks = (pmDoc: PMNode | object, options: AdapterOptions = {}) =>
-  baseToFlowBlocks(pmDoc, { converterContext: DEFAULT_CONVERTER_CONTEXT, ...options });
+  baseToFlowBlocks(pmDoc, { converterContext: createDefaultConverterContext(), ...options });
 
 const createTestBodySectPr = () => ({
   type: 'element',
@@ -70,11 +70,11 @@ describe('toFlowBlocks', () => {
         runs: [
           {
             text: 'Hello world',
-            fontFamily: 'Arial',
-            fontSize: 16,
+            fontFamily: 'Times New Roman, sans-serif',
           },
         ],
       });
+      expect(blocks[0].runs[0]?.fontSize).toBeCloseTo((10 * 96) / 72, 5);
     });
 
     it('generates unique BlockIds based on position', () => {
@@ -114,9 +114,9 @@ describe('toFlowBlocks', () => {
       });
 
       expect(blocks[0].runs[0]).toMatchObject({
-        fontFamily: 'Times New Roman',
-        fontSize: 14,
+        fontFamily: 'Times New Roman, sans-serif',
       });
+      expect(blocks[0].runs[0]?.fontSize).toBeCloseTo(14, 5);
     });
   });
 

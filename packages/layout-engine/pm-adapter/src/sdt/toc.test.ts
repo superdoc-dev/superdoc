@@ -145,10 +145,6 @@ describe('toc', () => {
   describe('processTocChildren', () => {
     const mockBlockIdGenerator = () => 'test-id';
     const mockPositionMap = new Map();
-    const mockStyleContext = {
-      styles: new Map(),
-      numbering: new Map(),
-    };
     const mockHyperlinkConfig = {
       mode: 'preserve' as const,
     };
@@ -192,7 +188,6 @@ describe('toc', () => {
           positions: mockPositionMap,
           defaultFont: 'Arial',
           defaultSize: 12,
-          styleContext: mockStyleContext,
           hyperlinkConfig: mockHyperlinkConfig,
           enableComments: true,
           converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
@@ -249,7 +244,6 @@ describe('toc', () => {
           positions: mockPositionMap,
           defaultFont: 'Arial',
           defaultSize: 12,
-          styleContext: mockStyleContext,
           hyperlinkConfig: mockHyperlinkConfig,
           enableComments: true,
           converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
@@ -304,7 +298,6 @@ describe('toc', () => {
           positions: mockPositionMap,
           defaultFont: 'Arial',
           defaultSize: 12,
-          styleContext: mockStyleContext,
           hyperlinkConfig: mockHyperlinkConfig,
           enableComments: true,
           converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
@@ -357,7 +350,6 @@ describe('toc', () => {
           positions: mockPositionMap,
           defaultFont: 'Arial',
           defaultSize: 12,
-          styleContext: mockStyleContext,
           hyperlinkConfig: mockHyperlinkConfig,
           enableComments: true,
           converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
@@ -415,7 +407,6 @@ describe('toc', () => {
           positions: mockPositionMap,
           defaultFont: 'Arial',
           defaultSize: 12,
-          styleContext: mockStyleContext,
           hyperlinkConfig: mockHyperlinkConfig,
           enableComments: true,
           converters: { paragraphToFlowBlocks: mockParagraphConverter } as never,
@@ -464,7 +455,6 @@ describe('toc', () => {
           positions: mockPositionMap,
           defaultFont: 'Calibri',
           defaultSize: 14,
-          styleContext: mockStyleContext,
           bookmarks: mockBookmarks,
           trackedChangesConfig: mockTrackedChanges,
           hyperlinkConfig: mockHyperlinkConfig,
@@ -480,14 +470,12 @@ describe('toc', () => {
           para: children[0],
           nextBlockId: mockBlockIdGenerator,
           positions: mockPositionMap,
-          defaultFont: 'Calibri',
-          defaultSize: 14,
-          styleContext: mockStyleContext,
           trackedChangesConfig: mockTrackedChanges,
           bookmarks: mockBookmarks,
           hyperlinkConfig: mockHyperlinkConfig,
           enableComments: false,
           converterContext: mockConverterContext,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter },
         }),
       );
     });

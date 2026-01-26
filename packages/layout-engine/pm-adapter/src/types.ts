@@ -3,7 +3,6 @@
  */
 
 import type { TrackedChangesMode, SectionMetadata, FlowBlock } from '@superdoc/contracts';
-import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
 import type { paragraphToFlowBlocks } from './converters/paragraph.js';
@@ -17,9 +16,6 @@ import type {
   vectorShapeNodeToDrawingBlock,
 } from './converters/shapes.js';
 export type { ConverterContext } from './converter-context.js';
-
-export type StyleContext = StyleEngineContext;
-export type { ComputedParagraphStyle };
 
 export type ThemeColorPalette = Record<string, string>;
 
@@ -282,7 +278,6 @@ export interface NodeHandlerContext {
   // Style & defaults
   defaultFont: string;
   defaultSize: number;
-  styleContext: StyleContext;
   converterContext: ConverterContext;
 
   // Tracked changes & hyperlinks
@@ -317,9 +312,6 @@ export type ParagraphToFlowBlocksParams = {
   para: PMNode;
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  defaultFont: string;
-  defaultSize: number;
-  styleContext: StyleContext;
   trackedChangesConfig?: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
@@ -333,9 +325,6 @@ export type TableNodeToBlockParams = {
   node: PMNode;
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  defaultFont: string;
-  defaultSize: number;
-  styleContext: StyleContext;
   trackedChangesConfig?: TrackedChangesConfig;
   bookmarks?: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;

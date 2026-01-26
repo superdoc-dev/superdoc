@@ -70,7 +70,7 @@ import {
   DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
   SPACE_SUFFIX_GAP_PX,
 } from '@superdoc/common/layout-constants';
-import { resolveListTextStartPx } from '@superdoc/common/list-marker-utils';
+import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
 export { installNodeCanvasPolyfill } from './setup.js';
@@ -895,7 +895,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     indentLeft,
     firstLine,
     hanging,
-    (markerText, marker) => {
+    (markerText: string, marker: MinimalMarker) => {
       const markerRun = {
         fontFamily: toCssFontFamily(marker.run?.fontFamily) ?? marker.run?.fontFamily ?? 'Arial',
         fontSize: marker.run?.fontSize ?? fallbackFontSize,

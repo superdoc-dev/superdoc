@@ -589,6 +589,8 @@ export const hitTestTableFragment = (
         colX += tableMeasure.columnWidths[col];
       }
     }
+    const initialColX = colX;
+
     let colIndex = -1;
     // Bounds check: skip if row has no cells
     if (rowMeasure.cells.length === 0 || row.cells.length === 0) continue;
@@ -602,8 +604,13 @@ export const hitTestTableFragment = (
     }
 
     if (colIndex === -1) {
-      // Click is to the right of all columns, use the last column
-      colIndex = rowMeasure.cells.length - 1;
+      if (localX < initialColX) {
+        // Click is in a rowspanned area (left of all cells in this row) - use first cell
+        colIndex = 0;
+      } else {
+        // Click is to the right of all columns - use last cell
+        colIndex = rowMeasure.cells.length - 1;
+      }
       if (colIndex < 0) continue;
     }
 

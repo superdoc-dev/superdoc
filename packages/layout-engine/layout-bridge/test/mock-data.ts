@@ -272,3 +272,153 @@ export const tableLayout: Layout = {
     },
   ],
 };
+
+// Mock data for table with rowspan (SD-1626 / IT-22)
+// Table structure:
+// Row 0: [Cell A (rowspan=2)] [Cell B] [Cell C]
+// Row 1:                      [Cell D] [Cell E]  <- Row 1 cells start at gridColumnStart=1
+const rowspanTableParagraph = {
+  kind: 'paragraph',
+  id: 'rowspan-cell-para',
+  runs: [{ text: 'Cell', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 5 }],
+} as const;
+
+export const rowspanTableBlock: FlowBlock = {
+  kind: 'table',
+  id: 'rowspan-table-0',
+  rows: [
+    {
+      id: 'row-0',
+      cells: [
+        {
+          id: 'cell-a',
+          blocks: [rowspanTableParagraph],
+          attrs: { rowspan: 2, padding: { top: 2, bottom: 2, left: 4, right: 4 } },
+        },
+        { id: 'cell-b', blocks: [rowspanTableParagraph], attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } } },
+        { id: 'cell-c', blocks: [rowspanTableParagraph], attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } } },
+      ],
+    },
+    {
+      id: 'row-1',
+      cells: [
+        // No cell at column 0 - occupied by rowspan from above
+        { id: 'cell-d', blocks: [rowspanTableParagraph], attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } } },
+        { id: 'cell-e', blocks: [rowspanTableParagraph], attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } } },
+      ],
+    },
+  ],
+};
+
+export const rowspanTableMeasure: Measure = {
+  kind: 'table',
+  rows: [
+    {
+      height: 24,
+      cells: [
+        {
+          width: 100,
+          height: 48,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 2,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+        {
+          width: 100,
+          height: 24,
+          gridColumnStart: 1,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+        {
+          width: 100,
+          height: 24,
+          gridColumnStart: 2,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      height: 24,
+      cells: [
+        // Row 1 cells start at gridColumnStart=1 (column 0 is occupied by rowspan)
+        {
+          width: 100,
+          height: 24,
+          gridColumnStart: 1,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+        {
+          width: 100,
+          height: 24,
+          gridColumnStart: 2,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  columnWidths: [100, 100, 100],
+  totalWidth: 300,
+  totalHeight: 48,
+};
+
+export const rowspanTableLayout: Layout = {
+  pageSize: { w: 400, h: 500 },
+  pages: [
+    {
+      number: 1,
+      fragments: [
+        {
+          kind: 'table',
+          blockId: 'rowspan-table-0',
+          fromRow: 0,
+          toRow: 2,
+          x: 30,
+          y: 60,
+          width: 300,
+          height: 48,
+        },
+      ],
+    },
+  ],
+};

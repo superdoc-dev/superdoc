@@ -30,6 +30,8 @@ import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js
 import { tabNodeToRun } from './inline-converters/tab.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
+import { lineBreakNodeToRun } from './inline-converters/line-break.js';
+import { lineBreakNodeToBreakBlock } from './break.js';
 import { inlineContentBlockConverter } from './inline-converters/content-block.js';
 import { handleImageNode } from './image.js';
 
@@ -544,52 +546,21 @@ export function paragraphToFlowBlocks({
 
     // Hard / line breaks
     if (node.type === 'hardBreak' || node.type === 'lineBreak') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
+      try {
+        const lineBreakRun = lineBreakNodeToRun(inlineConverterParams);
+        currentRuns.push(lineBreakRun);
+      } catch (error) {
+        if (error instanceof NotInlineNodeError) {
+          flushParagraph();
+          const anchorParagraphId = nextId();
+          const breakBlock = lineBreakNodeToBreakBlock(node, nextId);
+          if (breakBlock) {
+            blocks.push(attachAnchorParagraphId(breakBlock, anchorParagraphId));
+          }
+        } else {
+          throw error;
+        }
       }
-      const attrs = node.attrs ?? {};
-      const breakType = attrs.pageBreakType ?? attrs.lineBreakType ?? 'line';
-
-      if (breakType === 'page') {
-        flushParagraph();
-        blocks.push({
-          kind: 'pageBreak',
-          id: nextId(),
-          attrs: node.attrs || {},
-        });
-        return;
-      }
-
-      if (breakType === 'column') {
-        flushParagraph();
-        blocks.push({
-          kind: 'columnBreak',
-          id: nextId(),
-          attrs: node.attrs || {},
-        });
-        return;
-      }
-      // Inline line break: preserve as a run so measurer can create a new line
-      const lineBreakRun: Run = { kind: 'lineBreak', attrs: {} };
-      const lbAttrs: Record<string, string> = {};
-      if (attrs.lineBreakType) lbAttrs.lineBreakType = String(attrs.lineBreakType);
-      if (attrs.clear) lbAttrs.clear = String(attrs.clear);
-      if (Object.keys(lbAttrs).length > 0) {
-        (lineBreakRun as { attrs: Record<string, string> }).attrs = lbAttrs;
-      } else {
-        delete (lineBreakRun as { attrs?: Record<string, string> }).attrs;
-      }
-      const pos = positions.get(node);
-      if (pos) {
-        (lineBreakRun as { pmStart: number }).pmStart = pos.start;
-        (lineBreakRun as { pmEnd: number }).pmEnd = pos.end;
-      }
-      if (activeSdt) {
-        (lineBreakRun as { sdt?: SdtMetadata }).sdt = activeSdt;
-      }
-      currentRuns.push(lineBreakRun);
-      return;
     }
   };
 

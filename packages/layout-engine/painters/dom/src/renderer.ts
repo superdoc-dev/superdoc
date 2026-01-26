@@ -5204,9 +5204,9 @@ const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number
 
   if (fragment.kind === 'list-item' && lookup.measure.kind === 'list') {
     const listMeasure = lookup.measure as ListMeasure;
-    const item = listMeasure.items.find((it) => it.id === fragment.itemId);
+    const item = listMeasure.items.find((it) => it.itemId === fragment.itemId);
     if (!item) return 0;
-    const lines = item.measure.lines.slice(fragment.fromLine, fragment.toLine);
+    const lines = item.paragraph.lines.slice(fragment.fromLine, fragment.toLine);
     if (lines.length === 0) return 0;
     // Sum up lineHeight for all lines in this fragment
     let totalHeight = 0;
@@ -5250,7 +5250,7 @@ const computeSdtBoundaries = (
       const fragment = fragments[k];
       const isStart = k === i;
       const isEnd = k === j;
-      
+
       // Calculate padding bottom to fill gap to next fragment
       let paddingBottomOverride: number | undefined;
       if (!isEnd) {
@@ -5258,7 +5258,7 @@ const computeSdtBoundaries = (
         const currentHeight = getFragmentHeight(fragment, blockLookup);
         const currentBottom = fragment.y + currentHeight;
         const gapToNext = nextFragment.y - currentBottom;
-        
+
         // Only apply padding if there is a positive gap
         if (gapToNext > 0) {
           paddingBottomOverride = gapToNext;

@@ -3298,9 +3298,9 @@ export class PresentationEditor extends EventEmitter {
   #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
     const block = target.closest('.superdoc-structured-content-block');
-    
+
     if (!block || !(block instanceof HTMLElement)) return;
-    
+
     // Don't show hover effect if already selected
     if (block.classList.contains('ProseMirror-selectednode')) return;
 
@@ -3312,18 +3312,22 @@ export class PresentationEditor extends EventEmitter {
 
   #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
-    const block = target.closest('.superdoc-structured-content-block');
-    
+    const block = target.closest('.superdoc-structured-content-block') as HTMLElement | null;
+
     if (!block) return;
-    
+
     // Only clear if we're leaving the block entirely or moving to a non-SDT element
-    // However, since we're using mouseenter/leave on the elements themselves, 
+    // However, since we're using mouseenter/leave on the elements themselves,
     // simply clearing on leave is correct because the next enter will trigger if moving between fragments
     // But we want to avoid flickering if moving between fragments of same SDT.
     // Actually, checking relatedTarget is better.
-    
-    const relatedTarget = event.relatedTarget as HTMLElement;
-    if (relatedTarget && relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)) {
+
+    const relatedTarget = event.relatedTarget as HTMLElement | null;
+    if (
+      relatedTarget &&
+      block.dataset.sdtId &&
+      relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)
+    ) {
       return;
     }
 

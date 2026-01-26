@@ -1,5 +1,5 @@
 import type { RunProperties, ParagraphProperties } from '@superdoc/style-engine/ooxml';
-import type { SdtMetadata, TextRun } from '@superdoc/contracts';
+import type { SdtMetadata, TextRun, ParagraphAttrs } from '@superdoc/contracts';
 import { HyperlinkConfig, PMMark, PMNode, PositionMap, ThemeColorPalette } from '../../types';
 import { ConverterContext } from '../../converter-context';
 import { computeRunAttrs } from '../../attributes/paragraph';
@@ -27,6 +27,8 @@ export type InlineConverterParams = {
   enableComments: boolean;
   visitNode: VisitNodeFn;
   bookmarks: Map<string, number> | undefined;
+  tabOrdinal: number;
+  paragraphAttrs: ParagraphAttrs;
 };
 
 export const applyInlineRunProperties = (

@@ -19,7 +19,7 @@ import {
   annotateBlockWithTrackedChange,
   applyTrackedChangesModeToRuns,
 } from '../tracked-changes.js';
-import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './inline-converters/text-run.js';
+import { textNodeToRun, tokenNodeToRun } from './inline-converters/text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { pickNumber, isPlainObject } from '../utilities.js';
@@ -32,6 +32,7 @@ import { structuredContentNodeToBlocks } from './inline-converters/structured-co
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
 import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
+import { tabNodeToRun } from './inline-converters/tab.js';
 
 // ============================================================================
 // Constants
@@ -548,6 +549,8 @@ export function paragraphToFlowBlocks({
       converterContext,
       visitNode,
       bookmarks,
+      tabOrdinal,
+      paragraphAttrs,
     };
 
     if (node.type === 'footnoteReference') {
@@ -604,7 +607,7 @@ export function paragraphToFlowBlocks({
     }
 
     if (node.type === 'tab') {
-      const tabRun = tabNodeToRun(node, positions, tabOrdinal, paragraphAttrs, inheritedMarks);
+      const tabRun = tabNodeToRun(inlineConverterParams);
       tabOrdinal += 1;
       if (tabRun) {
         currentRuns.push(tabRun);

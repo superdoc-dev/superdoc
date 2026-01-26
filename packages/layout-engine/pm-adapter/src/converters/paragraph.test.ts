@@ -30,8 +30,11 @@ import type { Run, TextRun, FlowBlock, ParagraphBlock, TrackedChangeMeta, ImageR
 // Mock external dependencies
 vi.mock('./inline-converters/text-run.js', () => ({
   textNodeToRun: vi.fn(),
-  tabNodeToRun: vi.fn(),
   tokenNodeToRun: vi.fn(),
+}));
+
+vi.mock('./inline-converters/tab.js', () => ({
+  tabNodeToRun: vi.fn(),
 }));
 
 vi.mock('../attributes/index.js', () => ({
@@ -70,7 +73,8 @@ vi.mock('../attributes/paragraph-styles.js', () => ({
 }));
 
 // Import mocked functions
-import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './inline-converters/text-run.js';
+import { textNodeToRun, tokenNodeToRun } from './inline-converters/text-run.js';
+import { tabNodeToRun } from './inline-converters/tab.js';
 import { computeParagraphAttrs, cloneParagraphAttrs, deepClone, hasPageBreakBefore } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
 import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
@@ -1060,7 +1064,15 @@ describe('paragraph converters', () => {
 
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenCalledWith(tabNode, positions, 0, {}, []);
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenCalledWith(
+          expect.objectContaining({
+            node: tabNode,
+            positions,
+            tabOrdinal: 0,
+            paragraphAttrs: {},
+            inheritedMarks: [],
+          }),
+        );
         const paraBlock = blocks[0] as ParagraphBlock;
         expect(paraBlock.runs).toContain(mockTabRun);
       });
@@ -1073,9 +1085,18 @@ describe('paragraph converters', () => {
 
         paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(1, expect.any(Object), positions, 0, {}, []);
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(2, expect.any(Object), positions, 1, {}, []);
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(3, expect.any(Object), positions, 2, {}, []);
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ positions, tabOrdinal: 0 }),
+        );
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ positions, tabOrdinal: 1 }),
+        );
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(
+          3,
+          expect.objectContaining({ positions, tabOrdinal: 2 }),
+        );
       });
 
       it('should skip tab when tabNodeToRun returns null', () => {

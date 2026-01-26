@@ -36,6 +36,7 @@ import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
 import { applyInlineRunProperties } from './inline-converters/common.js';
+import { runNodeChildrenToRuns, HiddenByVanishError } from './inline-converters/run.js';
 
 // ============================================================================
 // Constants
@@ -672,8 +673,10 @@ export function paragraphToFlowBlocks({
         hyperlinkConfig,
         themeColors,
         runProperties: activeRunProperties,
+        paragraphProperties: resolvedParagraphProperties,
         converterContext,
         enableComments,
+        visitNode,
       });
 
       currentRuns.push(run);
@@ -692,7 +695,9 @@ export function paragraphToFlowBlocks({
         themeColors,
         enableComments,
         runProperties: activeRunProperties,
+        paragraphProperties: resolvedParagraphProperties,
         converterContext,
+        visitNode,
       });
 
       currentRuns.push(run);
@@ -700,23 +705,29 @@ export function paragraphToFlowBlocks({
     }
 
     if (node.type === 'run' && Array.isArray(node.content)) {
-      const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
-      const runProperties = (node.attrs?.runProperties ?? {}) as RunProperties;
-      const runVanish = runProperties?.vanish;
-      const nextHidden = runVanish === undefined ? activeHidden : runVanish;
-      if (nextHidden) {
-        suppressedByVanish = true;
-        return;
+      try {
+        runNodeChildrenToRuns({
+          node: node,
+          positions,
+          defaultFont,
+          defaultSize,
+          inheritedMarks: inheritedMarks ?? [],
+          sdtMetadata: activeSdt,
+          hyperlinkConfig,
+          themeColors,
+          enableComments,
+          runProperties: activeRunProperties,
+          paragraphProperties: resolvedParagraphProperties,
+          converterContext,
+          visitNode,
+        });
+      } catch (error) {
+        if (error instanceof HiddenByVanishError) {
+          suppressedByVanish = true;
+        } else {
+          throw error;
+        }
       }
-      const resolvedRunProperties = resolveRunProperties(
-        converterContext!,
-        runProperties,
-        resolvedParagraphProperties,
-        converterContext!.tableInfo,
-        false,
-        false,
-      );
-      node.content.forEach((child) => visitNode(child, mergedMarks, activeSdt, resolvedRunProperties, nextHidden));
       return;
     }
 
@@ -820,8 +831,10 @@ export function paragraphToFlowBlocks({
           hyperlinkConfig,
           themeColors,
           runProperties: resolvedRunProperties,
+          paragraphProperties: resolvedParagraphProperties,
           converterContext,
           enableComments,
+          visitNode,
         });
 
         // Copy PM positions from parent pageReference node

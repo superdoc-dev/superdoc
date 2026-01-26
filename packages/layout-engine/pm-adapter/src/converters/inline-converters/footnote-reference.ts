@@ -3,36 +3,16 @@ import { PMNode } from '../../types';
 import { textNodeToRun } from './text-run';
 import type { InlineConverterParams } from './common';
 
-export function footnoteReferenceToBlock({
-  node,
-  positions,
-  inheritedMarks,
-  defaultFont,
-  defaultSize,
-  sdtMetadata,
-  hyperlinkConfig,
-  themeColors,
-  runProperties,
-  converterContext,
-  enableComments,
-}: InlineConverterParams): TextRun {
-  const refPos = positions.get(node);
+export function footnoteReferenceToBlock(params: InlineConverterParams): TextRun {
+  const { node, converterContext } = params;
+  const refPos = params.positions.get(node);
   const id = (node.attrs as Record<string, unknown> | undefined)?.id;
-  const displayId = resolveFootnoteDisplayNumber(id, converterContext?.footnoteNumberById) ?? id ?? '*';
+  const displayId = resolveFootnoteDisplayNumber(id, converterContext.footnoteNumberById) ?? id ?? '*';
   const displayText = toSuperscriptDigits(displayId);
 
   const run = textNodeToRun({
+    ...params,
     node: { type: 'text', text: displayText } as PMNode,
-    positions,
-    defaultFont,
-    defaultSize,
-    inheritedMarks,
-    sdtMetadata,
-    hyperlinkConfig,
-    themeColors,
-    enableComments,
-    runProperties,
-    converterContext,
   });
 
   // Copy PM positions from the parent footnoteReference node

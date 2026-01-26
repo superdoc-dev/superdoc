@@ -7,12 +7,11 @@
  * - Token node conversion (page numbers, etc.)
  */
 
-import type { TextRun, Run, TabRun, TabStop, SdtMetadata, ParagraphAttrs } from '@superdoc/contracts';
-import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette, ConverterContext } from '../../types.js';
+import type { TextRun, Run, TabRun, TabStop, ParagraphAttrs } from '@superdoc/contracts';
+import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette } from '../../types.js';
 import { applyMarksToRun } from '../../marks/index.js';
 import { DEFAULT_HYPERLINK_CONFIG } from '../../constants.js';
-import { RunProperties } from '@superdoc/style-engine/ooxml';
-import { applyInlineRunProperties } from './common.js';
+import { applyInlineRunProperties, type InlineConverterParams } from './common.js';
 
 /**
  * Converts a text PM node to a TextRun.
@@ -38,19 +37,7 @@ export function textNodeToRun({
   enableComments,
   runProperties,
   converterContext,
-}: {
-  node: PMNode;
-  positions: PositionMap;
-  defaultFont: string;
-  defaultSize: number;
-  inheritedMarks: PMMark[];
-  sdtMetadata: SdtMetadata | undefined;
-  hyperlinkConfig: HyperlinkConfig;
-  themeColors: ThemeColorPalette | undefined;
-  enableComments: boolean;
-  runProperties: RunProperties | undefined;
-  converterContext: ConverterContext | undefined;
-}): TextRun {
+}: InlineConverterParams): TextRun {
   let run: TextRun = {
     text: node.text || '',
     fontFamily: defaultFont,

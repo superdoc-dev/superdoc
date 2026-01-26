@@ -1,7 +1,7 @@
-import { SdtMetadata, TextRun } from '@superdoc/contracts';
-import { ConverterContext, HyperlinkConfig, PMMark, PMNode, PositionMap, ThemeColorPalette } from '../../types';
-import type { RunProperties } from '@superdoc/style-engine/ooxml';
+import { TextRun } from '@superdoc/contracts';
+import { PMNode } from '../../types';
 import { textNodeToRun } from './text-run';
+import type { InlineConverterParams } from './common';
 
 export function footnoteReferenceToBlock({
   node,
@@ -15,26 +15,14 @@ export function footnoteReferenceToBlock({
   runProperties,
   converterContext,
   enableComments,
-}: {
-  node: PMNode;
-  positions: PositionMap;
-  inheritedMarks: PMMark[];
-  defaultFont: string;
-  defaultSize: number;
-  sdtMetadata: SdtMetadata | undefined;
-  hyperlinkConfig: HyperlinkConfig;
-  themeColors: ThemeColorPalette | undefined;
-  runProperties: RunProperties | undefined;
-  converterContext: ConverterContext;
-  enableComments: boolean;
-}): TextRun {
+}: InlineConverterParams): TextRun {
   const refPos = positions.get(node);
   const id = (node.attrs as Record<string, unknown> | undefined)?.id;
   const displayId = resolveFootnoteDisplayNumber(id, converterContext?.footnoteNumberById) ?? id ?? '*';
   const displayText = toSuperscriptDigits(displayId);
 
   const run = textNodeToRun({
-    textNode: { type: 'text', text: displayText } as PMNode,
+    node: { type: 'text', text: displayText } as PMNode,
     positions,
     defaultFont,
     defaultSize,

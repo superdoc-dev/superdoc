@@ -3810,6 +3810,66 @@ describe('DomPainter', () => {
     expect(borderLayer.style.borderLeftColor).toBe('rgb(0, 255, 0)');
   });
 
+  it('applies padding for border spacing to prevent overlap', () => {
+    const blockWithBorderSpacing: FlowBlock = {
+      kind: 'paragraph',
+      id: 'border-space-block',
+      attrs: {
+        borders: {
+          top: { style: 'solid', width: 2, color: '#ff0000', space: 5 },
+          bottom: { style: 'solid', width: 3, color: '#00ff00', space: 10 },
+          left: { style: 'dashed', width: 1, color: '#0000ff', space: 4 },
+          right: { style: 'dotted', width: 2, color: '#ffff00', space: 6 },
+        },
+      },
+      runs: [{ text: 'Border spacing test', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const painter = createDomPainter({
+      blocks: [blockWithBorderSpacing],
+      measures: [measure],
+    });
+
+    const borderSpaceLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'border-space-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 50,
+              y: 60,
+              width: 260,
+            },
+          ],
+        },
+      ],
+    };
+
+    painter.paint(borderSpaceLayout, mount);
+
+    const fragment = mount.querySelector('[data-block-id="border-space-block"]') as HTMLElement;
+    const borderLayer = fragment.querySelector('.superdoc-paragraph-border') as HTMLElement;
+
+    // Verify padding is applied to create space for borders
+    // Top: space(5) + width(2) = 7px
+    expect(fragment.style.paddingTop).toBe('7px');
+    // Bottom: space(10) + width(3) = 13px
+    expect(fragment.style.paddingBottom).toBe('13px');
+    // Left: space(4) + width(1) = 5px
+    expect(fragment.style.paddingLeft).toBe('5px');
+    // Right: space(6) + width(2) = 8px
+    expect(fragment.style.paddingRight).toBe('8px');
+
+    // Verify border layer is positioned with space offset
+    expect(borderLayer.style.top).toBe('5px');
+    expect(borderLayer.style.bottom).toBe('10px');
+  });
+
   it('applies paragraph shading fill to fragment backgrounds', () => {
     const shadedBlock: FlowBlock = {
       kind: 'paragraph',

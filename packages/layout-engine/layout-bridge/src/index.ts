@@ -1695,11 +1695,6 @@ export function selectionToRects(
                 if (typeof totalHeight === 'number' && totalHeight > height) {
                   height = totalHeight;
                 }
-                const spacingBefore = (paraBlock.attrs as { spacing?: { before?: number } } | undefined)?.spacing
-                  ?.before;
-                if (typeof spacingBefore === 'number' && spacingBefore > 0) {
-                  height += spacingBefore;
-                }
                 const spacingAfter = (paraBlock.attrs as { spacing?: { after?: number } } | undefined)?.spacing?.after;
                 if (typeof spacingAfter === 'number' && spacingAfter > 0) {
                   height += spacingAfter;

@@ -26,6 +26,7 @@ export type InlineConverterParams = {
   converterContext: ConverterContext;
   enableComments: boolean;
   visitNode: VisitNodeFn;
+  bookmarks: Map<string, number> | undefined;
 };
 
 export const applyInlineRunProperties = (

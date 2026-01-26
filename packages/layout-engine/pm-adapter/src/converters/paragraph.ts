@@ -31,6 +31,7 @@ import { runNodeChildrenToRuns, HiddenByVanishError } from './inline-converters/
 import { structuredContentNodeToBlocks } from './inline-converters/structured-content.js';
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
 import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
+import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
 
 // ============================================================================
 // Constants
@@ -546,6 +547,7 @@ export function paragraphToFlowBlocks({
       paragraphProperties: resolvedParagraphProperties,
       converterContext,
       visitNode,
+      bookmarks,
     };
 
     if (node.type === 'footnoteReference') {
@@ -597,20 +599,7 @@ export function paragraphToFlowBlocks({
     }
 
     if (node.type === 'bookmarkStart') {
-      // Track bookmark position for cross-reference resolution
-      const nodeAttrs =
-        typeof node.attrs === 'object' && node.attrs !== null ? (node.attrs as Record<string, unknown>) : {};
-      const bookmarkName = typeof nodeAttrs.name === 'string' ? nodeAttrs.name : undefined;
-      if (bookmarkName && bookmarks) {
-        const nodePos = positions.get(node);
-        if (nodePos) {
-          bookmarks.set(bookmarkName, nodePos.start);
-        }
-      }
-      // Process any content inside the bookmark (usually empty)
-      if (Array.isArray(node.content)) {
-        node.content.forEach((child) => visitNode(child, inheritedMarks, activeSdt, activeRunProperties));
-      }
+      bookmarkStartNodeToBlocks(inlineConverterParams);
       return;
     }
 

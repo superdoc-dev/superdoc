@@ -5,20 +5,8 @@ import type { PMNode, PMMark } from '../../types.js';
 import { textNodeToRun } from './text-run.js';
 import { type RunProperties, resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
-export function pageReferenceNodeToBlock({
-  node,
-  inheritedMarks,
-  defaultFont,
-  defaultSize,
-  visitNode,
-  sdtMetadata,
-  paragraphProperties,
-  converterContext,
-  hyperlinkConfig,
-  positions,
-  themeColors,
-  enableComments,
-}: InlineConverterParams): TextRun | void {
+export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun | void {
+  const { node, inheritedMarks, visitNode, sdtMetadata, positions, converterContext, paragraphProperties } = params;
   // Create pageReference token run for dynamic resolution
   const instruction = getNodeInstruction(node) || '';
   const nodeAttrs =
@@ -64,19 +52,10 @@ export function pageReferenceNodeToBlock({
       false,
     );
     const tokenRun = textNodeToRun({
+      ...params,
       node: { type: 'text', text: fallbackText } as PMNode,
-      positions,
-      defaultFont,
-      defaultSize,
       inheritedMarks: mergedMarks,
-      sdtMetadata,
-      hyperlinkConfig,
-      themeColors,
       runProperties: resolvedRunProperties,
-      paragraphProperties,
-      converterContext,
-      enableComments,
-      visitNode,
     });
 
     // Copy PM positions from parent pageReference node

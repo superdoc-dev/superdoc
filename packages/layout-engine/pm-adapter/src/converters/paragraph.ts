@@ -34,6 +34,7 @@ import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { pickNumber, isPlainObject } from '../utilities.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
+import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
 import { applyInlineRunProperties } from './inline-converters/common.js';
 
 // ============================================================================
@@ -617,33 +618,6 @@ export function paragraphToFlowBlocks({
   let tabOrdinal = 0;
   let suppressedByVanish = false;
 
-  const toSuperscriptDigits = (value: unknown): string => {
-    const map: Record<string, string> = {
-      '0': '⁰',
-      '1': '¹',
-      '2': '²',
-      '3': '³',
-      '4': '⁴',
-      '5': '⁵',
-      '6': '⁶',
-      '7': '⁷',
-      '8': '⁸',
-      '9': '⁹',
-    };
-    return String(value ?? '')
-      .split('')
-      .map((ch) => map[ch] ?? ch)
-      .join('');
-  };
-
-  const resolveFootnoteDisplayNumber = (id: unknown): unknown => {
-    const key = id == null ? null : String(id);
-    if (!key) return null;
-    const mapping = converterContext?.footnoteNumberById;
-    const mapped = mapping && typeof mapping === 'object' ? (mapping as Record<string, number>)[key] : undefined;
-    return typeof mapped === 'number' && Number.isFinite(mapped) && mapped > 0 ? mapped : null;
-  };
-
   const nextId = () => (partIndex === 0 ? baseBlockId : `${baseBlockId}-${partIndex}`);
   const attachAnchorParagraphId = <T extends FlowBlock>(block: T, anchorParagraphId: string): T => {
     const applicableKinds = new Set(['drawing', 'image', 'table']);
@@ -682,38 +656,26 @@ export function paragraphToFlowBlocks({
     activeRunProperties?: RunProperties,
     activeHidden = false,
   ) => {
-    if (node.type === 'footnoteReference') {
-      const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
-      const refPos = positions.get(node);
-      const id = (node.attrs as Record<string, unknown> | undefined)?.id;
-      const displayId = resolveFootnoteDisplayNumber(id) ?? id ?? '*';
-      const displayText = toSuperscriptDigits(displayId);
-
-      let run = textNodeToRun(
-        { type: 'text', text: displayText } as PMNode,
-        positions,
-        defaultFont,
-        defaultSize,
-        [], // marks applied after linked styles/base defaults
-        activeSdt,
-        hyperlinkConfig,
-        themeColors,
-      );
-      applyMarksToRun(run, mergedMarks, hyperlinkConfig, themeColors);
-      run = applyInlineRunProperties(run, activeRunProperties, converterContext);
-
-      // Copy PM positions from the parent footnoteReference node
-      if (refPos) {
-        run.pmStart = refPos.start;
-        run.pmEnd = refPos.end;
-      }
-
-      currentRuns.push(run);
+    if (activeHidden && node.type !== 'run') {
+      suppressedByVanish = true;
       return;
     }
 
-    if (activeHidden && node.type !== 'run') {
-      suppressedByVanish = true;
+    if (node.type === 'footnoteReference') {
+      const run = footnoteReferenceToBlock({
+        node,
+        positions,
+        inheritedMarks,
+        defaultFont,
+        defaultSize,
+        sdtMetadata: activeSdt,
+        hyperlinkConfig,
+        themeColors,
+        runProperties: activeRunProperties,
+        converterContext,
+      });
+
+      currentRuns.push(run);
       return;
     }
 

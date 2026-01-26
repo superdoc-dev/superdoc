@@ -8,16 +8,16 @@
  */
 
 import type { TextRun, Run, TabRun, TabStop, SdtMetadata, ParagraphAttrs } from '@superdoc/contracts';
-import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette, ConverterContext } from '../types.js';
-import { applyMarksToRun } from '../marks/index.js';
-import { DEFAULT_HYPERLINK_CONFIG } from '../constants.js';
+import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette, ConverterContext } from '../../types.js';
+import { applyMarksToRun } from '../../marks/index.js';
+import { DEFAULT_HYPERLINK_CONFIG } from '../../constants.js';
 import { RunProperties } from '@superdoc/style-engine/ooxml';
-import { applyInlineRunProperties } from './inline-converters/common.js';
+import { applyInlineRunProperties } from './common.js';
 
 /**
  * Converts a text PM node to a TextRun.
  *
- * @param textNode - PM text node to convert
+ * @param node - PM text node to convert
  * @param positions - Position map for PM node tracking
  * @param defaultFont - Default font family
  * @param defaultSize - Default font size
@@ -27,7 +27,7 @@ import { applyInlineRunProperties } from './inline-converters/common.js';
  * @returns TextRun block
  */
 export function textNodeToRun({
-  textNode,
+  node,
   positions,
   defaultFont,
   defaultSize,
@@ -39,7 +39,7 @@ export function textNodeToRun({
   runProperties,
   converterContext,
 }: {
-  textNode: PMNode;
+  node: PMNode;
   positions: PositionMap;
   defaultFont: string;
   defaultSize: number;
@@ -52,13 +52,13 @@ export function textNodeToRun({
   converterContext: ConverterContext | undefined;
 }): TextRun {
   let run: TextRun = {
-    text: textNode.text || '',
+    text: node.text || '',
     fontFamily: defaultFont,
     fontSize: defaultSize,
   };
 
   // Attach PM position tracking
-  const pos = positions.get(textNode);
+  const pos = positions.get(node);
   if (pos) {
     run.pmStart = pos.start;
     run.pmEnd = pos.end;
@@ -67,7 +67,7 @@ export function textNodeToRun({
 
   applyMarksToRun(
     run,
-    [...(textNode.marks ?? []), ...(inheritedMarks ?? [])],
+    [...(node.marks ?? []), ...(inheritedMarks ?? [])],
     hyperlinkConfig,
     themeColors,
     converterContext?.backgroundColor,

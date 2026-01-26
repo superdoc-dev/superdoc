@@ -28,7 +28,7 @@ import {
   annotateBlockWithTrackedChange,
   applyTrackedChangesModeToRuns,
 } from '../tracked-changes.js';
-import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
+import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './inline-converters/text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { pickNumber, isPlainObject } from '../utilities.js';
@@ -682,7 +682,7 @@ export function paragraphToFlowBlocks({
 
     if (node.type === 'text' && node.text) {
       const run = textNodeToRun({
-        textNode: node,
+        node: node,
         positions,
         defaultFont,
         defaultSize,
@@ -811,7 +811,7 @@ export function paragraphToFlowBlocks({
         );
 
         const tokenRun = textNodeToRun({
-          textNode: { type: 'text', text: fallbackText } as PMNode,
+          node: { type: 'text', text: fallbackText } as PMNode,
           positions,
           defaultFont,
           defaultSize,

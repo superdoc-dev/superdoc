@@ -8,14 +8,14 @@ import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette, C
 import type { TextRun, TabRun, SdtMetadata, TabStop, ParagraphIndent, ParagraphAttrs } from '@superdoc/contracts';
 import type { RunProperties } from '@superdoc/style-engine/ooxml';
 import { textNodeToRun as baseTextNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
-import * as marksModule from '../marks/index.js';
+import * as marksModule from '../../marks/index.js';
 
 // Mock the applyMarksToRun function to isolate tests
-vi.mock('../marks/index.js', () => ({
+vi.mock('../../marks/index.js', () => ({
   applyMarksToRun: vi.fn(),
 }));
 
-vi.mock('./inline-converters/common.js', () => ({
+vi.mock('./common.js', () => ({
   applyInlineRunProperties: vi.fn((run) => run),
 }));
 
@@ -35,7 +35,7 @@ const textNodeToRun = (
   converterContext?: ConverterContext,
 ) =>
   baseTextNodeToRun({
-    textNode,
+    node: textNode,
     positions,
     defaultFont,
     defaultSize,

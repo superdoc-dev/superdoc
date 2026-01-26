@@ -1,7 +1,7 @@
 import { SdtMetadata, TextRun } from '@superdoc/contracts';
 import { ConverterContext, HyperlinkConfig, PMMark, PMNode, PositionMap, ThemeColorPalette } from '../../types';
-import { textNodeToRun } from '../text-run';
 import type { RunProperties } from '@superdoc/style-engine/ooxml';
+import { textNodeToRun } from './text-run';
 
 export function footnoteReferenceToBlock({
   node,

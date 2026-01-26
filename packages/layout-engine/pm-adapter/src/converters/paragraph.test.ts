@@ -28,7 +28,7 @@ import type { ConverterContext } from '../converter-context.js';
 import type { Run, TextRun, FlowBlock, ParagraphBlock, TrackedChangeMeta, ImageRun } from '@superdoc/contracts';
 
 // Mock external dependencies
-vi.mock('./text-run.js', () => ({
+vi.mock('./inline-converters/text-run.js', () => ({
   textNodeToRun: vi.fn(),
   tabNodeToRun: vi.fn(),
   tokenNodeToRun: vi.fn(),
@@ -70,7 +70,7 @@ vi.mock('../attributes/paragraph-styles.js', () => ({
 }));
 
 // Import mocked functions
-import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
+import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './inline-converters/text-run.js';
 import { computeParagraphAttrs, cloneParagraphAttrs, deepClone, hasPageBreakBefore } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
 import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
@@ -723,8 +723,8 @@ describe('paragraph converters', () => {
       vi.mocked(computeParagraphAttrs).mockReturnValue({ paragraphAttrs: {}, resolvedParagraphProperties: {} });
       vi.mocked(cloneParagraphAttrs).mockReturnValue({});
       vi.mocked(hasPageBreakBefore).mockReturnValue(false);
-      vi.mocked(textNodeToRun).mockImplementation(({ textNode }) => ({
-        text: textNode.text || '',
+      vi.mocked(textNodeToRun).mockImplementation(({ node }) => ({
+        text: node.text || '',
         fontFamily: 'Arial',
         fontSize: 16,
       }));
@@ -862,13 +862,13 @@ describe('paragraph converters', () => {
         expect(paraBlock.runs[0].text).toBe('Hello world');
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.objectContaining({
-            textNode,
+            node: textNode,
             positions,
             defaultFont: DEFAULT_TEST_FONT_FAMILY,
             defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
             inheritedMarks: [],
             sdtMetadata: undefined,
-            hyperlinkConfig: expect.any(Object),
+            hyperlinkConfig: { enableRichHyperlinks: false },
             enableComments: true,
           }),
         );
@@ -946,13 +946,13 @@ describe('paragraph converters', () => {
         // textNodeToRun receives merged marks to apply after linked styles (correct priority order)
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.objectContaining({
-            textNode: { type: 'text', text: 'Bold text' },
+            node: { type: 'text', text: 'Bold text' },
             positions,
             defaultFont: FALLBACK_FONT_FAMILY,
             defaultSize: FALLBACK_FONT_SIZE_PX,
             inheritedMarks: [{ type: 'bold' }],
             sdtMetadata: undefined,
-            hyperlinkConfig: expect.any(Object),
+            hyperlinkConfig: { enableRichHyperlinks: false },
             enableComments: true,
           }),
         );
@@ -1027,7 +1027,7 @@ describe('paragraph converters', () => {
         // textNodeToRun receives merged marks so linked styles are resolved first
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.objectContaining({
-            textNode: { type: 'text', text: 'Bold italic' },
+            node: { type: 'text', text: 'Bold italic' },
             positions,
             defaultFont: FALLBACK_FONT_FAMILY,
             defaultSize: FALLBACK_FONT_SIZE_PX,
@@ -1481,13 +1481,13 @@ describe('paragraph converters', () => {
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.objectContaining({
-            textNode: { type: 'text', text: '42' },
+            node: { type: 'text', text: '42' },
             positions,
             defaultFont: FALLBACK_FONT_FAMILY,
             defaultSize: FALLBACK_FONT_SIZE_PX,
             inheritedMarks: [],
             sdtMetadata: undefined,
-            hyperlinkConfig: expect.any(Object),
+            hyperlinkConfig: { enableRichHyperlinks: false },
             enableComments: true,
           }),
         );
@@ -1515,13 +1515,13 @@ describe('paragraph converters', () => {
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.objectContaining({
-            textNode: { type: 'text', text: '??' },
+            node: { type: 'text', text: '??' },
             positions,
             defaultFont: FALLBACK_FONT_FAMILY,
             defaultSize: FALLBACK_FONT_SIZE_PX,
             inheritedMarks: [],
             sdtMetadata: undefined,
-            hyperlinkConfig: expect.any(Object),
+            hyperlinkConfig: { enableRichHyperlinks: false },
             enableComments: true,
           }),
         );
@@ -1555,7 +1555,7 @@ describe('paragraph converters', () => {
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
           expect.objectContaining({
-            textNode: { type: 'text', text: 'fallback' },
+            node: { type: 'text', text: 'fallback' },
             positions,
             defaultFont: FALLBACK_FONT_FAMILY,
             defaultSize: FALLBACK_FONT_SIZE_PX,
@@ -2934,8 +2934,8 @@ describe('paragraph converters', () => {
       vi.mocked(computeParagraphAttrs).mockReturnValue({ paragraphAttrs: {}, resolvedParagraphProperties: {} });
       vi.mocked(cloneParagraphAttrs).mockReturnValue({});
       vi.mocked(hasPageBreakBefore).mockReturnValue(false);
-      vi.mocked(textNodeToRun).mockImplementation(({ textNode }) => ({
-        text: textNode.text || '',
+      vi.mocked(textNodeToRun).mockImplementation(({ node }) => ({
+        text: node.text || '',
         fontFamily: 'Arial',
         fontSize: 16,
       }));

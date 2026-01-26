@@ -34,6 +34,7 @@ import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { pickNumber, isPlainObject } from '../utilities.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
+import { applyInlineRunProperties } from './inline-converters/common.js';
 
 // ============================================================================
 // Constants
@@ -489,18 +490,6 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
   merged.push(current);
   return merged;
 }
-
-const applyInlineRunProperties = (
-  run: TextRun,
-  runProperties: RunProperties | undefined,
-  converterContext?: ConverterContext,
-): TextRun => {
-  if (!runProperties) {
-    return run;
-  }
-  const runAttrs = computeRunAttrs(runProperties, converterContext);
-  return { ...run, ...runAttrs };
-};
 
 /**
  * Extracts the default font family and size from paragraph properties.

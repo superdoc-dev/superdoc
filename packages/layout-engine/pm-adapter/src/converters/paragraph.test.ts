@@ -723,8 +723,8 @@ describe('paragraph converters', () => {
       vi.mocked(computeParagraphAttrs).mockReturnValue({ paragraphAttrs: {}, resolvedParagraphProperties: {} });
       vi.mocked(cloneParagraphAttrs).mockReturnValue({});
       vi.mocked(hasPageBreakBefore).mockReturnValue(false);
-      vi.mocked(textNodeToRun).mockImplementation((node) => ({
-        text: node.text || '',
+      vi.mocked(textNodeToRun).mockImplementation(({ textNode }) => ({
+        text: textNode.text || '',
         fontFamily: 'Arial',
         fontSize: 16,
       }));
@@ -861,14 +861,16 @@ describe('paragraph converters', () => {
         expect(paraBlock.runs).toHaveLength(1);
         expect(paraBlock.runs[0].text).toBe('Hello world');
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          textNode,
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          undefined,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            textNode,
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
 
@@ -941,26 +943,18 @@ describe('paragraph converters', () => {
         );
 
         expect(blocks).toHaveLength(1);
-        // textNodeToRun receives empty marks - marks are applied separately after linked styles
-        // This ensures marks override linked styles (correct priority order)
+        // textNodeToRun receives merged marks to apply after linked styles (correct priority order)
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: 'Bold text' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [], // Empty marks - marks applied separately after linked styles
-          undefined,
-          expect.any(Object),
-          undefined,
-        );
-        // Marks including bold are applied via applyMarksToRun after linked styles
-        expect(vi.mocked(applyMarksToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          expect.arrayContaining([{ type: 'bold' }]),
-          expect.any(Object),
-          undefined,
-          undefined,
-          true, // enableComments defaults to true
+          expect.objectContaining({
+            textNode: { type: 'text', text: 'Bold text' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [{ type: 'bold' }],
+            sdtMetadata: undefined,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
 
@@ -1030,26 +1024,18 @@ describe('paragraph converters', () => {
           converterContext,
         );
 
-        // textNodeToRun receives empty marks - marks are applied separately after linked styles
+        // textNodeToRun receives merged marks so linked styles are resolved first
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: 'Bold italic' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [], // Empty marks - marks applied separately after linked styles
-          undefined,
-          { enableRichHyperlinks: false },
-          undefined,
-        );
-        // Marks are merged as [...nodeMarks, ...inheritedMarks] and applied via applyMarksToRun
-        // So italic (from inner run) comes first, then bold (from outer run)
-        expect(vi.mocked(applyMarksToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          expect.arrayContaining([{ type: 'italic' }, { type: 'bold' }]),
-          { enableRichHyperlinks: false },
-          undefined,
-          undefined,
-          true, // enableComments defaults to true
+          expect.objectContaining({
+            textNode: { type: 'text', text: 'Bold italic' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [{ type: 'italic' }, { type: 'bold' }],
+            sdtMetadata: undefined,
+            hyperlinkConfig: { enableRichHyperlinks: false },
+            enableComments: true,
+          }),
         );
       });
     });
@@ -1237,14 +1223,15 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          sdtMetadata,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
 
@@ -1493,14 +1480,16 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: '42' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [],
-          undefined,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            textNode: { type: 'text', text: '42' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
 
@@ -1525,14 +1514,16 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: '??' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [],
-          undefined,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            textNode: { type: 'text', text: '??' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
 
@@ -1563,14 +1554,16 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: 'fallback' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [],
-          undefined,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            textNode: { type: 'text', text: 'fallback' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
 
@@ -1601,26 +1594,17 @@ describe('paragraph converters', () => {
           converterContext,
         );
 
-        // textNodeToRun is called with empty marks (marks are applied separately via applyMarksToRun)
+        // textNodeToRun is called with merged marks from marksAsAttrs
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [], // Empty marks - applied separately to honor enableComments
-          undefined,
-          expect.any(Object),
-          undefined,
-        );
-
-        // Marks are applied via applyMarksToRun to honor enableComments flag
-        expect(vi.mocked(applyMarksToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          [{ type: 'bold' }, { type: 'italic' }],
-          expect.any(Object),
-          undefined,
-          undefined,
-          true, // enableComments defaults to true
+          expect.objectContaining({
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [{ type: 'bold' }, { type: 'italic' }],
+            sdtMetadata: undefined,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
     });
@@ -2300,14 +2284,15 @@ describe('paragraph converters', () => {
         paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, undefined, undefined, customHyperlinkConfig);
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          undefined,
-          customHyperlinkConfig,
-          undefined,
+          expect.objectContaining({
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: customHyperlinkConfig,
+            enableComments: true,
+          }),
         );
       });
 
@@ -2949,8 +2934,8 @@ describe('paragraph converters', () => {
       vi.mocked(computeParagraphAttrs).mockReturnValue({ paragraphAttrs: {}, resolvedParagraphProperties: {} });
       vi.mocked(cloneParagraphAttrs).mockReturnValue({});
       vi.mocked(hasPageBreakBefore).mockReturnValue(false);
-      vi.mocked(textNodeToRun).mockImplementation((node) => ({
-        text: node.text || '',
+      vi.mocked(textNodeToRun).mockImplementation(({ textNode }) => ({
+        text: textNode.text || '',
         fontFamily: 'Arial',
         fontSize: 16,
       }));

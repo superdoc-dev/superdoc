@@ -8,9 +8,11 @@
  */
 
 import type { TextRun, Run, TabRun, TabStop, SdtMetadata, ParagraphAttrs } from '@superdoc/contracts';
-import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette } from '../types.js';
+import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette, ConverterContext } from '../types.js';
 import { applyMarksToRun } from '../marks/index.js';
 import { DEFAULT_HYPERLINK_CONFIG } from '../constants.js';
+import { RunProperties } from '@superdoc/style-engine/ooxml';
+import { applyInlineRunProperties } from './inline-converters/common.js';
 
 /**
  * Converts a text PM node to a TextRun.
@@ -24,17 +26,32 @@ import { DEFAULT_HYPERLINK_CONFIG } from '../constants.js';
  * @param hyperlinkConfig - Hyperlink configuration
  * @returns TextRun block
  */
-export function textNodeToRun(
-  textNode: PMNode,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  inheritedMarks: PMMark[] = [],
-  sdtMetadata?: SdtMetadata,
-  hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
-  themeColors?: ThemeColorPalette,
-): TextRun {
-  const run: TextRun = {
+export function textNodeToRun({
+  textNode,
+  positions,
+  defaultFont,
+  defaultSize,
+  inheritedMarks = [],
+  sdtMetadata,
+  hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
+  themeColors,
+  enableComments,
+  runProperties,
+  converterContext,
+}: {
+  textNode: PMNode;
+  positions: PositionMap;
+  defaultFont: string;
+  defaultSize: number;
+  inheritedMarks: PMMark[];
+  sdtMetadata: SdtMetadata | undefined;
+  hyperlinkConfig: HyperlinkConfig;
+  themeColors: ThemeColorPalette | undefined;
+  enableComments: boolean;
+  runProperties: RunProperties | undefined;
+  converterContext: ConverterContext | undefined;
+}): TextRun {
+  let run: TextRun = {
     text: textNode.text || '',
     fontFamily: defaultFont,
     fontSize: defaultSize,
@@ -48,10 +65,18 @@ export function textNodeToRun(
     // Per-run creation logs removed to reduce noise
   }
 
-  applyMarksToRun(run, [...(textNode.marks ?? []), ...(inheritedMarks ?? [])], hyperlinkConfig, themeColors);
+  applyMarksToRun(
+    run,
+    [...(textNode.marks ?? []), ...(inheritedMarks ?? [])],
+    hyperlinkConfig,
+    themeColors,
+    converterContext?.backgroundColor,
+    enableComments,
+  );
   if (sdtMetadata) {
     run.sdt = sdtMetadata;
   }
+  run = applyInlineRunProperties(run, runProperties, converterContext);
 
   return run;
 }

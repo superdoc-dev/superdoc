@@ -1,9 +1,7 @@
 import { SdtMetadata, TextRun } from '@superdoc/contracts';
-import { applyMarksToRun } from '../../marks';
 import { ConverterContext, HyperlinkConfig, PMMark, PMNode, PositionMap, ThemeColorPalette } from '../../types';
 import { textNodeToRun } from '../text-run';
 import type { RunProperties } from '@superdoc/style-engine/ooxml';
-import { applyInlineRunProperties } from './common';
 
 export function footnoteReferenceToBlock({
   node,
@@ -16,6 +14,7 @@ export function footnoteReferenceToBlock({
   themeColors,
   runProperties,
   converterContext,
+  enableComments,
 }: {
   node: PMNode;
   positions: PositionMap;
@@ -27,25 +26,26 @@ export function footnoteReferenceToBlock({
   themeColors: ThemeColorPalette | undefined;
   runProperties: RunProperties | undefined;
   converterContext: ConverterContext;
+  enableComments: boolean;
 }): TextRun {
-  const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
   const refPos = positions.get(node);
   const id = (node.attrs as Record<string, unknown> | undefined)?.id;
   const displayId = resolveFootnoteDisplayNumber(id, converterContext?.footnoteNumberById) ?? id ?? '*';
   const displayText = toSuperscriptDigits(displayId);
 
-  let run = textNodeToRun(
-    { type: 'text', text: displayText } as PMNode,
+  const run = textNodeToRun({
+    textNode: { type: 'text', text: displayText } as PMNode,
     positions,
     defaultFont,
     defaultSize,
-    [], // marks applied after linked styles/base defaults
+    inheritedMarks,
     sdtMetadata,
     hyperlinkConfig,
     themeColors,
-  );
-  applyMarksToRun(run, mergedMarks, hyperlinkConfig, themeColors);
-  run = applyInlineRunProperties(run, runProperties, converterContext);
+    enableComments,
+    runProperties,
+    converterContext,
+  });
 
   // Copy PM positions from the parent footnoteReference node
   if (refPos) {

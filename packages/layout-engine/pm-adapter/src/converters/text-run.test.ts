@@ -4,15 +4,49 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { PMNode, PMMark, PositionMap, HyperlinkConfig } from '../types.js';
+import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette, ConverterContext } from '../types.js';
 import type { TextRun, TabRun, SdtMetadata, TabStop, ParagraphIndent, ParagraphAttrs } from '@superdoc/contracts';
-import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
+import type { RunProperties } from '@superdoc/style-engine/ooxml';
+import { textNodeToRun as baseTextNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import * as marksModule from '../marks/index.js';
 
 // Mock the applyMarksToRun function to isolate tests
 vi.mock('../marks/index.js', () => ({
   applyMarksToRun: vi.fn(),
 }));
+
+vi.mock('./inline-converters/common.js', () => ({
+  applyInlineRunProperties: vi.fn((run) => run),
+}));
+
+const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = { enableRichHyperlinks: false };
+
+const textNodeToRun = (
+  textNode: PMNode,
+  positions: PositionMap,
+  defaultFont: string,
+  defaultSize: number,
+  inheritedMarks: PMMark[] = [],
+  sdtMetadata?: SdtMetadata,
+  hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
+  themeColors?: ThemeColorPalette,
+  enableComments = false,
+  runProperties?: RunProperties,
+  converterContext?: ConverterContext,
+) =>
+  baseTextNodeToRun({
+    textNode,
+    positions,
+    defaultFont,
+    defaultSize,
+    inheritedMarks,
+    sdtMetadata,
+    hyperlinkConfig,
+    themeColors,
+    enableComments,
+    runProperties,
+    converterContext,
+  });
 
 // ============================================================================
 // textNodeToRun() Tests
@@ -38,6 +72,8 @@ describe('textNodeToRun', () => {
       [],
       { enableRichHyperlinks: false },
       undefined,
+      undefined,
+      false,
     );
   });
 
@@ -87,6 +123,8 @@ describe('textNodeToRun', () => {
         enableRichHyperlinks: false,
       },
       undefined,
+      undefined,
+      false,
     );
   });
 
@@ -107,6 +145,8 @@ describe('textNodeToRun', () => {
         enableRichHyperlinks: false,
       },
       undefined,
+      undefined,
+      false,
     );
   });
 
@@ -129,6 +169,8 @@ describe('textNodeToRun', () => {
         enableRichHyperlinks: false,
       },
       undefined,
+      undefined,
+      false,
     );
   });
 
@@ -176,6 +218,8 @@ describe('textNodeToRun', () => {
       expect.any(Array),
       hyperlinkConfig,
       undefined,
+      undefined,
+      false,
     );
   });
 
@@ -252,6 +296,8 @@ describe('textNodeToRun', () => {
         enableRichHyperlinks: false,
       },
       undefined,
+      undefined,
+      false,
     );
   });
 
@@ -289,6 +335,8 @@ describe('textNodeToRun', () => {
         enableRichHyperlinks: false,
       },
       undefined,
+      undefined,
+      false,
     );
   });
 });

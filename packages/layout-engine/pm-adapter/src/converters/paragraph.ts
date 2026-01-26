@@ -673,6 +673,7 @@ export function paragraphToFlowBlocks({
         themeColors,
         runProperties: activeRunProperties,
         converterContext,
+        enableComments,
       });
 
       currentRuns.push(run);
@@ -680,28 +681,20 @@ export function paragraphToFlowBlocks({
     }
 
     if (node.type === 'text' && node.text) {
-      // Pass empty array to textNodeToRun to prevent double mark application.
-      // Marks will be applied AFTER linked styles to ensure proper priority.
-      let run = textNodeToRun(
-        node,
+      const run = textNodeToRun({
+        textNode: node,
         positions,
         defaultFont,
         defaultSize,
-        [], // Empty marks - will be applied after linked styles
-        activeSdt,
+        inheritedMarks: inheritedMarks ?? [],
+        sdtMetadata: activeSdt,
         hyperlinkConfig,
         themeColors,
-      );
-      // Apply marks ONCE here - this ensures they override linked styles
-      applyMarksToRun(
-        run,
-        [...(node.marks ?? []), ...(inheritedMarks ?? [])],
-        hyperlinkConfig,
-        themeColors,
-        converterContext?.backgroundColor,
         enableComments,
-      );
-      run = applyInlineRunProperties(run, activeRunProperties, converterContext);
+        runProperties: activeRunProperties,
+        converterContext,
+      });
+
       currentRuns.push(run);
       return;
     }
@@ -808,18 +801,6 @@ export function paragraphToFlowBlocks({
         // Create token run with pageReference metadata
         // Get PM positions from the parent pageReference node (not the synthetic text node)
         const pageRefPos = positions.get(node);
-        // Pass empty marks to textNodeToRun to prevent double mark application.
-        // Marks will be applied AFTER linked styles to ensure proper priority and honor enableComments.
-        let tokenRun = textNodeToRun(
-          { type: 'text', text: fallbackText } as PMNode,
-          positions,
-          defaultFont,
-          defaultSize,
-          [], // Empty marks - will be applied after linked styles
-          activeSdt,
-          hyperlinkConfig,
-          themeColors,
-        );
         const resolvedRunProperties = resolveRunProperties(
           converterContext!,
           runProperties,
@@ -828,16 +809,21 @@ export function paragraphToFlowBlocks({
           false,
           false,
         );
-        // Apply marks ONCE here - this ensures they override linked styles and honor enableComments
-        applyMarksToRun(
-          tokenRun,
-          mergedMarks,
+
+        const tokenRun = textNodeToRun({
+          textNode: { type: 'text', text: fallbackText } as PMNode,
+          positions,
+          defaultFont,
+          defaultSize,
+          inheritedMarks: mergedMarks,
+          sdtMetadata: activeSdt,
           hyperlinkConfig,
           themeColors,
-          converterContext?.backgroundColor,
+          runProperties: resolvedRunProperties,
+          converterContext,
           enableComments,
-        );
-        tokenRun = applyInlineRunProperties(tokenRun, resolvedRunProperties, converterContext);
+        });
+
         // Copy PM positions from parent pageReference node
         if (pageRefPos) {
           (tokenRun as TextRun).pmStart = pageRefPos.start;

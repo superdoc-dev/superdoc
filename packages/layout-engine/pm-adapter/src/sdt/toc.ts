@@ -94,8 +94,8 @@ export function processTocChildren(
   context: {
     nextBlockId: BlockIdGenerator;
     positions: PositionMap;
-    bookmarks?: Map<string, number>;
-    trackedChangesConfig?: TrackedChangesConfig;
+    bookmarks: Map<string, number>;
+    trackedChangesConfig: TrackedChangesConfig;
     hyperlinkConfig: HyperlinkConfig;
     enableComments: boolean;
     converters: NestedConverters;
@@ -104,7 +104,7 @@ export function processTocChildren(
   },
   outputArrays: {
     blocks: FlowBlock[];
-    recordBlockKind: (kind: FlowBlock['kind']) => void;
+    recordBlockKind?: (kind: FlowBlock['kind']) => void;
   },
 ): void {
   const paragraphConverter = context.converters.paragraphToFlowBlocks;
@@ -138,7 +138,7 @@ export function processTocChildren(
 
       paragraphBlocks.forEach((block) => {
         blocks.push(block);
-        recordBlockKind(block.kind);
+        recordBlockKind?.(block.kind);
       });
     } else if (child.type === 'tableOfContents' && Array.isArray(child.content)) {
       // Nested tableOfContents - recurse with potentially different instruction
@@ -202,7 +202,7 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
           if (tocInstruction) block.attrs.tocInstruction = tocInstruction;
         }
         blocks.push(block);
-        recordBlockKind(block.kind);
+        recordBlockKind?.(block.kind);
       });
     }
   });

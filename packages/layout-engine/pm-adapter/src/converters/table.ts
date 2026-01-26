@@ -46,8 +46,8 @@ import { TableProperties } from '@superdoc/style-engine/ooxml';
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  trackedChangesConfig?: TrackedChangesConfig;
-  bookmarks?: Map<string, number>;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
   converterContext: ConverterContext;
@@ -880,6 +880,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
   });
   if (tableBlock) {
     blocks.push(tableBlock);
-    recordBlockKind(tableBlock.kind);
+    recordBlockKind?.(tableBlock.kind);
   }
 }

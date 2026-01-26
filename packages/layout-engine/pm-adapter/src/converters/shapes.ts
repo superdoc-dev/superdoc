@@ -519,7 +519,7 @@ export function handleVectorShapeNode(node: PMNode, context: NodeHandlerContext)
   const drawingBlock = vectorShapeNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -536,7 +536,7 @@ export function handleShapeGroupNode(node: PMNode, context: NodeHandlerContext):
   const drawingBlock = shapeGroupNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -553,7 +553,7 @@ export function handleShapeContainerNode(node: PMNode, context: NodeHandlerConte
   const drawingBlock = shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -570,6 +570,6 @@ export function handleShapeTextboxNode(node: PMNode, context: NodeHandlerContext
   const drawingBlock = shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }

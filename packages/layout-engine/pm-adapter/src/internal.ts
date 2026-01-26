@@ -203,7 +203,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     const lastSectionIndex = sectionRanges.length - 1;
     const lastSection = sectionRanges[lastSectionIndex];
     // Only emit if we haven't processed the last section yet
-    if (handlerContext.sectionState.currentSectionIndex < lastSectionIndex) {
+    if (handlerContext.sectionState!.currentSectionIndex < lastSectionIndex) {
       const sectionBreak = createSectionBreakBlock(lastSection, nextBlockId);
       blocks.push(sectionBreak);
       recordBlockKind(sectionBreak.kind);

@@ -33,8 +33,8 @@ import { processTocChildren } from './toc.js';
 interface ProcessingContext {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  trackedChangesConfig?: TrackedChangesConfig;
-  bookmarks?: Map<string, number>;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
   enableComments: boolean;
   converterContext: ConverterContext;
@@ -46,7 +46,7 @@ interface ProcessingContext {
  */
 interface ProcessingOutput {
   blocks: FlowBlock[];
-  recordBlockKind: (kind: FlowBlock['kind']) => void;
+  recordBlockKind?: (kind: FlowBlock['kind']) => void;
 }
 
 /**
@@ -70,7 +70,7 @@ function processParagraphChild(
     para: child,
     nextBlockId: context.nextBlockId,
     positions: context.positions,
-    trackedChangesConfig: undefined, // trackedChanges
+    trackedChangesConfig: context.trackedChangesConfig,
     bookmarks: context.bookmarks,
     hyperlinkConfig: context.hyperlinkConfig,
     converters,
@@ -83,7 +83,7 @@ function processParagraphChild(
   );
   paragraphBlocks.forEach((block) => {
     output.blocks.push(block);
-    output.recordBlockKind(block.kind);
+    output.recordBlockKind?.(block.kind);
   });
 }
 
@@ -118,7 +118,7 @@ function processTableChild(
   if (tableBlock) {
     applySdtMetadataToTableBlock(tableBlock, sectionMetadata);
     output.blocks.push(tableBlock);
-    output.recordBlockKind(tableBlock.kind);
+    output.recordBlockKind?.(tableBlock.kind);
   }
 }
 
@@ -147,7 +147,7 @@ function processImageChild(
       imageBlock.attrs.sdt = sectionMetadata;
     }
     output.blocks.push(imageBlock);
-    output.recordBlockKind(imageBlock.kind);
+    output.recordBlockKind?.(imageBlock.kind);
   }
 }
 
@@ -191,7 +191,7 @@ function processNestedStructuredContent(
       applySdtMetadataToParagraphBlocks(paraOnly, sectionMetadata);
       paragraphBlocks.forEach((block) => {
         output.blocks.push(block);
-        output.recordBlockKind(block.kind);
+        output.recordBlockKind?.(block.kind);
       });
     } else if (grandchild.type === 'table') {
       const tableBlock = converters.tableNodeToBlock({
@@ -210,7 +210,7 @@ function processNestedStructuredContent(
         if (nestedMetadata) applySdtMetadataToTableBlock(tableBlock, nestedMetadata);
         applySdtMetadataToTableBlock(tableBlock, sectionMetadata);
         output.blocks.push(tableBlock);
-        output.recordBlockKind(tableBlock.kind);
+        output.recordBlockKind?.(tableBlock.kind);
       }
     }
   });
@@ -256,6 +256,7 @@ function processDocumentPartObject(
         themeColors: context.themeColors,
         converters,
         converterContext: context.converterContext,
+        trackedChangesConfig: context.trackedChangesConfig,
       },
       { blocks: output.blocks, recordBlockKind: output.recordBlockKind },
     );

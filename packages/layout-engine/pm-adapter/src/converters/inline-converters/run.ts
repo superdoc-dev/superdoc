@@ -1,12 +1,5 @@
-import { type InlineConverterParams } from './common';
+import { type InlineConverterParams, HiddenByVanishError } from './common';
 import { type RunProperties, resolveRunProperties } from '@superdoc/style-engine/ooxml';
-
-export class HiddenByVanishError extends Error {
-  constructor() {
-    super('Node is hidden by vanish property');
-    this.name = 'HiddenByVanishError';
-  }
-}
 
 export function runNodeChildrenToRuns({
   node,

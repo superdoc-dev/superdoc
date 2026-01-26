@@ -12,6 +12,20 @@ type VisitNodeFn = (
   activeHidden?: boolean,
 ) => void;
 
+export class HiddenByVanishError extends Error {
+  constructor() {
+    super('Node is hidden by vanish property');
+    this.name = 'HiddenByVanishError';
+  }
+}
+
+export class NotInlineNodeError extends Error {
+  constructor() {
+    super('Node is not an inline node');
+    this.name = 'NotInlineNodeError';
+  }
+}
+
 export type InlineConverterParams = {
   node: PMNode;
   positions: PositionMap;

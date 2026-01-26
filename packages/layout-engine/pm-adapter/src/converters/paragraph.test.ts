@@ -12,9 +12,8 @@ import {
   mergeAdjacentRuns,
   dataAttrsCompatible,
   commentsCompatible,
-  isInlineImage,
-  imageNodeToRun,
 } from './paragraph.js';
+import { isInlineImage, imageNodeToRun } from './inline-converters/image.js';
 import type {
   PMNode,
   BlockIdGenerator,
@@ -25,7 +24,15 @@ import type {
   NestedConverters,
 } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
-import type { Run, TextRun, FlowBlock, ParagraphBlock, TrackedChangeMeta, ImageRun } from '@superdoc/contracts';
+import type {
+  Run,
+  TextRun,
+  FlowBlock,
+  ParagraphBlock,
+  TrackedChangeMeta,
+  ImageRun,
+  SdtMetadata,
+} from '@superdoc/contracts';
 
 // Mock external dependencies
 vi.mock('./inline-converters/text-run.js', () => ({
@@ -118,6 +125,13 @@ const isConverters = (value: unknown): value is NestedConverters => {
   );
 };
 
+const hasImageNode = (node: PMNode | undefined): boolean => {
+  if (!node) return false;
+  if (node.type === 'image') return true;
+  const content = (node.content ?? []) as PMNode[];
+  return content.some(hasImageNode);
+};
+
 const paragraphToFlowBlocks = (
   para: PMNode,
   nextBlockId: BlockIdGenerator,
@@ -146,6 +160,10 @@ const paragraphToFlowBlocks = (
     converterContext = converterContextOrConverters as ConverterContext;
   }
 
+  const effectiveTrackedChangesConfig =
+    trackedChangesConfig ??
+    (hasImageNode(para) ? ({ mode: 'review', enabled: false } as TrackedChangesConfig) : undefined);
+
   const effectiveConverterContext =
     converterContext ??
     ({
@@ -170,7 +188,7 @@ const paragraphToFlowBlocks = (
     para,
     nextBlockId,
     positions,
-    trackedChangesConfig,
+    trackedChangesConfig: effectiveTrackedChangesConfig,
     bookmarks,
     hyperlinkConfig: hyperlinkConfig ?? DEFAULT_HYPERLINK_CONFIG,
     themeColors,
@@ -1695,37 +1713,20 @@ describe('paragraph converters', () => {
 
     describe('Block nodes', () => {
       it('should flush paragraph before image node', () => {
-        const imageNode: PMNode = { type: 'image' };
+        const imageNode: PMNode = {
+          type: 'image',
+          attrs: {
+            wrap: { type: 'Tight' },
+            src: 'image.jpg',
+            size: { width: 100, height: 100 },
+          },
+        };
         const para: PMNode = {
           type: 'paragraph',
           content: [{ type: 'text', text: 'Before' }, imageNode, { type: 'text', text: 'After' }],
         };
 
-        const mockImageBlock: FlowBlock = {
-          kind: 'image',
-          id: 'image-0',
-          src: 'image.jpg',
-          width: 100,
-          height: 100,
-          attrs: {},
-        };
-
-        const converters = {
-          imageNodeToBlock: vi.fn().mockReturnValue(mockImageBlock),
-        };
-
-        const blocks = paragraphToFlowBlocks(
-          para,
-          nextBlockId,
-          positions,
-          'Arial',
-          16,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          converters as never,
-        );
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(3);
         expect(blocks[0].kind).toBe('paragraph');
@@ -1733,8 +1734,16 @@ describe('paragraph converters', () => {
         expect(blocks[2].kind).toBe('paragraph');
       });
 
-      it('should call imageNodeToBlock converter with correct parameters', () => {
-        const imageNode: PMNode = { type: 'image', marks: [{ type: 'trackInsert' }] };
+      it('should annotate tracked changes for image blocks', () => {
+        const imageNode: PMNode = {
+          type: 'image',
+          marks: [{ type: 'trackInsert' }],
+          attrs: {
+            wrap: { type: 'Tight' },
+            src: 'image.jpg',
+            size: { width: 100, height: 100 },
+          },
+        };
         const para: PMNode = {
           type: 'paragraph',
           content: [imageNode],
@@ -1751,34 +1760,11 @@ describe('paragraph converters', () => {
 
         vi.mocked(collectTrackedChangeFromMarks).mockReturnValue(trackedMeta);
 
-        const converters = {
-          imageNodeToBlock: vi.fn().mockReturnValue({
-            kind: 'image',
-            id: 'image-0',
-            src: 'image.jpg',
-            width: 100,
-            height: 100,
-            attrs: {},
-          }),
-        };
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
 
-        paragraphToFlowBlocks(
-          para,
-          nextBlockId,
-          positions,
-          'Arial',
-          16,
-          trackedChanges,
-          undefined,
-          undefined,
-          undefined,
-          converters as never,
-        );
-
-        expect(converters.imageNodeToBlock).toHaveBeenCalledWith(
-          imageNode,
-          nextBlockId,
-          positions,
+        expect(blocks.some((block) => block.kind === 'image')).toBe(true);
+        expect(vi.mocked(annotateBlockWithTrackedChange)).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'image' }),
           trackedMeta,
           trackedChanges,
         );
@@ -2677,6 +2663,24 @@ describe('paragraph converters', () => {
 
   describe('imageNodeToRun', () => {
     let positions: PositionMap;
+    const buildImageParams = (node: PMNode, pos: PositionMap, sdtMetadata?: SdtMetadata) => ({
+      node,
+      positions: pos,
+      sdtMetadata,
+      defaultFont: 'Arial',
+      defaultSize: 16,
+      inheritedMarks: [],
+      hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+      themeColors: undefined,
+      enableComments: true,
+      runProperties: undefined,
+      paragraphProperties: undefined,
+      converterContext: defaultConverterContext,
+      visitNode: vi.fn(),
+      bookmarks: undefined,
+      tabOrdinal: 0,
+      paragraphAttrs: {},
+    });
 
     beforeEach(() => {
       positions = new WeakMap();
@@ -2691,6 +2695,7 @@ describe('paragraph converters', () => {
           alt: 'Test image',
           title: 'Test title',
           wrap: {
+            type: 'Inline',
             attrs: {
               distTop: 10,
               distBottom: 20,
@@ -2702,7 +2707,7 @@ describe('paragraph converters', () => {
       };
       positions.set(node, { start: 10, end: 11 });
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
 
       expect(result).toEqual({
         kind: 'image',
@@ -2725,11 +2730,12 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           size: { width: 100, height: 100 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result).toBeNull();
     });
 
@@ -2737,12 +2743,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: '',
           size: { width: 100, height: 100 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result).toBeNull();
     });
 
@@ -2750,11 +2757,12 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100);
       expect(result?.height).toBe(100);
     });
@@ -2763,12 +2771,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: NaN, height: Infinity },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100);
       expect(result?.height).toBe(100);
     });
@@ -2777,12 +2786,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: -10, height: 100 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100); // DEFAULT_IMAGE_DIMENSION_PX
       expect(result?.height).toBe(100);
     });
@@ -2791,12 +2801,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: 100, height: -10 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100);
       expect(result?.height).toBe(100); // DEFAULT_IMAGE_DIMENSION_PX
     });
@@ -2805,12 +2816,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: 0, height: 100 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100); // DEFAULT_IMAGE_DIMENSION_PX
       expect(result?.height).toBe(100);
     });
@@ -2819,12 +2831,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: 100, height: 0 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100);
       expect(result?.height).toBe(100); // DEFAULT_IMAGE_DIMENSION_PX
     });
@@ -2835,6 +2848,7 @@ describe('paragraph converters', () => {
         attrs: {
           src: 'image.png',
           wrap: {
+            type: 'Inline',
             attrs: {
               distT: 5,
               distB: 10,
@@ -2845,7 +2859,7 @@ describe('paragraph converters', () => {
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.distTop).toBe(5);
       expect(result?.distBottom).toBe(10);
       expect(result?.distLeft).toBe(3);
@@ -2858,6 +2872,7 @@ describe('paragraph converters', () => {
         attrs: {
           src: 'image.png',
           wrap: {
+            type: 'Inline',
             attrs: {
               distTop: 12,
               distBottom: 14,
@@ -2868,7 +2883,7 @@ describe('paragraph converters', () => {
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.distTop).toBe(12);
       expect(result?.distBottom).toBe(14);
       expect(result?.distLeft).toBe(8);
@@ -2879,11 +2894,12 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.distTop).toBeUndefined();
       expect(result?.distBottom).toBeUndefined();
       expect(result?.distLeft).toBeUndefined();
@@ -2893,22 +2909,22 @@ describe('paragraph converters', () => {
     it('includes SDT metadata when provided', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
       const sdt = { kind: 'field' as const };
 
-      const result = imageNodeToRun(node, positions, sdt);
+      const result = imageNodeToRun(buildImageParams(node, positions, sdt));
       expect(result?.sdt).toEqual(sdt);
     });
 
     it('includes PM positions when available', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
       positions.set(node, { start: 42, end: 43 });
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.pmStart).toBe(42);
       expect(result?.pmEnd).toBe(43);
     });
@@ -2916,10 +2932,10 @@ describe('paragraph converters', () => {
     it('omits PM positions when not in map', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.pmStart).toBeUndefined();
       expect(result?.pmEnd).toBeUndefined();
     });
@@ -2927,20 +2943,20 @@ describe('paragraph converters', () => {
     it('sets verticalAlign to bottom by default', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.verticalAlign).toBe('bottom');
     });
 
     it('omits alt and title when not present', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.alt).toBeUndefined();
       expect(result?.title).toBeUndefined();
     });
@@ -3023,38 +3039,15 @@ describe('paragraph converters', () => {
         content: [{ type: 'text', text: 'Before' }, imageNode, { type: 'text', text: 'After' }],
       };
 
-      const mockImageBlock: FlowBlock = {
-        kind: 'image',
-        id: 'image-0',
-        src: 'image.png',
-        width: 100,
-        height: 100,
-        attrs: {},
-      };
-
-      const converters = {
-        imageNodeToBlock: vi.fn().mockReturnValue(mockImageBlock),
-      };
-
-      const blocks = paragraphToFlowBlocks(
-        para,
-        nextBlockId,
-        positions,
-        'Arial',
-        16,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        converters as never,
-      );
+      const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
       // Should split into: paragraph before, image block, paragraph after
       expect(blocks).toHaveLength(3);
       expect(blocks[0].kind).toBe('paragraph');
       expect(blocks[1].kind).toBe('image');
       expect(blocks[2].kind).toBe('paragraph');
-      expect(converters.imageNodeToBlock).toHaveBeenCalledWith(imageNode, nextBlockId, positions, undefined, undefined);
+      const imageBlock = blocks[1] as FlowBlock & { src?: string };
+      expect(imageBlock.src).toBe('image.png');
     });
 
     it('handles multiple inline images in same paragraph', () => {

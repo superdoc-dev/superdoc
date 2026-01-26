@@ -30,11 +30,14 @@ import type { Run, TextRun, FlowBlock, ParagraphBlock, TrackedChangeMeta, ImageR
 // Mock external dependencies
 vi.mock('./inline-converters/text-run.js', () => ({
   textNodeToRun: vi.fn(),
-  tokenNodeToRun: vi.fn(),
 }));
 
 vi.mock('./inline-converters/tab.js', () => ({
   tabNodeToRun: vi.fn(),
+}));
+
+vi.mock('./inline-converters/generic-token.js', () => ({
+  tokenNodeToRun: vi.fn(),
 }));
 
 vi.mock('../attributes/index.js', () => ({
@@ -73,8 +76,9 @@ vi.mock('../attributes/paragraph-styles.js', () => ({
 }));
 
 // Import mocked functions
-import { textNodeToRun, tokenNodeToRun } from './inline-converters/text-run.js';
+import { textNodeToRun } from './inline-converters/text-run.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
+import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { computeParagraphAttrs, cloneParagraphAttrs, deepClone, hasPageBreakBefore } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
 import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
@@ -1135,14 +1139,13 @@ describe('paragraph converters', () => {
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(vi.mocked(tokenNodeToRun)).toHaveBeenCalledWith(
-          tokenNode,
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          'pageNumber',
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            node: tokenNode,
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+          }),
         );
         const paraBlock = blocks[0] as ParagraphBlock;
         expect(paraBlock.runs).toContain(mockTokenRun);
@@ -1163,14 +1166,13 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(tokenNodeToRun)).toHaveBeenCalledWith(
-          tokenNode,
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          'totalPageCount',
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            node: tokenNode,
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+          }),
         );
       });
 
@@ -1193,7 +1195,10 @@ describe('paragraph converters', () => {
           fontFamily: 'Arial',
           fontSize: 16,
         };
-        vi.mocked(tokenNodeToRun).mockReturnValue(mockTokenRun);
+        vi.mocked(tokenNodeToRun).mockImplementation(({ sdtMetadata }) => ({
+          ...mockTokenRun,
+          ...(sdtMetadata ? { sdt: sdtMetadata } : {}),
+        }));
 
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 

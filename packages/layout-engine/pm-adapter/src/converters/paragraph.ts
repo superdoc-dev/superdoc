@@ -19,20 +19,20 @@ import {
   annotateBlockWithTrackedChange,
   applyTrackedChangesModeToRuns,
 } from '../tracked-changes.js';
-import { textNodeToRun, tokenNodeToRun } from './inline-converters/text-run.js';
+import { textNodeToRun } from './inline-converters/text-run.js';
 import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { pickNumber, isPlainObject } from '../utilities.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
-import { applyInlineRunProperties } from './inline-converters/common.js';
 import { runNodeChildrenToRuns, HiddenByVanishError } from './inline-converters/run.js';
 import { structuredContentNodeToBlocks } from './inline-converters/structured-content.js';
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
 import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
+import { tokenNodeToRun } from './inline-converters/generic-token.js';
 
 // ============================================================================
 // Constants
@@ -616,44 +616,8 @@ export function paragraphToFlowBlocks({
     }
 
     if (TOKEN_INLINE_TYPES.has(node.type)) {
-      const tokenKind = TOKEN_INLINE_TYPES.get(node.type);
-      if (tokenKind) {
-        const marksAsAttrs = Array.isArray(node.attrs?.marksAsAttrs) ? (node.attrs.marksAsAttrs as PMMark[]) : [];
-        const nodeMarks = node.marks ?? [];
-        const effectiveMarks = nodeMarks.length > 0 ? nodeMarks : marksAsAttrs;
-        const mergedMarks = [...effectiveMarks, ...(inheritedMarks ?? [])];
-        let tokenRun = tokenNodeToRun(
-          node,
-          positions,
-          defaultFont,
-          defaultSize,
-          inheritedMarks,
-          tokenKind,
-          hyperlinkConfig,
-          themeColors,
-        );
-        if (activeSdt) {
-          (tokenRun as TextRun).sdt = activeSdt;
-        }
-        if (mergedMarks.length > 0) {
-          applyMarksToRun(
-            tokenRun as TextRun,
-            mergedMarks,
-            hyperlinkConfig,
-            themeColors,
-            converterContext?.backgroundColor,
-            enableComments,
-          );
-        }
-        applyInlineRunProperties(tokenRun as TextRun, activeRunProperties, converterContext);
-        console.debug('[token-debug] paragraph-token-run', {
-          token: (tokenRun as TextRun).token,
-          fontFamily: (tokenRun as TextRun).fontFamily,
-          fontSize: (tokenRun as TextRun).fontSize,
-          inlineStyleId: paragraphProps.styleId || null,
-          mergedMarksCount: mergedMarks.length,
-        });
-        tokenRun = applyInlineRunProperties(tokenRun as TextRun, activeRunProperties, converterContext);
+      const tokenRun = tokenNodeToRun(inlineConverterParams);
+      if (tokenRun) {
         currentRuns.push(tokenRun);
       }
       return;

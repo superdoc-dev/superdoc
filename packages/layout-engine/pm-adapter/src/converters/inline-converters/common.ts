@@ -9,7 +9,7 @@ type VisitNodeFn = (
   inheritedMarks: PMMark[],
   activeSdt: SdtMetadata | undefined,
   activeRunProperties: RunProperties | undefined,
-  activeHidden: boolean,
+  activeHidden?: boolean,
 ) => void;
 
 export type InlineConverterParams = {

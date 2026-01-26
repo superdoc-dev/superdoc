@@ -26,7 +26,7 @@ catalog:
   canvas: ^3.2.0
   color2k: ^2.0.3
   concurrently: ^9.1.2
-  eslint: ^9.39.1
+  eslint: ^9.39.2
   eslint-config-prettier: ^9.1.0
   eslint-import-resolver-typescript: ^4.4.4
   eslint-plugin-import-x: ^4.16.1

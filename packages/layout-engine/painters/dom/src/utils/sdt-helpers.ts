@@ -1,28 +1,7 @@
-/**
- * SDT Helper Utilities
- *
- * Provides type guards and helper functions for working with SDT (Structured Document Tag) metadata
- * in the DOM painter. These utilities ensure type-safe access to SDT properties and reduce code
- * duplication across rendering logic.
- */
-
 import type { SdtMetadata } from '@superdoc/contracts';
 
 /**
- * Type guard for StructuredContentMetadata with specific properties.
- *
- * Validates that the metadata object has the expected structure for structured content
- * and narrows the type to allow safe property access.
- *
- * @param sdt - The SDT metadata to check
- * @returns True if the metadata is a structured content object with valid properties
- *
- * @example
- * ```typescript
- * if (isStructuredContentMetadata(block.attrs?.sdt)) {
- *   console.log(sdt.alias); // Type-safe access
- * }
- * ```
+ * Type guard for StructuredContentMetadata.
  */
 export function isStructuredContentMetadata(
   sdt: SdtMetadata | null | undefined,
@@ -33,20 +12,7 @@ export function isStructuredContentMetadata(
 }
 
 /**
- * Type guard for DocumentSectionMetadata with specific properties.
- *
- * Validates that the metadata object has the expected structure for document sections
- * and narrows the type to allow safe property access.
- *
- * @param sdt - The SDT metadata to check
- * @returns True if the metadata is a document section object with valid properties
- *
- * @example
- * ```typescript
- * if (isDocumentSectionMetadata(block.attrs?.sdt)) {
- *   console.log(sdt.title); // Type-safe access
- * }
- * ```
+ * Type guard for DocumentSectionMetadata.
  */
 export function isDocumentSectionMetadata(
   sdt: SdtMetadata | null | undefined,
@@ -132,10 +98,7 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
 }
 
 /**
- * Return the SDT metadata that should drive container styling.
- *
- * Prefers the primary `sdt` when it resolves to a container type, otherwise
- * falls back to `containerSdt` (e.g., docPart paragraphs inside a documentSection).
+ * Returns the SDT metadata for container styling, preferring `sdt` over `containerSdt`.
  */
 export function getSdtContainerMetadata(
   sdt?: SdtMetadata | null,
@@ -147,9 +110,7 @@ export function getSdtContainerMetadata(
 }
 
 /**
- * Returns a stable key for a block-level SDT container, or null if unavailable.
- *
- * The key is used to detect consecutive fragments that belong to the same SDT.
+ * Returns a stable key for grouping consecutive fragments in the same SDT container.
  */
 export function getSdtContainerKey(sdt?: SdtMetadata | null, containerSdt?: SdtMetadata | null): string | null {
   const metadata = getSdtContainerMetadata(sdt, containerSdt);
@@ -246,7 +207,6 @@ export function applySdtContainerStyling(
   containerSdt?: SdtMetadata | null | undefined,
   boundaryOptions?: SdtBoundaryOptions,
 ): void {
-  // Try primary sdt first, fall back to containerSdt
   let config = getSdtContainerConfig(sdt);
   if (!config && containerSdt) {
     config = getSdtContainerConfig(containerSdt);
@@ -256,7 +216,6 @@ export function applySdtContainerStyling(
   const isStart = boundaryOptions?.isStart ?? config.isStart;
   const isEnd = boundaryOptions?.isEnd ?? config.isEnd;
 
-  // Apply container class and data attributes
   container.classList.add(config.className);
   container.dataset.sdtContainerStart = String(isStart);
   container.dataset.sdtContainerEnd = String(isEnd);
@@ -270,8 +229,6 @@ export function applySdtContainerStyling(
     container.style.paddingBottom = `${boundaryOptions.paddingBottomOverride}px`;
   }
 
-  // Only create label on the first fragment of a multi-fragment container
-  // Or if showLabel is explicitly true (for cross-page support)
   const shouldShowLabel = boundaryOptions?.showLabel ?? isStart;
 
   if (shouldShowLabel) {

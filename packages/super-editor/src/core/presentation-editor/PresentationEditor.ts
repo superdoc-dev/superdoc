@@ -3241,14 +3241,12 @@ export class PresentationEditor extends EventEmitter {
     let id: string | null = null;
 
     if (selection instanceof NodeSelection) {
-      // NodeSelection directly on a structuredContentBlock
       if (selection.node?.type?.name !== 'structuredContentBlock') {
         this.#clearSelectedStructuredContentBlockClass();
         return;
       }
       node = selection.node;
     } else {
-      // TextSelection - check if cursor is inside a structuredContentBlock
       const $pos = selection.$from;
       for (let depth = $pos.depth; depth > 0; depth--) {
         const candidate = $pos.node(depth);
@@ -3316,12 +3314,6 @@ export class PresentationEditor extends EventEmitter {
 
     if (!block) return;
 
-    // Only clear if we're leaving the block entirely or moving to a non-SDT element
-    // However, since we're using mouseenter/leave on the elements themselves,
-    // simply clearing on leave is correct because the next enter will trigger if moving between fragments
-    // But we want to avoid flickering if moving between fragments of same SDT.
-    // Actually, checking relatedTarget is better.
-
     const relatedTarget = event.relatedTarget as HTMLElement | null;
     if (
       relatedTarget &&
@@ -3357,7 +3349,6 @@ export class PresentationEditor extends EventEmitter {
     if (elements.length === 0) return;
 
     elements.forEach((element) => {
-      // Don't apply hover class if selected (CSS handles this too, but good to be explicit)
       if (!element.classList.contains('ProseMirror-selectednode')) {
         element.classList.add('sdt-group-hover');
       }

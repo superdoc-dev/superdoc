@@ -744,10 +744,8 @@ export class EditorInputManager {
       }
     }
 
-    // Set selection for single click
     if (!handledByDepth) {
       try {
-        // Place cursor at click position for all content (including structured content blocks)
         let nextSelection: Selection = TextSelection.create(doc, hit.pos);
         if (!nextSelection.$from.parent.inlineContent) {
           nextSelection = Selection.near(doc.resolve(hit.pos), 1);

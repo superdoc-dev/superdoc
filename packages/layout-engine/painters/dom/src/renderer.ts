@@ -5177,11 +5177,6 @@ const getFragmentSdtContainerKey = (fragment: Fragment, blockLookup: BlockLookup
   return null;
 };
 
-/**
- * Calculate the height of a fragment.
- * For para/list-item fragments, this must be computed from the measure's line data.
- * For other fragment types, the height property is directly available.
- */
 const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number => {
   if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
     return fragment.height;
@@ -5194,7 +5189,6 @@ const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number
     const measure = lookup.measure;
     const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
     if (lines.length === 0) return 0;
-    // Sum up lineHeight for all lines in this fragment
     let totalHeight = 0;
     for (const line of lines) {
       totalHeight += line.lineHeight ?? 0;
@@ -5208,7 +5202,6 @@ const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number
     if (!item) return 0;
     const lines = item.paragraph.lines.slice(fragment.fromLine, fragment.toLine);
     if (lines.length === 0) return 0;
-    // Sum up lineHeight for all lines in this fragment
     let totalHeight = 0;
     for (const line of lines) {
       totalHeight += line.lineHeight ?? 0;
@@ -5251,21 +5244,17 @@ const computeSdtBoundaries = (
       const isStart = k === i;
       const isEnd = k === j;
 
-      // Calculate padding bottom to fill gap to next fragment
       let paddingBottomOverride: number | undefined;
       if (!isEnd) {
         const nextFragment = fragments[k + 1];
         const currentHeight = getFragmentHeight(fragment, blockLookup);
         const currentBottom = fragment.y + currentHeight;
         const gapToNext = nextFragment.y - currentBottom;
-
-        // Only apply padding if there is a positive gap
         if (gapToNext > 0) {
           paddingBottomOverride = gapToNext;
         }
       }
 
-      // Determine if label should be shown
       const showLabel = isStart && !sdtLabelsRendered.has(currentKey);
       if (showLabel) {
         sdtLabelsRendered.add(currentKey);

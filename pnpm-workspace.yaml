@@ -30,7 +30,7 @@ catalog:
   eslint-config-prettier: ^9.1.0
   eslint-import-resolver-typescript: ^4.4.4
   eslint-plugin-import-x: ^4.16.1
-  eslint-plugin-jsdoc: ^54.1.0
+  eslint-plugin-jsdoc: ^62.4.1
   eventemitter3: ^5.0.1
   happy-dom: ^20.3.4
   he: ^1.2.0

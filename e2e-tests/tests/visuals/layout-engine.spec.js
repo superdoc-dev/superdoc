@@ -42,5 +42,70 @@ if (!shouldRun) {
         });
       });
     });
+
+    const loadStructuredContentDocument = async (page) => {
+      const superEditor = await goToPageAndWaitForEditor(page, { layout: 1 });
+      const fileInput = page.locator('input[type="file"]');
+
+      await fileInput.setInputFiles('./test-data/structured-content/sdt-basic.docx');
+
+      await page.waitForFunction(() => window.superdoc !== undefined && window.editor !== undefined, null, {
+        polling: 100,
+        timeout: 10_000,
+      });
+
+      await page.waitForFunction(() => {
+        const toolbar = document.querySelector('#toolbar');
+        return toolbar && toolbar.children.length > 0;
+      });
+
+      return superEditor;
+    };
+
+    test('structured content: inline selection (sdt-basic.docx)', async ({ page }) => {
+      const superEditor = await loadStructuredContentDocument(page);
+      const inlineStructuredContent = page.locator('.superdoc-structured-content-inline').first();
+
+      await expect(inlineStructuredContent).toBeVisible();
+      await inlineStructuredContent.scrollIntoViewIfNeeded();
+      await inlineStructuredContent.hover();
+      await inlineStructuredContent.click({ force: true });
+      await expect(inlineStructuredContent).toHaveClass(/ProseMirror-selectednode/);
+      await page.waitForFunction(() => {
+        return document.querySelectorAll('.superdoc-structured-content-block.sdt-group-hover').length === 0;
+      });
+      const inlineEditorBox = await superEditor.boundingBox();
+      if (inlineEditorBox) {
+        await page.mouse.move(inlineEditorBox.x - 10, inlineEditorBox.y - 10);
+      }
+
+      await expect(superEditor).toHaveScreenshot();
+    });
+
+    test('structured content: block selection (sdt-basic.docx)', async ({ page }) => {
+      const superEditor = await loadStructuredContentDocument(page);
+      const blockStructuredContent = page.locator('.superdoc-structured-content-block').first();
+
+      await expect(blockStructuredContent).toBeVisible();
+      await blockStructuredContent.scrollIntoViewIfNeeded();
+      await blockStructuredContent.hover();
+      await blockStructuredContent.click({ force: true });
+      await expect(blockStructuredContent).toHaveClass(/ProseMirror-selectednode/);
+      const blockEditorBox = await superEditor.boundingBox();
+      if (blockEditorBox) {
+        await page.mouse.move(blockEditorBox.x - 10, blockEditorBox.y - 10);
+      }
+      await page.waitForFunction(
+        () => {
+          const block = document.querySelector('.superdoc-structured-content-block');
+          if (block?.matches(':hover')) return false;
+          return document.querySelectorAll('.superdoc-structured-content-block.sdt-group-hover').length === 0;
+        },
+        null,
+        { timeout: 2_000 },
+      );
+
+      await expect(superEditor).toHaveScreenshot();
+    });
   });
 }

@@ -37,7 +37,10 @@ import { handleImageNode } from './image.js';
 // Helper functions for inline image detection and conversion
 // ============================================================================
 
-const isNodeHidden = (node: PMNode): boolean => {
+const isHiddenShape = (node: PMNode): boolean => {
+  if (!node.type.toLowerCase().includes('shape')) {
+    return false;
+  }
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
   if (attrs.hidden === true) return true;
   return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
@@ -335,6 +338,9 @@ export function paragraphToFlowBlocks({
       suppressedByVanish = true;
       return;
     }
+    if (isHiddenShape(node)) {
+      return;
+    }
 
     const inlineConverterParams = {
       node: node,
@@ -471,77 +477,41 @@ export function paragraphToFlowBlocks({
     }
 
     if (node.type === 'vectorShape') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
       const anchorParagraphId = nextId();
       flushParagraph();
-      if (converters?.vectorShapeNodeToDrawingBlock) {
-        const drawingBlock = converters.vectorShapeNodeToDrawingBlock(node, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
+      const drawingBlock = converters.vectorShapeNodeToDrawingBlock(node, nextBlockId, positions);
+      if (drawingBlock) {
+        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
       return;
     }
 
     if (node.type === 'shapeGroup') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
       const anchorParagraphId = nextId();
       flushParagraph();
-      if (converters?.shapeGroupNodeToDrawingBlock) {
-        const drawingBlock = converters.shapeGroupNodeToDrawingBlock(node, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
+      const drawingBlock = converters.shapeGroupNodeToDrawingBlock(node, nextBlockId, positions);
+      if (drawingBlock) {
+        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
       return;
     }
 
     if (node.type === 'shapeContainer') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
       const anchorParagraphId = nextId();
       flushParagraph();
-      if (converters?.shapeContainerNodeToDrawingBlock) {
-        const drawingBlock = converters.shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
+      const drawingBlock = converters.shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
+      if (drawingBlock) {
+        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
       return;
     }
 
     if (node.type === 'shapeTextbox') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
       const anchorParagraphId = nextId();
       flushParagraph();
-      if (converters?.shapeTextboxNodeToDrawingBlock) {
-        const drawingBlock = converters.shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
+      const drawingBlock = converters.shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
+      if (drawingBlock) {
+        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
       return;
     }
@@ -554,22 +524,20 @@ export function paragraphToFlowBlocks({
       }
       const anchorParagraphId = nextId();
       flushParagraph();
-      if (converters?.tableNodeToBlock) {
-        const tableBlock = converters.tableNodeToBlock({
-          node,
-          nextBlockId,
-          positions,
-          trackedChangesConfig,
-          bookmarks,
-          hyperlinkConfig,
-          themeColors,
-          converterContext,
-          converters,
-          enableComments,
-        });
-        if (tableBlock) {
-          blocks.push(attachAnchorParagraphId(tableBlock, anchorParagraphId));
-        }
+      const tableBlock = converters.tableNodeToBlock({
+        node,
+        nextBlockId,
+        positions,
+        trackedChangesConfig,
+        bookmarks,
+        hyperlinkConfig,
+        themeColors,
+        converterContext,
+        converters,
+        enableComments,
+      });
+      if (tableBlock) {
+        blocks.push(attachAnchorParagraphId(tableBlock, anchorParagraphId));
       }
       return;
     }

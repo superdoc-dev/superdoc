@@ -186,6 +186,21 @@ describe('importCommentData metadata parsing', () => {
     expect(comment.trackedChangeType).toBeUndefined();
     expect(comment.trackedDeletedText).toBeNull();
   });
+
+  it('preserves multiple text elements for comments with several paragraphs', () => {
+    const docx = buildDocx({
+      comments: [
+        {
+          id: 8,
+          elements: [{ fakeParaId: 'first-para' }, { fakeParaId: 'second-para' }],
+        },
+      ],
+    });
+
+    const [comment] = importCommentData({ docx });
+    expect(comment.textElements).toHaveLength(2);
+    expect(comment.textJson).toEqual(comment.textElements[0]);
+  });
 });
 
 describe('importCommentData extended metadata', () => {

@@ -30,6 +30,7 @@ export function importCommentData({ docx, editor, converter }) {
   const { elements } = comments;
   if (!elements || !elements.length) return;
 
+  console.log('[debug] comments:', comments);
   const { elements: allComments = [] } = elements[0];
   const extractedComments = allComments.map((el) => {
     const { attributes } = el;
@@ -58,9 +59,11 @@ export function importCommentData({ docx, editor, converter }) {
       path: [el],
     });
 
+    console.log('[debug] parsedElements:', parsedElements);
     // Per OOXML spec, commentsExtended.xml links via the LAST paragraph's paraId
     // when a comment has multiple paragraphs
-    const lastElement = parsedElements[parsedElements.length - 1];
+    const textElements = Array.isArray(parsedElements) ? parsedElements : parsedElements ? [parsedElements] : [];
+    const lastElement = textElements[textElements.length - 1];
     const paraId = lastElement?.attrs?.['w14:paraId'];
 
     const threadingMethod = commentThreadingProfile.defaultStyle;
@@ -71,8 +74,9 @@ export function importCommentData({ docx, editor, converter }) {
       creatorName: authorName,
       creatorEmail: authorEmail,
       createdTime: unixTimestampMs,
-      textJson: parsedElements[0],
-      elements: parsedElements,
+      textElements,
+      textJson: textElements[0],
+      elements: textElements,
       initials,
       paraId,
       trackedChange,

@@ -620,7 +620,12 @@ export const useCommentsStore = defineStore('comments', () => {
     }
 
     comments.forEach((comment) => {
-      const htmlContent = getHtmlFromComment(comment.textJson);
+      const textElements = Array.isArray(comment.textElements)
+        ? comment.textElements
+        : comment.textJson
+          ? [comment.textJson]
+          : [];
+      const htmlContent = getHtmlFromComment(textElements);
 
       if (!htmlContent && !comment.trackedChange) {
         return;
@@ -631,7 +636,7 @@ export const useCommentsStore = defineStore('comments', () => {
       const newComment = useComment({
         fileId: documentId,
         fileType: document.type,
-        docxCommentJSON: comment.textJson,
+        docxCommentJSON: comment.textJson ?? textElements[0],
         commentId: comment.commentId,
         isInternal: false,
         parentCommentId: comment.parentCommentId,
@@ -643,7 +648,7 @@ export const useCommentsStore = defineStore('comments', () => {
           name: importedName,
           email: comment.creatorEmail,
         },
-        commentText: getHtmlFromComment(comment.textJson),
+        commentText: htmlContent,
         resolvedTime: comment.isDone ? Date.now() : null,
         resolvedByEmail: comment.isDone ? comment.creatorEmail : null,
         resolvedByName: comment.isDone ? importedName : null,
@@ -788,6 +793,13 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {string} The HTML content
    */
   const normalizeCommentForEditor = (node) => {
+    if (Array.isArray(node)) {
+      return node
+        .map((child) => normalizeCommentForEditor(child))
+        .flat()
+        .filter(Boolean);
+    }
+
     if (!node || typeof node !== 'object') return node;
 
     const stripTextStyleAttrs = (attrs) => {
@@ -840,18 +852,31 @@ export const useCommentsStore = defineStore('comments', () => {
     };
   };
 
-  const getHtmlFromComment = (commentTextJson) => {
+  const getHtmlFromComment = (commentTextElements) => {
     // If no content, we can't convert and its not a valid comment
-    if (!commentTextJson.content?.length) return;
+    const elementsArray = Array.isArray(commentTextElements)
+      ? commentTextElements
+      : commentTextElements
+        ? [commentTextElements]
+        : [];
+    const hasContent = elementsArray.some((element) => element?.content?.length);
+    if (!hasContent) return;
 
     try {
-      const normalizedContent = normalizeCommentForEditor(commentTextJson);
-      const schemaContent = Array.isArray(normalizedContent) ? normalizedContent[0] : normalizedContent;
-      if (!schemaContent.content.length) return null;
+      const normalizedContent = normalizeCommentForEditor(elementsArray);
+      const contentArray = Array.isArray(normalizedContent)
+        ? normalizedContent
+        : normalizedContent
+          ? [normalizedContent]
+          : [];
+      if (!contentArray.length) return null;
       const editor = new Editor({
         mode: 'text',
         isHeadless: true,
-        content: schemaContent,
+        content: {
+          type: 'doc',
+          content: contentArray,
+        },
         loadFromSchema: true,
         extensions: getRichTextExtensions(),
       });

@@ -312,7 +312,6 @@ export type ParagraphToFlowBlocksParams = {
 };
 
 export type TableNodeToBlockParams = {
-  node: PMNode;
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
   trackedChangesConfig: TrackedChangesConfig;

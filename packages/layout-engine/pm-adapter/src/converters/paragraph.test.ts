@@ -47,6 +47,10 @@ vi.mock('./inline-converters/generic-token.js', () => ({
   tokenNodeToRun: vi.fn(),
 }));
 
+vi.mock('./table.js', () => ({
+  tableNodeToBlock: vi.fn(),
+}));
+
 vi.mock('./shapes.js', () => ({
   vectorShapeNodeToDrawingBlock: vi.fn(),
   shapeGroupNodeToDrawingBlock: vi.fn(),
@@ -99,6 +103,7 @@ import {
   shapeContainerNodeToDrawingBlock,
   shapeTextboxNodeToDrawingBlock,
 } from './shapes.js';
+import { tableNodeToBlock } from './table.js';
 import { computeParagraphAttrs, cloneParagraphAttrs, deepClone, hasPageBreakBefore } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
 import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
@@ -1942,9 +1947,7 @@ describe('paragraph converters', () => {
           attrs: {},
         };
 
-        const converters = {
-          tableNodeToBlock: vi.fn().mockReturnValue(mockTableBlock),
-        };
+        vi.mocked(tableNodeToBlock).mockReturnValue(mockTableBlock as never);
 
         const bookmarks = new Map<string, number>();
         const hyperlinkConfig: HyperlinkConfig = { enableRichHyperlinks: false };
@@ -1960,12 +1963,11 @@ describe('paragraph converters', () => {
           bookmarks,
           hyperlinkConfig,
           undefined,
-          converters as never,
         );
 
-        expect(converters.tableNodeToBlock).toHaveBeenCalledWith(
+        expect(tableNodeToBlock).toHaveBeenCalledWith(
+          tableNode,
           expect.objectContaining({
-            node: tableNode,
             nextBlockId,
             positions,
             trackedChangesConfig: trackedChanges,

@@ -60,8 +60,7 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     } else if (child.type === 'table') {
       const tableNodeToBlock = converters?.tableNodeToBlock;
       if (tableNodeToBlock) {
-        const tableBlock = tableNodeToBlock({
-          node: child,
+        const tableBlock = tableNodeToBlock(child, {
           nextBlockId,
           positions,
           trackedChangesConfig,

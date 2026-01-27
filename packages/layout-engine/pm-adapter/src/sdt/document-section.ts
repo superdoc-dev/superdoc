@@ -104,8 +104,7 @@ function processTableChild(
   output: ProcessingOutput,
   converters: NestedConverters,
 ): void {
-  const tableBlock = converters.tableNodeToBlock({
-    node: child,
+  const tableBlock = converters.tableNodeToBlock(child, {
     nextBlockId: context.nextBlockId,
     positions: context.positions,
     trackedChangesConfig: context.trackedChangesConfig,
@@ -194,8 +193,7 @@ function processNestedStructuredContent(
         output.recordBlockKind?.(block.kind);
       });
     } else if (grandchild.type === 'table') {
-      const tableBlock = converters.tableNodeToBlock({
-        node: grandchild,
+      const tableBlock = converters.tableNodeToBlock(grandchild, {
         nextBlockId: context.nextBlockId,
         positions: context.positions,
         trackedChangesConfig: context.trackedChangesConfig,

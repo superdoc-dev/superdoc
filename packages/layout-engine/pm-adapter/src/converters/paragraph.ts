@@ -51,6 +51,7 @@ import {
   shapeTextboxNodeToDrawingBlock,
   vectorShapeNodeToDrawingBlock,
 } from './shapes.js';
+import { tableNodeToBlock } from './table.js';
 
 // ============================================================================
 // Helper functions for inline image detection and conversion
@@ -446,32 +447,6 @@ export function paragraphToFlowBlocks({
       }
       return;
     }
-
-    // Tables may occasionally appear inline via wrappers; treat as block-level
-    if (node.type === 'table') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      const tableBlock = converters.tableNodeToBlock({
-        node,
-        nextBlockId,
-        positions,
-        trackedChangesConfig,
-        bookmarks,
-        hyperlinkConfig,
-        themeColors,
-        converterContext,
-        converters,
-        enableComments,
-      });
-      if (tableBlock) {
-        blocks.push(attachAnchorParagraphId(tableBlock, anchorParagraphId));
-      }
-      return;
-    }
   };
 
   para.content.forEach((child) => {
@@ -585,6 +560,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   lineBreak: {
     inlineConverter: lineBreakNodeToRun,
     blockConverter: lineBreakNodeToBreakBlock,
+  },
+  table: {
+    blockConverter: tableNodeToBlock,
   },
 };
 

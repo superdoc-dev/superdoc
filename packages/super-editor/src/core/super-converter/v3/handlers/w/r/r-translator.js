@@ -7,7 +7,10 @@ import { translator as wHyperlinkTranslator } from '../hyperlink/hyperlink-trans
 import { translator as wRPrTranslator } from '../rpr';
 import validXmlAttributes from './attributes/index.js';
 import { handleStyleChangeMarksV2 } from '../../../../v2/importer/markImporter.js';
-import { encodeMarksFromRPr, resolveRunProperties } from '../../../../styles.js';
+import { encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
+import { TrackFormatMarkName } from '@extensions/track-changes/constants.js';
+import { createTrackStyleMark } from '@converter/v3/handlers/helpers.js';
+
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:r';
 
@@ -175,6 +178,21 @@ const decode = (params, decodedAttrs = {}) => {
     ...params,
     node: { attrs: { runProperties: runProperties } },
   });
+
+  const trackFormatMark = trackingMarksByType.get(TrackFormatMarkName);
+  if (trackFormatMark) {
+    const rPrChangeElement = createTrackStyleMark([trackFormatMark]);
+    if (rPrChangeElement) {
+      if (!runPropertiesElement) {
+        runPropertiesElement = { name: 'w:rPr', elements: [] };
+      }
+      if (!Array.isArray(runPropertiesElement.elements)) {
+        runPropertiesElement.elements = [];
+      }
+      runPropertiesElement.elements = runPropertiesElement.elements.filter((el) => el?.name !== 'w:rPrChange');
+      runPropertiesElement.elements.push(rPrChangeElement);
+    }
+  }
 
   const runPropsTemplate = runPropertiesElement ? cloneXmlNode(runPropertiesElement) : null;
   const applyBaseRunProps = (runNode) => applyRunPropertiesTemplate(runNode, runPropsTemplate);

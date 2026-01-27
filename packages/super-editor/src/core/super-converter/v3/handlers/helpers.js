@@ -7,6 +7,14 @@ import { processOutputMarks } from '@converter/exporter.js';
 export const createTrackStyleMark = (marks) => {
   const trackStyleMark = marks.find((mark) => mark.type === 'trackFormat');
   if (trackStyleMark) {
+    const beforeMarks = Array.isArray(trackStyleMark.attrs.before) ? trackStyleMark.attrs.before : [];
+    const beforeElements = beforeMarks
+      .flatMap((mark) => processOutputMarks([mark]) || [])
+      .filter((element) => element && typeof element === 'object');
+    const rPrElement = {
+      name: 'w:rPr',
+      elements: beforeElements,
+    };
     return {
       type: 'element',
       name: 'w:rPrChange',
@@ -16,7 +24,7 @@ export const createTrackStyleMark = (marks) => {
         'w:authorEmail': trackStyleMark.attrs.authorEmail,
         'w:date': trackStyleMark.attrs.date,
       },
-      elements: trackStyleMark.attrs.before.map((mark) => processOutputMarks([mark])).filter((r) => r !== undefined),
+      elements: [rPrElement],
     };
   }
   return undefined;

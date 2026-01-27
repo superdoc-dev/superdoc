@@ -1,4 +1,4 @@
-import { TrackDeleteMarkName, TrackInsertMarkName } from '@extensions/track-changes/constants.js';
+import { TrackDeleteMarkName, TrackInsertMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 
 const cloneMark = (mark) => {
   if (!mark) return mark;
@@ -24,8 +24,9 @@ const cloneRuns = (runs = []) => runs.map((run) => cloneNode(run));
 
 export const prepareRunTrackingContext = (node = {}) => {
   const marks = Array.isArray(node.marks) ? node.marks : [];
-  const trackingMarks = marks.filter(
-    (mark) => mark?.type === TrackInsertMarkName || mark?.type === TrackDeleteMarkName,
+
+  const trackingMarks = marks.filter((mark) =>
+    [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName].includes(mark?.type),
   );
 
   if (!trackingMarks.length) {
@@ -88,7 +89,8 @@ export const ensureTrackedWrapper = (runs, trackingMarksByType = new Map()) => {
 
   if (!trackingMarksByType.size) return runs;
 
-  if (trackingMarksByType.has(TrackInsertMarkName)) {
+  const isTrackInsertMark = trackingMarksByType.has(TrackInsertMarkName);
+  if (isTrackInsertMark) {
     const mark = trackingMarksByType.get(TrackInsertMarkName);
     const clonedRuns = cloneRuns(runs);
     const wrapper = {
@@ -107,7 +109,8 @@ export const ensureTrackedWrapper = (runs, trackingMarksByType = new Map()) => {
     return [wrapper];
   }
 
-  if (trackingMarksByType.has(TrackDeleteMarkName)) {
+  const isTrackDeleteMark = trackingMarksByType.has(TrackDeleteMarkName);
+  if (isTrackDeleteMark) {
     const mark = trackingMarksByType.get(TrackDeleteMarkName);
     const clonedRuns = cloneRuns(runs);
     clonedRuns.forEach(renameTextElementsForDeletion);

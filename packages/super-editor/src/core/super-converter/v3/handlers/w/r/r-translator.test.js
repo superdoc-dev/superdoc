@@ -222,4 +222,50 @@ describe('w:r r-translator (node)', () => {
       }),
     );
   });
+
+  it('adds w:rPrChange to run properties when a track format mark is present', () => {
+    const trackFormatMark = {
+      type: 'trackFormat',
+      attrs: {
+        id: 'fmt-1',
+        author: 'Alice',
+        authorEmail: 'alice@example.com',
+        date: '2024-09-04T09:29:00Z',
+        before: [{ type: 'bold', attrs: { value: true } }],
+      },
+    };
+
+    const node = {
+      type: 'run',
+      marks: [trackFormatMark],
+      content: [
+        {
+          type: 'text',
+          text: 'changed text',
+          marks: [{ type: 'bold', attrs: { value: true } }],
+        },
+      ],
+    };
+
+    const result = translator.decode({
+      node,
+      editor: { extensionService: { extensions: [] } },
+    });
+
+    expect(result.name).toBe('w:r');
+    const rPr = result.elements?.find((el) => el.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    const change = rPr.elements?.find((el) => el.name === 'w:rPrChange');
+    expect(change).toBeDefined();
+    expect(change.attributes).toMatchObject({
+      'w:id': 'fmt-1',
+      'w:author': 'Alice',
+      'w:authorEmail': 'alice@example.com',
+      'w:date': '2024-09-04T09:29:00Z',
+    });
+    const beforeRPr = change.elements?.find((el) => el.name === 'w:rPr');
+    expect(beforeRPr).toBeDefined();
+    const boldElement = beforeRPr.elements?.find((el) => el.name === 'w:b');
+    expect(boldElement).toBeDefined();
+  });
 });

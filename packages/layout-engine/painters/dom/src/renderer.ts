@@ -2860,9 +2860,9 @@ export class DomPainter {
     textDiv.style.display = 'flex';
     textDiv.style.flexDirection = 'column';
 
-    // Use extracted vertical alignment or default to center
+    // Use extracted vertical alignment or default to top per OOXML spec
     // In flex-direction: column, justifyContent controls vertical (main axis)
-    const verticalAlign = textVerticalAlign ?? 'center';
+    const verticalAlign = textVerticalAlign ?? 'top';
     if (verticalAlign === 'top') {
       textDiv.style.justifyContent = 'flex-start';
     } else if (verticalAlign === 'bottom') {

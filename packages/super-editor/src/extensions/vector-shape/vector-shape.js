@@ -143,7 +143,7 @@ export const VectorShape = Node.create({
       },
 
       textVerticalAlign: {
-        default: 'center',
+        default: 'top', // Per OOXML spec, text box defaults to top alignment
         rendered: false,
       },
 

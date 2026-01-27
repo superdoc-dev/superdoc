@@ -8,7 +8,7 @@
  */
 
 import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
-import type { FlowBlock, Run, TextRun, SdtMetadata } from '@superdoc/contracts';
+import type { FlowBlock, Run, TextRun, SdtMetadata, DrawingBlock } from '@superdoc/contracts';
 import type { PMNode, PMMark, NodeHandlerContext, ParagraphToFlowBlocksParams } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
@@ -16,12 +16,16 @@ import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBr
 import { trackedChangesCompatible, applyMarksToRun } from '../marks/index.js';
 import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
 import { textNodeToRun } from './inline-converters/text-run.js';
-import { contentBlockNodeToDrawingBlock } from './content-block.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
-import { HiddenByVanishError, NotInlineNodeError } from './inline-converters/common.js';
+import {
+  HiddenByVanishError,
+  NotInlineNodeError,
+  InlineConverterParams,
+  BlockConverterOptions,
+} from './inline-converters/common.js';
 import { runNodeChildrenToRuns } from './inline-converters/run.js';
 import { structuredContentNodeToBlocks } from './inline-converters/structured-content.js';
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
@@ -34,6 +38,12 @@ import { lineBreakNodeToRun } from './inline-converters/line-break.js';
 import { lineBreakNodeToBreakBlock } from './break.js';
 import { inlineContentBlockConverter } from './inline-converters/content-block.js';
 import { handleImageNode } from './image.js';
+import {
+  shapeContainerNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+  vectorShapeNodeToDrawingBlock,
+} from './shapes.js';
 
 // ============================================================================
 // Helper functions for inline image detection and conversion
@@ -364,118 +374,60 @@ export function paragraphToFlowBlocks({
       nextBlockId,
     };
 
-    if (node.type === 'footnoteReference') {
-      const run = footnoteReferenceToBlock(inlineConverterParams);
+    const blockOptions: BlockConverterOptions = {
+      blocks,
+      nextBlockId,
+      nextId,
+      positions,
+      trackedChangesConfig,
+      defaultFont,
+      defaultSize,
+      converterContext,
+      hyperlinkConfig,
+      enableComments,
+      bookmarks: bookmarks!,
+      converters,
+      paragraphAttrs,
+    };
 
-      currentRuns.push(run);
-      return;
-    }
-
-    if (node.type === 'text' && node.text) {
-      const run = textNodeToRun(inlineConverterParams);
-
-      currentRuns.push(run);
-      return;
-    }
-
-    if (node.type === 'run' && Array.isArray(node.content)) {
-      try {
-        runNodeChildrenToRuns(inlineConverterParams);
-      } catch (error) {
-        if (error instanceof HiddenByVanishError) {
-          suppressedByVanish = true;
-        } else {
-          throw error;
-        }
-      }
-      return;
-    }
-
-    // SDT inline structured content: treat as transparent container
-    if (node.type === 'structuredContent' && Array.isArray(node.content)) {
-      structuredContentNodeToBlocks(inlineConverterParams);
-      return;
-    }
-
-    // SDT fieldAnnotation: create FieldAnnotationRun for pill-style rendering
-    if (node.type === 'fieldAnnotation') {
-      const run = fieldAnnotationNodeToRun(inlineConverterParams);
-      currentRuns.push(run);
-      return;
-    }
-
-    if (node.type === 'pageReference') {
-      const run = pageReferenceNodeToBlock(inlineConverterParams);
-      if (run) {
-        currentRuns.push(run);
-      }
-      return;
-    }
-
-    if (node.type === 'bookmarkStart') {
-      bookmarkStartNodeToBlocks(inlineConverterParams);
-      return;
-    }
-
-    if (node.type === 'tab') {
-      const tabRun = tabNodeToRun(inlineConverterParams);
-      tabOrdinal += 1;
-      if (tabRun) {
-        currentRuns.push(tabRun);
-      }
-      return;
-    }
-
-    if (TOKEN_INLINE_TYPES.has(node.type)) {
-      const tokenRun = tokenNodeToRun(inlineConverterParams);
-      if (tokenRun) {
-        currentRuns.push(tokenRun);
-      }
-      return;
-    }
-
-    if (node.type === 'image') {
-      try {
-        const imageRun = imageNodeToRun(inlineConverterParams);
-        if (imageRun) {
-          currentRuns.push(imageRun);
-        }
-      } catch (error) {
-        if (error instanceof NotInlineNodeError) {
-          const anchorParagraphId = nextId();
-          flushParagraph();
-          const imageBlock = handleImageNode(node, {
-            blocks,
-            nextBlockId,
-            positions,
-            trackedChangesConfig,
-            defaultFont,
-            defaultSize,
-            converterContext,
-            hyperlinkConfig,
-            enableComments,
-            bookmarks,
-            converters,
-          });
-          if (imageBlock) {
-            attachAnchorParagraphId(imageBlock, anchorParagraphId);
+    if (INLINE_CONVERTERS_REGISTRY[node.type]) {
+      const { inlineConverter, extraCheck, blockConverter } = INLINE_CONVERTERS_REGISTRY[node.type];
+      if (!extraCheck || extraCheck(node)) {
+        try {
+          if (!inlineConverter) {
+            throw new NotInlineNodeError();
+          } else {
+            const run = inlineConverter(inlineConverterParams);
+            if (run) {
+              currentRuns.push(run);
+              if (node.type === 'tab') {
+                tabOrdinal += 1;
+              }
+            }
           }
-        } else {
-          throw error;
+        } catch (error) {
+          if (error instanceof HiddenByVanishError) {
+            suppressedByVanish = true;
+          } else if (error instanceof NotInlineNodeError && blockConverter) {
+            const anchorParagraphId = nextId();
+            flushParagraph();
+            const newBlocks: FlowBlock[] = [];
+            const block = blockConverter(node, { ...blockOptions, blocks: newBlocks });
+            if (block) {
+              attachAnchorParagraphId(block, anchorParagraphId);
+              blocks.push(block);
+            } else if (newBlocks.length > 0) {
+              newBlocks.forEach((b) => {
+                attachAnchorParagraphId(b, anchorParagraphId);
+                blocks.push(b);
+              });
+            }
+          } else {
+            throw error;
+          }
         }
+        return;
       }
-
-      return;
-    }
-
-    if (node.type === 'contentBlock') {
-      const block = inlineContentBlockConverter(inlineConverterParams);
-      if (block) {
-        const anchorParagraphId = nextId();
-        flushParagraph();
-        blocks.push(attachAnchorParagraphId(block, anchorParagraphId));
-      }
-      return;
     }
 
     if (node.type === 'vectorShape') {
@@ -543,25 +495,6 @@ export function paragraphToFlowBlocks({
       }
       return;
     }
-
-    // Hard / line breaks
-    if (node.type === 'hardBreak' || node.type === 'lineBreak') {
-      try {
-        const lineBreakRun = lineBreakNodeToRun(inlineConverterParams);
-        currentRuns.push(lineBreakRun);
-      } catch (error) {
-        if (error instanceof NotInlineNodeError) {
-          flushParagraph();
-          const anchorParagraphId = nextId();
-          const breakBlock = lineBreakNodeToBreakBlock(node, nextId);
-          if (breakBlock) {
-            blocks.push(attachAnchorParagraphId(breakBlock, anchorParagraphId));
-          }
-        } else {
-          throw error;
-        }
-      }
-    }
   };
 
   para.content.forEach((child) => {
@@ -626,6 +559,70 @@ export function paragraphToFlowBlocks({
 
   return processedBlocks;
 }
+
+type InlineConverterSpec = {
+  inlineConverter?: (params: InlineConverterParams) => Run | void | null;
+  extraCheck?: (node: PMNode) => boolean;
+  blockConverter?: (node: PMNode, options: BlockConverterOptions) => FlowBlock | DrawingBlock | void | null;
+};
+
+const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
+  footnoteReference: {
+    inlineConverter: footnoteReferenceToBlock,
+  },
+  text: {
+    inlineConverter: textNodeToRun,
+    extraCheck: (node: PMNode) => Boolean(node.text),
+  },
+  run: {
+    inlineConverter: runNodeChildrenToRuns,
+    extraCheck: (node: PMNode) => Array.isArray(node.content),
+  },
+  structuredContent: {
+    inlineConverter: structuredContentNodeToBlocks,
+    extraCheck: (node: PMNode) => Array.isArray(node.content),
+  },
+  fieldAnnotation: {
+    inlineConverter: fieldAnnotationNodeToRun,
+  },
+  pageReference: {
+    inlineConverter: pageReferenceNodeToBlock,
+  },
+  bookmarkStart: {
+    inlineConverter: bookmarkStartNodeToBlocks,
+  },
+  tab: {
+    inlineConverter: tabNodeToRun,
+  },
+  image: {
+    inlineConverter: imageNodeToRun,
+    blockConverter: handleImageNode,
+  },
+  contentBlock: {
+    blockConverter: inlineContentBlockConverter,
+  },
+  hardBreak: {
+    inlineConverter: lineBreakNodeToRun,
+    blockConverter: lineBreakNodeToBreakBlock,
+  },
+  lineBreak: {
+    inlineConverter: lineBreakNodeToRun,
+    blockConverter: lineBreakNodeToBreakBlock,
+  },
+};
+
+for (const type of TOKEN_INLINE_TYPES.keys()) {
+  INLINE_CONVERTERS_REGISTRY[type] = {
+    inlineConverter: tokenNodeToRun,
+  };
+}
+
+const SHAPE_CONVERTERS = {
+  vectorShape: vectorShapeNodeToDrawingBlock,
+  shapeGroup: shapeGroupNodeToDrawingBlock,
+  shapeContainer: shapeContainerNodeToDrawingBlock,
+  shapeTextbox: shapeTextboxNodeToDrawingBlock,
+};
 
 /**
  * Handle paragraph nodes.

@@ -12,7 +12,7 @@ export function footnoteReferenceToBlock(params: InlineConverterParams): TextRun
 
   const run = textNodeToRun({
     ...params,
-    node: { type: 'text', text: displayText } as PMNode,
+    node: { type: 'text', text: displayText, marks: [...(node.marks ?? [])] } as PMNode,
   });
 
   // Copy PM positions from the parent footnoteReference node

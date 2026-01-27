@@ -141,6 +141,16 @@ const encode = (params, encodedAttrs = {}) => {
   return splitRuns;
 };
 
+const addRPrChange = (runPropertiesElement, trackingMarksByType) => {
+  const trackFormatMark = trackingMarksByType.get(TrackFormatMarkName);
+  if (trackFormatMark) {
+    const rPrChangeElement = decodeTrackFormatMark([trackFormatMark]);
+    if (rPrChangeElement) {
+      runPropertiesElement.elements.push(rPrChangeElement);
+    }
+  }
+};
+
 const decode = (params, decodedAttrs = {}) => {
   const { node } = params || {};
   if (!node) return undefined;
@@ -181,17 +191,7 @@ const decode = (params, decodedAttrs = {}) => {
 
   const trackFormatMark = trackingMarksByType.get(TrackFormatMarkName);
   if (trackFormatMark) {
-    const rPrChangeElement = decodeTrackFormatMark([trackFormatMark]);
-    if (rPrChangeElement) {
-      if (!runPropertiesElement) {
-        runPropertiesElement = { name: 'w:rPr', elements: [] };
-      }
-      if (!Array.isArray(runPropertiesElement.elements)) {
-        runPropertiesElement.elements = [];
-      }
-      runPropertiesElement.elements = runPropertiesElement.elements.filter((el) => el?.name !== 'w:rPrChange');
-      runPropertiesElement.elements.push(rPrChangeElement);
-    }
+    addRPrChange(runPropertiesElement, trackingMarksByType);
   }
 
   const runPropsTemplate = runPropertiesElement ? cloneXmlNode(runPropertiesElement) : null;

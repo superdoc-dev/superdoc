@@ -99,11 +99,11 @@ describe('handleDocxPaste', () => {
         </head>
         <body>
           <ol type="1" start="1">
-            <li class="MsoListParagraph" style="mso-list:l0 level1 lfo1">
-              <span>First item</span>
+            <li class="MsoListParagraph" style="mso-list:l0 level1 lfo1;font-size:13pt;font-family:Calibri">
+              <span style="font-size:13pt;font-family:Calibri">First item</span>
             </li>
           </ol>
-          <p class="MsoListParagraph" style="mso-list:l0 level1 lfo1">
+          <p class="MsoListParagraph" style="mso-list:l0 level1 lfo1;font-size:13pt;font-family:Calibri">
             <!--[if !supportLists]--><span style="font-family:Arial;font-size:12pt">2.</span><!--[endif]-->
             Second item
           </p>

@@ -69,6 +69,10 @@ const encode = (params, encodedAttrs = {}) => {
   const contentWithRunMarks = (Array.isArray(content) ? content : []).map((child) => {
     if (!child || typeof child !== 'object') return child;
 
+    if (child.type === 'passthroughInline') {
+      return { ...child, marks: [] };
+    }
+
     // Preserve existing marks on child nodes
     const baseMarks = Array.isArray(child.marks) ? child.marks : [];
 

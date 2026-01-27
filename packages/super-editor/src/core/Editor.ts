@@ -52,9 +52,18 @@ import { buildSchemaSummary } from './schema-summary.js';
 import { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
+import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
+import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
+
+/**
+ * Constants for layout calculations
+ */
+const PIXELS_PER_INCH = 96;
+const MAX_HEIGHT_BUFFER_PX = 50;
+const MAX_WIDTH_BUFFER_PX = 20;
 
 /**
  * Image storage structure used by the image extension
@@ -264,6 +273,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     isCommentsEnabled: false,
     isNewFile: false,
     scale: 1,
+    viewOptions: { layout: 'print' },
     annotations: false,
     isInternal: false,
     externalExtensions: [],
@@ -633,6 +643,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
         } else {
           // Browser: fetch the file
           const response = await fetch(source);
+          if (!response.ok) {
+            console.debug('[SuperDoc] Fetch failed:', response.status, response.statusText);
+            throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+          }
           const blob = await response.blob();
           const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(blob))!;
           resolvedOptions.content = docx;
@@ -671,13 +685,41 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       } else {
         // Blank document (source is undefined or null)
-        // Use pre-parsed content from options if provided, otherwise create minimal structure
-        resolvedOptions.content = (options?.content ?? []) as string | Record<string, unknown> | DocxFileEntry[];
-        resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
-        resolvedOptions.fonts = options?.fonts ?? {};
-        resolvedOptions.fileSource = null;
-        resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
-        this.#sourcePath = null;
+        // For docx mode without pre-parsed content, load the blank.docx template
+        const shouldLoadBlankDocx =
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+
+        if (shouldLoadBlankDocx) {
+          // Decode base64 blank.docx without fetch
+          const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
+          const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
+          const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
+          // Use Uint8Array to ensure compatibility with both Node Buffer and browser Blob
+          const uint8Array = new Uint8Array(arrayBuffer);
+          let fileSource: File | Blob | Buffer;
+          if (canUseBuffer) {
+            fileSource = Buffer.from(uint8Array);
+          } else if (typeof Blob !== 'undefined') {
+            fileSource = new Blob([uint8Array as BlobPart]);
+          } else {
+            throw new Error('Blob is not available to create blank DOCX');
+          }
+          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
+          resolvedOptions.content = docx;
+          resolvedOptions.mediaFiles = mediaFiles;
+          resolvedOptions.fonts = fonts;
+          resolvedOptions.fileSource = fileSource;
+          resolvedOptions.isNewFile = true;
+          this.#sourcePath = null;
+        } else {
+          // Use pre-parsed content from options if provided, otherwise create minimal structure
+          resolvedOptions.content = (options?.content ?? []) as string | Record<string, unknown> | DocxFileEntry[];
+          resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
+          resolvedOptions.fonts = options?.fonts ?? {};
+          resolvedOptions.fileSource = null;
+          resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
+          this.#sourcePath = null;
+        }
       }
 
       // Update options
@@ -753,6 +795,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      console.debug('[SuperDoc] Document load error:', err.message);
       throw new DocumentLoadError(`Failed to load document: ${err.message}`, err);
     }
   }
@@ -1007,6 +1050,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
       );
       (global as typeof globalThis).window = options.mockWindow as Window & typeof globalThis;
     }
+  }
+
+  /**
+   * Check if web layout mode is enabled (OOXML ST_View 'web')
+   */
+  isWebLayout(): boolean {
+    return this.options.viewOptions?.layout === 'web';
   }
 
   /**
@@ -1829,19 +1879,38 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get the maximum content size
+   * Get the maximum content size based on page dimensions and margins
+   * @returns Size object with width and height in pixels, or empty object if no page size
+   * @note In web layout mode, returns empty object to skip content constraints.
+   *       CSS max-width: 100% handles responsive display while preserving full resolution.
    */
   getMaxContentSize(): { width?: number; height?: number } {
     if (!this.converter) return {};
+
+    // In web layout mode: skip constraints, let CSS handle responsive sizing
+    // This preserves full image resolution while CSS max-width: 100% handles display
+    if (this.isWebLayout()) {
+      return {};
+    }
+
     const { pageSize = {}, pageMargins = {} } = this.converter.pageStyles ?? {};
     const { width, height } = pageSize;
-    const { top = 0, bottom = 0, left = 0, right = 0 } = pageMargins;
 
-    // All sizes are in inches so we multiply by 96 to get pixels
     if (!width || !height) return {};
 
-    const maxHeight = height * 96 - top * 96 - bottom * 96 - 50;
-    const maxWidth = width * 96 - left * 96 - right * 96 - 20;
+    // Print layout mode: use document margins (inches converted to pixels)
+    const getMarginPx = (side: 'top' | 'bottom' | 'left' | 'right'): number => {
+      return (pageMargins?.[side] ?? 0) * PIXELS_PER_INCH;
+    };
+
+    const topPx = getMarginPx('top');
+    const bottomPx = getMarginPx('bottom');
+    const leftPx = getMarginPx('left');
+    const rightPx = getMarginPx('right');
+
+    // All sizes are in inches so we multiply by PIXELS_PER_INCH to get pixels
+    const maxHeight = height * PIXELS_PER_INCH - topPx - bottomPx - MAX_HEIGHT_BUFFER_PX;
+    const maxWidth = width * PIXELS_PER_INCH - leftPx - rightPx - MAX_WIDTH_BUFFER_PX;
     return {
       width: maxWidth,
       height: maxHeight,

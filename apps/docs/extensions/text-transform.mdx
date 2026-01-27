@@ -1,0 +1,32 @@
+---
+title: TextTransform extension
+sidebarTitle: "Text Transform"
+keywords: "TextTransform extension, superdoc TextTransform, word TextTransform, document TextTransform, docx TextTransform"
+---
+
+import Description from '/snippets/extensions/text-transform.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="types" type="Array<string>" default="['textStyle']">
+  Mark types to apply text transform to
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="textTransform" type="string">
+  Text transform value (uppercase, lowercase, capitalize, none)
+</ParamField>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/text-transform/text-transform.js" />

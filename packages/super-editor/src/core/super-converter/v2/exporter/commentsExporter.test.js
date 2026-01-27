@@ -103,4 +103,44 @@ describe('updateCommentsExtendedXml', () => {
 
     expect(childEntry.attributes['w15:paraIdParent']).toBe('PARENT-PARA');
   });
+
+  it('sets paraIdParent for range-based threads to preserve Word threading', () => {
+    const comments = [
+      {
+        commentId: 'parent-comment',
+        commentParaId: 'PARENT-PARA',
+        resolvedTime: null,
+        threadingMethod: 'range-based',
+        originalXmlStructure: { hasCommentsExtended: false },
+      },
+      {
+        commentId: 'child-comment',
+        commentParaId: 'CHILD-PARA',
+        parentCommentId: 'parent-comment',
+        resolvedTime: null,
+        threadingMethod: 'range-based',
+        originalXmlStructure: { hasCommentsExtended: false },
+      },
+    ];
+
+    const commentsExtendedXml = {
+      elements: [{ elements: [] }],
+    };
+
+    const profile = {
+      defaultStyle: 'range-based',
+      mixed: false,
+      fileSet: {
+        hasCommentsExtended: false,
+        hasCommentsExtensible: false,
+        hasCommentsIds: false,
+      },
+    };
+
+    const result = updateCommentsExtendedXml(comments, commentsExtendedXml, profile);
+    const entries = result.elements[0].elements;
+    const childEntry = entries.find((entry) => entry.attributes['w15:paraId'] === 'CHILD-PARA');
+
+    expect(childEntry.attributes['w15:paraIdParent']).toBe('PARENT-PARA');
+  });
 });

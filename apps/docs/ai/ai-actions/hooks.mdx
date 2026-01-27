@@ -1,0 +1,283 @@
+---
+title: Hooks
+keywords: "superdoc ai hooks, ai lifecycle events, automation callbacks, llm response handling, intelligent document triggers"
+---
+
+Hooks let you react to lifecycle milestones and streaming updates emitted by SuperDoc AI.
+
+```ts
+const ai = new AIActions(superdoc, {
+  user,
+  provider,
+  onReady: ({ aiActions }) => console.log('AI ready', aiActions),
+  onStreamingStart: () => console.log('Streaming started'),
+  onStreamingPartialResult: ({ partialResult }) => updateLog(partialResult),
+  onStreamingEnd: ({ fullResult }) => console.log('Stream finished', fullResult),
+  onError: error => console.error('AI error', error),
+});
+```
+
+## Use cases
+
+Hooks are ideal for:
+
+- **Activity logs** - Track all AI operations and results
+- **Streaming UI** - Update interface in real-time as text arrives
+- **Progress indicators** - Show loading states during operations
+- **Error tracking** - Centralize error reporting and monitoring
+- **Analytics** - Measure AI performance and usage patterns
+- **Status badges** - Display connection and readiness state
+
+
+## Available hooks
+
+### `onReady`
+
+Called once the provider has been validated and the AI wrapper sets the editor user identity.
+
+**Parameters:**
+
+<ParamField path="context" type="object" required>
+  Context object containing the AIActions instance
+
+  ```ts
+  { aiActions: AIActions }
+  ```
+</ParamField>
+
+**Example:**
+
+```ts
+onReady: ({ aiActions }) => {
+  console.log('AI is ready!');
+  // Display "AI connected" badge
+  // Kick off initial prompt
+}
+```
+
+### `onStreamingStart`
+
+Fires immediately before the provider call begins streaming. No parameters.
+
+**Example:**
+
+```ts
+onStreamingStart: () => {
+  console.log('Starting to stream...');
+  // Show loading indicator
+  // Clear previous results
+}
+```
+
+### `onStreamingPartialResult`
+
+Fires for each streaming chunk received from the provider. The `partialResult` accumulates all text received so far.
+
+**Parameters:**
+
+<ParamField path="context" type="object" required>
+  Context object containing the accumulated result
+
+  ```ts
+  { partialResult: string }
+  ```
+</ParamField>
+
+**Example:**
+
+```ts
+onStreamingPartialResult: ({ partialResult }) => {
+  console.log('Received:', partialResult);
+  // Update UI with latest text
+  // Use diffing to show incremental tokens
+}
+```
+
+<Note>
+The `partialResult` contains **all accumulated text** from the start of the stream, not just the latest chunk. Use diffing if you need to extract only the new content.
+</Note>
+
+### `onStreamingEnd`
+
+Fires when streaming completes successfully. Receives the final result object.
+
+**Parameters:**
+
+<ParamField path="context" type="object" required>
+  Context object containing the complete result
+
+  ```ts
+  { fullResult: unknown }  // Type varies: string for completions, Result for actions
+  ```
+</ParamField>
+
+**Example:**
+
+```ts
+onStreamingEnd: ({ fullResult }) => {
+  console.log('Streaming complete:', fullResult);
+  // Hide loading indicator
+  // Log final result
+}
+```
+
+## Hook execution order
+
+For both `streamCompletion()` calls and `ai.action.*` helpers, hooks fire in this order:
+
+1. **onStreamingStart** - Before provider call
+2. **onStreamingPartialResult** - Multiple times during streaming
+3. **onStreamingEnd** - After completion
+4. **onError** - If an error occurs (instead of onStreamingEnd)
+
+## Planner progress hooks
+
+The AI Planner provides additional progress callbacks for multi-step workflows. Configure these via the `planner.onProgress` option:
+
+```ts
+const ai = new AIActions(superdoc, {
+  user,
+  provider,
+  planner: {
+    onProgress: (event) => {
+      switch (event.type) {
+        case 'planning':
+          console.log('Planning:', event.message);
+          break;
+        case 'plan_ready':
+          console.log('Plan created:', event.plan);
+          break;
+        case 'tool_start':
+          console.log(`Step ${event.stepIndex}/${event.totalSteps}: ${event.tool}`);
+          break;
+        case 'tool_complete':
+          console.log(`Completed step ${event.stepIndex}/${event.totalSteps}`);
+          break;
+        case 'complete':
+          console.log('Planner finished:', event.success);
+          break;
+      }
+    },
+  },
+});
+```
+
+### Progress event types
+
+<ParamField path="event.type" type="'planning'">
+  Fired when the planner begins building an execution plan.
+
+  ```ts
+  { type: 'planning'; message: string }
+  ```
+</ParamField>
+
+<ParamField path="event.type" type="'plan_ready'">
+  Fired when the plan has been created and validated.
+
+  ```ts
+  { type: 'plan_ready'; plan: AIPlan }
+  ```
+</ParamField>
+
+<ParamField path="event.type" type="'tool_start'">
+  Fired when a tool execution step begins.
+
+  ```ts
+  {
+    type: 'tool_start';
+    tool: string;
+    instruction: string;
+    stepIndex: number;
+    totalSteps: number;
+  }
+  ```
+</ParamField>
+
+<ParamField path="event.type" type="'tool_complete'">
+  Fired when a tool execution step completes.
+
+  ```ts
+  {
+    type: 'tool_complete';
+    tool: string;
+    stepIndex: number;
+    totalSteps: number;
+  }
+  ```
+</ParamField>
+
+<ParamField path="event.type" type="'complete'">
+  Fired when all planner steps have finished.
+
+  ```ts
+  { type: 'complete'; success: boolean }
+  ```
+</ParamField>
+
+**Example: Progress tracking UI**
+
+```ts
+const ai = new AIActions(superdoc, {
+  user,
+  provider,
+  planner: {
+    onProgress: (event) => {
+      if (event.type === 'planning') {
+        setStatus('Planning workflow...');
+      } else if (event.type === 'plan_ready') {
+        setStatus(`Executing ${event.plan.steps.length} steps...`);
+      } else if (event.type === 'tool_start') {
+        setProgress({
+          current: event.stepIndex,
+          total: event.totalSteps,
+          tool: event.tool,
+        });
+      } else if (event.type === 'complete') {
+        setStatus(event.success ? 'Complete' : 'Failed');
+      }
+    },
+  },
+});
+```
+
+### `onError`
+
+Fired whenever an action or completion throws an error (network issues, invalid provider config, parser errors, etc.).
+
+**Parameters:**
+
+<ParamField path="error" type="Error" required>
+  The error object that was thrown
+</ParamField>
+
+**Example:**
+
+```ts
+onError: (error) => {
+  console.error('AI error:', error);
+  // Log to error tracking service
+  // Show user-friendly error message
+}
+```
+
+<Note>
+Errors are **re-thrown** after the hook runs, so you can still use `try/catch` around actions while logging errors centrally.
+</Note>
+
+**Error handling pattern:**
+
+```ts
+const ai = new AIActions(superdoc, {
+  user,
+  provider,
+  onError: error => captureException(error),  // Centralized logging
+});
+
+try {
+  await ai.action.replace('Rewrite the conclusion');
+} catch (error) {
+  // Handle error in UI
+  // Error already logged by onError hook
+}
+```

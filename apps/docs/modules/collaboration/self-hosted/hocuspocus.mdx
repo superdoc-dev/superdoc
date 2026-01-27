@@ -1,0 +1,302 @@
+---
+title: Hocuspocus
+sidebarTitle: Hocuspocus
+keywords: "hocuspocus server, tiptap yjs, self-hosted collaboration"
+---
+
+[Hocuspocus](https://tiptap.dev/docs/hocuspocus) is TipTap's open-source Yjs WebSocket server. It's a mature, battle-tested option for self-hosted collaboration.
+
+## Setup
+
+### Server
+
+```bash
+npm install @hocuspocus/server
+```
+
+```typescript
+import { Server } from "@hocuspocus/server";
+
+const server = Server.configure({
+  port: 1234,
+
+  async onLoadDocument(data) {
+    // Load document from database
+    const state = await db.getDocument(data.documentName);
+    if (state) {
+      Y.applyUpdate(data.document, state);
+    }
+    return data.document;
+  },
+
+  async onStoreDocument(data) {
+    // Save document to database
+    const state = Y.encodeStateAsUpdate(data.document);
+    await db.saveDocument(data.documentName, state);
+  },
+
+  async onAuthenticate(data) {
+    // Validate token
+    const user = await validateToken(data.token);
+    if (!user) {
+      throw new Error("Unauthorized");
+    }
+    return { user };
+  },
+});
+
+server.listen();
+```
+
+### Client
+
+Use the provider-agnostic API to connect SuperDoc:
+
+```bash
+npm install @hocuspocus/provider yjs
+```
+
+```typescript
+import { HocuspocusProvider } from "@hocuspocus/provider";
+import * as Y from "yjs";
+import { SuperDoc } from "superdoc";
+
+const ydoc = new Y.Doc();
+const provider = new HocuspocusProvider({
+  url: "ws://localhost:1234",
+  name: "document-123",
+  document: ydoc,
+  token: "auth-token", // Optional
+});
+
+// Wait for sync before creating editor
+provider.on("synced", () => {
+  const superdoc = new SuperDoc({
+    selector: "#editor",
+    documentMode: "editing",
+    user: {
+      name: "John Smith",
+      email: "john@example.com",
+    },
+    modules: {
+      collaboration: { ydoc, provider },
+    },
+  });
+});
+```
+
+## React Example
+
+```tsx
+import { useEffect, useRef, useState } from "react";
+import { HocuspocusProvider } from "@hocuspocus/provider";
+import * as Y from "yjs";
+import { SuperDoc } from "superdoc";
+import "superdoc/style.css";
+
+export default function Editor() {
+  const superdocRef = useRef<SuperDoc | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const ydoc = new Y.Doc();
+    const provider = new HocuspocusProvider({
+      url: "ws://localhost:1234",
+      name: "my-document",
+      document: ydoc,
+    });
+
+    provider.on("synced", () => {
+      superdocRef.current = new SuperDoc({
+        selector: "#superdoc",
+        documentMode: "editing",
+        user: {
+          name: `User ${Math.floor(Math.random() * 1000)}`,
+          email: "user@example.com",
+        },
+        modules: {
+          collaboration: { ydoc, provider },
+        },
+        onAwarenessUpdate: ({ states }) => {
+          setUsers(states.filter((s) => s.user));
+        },
+      });
+    });
+
+    return () => {
+      superdocRef.current?.destroy();
+      provider.destroy();
+    };
+  }, []);
+
+  return (
+    <div>
+      <div className="users">
+        {users.map((u, i) => (
+          <span key={i} style={{ background: u.user?.color }}>
+            {u.user?.name}
+          </span>
+        ))}
+      </div>
+      <div id="superdoc" style={{ height: "100vh" }} />
+    </div>
+  );
+}
+```
+
+## Server Configuration
+
+### Basic Options
+
+```typescript
+Server.configure({
+  port: 1234,
+  timeout: 30000, // Connection timeout
+  debounce: 2000, // Debounce document saves
+  maxDebounce: 10000, // Max wait before save
+  quiet: false, // Disable logging
+});
+```
+
+### Hooks
+
+| Hook              | Purpose                    |
+| ----------------- | -------------------------- |
+| `onLoadDocument`  | Load document from storage |
+| `onStoreDocument` | Save document to storage   |
+| `onAuthenticate`  | Validate user tokens       |
+| `onChange`        | React to document changes  |
+| `onConnect`       | Handle new connections     |
+| `onDisconnect`    | Handle disconnections      |
+
+### Persistence Example
+
+```typescript
+import { Server } from "@hocuspocus/server";
+import { Database } from "@hocuspocus/extension-database";
+
+const server = Server.configure({
+  extensions: [
+    new Database({
+      fetch: async ({ documentName }) => {
+        const doc = await db.findOne({ name: documentName });
+        return doc?.data || null;
+      },
+      store: async ({ documentName, state }) => {
+        await db.upsert({ name: documentName }, { data: state });
+      },
+    }),
+  ],
+});
+```
+
+## Provider Options
+
+```typescript
+const provider = new HocuspocusProvider({
+  url: "ws://localhost:1234",
+  name: "document-id",
+  document: ydoc,
+
+  // Optional
+  token: "auth-token",
+  awareness: awareness, // Custom awareness instance
+  connect: true, // Auto-connect on create
+  preserveConnection: true, // Keep connection on destroy
+  broadcast: true, // Broadcast changes to tabs
+});
+```
+
+## Events
+
+### Provider Events
+
+```typescript
+// Sync status
+provider.on("synced", () => {
+  console.log("Document synced");
+});
+
+// Connection status
+provider.on("status", ({ status }) => {
+  // 'connecting' | 'connected' | 'disconnected'
+});
+
+// Authentication
+provider.on("authenticationFailed", ({ reason }) => {
+  console.error("Auth failed:", reason);
+});
+```
+
+## Production Deployment
+
+### Docker
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production
+
+COPY . .
+
+EXPOSE 1234
+CMD ["node", "server.js"]
+```
+
+### With Redis (Scaling)
+
+```typescript
+import { Server } from "@hocuspocus/server";
+import { Redis } from "@hocuspocus/extension-redis";
+
+Server.configure({
+  extensions: [
+    new Redis({
+      host: "localhost",
+      port: 6379,
+    }),
+  ],
+});
+```
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Hocuspocus Docs"
+    icon="book"
+    href="https://tiptap.dev/docs/hocuspocus"
+  >
+    Official documentation
+  </Card>
+
+  <Card
+    title="Working Example"
+    icon="github"
+    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/hocuspocus"
+  >
+    Complete source code
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="SuperDoc Yjs"
+    icon="rocket"
+    href="/modules/collaboration/self-hosted/superdoc-yjs"
+  >
+    Try our official collaboration package
+  </Card>
+
+  <Card
+    title="Client Configuration"
+    icon="settings"
+    href="/modules/collaboration/configuration"
+  >
+    All SuperDoc collaboration options
+  </Card>
+</CardGroup>

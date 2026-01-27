@@ -9,6 +9,7 @@
  */
 
 import type { ParagraphSpacing } from '@superdoc/contracts';
+import type { NumberingProperties, StylesDocumentProperties, TableInfo } from '@superdoc/style-engine/ooxml';
 
 export type ConverterNumberingContext = {
   definitions?: Record<string, unknown>;
@@ -35,6 +36,8 @@ export type ConverterContext = {
   docx?: Record<string, unknown>;
   numbering?: ConverterNumberingContext;
   linkedStyles?: ConverterLinkedStyle[];
+  translatedNumbering: NumberingProperties;
+  translatedLinkedStyles: StylesDocumentProperties;
   /**
    * Optional mapping from OOXML footnote id -> display number.
    * Display numbers are assigned in order of first appearance in the document (1-based),
@@ -49,7 +52,7 @@ export type ConverterContext = {
    *
    * Style cascade: docDefaults → tableStyleParagraphProps → paragraph style → direct formatting
    */
-  tableStyleParagraphProps?: TableStyleParagraphProps;
+  tableInfo?: TableInfo;
   /**
    * Background color of the containing table cell (hex format, e.g., "#342D8C").
    * Used for auto text color resolution - text without explicit color should

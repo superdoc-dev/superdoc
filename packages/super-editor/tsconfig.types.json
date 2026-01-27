@@ -2,7 +2,8 @@
   "extends": "./tsconfig.build.json",
   "compilerOptions": {
     "composite": true,
-    "outDir": "dist-types"
+    "outDir": "dist",
+    "tsBuildInfoFile": "./dist/tsconfig.types.tsbuildinfo"
   },
   "references": [
     { "path": "../layout-engine/contracts/tsconfig.json" },

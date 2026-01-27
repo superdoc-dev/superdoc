@@ -71,7 +71,10 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           getResolvedParagraphProperties(paragraphNode) ||
           calculateResolvedParagraphProperties(editor, paragraphNode, $pos);
         const runPropertiesFromStyles = resolveRunProperties(
-          { docx: editor.converter?.convertedXml ?? {}, numbering: editor.converter?.numbering ?? {} },
+          {
+            translatedNumbering: editor.converter?.translatedNumbering ?? {},
+            translatedLinkedStyles: editor.converter?.translatedLinkedStyles ?? {},
+          },
           {},
           paragraphProperties,
           false,

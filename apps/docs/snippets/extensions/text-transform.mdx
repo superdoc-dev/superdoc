@@ -1,0 +1,66 @@
+Apply uppercase, lowercase, or capitalization without changing the source text.
+
+Preserves original text while controlling display formatting through Word-compatible styles.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p>Select text and apply transformations. All CSS transforms work in the editor, but only UPPERCASE exports to Word.</p><p>this text can be transformed to any case.</p><p>John Smith And Other Proper Names.</p>`}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'UPPERCASE',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setMark('textStyle', { textTransform: 'uppercase' })
+        }
+      },
+      {
+        label: 'lowercase',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setMark('textStyle', { textTransform: 'lowercase' })
+        }
+      },
+      {
+        label: 'Capitalize',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setMark('textStyle', { textTransform: 'capitalize' })
+        }
+      },
+      {
+        label: 'None',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setMark('textStyle', { textTransform: 'none' })
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:caps/>
+    <!-- or <w:smallCaps/> for small capitals -->
+  </w:rPr>
+  <w:t>Text with transform</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Headings** - Consistent uppercase styling without CAPS LOCK
+- **Acronyms** - Ensure abbreviations display correctly
+- **Legal Documents** - Emphasize key terms in uppercase
+- **Design Consistency** - Control display without editing source
+- **Dynamic Content** - Apply consistent casing to user-generated text

@@ -1,0 +1,618 @@
+---
+title: Methods
+keywords: "superdoc ai methods, ai document actions, automation commands, llm task api, docx ai controls"
+---
+
+Reference for AIActions helpers and the high-level action surface.
+
+`AIActions` exposes two layers of functionality:
+
+1. **Wrapper methods** on the `AIActions` instance (lifecycle & raw completions).
+2. **Action helpers** under `ai.action`, which combine prompting, response parsing, and editor updates.
+
+## Instance methods
+
+### `waitUntilReady`
+
+Resolves once provider/user set-up completes. Safe to call multiple times.
+
+**Returns:** `Promise<void>`
+
+**Example:**
+
+```ts
+await ai.waitUntilReady();
+console.log('AI is ready!');
+```
+
+### `getIsReady`
+
+Returns `true` after initialisation.
+
+**Returns:** `boolean`
+
+**Example:**
+
+```ts
+if (ai.getIsReady()) {
+  console.log('AI is ready!');
+}
+```
+
+### `getCompletion`
+
+Single-shot completion that includes the serialized document context.
+
+**Parameters:**
+
+<ParamField path="prompt" type="string" required>
+  The user prompt for the AI
+</ParamField>
+
+<ParamField path="options" type="CompletionOptions">
+  Optional completion configuration
+</ParamField>
+
+**Returns:** `Promise<string>`
+
+**Example:**
+
+```ts
+const response = await ai.getCompletion('Summarise the introduction', {
+  temperature: 0.3,
+  maxTokens: 600,
+  stop: ['</summary>'],
+  metadata: { documentId: 'contract-42' },
+  providerOptions: { top_p: 0.9 },
+});
+```
+
+### `streamCompletion`
+
+Streams a completion, firing hooks for each chunk and resolving with the full string.
+
+**Parameters:**
+
+<ParamField path="prompt" type="string" required>
+  The user prompt for the AI
+</ParamField>
+
+<ParamField path="options" type="StreamOptions">
+  Optional streaming configuration
+</ParamField>
+
+**Returns:** `Promise<string>`
+
+**Example:**
+
+```ts
+const response = await ai.streamCompletion('Explain the GDPR section', {
+  temperature: 0.7,
+  maxTokens: 1000,
+});
+```
+
+### `getDocumentContext`
+
+Retrieves the current document context for AI processing. Returns the plain text content of the active editor document.
+
+**Returns:** `string`
+
+**Example:**
+
+```ts
+const context = ai.getDocumentContext();
+console.log('Document text:', context);
+```
+
+## Action helpers
+
+All actions return a [`Result`](#result) object containing `{ success: boolean; results: FoundMatch[] }`. Each [`FoundMatch`](#foundmatch) includes the AI text (`originalText`, `suggestedText`) alongside the resolved document positions.
+
+### `find`
+
+Finds the first occurrence and resolves its document positions.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what to find
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+**Example:**
+
+```ts
+const { success, results } = await ai.action.find('GDPR clause');
+if (success && results[0]?.positions?.length) {
+  console.log('Found at', results[0].positions[0]);
+}
+```
+
+### `findAll`
+
+Finds every occurrence matching the instruction.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what to find
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+### `highlight`
+
+Highlights the first match in the editor with the specified color.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what to highlight
+</ParamField>
+
+<ParamField path="color" type="string" default="#6CA0DC">
+  Hex color code for the highlight
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+### `replace`
+
+Replaces a single match with AI-generated text.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what to replace and how
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+**Example:**
+
+```ts
+await ai.action.replace('Replace "utilize" with "use"');
+```
+
+> **Note:** Replacements are inserted as fresh text, so existing styling (bold, numbering, etc.) might not carry over. Re-apply any required formatting after the AI edit.
+
+### `replaceAll`
+
+Replaces every match with AI-generated text.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what to replace and how
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+### `literalReplace`
+
+Performs literal text replacement when you have exact find and replace text. Prefer this over `replaceAll` when the user provides explicit text pairs (e.g., "change X to Y", "replace A with B"). Automatically replaces all instances.
+
+**Parameters:**
+
+<ParamField path="findText" type="string" required>
+  Exact text to find
+</ParamField>
+
+<ParamField path="replaceText" type="string" required>
+  Exact replacement text
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional replacement options
+
+  ```ts
+  {
+    caseSensitive?: boolean;      // Default: false
+    trackChanges?: boolean;        // Default: false
+  }
+  ```
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+**Example:**
+
+```ts
+// Direct replacement
+await ai.action.literalReplace('CompanyA', 'CompanyB');
+
+// Case-sensitive replacement with tracked changes
+await ai.action.literalReplace('utilize', 'use', {
+  caseSensitive: true,
+  trackChanges: true
+});
+```
+
+### `insertTrackedChange`
+
+Inserts a tracked change attributed to the configured user (e.g., "RedlineBot").
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what change to track
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+**Example:**
+
+```ts
+await ai.action.insertTrackedChange(
+  'Rewrite the GDPR clause as bullet points'
+);
+```
+
+> **Note:** Tracked changes are also inserted as newly generated text, which can strip local formatting. Double-check for styling regressions after accepting or rejecting the change.
+
+### `insertTrackedChanges`
+
+Inserts tracked changes for multiple matches.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what changes to track
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+### `insertComment`
+
+Inserts a comment annotating the first match.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what to comment on
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+### `insertComments`
+
+Inserts comments for every match.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what to comment on
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+### `literalInsertComment`
+
+Inserts a comment when you have exact find text and comment text. Prefer this over `insertComments` when the user provides explicit text to find and exact comment text to add. Automatically adds comments to all instances.
+
+**Parameters:**
+
+<ParamField path="findText" type="string" required>
+  Exact text to find
+</ParamField>
+
+<ParamField path="commentText" type="string" required>
+  Exact comment text to add
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional search options
+
+  ```ts
+  {
+    caseSensitive?: boolean;      // Default: false
+  }
+  ```
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+**Example:**
+
+```ts
+// Add comment to all instances
+await ai.action.literalInsertComment('GDPR', 'Please review GDPR compliance');
+
+// Case-sensitive search
+await ai.action.literalInsertComment('CompanyA', 'Verify entity name', {
+  caseSensitive: true
+});
+```
+
+### `summarize`
+
+Returns AI-generated summary text in the `suggestedText` field. Streams results if the provider supports streaming.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what to summarize
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+**Example:**
+
+```ts
+const { results } = await ai.action.summarize('Summarize the introduction');
+console.log(results[0]?.suggestedText);
+```
+
+### `insertContent`
+
+Inserts AI-generated content into the document at the current cursor position, or appends it to the end if no cursor location is set. Content streams directly into the editor as it arrives from the provider.
+
+**Parameters:**
+
+<ParamField path="instruction" type="string" required>
+  AI instruction describing what content to insert
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional insertion options
+
+  ```ts
+  {
+    position?: 'before' | 'after' | 'replace';  // Default: 'after'
+  }
+  ```
+</ParamField>
+
+**Returns:** `Promise<Result>`
+
+**Example:**
+
+```ts
+// Insert after cursor
+await ai.action.insertContent('Add a conclusion paragraph');
+
+// Insert before cursor
+await ai.action.insertContent('Add an introduction', { position: 'before' });
+
+// Replace selection
+await ai.action.insertContent('Rewrite this section', { position: 'replace' });
+```
+
+## AI Planner
+
+The AI Planner enables multi-step AI workflows where the AI can plan and execute a sequence of actions automatically.
+
+### `planner`
+
+Access the planner instance via the `planner` property. The planner is lazily initialized on first access.
+
+**Returns:** `AIPlanner`
+
+**Example:**
+
+```ts
+const ai = new AIActions(superdoc, { user, provider });
+
+// Access the planner
+const result = await ai.planner.execute('Review the document and add comments to all legal terms');
+```
+
+### `planner.execute`
+
+Executes a user instruction by having the AI plan and execute a sequence of actions.
+
+**Parameters:**
+
+<ParamField path="prompt" type="string" required>
+  Natural language instruction describing the multi-step task to perform
+</ParamField>
+
+<ParamField path="options" type="CompletionOptions">
+  Optional completion configuration for the planning phase
+</ParamField>
+
+**Returns:** `Promise<AIPlannerExecutionResult>`
+
+**Result structure:**
+
+```ts
+{
+  success: boolean;
+  executedTools: string[];        // Names of tools that were executed
+  reasoning?: string;              // AI's reasoning for the plan
+  response?: string;               // Final response from the AI
+  plan?: AIPlan;                   // The execution plan that was created
+  rawPlan?: string;                // Raw plan text from the AI
+  error?: string;                  // Error message if execution failed
+  warnings?: string[];             // Warnings encountered during execution
+}
+```
+
+**Example:**
+
+```ts
+const result = await ai.planner.execute('Fix all grammar issues and add comments to unclear sentences');
+
+if (result.success) {
+  console.log('Executed tools:', result.executedTools);
+  console.log('AI reasoning:', result.reasoning);
+  console.log('Final response:', result.response);
+} else {
+  console.error('Planner failed:', result.error);
+  console.log('Warnings:', result.warnings);
+}
+```
+
+**Use cases:**
+- Complex multi-step document reviews
+- Automated document improvement workflows
+- Batch operations across multiple document sections
+- Conditional workflows based on document content
+
+<Note>
+The planner automatically selects and sequences the appropriate tools based on your instruction. You don't need to specify which tools to use - the AI decides the best approach.
+</Note>
+
+## Types
+
+### Result
+
+```ts
+{
+  success: boolean;
+  results: FoundMatch[];
+}
+```
+
+Standard result structure returned by all AI actions.
+
+### FoundMatch
+
+```ts
+{
+  originalText?: string;
+  suggestedText?: string;
+  positions?: DocumentPosition[];
+}
+```
+
+Represents a match found by AI operations, with optional original text, suggested replacement, and document positions.
+
+### DocumentPosition
+
+```ts
+{
+  from: number;
+  to: number;
+}
+```
+
+Position range in the document (character offsets).
+
+### CompletionOptions
+
+```ts
+{
+  temperature?: number;
+  maxTokens?: number;
+  stop?: string[];
+  model?: string;
+  signal?: AbortSignal;         // Cancel request
+  metadata?: Record<string, unknown>;  // Custom metadata
+  providerOptions?: Record<string, unknown>;  // Provider-specific options
+  documentId?: string;          // Document tracking
+}
+```
+
+Configuration options for `getCompletion()` calls.
+
+### StreamOptions
+
+```ts
+{
+  temperature?: number;
+  maxTokens?: number;
+  stop?: string[];
+  model?: string;
+  signal?: AbortSignal;         // Cancel request
+  metadata?: Record<string, unknown>;  // Custom metadata
+  providerOptions?: Record<string, unknown>;  // Provider-specific options
+  documentId?: string;          // Document tracking
+  stream?: boolean;             // Force streaming on/off
+}
+```
+
+Configuration options for `streamCompletion()` calls. Extends `CompletionOptions` with a `stream` flag.
+
+## Tool utilities
+
+The package exports utilities for working with AI tools and the tool registry:
+
+### `createToolRegistry`
+
+Creates a tool registry with built-in and custom tools. Used internally by the planner but can be used for custom implementations.
+
+**Parameters:**
+
+<ParamField path="actions" type="AIToolActions" required>
+  AI actions service instance
+</ParamField>
+
+<ParamField path="customTools" type="AIToolDefinition[]">
+  Optional array of custom tool definitions
+</ParamField>
+
+**Returns:** `Map<AIToolName, AIToolDefinition>`
+
+**Example:**
+
+```ts
+import { createToolRegistry, AIActionsService } from '@superdoc-dev/ai';
+
+const service = new AIActionsService(provider, editor, getContext, false);
+const registry = createToolRegistry(service, [
+  {
+    name: 'customTool',
+    description: 'My custom tool',
+    handler: async ({ instruction, context }) => {
+      // Custom implementation
+      return { success: true };
+    },
+  },
+]);
+```
+
+### `getToolDescriptions`
+
+Gets formatted descriptions of all tools in a registry for use in system prompts.
+
+**Parameters:**
+
+<ParamField path="toolRegistry" type="Map<AIToolName, AIToolDefinition>" required>
+  Tool registry map
+</ParamField>
+
+**Returns:** `string`
+
+**Example:**
+
+```ts
+import { getToolDescriptions } from '@superdoc-dev/ai';
+
+const descriptions = getToolDescriptions(registry);
+// Returns: "- findAll: Find all occurrences...\n- highlight: Highlight content..."
+```
+
+### `isValidTool`
+
+Type guard to validate if a value is a valid tool definition.
+
+**Parameters:**
+
+<ParamField path="tool" type="unknown" required>
+  Value to validate
+</ParamField>
+
+**Returns:** `boolean`
+
+**Example:**
+
+```ts
+import { isValidTool } from '@superdoc-dev/ai';
+
+if (isValidTool(myTool)) {
+  // TypeScript knows myTool is AIToolDefinition
+  console.log(myTool.name, myTool.description);
+}
+```
+
+## Advanced Exports
+
+For advanced use cases, the package exports additional classes and utilities:
+
+- **`AIActionsService`** - Core service with direct access to action implementations
+- **`EditorAdapter`** - Editor interaction layer for custom integrations
+- **`createAIProvider(config)`** - Factory function for creating AI providers
+- **Utilities**: `validateInput()`, `parseJSON()`, `removeMarkdownCodeBlocks()`, `generateId()`

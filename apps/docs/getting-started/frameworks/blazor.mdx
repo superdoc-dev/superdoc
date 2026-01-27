@@ -1,0 +1,199 @@
+---
+title: .NET / Blazor
+keywords: "blazor docx editor, blazor word component, superdoc blazor, .net docx editor, c# document editor"
+---
+
+SuperDoc works with both traditional ASP.NET and Blazor applications.
+
+## ASP.NET MVC/Razor Pages
+
+```csharp
+// Controllers/DocumentController.cs
+public class DocumentController : Controller
+{
+    private readonly IWebHostEnvironment _env;
+    
+    public IActionResult Edit(int id)
+    {
+        var model = new DocumentViewModel
+        {
+            Id = id,
+            User = User.Identity.Name,
+            Email = User.FindFirst(ClaimTypes.Email)?.Value
+        };
+        return View(model);
+    }
+    
+    [HttpGet]
+    public IActionResult Download(int id)
+    {
+        var path = Path.Combine(_env.ContentRootPath, "Documents", $"{id}.docx");
+        var bytes = System.IO.File.ReadAllBytes(path);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    }
+}
+```
+
+```html
+<!-- Views/Document/Edit.cshtml -->
+@model DocumentViewModel
+
+<div id="editor" style="height: 700px"></div>
+
+<script type="module">
+    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+    
+    new SuperDoc({
+        selector: '#editor',
+        document: '@Url.Action("Download", new { id = Model.Id })',
+        user: {
+            name: '@Model.User',
+            email: '@Model.Email'
+        }
+    });
+</script>
+```
+
+## Blazor Server
+
+```csharp
+// Pages/DocumentEditor.razor
+@page "/document/{DocumentId:int}"
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthProvider
+
+<div @ref="editorElement" style="height: 700px"></div>
+
+@code {
+    [Parameter] public int DocumentId { get; set; }
+    
+    private ElementReference editorElement;
+    private IJSObjectReference? superdocModule;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            
+            superdocModule = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "/_content/YourApp/superdoc-interop.js");
+                
+            await superdocModule.InvokeVoidAsync("initSuperDoc", 
+                editorElement, 
+                $"/api/documents/{DocumentId}",
+                user.Identity.Name,
+                user.FindFirst(ClaimTypes.Email)?.Value);
+        }
+    }
+    
+    public async ValueTask DisposeAsync()
+    {
+        if (superdocModule != null)
+        {
+            await superdocModule.InvokeVoidAsync("cleanup");
+            await superdocModule.DisposeAsync();
+        }
+    }
+}
+```
+
+```javascript
+// wwwroot/superdoc-interop.js
+let superdoc = null;
+
+export async function initSuperDoc(element, documentUrl, userName, userEmail) {
+    const { SuperDoc } = await import('https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js');
+    
+    superdoc = new SuperDoc({
+        selector: element,
+        document: documentUrl,
+        user: {
+            name: userName,
+            email: userEmail
+        }
+    });
+}
+
+export function cleanup() {
+    superdoc = null;
+}
+```
+
+## Blazor WebAssembly
+
+```csharp
+// Pages/Editor.razor
+@page "/editor"
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<div @ref="editorElement" style="height: 700px"></div>
+
+@code {
+    private ElementReference editorElement;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Fetch document as blob
+            var documentBytes = await Http.GetByteArrayAsync("api/documents/sample.docx");
+            
+            // Pass to JavaScript
+            await JS.InvokeVoidAsync("initEditorWithBlob", 
+                editorElement, 
+                documentBytes);
+        }
+    }
+}
+```
+
+```javascript
+// wwwroot/index.html
+window.initEditorWithBlob = async (element, byteArray) => {
+    const { SuperDoc } = await import('https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js');
+    
+    const blob = new Blob([byteArray], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+    
+    // Convert Blob to File
+    const file = new File([blob], 'document.docx', { type: blob.type });
+    
+    new SuperDoc({
+        selector: element,
+        document: file
+    });
+};
+```
+
+## File upload
+
+```csharp
+// API/DocumentsController.cs
+[ApiController]
+[Route("api/[controller]")]
+public class DocumentsController : ControllerBase
+{
+    [HttpPost]
+    public async Task<IActionResult> Upload(IFormFile file)
+    {
+        if (file?.Length > 0)
+        {
+            var fileName = $"{Guid.NewGuid()}.docx";
+            var path = Path.Combine("Documents", fileName);
+            
+            using (var stream = new FileStream(path, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+            
+            return Ok(new { fileName });
+        }
+        
+        return BadRequest();
+    }
+}
+```

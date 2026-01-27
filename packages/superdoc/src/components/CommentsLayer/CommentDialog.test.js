@@ -405,4 +405,65 @@ describe('CommentDialog.vue', () => {
     // Third should be child-2 (created at time 2000)
     expect(headers[2].props('comment').commentId).toBe('child-2');
   });
+
+  it('threads range-based comments under tracked change parent', async () => {
+    const rangeBasedRoot = reactive({
+      uid: 'uid-range-root',
+      commentId: 'range-root',
+      parentCommentId: null,
+      trackedChangeParentId: 'tc-parent',
+      threadingMethod: 'range-based',
+      email: 'root@example.com',
+      commentText: '<p>Root comment</p>',
+      createdTime: 1000,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const replyToRoot = reactive({
+      uid: 'uid-range-reply',
+      commentId: 'range-reply',
+      parentCommentId: 'range-root',
+      email: 'reply@example.com',
+      commentText: '<p>Reply comment</p>',
+      createdTime: 1500,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        commentId: 'tc-parent',
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+        createdTime: 500,
+      },
+      extraComments: [replyToRoot, rangeBasedRoot],
+    });
+
+    const headers = wrapper.findAllComponents(CommentHeaderStub);
+    expect(headers).toHaveLength(3);
+    expect(headers[0].props('comment').commentId).toBe('tc-parent');
+    expect(headers[1].props('comment').commentId).toBe('range-root');
+    expect(headers[2].props('comment').commentId).toBe('range-reply');
+  });
 });

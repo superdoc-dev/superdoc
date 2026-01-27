@@ -198,6 +198,7 @@ export const normalizeTabVal = (value: unknown): TabStop['val'] | undefined => {
     case 'clear':
       return value;
     case 'left':
+    case 'num':
       return 'start'; // Legacy mapping for RTL support
     case 'right':
       return 'end'; // Legacy mapping for RTL support

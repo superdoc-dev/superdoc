@@ -6,6 +6,7 @@ import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
 import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
+import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
 const DEFAULT_HEADER_FOOTER_HEIGHT = 100;
@@ -1173,7 +1174,7 @@ export class HeaderFooterLayoutAdapter {
    *
    * @returns The converter context containing document metadata, or undefined if not available
    */
-  #getConverterContext(): MinimalConverterContext | undefined {
+  #getConverterContext(): ConverterContext | undefined {
     const rootEditor = this.#manager.rootEditor;
     if (!('converter' in rootEditor)) {
       return undefined;
@@ -1181,23 +1182,13 @@ export class HeaderFooterLayoutAdapter {
     const converter = (rootEditor as EditorWithConverter).converter as Record<string, unknown> | undefined;
     if (!converter) return undefined;
 
-    const context: MinimalConverterContext = {};
+    const context: ConverterContext = {
+      docx: converter.convertedXml,
+      numbering: converter.numbering,
+      translatedLinkedStyles: converter.translatedLinkedStyles,
+      translatedNumbering: converter.translatedNumbering,
+    } as ConverterContext;
 
-    // Type guard: check if convertedXml exists and is a record
-    if (converter.convertedXml && typeof converter.convertedXml === 'object') {
-      context.docx = converter.convertedXml as Record<string, unknown>;
-    }
-
-    // Type guard: check if numbering exists and has expected structure
-    if (converter.numbering && typeof converter.numbering === 'object') {
-      context.numbering = converter.numbering as MinimalConverterContext['numbering'];
-    }
-
-    // Type guard: check if linkedStyles exists and is an array
-    if (Array.isArray(converter.linkedStyles)) {
-      context.linkedStyles = converter.linkedStyles as MinimalConverterContext['linkedStyles'];
-    }
-
-    return Object.keys(context).length > 0 ? context : undefined;
+    return context;
   }
 }

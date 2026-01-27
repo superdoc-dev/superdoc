@@ -197,8 +197,11 @@ class SuperConverter {
     this.xml = params?.xml;
     this.declaration = null;
 
-    // List defs
+    // List defs (deprecated)
     this.numbering = {};
+
+    // Translated numbering definitions
+    this.translatedNumbering = {};
 
     // Processed additional content
     this.numbering = null;
@@ -219,8 +222,11 @@ class SuperConverter {
     this.importedBodyHasFooterRef = false;
     this.headerFooterModified = false;
 
-    // Linked Styles
+    // Linked Styles (deprecated)
     this.linkedStyles = [];
+
+    // Translated linked styles
+    this.translatedLinkedStyles = {};
 
     // This is the JSON schema that we will be working with
     this.json = params?.json;
@@ -775,18 +781,29 @@ class SuperConverter {
 
   getDocumentFonts() {
     const inlineDocumentFonts = [...new Set(this.inlineDocumentFonts || [])];
+    const defaults = this.getDocumentDefaultStyles?.() || {};
+    const defaultTypeface = typeof defaults.typeface === 'string' ? defaults.typeface : null;
+    const defaultFontFamilyCss = typeof defaults.fontFamilyCss === 'string' ? defaults.fontFamilyCss : null;
+    const fallbackFont =
+      defaultTypeface ||
+      (defaultFontFamilyCss ? defaultFontFamilyCss.split(',')[0]?.replace(/["']/g, '').trim() : null);
+    const withDefaultFont = (fonts) => {
+      const result = [...fonts];
+      if (fallbackFont && !result.includes(fallbackFont)) result.push(fallbackFont);
+      return result;
+    };
     const fontTable = this.convertedXml['word/fontTable.xml'];
     if (!fontTable) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     const wFonts = fontTable.elements?.find((element) => element.name === 'w:fonts');
     if (!wFonts) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     if (!wFonts.elements) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     const fontsInFontTable = wFonts.elements
@@ -794,7 +811,7 @@ class SuperConverter {
       .map((element) => element.attributes['w:name']);
 
     const allFonts = [...inlineDocumentFonts, ...fontsInFontTable];
-    return [...new Set(allFonts)];
+    return withDefaultFont([...new Set(allFonts)]);
   }
 
   getFontFaceImportString() {
@@ -928,6 +945,8 @@ class SuperConverter {
       this.comments = result.comments;
       this.footnotes = result.footnotes;
       this.linkedStyles = result.linkedStyles;
+      this.translatedLinkedStyles = result.translatedLinkedStyles;
+      this.translatedNumbering = result.translatedNumbering;
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
 
@@ -954,7 +973,9 @@ class SuperConverter {
     fieldsHighlightColor,
     preserveCommentsOnEmpty = true,
   ) {
-    const commentsWithParaIds = comments.map((c) => prepareCommentParaIds(c));
+    // Filter out synthetic tracked change comments - they shouldn't be exported to comments.xml
+    const exportableComments = comments.filter((c) => !c.trackedChange);
+    const commentsWithParaIds = exportableComments.map((c) => prepareCommentParaIds(c));
     const commentDefinitions = commentsWithParaIds.map((c, index) =>
       getCommentDefinition(c, index, commentsWithParaIds, editor),
     );
@@ -962,7 +983,7 @@ class SuperConverter {
     const { result, params } = this.exportToXmlJson({
       data: jsonData,
       editorSchema,
-      comments,
+      comments: exportableComments,
       commentDefinitions,
       commentsExportType,
       isFinalDoc,

@@ -71,7 +71,8 @@ test.describe('fonts', () => {
     await expect(page.locator('div.super-editor').first()).toBeVisible();
 
     expect(resolvedFonts).toEqual({
-      documentFonts: ['DejaVu Sans', 'Liberation Serif', 'Unifont Upper'].sort(),
+      // Arial is included because it's the document's default font in w:docDefaults
+      documentFonts: ['Arial', 'DejaVu Sans', 'Liberation Serif', 'Unifont Upper'].sort(),
       unsupportedFonts: [],
     });
   });

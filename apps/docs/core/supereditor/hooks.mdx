@@ -1,0 +1,341 @@
+---
+title: Hooks
+keywords: "supereditor hooks, editor lifecycle, prosemirror hooks, document events, editor callbacks"
+---
+
+Hooks let you respond to editor lifecycle and changes with fine-grained control.
+
+## Hook Categories
+
+<CardGroup cols={2}>
+  <Card title="Lifecycle" icon="rocket">
+    Initialization and teardown
+  </Card>
+  <Card title="Content" icon="file-text">
+    Document changes
+  </Card>
+  <Card title="Selection" icon="text-cursor">
+    Cursor and selection
+  </Card>
+  <Card title="Features" icon="puzzle">
+    Comments, track changes, etc.
+  </Card>
+</CardGroup>
+
+## Lifecycle Hooks
+
+### `onBeforeCreate`
+
+Called before the editor view is created.
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance (partially initialized)
+</ParamField>
+
+```javascript
+onBeforeCreate: ({ editor }) => {
+  console.log('Preparing editor...');
+  // Set up external services
+}
+```
+
+### `onCreate`
+
+Called when editor is fully initialized and ready.
+
+<ParamField path="editor" type="Editor" required>
+  Fully initialized editor instance
+</ParamField>
+
+```javascript
+onCreate: ({ editor }) => {
+  console.log('Editor ready');
+  editor.focus();
+}
+```
+
+### `onDestroy`
+
+Called when editor is being destroyed.
+
+<Note>No parameters passed. Clean up resources here.</Note>
+
+```javascript
+onDestroy: () => {
+  console.log('Cleaning up...');
+  clearInterval(autoSaveTimer);
+}
+```
+
+### `onFirstRender`
+
+Called after the first render completes.
+
+```javascript
+onFirstRender: () => {
+  measurePerformance();
+  hideLoadingSpinner();
+}
+```
+
+## Content Hooks
+
+### `onUpdate`
+
+Called when document content changes.
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance
+</ParamField>
+
+<ParamField path="transaction" type="Transaction" required>
+  ProseMirror transaction
+</ParamField>
+
+```javascript
+onUpdate: ({ editor, transaction }) => {
+  if (transaction.docChanged) {
+    const content = editor.getJSON();
+    saveToBackend(content);
+  }
+}
+```
+
+### `onTransaction`
+
+<Warning>Fires for every transaction including selection changes. Use sparingly.</Warning>
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance
+</ParamField>
+
+<ParamField path="transaction" type="Transaction" required>
+  ProseMirror transaction
+</ParamField>
+
+<ParamField path="duration" type="number" required>
+  Transaction processing time in milliseconds
+</ParamField>
+
+```javascript
+onTransaction: ({ editor, transaction, duration }) => {
+  if (duration > 50) {
+    console.warn(`Slow transaction: ${duration}ms`);
+  }
+}
+```
+
+### `onContentError`
+
+Called when content processing fails.
+
+<ParamField path="error" type="Error" required>
+  Error object with details
+  
+  <Expandable title="Error properties">
+    <ResponseField name="type" type="string">
+      Error type (e.g., 'INVALID_NODE', 'CORRUPT_STATE')
+    </ResponseField>
+    <ResponseField name="recoverable" type="boolean">
+      Whether error can be recovered
+    </ResponseField>
+    <ResponseField name="message" type="string">
+      Error description
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance
+</ParamField>
+
+<ParamField path="documentId" type="string" required>
+  Document identifier
+</ParamField>
+
+<ParamField path="file" type="File | Blob">
+  Original file that failed
+</ParamField>
+
+```javascript
+onContentError: ({ error, editor }) => {
+  if (error.recoverable) {
+    editor.commands.clearInvalidNodes();
+  } else {
+    showErrorDialog(error);
+  }
+}
+```
+
+## Selection Hooks
+
+### `onSelectionUpdate`
+
+Called when selection changes (cursor movement).
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance
+</ParamField>
+
+<ParamField path="transaction" type="Transaction" required>
+  ProseMirror transaction
+</ParamField>
+
+```javascript
+onSelectionUpdate: ({ editor }) => {
+  const { from, to } = editor.state.selection;
+  updateSelectionUI(from, to);
+  
+  // Update formatting buttons
+  toolbar.bold = editor.isActive('bold');
+}
+```
+
+### `onFocus`
+
+Called when editor gains focus.
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance
+</ParamField>
+
+<ParamField path="event" type="FocusEvent" required>
+  Browser focus event
+</ParamField>
+
+```javascript
+onFocus: ({ editor, event }) => {
+  showFormattingToolbar();
+  trackEngagement('editor_focused');
+}
+```
+
+### `onBlur`
+
+Called when editor loses focus.
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance
+</ParamField>
+
+<ParamField path="event" type="FocusEvent" required>
+  Browser blur event
+</ParamField>
+
+```javascript
+onBlur: ({ editor, event }) => {
+  hideInlineMenus();
+  saveCurrentState();
+}
+```
+
+## Feature Hooks
+
+### Comments Hooks
+
+#### `onCommentsUpdate`
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance with updated comments
+</ParamField>
+
+```javascript
+onCommentsUpdate: ({ editor }) => {
+  const comments = editor.storage.comments.all();
+  updateCommentsSidebar(comments);
+}
+```
+
+#### `onCommentsLoaded`
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance
+</ParamField>
+
+<ParamField path="comments" type="Array<Comment>" required>
+  Loaded comments array
+</ParamField>
+
+<ParamField path="replacedFile" type="boolean">
+  Whether file was replaced
+</ParamField>
+
+```javascript
+onCommentsLoaded: ({ editor, comments }) => {
+  console.log(`Loaded ${comments.length} comments`);
+  renderCommentsList(comments);
+}
+```
+
+### Track Changes Hooks
+
+#### `onTrackedChangesUpdate`
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance with track changes
+</ParamField>
+
+```javascript
+onTrackedChangesUpdate: ({ editor }) => {
+  const changes = editor.storage.trackChanges.all();
+  updateReviewPanel(changes);
+}
+```
+
+### Collaboration Hooks
+
+#### `onCollaborationReady`
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance
+</ParamField>
+
+<ParamField path="ydoc" type="Y.Doc" required>
+  Yjs document instance
+</ParamField>
+
+```javascript
+onCollaborationReady: ({ editor, ydoc }) => {
+  console.log('Collaboration active');
+  showCollaboratorsCursors();
+}
+```
+
+## Common Patterns
+
+### Auto-save with Debouncing
+
+```javascript
+import { debounce } from 'lodash';
+
+const autoSave = debounce(async (content) => {
+  await api.saveDocument(content);
+}, 1000);
+
+options: {
+  onUpdate: ({ editor }) => {
+    autoSave(editor.getJSON());
+  }
+}
+```
+
+### Error Recovery
+
+```javascript
+options: {
+  onContentError: ({ error, editor }) => {
+    console.error('Document error:', error);
+  }
+}
+```
+
+## Performance Tips
+
+<Note>
+**Best practices for hooks:**
+- Debounce expensive operations
+- Use `onTransaction` sparingly
+- Check `transaction.docChanged` before processing
+- Clean up resources in `onDestroy`
+- Batch initialization in `onCreate`
+</Note>

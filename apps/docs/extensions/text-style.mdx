@@ -1,0 +1,67 @@
+---
+title: TextStyle extension
+sidebarTitle: "Text Style"
+keywords: "TextStyle extension, superdoc TextStyle, word TextStyle, document TextStyle, docx TextStyle"
+---
+
+import Description from '/snippets/extensions/text-style.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  Custom HTML attributes to apply to text style spans
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="styleId" type="string">
+  Style identifier for referencing predefined styles
+</ParamField>
+
+## Commands
+
+### `removeEmptyTextStyle`
+
+Remove empty text style marks
+
+<Note>
+Automatically checks if any style attributes exist before removal
+</Note>
+
+**Example:**
+
+```javascript
+editor.commands.removeEmptyTextStyle()
+```
+
+## Types
+
+### `ParentNodeInfo`
+
+<Expandable title="Properties">
+<ResponseField name="pos" type="number" required>
+  The position of the parent node.
+</ResponseField>
+<ResponseField name="start" type="number" required>
+  The start position of the parent node.
+</ResponseField>
+<ResponseField name="depth" type="number" required>
+  The depth of the parent node.
+</ResponseField>
+<ResponseField name="node" type="any" required>
+  The parent node.
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/text-style/text-style.js" />

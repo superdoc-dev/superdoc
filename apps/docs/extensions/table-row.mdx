@@ -1,0 +1,140 @@
+---
+title: TableRow extension
+sidebarTitle: "Table Row"
+keywords: "TableRow extension, superdoc TableRow, word TableRow, document TableRow, docx TableRow"
+---
+
+import Description from '/snippets/extensions/table-row.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{'aria-label':'Table row node'}">
+  HTML attributes for table rows
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="rowHeight" type="number">
+  Fixed row height in pixels
+</ParamField>
+
+<ParamField path="cantSplit" type="boolean" default="false">
+  Indicates row should not split across pages
+</ParamField>
+
+## Types
+
+### `CnfStyle`
+
+<Expandable title="Properties">
+<ResponseField name="evenHBand" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the even numbered horizontal bands of the parent object.
+</ResponseField>
+<ResponseField name="evenVBand" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the even numbered vertical bands of the parent object.
+</ResponseField>
+<ResponseField name="firstColumn" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the first column of the parent object.
+</ResponseField>
+<ResponseField name="firstRow" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the first row of the parent object.
+</ResponseField>
+<ResponseField name="firstRowFirstColumn" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the cell that is in the first row and first column of the parent object.
+</ResponseField>
+<ResponseField name="firstRowLastColumn" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the cell that is in the first row and last column of the parent object.
+</ResponseField>
+<ResponseField name="lastColumn" type="boolean">
+  Specifies that the object has inherited the conditional properties
+applied to the last column of the parent object.
+</ResponseField>
+<ResponseField name="lastRow" type="boolean">
+  Specifies that the object has inherited the conditional properties
+applied to the last row of the parent object.
+</ResponseField>
+<ResponseField name="lastRowFirstColumn" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the cell that is in the last row and first column of the parent object.
+</ResponseField>
+<ResponseField name="lastRowLastColumn" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the cell that is in the last row and last column of the parent object.
+</ResponseField>
+<ResponseField name="oddHBand" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the odd numbered horizontal bands of the parent object.
+</ResponseField>
+<ResponseField name="oddVBand" type="boolean">
+  Specifies that the object has inherited the conditional properties applied to the odd numbered vertical bands of the parent object.
+</ResponseField>
+</Expandable>
+
+### `TableRowProperties`
+
+<Expandable title="Properties">
+<ResponseField name="cantSplit" type="boolean">
+  Indicates that this row should not be split across pages when paginating/exporting.
+</ResponseField>
+<ResponseField name="cnfStyle" type="CnfStyle">
+  Specifies the set of conditional table style formatting properties which have been applied to this row
+</ResponseField>
+<ResponseField name="divId" type="string">
+  Specifies the HTML div information which is associated with this row.
+</ResponseField>
+<ResponseField name="gridAfter" type="number">
+  Specifies the number of grid columns to be that should be left empty after the last cell in this row.
+</ResponseField>
+<ResponseField name="gridBefore" type="number">
+  Specifies the number of grid columns that should be skipped before the first cell in this row.
+</ResponseField>
+<ResponseField name="hidden" type="boolean">
+  Specifies that the glyph representing the end character of current table row shall not be displayed in the current document.
+</ResponseField>
+<ResponseField name="jc" type="any | any | any | any | any">
+  Specifies the overall justification of the contents of this row.
+</ResponseField>
+<ResponseField name="tblCellSpacing" type="Object">
+  Specifies the amount of spacing that shall be applied between the cells in this row.
+</ResponseField>
+<ResponseField name="tblCellSpacing.value" type="number">
+  The size of the spacing in twenieths of a point (1/1440 of an inch).
+</ResponseField>
+<ResponseField name="tblCellSpacing.type" type="any | any | any | any">
+  The type of spacing.
+</ResponseField>
+<ResponseField name="repeatHeader" type="boolean">
+  Specifies that this row is to be repeated as a header row at the top of each page on which the table is displayed.
+</ResponseField>
+<ResponseField name="rowHeight.rule" type="any | any | any">
+  The rule for the row height.
+</ResponseField>
+<ResponseField name="wAfter" type="Object">
+  Specifies the preferred width for the total number of grid columns after this table row.
+</ResponseField>
+<ResponseField name="wAfter.value" type="number">
+  The width in twenieths of a point (1/1440 of an inch).
+</ResponseField>
+<ResponseField name="wAfter.type" type="any | any | any | any">
+  The type of width.
+</ResponseField>
+<ResponseField name="wBefore" type="Object">
+  Specifies the preferred width for the total number of grid columns before this table row.
+</ResponseField>
+<ResponseField name="wBefore.value" type="number">
+  The width in twenieths of a point (1/1440 of an inch).
+</ResponseField>
+<ResponseField name="wBefore.type" type="any | any | any | any">
+  The type of width.
+</ResponseField>
+</Expandable>
+
+
+## Source Code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/table-row/table-row.js" />

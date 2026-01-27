@@ -109,6 +109,27 @@ describe('measureBlock', () => {
       }
     });
 
+    it('falls back when text runs are missing font size', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          // Intentionally omitting fontSize to test fallback behavior
+          {
+            text: 'Hello',
+            fontFamily: 'Arial',
+          } as unknown as TextRun,
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(Number.isFinite(measure.lines[0].lineHeight)).toBe(true);
+      expect(measure.lines[0].lineHeight).toBeGreaterThan(0);
+      expect(measure.lines[0].width).toBeGreaterThan(0);
+    });
+
     it('uses content width for wordLayout list first lines with standard hanging indent', async () => {
       // Standard hanging indent pattern: marker is positioned in the hanging area (left of text),
       // NOT inline with text. The marker doesn't consume horizontal space on the first line.
@@ -277,6 +298,44 @@ describe('measureBlock', () => {
       expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(16);
       expect(measure.lines[0].lineHeight).toBeLessThan(16 * 1.15);
       expect(measure.totalHeight).toBeGreaterThan(0);
+    });
+
+    it('preserves marker measurements for empty list paragraphs', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-list',
+        runs: [
+          {
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ],
+        attrs: {
+          indent: { left: 0, hanging: 18 },
+          wordLayout: {
+            indentLeftPx: 0,
+            marker: {
+              markerText: '1.',
+              gutterWidthPx: 8,
+              run: {
+                fontFamily: 'Arial',
+                fontSize: 16,
+                bold: false,
+                italic: false,
+                letterSpacing: 0,
+              },
+            },
+          },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 200));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.marker).toBeDefined();
+      expect(measure.marker?.markerWidth).toBeGreaterThan(0);
+      expect(measure.marker?.markerTextWidth).toBeGreaterThan(0);
     });
 
     it('creates a new line for explicit lineBreak runs', async () => {
@@ -4319,6 +4378,154 @@ describe('measureBlock', () => {
       // No tableWidth - auto layout uses column widths as-is
       expect(measure.totalWidth).toBe(140);
       expect(measure.columnWidths[0]).toBe(140);
+    });
+
+    it('does NOT scale up column widths for fixed layout tables with explicit width', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-layout-no-scale-up',
+        attrs: {
+          tableLayout: 'fixed',
+          tableWidth: { width: 600, type: 'px' }, // Explicit 600px width
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [100, 100], // Original: 200px total, explicit width is 600px
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      // Fixed layout should preserve original column widths, NOT scale up to 600px
+      // This is Word behavior: fixed layout tables honor the grid column widths exactly
+      expect(measure.totalWidth).toBe(200);
+      expect(measure.columnWidths[0]).toBe(100);
+      expect(measure.columnWidths[1]).toBe(100);
+    });
+
+    it('scales DOWN column widths for fixed layout tables when exceeding target width', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-layout-scale-down',
+        attrs: {
+          tableLayout: 'fixed',
+          tableWidth: { width: 300, type: 'px' }, // Explicit 300px width
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [300, 300], // Original: 600px total, exceeds explicit width of 300px
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      // Fixed layout SHOULD scale down when columns exceed the explicit width
+      expect(measure.totalWidth).toBe(300);
+      expect(measure.columnWidths[0]).toBe(150);
+      expect(measure.columnWidths[1]).toBe(150);
+    });
+
+    it('scales up column widths for auto layout tables with explicit pixel width', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'auto-layout-scale-up',
+        attrs: {
+          // No tableLayout means auto layout
+          tableWidth: { width: 400, type: 'px' }, // Explicit 400px width
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [100, 100], // Original: 200px total
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      // Auto layout with explicit width SHOULD scale up to fill the explicit width
+      expect(measure.totalWidth).toBe(400);
+      expect(measure.columnWidths[0]).toBe(200);
+      expect(measure.columnWidths[1]).toBe(200);
     });
   });
 

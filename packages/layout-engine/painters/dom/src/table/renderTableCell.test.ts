@@ -221,6 +221,64 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.top).toBe('5px');
   });
 
+  it('adjusts column-relative anchored images by table indent and cell offset', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-anchored',
+      src: 'data:image/png;base64,AAA',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        alignH: 'left',
+        offsetH: 100,
+        vRelativeFrom: 'paragraph',
+        offsetV: 0,
+      },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor' },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        paragraphMeasure,
+        {
+          kind: 'image' as const,
+          width: 20,
+          height: 10,
+        },
+      ],
+      width: 120,
+      height: 30,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-anchored-image',
+      blocks: [para, anchoredImage],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      x: 40,
+      tableIndent: 20,
+      cellMeasure,
+      cell,
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl).toBeTruthy();
+    expect(imgEl?.parentElement?.style.left).toBe('40px');
+  });
+
   it('absolutely positions anchored drawing blocks inside table cells', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',

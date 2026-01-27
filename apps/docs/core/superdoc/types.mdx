@@ -1,0 +1,81 @@
+---
+title: TypeScript Types
+sidebarTitle: Types
+keywords: "superdoc typescript, document types, node types, mark types, type safety, schema introspection"
+---
+
+This is useful for building AI drafting agents and ensuring type-safe document manipulation.
+
+## TypeScript Types Export
+
+Exports TypeScript interfaces for all node and mark types:
+
+- `NodeName` - union of all valid node names (expands in IDE hover tooltips)
+- `NodeAttrs<N>` - get attribute type for a specific node
+- `MarkName`, `MarkAttrs<M>` - same for marks
+- Includes all specific attribute interfaces (`ParagraphAttrs`, `TableAttrs`, `ImageAttrs`, etc.)
+
+```typescript
+import type { NodeName, NodeAttrs, ParagraphAttrs } from 'superdoc/types';
+
+// NodeName shows all 39 node types in autocomplete
+type Test = NodeAttrs<'paragraph'>; // Resolves to ParagraphAttrs
+```
+
+## Schema Introspection
+
+Returns JSON schema summary with all nodes, marks, and their attributes. Useful for AI agents that need schema context for prompt engineering.
+
+Supports different modes: `docx`, `html`, `text`
+
+```javascript
+import { getSchemaIntrospection } from '@harbour-enterprises/superdoc';
+
+const schema = await getSchemaIntrospection({ mode: 'docx' });
+// Returns: { version, nodes: [...], marks: [...] }
+```
+
+### Options
+
+<ParamField path="options" type="Object">
+  Configuration options
+
+  <Expandable title="properties">
+    <ParamField path="editor" type="Editor">
+      Existing Editor instance to introspect. If provided, uses this instead of creating a temporary editor.
+    </ParamField>
+    <ParamField path="extensions" type="Array">
+      Custom extensions to use when building the schema.
+    </ParamField>
+    <ParamField path="mode" type="string" default="'docx'">
+      Editor mode: `'docx'`, `'html'`, or `'text'`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Response
+
+```json
+{
+  "version": "1.8.2",
+  "schemaVersion": "current",
+  "topNode": "doc",
+  "nodes": [
+    {
+      "name": "paragraph",
+      "attrs": {
+        "paragraphProperties": { "default": null, "required": false }
+      },
+      "group": "block",
+      "content": "inline*"
+    }
+  ],
+  "marks": [
+    {
+      "name": "bold",
+      "attrs": {},
+      "group": "formatting"
+    }
+  ]
+}
+```

@@ -8,15 +8,17 @@ import {
   eighthPointsToPixels,
   linesToTwips,
 } from '@converter/helpers.js';
-import { translator as w_pPrTranslator } from '@converter/v3/handlers/w/pPr';
-import { translator as w_rPrTranslator } from '@converter/v3/handlers/w/rpr';
 import { isValidHexColor, getHexColorFromDocxSystem } from '@converter/helpers';
 import { SuperConverter } from '@converter/SuperConverter.js';
 import { getUnderlineCssString } from '@extensions/linked-styles/underline-css.js';
-import { createOoxmlResolver, resolveDocxFontFamily } from '@superdoc/style-engine/ooxml';
-import { combineProperties as _combineProperties } from '@superdoc/style-engine';
+import {
+  resolveDocxFontFamily,
+  resolveRunProperties,
+  resolveParagraphProperties,
+  combineRunProperties,
+} from '@superdoc/style-engine/ooxml';
 
-const ooxmlResolver = createOoxmlResolver({ pPr: w_pPrTranslator, rPr: w_rPrTranslator });
+export { resolveRunProperties, resolveParagraphProperties, combineRunProperties };
 
 /**
  * Font family converter from SuperConverter (lazy getter to avoid circular import)
@@ -34,88 +36,6 @@ const getToCssFontFamily = () => {
  * Applied to the base font size to reduce text size for sub/superscripts.
  */
 const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
-
-/**
- * Gets the resolved run properties by merging defaults, styles, and inline properties.
- *
- * FontSize Fallback Behavior:
- * - Validates that the resolved fontSize is a valid positive number
- * - If fontSize is null, 0, negative, or NaN, applies fallback cascade:
- *   1. Document defaults (defaultProps.fontSize)
- *   2. Normal style (normalProps.fontSize)
- *   3. Baseline constant (DEFAULT_FONT_SIZE_HALF_POINTS = 20 half-points = 10pt)
- * - Each fallback source is validated before use (must be positive finite number)
- * - Ensures all text has a valid font size, preventing rendering issues
- *
- * @param {import('@translator').SCEncoderConfig} params - Converter context containing docx data.
- * @param {Object} inlineRpr - The inline run properties.
- * @param {Object} resolvedPpr - The resolved paragraph properties.
- * @param {boolean} [isListNumber=false] - Whether this run is a list number marker. When true,
- *                                         applies special handling for numbering properties and
- *                                         removes inline underlines.
- * @param {boolean} [numberingDefinedInline=false] - Whether numbering is defined inline rather than
- *                                                   in the style definition. When false, inline rPr
- *                                                   is ignored for list numbers.
- * @returns {Object} The resolved run properties.
- */
-export const resolveRunProperties = (
-  params,
-  inlineRpr,
-  resolvedPpr,
-  isListNumber = false,
-  numberingDefinedInline = false,
-) => ooxmlResolver.resolveRunProperties(params, inlineRpr, resolvedPpr, isListNumber, numberingDefinedInline);
-
-/**
- * Gets the resolved paragraph properties by merging defaults, styles, and inline properties.
- * @param {import('@translator').SCEncoderConfig} params
- * @param {Object} inlineProps - The inline paragraph properties.
- * @param {boolean} [insideTable=false] - Whether the paragraph is inside a table.
- * @param {boolean} [overrideInlineStyleId=false] - Whether to override the inline style ID with the one from numbering.
- * @param {string | null} [tableStyleId=null] - styleId for the current table, if any.
- * @returns {Object} The resolved paragraph properties.
- */
-export function resolveParagraphProperties(
-  params,
-  inlineProps,
-  insideTable = false,
-  overrideInlineStyleId = false,
-  tableStyleId = null,
-) {
-  return ooxmlResolver.resolveParagraphProperties(
-    params,
-    inlineProps,
-    insideTable,
-    overrideInlineStyleId,
-    tableStyleId,
-  );
-}
-
-export const getDefaultProperties = ooxmlResolver.getDefaultProperties;
-export const getStyleProperties = ooxmlResolver.getStyleProperties;
-export const getNumberingProperties = ooxmlResolver.getNumberingProperties;
-
-/**
- * Performs a deep merge on an ordered list of property objects.
- * Delegates to the single source of truth in @superdoc/style-engine.
- *
- * @param {Array<Object>} propertiesArray - Ordered list of property objects to combine.
- * @param {Array<string>} [fullOverrideProps=[]] - Keys that should overwrite instead of merge.
- * @param {Record<string, import('@superdoc/style-engine').SpecialHandler>} [specialHandling={}] - Optional per-key merge overrides.
- * @returns {Object} Combined property object.
- */
-export const combineProperties = (propertiesArray, fullOverrideProps = [], specialHandling = {}) => {
-  return _combineProperties(propertiesArray, { fullOverrideProps, specialHandling });
-};
-
-/**
- * Combines run property objects while fully overriding certain keys.
- * @param {Array<Object>} propertiesArray - Ordered list of run property objects.
- * @returns {Object} Combined run property object.
- */
-export const combineRunProperties = (propertiesArray) => {
-  return combineProperties(propertiesArray, ['fontFamily', 'color']);
-};
 
 /**
  * Encodes run property objects into mark definitions for the editor schema.

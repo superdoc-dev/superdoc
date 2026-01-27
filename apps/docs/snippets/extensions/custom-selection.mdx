@@ -1,0 +1,60 @@
+Keep text selection visible when clicking toolbar buttons.
+
+Select text and click the toolbar - your selection stays highlighted for a seamless editing experience.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p>Select any text in this paragraph, then click the toolbar buttons.</p>
+    <br />
+    <p>Your selection remains visible even when the editor loses focus.</p>
+    <br />
+    <p>This creates the polished interaction you expect from professional editors.</p>
+    `}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'Apply Bold',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.restorePreservedSelection()
+          editor.commands.toggleBold()
+        }
+      },
+      {
+        label: 'Apply Italic',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.restorePreservedSelection()
+          editor.commands.toggleItalic()
+        }
+      },
+      {
+        label: 'Change Color',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          const color = prompt('Enter color:', '#3b82f6')
+          if (color) {
+            editor.commands.restorePreservedSelection()
+            editor.commands.setColor(color)
+          }
+        }
+      }
+    ]
+  ]}
+/>
+
+## Use Case
+
+- **Professional UX** - Selection doesn't disappear when using toolbars
+- **Seamless editing** - Apply multiple formats without reselecting
+- **User expectations** - Matches desktop word processor behavior
+
+## Integration
+
+Add `toolbar-button` class to toolbar elements. Call `restorePreservedSelection()` before applying commands.

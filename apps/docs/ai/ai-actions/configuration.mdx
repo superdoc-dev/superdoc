@@ -1,0 +1,376 @@
+---
+title: Configuration
+keywords: "ai actions configuration, ai workflow setup, llm integration options, automation settings, ai agent config"
+---
+
+AI Actions requires two pieces of configuration: a user identity for AI-generated changes and a provider for LLM completions.
+
+## Required options
+
+<ParamField path="user" type="AIUser" required>
+  Identifies the AI assistant in tracked changes and comments.
+
+  ```ts
+  user: {
+    displayName: 'RedlineBot',
+    userId: 'ai-assistant',      // required
+    profileUrl: 'https://...'    // optional
+  }
+  ```
+</ParamField>
+
+<ParamField path="provider" type="AIProviderInput" required>
+  The LLM backend used for completions and streaming. Can be a provider configuration object (OpenAI, Anthropic, HTTP) or a custom provider instance. See [Provider Configuration](#provider-configuration) below.
+</ParamField>
+
+## Optional options
+
+<ParamField path="systemPrompt" type="string">
+  Overrides the default SuperDoc-centric system message. Use this to customize how the AI interprets document context and user instructions.
+</ParamField>
+
+<ParamField path="enableLogging" type="boolean" default="false">
+  Emits parsing and traversal warnings to the console for debugging purposes.
+</ParamField>
+
+<ParamField path="maxContextLength" type="number" default="8000">
+  Maximum number of characters from the document that will accompany AI prompts. Used to control context size for both regular actions and planner operations.
+</ParamField>
+
+<ParamField path="planner" type="PlannerOptions">
+  Configuration for the AI Planner, which enables multi-step AI workflows. See [Planner Configuration](#planner-configuration) below.
+</ParamField>
+
+<ParamField path="onReady" type="function">
+  Lifecycle callback fired when the AI is initialized and ready. See [Hooks](./hooks.mdx) for details.
+</ParamField>
+
+<ParamField path="onStreamingStart" type="function">
+  Lifecycle callback fired when streaming begins. See [Hooks](./hooks.mdx) for details.
+</ParamField>
+
+<ParamField path="onStreamingPartialResult" type="function">
+  Lifecycle callback fired for each streaming chunk. See [Hooks](./hooks.mdx) for details.
+</ParamField>
+
+<ParamField path="onStreamingEnd" type="function">
+  Lifecycle callback fired when streaming completes. See [Hooks](./hooks.mdx) for details.
+</ParamField>
+
+<ParamField path="onError" type="function">
+  Lifecycle callback fired when an error occurs. See [Hooks](./hooks.mdx) for details.
+</ParamField>
+
+## Provider configuration
+
+`provider` accepts either a config object (OpenAI, Anthropic, HTTP) or a custom implementation that exposes `getCompletion` and `streamCompletion`.
+
+<Note>
+**Browser vs Server:** For browser applications, use the HTTP gateway pattern to keep API keys secure on your backend. OpenAI and Anthropic providers are for server-side use only (Next.js API routes, Node.js scripts, etc.).
+</Note>
+
+### HTTP gateway (Browser-safe)
+
+Recommended for browser applications. Your backend handles API keys securely:
+
+```ts
+const ai = new AIActions(superdoc, {
+  user,
+  provider: {
+    type: 'http',
+    url: '/api/ai/complete', // Your backend endpoint
+    headers: {
+      'Authorization': `Bearer ${userAuthToken}`,
+    },
+  },
+});
+```
+
+For custom AI gateways or internal endpoints with advanced configuration:
+
+```ts
+provider: {
+  type: 'http',
+  url: 'https://your-ai-gateway/complete',
+
+  // Optional configuration
+  streamUrl: 'https://your-ai-gateway/stream',
+  method: 'POST',
+  streamResults: true,
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${userToken}`,
+  },
+  buildRequestBody: ({ messages, stream, options }) => ({
+    stream,
+    messages,
+    model: options?.model ?? 'gpt-4o-mini',
+    temperature: options?.temperature ?? 0.7,
+    metadata: options?.metadata,
+  }),
+  parseCompletion: payload => payload.choices?.[0]?.message?.content ?? '',
+  parseStreamChunk: payload => payload.choices?.[0]?.delta?.content ?? '',
+}
+```
+
+**HTTP-specific options:**
+
+<ParamField path="streamUrl" type="string">
+  Separate URL for streaming requests. If not provided, falls back to `url` for all requests.
+</ParamField>
+
+<ParamField path="method" type="string" default="POST">
+  HTTP method for requests
+</ParamField>
+
+<ParamField path="buildRequestBody" type="function">
+  Custom function to build the request body. Receives `{ messages, stream, options }` context.
+</ParamField>
+
+<ParamField path="parseCompletion" type="function">
+  Custom function to parse non-streaming responses. Receives the response payload and should return a string.
+</ParamField>
+
+<ParamField path="parseStreamChunk" type="function">
+  Custom function to parse each streaming chunk. Receives the chunk payload and should return a string or undefined.
+</ParamField>
+
+### OpenAI (Server-side only)
+
+<Warning>
+**Security:** Never use this provider in browser code. API keys will be exposed. Use the HTTP gateway pattern instead.
+</Warning>
+
+For server-side environments (Next.js API routes, Node.js, backend scripts):
+
+```ts
+const ai = new AIActions(superdoc, {
+  user,
+  provider: {
+    type: 'openai',
+    apiKey: process.env.OPENAI_API_KEY!,
+    model: 'gpt-4o',
+
+    // Optional configuration
+    baseURL: 'https://api.openai.com/v1',
+    organizationId: 'org_123',
+    completionPath: '/chat/completions',
+    temperature: 0.7,
+    maxTokens: 2000,
+    streamResults: true,
+    headers: { 'OpenAI-Beta': 'assistants=v2' },
+    requestOptions: { /* additional OpenAI options */ },
+  },
+});
+```
+
+**OpenAI-specific options:**
+
+<ParamField path="completionPath" type="string" default="/chat/completions">
+  Custom completion endpoint path (useful for Azure OpenAI or custom deployments)
+</ParamField>
+
+<ParamField path="organizationId" type="string">
+  OpenAI organization ID for API requests
+</ParamField>
+
+<ParamField path="requestOptions" type="Record<string, any>">
+  Additional OpenAI-specific request options passed directly to the API
+</ParamField>
+
+### Anthropic (Server-side only)
+
+<Warning>
+**Security:** Never use this provider in browser code. API keys will be exposed. Use the HTTP gateway pattern instead.
+</Warning>
+
+For server-side environments (Next.js API routes, Node.js, backend scripts):
+
+```ts
+provider: {
+  type: 'anthropic',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  model: 'claude-3-5-sonnet-20241022',
+
+  // Optional configuration
+  baseURL: 'https://api.anthropic.com',
+  apiVersion: '2023-06-01',
+  temperature: 0.7,
+  maxTokens: 2000,
+  streamResults: true,
+  headers: { /* custom headers */ },
+  requestOptions: { /* additional Anthropic options */ },
+}
+```
+
+**Anthropic-specific options:**
+
+<ParamField path="apiVersion" type="string" default="2023-06-01">
+  Anthropic API version to use
+</ParamField>
+
+<ParamField path="requestOptions" type="Record<string, any>">
+  Additional Anthropic-specific request options passed directly to the API
+</ParamField>
+
+### Custom provider instance
+
+Bring your own provider that implements the `AIProvider` interface:
+
+```ts
+const provider = {
+  streamResults: true,  // optional
+
+  async *streamCompletion(messages, options) {
+    // Yield tokens incrementally
+    yield 'Hello ';
+    yield 'world';
+  },
+
+  async getCompletion(messages, options) {
+    // Return complete response
+    return 'response';
+  },
+};
+
+const ai = new AIActions(superdoc, { user, provider });
+```
+
+## Common provider options
+
+All provider configurations support these common options:
+
+<ParamField path="temperature" type="number">
+  Controls randomness (0-2). Lower values make output more focused and deterministic.
+</ParamField>
+
+<ParamField path="maxTokens" type="number">
+  Maximum tokens to generate in responses
+</ParamField>
+
+<ParamField path="stop" type="string[]">
+  Stop sequences to end generation early
+</ParamField>
+
+<ParamField path="streamResults" type="boolean">
+  When true, actions like `insertContent` and `summarize` will stream results back. Provider must support streaming.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>">
+  Custom HTTP headers to include in requests
+</ParamField>
+
+<ParamField path="fetch" type="FetchLike">
+  Custom fetch implementation (useful for Node.js environments or custom HTTP logic)
+</ParamField>
+
+<ParamField path="baseURL" type="string">
+  Base URL for the API endpoint (OpenAI and Anthropic only)
+</ParamField>
+
+## Helper functions
+
+### createAIProvider
+
+Factory function for creating providers from configuration objects.
+
+```ts
+import { createAIProvider } from '@superdoc-dev/ai';
+
+const provider = createAIProvider({
+  type: 'openai',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4o',
+});
+
+// Use with AIActions
+const ai = new AIActions(superdoc, { user, provider });
+```
+
+<Note>
+`AIActions` automatically calls `createAIProvider()` internally, so you can pass configuration objects directly. This helper is useful for creating providers outside of initialization.
+</Note>
+
+
+## Planner configuration
+
+The AI Planner enables multi-step AI workflows where the AI can plan and execute a sequence of actions. Configure it via the `planner` option:
+
+```ts
+const ai = new AIActions(superdoc, {
+  user,
+  provider,
+  planner: {
+    maxContextLength: 10000,
+    documentContextProvider: () => customContextExtractor(),
+    tools: customTools,
+    onProgress: (event) => {
+      console.log('Planner progress:', event);
+    },
+  },
+});
+```
+
+<ParamField path="planner.maxContextLength" type="number" default="8000">
+  Maximum number of characters from the document that will be sent to the planner. Overrides the global `maxContextLength` for planner operations only.
+</ParamField>
+
+<ParamField path="planner.documentContextProvider" type="function">
+  Custom function to extract document context. If not provided, uses the default document text extraction. Useful for filtering or transforming document content before sending to the AI.
+
+  ```ts
+  documentContextProvider: () => {
+    // Return custom context string
+    return extractRelevantSections();
+  }
+  ```
+</ParamField>
+
+<ParamField path="planner.tools" type="AIToolDefinition[]">
+  Array of custom tool definitions to extend or override built-in tools. See [Custom Tools](#custom-tools) below.
+</ParamField>
+
+<ParamField path="planner.onProgress" type="AIPlannerProgressCallback">
+  Callback function that receives progress events during planner execution. See [Planner Progress Hooks](./hooks.mdx#planner-progress-hooks) for details.
+</ParamField>
+
+### Custom tools
+
+You can extend the planner with custom tools or override built-in ones:
+
+```ts
+import { AIToolDefinition } from '@superdoc-dev/ai';
+
+const customTool: AIToolDefinition = {
+  name: 'customAction',
+  description: 'Performs a custom action on the document',
+  handler: async ({ instruction, context, previousResults }) => {
+    // Implement your custom logic
+    const result = await performCustomAction(instruction, context.editor);
+    return {
+      success: true,
+      data: result,
+    };
+  },
+};
+
+const ai = new AIActions(superdoc, {
+  user,
+  provider,
+  planner: {
+    tools: [customTool],
+  },
+});
+```
+
+**Built-in tools available to the planner:**
+- `findAll` - Find all occurrences matching a query
+- `highlight` - Highlight content
+- `replaceAll` - Replace all matches
+- `literalReplace` - Literal text replacement
+- `insertTrackedChanges` - Insert tracked changes
+- `insertComments` - Insert comments
+- `literalInsertComment` - Literal comment insertion
+- `summarize` - Generate summaries
+- `insertContent` - Insert new content
+- `respond` - Provide textual response without document changes

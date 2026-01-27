@@ -208,7 +208,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
   });
 
   const getThreadingParentId = (comment) => {
-    if (!comment) return comment?.parentCommentId;
+    if (!comment) return undefined;
     const usesRangeThreading =
       comment.threadingStyleOverride === 'range-based' ||
       comment.threadingMethod === 'range-based' ||
@@ -278,6 +278,8 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         comment,
         parentCommentId,
         trackedChangeId,
+        actualStart: start,
+        actualEnd: end,
       });
       return;
     }
@@ -336,7 +338,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
   });
 
   if (trackedChangeSpanById.size > 0) {
-    trackedChangeCommentMeta.forEach(({ comment, parentCommentId, trackedChangeId }) => {
+    trackedChangeCommentMeta.forEach(({ comment, parentCommentId, trackedChangeId, actualStart, actualEnd }) => {
       if (!comment || !trackedChangeSpanById.has(trackedChangeId)) return;
 
       const span = trackedChangeSpanById.get(trackedChangeId);
@@ -359,9 +361,13 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
           ? [trackedMarks.insertMark]
           : undefined;
 
+      // Use actual comment range if available, fall back to full TC span
+      const startPos = actualStart ?? span.startPos;
+      const endPos = actualEnd ?? span.endPos;
+
       const childStartNode = schema.nodes.commentRangeStart.create(childMark, null, startMarks);
       startNodes.push({
-        pos: span.startPos,
+        pos: startPos,
         node: childStartNode,
         commentId: comment.commentId,
         parentCommentId,
@@ -369,7 +375,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
 
       const childEndNode = schema.nodes.commentRangeEnd.create(childMark, null, endMarks);
       endNodes.push({
-        pos: span.endPos,
+        pos: endPos,
         node: childEndNode,
         commentId: comment.commentId,
         parentCommentId,
@@ -384,8 +390,9 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         seen.add(c.commentId);
 
         const childRange = commentRanges.get(c.commentId);
-        const childStart = childRange?.start ?? span.startPos;
-        const childEnd = childRange?.end ?? span.endPos;
+        // Use child's own range, fall back to parent's actual range, then TC span
+        const childStart = childRange?.start ?? actualStart ?? span.startPos;
+        const childEnd = childRange?.end ?? actualEnd ?? span.endPos;
         const childStartMarks = childRange ? undefined : startMarks;
         const childEndMarks = childRange ? undefined : endMarks;
 
@@ -412,14 +419,19 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
       });
     });
 
+    // Handle comments that are on tracked change text (identified by trackedChangeParentId)
     comments
-      .filter((comment) => trackedChangeSpanById.has(comment.parentCommentId) && !comment.trackedChange)
+      .filter((comment) => {
+        const tcParentId = comment.trackedChangeParentId || comment.parentCommentId;
+        return trackedChangeSpanById.has(tcParentId) && !comment.trackedChange;
+      })
       .sort((a, b) => a.createdTime - b.createdTime)
       .forEach((comment) => {
         if (seen.has(comment.commentId)) return;
         seen.add(comment.commentId);
 
-        const span = trackedChangeSpanById.get(comment.parentCommentId);
+        const tcParentId = comment.trackedChangeParentId || comment.parentCommentId;
+        const span = trackedChangeSpanById.get(tcParentId);
         if (!span) return;
 
         const childMark = getPreparedComment({
@@ -428,7 +440,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         });
 
         const parentCommentId = getThreadingParentId(comment);
-        const trackedMarks = trackedChangeMarksById.get(comment.parentCommentId) || {};
+        const trackedMarks = trackedChangeMarksById.get(tcParentId) || {};
         const startMarks = trackedMarks.insertMark
           ? [trackedMarks.insertMark]
           : trackedMarks.deleteMark
@@ -718,10 +730,62 @@ export const translateFormatChangesToEnglish = (attrs = {}) => {
  * @param {EditorView} param0.editor The current editor view
  * @returns {String} The color to use for the highlight
  */
+
+/** Default opacity for active comment highlights (0x44/0xff ≈ 0.267) */
+const DEFAULT_ACTIVE_ALPHA = 0x44 / 0xff;
+
+/** Default opacity for inactive comment highlights (0x22/0xff ≈ 0.133) */
+const DEFAULT_INACTIVE_ALPHA = 0x22 / 0xff;
+
+/**
+ * Clamps an opacity value to the valid range [0, 1].
+ * @param {number} value - The opacity value to clamp
+ * @returns {number|null} The clamped value, or null if input is not a finite number
+ */
+export const clampOpacity = (value) => {
+  if (!Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
+};
+
+/**
+ * Applies an alpha/opacity value to a hex color string.
+ * @param {string} color - Hex color in 3-digit (#abc) or 6-digit (#aabbcc) format
+ * @param {number} opacity - Opacity value between 0 and 1
+ * @returns {string} The color with alpha appended (e.g., #aabbcc44), or original color if invalid format
+ */
+export const applyAlphaToHex = (color, opacity) => {
+  if (typeof color !== 'string') return color;
+  const match = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return color;
+
+  const hex =
+    match[1].length === 3
+      ? match[1]
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : match[1];
+  const alpha = Math.round(opacity * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `#${hex}${alpha}`;
+};
+
 export const getHighlightColor = ({ activeThreadId, threadId, isInternal, editor }) => {
   if (!editor.options.isInternal && isInternal) return 'transparent';
   const pluginState = CommentsPluginKey.getState(editor.state);
-  const color = isInternal ? pluginState.internalColor : pluginState.externalColor;
-  const alpha = activeThreadId == threadId ? '44' : '22';
-  return `${color}${alpha}`;
+  const highlightColors = editor.options.comments?.highlightColors || {};
+  const highlightOpacity = editor.options.comments?.highlightOpacity || {};
+  const isActive = activeThreadId === threadId;
+
+  const baseColor = isInternal
+    ? (highlightColors.internal ?? pluginState.internalColor)
+    : (highlightColors.external ?? pluginState.externalColor);
+
+  const activeOverride = isInternal ? highlightColors.activeInternal : highlightColors.activeExternal;
+  if (isActive && activeOverride) return activeOverride;
+
+  const resolvedOpacity = clampOpacity(isActive ? highlightOpacity.active : highlightOpacity.inactive);
+  const opacity = resolvedOpacity ?? (isActive ? DEFAULT_ACTIVE_ALPHA : DEFAULT_INACTIVE_ALPHA);
+  return applyAlphaToHex(baseColor, opacity);
 };

@@ -226,21 +226,21 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 }
 
 .ProseMirror .track-insert-dec.highlighted {
-  border-top: 1px dashed #00853d;
-  border-bottom: 1px dashed #00853d;
-  background-color: #399c7222;
+  border-top: 1px dashed var(--sd-track-insert-border, #00853d);
+  border-bottom: 1px dashed var(--sd-track-insert-border, #00853d);
+  background-color: var(--sd-track-insert-bg, #399c7222);
 }
 
 .ProseMirror .track-delete-dec.highlighted {
-  border-top: 1px dashed #cb0e47;
-  border-bottom: 1px dashed #cb0e47;
-  background-color: #cb0e4722;
+  border-top: 1px dashed var(--sd-track-delete-border, #cb0e47);
+  border-bottom: 1px dashed var(--sd-track-delete-border, #cb0e47);
+  background-color: var(--sd-track-delete-bg, #cb0e4722);
   text-decoration: line-through !important;
   text-decoration-thickness: 2px !important;
 }
 
 .ProseMirror .track-format-dec.highlighted {
-  border-bottom: 2px solid gold;
+  border-bottom: 2px solid var(--sd-track-format-border, gold);
 }
 
 .ProseMirror .track-delete-widget {

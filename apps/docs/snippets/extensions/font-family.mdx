@@ -1,0 +1,77 @@
+Change text font to match your document's style and tone.
+
+Select text and apply different fonts for headers, quotes, or emphasis. Preserves perfectly through Word import/export.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`
+    <p style="font-family: Arial">This is Arial - clean and modern.</p>
+    <p style="font-family: Georgia, serif">This is Georgia - classic and readable.</p>
+    <p style="font-family: 'Courier New', monospace">This is Courier - perfect for code.</p>
+    <p>Select any text and change its font using the buttons below.</p>
+  `}
+  height="250px"
+  customButtons={[
+    [
+      {
+        label: 'Arial',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontFamily('Arial, sans-serif')
+        }
+      },
+      {
+        label: 'Times',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontFamily('Times New Roman, serif')
+        }
+      },
+      {
+        label: 'Georgia',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontFamily('Georgia, serif')
+        }
+      },
+      {
+        label: 'Courier',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.setFontFamily('Courier New, monospace')
+        }
+      },
+      {
+        label: 'Reset Font',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.unsetFontFamily()
+        }
+      }
+    ]
+  ]}
+/>
+
+## OOXML Structure
+
+```xml
+<w:r>
+  <w:rPr>
+    <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
+  </w:rPr>
+  <w:t>Text in Arial font</w:t>
+</w:r>
+```
+
+## Use Case
+
+- **Brand consistency** - Match company typography guidelines
+- **Document hierarchy** - Different fonts for headers vs body text
+- **Code snippets** - Monospace fonts for technical content
+- **Readability** - Choose fonts optimized for screen or print

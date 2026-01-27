@@ -1,0 +1,158 @@
+---
+title: Creating Extensions
+sidebarTitle: Create Your Own
+---
+
+Create extensions to add custom features to SuperDoc.
+
+## Basic extension
+
+```javascript
+import { Extensions } from '@harbour-enterprises/superdoc';
+const { Extension } = Extensions;
+
+const MyExtension = Extension.create({
+  name: 'myExtension',
+  
+  addCommands() {
+    return {
+      myCommand: () => ({ commands }) => {
+        console.log('Command executed');
+        return true;
+      }
+    };
+  }
+});
+
+// Use it
+editor.commands.myCommand();
+```
+
+## Extension types
+
+### Node extension
+For document elements:
+
+```javascript
+import { Extensions } from '@harbour-enterprises/superdoc';
+
+const { Node } = Extensions;
+const CustomBlock = Node.create({
+  name: 'customBlock',
+  group: 'block',
+  content: 'inline*',
+  
+  parseHTML() {
+    return [{ tag: 'div[data-custom]' }];
+  },
+  
+  renderHTML({ HTMLAttributes }) {
+    return ['div', { 'data-custom': '' }, 0];
+  }
+});
+```
+
+### Mark extension
+For inline formatting:
+
+```javascript
+import { Extensions } from '@harbour-enterprises/superdoc';
+
+const { Mark } = Extensions;
+const Highlight = Mark.create({
+  name: 'highlight',
+  
+  addCommands() {
+    return {
+      toggleHighlight: () => ({ commands }) => {
+        return commands.toggleMark(this.name);
+      }
+    };
+  }
+});
+```
+
+## Adding features
+
+### Commands
+```javascript
+addCommands() {
+  return {
+    simpleCommand: () => ({ commands }) => {
+      return commands.insertContent('Hello');
+    },
+    
+    complexCommand: (text) => ({ state, dispatch }) => {
+      dispatch(state.tr.insertText(text));
+      return true;
+    }
+  };
+}
+```
+
+### Keyboard shortcuts
+```javascript
+addKeyboardShortcuts() {
+  return {
+    'Mod-Shift-h': () => this.editor.commands.toggleHighlight()
+  };
+}
+```
+
+### ProseMirror plugins
+
+Your extension can also define ProseMirror plugins which will let you perform more advanced things, such as listening to browser events attached to a node.
+```javascript
+import { Plugin, PluginKey } from 'prosemirror-state';
+
+// ...
+
+addPmPlugins() {
+    return [
+        new Plugin({
+            key: new PluginKey('myPlugin'),
+            props: {
+                handleClickOn: (view, pos, node, nodePos, event, direct) => {
+                    console.log("Node was clicked!");
+                }
+            },
+        })
+    ];
+}
+```
+You can read more about ProseMirror's plugin system [here](https://prosemirror.net/docs/ref/#state.Plugin_System).
+
+### Configuration
+```javascript
+const ConfigurableExt = Extension.create({
+  addOptions() {
+    return {
+      color: '#0000FF',
+      enabled: true
+    };
+  },
+  
+  addCommands() {
+    return {
+      applyColor: () => () => {
+        // Use this.options.color
+      }
+    };
+  }
+});
+
+// Configure when using
+ConfigurableExt.configure({ color: '#FF0000' });
+```
+
+## Using your extension
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'document.docx',
+  editorExtensions: [
+    MyExtension,
+  ]
+});
+```

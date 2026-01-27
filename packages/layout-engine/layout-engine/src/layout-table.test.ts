@@ -1439,12 +1439,47 @@ describe('layoutTableBlock', () => {
       const measure = createMockTableMeasure(
         [100, 100], // Two columns
         [120], // Row height (max of cell heights)
-        [
-          // Row 0 - different line heights per cell
-          [20, 20, 20], // Cell 0: 3x20px lines
-          [40, 40, 40], // Cell 1: 3x40px lines
-        ],
+        [[20, 20, 20]], // Row 0 defaults (applied to all cells)
       );
+
+      if (measure.rows[0].cells[1]) {
+        measure.rows[0].cells[1].paragraph = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 1,
+              width: 100,
+              ascent: 30,
+              descent: 10,
+              lineHeight: 40,
+            },
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 1,
+              width: 100,
+              ascent: 30,
+              descent: 10,
+              lineHeight: 40,
+            },
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 1,
+              width: 100,
+              ascent: 30,
+              descent: 10,
+              lineHeight: 40,
+            },
+          ],
+          totalHeight: 120,
+        };
+      }
 
       const fragments: TableFragment[] = [];
       let pageCount = 0;
@@ -1583,11 +1618,57 @@ describe('layoutTableBlock', () => {
       const measure = createMockTableMeasure(
         [100, 100],
         [80], // Row height (max of cells)
-        [
-          [20, 20], // Cell 0: 2 lines of 20px (total 40px)
-          [20, 20, 20, 20], // Cell 1: 4 lines of 20px (total 80px)
-        ],
+        [[20, 20]], // Row 0 defaults (applied to all cells)
       );
+
+      if (measure.rows[0].cells[1]) {
+        measure.rows[0].cells[1].paragraph = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 1,
+              width: 100,
+              ascent: 15,
+              descent: 5,
+              lineHeight: 20,
+            },
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 1,
+              width: 100,
+              ascent: 15,
+              descent: 5,
+              lineHeight: 20,
+            },
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 1,
+              width: 100,
+              ascent: 15,
+              descent: 5,
+              lineHeight: 20,
+            },
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 1,
+              width: 100,
+              ascent: 15,
+              descent: 5,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 80,
+        };
+      }
 
       const fragments: TableFragment[] = [];
       let cursorY = 0;

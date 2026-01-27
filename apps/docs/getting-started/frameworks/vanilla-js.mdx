@@ -1,0 +1,181 @@
+---
+title: Vanilla JavaScript
+sidebarTitle: Vanilla JS
+keywords: "vanilla javascript docx, plain js word editor, superdoc vanilla, no framework docx, pure javascript editor"
+---
+
+SuperDoc works with plain JavaScript. No framework required.
+
+## Basic Setup
+
+<CodeGroup>
+
+```html CDN
+<!DOCTYPE html>
+<html>
+<head>
+  <link href="https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" 
+        rel="stylesheet">
+</head>
+<body>
+  <div id="editor" style="height: 700px"></div>
+  
+  <script type="module">
+    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+    
+    const superdoc = new SuperDoc({
+      selector: '#editor',
+      document: 'contract.docx'
+    });
+  </script>
+</body>
+</html>
+```
+
+```javascript NPM/Bundler
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import '@harbour-enterprises/superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx'
+});
+```
+
+</CodeGroup>
+
+## Load Documents
+
+<CodeGroup>
+
+```javascript File Upload
+const fileInput = document.querySelector('input[type="file"]');
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  new SuperDoc({
+    selector: '#editor',
+    document: file
+  });
+});
+```
+
+```javascript Fetch API
+fetch('/api/documents/123')
+  .then(res => res.blob())
+  .then(blob => {
+    // Convert Blob to File (required)
+    const file = new File([blob], 'document.docx', {
+      type: blob.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+    
+    new SuperDoc({
+      selector: '#editor',
+      document: file
+    });
+  });
+```
+
+```javascript Direct URL
+new SuperDoc({
+  selector: '#editor',
+  document: 'https://example.com/contract.docx'
+});
+```
+
+</CodeGroup>
+
+## Complete Example
+
+<CodeGroup>
+
+```html CDN
+<!DOCTYPE html>
+<html>
+<head>
+  <link href="https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" 
+        rel="stylesheet">
+</head>
+<body>
+  <div class="controls">
+    <input type="file" id="file-input" accept=".docx">
+    <button id="mode-edit">Edit</button>
+    <button id="mode-review">Review</button>
+    <button id="export-btn">Export</button>
+  </div>
+  
+  <div id="editor" style="height: 700px"></div>
+  
+  <script type="module">
+    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+    
+    let superdoc = null;
+    
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      superdoc = new SuperDoc({
+        selector: '#editor',
+        document: file,
+        documentMode: 'editing'
+      });
+    });
+    
+    document.getElementById('mode-edit').addEventListener('click', () => {
+      superdoc?.setDocumentMode('editing');
+    });
+    
+    document.getElementById('mode-review').addEventListener('click', () => {
+      superdoc?.setDocumentMode('suggesting');
+    });
+    
+    document.getElementById('export-btn').addEventListener('click', async () => {
+      await superdoc?.export({ isFinalDoc: true });
+    });
+  </script>
+</body>
+</html>
+```
+
+```javascript NPM/Bundler
+import { SuperDoc } from '@harbour-enterprises/superdoc';
+import '@harbour-enterprises/superdoc/style.css';
+
+let superdoc = null;
+
+// File upload
+document.getElementById('file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  superdoc = new SuperDoc({
+    selector: '#editor',
+    document: file,
+    documentMode: 'editing'
+  });
+});
+
+// Mode controls
+document.getElementById('mode-edit').addEventListener('click', () => {
+  superdoc?.setDocumentMode('editing');
+});
+
+document.getElementById('mode-review').addEventListener('click', () => {
+  superdoc?.setDocumentMode('suggesting');
+});
+
+// Export
+document.getElementById('export-btn').addEventListener('click', async () => {
+  await superdoc?.export({ isFinalDoc: true });
+});
+```
+
+</CodeGroup>
+
+## Next Steps
+
+- [API Reference](/core/superdoc/configuration) - Configuration options
+- [React Integration](/getting-started/frameworks/react) - Using with React
+- [Vue Integration](/getting-started/frameworks/vue) - Using with Vue

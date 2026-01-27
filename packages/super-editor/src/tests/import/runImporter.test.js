@@ -65,9 +65,9 @@ const createMockDocx = (styles = []) => {
   return docx;
 };
 
-const createMockStyle = (styleId, runProperties = []) => ({
+const createMockStyle = (styleId, runProperties = [], type = 'paragraph') => ({
   name: 'w:style',
-  attributes: { 'w:styleId': styleId },
+  attributes: { 'w:styleId': styleId, 'w:type': type },
   elements: [
     {
       name: 'w:rPr',
@@ -111,29 +111,109 @@ const createMockBold = () => createMockRunProperty('w:b', {});
 
 const createMockItalic = () => createMockRunProperty('w:i', {});
 
+const parseRunProperties = (runProperties = []) => {
+  const resolved = {};
+  runProperties.forEach((prop) => {
+    if (!prop || typeof prop !== 'object') return;
+    switch (prop.name) {
+      case 'w:rFonts': {
+        const ascii = prop.attributes?.['w:ascii'];
+        if (ascii) {
+          resolved.fontFamily = {
+            ascii,
+            hAnsi: prop.attributes?.['w:hAnsi'] || ascii,
+            eastAsia: prop.attributes?.['w:eastAsia'],
+            cs: prop.attributes?.['w:cs'],
+          };
+        }
+        break;
+      }
+      case 'w:sz': {
+        const size = Number(prop.attributes?.['w:val']);
+        if (Number.isFinite(size)) resolved.fontSize = size;
+        break;
+      }
+      case 'w:color': {
+        const val = prop.attributes?.['w:val'];
+        if (val) resolved.color = { val };
+        break;
+      }
+      case 'w:b':
+        resolved.bold = true;
+        break;
+      case 'w:i':
+        resolved.italic = true;
+        break;
+      default:
+        break;
+    }
+  });
+  return resolved;
+};
+
+const buildTranslatedLinkedStyles = (styles = []) => {
+  const translated = {
+    docDefaults: {
+      runProperties: {},
+      paragraphProperties: {},
+    },
+    latentStyles: {},
+    styles: {
+      Normal: {
+        styleId: 'Normal',
+        type: 'paragraph',
+        default: true,
+        name: 'Normal',
+        runProperties: {},
+        paragraphProperties: {},
+      },
+    },
+  };
+
+  styles.forEach((style) => {
+    const styleId = style?.attributes?.['w:styleId'];
+    if (!styleId) return;
+    const type = style?.attributes?.['w:type'] || 'paragraph';
+    const runPropsNode = style?.elements?.find((child) => child?.name === 'w:rPr');
+    const runProps = parseRunProperties(runPropsNode?.elements ?? []);
+    translated.styles[styleId] = {
+      styleId,
+      type,
+      runProperties: runProps,
+      paragraphProperties: {},
+    };
+  });
+
+  return translated;
+};
+
 describe('runImporter', () => {
   describe('runStyle attributes override paragraphStyleAttributes', () => {
     it('should override paragraph style attributes with run style attributes', () => {
       // Create styles with paragraph and run styles
-      const paragraphStyle = createMockStyle('ParagraphStyle', [
-        createMockFont('Times New Roman'),
-        createMockSize('24'), // 12pt
-      ]);
+      const paragraphStyle = createMockStyle(
+        'ParagraphStyle',
+        [createMockFont('Times New Roman'), createMockSize('24')],
+        'paragraph',
+      );
 
-      const runStyle = createMockStyle('RunStyle', [
-        createMockFont('Arial'),
-        createMockSize('32'), // 16pt
-      ]);
+      const runStyle = createMockStyle('RunStyle', [createMockFont('Arial'), createMockSize('32')], 'character');
 
       const mockDocx = createMockDocx([paragraphStyle, runStyle]);
+      const translatedLinkedStyles = buildTranslatedLinkedStyles([paragraphStyle, runStyle]);
       const mockRunNode = createMockRunNode([createMockRunStyle('RunStyle')]);
       const mockNodeListHandler = createMockNodeListHandler();
 
       const result = handleRunNode({
         nodes: [mockRunNode],
         nodeListHandler: mockNodeListHandler,
-        parentStyleId: 'ParagraphStyle',
+        extraParams: {
+          paragraphProperties: {
+            styleId: 'ParagraphStyle',
+          },
+        },
         docx: mockDocx,
+        translatedLinkedStyles,
       });
 
       expect(result.nodes).toHaveLength(1);
@@ -154,15 +234,16 @@ describe('runImporter', () => {
 
     it('should combine paragraph and run styles with correct precedence', () => {
       // Create styles with paragraph and run styles
-      const paragraphStyle = createMockStyle('ParagraphStyle', [
-        createMockFont('Times New Roman'),
-        createMockSize('24'), // 12pt
-        createMockBold(),
-      ]);
+      const paragraphStyle = createMockStyle(
+        'ParagraphStyle',
+        [createMockFont('Times New Roman'), createMockSize('24'), createMockBold()],
+        'paragraph',
+      );
 
-      const runStyle = createMockStyle('RunStyle', [createMockFont('Arial'), createMockItalic()]);
+      const runStyle = createMockStyle('RunStyle', [createMockFont('Arial'), createMockItalic()], 'character');
 
       const mockDocx = createMockDocx([paragraphStyle, runStyle]);
+      const translatedLinkedStyles = buildTranslatedLinkedStyles([paragraphStyle, runStyle]);
       const mockRunNode = createMockRunNode([createMockRunStyle('RunStyle')]);
       const mockNodeListHandler = createMockNodeListHandler();
 
@@ -175,6 +256,7 @@ describe('runImporter', () => {
           },
         },
         docx: mockDocx,
+        translatedLinkedStyles,
       });
 
       expect(result.nodes).toHaveLength(1);
@@ -198,12 +280,14 @@ describe('runImporter', () => {
 
     it('should handle run nodes without run styles', () => {
       // Create style with only paragraph styles
-      const paragraphStyle = createMockStyle('ParagraphStyle', [
-        createMockFont('Times New Roman'),
-        createMockSize('24'), // 12pt
-      ]);
+      const paragraphStyle = createMockStyle(
+        'ParagraphStyle',
+        [createMockFont('Times New Roman'), createMockSize('24')],
+        'paragraph',
+      );
 
       const mockDocx = createMockDocx([paragraphStyle]);
+      const translatedLinkedStyles = buildTranslatedLinkedStyles([paragraphStyle]);
       const mockRunNode = createMockRunNode([createMockBold()]);
       const mockNodeListHandler = createMockNodeListHandler();
 
@@ -216,6 +300,7 @@ describe('runImporter', () => {
           },
         },
         docx: mockDocx,
+        translatedLinkedStyles,
       });
 
       expect(result.nodes).toHaveLength(1);
@@ -239,9 +324,10 @@ describe('runImporter', () => {
 
   describe('textStyle mark stores the styleId', () => {
     it('should store run style ID in textStyle mark', () => {
-      const runStyle = createMockStyle('CustomRunStyle', [createMockFont('Calibri')]);
+      const runStyle = createMockStyle('CustomRunStyle', [createMockFont('Calibri')], 'character');
 
       const mockDocx = createMockDocx([runStyle]);
+      const translatedLinkedStyles = buildTranslatedLinkedStyles([runStyle]);
       const mockRunNode = createMockRunNode([createMockRunStyle('CustomRunStyle')]);
       const mockNodeListHandler = createMockNodeListHandler('text', 'Styled text');
 
@@ -250,6 +336,7 @@ describe('runImporter', () => {
         nodeListHandler: mockNodeListHandler,
         parentStyleId: null,
         docx: mockDocx,
+        translatedLinkedStyles,
       });
 
       expect(result.nodes).toHaveLength(1);
@@ -274,6 +361,7 @@ describe('runImporter', () => {
         nodeListHandler: mockNodeListHandler,
         parentStyleId: null,
         docx: mockDocx,
+        translatedLinkedStyles: buildTranslatedLinkedStyles([]),
       });
 
       expect(result.nodes).toHaveLength(1);
@@ -289,12 +377,10 @@ describe('runImporter', () => {
     });
 
     it('should handle multiple textStyle marks correctly', () => {
-      const runStyle = createMockStyle('MultiStyle', [
-        createMockFont('Verdana'),
-        createMockSize('40'), // 20pt
-      ]);
+      const runStyle = createMockStyle('MultiStyle', [createMockFont('Verdana'), createMockSize('40')], 'character');
 
       const mockDocx = createMockDocx([runStyle]);
+      const translatedLinkedStyles = buildTranslatedLinkedStyles([runStyle]);
       const mockRunNode = createMockRunNode([createMockRunStyle('MultiStyle'), createMockColor('FF0000')]);
       const mockNodeListHandler = createMockNodeListHandler('text', 'Multi-styled text');
 
@@ -303,6 +389,7 @@ describe('runImporter', () => {
         nodeListHandler: mockNodeListHandler,
         parentStyleId: null,
         docx: mockDocx,
+        translatedLinkedStyles,
       });
 
       expect(result.nodes).toHaveLength(1);
@@ -323,15 +410,16 @@ describe('runImporter', () => {
   describe('integration with real document structure', () => {
     it('should handle run nodes with complex style hierarchies', () => {
       // Create a more complex document structure
-      const headingStyle = createMockStyle('Heading1', [
-        createMockFont('Georgia'),
-        createMockSize('48'), // 24pt
-        createMockBold(),
-      ]);
+      const headingStyle = createMockStyle(
+        'Heading1',
+        [createMockFont('Georgia'), createMockSize('48'), createMockBold()],
+        'paragraph',
+      );
 
-      const emphasisStyle = createMockStyle('Emphasis', [createMockItalic(), createMockColor('0000FF')]);
+      const emphasisStyle = createMockStyle('Emphasis', [createMockItalic(), createMockColor('0000FF')], 'character');
 
       const mockDocx = createMockDocx([headingStyle, emphasisStyle]);
+      const translatedLinkedStyles = buildTranslatedLinkedStyles([headingStyle, emphasisStyle]);
       const mockRunNode = createMockRunNode([createMockRunStyle('Emphasis')], 'emphasized text');
       const mockNodeListHandler = createMockNodeListHandler('text', 'emphasized text');
 
@@ -344,6 +432,7 @@ describe('runImporter', () => {
           },
         },
         docx: mockDocx,
+        translatedLinkedStyles,
       });
 
       expect(result.nodes).toHaveLength(1);

@@ -22,6 +22,7 @@ import type { FlowBlock, PMNode, SectionBreakBlock, Measure } from '@superdoc/co
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_CONVERTER_CONTEXT } from './test-helpers/section-test-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -99,6 +100,7 @@ describe('Multi-Section Document Page Count (Simple)', () => {
     console.log('\nConverting to flow blocks...');
     const { blocks, bookmarks } = toFlowBlocks(pmDoc, {
       emitSectionBreaks: true, // CRITICAL: Must enable section break emission
+      converterContext: DEFAULT_CONVERTER_CONTEXT,
     });
     console.log(`Generated ${blocks.length} flow blocks`);
     console.log(`Generated ${bookmarks.size} bookmarks`);
@@ -203,7 +205,10 @@ describe('Multi-Section Document Page Count (Simple)', () => {
 
   it('should emit 4 section break blocks for a 4-section document', () => {
     const pmDoc = loadPMJsonFixture('multi_section_doc.json');
-    const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+    const { blocks } = toFlowBlocks(pmDoc, {
+      emitSectionBreaks: true,
+      converterContext: DEFAULT_CONVERTER_CONTEXT,
+    });
 
     const sectionBreaks = blocks.filter((b) => b.kind === 'sectionBreak');
     console.log(`\nSection breaks found: ${sectionBreaks.length}`);
@@ -224,7 +229,10 @@ describe('Multi-Section Document Page Count (Simple)', () => {
 
   it('should have correct section break types', () => {
     const pmDoc = loadPMJsonFixture('multi_section_doc.json');
-    const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+    const { blocks } = toFlowBlocks(pmDoc, {
+      emitSectionBreaks: true,
+      converterContext: DEFAULT_CONVERTER_CONTEXT,
+    });
 
     const sectionBreaks = blocks.filter((b) => b.kind === 'sectionBreak') as SectionBreakBlock[];
 

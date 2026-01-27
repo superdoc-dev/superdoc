@@ -16,6 +16,7 @@ export default function useComment(params) {
   const commentId = params.commentId || uuidv4();
   const importedId = params.importedId;
   const parentCommentId = params.parentCommentId;
+  const trackedChangeParentId = params.trackedChangeParentId;
   const fileId = params.fileId;
   const fileType = params.fileType;
   const createdAtVersionNumber = params.createdAtVersionNumber;
@@ -231,6 +232,7 @@ export default function useComment(params) {
       commentId,
       importedId,
       parentCommentId,
+      trackedChangeParentId,
       fileId,
       fileType,
       mentions: mentions.value.map((u) => {
@@ -266,6 +268,7 @@ export default function useComment(params) {
     commentId,
     importedId,
     parentCommentId,
+    trackedChangeParentId,
     fileId,
     fileType,
     mentions,

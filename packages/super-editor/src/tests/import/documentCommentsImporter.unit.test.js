@@ -324,7 +324,11 @@ describe('importCommentData extended metadata', () => {
     const comments = importCommentData({ docx });
     const child = comments.find((comment) => comment.commentId === 'child-comment');
 
-    expect(child.parentCommentId).toBe('tc-1');
+    // With the new separation of TC and comments:
+    // - trackedChangeParentId tracks the TC association
+    // - parentCommentId tracks the threading relationship (from range nesting)
+    expect(child.trackedChangeParentId).toBe('tc-1');
+    expect(child.parentCommentId).toBe('parent-comment');
     expect(child.threadingParentCommentId).toBe('parent-comment');
   });
 });
@@ -833,8 +837,8 @@ describe('Google Docs tracked change comment threading', () => {
     expect(comments).toHaveLength(1);
 
     const comment = comments[0];
-    // The parent should be the tracked change ID ('0')
-    expect(comment.parentCommentId).toBe('0');
+    // The tracked change ID ('0') should be in trackedChangeParentId (not parentCommentId)
+    expect(comment.trackedChangeParentId).toBe('0');
   });
 
   it('detects comment inside tracked change insertion as child of tracked change', () => {
@@ -865,7 +869,7 @@ describe('Google Docs tracked change comment threading', () => {
     expect(comments).toHaveLength(1);
 
     const comment = comments[0];
-    expect(comment.parentCommentId).toBe('2');
+    expect(comment.trackedChangeParentId).toBe('2');
   });
 
   it('detects multiple comments inside same tracked change', () => {
@@ -903,9 +907,50 @@ describe('Google Docs tracked change comment threading', () => {
     const firstComment = comments.find((c) => c.commentId === 'first-comment');
     const secondComment = comments.find((c) => c.commentId === 'second-comment');
 
-    // Both should have the tracked change as parent
-    expect(firstComment.parentCommentId).toBe('1');
-    expect(secondComment.parentCommentId).toBe('1');
+    // Both should have the tracked change as trackedChangeParentId (not parentCommentId)
+    expect(firstComment.trackedChangeParentId).toBe('1');
+    expect(secondComment.trackedChangeParentId).toBe('1');
+  });
+
+  it('threads nested range replies inside a tracked change', () => {
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'root-comment', author: 'Author A', date: '2024-01-01T10:00:00Z' },
+        { id: 1, internalId: 'reply-comment', author: 'Author B', date: '2024-01-01T10:05:00Z' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': '55', 'w:author': 'Author A', 'w:date': '2024-01-01T09:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+                {
+                  name: 'w:r',
+                  elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Inserted text' }] }],
+                },
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const root = comments.find((c) => c.commentId === 'root-comment');
+    const reply = comments.find((c) => c.commentId === 'reply-comment');
+
+    expect(root.trackedChangeParentId).toBe('55');
+    expect(root.parentCommentId).toBeUndefined();
+    expect(reply.trackedChangeParentId).toBe('55');
+    expect(reply.parentCommentId).toBe('root-comment');
   });
 
   it('detects comments inside replacement tracked change (ins + del)', () => {
@@ -953,9 +998,10 @@ describe('Google Docs tracked change comment threading', () => {
     const comment1 = comments.find((c) => c.commentId === 'replacement-comment-1');
     const comment2 = comments.find((c) => c.commentId === 'replacement-comment-2');
 
-    // Both should have the tracked change (ins) as parent since their range starts in the ins element
-    expect(comment1.parentCommentId).toBe('3');
-    expect(comment2.parentCommentId).toBe('3');
+    // Both should have the tracked change (ins) as trackedChangeParentId since their range starts in the ins element
+    // (parentCommentId is reserved for actual comment replies, not TC associations)
+    expect(comment1.trackedChangeParentId).toBe('3');
+    expect(comment2.trackedChangeParentId).toBe('3');
   });
 
   it('does not affect comments outside tracked changes', () => {
@@ -1004,12 +1050,106 @@ describe('Google Docs tracked change comment threading', () => {
 
     // Regular comment should have no parent
     expect(regularComment.parentCommentId).toBeUndefined();
-    // TC comment should have the tracked change as parent
-    expect(tcComment.parentCommentId).toBe('1');
+    // TC comment should have the tracked change as trackedChangeParentId (not parentCommentId)
+    expect(tcComment.trackedChangeParentId).toBe('1');
   });
 });
 
-describe('Word tracked change comment threading (with commentsExtended.xml)', () => {
+describe('Word comment threading (with commentsExtended.xml)', () => {
+  it('treats nested ranges as separate comments when both have commentsExtended.xml entries without paraIdParent', () => {
+    // This tests the case where Word has nested ranges (like a comment on "world" inside
+    // a larger comment on "Hello world") but commentsExtended.xml explicitly defines
+    // them as separate top-level comments (no paraIdParent).
+    // Range-based nesting should NOT override the explicit commentsExtended.xml structure.
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'outer-comment', paraId: 'para-outer' },
+        { id: 1, internalId: 'nested-comment', paraId: 'para-nested' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Hello ' }] }],
+            },
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'world' }] }],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+          ],
+        },
+      ],
+      extended: [
+        // Both comments have entries in commentsExtended.xml WITHOUT paraIdParent
+        // meaning they are explicitly defined as separate top-level comments
+        { paraId: 'para-outer', done: '0' },
+        { paraId: 'para-nested', done: '0' },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const outerComment = comments.find((c) => c.commentId === 'outer-comment');
+    const nestedComment = comments.find((c) => c.commentId === 'nested-comment');
+
+    // Both should be top-level comments (no parentCommentId)
+    // because commentsExtended.xml explicitly defines them without paraIdParent
+    expect(outerComment.parentCommentId).toBeUndefined();
+    expect(nestedComment.parentCommentId).toBeUndefined();
+  });
+
+  it('still respects explicit paraIdParent threading in commentsExtended.xml for nested ranges', () => {
+    // When commentsExtended.xml explicitly defines a parent relationship via paraIdParent,
+    // that should be respected even with nested ranges
+    const docx = buildDocx({
+      comments: [
+        { id: 0, internalId: 'parent-comment', paraId: 'para-parent' },
+        { id: 1, internalId: 'reply-comment', paraId: 'para-reply' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Some text' }] }],
+            },
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: ' with reply' }] }],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+          ],
+        },
+      ],
+      extended: [
+        { paraId: 'para-parent', done: '0' },
+        // Explicit parent relationship via paraIdParent
+        { paraId: 'para-reply', done: '0', parent: 'para-parent' },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const parentComment = comments.find((c) => c.commentId === 'parent-comment');
+    const replyComment = comments.find((c) => c.commentId === 'reply-comment');
+
+    expect(parentComment.parentCommentId).toBeUndefined();
+    // Reply should have parent from commentsExtended.xml
+    expect(replyComment.parentCommentId).toBe('parent-comment');
+  });
+
   it('detects comment inside tracked change insertion as child of tracked change even when commentsExtended.xml exists', () => {
     const docx = buildDocx({
       comments: [{ id: 7, internalId: 'comment-on-insertion', author: 'Missy Fox', date: '2024-01-01T10:00:00Z' }],
@@ -1039,7 +1179,9 @@ describe('Word tracked change comment threading (with commentsExtended.xml)', ()
     expect(comments).toHaveLength(1);
 
     const comment = comments[0];
-    expect(comment.parentCommentId).toBe('2');
+    // Comment is on TC text, so trackedChangeParentId should be set instead of parentCommentId
+    expect(comment.trackedChangeParentId).toBe('2');
+    expect(comment.parentCommentId).toBeUndefined();
   });
 
   it('detects root comment of a thread as child of tracked change, and replies as child of root', () => {
@@ -1081,10 +1223,12 @@ describe('Word tracked change comment threading (with commentsExtended.xml)', ()
     const root = comments.find((c) => c.commentId === 'root-comment');
     const reply = comments.find((c) => c.commentId === 'reply-comment');
 
-    // Root should point to tracked change
-    expect(root.parentCommentId).toBe('99');
-    // Reply should point to tracked change (flattened)
-    expect(reply.parentCommentId).toBe('99');
+    // Root should have trackedChangeParentId pointing to tracked change (not parentCommentId)
+    expect(root.trackedChangeParentId).toBe('99');
+    expect(root.parentCommentId).toBeUndefined();
+    // Reply should have trackedChangeParentId pointing to tracked change, but parentCommentId pointing to root
+    expect(reply.trackedChangeParentId).toBe('99');
+    expect(reply.parentCommentId).toBe('root-comment');
   });
 
   it('detects comments that end before a deletion in the same paragraph as children of the deletion', () => {
@@ -1130,8 +1274,92 @@ describe('Word tracked change comment threading (with commentsExtended.xml)', ()
     const comment1 = comments.find((c) => c.commentId === 'comment-on-delete');
     const comment2 = comments.find((c) => c.commentId === 'thread-on-delete');
 
-    // Both comments should be associated with the deletion (flattened, not threaded)
-    expect(comment1.parentCommentId).toBe('9');
-    expect(comment2.parentCommentId).toBe('9');
+    // Both comments should have trackedChangeParentId pointing to the deletion
+    // Comment1 is the root, so parentCommentId is undefined
+    expect(comment1.trackedChangeParentId).toBe('9');
+    expect(comment1.parentCommentId).toBeUndefined();
+    // Comment2 is a reply to comment1 (via commentsExtended parent relationship)
+    expect(comment2.trackedChangeParentId).toBe('9');
+    expect(comment2.parentCommentId).toBe('comment-on-delete');
+  });
+
+  it('imports comment on TC text with trackedChangeParentId but no parentCommentId', () => {
+    // Regression test: A single comment placed entirely on tracked change text
+    // should have trackedChangeParentId set (for bubble association) but
+    // should NOT have parentCommentId (since it's not a reply to another comment)
+    const docx = buildDocx({
+      comments: [{ id: 0, internalId: 'comment-on-tc', paraId: 'para-0' }],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': 'tc-1', 'w:author': 'Author', 'w:date': '2024-01-01T00:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } },
+                { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'TC text' }] }] },
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
+              ],
+            },
+          ],
+        },
+      ],
+      extended: [{ paraId: 'para-0', done: '0' }],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(1);
+    expect(comments[0].trackedChangeParentId).toBe('tc-1');
+    expect(comments[0].parentCommentId).toBeUndefined();
+  });
+
+  it('separates trackedChangeParentId from parentCommentId for threaded comment in TC', () => {
+    // Regression test: When a comment thread exists on tracked change text,
+    // the child comment should have:
+    // - trackedChangeParentId: pointing to the TC (for bubble association)
+    // - parentCommentId: pointing to the parent comment (for threading)
+    const docx = buildDocx({
+      comments: [
+        { id: 1, internalId: 'parent-comment', paraId: 'para-1' },
+        { id: 2, internalId: 'child-comment', paraId: 'para-2' },
+      ],
+      documentRanges: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } },
+            {
+              name: 'w:ins',
+              attributes: { 'w:id': 'tc-1', 'w:author': 'Author', 'w:date': '2024-01-01T00:00:00Z' },
+              elements: [
+                { name: 'w:commentRangeStart', attributes: { 'w:id': '2' } },
+                { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'TC' }] }] },
+                { name: 'w:commentRangeEnd', attributes: { 'w:id': '2' } },
+              ],
+            },
+            { name: 'w:commentRangeEnd', attributes: { 'w:id': '1' } },
+          ],
+        },
+      ],
+      extended: [
+        { paraId: 'para-1', done: '0' },
+        { paraId: 'para-2', done: '0', parent: 'para-1' },
+      ],
+    });
+
+    const comments = importCommentData({ docx });
+    expect(comments).toHaveLength(2);
+
+    const parent = comments.find((c) => c.commentId === 'parent-comment');
+    const child = comments.find((c) => c.commentId === 'child-comment');
+
+    // Parent comment spans outside TC, so it should NOT have trackedChangeParentId
+    expect(parent.trackedChangeParentId).toBeUndefined();
+    expect(parent.parentCommentId).toBeUndefined();
+
+    // Child comment is inside TC and is a reply to parent
+    expect(child.trackedChangeParentId).toBe('tc-1');
+    expect(child.parentCommentId).toBe('parent-comment');
   });
 });

@@ -832,4 +832,60 @@ describe('SuperDoc.vue', () => {
     expect(setupState.toolsMenuPosition.top).toBeNull();
     expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
   });
+
+  it('merges partial trackChangeActiveHighlightColors with base colors', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.comments = {
+      trackChangeHighlightColors: {
+        insertBorder: '#00ff00',
+        deleteBackground: '#0000ff',
+      },
+      trackChangeActiveHighlightColors: {
+        insertBorder: '#ff0000', // only override this one
+      },
+    };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const styleVars = wrapper.vm.superdocStyleVars;
+
+    // Active insertBorder should be overridden
+    expect(styleVars['--sd-track-insert-border']).toBe('#ff0000');
+    // deleteBackground should be inherited from base config
+    expect(styleVars['--sd-track-delete-bg']).toBe('#0000ff');
+  });
+
+  it('sets track change CSS vars from base config when no active config provided', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.comments = {
+      trackChangeHighlightColors: {
+        insertBorder: '#11ff11',
+        deleteBorder: '#ff1111',
+        formatBorder: '#1111ff',
+      },
+    };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const styleVars = wrapper.vm.superdocStyleVars;
+
+    expect(styleVars['--sd-track-insert-border']).toBe('#11ff11');
+    expect(styleVars['--sd-track-delete-border']).toBe('#ff1111');
+    expect(styleVars['--sd-track-format-border']).toBe('#1111ff');
+  });
+
+  it('sets comment highlight hover color CSS var', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.comments = {
+      highlightHoverColor: '#abcdef88',
+    };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const styleVars = wrapper.vm.superdocStyleVars;
+    expect(styleVars['--sd-comment-highlight-hover']).toBe('#abcdef88');
+  });
 });

@@ -1079,13 +1079,7 @@ export function remeasureParagraph(
   // Both values represent the same concept: where the first-line text begins after the marker/tab.
   // IMPORTANT: Priority must match the painter (renderer.ts) which prefers marker.textStartX
   // because it's consistent with marker.markerX positioning. Mismatched priority causes justify overflow.
-  const markerTextStartX = wordLayout?.marker?.textStartX;
-  const textStartPx =
-    typeof markerTextStartX === 'number' && Number.isFinite(markerTextStartX)
-      ? markerTextStartX
-      : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
-        ? wordLayout.textStartPx
-        : undefined;
+  const textStartPx = wordLayout?.textStartPx;
   // Track measured marker text width for returning in measure.marker
   let measuredMarkerTextWidth: number | undefined;
   const resolvedTextStartPx = resolveListTextStartPx(
@@ -1319,7 +1313,7 @@ export function remeasureParagraph(
   const marker = wordLayout?.marker;
   const markerInfo = marker
     ? {
-        markerWidth: marker.markerBoxWidthPx ?? indentHanging ?? 0,
+        markerWidth: indentHanging ?? 0,
         markerTextWidth: measuredMarkerTextWidth ?? 0,
         indentLeft,
         gutterWidth: marker.gutterWidthPx,

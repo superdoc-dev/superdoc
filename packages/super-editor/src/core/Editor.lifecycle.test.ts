@@ -6,8 +6,10 @@ import {
   FileSystemNotAvailableError,
   DocumentLoadError,
 } from './errors/index.js';
-import { loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { loadTestDataForEditorTests, getMinimalTranslatedLinkedStyles } from '@tests/helpers/helpers.js';
 import { getStarterExtensions } from '@extensions/index.js';
+import { SuperConverter } from './super-converter/SuperConverter.js';
+import { BLANK_DOCX_BASE64, BLANK_DOCX_DATA_URI } from './blank-docx.js';
 
 /**
  * Comprehensive test suite for the Editor Document Lifecycle API.
@@ -303,10 +305,14 @@ describe('Editor Lifecycle API', () => {
       });
 
       it('should allow overriding mode', async () => {
+        const converter = new SuperConverter();
+        converter.translatedLinkedStyles = getMinimalTranslatedLinkedStyles();
+
         editor = await Editor.open(undefined, {
           extensions: getStarterExtensions(),
           suppressDefaultDocxStyles: true,
           mode: 'html',
+          converter,
         });
 
         expect(editor.options.mode).toBe('html');
@@ -741,6 +747,140 @@ describe('Editor Lifecycle API', () => {
 
         editor.close();
         editor.destroy();
+      });
+    });
+  });
+
+  describe('Blank DOCX Template Loading', () => {
+    describe('BLANK_DOCX_BASE64 export', () => {
+      it('should decode to a valid ZIP file (PK signature)', () => {
+        // Decode base64 to bytes
+        const binaryString = atob(BLANK_DOCX_BASE64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        // ZIP files start with PK signature (0x50, 0x4B)
+        expect(bytes[0]).toBe(0x50); // 'P'
+        expect(bytes[1]).toBe(0x4b); // 'K'
+      });
+
+      it('should have a valid data URI format', () => {
+        expect(BLANK_DOCX_DATA_URI).toMatch(
+          /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,
+        );
+      });
+    });
+
+    describe('Editor.open() with no source in docx mode', () => {
+      let editor: Editor;
+
+      afterEach(() => {
+        if (editor && !editor.isDestroyed) {
+          try {
+            if (editor.lifecycleState === 'ready') {
+              editor.close();
+            }
+            editor.destroy();
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      });
+
+      it('should load blank.docx template when no source is provided', async () => {
+        editor = await Editor.open(undefined, {
+          extensions: getStarterExtensions(),
+          suppressDefaultDocxStyles: true,
+          mode: 'docx',
+        });
+
+        expect(editor.lifecycleState).toBe('ready');
+        expect(editor.sourcePath).toBeNull();
+        // The editor should have content from the blank.docx template
+        const docxEntries = editor.options.content as Array<{ name?: string }>;
+        expect(Array.isArray(docxEntries)).toBe(true);
+        expect(docxEntries.some((entry) => entry?.name === 'word/document.xml')).toBe(true);
+      });
+
+      it('should fall back to Blob when Node runtime is not detected', async () => {
+        if (typeof Blob === 'undefined' || typeof globalThis.atob !== 'function') {
+          return;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(process, 'versions');
+        if (!descriptor || descriptor.configurable !== true || typeof descriptor.get === 'function') {
+          return;
+        }
+
+        const originalVersions = process.versions;
+
+        Object.defineProperty(process, 'versions', {
+          ...descriptor,
+          value: { ...originalVersions, node: undefined },
+        });
+
+        try {
+          editor = await Editor.open(undefined, {
+            extensions: getStarterExtensions(),
+            suppressDefaultDocxStyles: true,
+            mode: 'docx',
+          });
+
+          expect(editor.lifecycleState).toBe('ready');
+          expect(editor.options.fileSource).toBeInstanceOf(Blob);
+        } finally {
+          Object.defineProperty(process, 'versions', {
+            ...descriptor,
+            value: originalVersions,
+          });
+        }
+      });
+
+      it('should allow exporting after opening with blank template (round-trip)', async () => {
+        editor = await Editor.open(undefined, {
+          extensions: getStarterExtensions(),
+          suppressDefaultDocxStyles: true,
+          mode: 'docx',
+        });
+
+        expect(editor.lifecycleState).toBe('ready');
+
+        // Export the document
+        const exported = await editor.exportDocument();
+        expect(exported).toBeDefined();
+
+        // Exported document should be a valid file (Buffer or Blob)
+        if (typeof Buffer !== 'undefined') {
+          expect(Buffer.isBuffer(exported) || exported instanceof Blob).toBe(true);
+        } else {
+          expect(exported).toBeInstanceOf(Blob);
+        }
+      });
+
+      it('should use pre-parsed content when provided instead of blank template', async () => {
+        // When content is provided, the blank template should NOT be loaded
+        editor = await Editor.open(undefined, {
+          extensions: getStarterExtensions(),
+          suppressDefaultDocxStyles: true,
+          ...getBlankDocOptions(), // This provides pre-parsed content
+        });
+
+        expect(editor.lifecycleState).toBe('ready');
+        expect(editor.sourcePath).toBeNull();
+      });
+
+      it('should set isNewFile flag when loading blank template', async () => {
+        editor = await Editor.open(undefined, {
+          extensions: getStarterExtensions(),
+          suppressDefaultDocxStyles: true,
+          mode: 'docx',
+        });
+
+        expect(editor.lifecycleState).toBe('ready');
+        // The editor was opened with a new blank document
+        expect(editor.options.isNewFile).toBe(true);
       });
     });
   });

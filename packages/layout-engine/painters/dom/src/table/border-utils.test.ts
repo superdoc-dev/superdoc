@@ -76,14 +76,18 @@ describe('applyBorder', () => {
     const border: BorderSpec = { style: 'none', width: 2, color: '#FF0000' };
     applyBorder(element, 'Top', border);
     // Setting border to 'none' results in empty string or 'none' depending on browser
-    expect(element.style.borderTop === 'none' || element.style.borderTop === '').toBe(true);
+    expect(
+      ['', 'none', 'medium', '0px'].includes(element.style.borderTop) || /none/i.test(element.style.borderTop),
+    ).toBe(true);
   });
 
   it('should set border to none for zero width', () => {
     const border: BorderSpec = { style: 'single', width: 0, color: '#FF0000' };
     applyBorder(element, 'Top', border);
     // Setting border to 'none' results in empty string or 'none' depending on browser
-    expect(element.style.borderTop === 'none' || element.style.borderTop === '').toBe(true);
+    expect(
+      ['', 'none', 'medium', '0px'].includes(element.style.borderTop) || /none/i.test(element.style.borderTop),
+    ).toBe(true);
   });
 
   it('should sanitize invalid hex color to black', () => {

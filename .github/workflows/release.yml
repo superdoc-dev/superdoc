@@ -1,14 +1,15 @@
 name: 📦 Release [auto]
 
 on:
-  push:
-    branches:
-      - main
-      - stable
-      - '*.x' # Maintenance branches
-    paths:
-      - 'packages/**'
-      - '!**.md'
+  # TEMPORARILY DISABLED - re-enable after main/stable branch cleanu
+  # push:
+  #   branches:
+  #     - main
+  #     - stable
+  #     - '*.x' # Maintenance branches
+  #   paths:
+  #     - 'packages/**'
+  #     - '!**.md'
   workflow_dispatch:
 
 permissions:
@@ -21,8 +22,6 @@ concurrency:
 
 jobs:
   release:
-    # TEMPORARILY DISABLED - re-enable after main/stable branch cleanup
-    if: false
     runs-on: ubuntu-24.04
     steps:
       - name: Generate token

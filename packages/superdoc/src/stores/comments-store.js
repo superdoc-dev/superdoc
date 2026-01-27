@@ -93,11 +93,118 @@ export const useCommentsStore = defineStore('comments', () => {
     return getComment(comment.parentCommentId);
   };
 
+  const isRangeThreadedComment = (comment) => {
+    if (!comment) return false;
+    return (
+      comment.threadingStyleOverride === 'range-based' ||
+      comment.threadingMethod === 'range-based' ||
+      comment.originalXmlStructure?.hasCommentsExtended === false
+    );
+  };
+
+  const shouldThreadWithTrackedChange = (comment) => {
+    if (!comment?.trackedChangeParentId) return false;
+    if (!isRangeThreadedComment(comment)) return false;
+    const trackedChange = getComment(comment.trackedChangeParentId);
+    return Boolean(trackedChange?.trackedChange);
+  };
+
+  /**
+   * Extract the position lookup key from a comment or comment ID.
+   * Prefers importedId for imported comments since editor marks retain the original ID.
+   *
+   * @param {Object | string | null | undefined} commentOrId The comment object or comment ID
+   * @returns {string | null} The position key (importedId or commentId)
+   */
+  const getCommentPositionKey = (commentOrId) => {
+    if (!commentOrId) return null;
+    if (typeof commentOrId === 'object') {
+      return commentOrId.importedId ?? commentOrId.commentId ?? null;
+    }
+    return commentOrId;
+  };
+
+  /**
+   * Normalize a position object to a consistent { start, end } format.
+   * Handles different editor position schemas (start/end, pos/to, from/to).
+   *
+   * @param {Object | null | undefined} position The position object
+   * @returns {{ start: number, end: number } | null} The normalized range or null
+   */
+  const getCommentPositionRange = (position) => {
+    if (!position) return null;
+    const start = position.start ?? position.pos ?? position.from;
+    const end = position.end ?? position.to ?? start;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    return { start, end };
+  };
+
+  /**
+   * Get the editor position data for a comment.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @returns {Object | null} The position data from editorCommentPositions
+   */
+  const getCommentPosition = (commentOrId) => {
+    const key = getCommentPositionKey(commentOrId);
+    if (!key) return null;
+    return editorCommentPositions.value?.[key] ?? null;
+  };
+
+  /**
+   * Get the text that a comment is anchored to in the document.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @param {Object} [options] Options for text extraction
+   * @param {string} [options.separator=' '] Separator for textBetween when crossing nodes
+   * @param {boolean} [options.trim=true] Whether to trim whitespace from the result
+   * @returns {string | null} The anchored text or null if unavailable
+   */
+  const getCommentAnchoredText = (commentOrId, options = {}) => {
+    const key = getCommentPositionKey(commentOrId);
+    if (!key) return null;
+
+    const comment = typeof commentOrId === 'object' ? commentOrId : getComment(commentOrId);
+    if (!comment) return null;
+
+    const position = editorCommentPositions.value?.[key] ?? null;
+    const range = getCommentPositionRange(position);
+    if (!range) return null;
+
+    const doc = superdocStore.getDocument(comment.fileId);
+    const editor = doc?.getEditor?.();
+    const docNode = editor?.state?.doc;
+    if (!docNode?.textBetween) return null;
+
+    const separator = options.separator ?? ' ';
+    const text = docNode.textBetween(range.start, range.end, separator, separator);
+    return options.trim === false ? text : text?.trim();
+  };
+
+  /**
+   * Get both position and anchored text data for a comment.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @param {Object} [options] Options passed to getCommentAnchoredText
+   * @param {string} [options.separator=' '] Separator for textBetween when crossing nodes
+   * @param {boolean} [options.trim=true] Whether to trim whitespace from the result
+   * @returns {{ position: Object, anchoredText: string | null } | null} The anchor data or null
+   */
+  const getCommentAnchorData = (commentOrId, options = {}) => {
+    const position = getCommentPosition(commentOrId);
+    if (!position) return null;
+    return {
+      position,
+      anchoredText: getCommentAnchoredText(commentOrId, options),
+    };
+  };
+
   const isThreadVisible = (comment) => {
     if (!isViewingMode.value) return true;
     const parent = getThreadParent(comment);
     if (!parent && comment?.parentCommentId) return false;
-    const isTrackedChange = Boolean(parent?.trackedChange);
+    // Check both parent's trackedChange flag and comment's trackedChangeParentId
+    const isTrackedChange = Boolean(parent?.trackedChange) || Boolean(comment?.trackedChangeParentId);
     return isTrackedChange ? viewingVisibility.trackChangesVisible : viewingVisibility.commentsVisible;
   };
 
@@ -234,44 +341,107 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   /**
-   * Generate the comments list separating resolved and active
-   * We only return parent comments here, since CommentDialog.vue will handle threaded comments
+   * Get the numeric position value for sorting a comment by document order.
+   * Checks multiple position properties to handle different editor position schemas
+   * (e.g., ProseMirror uses from/to, other editors may use start/pos).
+   *
+   * @param {Object} comment - The comment object
+   * @returns {number|null} The position value, or null if not found
    */
-  const getGroupedComments = computed(() => {
+  const getPositionSortValue = (comment) => {
+    const key = getCommentPositionKey(comment);
+    if (!key) return null;
+    const position = editorCommentPositions.value?.[key];
+    if (!position) return null;
+    // Check different position properties to handle various editor position schemas
+    if (Number.isFinite(position.start)) return position.start;
+    if (Number.isFinite(position.pos)) return position.pos;
+    if (Number.isFinite(position.from)) return position.from;
+    if (Number.isFinite(position.to)) return position.to;
+    return null;
+  };
+
+  /**
+   * Comparator that sorts comments by creation time (ascending).
+   *
+   * @param {Object} a - First comment
+   * @param {Object} b - Second comment
+   * @returns {number} Comparison result
+   */
+  const compareByCreatedTime = (a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0);
+
+  /**
+   * Comparator that sorts comments by document position (ascending).
+   * Comments without positions are sorted after those with positions.
+   * Falls back to creation time when positions are equal or unavailable.
+   *
+   * @param {Object} a - First comment
+   * @param {Object} b - Second comment
+   * @returns {number} Comparison result
+   */
+  const compareByPosition = (a, b) => {
+    const posA = getPositionSortValue(a);
+    const posB = getPositionSortValue(b);
+
+    const hasA = Number.isFinite(posA);
+    const hasB = Number.isFinite(posB);
+
+    if (hasA && hasB && posA !== posB) return posA - posB;
+    if (hasA && !hasB) return -1;
+    if (!hasA && hasB) return 1;
+    return compareByCreatedTime(a, b);
+  };
+
+  /**
+   * Generate the comments list separating resolved and active.
+   * We only return parent comments here, since CommentDialog.vue will handle threaded comments.
+   *
+   * @param {(a: Object, b: Object) => number} sorter - Comparator function for sorting comments
+   * @returns {{parentComments: Array, resolvedComments: Array}} Grouped and sorted comments
+   */
+  const buildGroupedComments = (sorter) => {
     const parentComments = [];
     const resolvedComments = [];
     const childCommentMap = new Map();
 
     commentsList.value.forEach((comment) => {
       if (!isThreadVisible(comment)) return;
+      const trackedChangeParentId = shouldThreadWithTrackedChange(comment) ? comment.trackedChangeParentId : null;
+      const parentId = comment.parentCommentId || trackedChangeParentId;
       // Track resolved comments
       if (comment.resolvedTime) {
         resolvedComments.push(comment);
       }
 
       // Track parent comments
-      else if (!comment.parentCommentId && !comment.resolvedTime) {
+      else if (!parentId && !comment.resolvedTime) {
         parentComments.push({ ...comment });
       }
 
       // Track child comments (threaded comments)
-      else if (comment.parentCommentId) {
-        if (!childCommentMap.has(comment.parentCommentId)) {
-          childCommentMap.set(comment.parentCommentId, []);
+      else if (parentId) {
+        if (!childCommentMap.has(parentId)) {
+          childCommentMap.set(parentId, []);
         }
-        childCommentMap.get(comment.parentCommentId).push(comment);
+        childCommentMap.get(parentId).push(comment);
       }
     });
 
     // Return only parent comments
-    const sortedParentComments = parentComments.sort((a, b) => a.createdTime - b.createdTime);
-    const sortedResolvedComments = resolvedComments.sort((a, b) => a.createdTime - b.createdTime);
+    const sortedParentComments = parentComments.sort(sorter);
+    const sortedResolvedComments = resolvedComments.sort(sorter);
 
     return {
       parentComments: sortedParentComments,
       resolvedComments: sortedResolvedComments,
     };
-  });
+  };
+
+  /** @type {import('vue').ComputedRef<{parentComments: Array, resolvedComments: Array}>} Comments grouped and sorted by creation time */
+  const getGroupedComments = computed(() => buildGroupedComments(compareByCreatedTime));
+
+  /** @type {import('vue').ComputedRef<{parentComments: Array, resolvedComments: Array}>} Comments grouped and sorted by document position */
+  const getCommentsByPosition = computed(() => buildGroupedComments(compareByPosition));
 
   const hasOverlapId = (id) => overlappedIds.includes(id);
   const documentsWithConverations = computed(() => {
@@ -465,6 +635,7 @@ export const useCommentsStore = defineStore('comments', () => {
         commentId: comment.commentId,
         isInternal: false,
         parentCommentId: comment.parentCommentId,
+        trackedChangeParentId: comment.trackedChangeParentId,
         creatorName,
         createdTime: comment.createdTime,
         creatorEmail: comment.creatorEmail,
@@ -619,13 +790,27 @@ export const useCommentsStore = defineStore('comments', () => {
   const normalizeCommentForEditor = (node) => {
     if (!node || typeof node !== 'object') return node;
 
+    const stripTextStyleAttrs = (attrs) => {
+      if (!attrs) return attrs;
+      const rest = { ...attrs };
+      delete rest.fontSize;
+      delete rest.fontFamily;
+      delete rest.eastAsiaFontFamily;
+      return Object.keys(rest).length ? rest : undefined;
+    };
+
+    const normalizeMark = (mark) => {
+      if (!mark) return mark;
+      const typeName = typeof mark.type === 'string' ? mark.type : mark.type?.name;
+      const attrs = mark?.attrs ? { ...mark.attrs } : undefined;
+      if (typeName === 'textStyle' && attrs) {
+        return { ...mark, attrs: stripTextStyleAttrs(attrs) };
+      }
+      return { ...mark, attrs };
+    };
+
     const cloneMarks = (marks) =>
-      Array.isArray(marks)
-        ? marks.filter(Boolean).map((mark) => ({
-            ...mark,
-            attrs: mark?.attrs ? { ...mark.attrs } : undefined,
-          }))
-        : undefined;
+      Array.isArray(marks) ? marks.filter(Boolean).map((mark) => normalizeMark(mark)) : undefined;
 
     const cloneAttrs = (attrs) => (attrs && typeof attrs === 'object' ? { ...attrs } : undefined);
 
@@ -710,7 +895,11 @@ export const useCommentsStore = defineStore('comments', () => {
     getConfig,
     documentsWithConverations,
     getGroupedComments,
+    getCommentsByPosition,
     getFloatingComments,
+    getCommentPosition,
+    getCommentAnchoredText,
+    getCommentAnchorData,
 
     // Actions
     init,

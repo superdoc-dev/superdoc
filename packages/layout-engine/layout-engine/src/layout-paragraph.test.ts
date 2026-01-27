@@ -203,10 +203,10 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
       expect(remeasureParagraph).toHaveBeenCalledWith(block, 150, 24);
     });
 
-    it('uses fallback to markerBoxWidthPx when markerWidth is missing', () => {
+    it('uses markerWidth=0 fallback when markerWidth is missing', () => {
       const remeasureParagraph = vi.fn((block, maxWidth, firstLineIndent) => {
-        // Should use markerBoxWidthPx (20) + gutterWidth (6)
-        expect(firstLineIndent).toBe(26);
+        // markerWidth defaults to 0 when the measure marker is present
+        expect(firstLineIndent).toBe(6);
         return makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
       });
 
@@ -226,7 +226,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
 
       const measure = makeMeasure(
         [{ width: 100, lineHeight: 20, maxWidth: 200 }],
-        { gutterWidth: 6 }, // markerWidth is missing
+        { gutterWidth: 6 }, // markerWidth is missing and defaults to 0
       );
 
       const ctx: ParagraphLayoutContext = {
@@ -242,7 +242,7 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
 
       layoutParagraphBlock(ctx);
 
-      expect(remeasureParagraph).toHaveBeenCalledWith(block, 150, 26);
+      expect(remeasureParagraph).toHaveBeenCalledWith(block, 150, 6);
     });
 
     it('uses fallback to 0 when both markerWidth and markerBoxWidthPx are missing', () => {

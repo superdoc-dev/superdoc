@@ -1,0 +1,33 @@
+Text boxes from Word documents.
+
+Maintains Word text box content and formatting through import/export.
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<div class="sd-editor-shape-textbox" style="border: 2px solid #3b82f6; padding: 16px; margin: 16px 0;">
+  <p><strong>Important Note:</strong></p>
+  <p>This text box preserves its content and styling when exported to Word.</p>
+</div>`}
+  height="200px"
+/>
+
+## OOXML Structure
+
+```xml
+<w:txbxContent>
+  <w:p>
+    <w:r>
+      <w:t>Text box content</w:t>
+    </w:r>
+  </w:p>
+</w:txbxContent>
+```
+
+## Use Case
+
+- **Sidebars** - Additional information alongside main text
+- **Callouts** - Highlight key points
+- **Forms** - Fixed-position form fields  
+- **Annotations** - Comments or notes
+- **Layout elements** - Complex page designs

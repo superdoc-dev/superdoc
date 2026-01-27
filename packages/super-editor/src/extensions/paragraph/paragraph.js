@@ -1,8 +1,8 @@
 import { OxmlNode, Attribute } from '@core/index.js';
-import { TextSelection } from 'prosemirror-state';
+import { Plugin, TextSelection } from 'prosemirror-state';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { splitBlock } from '@core/commands/splitBlock.js';
-import { removeNumberingProperties } from '@core/commands/removeNumberingProperties.js';
+import { removeNumberingProperties, isVisuallyEmptyParagraph } from '@core/commands/removeNumberingProperties.js';
 import { isList } from '@core/commands/list-helpers';
 import { findParentNode } from '@helpers/index.js';
 import { InputRule } from '@core/InputRule.js';
@@ -288,6 +288,33 @@ export const Paragraph = OxmlNode.create({
   addPmPlugins() {
     const dropcapPlugin = createDropcapPlugin(this.editor);
     const numberingPlugin = createNumberingPlugin(this.editor);
-    return [dropcapPlugin, numberingPlugin];
+    const listEmptyInputPlugin = new Plugin({
+      props: {
+        handleDOMEvents: {
+          beforeinput: (view, event) => {
+            if (!event || event.inputType !== 'insertText' || !event.data) {
+              return false;
+            }
+            if (event.isComposing) return false;
+
+            const { state } = view;
+            const { selection } = state;
+            if (!selection.empty) return false;
+
+            const $from = selection.$from;
+            const paragraph = $from.parent;
+            if (!paragraph || paragraph.type.name !== 'paragraph') return false;
+            if (!isList(paragraph)) return false;
+            if (!isVisuallyEmptyParagraph(paragraph)) return false;
+
+            const tr = state.tr.insertText(event.data);
+            view.dispatch(tr);
+            event.preventDefault();
+            return true;
+          },
+        },
+      },
+    });
+    return [dropcapPlugin, numberingPlugin, listEmptyInputPlugin];
   },
 });

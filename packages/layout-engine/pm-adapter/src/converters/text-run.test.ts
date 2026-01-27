@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { PMNode, PMMark, PositionMap, HyperlinkConfig } from '../types.js';
-import type { TextRun, TabRun, SdtMetadata, TabStop, ParagraphIndent } from '@superdoc/contracts';
+import type { TextRun, TabRun, SdtMetadata, TabStop, ParagraphIndent, ParagraphAttrs } from '@superdoc/contracts';
 import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
 import * as marksModule from '../marks/index.js';
 
@@ -302,13 +302,11 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-    };
+    const paragraphAttrs: ParagraphAttrs = {};
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 5, end: 6 });
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode);
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs);
 
     expect(result).toEqual({
       kind: 'tab',
@@ -326,12 +324,10 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-    };
+    const paragraphAttrs: ParagraphAttrs = {};
     const positions: PositionMap = new WeakMap();
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode);
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs);
 
     expect(result).toBeNull();
   });
@@ -344,14 +340,11 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-      attrs: { tabStops },
-    };
+    const paragraphAttrs: ParagraphAttrs = { tabs: tabStops };
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs) as TabRun;
 
     expect(result.tabStops).toEqual(tabStops);
   });
@@ -365,14 +358,11 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-      attrs: { indent },
-    };
+    const paragraphAttrs: ParagraphAttrs = { indent };
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs) as TabRun;
 
     expect(result.indent).toEqual(indent);
   });
@@ -382,13 +372,11 @@ describe('tabNodeToRun', () => {
       type: 'tab',
       attrs: { leader: 'dot' },
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-    };
+    const paragraphAttrs: ParagraphAttrs = {};
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs) as TabRun;
 
     expect(result.leader).toBe('dot');
   });
@@ -397,13 +385,11 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-    };
+    const paragraphAttrs: ParagraphAttrs = {};
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs) as TabRun;
 
     expect(result.leader).toBeNull();
   });
@@ -412,28 +398,24 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-    };
+    const paragraphAttrs: ParagraphAttrs = {};
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 5, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 5, paragraphAttrs) as TabRun;
 
     expect(result.tabIndex).toBe(5);
   });
 
-  it('handles paragraph with undefined attrs', () => {
+  it('handles paragraph with empty attrs', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-    };
+    const paragraphAttrs: ParagraphAttrs = {};
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs) as TabRun;
 
     expect(result.tabStops).toBeUndefined();
     expect(result.indent).toBeUndefined();
@@ -443,17 +425,13 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-      attrs: { tabStops: [] },
-    };
+    const paragraphAttrs: ParagraphAttrs = { tabs: [] };
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs) as TabRun;
 
-    // Empty arrays are normalized to undefined for cleaner output
-    expect(result.tabStops).toBeUndefined();
+    expect(result.tabStops).toEqual([]);
   });
 
   it('handles multiple tab stops in paragraph', () => {
@@ -466,14 +444,11 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-      attrs: { tabStops },
-    };
+    const paragraphAttrs: ParagraphAttrs = { tabs: tabStops };
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 2, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 2, paragraphAttrs) as TabRun;
 
     expect(result.tabStops).toEqual(tabStops);
     expect(result.tabStops?.length).toBe(4);
@@ -489,14 +464,11 @@ describe('tabNodeToRun', () => {
     const tabNode: PMNode = {
       type: 'tab',
     };
-    const paragraphNode: PMNode = {
-      type: 'paragraph',
-      attrs: { indent },
-    };
+    const paragraphAttrs: ParagraphAttrs = { indent };
     const positions: PositionMap = new WeakMap();
     positions.set(tabNode, { start: 0, end: 1 });
 
-    const result = tabNodeToRun(tabNode, positions, 0, paragraphNode) as TabRun;
+    const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs) as TabRun;
 
     expect(result.indent).toEqual(indent);
   });
@@ -509,13 +481,11 @@ describe('tabNodeToRun', () => {
         type: 'tab',
         attrs: { leader },
       };
-      const paragraphNode: PMNode = {
-        type: 'paragraph',
-      };
+      const paragraphAttrs: ParagraphAttrs = {};
       const positions: PositionMap = new WeakMap();
       positions.set(tabNode, { start: 0, end: 1 });
 
-      const result = tabNodeToRun(tabNode, positions, 0, paragraphNode) as TabRun;
+      const result = tabNodeToRun(tabNode, positions, 0, paragraphAttrs) as TabRun;
 
       expect(result.leader).toBe(leader);
     });
@@ -530,11 +500,11 @@ describe('tabNodeToRun', () => {
         type: 'tab',
         marks: [{ type: 'underline', attrs: { underlineType: 'single' } }],
       };
-      const paragraphNode: PMNode = { type: 'paragraph' };
+      const paragraphAttrs: ParagraphAttrs = {};
       const positions: PositionMap = new WeakMap();
       positions.set(tabNode, { start: 0, end: 1 });
 
-      tabNodeToRun(tabNode, positions, 0, paragraphNode);
+      tabNodeToRun(tabNode, positions, 0, paragraphAttrs);
 
       expect(applyMarksToRunMock).toHaveBeenCalledTimes(1);
       expect(applyMarksToRunMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'tab' }), [
@@ -547,12 +517,12 @@ describe('tabNodeToRun', () => {
       applyMarksToRunMock.mockClear();
 
       const tabNode: PMNode = { type: 'tab' };
-      const paragraphNode: PMNode = { type: 'paragraph' };
+      const paragraphAttrs: ParagraphAttrs = {};
       const positions: PositionMap = new WeakMap();
       positions.set(tabNode, { start: 0, end: 1 });
       const inheritedMarks: PMMark[] = [{ type: 'underline', attrs: { underlineType: 'single' } }];
 
-      tabNodeToRun(tabNode, positions, 0, paragraphNode, inheritedMarks);
+      tabNodeToRun(tabNode, positions, 0, paragraphAttrs, inheritedMarks);
 
       expect(applyMarksToRunMock).toHaveBeenCalledTimes(1);
       expect(applyMarksToRunMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'tab' }), [
@@ -568,12 +538,12 @@ describe('tabNodeToRun', () => {
         type: 'tab',
         marks: [{ type: 'bold' }],
       };
-      const paragraphNode: PMNode = { type: 'paragraph' };
+      const paragraphAttrs: ParagraphAttrs = {};
       const positions: PositionMap = new WeakMap();
       positions.set(tabNode, { start: 0, end: 1 });
       const inheritedMarks: PMMark[] = [{ type: 'underline', attrs: { underlineType: 'single' } }];
 
-      tabNodeToRun(tabNode, positions, 0, paragraphNode, inheritedMarks);
+      tabNodeToRun(tabNode, positions, 0, paragraphAttrs, inheritedMarks);
 
       expect(applyMarksToRunMock).toHaveBeenCalledTimes(1);
       expect(applyMarksToRunMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'tab' }), [
@@ -587,11 +557,11 @@ describe('tabNodeToRun', () => {
       applyMarksToRunMock.mockClear();
 
       const tabNode: PMNode = { type: 'tab' };
-      const paragraphNode: PMNode = { type: 'paragraph' };
+      const paragraphAttrs: ParagraphAttrs = {};
       const positions: PositionMap = new WeakMap();
       positions.set(tabNode, { start: 0, end: 1 });
 
-      tabNodeToRun(tabNode, positions, 0, paragraphNode);
+      tabNodeToRun(tabNode, positions, 0, paragraphAttrs);
 
       expect(applyMarksToRunMock).not.toHaveBeenCalled();
     });

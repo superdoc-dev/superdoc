@@ -14,8 +14,8 @@ const extractNodeText = (node) => {
 };
 
 const getCommentJSONNodes = (comment) => {
-  if (Array.isArray(comment.textElements) && comment.textElements.length) {
-    return comment.textElements;
+  if (Array.isArray(comment.elements) && comment.elements.length) {
+    return comment.elements;
   }
   return [];
 };
@@ -114,7 +114,7 @@ describe('Comment origin detection and round trip', () => {
 
         expect(reimportedComments).toHaveLength(2);
         const roundTripTexts = reimportedComments
-          .map((comment) => extractNodeText(comment.textElements).trim())
+          .map((comment) => extractNodeText(comment.elements).trim())
           .filter((text) => text.length);
         expect(roundTripTexts).toEqual(expect.arrayContaining(['comment on text', 'BLANK']));
         reimportedComments.forEach((comment) => {

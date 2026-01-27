@@ -198,7 +198,7 @@ describe('importCommentData metadata parsing', () => {
     });
 
     const [comment] = importCommentData({ docx });
-    expect(comment.textElements).toHaveLength(2);
+    expect(comment.elements).toHaveLength(2);
   });
 });
 

@@ -171,7 +171,7 @@ describe('IT-292: Nested comments round-trip', () => {
 
       // Now export the document
       const commentsForExport = editor.converter.comments.map((comment) => {
-        const nodes = Array.isArray(comment.textElements) && comment.textElements.length ? comment.textElements : [];
+        const nodes = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : [];
         return {
           ...comment,
           commentJSON: nodes,

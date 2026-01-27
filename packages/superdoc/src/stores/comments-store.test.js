@@ -219,7 +219,7 @@ describe('comments-store', () => {
           commentId: 'c-1',
           createdTime: now,
           creatorName: 'Gabriel',
-          textElements: [
+          elements: [
             {
               type: 'paragraph',
               content: [

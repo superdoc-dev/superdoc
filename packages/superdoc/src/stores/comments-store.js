@@ -620,7 +620,7 @@ export const useCommentsStore = defineStore('comments', () => {
     }
 
     comments.forEach((comment) => {
-      const textElements = Array.isArray(comment.textElements) ? comment.textElements : [];
+      const textElements = Array.isArray(comment.elements) ? comment.elements : [];
       const htmlContent = getHtmlFromComment(textElements);
 
       if (!htmlContent && !comment.trackedChange) {

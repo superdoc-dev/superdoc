@@ -41,7 +41,7 @@ describe('basic comment import [basic-comment.docx]', () => {
     expect(comment.isDone).toBe(false);
     expect(comment.parentCommentId).toBeUndefined();
 
-    const commentText = comment.textElements?.[0];
+    const commentText = comment.elements?.[0];
     expect(commentText?.type).toBe('paragraph');
 
     const textNode = commentText.content
@@ -129,7 +129,7 @@ describe('comment import without extended metadata [gdocs-comments-export.docx]'
     expect(firstComment.isDone).toBe(false);
 
     const secondComment = comments[1];
-    expect(extractNodeText(secondComment.textElements)).toBe('comment on text');
+    expect(extractNodeText(secondComment.elements)).toBe('comment on text');
   });
 });
 

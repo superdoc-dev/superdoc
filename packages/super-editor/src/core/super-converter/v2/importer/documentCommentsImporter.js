@@ -30,7 +30,6 @@ export function importCommentData({ docx, editor, converter }) {
   const { elements } = comments;
   if (!elements || !elements.length) return;
 
-  console.log('[debug] comments:', comments);
   const { elements: allComments = [] } = elements[0];
   const extractedComments = allComments.map((el) => {
     const { attributes } = el;

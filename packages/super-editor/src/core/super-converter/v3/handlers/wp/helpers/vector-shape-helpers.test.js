@@ -213,7 +213,43 @@ describe('extractFillColor', () => {
     expect(extractFillColor(spPr, style)).toBe('#70ad47');
   });
 
-  it('returns default accent1 when nothing found', () => {
-    expect(extractFillColor({ elements: [] }, null)).toBe('#5b9bd5');
+  it('returns null (transparent) when no fill in spPr and no style provided', () => {
+    // Per ECMA-376: when no fill is specified and no style exists, shape should be transparent
+    expect(extractFillColor({ elements: [] }, null)).toBeNull();
+  });
+
+  it('returns null (transparent) when no fill in spPr and style has no fillRef', () => {
+    const spPr = { elements: [] };
+    const style = { elements: [] };
+    expect(extractFillColor(spPr, style)).toBeNull();
+  });
+
+  it('returns null (transparent) when fillRef idx is 0', () => {
+    // Per OOXML spec, fillRef idx="0" means "no fill"
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:fillRef',
+          attributes: { idx: '0' },
+          elements: [],
+        },
+      ],
+    };
+    expect(extractFillColor(spPr, style)).toBeNull();
+  });
+
+  it('returns null (transparent) when fillRef has no schemeClr', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:fillRef',
+          attributes: { idx: '1' },
+          elements: [], // No schemeClr
+        },
+      ],
+    };
+    expect(extractFillColor(spPr, style)).toBeNull();
   });
 });

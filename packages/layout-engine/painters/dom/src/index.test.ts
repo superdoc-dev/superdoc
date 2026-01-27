@@ -3810,7 +3810,7 @@ describe('DomPainter', () => {
     expect(borderLayer.style.borderLeftColor).toBe('rgb(0, 255, 0)');
   });
 
-  it('applies padding for border spacing to prevent overlap', () => {
+  it('renders borders extending into margins without pushing content', () => {
     const blockWithBorderSpacing: FlowBlock = {
       kind: 'paragraph',
       id: 'border-space-block',
@@ -3855,19 +3855,23 @@ describe('DomPainter', () => {
     const fragment = mount.querySelector('[data-block-id="border-space-block"]') as HTMLElement;
     const borderLayer = fragment.querySelector('.superdoc-paragraph-border') as HTMLElement;
 
-    // Verify padding is applied to create space for borders
-    // Top: space(5) + width(2) = 7px
-    expect(fragment.style.paddingTop).toBe('7px');
-    // Bottom: space(10) + width(3) = 13px
-    expect(fragment.style.paddingBottom).toBe('13px');
-    // Left: space(4) + width(1) = 5px
-    expect(fragment.style.paddingLeft).toBe('5px');
-    // Right: space(6) + width(2) = 8px
-    expect(fragment.style.paddingRight).toBe('8px');
+    // Verify fragment has no padding - borders should not push content inward
+    expect(fragment.style.paddingTop).toBe('');
+    expect(fragment.style.paddingBottom).toBe('');
+    expect(fragment.style.paddingLeft).toBe('');
+    expect(fragment.style.paddingRight).toBe('');
 
-    // Verify border layer is positioned with space offset
-    expect(borderLayer.style.top).toBe('5px');
-    expect(borderLayer.style.bottom).toBe('10px');
+    // Verify border layer extends into margins with negative offsets
+    // Top: -(space(5) + width(2)) = -7px
+    expect(borderLayer.style.top).toBe('-7px');
+    // Bottom: -(space(10) + width(3)) = -13px
+    expect(borderLayer.style.bottom).toBe('-13px');
+    // Left offset is added to leftInset, so check the actual CSS value
+    // The border layer should extend leftward by -(space(4) + width(1)) = -5px
+    expect(borderLayer.style.left).toBe('-5px');
+    // Width should be increased to account for both left and right extensions
+    // Original width 260 + left extension 5 + right extension 8 = 273
+    expect(borderLayer.style.width).toBe('273px');
   });
 
   it('applies paragraph shading fill to fragment backgrounds', () => {

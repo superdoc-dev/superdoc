@@ -2036,31 +2036,9 @@ export class DomPainter {
       if (fragmentEl.style.marginRight) fragmentEl.style.removeProperty('margin-right');
       if (fragmentEl.style.textIndent) fragmentEl.style.removeProperty('text-indent');
 
-      // Apply border padding to fragment after removing indent padding
-      // This padding creates space for borders and prevents them from overlapping content
-      const borders = block.attrs?.borders;
-      if (borders) {
-        if (borders.top) {
-          const topSpace = Math.max(0, borders.top.space ?? 0);
-          const topWidth = Math.max(0, borders.top.width ?? 1);
-          fragmentEl.style.paddingTop = `${topSpace + topWidth}px`;
-        }
-        if (borders.bottom) {
-          const bottomSpace = Math.max(0, borders.bottom.space ?? 0);
-          const bottomWidth = Math.max(0, borders.bottom.width ?? 1);
-          fragmentEl.style.paddingBottom = `${bottomSpace + bottomWidth}px`;
-        }
-        if (borders.left) {
-          const leftSpace = Math.max(0, borders.left.space ?? 0);
-          const leftWidth = Math.max(0, borders.left.width ?? 1);
-          fragmentEl.style.paddingLeft = `${leftSpace + leftWidth}px`;
-        }
-        if (borders.right) {
-          const rightSpace = Math.max(0, borders.right.space ?? 0);
-          const rightWidth = Math.max(0, borders.right.width ?? 1);
-          fragmentEl.style.paddingRight = `${rightSpace + rightWidth}px`;
-        }
-      }
+      // Note: Paragraph borders should extend into margins, not push content inward.
+      // Border rendering is handled by the border layer which uses negative positioning
+      // to extend beyond the fragment bounds. No padding is needed here.
 
       const paraIndent = block.attrs?.indent;
       const paraIndentLeft = paraIndent?.left ?? 0;
@@ -5939,8 +5917,8 @@ const createParagraphDecorationLayers = (
   if (!attrs?.borders && !attrs?.shading) return {};
   const borderBox = getParagraphBorderBox(fragmentWidth, attrs.indent);
 
-  // Calculate border spacing to position the border layer correctly
-  // The border should be drawn at the inner edge of the space (between space and content)
+  // Calculate border positioning to extend into margins
+  // Borders should overflow outside the content area, with 'space' creating a gap between border and text
   const borders = attrs.borders;
   let topOffset = 0;
   let bottomOffset = 0;
@@ -5948,21 +5926,26 @@ const createParagraphDecorationLayers = (
   let rightOffset = 0;
 
   if (borders) {
+    // For each border, extend outward by (space + width) so border is drawn in the margin
     if (borders.top) {
       const space = Math.max(0, borders.top.space ?? 0);
-      topOffset = space; // Border at the inner edge of the space
+      const width = Math.max(0, borders.top.width ?? 1);
+      topOffset = -(space + width); // Negative to extend upward into margin
     }
     if (borders.bottom) {
       const space = Math.max(0, borders.bottom.space ?? 0);
-      bottomOffset = space;
+      const width = Math.max(0, borders.bottom.width ?? 1);
+      bottomOffset = -(space + width); // Negative to extend downward into margin
     }
     if (borders.left) {
       const space = Math.max(0, borders.left.space ?? 0);
-      leftOffset = space;
+      const width = Math.max(0, borders.left.width ?? 1);
+      leftOffset = -(space + width); // Negative to extend left into margin
     }
     if (borders.right) {
       const space = Math.max(0, borders.right.space ?? 0);
-      rightOffset = space;
+      const width = Math.max(0, borders.right.width ?? 1);
+      rightOffset = -(space + width); // Negative to extend right into margin
     }
   }
 
@@ -5991,11 +5974,12 @@ const createParagraphDecorationLayers = (
     Object.assign(borderLayer.style, baseStyles);
     borderLayer.style.zIndex = '1';
 
-    // Adjust positioning to account for border space
+    // Position border layer to extend into margins
+    // Negative offsets mean the border extends beyond the fragment bounds
     borderLayer.style.top = `${topOffset}px`;
     borderLayer.style.bottom = `${bottomOffset}px`;
     borderLayer.style.left = `${borderBox.leftInset + leftOffset}px`;
-    borderLayer.style.width = `${Math.max(0, borderBox.width - leftOffset - rightOffset)}px`;
+    borderLayer.style.width = `${borderBox.width - leftOffset - rightOffset}px`;
 
     applyParagraphBorderStyles(borderLayer, attrs.borders);
   }

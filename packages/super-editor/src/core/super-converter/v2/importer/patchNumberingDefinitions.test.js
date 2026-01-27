@@ -87,4 +87,37 @@ describe('patchNumberingDefinitions', () => {
 
     expect(docx).toEqual(before);
   });
+
+  it('creates multiple missing abstractNum definitions', () => {
+    const docx = {
+      'word/numbering.xml': makeNumberingXml([
+        abstractNum(41),
+        num({ numId: 1, abstractId: 43 }),
+        num({ numId: 2, abstractId: 42 }),
+        num({ numId: 3, abstractId: 44 }),
+      ]),
+    };
+
+    patchNumberingDefinitions(docx);
+
+    const numberingRoot = docx['word/numbering.xml'].elements[0];
+    const numberingElements = numberingRoot.elements;
+
+    const missingIds = ['42', '43', '44'];
+    for (const id of missingIds) {
+      const patchedAbstract = numberingElements.find(
+        (el) => el?.name === 'w:abstractNum' && String(el.attributes?.['w:abstractNumId']) === id,
+      );
+      expect(patchedAbstract).toBeTruthy();
+    }
+
+    const firstNumIndex = numberingElements.findIndex((el) => el?.name === 'w:num');
+    for (const id of missingIds) {
+      const patchedAbstractIndex = numberingElements.findIndex(
+        (el) => el?.name === 'w:abstractNum' && String(el.attributes?.['w:abstractNumId']) === id,
+      );
+      expect(patchedAbstractIndex).toBeGreaterThan(-1);
+      expect(firstNumIndex).toBeGreaterThan(patchedAbstractIndex);
+    }
+  });
 });

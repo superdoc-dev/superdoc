@@ -4,7 +4,7 @@ import { processOutputMarks } from '@converter/exporter.js';
  * @param {Array} marks SD node marks.
  * @returns {Object|undefined} Properties element for trackFormat change or undefined.
  */
-export const createTrackStyleMark = (marks) => {
+export const decodeTrackFormatMark = (marks) => {
   const trackStyleMark = marks.find((mark) => mark.type === 'trackFormat');
   if (trackStyleMark) {
     const beforeMarks = Array.isArray(trackStyleMark.attrs.before) ? trackStyleMark.attrs.before : [];

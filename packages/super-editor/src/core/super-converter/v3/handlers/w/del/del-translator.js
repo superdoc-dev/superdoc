@@ -2,7 +2,7 @@
 import { NodeTranslator } from '@translator';
 import { createAttributeHandler } from '@converter/v3/handlers/utils.js';
 import { exportSchemaToJson } from '@converter/exporter.js';
-import { createTrackStyleMark } from '@converter/v3/handlers/helpers.js';
+import { decodeTrackFormatMark } from '@converter/v3/handlers/helpers.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:del';
@@ -73,7 +73,7 @@ function decode(params) {
   const trackingMarks = ['trackInsert', 'trackFormat', 'trackDelete'];
   const marks = node.marks;
   const trackedMark = marks.find((m) => m.type === 'trackDelete');
-  const trackStyleMark = createTrackStyleMark(marks);
+  const trackStyleMark = decodeTrackFormatMark(marks);
   node.marks = marks.filter((m) => !trackingMarks.includes(m.type));
   if (trackStyleMark) {
     node.marks.push(trackStyleMark);

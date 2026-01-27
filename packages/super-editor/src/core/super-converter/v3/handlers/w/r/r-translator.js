@@ -9,7 +9,7 @@ import validXmlAttributes from './attributes/index.js';
 import { handleStyleChangeMarksV2 } from '../../../../v2/importer/markImporter.js';
 import { encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
 import { TrackFormatMarkName } from '@extensions/track-changes/constants.js';
-import { createTrackStyleMark } from '@converter/v3/handlers/helpers.js';
+import { decodeTrackFormatMark } from '@converter/v3/handlers/helpers.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:r';
@@ -181,7 +181,7 @@ const decode = (params, decodedAttrs = {}) => {
 
   const trackFormatMark = trackingMarksByType.get(TrackFormatMarkName);
   if (trackFormatMark) {
-    const rPrChangeElement = createTrackStyleMark([trackFormatMark]);
+    const rPrChangeElement = decodeTrackFormatMark([trackFormatMark]);
     if (rPrChangeElement) {
       if (!runPropertiesElement) {
         runPropertiesElement = { name: 'w:rPr', elements: [] };

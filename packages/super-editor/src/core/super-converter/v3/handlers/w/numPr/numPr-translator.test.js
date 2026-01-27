@@ -3,7 +3,7 @@ import { translator } from './numPr-translator.js';
 
 vi.mock('@converter/exporter', () => ({
   exportSchemaToJson: vi.fn(),
-  createTrackStyleMark: vi.fn(),
+  decodeTrackFormatMark: vi.fn(),
 }));
 
 describe('w:numPr translator', () => {

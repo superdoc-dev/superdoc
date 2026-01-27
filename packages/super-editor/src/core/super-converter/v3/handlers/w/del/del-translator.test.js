@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { config, translator } from './del-translator.js';
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson } from '@converter/exporter.js';
-import { createTrackStyleMark } from '@converter/v3/handlers/helpers.js';
+import { decodeTrackFormatMark } from '@converter/v3/handlers/helpers.js';
 
 // Mock external modules
 vi.mock('@converter/exporter.js', () => ({
@@ -10,7 +10,7 @@ vi.mock('@converter/exporter.js', () => ({
 }));
 
 vi.mock('@converter/v3/handlers/helpers.js', () => ({
-  createTrackStyleMark: vi.fn(),
+  decodeTrackFormatMark: vi.fn(),
 }));
 
 describe('w:del translator', () => {
@@ -98,7 +98,7 @@ describe('w:del translator', () => {
       const mockTranslatedNode = { elements: [mockTextNode] };
 
       exportSchemaToJson.mockReturnValue(mockTranslatedNode);
-      createTrackStyleMark.mockReturnValue(null);
+      decodeTrackFormatMark.mockReturnValue(null);
 
       const node = {
         type: 'text',
@@ -132,12 +132,12 @@ describe('w:del translator', () => {
       };
 
       const mockTrackStyleMark = { type: 'trackStyle', attrs: {} };
-      createTrackStyleMark.mockReturnValue(mockTrackStyleMark);
+      decodeTrackFormatMark.mockReturnValue(mockTrackStyleMark);
       exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:t' }] });
 
       const result = config.decode({ node });
 
-      expect(createTrackStyleMark).toHaveBeenCalled();
+      expect(decodeTrackFormatMark).toHaveBeenCalled();
       expect(result).toBeTruthy();
       expect(result.elements[0].elements[0].name).toBe('w:delText');
     });

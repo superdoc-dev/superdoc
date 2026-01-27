@@ -6,7 +6,7 @@ type BreakBlock = {
   attrs: Record<string, unknown>;
 };
 
-export const lineBreakNodeToBreakBlock = (node: PMNode, nextId: () => string): BreakBlock | null => {
+export const lineBreakNodeToBreakBlock = (node: PMNode, { nextId }: { nextId: () => string }): BreakBlock | null => {
   const breakType = node.attrs?.pageBreakType ?? node.attrs?.lineBreakType ?? 'line';
   const kind = breakType === 'page' ? 'pageBreak' : breakType === 'column' ? 'columnBreak' : null;
   if (!kind) {

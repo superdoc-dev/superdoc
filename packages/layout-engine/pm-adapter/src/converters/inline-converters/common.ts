@@ -1,6 +1,15 @@
 import type { RunProperties, ParagraphProperties } from '@superdoc/style-engine/ooxml';
-import type { SdtMetadata, TextRun, ParagraphAttrs } from '@superdoc/contracts';
-import { HyperlinkConfig, PMMark, PMNode, PositionMap, ThemeColorPalette, BlockIdGenerator } from '../../types';
+import type { FlowBlock, SdtMetadata, TextRun, ParagraphAttrs } from '@superdoc/contracts';
+import {
+  HyperlinkConfig,
+  NodeHandlerContext,
+  PMMark,
+  PMNode,
+  PositionMap,
+  ThemeColorPalette,
+  BlockIdGenerator,
+  Position,
+} from '../../types';
 import { ConverterContext } from '../../converter-context';
 import { computeRunAttrs } from '../../attributes/paragraph';
 
@@ -44,6 +53,22 @@ export type InlineConverterParams = {
   tabOrdinal: number;
   paragraphAttrs: ParagraphAttrs;
   nextBlockId: BlockIdGenerator;
+};
+
+export type BlockConverterOptions = {
+  blocks: FlowBlock[];
+  nextBlockId: BlockIdGenerator;
+  nextId: () => string;
+  positions: WeakMap<PMNode, Position>;
+  trackedChangesConfig: NodeHandlerContext['trackedChangesConfig'];
+  defaultFont: string;
+  defaultSize: number;
+  converterContext: ConverterContext;
+  hyperlinkConfig: NodeHandlerContext['hyperlinkConfig'];
+  enableComments: boolean;
+  bookmarks: Map<string, number>;
+  converters: NodeHandlerContext['converters'];
+  paragraphAttrs: ParagraphAttrs;
 };
 
 export const applyInlineRunProperties = (

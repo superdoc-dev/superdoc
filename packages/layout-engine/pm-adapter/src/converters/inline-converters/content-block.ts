@@ -1,13 +1,12 @@
-import { type InlineConverterParams } from './common';
+import { type BlockConverterOptions } from './common';
 import { contentBlockNodeToDrawingBlock } from '../content-block.js';
 import type { DrawingBlock } from '@superdoc/contracts';
+import { PMNode } from '../../types';
 
-export function inlineContentBlockConverter({
-  node,
-  positions,
-  nextBlockId,
-  paragraphAttrs,
-}: InlineConverterParams): DrawingBlock | null {
+export function inlineContentBlockConverter(
+  node: PMNode,
+  { positions, nextBlockId, paragraphAttrs }: BlockConverterOptions,
+): DrawingBlock | null {
   const attrs = node.attrs ?? {};
   if (!attrs.horizontalRule) {
     return null;

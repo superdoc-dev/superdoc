@@ -58,7 +58,6 @@ export function importCommentData({ docx, editor, converter }) {
       path: [el],
     });
 
-    console.log('[debug] parsedElements:', parsedElements);
     // Per OOXML spec, commentsExtended.xml links via the LAST paragraph's paraId
     // when a comment has multiple paragraphs
     const textElements = Array.isArray(parsedElements) ? parsedElements : parsedElements ? [parsedElements] : [];

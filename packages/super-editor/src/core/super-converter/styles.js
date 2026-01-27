@@ -509,6 +509,7 @@ export function decodeRPrFromMarks(marks) {
     return runProperties;
   }
 
+  console.log('[debug] marks:', marks);
   marks.forEach((mark) => {
     const type = mark.type.name ?? mark.type;
     switch (type) {

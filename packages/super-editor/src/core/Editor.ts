@@ -2458,10 +2458,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 
-      // Normalize commentJSON property (imported comments provide textElements)
+      // Normalize commentJSON property (imported comments provide `elements`)
       const preparedComments = effectiveComments.map((comment: Comment) => {
-        const elements =
-          Array.isArray(comment.textElements) && comment.textElements.length ? comment.textElements : undefined;
+        const elements = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : undefined;
         return {
           ...comment,
           commentJSON: comment.commentJSON ?? elements,

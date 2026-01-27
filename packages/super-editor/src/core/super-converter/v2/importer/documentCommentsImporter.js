@@ -72,7 +72,6 @@ export function importCommentData({ docx, editor, converter }) {
       creatorName: authorName,
       creatorEmail: authorEmail,
       createdTime: unixTimestampMs,
-      textElements,
       elements: textElements,
       initials,
       paraId,

@@ -46,6 +46,16 @@
     "./style.css": "./dist/style.css"
   },
   "types": "./dist/superdoc/src/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "super-editor": [
+        "./dist/super-editor/src/index.d.ts"
+      ],
+      "types": [
+        "./dist/types.d.ts"
+      ]
+    }
+  },
   "main": "./dist/superdoc.umd.js",
   "module": "./dist/superdoc.es.js",
   "scripts": {

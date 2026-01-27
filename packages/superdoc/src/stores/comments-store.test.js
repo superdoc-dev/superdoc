@@ -219,46 +219,49 @@ describe('comments-store', () => {
           commentId: 'c-1',
           createdTime: now,
           creatorName: 'Gabriel',
-          textJson: {
-            content: [
-              {
-                type: 'run',
-                content: [],
-                attrs: {
-                  runProperties: [
-                    {
-                      xmlName: 'w:rStyle',
-                      attributes: {
-                        'w:val': 'CommentReference',
-                      },
-                    },
-                  ],
-                },
-              },
-              {
-                type: 'run',
-                content: [
-                  {
-                    type: 'text',
-                    text: 'I am a comment~!',
-                    attrs: {
-                      type: 'element',
-                      attributes: {},
-                    },
-                    marks: [
+          textElements: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [],
+                  attrs: {
+                    runProperties: [
                       {
-                        type: 'textStyle',
-                        attrs: {
-                          fontSize: '10pt',
-                          fontSizeCs: '10pt',
+                        xmlName: 'w:rStyle',
+                        attributes: {
+                          'w:val': 'CommentReference',
                         },
                       },
                     ],
                   },
-                ],
-              },
-            ],
-          },
+                },
+                {
+                  type: 'run',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'I am a comment~!',
+                      attrs: {
+                        type: 'element',
+                        attributes: {},
+                      },
+                      marks: [
+                        {
+                          type: 'textStyle',
+                          attrs: {
+                            fontSize: '10pt',
+                            fontSizeCs: '10pt',
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
       ],
       documentId: 'doc-1',

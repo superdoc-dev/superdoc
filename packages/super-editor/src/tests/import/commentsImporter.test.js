@@ -4,6 +4,9 @@ import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 
 const extractNodeText = (node) => {
   if (!node) return '';
+  if (Array.isArray(node)) {
+    return node.map((child) => extractNodeText(child)).join('');
+  }
   if (typeof node.text === 'string') return node.text;
   const content = Array.isArray(node.content) ? node.content : [];
   return content.map((child) => extractNodeText(child)).join('');
@@ -38,8 +41,8 @@ describe('basic comment import [basic-comment.docx]', () => {
     expect(comment.isDone).toBe(false);
     expect(comment.parentCommentId).toBeUndefined();
 
-    const commentText = comment.textJson;
-    expect(commentText.type).toBe('paragraph');
+    const commentText = comment.textElements?.[0];
+    expect(commentText?.type).toBe('paragraph');
 
     const textNode = commentText.content
       .flatMap((node) => (node.type === 'run' ? node.content || [] : [node]))
@@ -126,7 +129,7 @@ describe('comment import without extended metadata [gdocs-comments-export.docx]'
     expect(firstComment.isDone).toBe(false);
 
     const secondComment = comments[1];
-    expect(extractNodeText(secondComment.textJson)).toBe('comment on text');
+    expect(extractNodeText(secondComment.textElements)).toBe('comment on text');
   });
 });
 

@@ -620,11 +620,7 @@ export const useCommentsStore = defineStore('comments', () => {
     }
 
     comments.forEach((comment) => {
-      const textElements = Array.isArray(comment.textElements)
-        ? comment.textElements
-        : comment.textJson
-          ? [comment.textJson]
-          : [];
+      const textElements = Array.isArray(comment.textElements) ? comment.textElements : [];
       const htmlContent = getHtmlFromComment(textElements);
 
       if (!htmlContent && !comment.trackedChange) {
@@ -636,7 +632,7 @@ export const useCommentsStore = defineStore('comments', () => {
       const newComment = useComment({
         fileId: documentId,
         fileType: document.type,
-        docxCommentJSON: comment.textJson ?? textElements[0],
+        docxCommentJSON: textElements.length ? textElements : null,
         commentId: comment.commentId,
         isInternal: false,
         parentCommentId: comment.parentCommentId,
@@ -716,6 +712,12 @@ export const useCommentsStore = defineStore('comments', () => {
     });
   };
 
+  const normalizeDocxSchemaForExport = (value) => {
+    if (!value) return [];
+    const nodes = Array.isArray(value) ? value : [value];
+    return nodes.filter(Boolean);
+  };
+
   const translateCommentsForExport = () => {
     const processedComments = [];
     commentsList.value.forEach((comment) => {
@@ -724,7 +726,8 @@ export const useCommentsStore = defineStore('comments', () => {
       // If this comment originated from DOCX (Word or Google Docs), prefer the
       // original DOCX-schema JSON captured at import time. Otherwise, fall back
       // to rebuilding commentJSON from the rich-text HTML.
-      const schema = values.docxCommentJSON || convertHtmlToSchema(richText);
+      const docxSchema = normalizeDocxSchemaForExport(values.docxCommentJSON);
+      const schema = docxSchema.length ? docxSchema : convertHtmlToSchema(richText);
       processedComments.push({
         ...values,
         commentJSON: schema,
@@ -740,7 +743,8 @@ export const useCommentsStore = defineStore('comments', () => {
       content: commentHTML,
       extensions: getRichTextExtensions(),
     });
-    return editor.getJSON().content[0];
+    const json = editor.getJSON();
+    return Array.isArray(json?.content) ? json.content.filter(Boolean) : [];
   };
 
   /**

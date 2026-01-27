@@ -26,7 +26,13 @@ export const prepareCommentParaIds = (comment) => {
  * @returns {Object} The w:comment node for the comment
  */
 export const getCommentDefinition = (comment, commentId, allComments, editor) => {
-  const translatedText = wPTranslator.decode({ editor, node: comment.commentJSON });
+  const nodes = Array.isArray(comment.commentJSON)
+    ? comment.commentJSON
+    : comment.commentJSON
+      ? [comment.commentJSON]
+      : [];
+  const translatedParagraphs = nodes.map((node) => wPTranslator.decode({ editor, node })).filter(Boolean);
+
   const attributes = {
     'w:id': String(commentId),
     'w:author': comment.creatorName || comment.importedAuthor?.name,
@@ -56,7 +62,7 @@ export const getCommentDefinition = (comment, commentId, allComments, editor) =>
     type: 'element',
     name: 'w:comment',
     attributes,
-    elements: [translatedText],
+    elements: translatedParagraphs,
   };
 };
 

@@ -47,6 +47,13 @@ vi.mock('./inline-converters/generic-token.js', () => ({
   tokenNodeToRun: vi.fn(),
 }));
 
+vi.mock('./shapes.js', () => ({
+  vectorShapeNodeToDrawingBlock: vi.fn(),
+  shapeGroupNodeToDrawingBlock: vi.fn(),
+  shapeContainerNodeToDrawingBlock: vi.fn(),
+  shapeTextboxNodeToDrawingBlock: vi.fn(),
+}));
+
 vi.mock('../attributes/index.js', () => ({
   computeParagraphAttrs: vi.fn(),
   cloneParagraphAttrs: vi.fn(),
@@ -86,6 +93,12 @@ vi.mock('../attributes/paragraph-styles.js', () => ({
 import { textNodeToRun } from './inline-converters/text-run.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
+import {
+  vectorShapeNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeContainerNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+} from './shapes.js';
 import { computeParagraphAttrs, cloneParagraphAttrs, deepClone, hasPageBreakBefore } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
 import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
@@ -723,6 +736,7 @@ describe('paragraph converters', () => {
     let converterContext: ConverterContext;
 
     beforeEach(() => {
+      vi.restoreAllMocks();
       vi.clearAllMocks();
 
       // Setup default block ID generator
@@ -1812,9 +1826,7 @@ describe('paragraph converters', () => {
           attrs: {},
         };
 
-        const converters = {
-          vectorShapeNodeToDrawingBlock: vi.fn().mockReturnValue(mockDrawingBlock),
-        };
+        vi.mocked(vectorShapeNodeToDrawingBlock).mockReturnValue(mockDrawingBlock as never);
 
         const blocks = paragraphToFlowBlocks(
           para,
@@ -1826,24 +1838,21 @@ describe('paragraph converters', () => {
           undefined,
           undefined,
           undefined,
-          converters as never,
         );
 
-        expect(converters.vectorShapeNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
+        expect(vectorShapeNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
         expect(blocks.some((b) => b.kind === 'drawing')).toBe(true);
       });
 
       it('should handle shapeGroup node', () => {
         const shapeNode: PMNode = { type: 'shapeGroup' };
 
-        const converters = {
-          shapeGroupNodeToDrawingBlock: vi.fn().mockReturnValue({
-            kind: 'drawing',
-            id: 'drawing-0',
-            shapes: [],
-            attrs: {},
-          }),
-        };
+        vi.mocked(shapeGroupNodeToDrawingBlock).mockReturnValue({
+          kind: 'drawing',
+          id: 'drawing-0',
+          shapes: [],
+          attrs: {},
+        } as never);
 
         paragraphToFlowBlocks(
           {
@@ -1858,23 +1867,20 @@ describe('paragraph converters', () => {
           undefined,
           undefined,
           undefined,
-          converters as never,
         );
 
-        expect(converters.shapeGroupNodeToDrawingBlock).toHaveBeenCalled();
+        expect(shapeGroupNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
       it('should handle shapeContainer node', () => {
         const shapeNode: PMNode = { type: 'shapeContainer' };
 
-        const converters = {
-          shapeContainerNodeToDrawingBlock: vi.fn().mockReturnValue({
-            kind: 'drawing',
-            id: 'drawing-0',
-            shapes: [],
-            attrs: {},
-          }),
-        };
+        vi.mocked(shapeContainerNodeToDrawingBlock).mockReturnValue({
+          kind: 'drawing',
+          id: 'drawing-0',
+          shapes: [],
+          attrs: {},
+        } as never);
 
         paragraphToFlowBlocks(
           {
@@ -1889,23 +1895,20 @@ describe('paragraph converters', () => {
           undefined,
           undefined,
           undefined,
-          converters as never,
         );
 
-        expect(converters.shapeContainerNodeToDrawingBlock).toHaveBeenCalled();
+        expect(shapeContainerNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
       it('should handle shapeTextbox node', () => {
         const shapeNode: PMNode = { type: 'shapeTextbox' };
 
-        const converters = {
-          shapeTextboxNodeToDrawingBlock: vi.fn().mockReturnValue({
-            kind: 'drawing',
-            id: 'drawing-0',
-            shapes: [],
-            attrs: {},
-          }),
-        };
+        vi.mocked(shapeTextboxNodeToDrawingBlock).mockReturnValue({
+          kind: 'drawing',
+          id: 'drawing-0',
+          shapes: [],
+          attrs: {},
+        } as never);
 
         paragraphToFlowBlocks(
           {
@@ -1920,10 +1923,9 @@ describe('paragraph converters', () => {
           undefined,
           undefined,
           undefined,
-          converters as never,
         );
 
-        expect(converters.shapeTextboxNodeToDrawingBlock).toHaveBeenCalled();
+        expect(shapeTextboxNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
       it('should handle table node', () => {

@@ -9,7 +9,14 @@
 
 import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
 import type { FlowBlock, Run, TextRun, SdtMetadata, DrawingBlock } from '@superdoc/contracts';
-import type { PMNode, PMMark, NodeHandlerContext, ParagraphToFlowBlocksParams } from '../types.js';
+import type {
+  PMNode,
+  PMMark,
+  NodeHandlerContext,
+  ParagraphToFlowBlocksParams,
+  BlockIdGenerator,
+  PositionMap,
+} from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBreakBlock } from '../sections/index.js';
@@ -417,6 +424,7 @@ export function paragraphToFlowBlocks({
               attachAnchorParagraphId(block, anchorParagraphId);
               blocks.push(block);
             } else if (newBlocks.length > 0) {
+              // Some block converters may push multiple blocks to the provided array
               newBlocks.forEach((b) => {
                 attachAnchorParagraphId(b, anchorParagraphId);
                 blocks.push(b);
@@ -428,42 +436,11 @@ export function paragraphToFlowBlocks({
         }
         return;
       }
-    }
-
-    if (node.type === 'vectorShape') {
+    } else if (SHAPE_CONVERTERS_REGISTRY[node.type]) {
       const anchorParagraphId = nextId();
       flushParagraph();
-      const drawingBlock = converters.vectorShapeNodeToDrawingBlock(node, nextBlockId, positions);
-      if (drawingBlock) {
-        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-      }
-      return;
-    }
-
-    if (node.type === 'shapeGroup') {
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      const drawingBlock = converters.shapeGroupNodeToDrawingBlock(node, nextBlockId, positions);
-      if (drawingBlock) {
-        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-      }
-      return;
-    }
-
-    if (node.type === 'shapeContainer') {
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      const drawingBlock = converters.shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
-      if (drawingBlock) {
-        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-      }
-      return;
-    }
-
-    if (node.type === 'shapeTextbox') {
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      const drawingBlock = converters.shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
+      const converter = SHAPE_CONVERTERS_REGISTRY[node.type];
+      const drawingBlock = converter(node, nextBlockId, positions);
       if (drawingBlock) {
         blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
@@ -617,7 +594,10 @@ for (const type of TOKEN_INLINE_TYPES.keys()) {
   };
 }
 
-const SHAPE_CONVERTERS = {
+const SHAPE_CONVERTERS_REGISTRY: Record<
+  string,
+  (node: PMNode, nextBlockId: BlockIdGenerator, positions: PositionMap) => DrawingBlock | null
+> = {
   vectorShape: vectorShapeNodeToDrawingBlock,
   shapeGroup: shapeGroupNodeToDrawingBlock,
   shapeContainer: shapeContainerNodeToDrawingBlock,

@@ -70,4 +70,21 @@ describe('patchNumberingDefinitions', () => {
     expect(patchedAbstractIndex).toBeGreaterThan(-1);
     expect(firstNumIndex).toBeGreaterThan(patchedAbstractIndex);
   });
+
+  it('does not change the numbering xml when all abstract references exist', () => {
+    const docx = {
+      'word/numbering.xml': makeNumberingXml([
+        abstractNum(41),
+        abstractNum(42),
+        num({ numId: 1, abstractId: 41 }),
+        num({ numId: 2, abstractId: 42 }),
+      ]),
+    };
+
+    const before = JSON.parse(JSON.stringify(docx));
+
+    patchNumberingDefinitions(docx);
+
+    expect(docx).toEqual(before);
+  });
 });

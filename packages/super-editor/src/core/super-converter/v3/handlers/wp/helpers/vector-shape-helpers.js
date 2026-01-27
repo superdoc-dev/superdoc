@@ -127,7 +127,9 @@ export function extractStrokeColor(spPr, style) {
 
   if (ln) {
     const noFill = ln.elements?.find((el) => el.name === 'a:noFill');
-    if (noFill) return null;
+    if (noFill) {
+      return null;
+    }
 
     const solidFill = ln.elements?.find((el) => el.name === 'a:solidFill');
     if (solidFill) {
@@ -157,13 +159,29 @@ export function extractStrokeColor(spPr, style) {
     }
   }
 
-  if (!style) return '#000000';
+  // No stroke specified in spPr, check style reference
+  // Per ECMA-376: when no stroke is specified and no style exists, shape should have no stroke
+  if (!style) {
+    return null;
+  }
 
   const lnRef = style.elements?.find((el) => el.name === 'a:lnRef');
-  if (!lnRef) return '#000000';
+  if (!lnRef) {
+    // No lnRef in style means no stroke specified - return null
+    return null;
+  }
+
+  // Per OOXML spec, lnRef idx="0" means "no stroke" - return null
+  const lnRefIdx = lnRef.attributes?.['idx'];
+  if (lnRefIdx === '0') {
+    return null;
+  }
 
   const schemeClr = lnRef.elements?.find((el) => el.name === 'a:schemeClr');
-  if (!schemeClr) return '#000000';
+  if (!schemeClr) {
+    // No schemeClr in lnRef - return null rather than default black
+    return null;
+  }
 
   const themeName = schemeClr.attributes?.['val'];
   let color = getThemeColor(themeName);

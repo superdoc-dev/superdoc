@@ -139,8 +139,44 @@ describe('extractStrokeColor', () => {
     expect(extractStrokeColor(spPr, style)).toBe('#5b9bd5');
   });
 
-  it('returns default black when nothing found', () => {
-    expect(extractStrokeColor({ elements: [] }, null)).toBe('#000000');
+  it('returns null (no stroke) when no stroke in spPr and no style provided', () => {
+    // Per ECMA-376: when no stroke is specified and no style exists, shape should have no stroke
+    expect(extractStrokeColor({ elements: [] }, null)).toBeNull();
+  });
+
+  it('returns null (no stroke) when no stroke in spPr and style has no lnRef', () => {
+    const spPr = { elements: [] };
+    const style = { elements: [] };
+    expect(extractStrokeColor(spPr, style)).toBeNull();
+  });
+
+  it('returns null (no stroke) when lnRef idx is 0', () => {
+    // Per OOXML spec, lnRef idx="0" means "no stroke"
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:lnRef',
+          attributes: { idx: '0' },
+          elements: [],
+        },
+      ],
+    };
+    expect(extractStrokeColor(spPr, style)).toBeNull();
+  });
+
+  it('returns null (no stroke) when lnRef has no schemeClr', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:lnRef',
+          attributes: { idx: '1' },
+          elements: [], // No schemeClr
+        },
+      ],
+    };
+    expect(extractStrokeColor(spPr, style)).toBeNull();
   });
 });
 

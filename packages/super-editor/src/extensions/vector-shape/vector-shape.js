@@ -43,7 +43,7 @@ export const VectorShape = Node.create({
       },
 
       fillColor: {
-        default: '#5b9bd5',
+        default: null,
         renderDOM: (attrs) => {
           if (!attrs.fillColor) return {};
           return { 'data-fill-color': attrs.fillColor };
@@ -51,7 +51,7 @@ export const VectorShape = Node.create({
       },
 
       strokeColor: {
-        default: '#000000',
+        default: null,
         renderDOM: (attrs) => {
           if (!attrs.strokeColor) return {};
           return { 'data-stroke-color': attrs.strokeColor };

@@ -2,6 +2,7 @@ import * as xmljs from 'xml-js';
 import JSZip from 'jszip';
 import { getContentTypesFromXml } from './super-converter/helpers.js';
 import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
+import { DOCX } from '@superdoc/common';
 
 /**
  * Class to handle unzipping and zipping of docx files
@@ -274,7 +275,7 @@ class DocxZipper {
 
     // If we are headless we don't have 'blob' support, so export as 'nodebuffer'
     const exportType = isHeadless ? 'nodebuffer' : 'blob';
-    return await zip.generateAsync({ type: exportType });
+    return await zip.generateAsync({ type: exportType, mimeType: DOCX });
   }
 
   /**

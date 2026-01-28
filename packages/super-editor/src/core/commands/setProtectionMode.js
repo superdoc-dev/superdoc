@@ -19,9 +19,8 @@ const DEFAULT_MODE = 'noProtection';
  * @param {string} mode
  * @returns {keyof typeof PROTECTION_VALUE_MAP}
  */
-function normalizeMode(mode = '') {
+function normalizeMode(mode) {
   const normalized = typeof mode === 'string' ? mode.trim() : '';
-  console.log('normalized', normalized);
   return /** @type {keyof typeof PROTECTION_VALUE_MAP} */ (normalized || DEFAULT_MODE);
 }
 
@@ -46,14 +45,13 @@ function createDocProtectionNode(editValue) {
  * @param {'noProtection' | 'allowOnlyRevisions' | 'allowOnlyComments' | 'allowOnlyFormFields' | 'allowOnlyReading'} mode
  * @returns {import('./types').Command}
  */
-export const setProtectionMode = (mode = 'noProtection') => {
+export const setProtectionMode = (mode) => {
   return ({ editor }) => {
+    if (!mode || typeof mode !== 'string') return false;
     const convertedXml = editor?.converter?.convertedXml;
     if (!convertedXml) return false;
 
     const normalizedMode = normalizeMode(mode);
-    console.log('normalizedMode', normalizedMode);
-    console.log('PROTECTION_VALUE_MAP', PROTECTION_VALUE_MAP, normalizedMode in PROTECTION_VALUE_MAP);
     if (!(normalizedMode in PROTECTION_VALUE_MAP)) return false;
     const settingsXml = convertedXml[SETTINGS_PATH];
     const settingsRoot = settingsXml?.elements?.[0];

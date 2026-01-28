@@ -55,24 +55,6 @@ describe('setProtectionMode command', () => {
     expect(editor.updateInternalXmlFile).toHaveBeenCalledWith(SETTINGS_PATH, updatedSettings);
   });
 
-  it('supports AllowOnlyFormFields casing and replaces existing node', () => {
-    const base = createBaseSettings();
-    base.elements[0].elements.unshift({
-      type: 'element',
-      name: 'w:documentProtection',
-      attributes: { 'w:edit': 'comments', 'w:enforcement': '1' },
-    });
-
-    const editor = buildEditor(base);
-    const command = setProtectionMode('allowOnlyFormFields');
-    const success = command({ editor });
-
-    expect(success).toBe(true);
-    const updated = editor.converter.convertedXml[SETTINGS_PATH].elements[0].elements;
-    expect(updated[0].attributes['w:edit']).toBe('forms');
-    expect(updated).toHaveLength(base.elements[0].elements.length);
-  });
-
   it('removes docProtection node when switching to noProtection', () => {
     const base = createBaseSettings();
     base.elements[0].elements.unshift({

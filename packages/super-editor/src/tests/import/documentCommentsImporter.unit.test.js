@@ -160,6 +160,37 @@ describe('importCommentData metadata parsing', () => {
     expect(comment.createdTime).toBeNaN();
   });
 
+  it('produces stable imported ids for the same input', () => {
+    const docx = buildDocx({
+      comments: [
+        {
+          id: 7,
+          author: 'Stable Commenter',
+          date: '2024-04-01T09:15:00Z',
+        },
+      ],
+    });
+
+    const [first] = importCommentData({ docx });
+    const [second] = importCommentData({ docx });
+
+    expect(first.commentId).toBe(second.commentId);
+    expect(uuidv4).not.toHaveBeenCalled();
+
+    const changedDocx = buildDocx({
+      comments: [
+        {
+          id: 8,
+          author: 'Stable Commenter',
+          date: '2024-04-01T09:15:01Z',
+        },
+      ],
+    });
+
+    const [changed] = importCommentData({ docx: changedDocx });
+    expect(changed.commentId).not.toBe(first.commentId);
+  });
+
   it('respects provided internal metadata and tracked change fields', () => {
     const docx = buildDocx({
       comments: [

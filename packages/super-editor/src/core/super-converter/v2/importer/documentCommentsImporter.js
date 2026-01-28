@@ -658,7 +658,7 @@ const simpleHash = (input) => {
  */
 const getCommentId = (internalId, importedId, createdTime) => {
   if (internalId != null) return internalId;
-  if (importedId == null) return uuidv4();
+  if (importedId == null || !Number.isFinite(createdTime)) return uuidv4();
   const hash = simpleHash(`${importedId}-${createdTime}`);
   return `imported-${hash}`;
 };

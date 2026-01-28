@@ -140,6 +140,26 @@ describe('importCommentData metadata parsing', () => {
     expect(comment.isDone).toBe(false);
   });
 
+  it('falls back to uuid when created date is missing', () => {
+    const docx = buildDocx({
+      comments: [
+        {
+          id: 2,
+          author: 'Date-less Commenter',
+          date: '2024-02-10T12:30:00Z',
+        },
+      ],
+    });
+
+    delete docx['word/comments.xml'].elements[0].elements[0].attributes['w:date'];
+
+    const [comment] = importCommentData({ docx });
+    expect(comment.commentId).toBe('00000000-0000-4000-8000-000000000001');
+    expect(uuidv4).toHaveBeenCalledTimes(1);
+    expect(comment.creatorName).toBe('Date-less Commenter');
+    expect(comment.createdTime).toBeNaN();
+  });
+
   it('respects provided internal metadata and tracked change fields', () => {
     const docx = buildDocx({
       comments: [

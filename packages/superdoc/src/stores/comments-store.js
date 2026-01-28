@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, computed, watch } from 'vue';
 import { comments_module_events } from '@superdoc/common';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { syncCommentsToClients } from '../core/collaboration/helpers.js';
@@ -123,6 +123,45 @@ export const useCommentsStore = defineStore('comments', () => {
     }
     return commentOrId;
   };
+
+  const clearResolvedMetadata = (comment) => {
+    if (!comment) return;
+    // Sets the resolved state to null so it can be restored in the comments sidebar
+    comment.resolvedTime = null;
+    comment.resolvedByEmail = null;
+    comment.resolvedByName = null;
+  };
+
+  const syncResolvedCommentsWithDocument = () => {
+    const docPositions = editorCommentPositions.value || {};
+    const activeKeys = new Set(Object.keys(docPositions));
+    if (!activeKeys.size) return;
+
+    commentsList.value.forEach((comment) => {
+      const key = getCommentPositionKey(comment);
+      if (!key) return;
+
+      const hasActiveAnchor = activeKeys.has(String(key));
+      if (hasActiveAnchor && comment.resolvedTime) {
+        clearResolvedMetadata(comment);
+      }
+    });
+  };
+
+  /* The watchers below are used to sync the resolved state of comments with the document.
+   *  This is especially useful for undo/redo operations that are not handled by the editor.
+   */
+  watch(editorCommentPositions, () => {
+    syncResolvedCommentsWithDocument();
+  });
+
+  watch(
+    commentsList,
+    () => {
+      syncResolvedCommentsWithDocument();
+    },
+    { deep: false },
+  );
 
   /**
    * Normalize a position object to a consistent { start, end } format.

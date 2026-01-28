@@ -60,6 +60,8 @@
   "module": "./dist/superdoc.es.js",
   "scripts": {
     "dev": "vite",
+    "dev:collab": "concurrently -k -n VITE,COLLAB -c cyan,green \"vite\" \"node src/dev/collab-server.js\"",
+    "collab-server": "node src/dev/collab-server.js",
     "build": "pnpm --prefix ../super-editor run types:build && vite build && pnpm run build:umd",
     "postbuild": "node ./scripts/ensure-types.cjs",
     "build:es": "pnpm --prefix ../super-editor run types:build && vite build && node ./scripts/ensure-types.cjs",
@@ -90,8 +92,10 @@
   },
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",
+    "@hocuspocus/server": "catalog:",
     "@superdoc/common": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
+    "concurrently": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
     "jszip": "catalog:",

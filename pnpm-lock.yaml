@@ -24,6 +24,9 @@ catalogs:
     '@hocuspocus/provider':
       specifier: ^2.13.6
       version: 2.15.3
+    '@hocuspocus/server':
+      specifier: ^2.13.6
+      version: 2.15.3
     '@linear/sdk':
       specifier: ^53.0.0
       version: 53.0.0
@@ -903,6 +906,9 @@ importers:
       '@hocuspocus/provider':
         specifier: 'catalog:'
         version: 2.15.3(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19)
+      '@hocuspocus/server':
+        specifier: 'catalog:'
+        version: 2.15.3(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19)
       '@superdoc/common':
         specifier: workspace:*
         version: link:../../shared/common
@@ -915,6 +921,9 @@ importers:
       '@vue/test-utils':
         specifier: 'catalog:'
         version: 2.4.6
+      concurrently:
+        specifier: 'catalog:'
+        version: 9.2.1
       jszip:
         specifier: 'catalog:'
         version: 3.10.1
@@ -1625,6 +1634,12 @@ packages:
 
   '@hocuspocus/provider@2.15.3':
     resolution: {integrity: sha512-oadN05m+KL4ylNKVo5YspNG4MXkT2Y+FUFzrgigpQeTjQibkPUwCNmUnkUxMgrGRgxb+O0lJCfirFIJMxedctA==}
+    peerDependencies:
+      y-protocols: ^1.0.6
+      yjs: ^13.6.8
+
+  '@hocuspocus/server@2.15.3':
+    resolution: {integrity: sha512-Ju4ty4/7JtmvivcP7gKReOLf8KrFwN7Yx/5VhXYh4TRULy4kSo2fsDVUaluPp0neZa6PbVhizJuzlOim73IEbQ==}
     peerDependencies:
       y-protocols: ^1.0.6
       yjs: ^13.6.8
@@ -3540,6 +3555,9 @@ packages:
   async-function@1.0.0:
     resolution: {integrity: sha512-hsU18Ae8CDTR6Kgu9DYf0EbCr/a5iGL0rytQDobUcdpYOKokk8LEjVphnXkDkgpi0wYVsqrXuP0bZxJaTqdgoA==}
     engines: {node: '>= 0.4'}
+
+  async-lock@1.4.1:
+    resolution: {integrity: sha512-Az2ZTpuytrtqENulXwO3GGv1Bztugx6TT37NIo7imr/Qo0gsYiGtSdBa2B6fsXhTpVZDNfu1Qn3pk531e3q+nQ==}
 
   async-validator@4.2.5:
     resolution: {integrity: sha512-7HhHjtERjqlNbZtqNqy2rckN/SpOOlmDliet+lP7k+eKZEjPk3DgyeU9lIXLdeLz0uBbbVp+9Qdow9wJWgwwfg==}
@@ -10261,6 +10279,20 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@hocuspocus/server@2.15.3(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19)':
+    dependencies:
+      '@hocuspocus/common': 2.15.3
+      async-lock: 1.4.1
+      kleur: 4.1.5
+      lib0: 0.2.114
+      uuid: 11.1.0
+      ws: 8.18.3
+      y-protocols: 1.0.6(yjs@13.6.19)
+      yjs: 13.6.19
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@humanfs/core@0.19.1': {}
 
   '@humanfs/node@0.16.7':
@@ -12876,6 +12908,8 @@ snapshots:
   astring@1.9.0: {}
 
   async-function@1.0.0: {}
+
+  async-lock@1.4.1: {}
 
   async-validator@4.2.5: {}
 

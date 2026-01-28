@@ -705,6 +705,11 @@ export class EditorInputManager {
       }
     }
 
+    const hasFocus = editor.view?.hasFocus?.() ?? false;
+    if (!hasFocus) {
+      this.#focusEditor();
+    }
+
     // Set selection for single click
     if (!handledByDepth) {
       try {
@@ -724,7 +729,6 @@ export class EditorInputManager {
     }
 
     this.#callbacks.scheduleSelectionUpdate?.();
-    this.#focusEditor();
   }
 
   #handlePointerMove(event: PointerEvent): void {

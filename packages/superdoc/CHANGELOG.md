@@ -1,3 +1,10 @@
+# [1.9.0-next.7](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.6...v1.9.0-next.7) (2026-01-27)
+
+
+### Bug Fixes
+
+* **export:** prefix Relationship IDs with rId for valid xsd:ID ([#1855](https://github.com/superdoc-dev/superdoc/issues/1855)) ([11e67e1](https://github.com/superdoc-dev/superdoc/commit/11e67e1e4332976df279edf62f1aa33177004f9e))
+
 # [1.9.0-next.5](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.4...v1.9.0-next.5) (2026-01-24)
 
 

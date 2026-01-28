@@ -90,6 +90,9 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Run slow tests
+        run: pnpm test:slow
+
   run-e2e-tests:
     runs-on: ubuntu-latest
     container:

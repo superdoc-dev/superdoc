@@ -17,7 +17,7 @@ export function preProcessHyperlinkInstruction(nodesToCombine, instruction, docx
     const rels = docx['word/_rels/document.xml.rels'];
     const relationships = rels?.elements.find((el) => el.name === 'Relationships');
     if (relationships) {
-      const rId = generateDocxRandomId();
+      const rId = 'rId' + generateDocxRandomId();
       relationships.elements.push({
         type: 'element',
         name: 'Relationship',

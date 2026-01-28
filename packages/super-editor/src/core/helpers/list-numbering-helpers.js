@@ -349,10 +349,10 @@ export const getListDefinitionDetails = ({ numId, level, listType, editor, tries
 /**
  * Get all list definitions grouped by numId and level.
  * @param {import('../Editor').Editor} editor - The editor instance containing numbering information.
- * @returns {Record<string, Record<string, {start: string|null, numFmt: string|null, lvlText: string|null, suffix: string|null, listNumberingType: string|null, customFormat: string|null, abstract: Object|null, abstractId: string|undefined}>>}
+ * @returns {Record<string, Record<string, {start: string|null, startOverridden: boolean, numFmt: string|null, lvlText: string|null, suffix: string|null, listNumberingType: string|null, customFormat: string|null, abstract: Object|null, abstractId: string|undefined}>>}
  */
 export const getAllListDefinitions = (editor) => {
-  const numbering = editor?.converter?.numbering;
+  const numbering = editor?.converter?.translatedNumbering;
   if (!numbering) return {};
 
   const { definitions = {}, abstracts = {} } = numbering;
@@ -360,33 +360,30 @@ export const getAllListDefinitions = (editor) => {
   return Object.entries(definitions).reduce((acc, [numId, definition]) => {
     if (!definition) return acc;
 
-    const abstractId = definition.elements?.find((item) => item.name === 'w:abstractNumId')?.attributes?.['w:val'];
+    const abstractId = definition['abstractNumId'];
     const abstract = abstractId != null ? abstracts?.[abstractId] : undefined;
-    const levelDefinitions = abstract?.elements?.filter((item) => item.name === 'w:lvl') || [];
+    const levelDefinitions = abstract?.levels || {};
 
     if (!acc[numId]) acc[numId] = {};
 
-    levelDefinitions.forEach((levelDef) => {
-      const ilvl = levelDef?.attributes?.['w:ilvl'];
-      if (ilvl == null) return;
+    Object.values(levelDefinitions).forEach((levelDef) => {
+      const ilvl = levelDef.ilvl;
 
       const findElement = (name) => levelDef?.elements?.find((item) => item.name === name);
 
-      const startElement = findElement('w:start');
-      const lvlRestartElement = findElement('w:lvlRestart');
       const numFmtElement = findElement('w:numFmt');
-      const lvlTextElement = findElement('w:lvlText');
-      const suffixElement = findElement('w:suff');
 
       const numFmt = numFmtElement?.attributes?.['w:val'] ?? null;
-      const customFormat = numFmt === 'custom' ? (numFmtElement?.attributes?.['w:format'] ?? null) : null;
+      const customFormat = levelDef.numFmt?.val === 'custom' ? levelDef.numFmt.format : null;
+      const start = definition.lvlOverrides?.[ilvl]?.startOverride || levelDef.start;
 
       acc[numId][ilvl] = {
-        start: startElement?.attributes?.['w:val'] ?? null,
-        restart: lvlRestartElement?.attributes?.['w:val'] ?? null,
-        numFmt,
-        lvlText: lvlTextElement?.attributes?.['w:val'] ?? null,
-        suffix: suffixElement?.attributes?.['w:val'] ?? null,
+        start,
+        startOverridden: definition.lvlOverrides?.[ilvl]?.startOverride != null,
+        restart: levelDef.lvlRestart,
+        numFmt: levelDef.numFmt?.val,
+        lvlText: levelDef.lvlText,
+        suffix: levelDef.suff,
         listNumberingType: numFmt,
         customFormat,
         abstract: abstract ?? null,

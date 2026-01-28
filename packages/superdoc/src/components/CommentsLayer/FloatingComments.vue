@@ -136,7 +136,10 @@ watch(activeComment, (newVal, oldVal) => {
     verticalOffset.value = selectionTop - renderedTop;
 
     setTimeout(() => {
-      renderedItem.elementRef.value?.scrollIntoView({
+      // elementRef may be stale/null after comment list re-renders
+      const elementRef = renderedItem.elementRef;
+      if (!elementRef) return;
+      elementRef.value?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });

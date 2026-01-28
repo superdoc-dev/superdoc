@@ -313,6 +313,9 @@ importers:
       eslint-plugin-jsdoc:
         specifier: 'catalog:'
         version: 54.7.0(eslint@9.39.1(jiti@2.6.1))
+      happy-dom:
+        specifier: 'catalog:'
+        version: 20.3.4
       husky:
         specifier: 'catalog:'
         version: 9.1.7

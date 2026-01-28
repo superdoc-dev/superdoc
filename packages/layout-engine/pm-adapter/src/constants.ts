@@ -142,6 +142,7 @@ export const ATOMIC_INLINE_TYPES = new Set([
   'footnoteReference',
   'passthroughInline',
   'bookmarkEnd',
+  'fieldAnnotation',
 ]);
 
 /**

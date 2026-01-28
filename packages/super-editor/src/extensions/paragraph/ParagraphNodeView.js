@@ -37,7 +37,10 @@ export class ParagraphNodeView {
     calculateResolvedParagraphProperties(this.editor, this.node, this.editor.state.doc.resolve(this.getPos()));
 
     this.dom = document.createElement('p');
-    this.contentDOM = document.createElement('span');
+    const contentEl = document.createElement('span');
+    contentEl.classList.add('sd-paragraph-content');
+
+    this.contentDOM = contentEl;
     this.dom.appendChild(this.contentDOM);
     if (this.#checkIsList()) {
       this.#initList(node.attrs.listRendering);

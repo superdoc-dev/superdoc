@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
       exclude: [
         ...configDefaults.exclude,
         '**/*.spec.js',
+        '**/node-import-timing.test.js', // Slow test, run separately with test:slow
       ],
       coverage: {
         provider: 'v8',

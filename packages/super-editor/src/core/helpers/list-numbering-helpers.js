@@ -369,11 +369,6 @@ export const getAllListDefinitions = (editor) => {
     Object.values(levelDefinitions).forEach((levelDef) => {
       const ilvl = levelDef.ilvl;
 
-      const findElement = (name) => levelDef?.elements?.find((item) => item.name === name);
-
-      const numFmtElement = findElement('w:numFmt');
-
-      const numFmt = numFmtElement?.attributes?.['w:val'] ?? null;
       const customFormat = levelDef.numFmt?.val === 'custom' ? levelDef.numFmt.format : null;
       const start = definition.lvlOverrides?.[ilvl]?.startOverride || levelDef.start;
 
@@ -384,7 +379,7 @@ export const getAllListDefinitions = (editor) => {
         numFmt: levelDef.numFmt?.val,
         lvlText: levelDef.lvlText,
         suffix: levelDef.suff,
-        listNumberingType: numFmt,
+        listNumberingType: levelDef.numFmt?.val,
         customFormat,
         abstract: abstract ?? null,
         abstractId,

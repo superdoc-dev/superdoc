@@ -1,7 +1,7 @@
 // @ts-check
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createNumberingPlugin } from './numberingPlugin.js';
-import { NumberingManager } from './NumberingManager.js';
+import { createNumberingManager } from './NumberingManager.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
 import { docxNumberingHelpers } from '@core/super-converter/v2/importer/listImporter.js';
@@ -20,7 +20,7 @@ vi.mock('prosemirror-state', () => ({
 }));
 
 vi.mock('./NumberingManager.js', () => ({
-  NumberingManager: vi.fn(),
+  createNumberingManager: vi.fn(),
 }));
 
 vi.mock('@helpers/list-numbering-helpers.js', () => ({
@@ -100,7 +100,7 @@ describe('numberingPlugin', () => {
       setCounter: vi.fn(),
       calculatePath: vi.fn().mockReturnValue([1]),
     };
-    NumberingManager.mockReturnValue(numberingManager);
+    createNumberingManager.mockReturnValue(numberingManager);
     ListHelpers.getAllListDefinitions.mockReturnValue({});
   });
 
@@ -117,9 +117,9 @@ describe('numberingPlugin', () => {
 
     createNumberingPlugin(createEditor());
 
-    expect(numberingManager.setStartSettings).toHaveBeenCalledWith('12', 0, 3, undefined);
-    expect(numberingManager.setStartSettings).toHaveBeenCalledWith('12', 1, 2, undefined);
-    expect(numberingManager.setStartSettings).toHaveBeenCalledWith('20', 0, 1, undefined);
+    expect(numberingManager.setStartSettings).toHaveBeenCalledWith('12', 0, 3, undefined, undefined);
+    expect(numberingManager.setStartSettings).toHaveBeenCalledWith('12', 1, 2, undefined, undefined);
+    expect(numberingManager.setStartSettings).toHaveBeenCalledWith('20', 0, 1, undefined, undefined);
   });
 
   it('refreshes start settings when list definitions change', () => {
@@ -139,7 +139,7 @@ describe('numberingPlugin', () => {
 
     listChangeHandler();
 
-    expect(numberingManager.setStartSettings).toHaveBeenCalledWith('42', 0, 5, undefined);
+    expect(numberingManager.setStartSettings).toHaveBeenCalledWith('42', 0, 5, undefined, undefined);
   });
 
   it('unsubscribes the list definition listener on destroy', () => {

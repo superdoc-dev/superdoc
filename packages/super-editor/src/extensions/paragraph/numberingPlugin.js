@@ -1,5 +1,5 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
-import { NumberingManager } from './NumberingManager.js';
+import { createNumberingManager } from './NumberingManager.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
 import { docxNumberingHelpers } from '@core/super-converter/v2/importer/listImporter.js';
@@ -13,7 +13,7 @@ import { calculateResolvedParagraphProperties } from './resolvedPropertiesCache.
  * @returns {import('prosemirror-state').Plugin}
  */
 export function createNumberingPlugin(editor) {
-  const numberingManager = NumberingManager();
+  const numberingManager = createNumberingManager();
 
   // Helpers to initialize and refresh start settings from definitions
   const applyStartSettingsFromDefinitions = (definitionsMap) => {
@@ -24,7 +24,7 @@ export function createNumberingPlugin(editor) {
         if (restart != null) {
           restart = parseInt(restart);
         }
-        numberingManager.setStartSettings(numId, parseInt(level), start, restart);
+        numberingManager.setStartSettings(numId, parseInt(level), start, restart, def.startOverridden);
       });
     });
   };

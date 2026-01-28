@@ -203,6 +203,9 @@ describe('EditorAdapter', () => {
         editorState = newState;
       },
       view,
+      dispatch: vi.fn((tr) => {
+        editorState = editorState.apply(tr);
+      }),
       exportDocx: vi.fn().mockResolvedValue({}),
       options: {
         documentId: 'doc-123',
@@ -561,6 +564,41 @@ describe('EditorAdapter', () => {
       expect(mockEditor.commands.disableTrackChanges).toHaveBeenCalled();
 
       (mockAdapter as unknown as { applyPatch: () => void }).applyPatch = originalApply;
+    });
+
+    it('applies tracked change in headless mode (no view)', () => {
+      let headlessState = createEditorState([{ text: 'original' }]);
+      const headlessEditor = {
+        get state() {
+          return headlessState;
+        },
+        set state(newState) {
+          headlessState = newState;
+        },
+        view: undefined,
+        dispatch: vi.fn((tr) => {
+          headlessState = headlessState.apply(tr);
+        }),
+        options: {
+          documentId: 'headless-doc',
+          user: { name: 'Test User', image: '' },
+        },
+        commands: {
+          enableTrackChanges: vi.fn(),
+          disableTrackChanges: vi.fn(),
+        },
+        chain: vi.fn(),
+      } as unknown as Editor;
+
+      const headlessAdapter = new EditorAdapter(headlessEditor);
+      const from = 1;
+      const to = headlessState.doc.content.size - 1;
+
+      const changeId = headlessAdapter.createTrackedChange(from, to, 'tracked');
+
+      expect(changeId).toMatch(/^tracked-change-/);
+      expect(headlessEditor.dispatch).toHaveBeenCalled();
+      expect(headlessState.doc.textContent).toBe('tracked');
     });
   });
 

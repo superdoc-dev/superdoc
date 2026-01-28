@@ -604,8 +604,8 @@ export class EditorAdapter {
    * @private
    */
   private applyPatch(from: number, to: number, suggestedText: string): void {
-    const { state, view } = this.editor;
-    if (!state || !view) {
+    const { state } = this.editor;
+    if (!state) {
       return;
     }
 
@@ -638,7 +638,8 @@ export class EditorAdapter {
       tr.insert(insertPos, node);
       insertPos += node.nodeSize;
     }
-    view.dispatch(tr);
+
+    this.editor.dispatch(tr);
   }
 
   /**
@@ -675,6 +676,7 @@ export class EditorAdapter {
         this.editor.commands.disableTrackChanges();
       }
     }
+
     return changeId;
   }
 

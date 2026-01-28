@@ -3244,8 +3244,20 @@ export class PresentationEditor extends EventEmitter {
       }
       return;
     }
+
+    const activeEditor = this.getActiveEditor();
+    const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
+
+    if (!hasFocus) {
+      try {
+        this.#clearSelectedFieldAnnotationClass();
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
     const layout = this.#layoutState.layout;
-    const editorState = this.getActiveEditor().state;
+    const editorState = activeEditor.state;
     const selection = editorState?.selection;
 
     if (!selection) {

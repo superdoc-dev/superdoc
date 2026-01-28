@@ -259,7 +259,7 @@ export type FlowBlocksResult = {
 export interface NodeHandlerContext {
   // Block accumulation
   blocks: FlowBlock[];
-  recordBlockKind: (kind: FlowBlock['kind']) => void;
+  recordBlockKind?: (kind: FlowBlock['kind']) => void;
 
   // ID generation & positions
   nextBlockId: BlockIdGenerator;
@@ -281,7 +281,7 @@ export interface NodeHandlerContext {
   bookmarks: Map<string, number>;
 
   // Section state (mutable)
-  sectionState: {
+  sectionState?: {
     ranges: SectionRange[];
     currentSectionIndex: number;
     currentParagraphIndex: number;
@@ -302,21 +302,20 @@ export type ParagraphToFlowBlocksParams = {
   para: PMNode;
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  trackedChangesConfig?: TrackedChangesConfig;
+  trackedChangesConfig: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
-  bookmarks?: Map<string, number>;
+  bookmarks: Map<string, number>;
   converters: NestedConverters;
   enableComments: boolean;
   converterContext: ConverterContext;
 };
 
 export type TableNodeToBlockParams = {
-  node: PMNode;
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  trackedChangesConfig?: TrackedChangesConfig;
-  bookmarks?: Map<string, number>;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
   converterContext: ConverterContext;

@@ -1,3 +1,16 @@
+# [1.9.0-next.10](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.9...v1.9.0-next.10) (2026-01-28)
+
+
+### Bug Fixes
+
+* block ID collisions and missing positions in paragraph converter ([3e75a98](https://github.com/superdoc-dev/superdoc/commit/3e75a9827fdb8b1847632e6a5b7f8f5dcabcabd1))
+* make test:slow script find the slow test file ([5a6b6d6](https://github.com/superdoc-dev/superdoc/commit/5a6b6d6d0d16caff9e8851b6a44ad827a001d993))
+
+
+### Features
+
+* dev collab mode ([#1860](https://github.com/superdoc-dev/superdoc/issues/1860)) ([469477b](https://github.com/superdoc-dev/superdoc/commit/469477bb816e98811f3986517d0541d1b4d4ac5e))
+
 # [1.9.0-next.9](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.8...v1.9.0-next.9) (2026-01-28)
 
 

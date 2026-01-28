@@ -66,7 +66,6 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   documentSection: handleDocumentSectionNode,
   table: handleTableNode,
   documentPartObject: handleDocumentPartObjectNode,
-  // orderedList and bulletList removed - list handling moved out of layout-engine
   image: handleImageNode,
   vectorShape: handleVectorShapeNode,
   shapeGroup: handleShapeGroupNode,
@@ -74,7 +73,7 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   shapeTextbox: handleShapeTextboxNode,
 };
 
-export const converters: NestedConverters = {
+const converters: NestedConverters = {
   contentBlockNodeToDrawingBlock,
   imageNodeToBlock,
   vectorShapeNodeToDrawingBlock,

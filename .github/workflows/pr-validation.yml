@@ -130,23 +130,10 @@ jobs:
         run: |
           pnpm run build
         
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('e2e-tests/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
       - name: Install Playwright browsers
         run: |
           cd e2e-tests
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
-            pnpx playwright install --with-deps
-          else
-            pnpx playwright install-deps
-          fi
+          pnpx playwright install --with-deps chromium
 
       - name: Run e2e tests
         id: run-e2e-tests

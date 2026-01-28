@@ -10,6 +10,7 @@ import { toggleList } from '@core/commands/index.js';
 import { restartNumbering } from '@core/commands/restartNumbering.js';
 import { ParagraphNodeView } from './ParagraphNodeView.js';
 import { createNumberingPlugin } from './numberingPlugin.js';
+import { createLeadingCaretPlugin } from './leadingCaretPlugin.js';
 import { createDropcapPlugin } from './dropcapPlugin.js';
 import { shouldSkipNodeView } from '../../utils/headless-helpers.js';
 import { parseAttrs } from './helpers/parseAttrs.js';
@@ -315,6 +316,6 @@ export const Paragraph = OxmlNode.create({
         },
       },
     });
-    return [dropcapPlugin, numberingPlugin, listEmptyInputPlugin];
+    return [dropcapPlugin, numberingPlugin, listEmptyInputPlugin, createLeadingCaretPlugin()];
   },
 });

@@ -4192,10 +4192,39 @@ export class DomPainter {
     }
     annotation.dataset.layoutEpoch = String(this.layoutEpoch);
 
+    this.appendAnnotationCaretAnchor(annotation, run);
+
     // Apply SDT metadata
     this.applySdtDataset(annotation, run.sdt);
 
     return annotation;
+  }
+
+  /**
+   * Adds a hidden DOM anchor at pmEnd so caret placement after the annotation is correct.
+   */
+  private appendAnnotationCaretAnchor(annotation: HTMLElement, run: FieldAnnotationRun): void {
+    if (!this.doc || run.pmEnd == null) return;
+
+    const caretAnchor = this.doc.createElement('span');
+    caretAnchor.dataset.pmStart = String(run.pmEnd);
+    caretAnchor.dataset.pmEnd = String(run.pmEnd);
+    caretAnchor.dataset.layoutEpoch = String(this.layoutEpoch);
+    caretAnchor.classList.add('annotation-caret-anchor');
+    caretAnchor.style.position = 'absolute';
+    caretAnchor.style.left = '100%';
+    caretAnchor.style.top = '0';
+    caretAnchor.style.width = '0';
+    caretAnchor.style.height = '1em';
+    caretAnchor.style.overflow = 'hidden';
+    caretAnchor.style.pointerEvents = 'none';
+    caretAnchor.style.userSelect = 'none';
+    caretAnchor.style.opacity = '0';
+    caretAnchor.textContent = '\u200B';
+    if (!annotation.style.position) {
+      annotation.style.position = 'relative';
+    }
+    annotation.appendChild(caretAnchor);
   }
 
   /**

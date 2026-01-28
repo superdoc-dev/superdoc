@@ -1,5 +1,6 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
-import { decodeRPrFromMarks, encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
+import { decodeRPrFromMarks, encodeMarksFromRPr } from '@converter/styles.js';
+import { carbonCopy } from '@core/utilities/carbonCopy';
 
 const mergeRanges = (ranges, docSize) => {
   if (!ranges.length) return [];
@@ -68,54 +69,6 @@ const getParagraphAtPos = (doc, pos) => {
   return null;
 };
 
-/**
- * Resolves run properties from a paragraph's style definition.
- * Extracts character-level formatting (fonts, sizes, bold, italic, etc.) that should
- * apply to text within the paragraph based on the paragraph's styleId.
- *
- * @param {Object | null} paragraphNode - The ProseMirror paragraph node containing style information.
- * @param {Object} paragraphNode.attrs - Node attributes.
- * @param {Object} [paragraphNode.attrs.paragraphProperties] - Paragraph properties object.
- * @param {string} [paragraphNode.attrs.paragraphProperties.styleId] - The paragraph style ID to resolve.
- * @param {Object} editor - The editor instance containing the converter.
- * @param {Object} editor.converter - The DOCX converter instance with style data.
- * @param {Object} editor.converter.convertedXml - The parsed DOCX XML structure for theme/font lookups.
- * @param {Object} editor.converter.numbering - The numbering definitions from DOCX.
- * @returns {{runProperties: Object, markDefs: Array<Object>}} Resolved run properties and mark definitions.
- *
- * @remarks
- * Error handling: Returns empty objects on any failure to prevent crashes during typing.
- * This allows the plugin to gracefully degrade when converter data is unavailable.
- */
-const resolveRunPropertiesFromParagraphStyle = (paragraphNode, editor) => {
-  if (!paragraphNode || !editor?.converter) return { runProperties: {}, markDefs: [] };
-
-  const styleId = paragraphNode.attrs?.paragraphProperties?.styleId;
-  if (!styleId) return { runProperties: {}, markDefs: [] };
-
-  try {
-    const params = {
-      translatedNumbering: editor.converter.translatedNumbering,
-      translatedLinkedStyles: editor.converter.translatedLinkedStyles,
-    };
-    const resolvedPpr = { styleId };
-    const runProperties = resolveRunProperties(params, {}, resolvedPpr, null, false, false);
-    const markDefs = encodeMarksFromRPr(runProperties, editor.converter.convertedXml);
-
-    return { runProperties, markDefs: Array.isArray(markDefs) ? markDefs : [] };
-  } catch (_e) {
-    return { runProperties: {}, markDefs: [] };
-  }
-};
-
-const createMarksFromDefs = (schema, markDefs = []) =>
-  markDefs
-    .map((def) => {
-      const markType = schema.marks[def.type];
-      return markType ? markType.create(def.attrs) : null;
-    })
-    .filter(Boolean);
-
 // Keep collapsed selections inside run nodes so caret geometry maps to text positions.
 const normalizeSelectionIntoRun = (tr, runType) => {
   const selection = tr.selection;
@@ -142,11 +95,41 @@ const normalizeSelectionIntoRun = (tr, runType) => {
   }
 };
 
-const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta = []) => {
+/**
+ * Copies run properties from the previous paragraph's last run and applies its marks to a text node.
+ * @param {import('prosemirror-state').EditorState} state
+ * @param {number} pos
+ * @param {import('prosemirror-model').Node} textNode
+ * @param {import('prosemirror-model').NodeType} runType
+ * @param {Object} editor
+ * @returns {{ runProperties: Record<string, unknown> | undefined, textNode: import('prosemirror-model').Node }}
+ */
+const copyRunPropertiesFromPreviousParagraph = (state, pos, textNode, runType, editor) => {
+  let runProperties;
+  let updatedTextNode = textNode;
+  const paragraphNode = getParagraphAtPos(state.doc, pos - 2);
+  if (paragraphNode && paragraphNode.content.size > 0) {
+    const lastChild = paragraphNode.child(paragraphNode.childCount - 1);
+    if (lastChild.type === runType && lastChild.attrs.runProperties) {
+      runProperties = carbonCopy(lastChild.attrs.runProperties);
+    }
+    // Copy marks and apply them to the text node being wrapped.
+    if (runProperties) {
+      const markDefs = encodeMarksFromRPr(runProperties, editor?.converter?.convertedXml ?? {});
+      const markInstances = markDefs.map((def) => state.schema.marks[def.type]?.create(def.attrs)).filter(Boolean);
+      if (markInstances.length) {
+        const mergedMarks = markInstances.reduce((set, mark) => mark.addToSet(set), updatedTextNode.marks);
+        updatedTextNode = updatedTextNode.mark(mergedMarks);
+      }
+    }
+  }
+  return { runProperties, textNode: updatedTextNode };
+};
+
+const buildWrapTransaction = (state, ranges, runType, editor) => {
   if (!ranges.length) return null;
 
   const replacements = [];
-  const metaStyleMarks = createMarksFromDefs(state.schema, markDefsFromMeta);
 
   ranges.forEach(({ from, to }) => {
     state.doc.nodesBetween(from, to, (node, pos, parent, index) => {
@@ -156,29 +139,16 @@ const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta =
       if (match && !match.matchType(runType)) return;
       if (!match && !parent.type.contentMatch.matchType(runType)) return;
 
-      let runProperties = decodeRPrFromMarks(node.marks);
+      let runProperties;
+      let textNode = node;
 
-      if ((!node.marks || node.marks.length === 0) && editor?.converter) {
-        const paragraphNode = getParagraphAtPos(state.doc, pos);
-        const { runProperties: styleRunProps, markDefs: styleMarkDefs } = resolveRunPropertiesFromParagraphStyle(
-          paragraphNode,
-          editor,
-        );
-        if (Object.keys(styleRunProps).length > 0) {
-          runProperties = styleRunProps;
-          // Use metaStyleMarks if available, otherwise create marks from resolved OOXML run props
-          const markDefs = metaStyleMarks.length ? markDefsFromMeta : styleMarkDefs;
-          const styleMarks = metaStyleMarks.length ? metaStyleMarks : createMarksFromDefs(state.schema, markDefs);
-          if (styleMarks.length && typeof state.schema.text === 'function') {
-            const textNode = state.schema.text(node.text || '', styleMarks);
-            if (textNode) {
-              node = textNode;
-            }
-          }
-        }
+      if (index === 0) {
+        // First node in parent. Copy run properties from the preceding paragraph's last run, if any.
+        ({ runProperties, textNode } = copyRunPropertiesFromPreviousParagraph(state, pos, textNode, runType, editor));
+      } else {
+        runProperties = decodeRPrFromMarks(node.marks);
       }
-
-      const runNode = runType.create({ runProperties }, node);
+      const runNode = runType.create({ runProperties }, textNode);
       replacements.push({ from: pos, to: pos + node.nodeSize, runNode });
     });
   });
@@ -195,7 +165,6 @@ const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta =
 export const wrapTextInRunsPlugin = (editor) => {
   let view = null;
   let pendingRanges = [];
-  let lastStyleMarksMeta = [];
 
   const flush = () => {
     if (!view) return;
@@ -204,7 +173,7 @@ export const wrapTextInRunsPlugin = (editor) => {
       pendingRanges = [];
       return;
     }
-    const tr = buildWrapTransaction(view.state, pendingRanges, runType, editor, lastStyleMarksMeta);
+    const tr = buildWrapTransaction(view.state, pendingRanges, runType, editor);
     pendingRanges = [];
     if (tr) {
       view.dispatch(tr);
@@ -225,7 +194,6 @@ export const wrapTextInRunsPlugin = (editor) => {
           editorView.dom.removeEventListener('compositionend', onCompositionEnd);
           view = null;
           pendingRanges = [];
-          lastStyleMarksMeta = [];
         },
       };
     },
@@ -243,16 +211,7 @@ export const wrapTextInRunsPlugin = (editor) => {
         return null;
       }
 
-      const latestStyleMarksMeta =
-        [...transactions]
-          .reverse()
-          .find((tr) => tr.getMeta && tr.getMeta('sdStyleMarks'))
-          ?.getMeta('sdStyleMarks') || lastStyleMarksMeta;
-      if (latestStyleMarksMeta && latestStyleMarksMeta.length) {
-        lastStyleMarksMeta = latestStyleMarksMeta;
-      }
-
-      const tr = buildWrapTransaction(newState, pendingRanges, runType, editor, latestStyleMarksMeta);
+      const tr = buildWrapTransaction(newState, pendingRanges, runType, editor);
       pendingRanges = [];
       return tr;
     },

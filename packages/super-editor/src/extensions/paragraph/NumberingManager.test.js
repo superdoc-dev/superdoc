@@ -55,6 +55,17 @@ describe('NumberingManager', () => {
       expect(numberingManager.calculatePath('numB', 0, 20)).toEqual([2]);
     });
 
+    it('uses the highest previous position even if counters are set out of order', () => {
+      const numberingManager = makeNumberingManager();
+      numberingManager.setStartSettings('list1', 0, 1, null);
+
+      numberingManager.setCounter('list1', 0, 20, 2, 'abs-3');
+      numberingManager.setCounter('list1', 0, 10, 1, 'abs-3');
+
+      const next = numberingManager.calculateCounter('list1', 0, 30, 'abs-3');
+      expect(next).toBe(3);
+    });
+
     it('respects startOverridden by isolating cache lookups to the numId', () => {
       const numberingManager = makeNumberingManager();
       numberingManager.setStartSettings('numA', 0, 1, null);

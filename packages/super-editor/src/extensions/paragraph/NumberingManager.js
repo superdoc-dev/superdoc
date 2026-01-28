@@ -197,13 +197,19 @@ export function createNumberingManager() {
         }
       }
       if (previousPos == null && !cacheEnabled) {
-        const fallbackPos = Object.keys(levelData)
-          .map((p) => parseInt(p))
-          .filter((p) => p < pos)
-          .pop();
-        if (fallbackPos != null) {
-          previousPos = fallbackPos;
-          previousCount = levelData[fallbackPos];
+        let maxPos = null;
+        for (const key of Object.keys(levelData)) {
+          const p = parseInt(key, 10);
+          if (!Number.isFinite(p) || p >= pos) {
+            continue;
+          }
+          if (maxPos == null || p > maxPos) {
+            maxPos = p;
+          }
+        }
+        if (maxPos != null) {
+          previousPos = maxPos;
+          previousCount = levelData[maxPos];
         }
       }
 

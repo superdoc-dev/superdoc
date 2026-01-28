@@ -55,13 +55,12 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
       );
       paragraphBlocks.forEach((block) => {
         blocks.push(block);
-        recordBlockKind(block.kind);
+        recordBlockKind?.(block.kind);
       });
     } else if (child.type === 'table') {
       const tableNodeToBlock = converters?.tableNodeToBlock;
       if (tableNodeToBlock) {
-        const tableBlock = tableNodeToBlock({
-          node: child,
+        const tableBlock = tableNodeToBlock(child, {
           nextBlockId,
           positions,
           trackedChangesConfig,
@@ -75,7 +74,7 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         if (tableBlock) {
           applySdtMetadataToTableBlock(tableBlock as TableBlock, structuredContentMetadata);
           blocks.push(tableBlock);
-          recordBlockKind(tableBlock.kind);
+          recordBlockKind?.(tableBlock.kind);
         }
       }
     }

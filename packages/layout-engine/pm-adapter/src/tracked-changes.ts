@@ -272,22 +272,6 @@ export const trackedChangesCompatible = (a: TextRun, b: TextRun): boolean => {
 };
 
 /**
- * Collects and prioritizes tracked change metadata from an array of ProseMirror marks.
- * When multiple tracked change marks are present, returns the highest-priority one.
- *
- * @param marks - Array of ProseMirror marks to process
- * @returns The highest-priority TrackedChangeMeta, or undefined if none found
- */
-export const collectTrackedChangeFromMarks = (marks?: PMMark[]): TrackedChangeMeta | undefined => {
-  if (!marks || !marks.length) return undefined;
-  return marks.reduce<TrackedChangeMeta | undefined>((current, mark) => {
-    const meta = buildTrackedChangeMetaFromMark(mark);
-    if (!meta) return current;
-    return selectTrackedChangeMeta(current, meta);
-  }, undefined);
-};
-
-/**
  * Determines if a tracked node should be hidden based on the viewing mode
  *
  * @param meta - Tracked change metadata

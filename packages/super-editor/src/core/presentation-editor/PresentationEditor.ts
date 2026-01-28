@@ -2792,8 +2792,6 @@ export class PresentationEditor extends EventEmitter {
         converterContext = converter
           ? {
               docx: converter.convertedXml,
-              numbering: converter.numbering,
-              linkedStyles: converter.linkedStyles,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,

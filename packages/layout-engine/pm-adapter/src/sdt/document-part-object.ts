@@ -73,7 +73,7 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
         });
         for (const block of childBlocks) {
           blocks.push(block);
-          recordBlockKind(block.kind);
+          recordBlockKind?.(block.kind);
         }
       }
     }

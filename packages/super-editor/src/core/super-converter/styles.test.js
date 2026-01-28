@@ -431,6 +431,12 @@ describe('decodeRPrFromMarks', () => {
     const rPr = decodeRPrFromMarks(marks);
     expect(rPr).toEqual({ textTransform: 'uppercase' });
   });
+
+  it('should decode link mark into Hyperlink styleId', () => {
+    const marks = [{ type: 'link', attrs: { href: 'https://example.com' } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr).toEqual({ styleId: 'Hyperlink' });
+  });
 });
 
 describe('marks encoding/decoding round-trip', () => {

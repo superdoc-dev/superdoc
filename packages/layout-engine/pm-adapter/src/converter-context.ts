@@ -11,19 +11,6 @@
 import type { ParagraphSpacing } from '@superdoc/contracts';
 import type { NumberingProperties, StylesDocumentProperties, TableInfo } from '@superdoc/style-engine/ooxml';
 
-export type ConverterNumberingContext = {
-  definitions?: Record<string, unknown>;
-  abstracts?: Record<string, unknown>;
-};
-
-export type ConverterLinkedStyle = {
-  id: string;
-  definition?: {
-    styles?: Record<string, unknown>;
-    attrs?: Record<string, unknown>;
-  };
-};
-
 /**
  * Paragraph properties from a table style that should be applied to
  * paragraphs inside table cells as part of the OOXML style cascade.
@@ -34,8 +21,6 @@ export type TableStyleParagraphProps = {
 
 export type ConverterContext = {
   docx?: Record<string, unknown>;
-  numbering?: ConverterNumberingContext;
-  linkedStyles?: ConverterLinkedStyle[];
   translatedNumbering: NumberingProperties;
   translatedLinkedStyles: StylesDocumentProperties;
   /**
@@ -59,20 +44,6 @@ export type ConverterContext = {
    * contrast with the cell background per WCAG guidelines.
    */
   backgroundColor?: string;
-};
-
-/**
- * Guard that checks whether the converter context includes DOCX data
- * required for paragraph style hydration.
- *
- * Paragraph hydration needs DOCX structures so it can follow style
- * inheritance chains via resolveParagraphProperties. Numbering is optional
- * since documents without lists should still get docDefaults spacing.
- */
-export const hasParagraphStyleContext = (
-  context?: ConverterContext,
-): context is ConverterContext & { docx: Record<string, unknown> } => {
-  return Boolean(context?.docx);
 };
 
 /**

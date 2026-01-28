@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import crypto from 'crypto';
 
 const handlerMock = vi.fn(({ nodes }) =>
   nodes.map((node) => ({
@@ -133,8 +132,7 @@ describe('importCommentData metadata parsing', () => {
 
     const [comment] = importCommentData({ docx });
     const createdTime = new Date('2024-02-10T12:30:00Z').getTime();
-    const expectedHash = crypto.createHash('md5').update(`1-${createdTime}`).digest('hex');
-    expect(comment.commentId).toBe(`imported-${expectedHash}`);
+    expect(comment.commentId).toBe('imported-58b122b1');
     expect(uuidv4).not.toHaveBeenCalled();
     expect(comment.creatorName).toBe('Casey Commenter');
     expect(comment.createdTime).toBe(createdTime);

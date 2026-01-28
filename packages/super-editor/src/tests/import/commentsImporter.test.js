@@ -2,7 +2,7 @@ import { getTestDataByFileName, loadTestDataForEditorTests, initTestEditor } fro
 import { importCommentData } from '@converter/v2/importer/documentCommentsImporter.js';
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 
-const importedCommentIdPattern = /^imported-[0-9a-f]{32}$/;
+const importedCommentIdPattern = /^imported-[0-9a-f]{8}$/;
 
 const extractNodeText = (node) => {
   if (!node) return '';

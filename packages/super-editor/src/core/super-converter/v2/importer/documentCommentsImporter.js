@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { defaultNodeListHandler } from './docxImporter';
+import crypto from 'crypto';
 
 /**
  * Parse comments.xml into SuperDoc-ready comments
@@ -64,9 +65,10 @@ export function importCommentData({ docx, editor, converter }) {
     const paraId = lastElement?.attrs?.['w14:paraId'];
 
     const threadingMethod = commentThreadingProfile.defaultStyle;
+    const commentId = getCommentId(internalId, importedId, unixTimestampMs);
 
     return {
-      commentId: internalId || uuidv4(),
+      commentId,
       importedId,
       creatorName: authorName,
       creatorEmail: authorEmail,
@@ -632,4 +634,17 @@ const applyParentRelationships = (comments, parentMap, trackedChangeParentMap = 
     }
     return updatedComment;
   });
+};
+
+/**
+ * Resolve a stable comment ID for imported comments.
+ * - Prefer the explicit internal ID when present.
+ * - If the comment has an imported ID, derive a stable hash from imported ID + created time.
+ * - Otherwise, fall back to a new UUID.
+ */
+const getCommentId = (internalId, importedId, createdTime) => {
+  if (internalId != null) return internalId;
+  if (importedId == null) return uuidv4();
+  const hash = crypto.createHash('md5').update(`${importedId}-${createdTime}`).digest('hex');
+  return `imported-${hash}`;
 };

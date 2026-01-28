@@ -1,5 +1,6 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { CellSelection } from 'prosemirror-tables';
+import { DecorationSet } from 'prosemirror-view';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -273,6 +274,10 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
+  /** Cached list of plugins that provide decorations (plugins don't change after init) */
+  #decorationPlugins: Array<{
+    props: { decorations: (state: EditorState) => DecorationSet | null | undefined };
+  }> | null = null;
   #rafHandle: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #sectionMetadata: SectionMetadata[] = [];
@@ -384,6 +389,7 @@ export class PresentationEditor extends EventEmitter {
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
         this.#rebuildDomPositionIndex();
+        this.#syncDecorationAttributes();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -2185,6 +2191,56 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  /**
+   * Syncs decoration classes/attributes from PM plugins to painted elements.
+   * Skips internal plugins (like track-changes) whose decorations the painter handles.
+   */
+  #syncDecorationAttributes(): void {
+    const view = this.#editor?.view;
+    if (!view) return;
+
+    const { state } = view;
+
+    // Cache plugins with decorations, excluding painter-handled ones (plugins don't change after init)
+    if (this.#decorationPlugins === null) {
+      this.#decorationPlugins = state.plugins.filter(
+        (p) => p.props.decorations && p.spec.key !== TrackChangesBasePluginKey,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ) as any;
+    }
+    if (this.#decorationPlugins.length === 0) return;
+
+    try {
+      for (const plugin of this.#decorationPlugins) {
+        const decorationSet = plugin.props.decorations.call(plugin, state);
+        if (!(decorationSet instanceof DecorationSet)) continue;
+
+        for (const decoration of decorationSet.find(0, state.doc.content.size)) {
+          // @ts-expect-error - inline property exists but not in types
+          if (!decoration.inline) continue;
+
+          const { from, to } = decoration;
+          // @ts-expect-error - type.attrs holds DOM attributes for inline decorations
+          const decorationAttrs = decoration.type?.attrs || {};
+
+          const classes = (decorationAttrs.class?.split(/\s+/) || []).filter((c: string) => c);
+          const attrs = Object.entries(decorationAttrs)
+            .filter(([k, v]) => k !== 'class' && (k.startsWith('data-') || k === 'style') && typeof v === 'string')
+            .map(([name, value]) => ({ name, value: value as string }));
+
+          if (classes.length === 0 && attrs.length === 0) continue;
+
+          for (const entry of this.#domPositionIndex.findEntriesInRange(from, to)) {
+            classes.forEach((cls: string) => entry.el.classList.add(cls));
+            attrs.forEach((attr) => entry.el.setAttribute(attr.name, attr.value));
+          }
+        }
+      }
+    } catch (error) {
+      debugLog('warn', 'Decoration sync failed', { error: String(error) });
+    }
+  }
+
   #setupEditorListeners() {
     const handleUpdate = ({ transaction }: { transaction?: Transaction }) => {
       const trackedChangesChanged = this.#syncTrackedChangesPreferences();
@@ -2992,6 +3048,7 @@ export class PresentationEditor extends EventEmitter {
       painter.paint(layout, this.#painterHost, mapping ?? undefined);
       this.#applyVertAlignToLayout();
       this.#rebuildDomPositionIndex();
+      this.#syncDecorationAttributes();
       this.#domIndexObserverManager?.resume();
       this.#layoutEpoch = layoutEpoch;
       if (this.#updateHtmlAnnotationMeasurements(layoutEpoch)) {

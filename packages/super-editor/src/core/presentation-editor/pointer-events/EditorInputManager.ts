@@ -274,8 +274,8 @@ export class EditorInputManager {
     // Focus events on visible host
     visibleHost.addEventListener('focusin', this.#boundHandleFocusIn);
     const editor = this.#deps.getEditor();
-    editor.on('focus', this.#boundHandleEditorFocus);
-    editor.on('blur', this.#boundHandleEditorBlur);
+    editor.on?.('focus', this.#boundHandleEditorFocus);
+    editor.on?.('blur', this.#boundHandleEditorBlur);
   }
 
   /**
@@ -315,10 +315,10 @@ export class EditorInputManager {
       visibleHost.removeEventListener('focusin', this.#boundHandleFocusIn);
     }
     if (this.#boundHandleEditorFocus) {
-      this.#deps.getEditor().off('focus', this.#boundHandleEditorFocus);
+      this.#deps.getEditor().off?.('focus', this.#boundHandleEditorFocus);
     }
     if (this.#boundHandleEditorBlur) {
-      this.#deps.getEditor().off('blur', this.#boundHandleEditorBlur);
+      this.#deps.getEditor().off?.('blur', this.#boundHandleEditorBlur);
     }
 
     // Clear bound handlers

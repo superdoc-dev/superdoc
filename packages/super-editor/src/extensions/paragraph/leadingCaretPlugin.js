@@ -18,7 +18,7 @@ export function createLeadingCaretPlugin() {
         if (typeof document === 'undefined') return null;
         const decorations = [];
         state.doc.descendants((node, pos) => {
-          if (!shouldAddLeadingCaret(node)) return false;
+          if (!shouldAddLeadingCaret(node)) return true;
           const widgetPos = pos + 1;
           const deco = Decoration.widget(widgetPos, () => document.createTextNode('\u200B'), {
             key: `sd-leading-caret-${pos}`,

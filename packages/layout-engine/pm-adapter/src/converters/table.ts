@@ -762,6 +762,10 @@ export function tableNodeToBlock(
     tableAttrs.tableIndent = { ...node.attrs.tableIndent };
   }
 
+  if (defaultCellPadding && typeof defaultCellPadding === 'object') {
+    tableAttrs.defaultCellPadding = { ...defaultCellPadding };
+  }
+
   // Pass tableLayout through (extracted by tblLayout-translator.js)
   const tableLayout = node.attrs?.tableLayout;
   if (tableLayout) {

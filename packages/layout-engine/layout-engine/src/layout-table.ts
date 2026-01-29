@@ -230,7 +230,8 @@ function calculateColumnMinWidth(): number {
  */
 function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: number[]): TableColumnBoundary[] {
   const boundaries: TableColumnBoundary[] = [];
-  let xPosition = 0;
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  let xPosition = cellSpacingPx; // space before first column
   const widths = effectiveWidths ?? measure.columnWidths;
 
   for (let i = 0; i < widths.length; i++) {
@@ -247,7 +248,8 @@ function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: numbe
 
     boundaries.push(boundary);
 
-    xPosition += width;
+    // Next boundary is after this column plus spacing (border-spacing between columns)
+    xPosition += width + cellSpacingPx;
   }
 
   return boundaries;
@@ -311,14 +313,28 @@ function calculateFragmentHeight(
   _headerCount: number,
 ): number {
   let height = 0;
+  let rowCount = 0;
 
   // Add header height if continuation with repeated headers
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
     height += sumRowHeights(measure.rows, 0, fragment.repeatHeaderCount);
+    rowCount += fragment.repeatHeaderCount;
   }
 
   // Add body row heights (fromRow to toRow, exclusive)
+  const bodyRowCount = fragment.toRow - fragment.fromRow;
   height += sumRowHeights(measure.rows, fragment.fromRow, fragment.toRow);
+  rowCount += bodyRowCount;
+
+  // Add vertical gaps: space before first row, between rows, after last row (outer spacing)
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  if (rowCount > 0 && cellSpacingPx > 0) {
+    height += (rowCount + 1) * cellSpacingPx;
+  }
+  if (rowCount > 0 && measure.tableBorderWidths) {
+    const borderWidthV = measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
+    height += borderWidthV;
+  }
 
   return height;
 }

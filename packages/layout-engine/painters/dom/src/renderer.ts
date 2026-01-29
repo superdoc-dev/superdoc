@@ -6464,7 +6464,8 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         hash = hashString(hash, tblAttrs.borderCollapse);
       }
       if (tblAttrs.cellSpacing !== undefined) {
-        hash = hashNumber(hash, tblAttrs.cellSpacing);
+        const cs = tblAttrs.cellSpacing;
+        hash = typeof cs === 'number' ? hashNumber(hash, cs) : hashString(hash, JSON.stringify(cs));
       }
       // Include SDT metadata so lock-mode changes invalidate the cache.
       if (tblAttrs.sdt) {

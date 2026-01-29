@@ -1,3 +1,38 @@
+# [1.9.0-next.13](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.12...v1.9.0-next.13) (2026-01-29)
+
+
+### Bug Fixes
+
+* incorrect list counter calculation (SD-1658) ([#1867](https://github.com/superdoc-dev/superdoc/issues/1867)) ([a960a65](https://github.com/superdoc-dev/superdoc/commit/a960a656235d2c4daa7b5f169e79bfba5f057ff6))
+* list numbering sync for cloned defs and zero start overrides ([c21301b](https://github.com/superdoc-dev/superdoc/commit/c21301b64168edb4feedebc31aeba17e08ebaed2))
+
+# [1.9.0-next.12](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.11...v1.9.0-next.12) (2026-01-28)
+
+
+### Bug Fixes
+
+* text in new paragraph doesn't inherit styles (SD-1657) ([#1869](https://github.com/superdoc-dev/superdoc/issues/1869)) ([275fef2](https://github.com/superdoc-dev/superdoc/commit/275fef25f4ccd4ab511e66cca557abcebe79f4ef))
+
+# [1.9.0-next.11](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.10...v1.9.0-next.11) (2026-01-28)
+
+
+### Bug Fixes
+
+* apply correct style to inserted links ([#1871](https://github.com/superdoc-dev/superdoc/issues/1871)) ([36e3c4b](https://github.com/superdoc-dev/superdoc/commit/36e3c4b066a02fbcac4e53cc3df2c3cefaf207fb))
+
+# [1.9.0-next.10](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.9...v1.9.0-next.10) (2026-01-28)
+
+
+### Bug Fixes
+
+* block ID collisions and missing positions in paragraph converter ([3e75a98](https://github.com/superdoc-dev/superdoc/commit/3e75a9827fdb8b1847632e6a5b7f8f5dcabcabd1))
+* make test:slow script find the slow test file ([5a6b6d6](https://github.com/superdoc-dev/superdoc/commit/5a6b6d6d0d16caff9e8851b6a44ad827a001d993))
+
+
+### Features
+
+* dev collab mode ([#1860](https://github.com/superdoc-dev/superdoc/issues/1860)) ([469477b](https://github.com/superdoc-dev/superdoc/commit/469477bb816e98811f3986517d0541d1b4d4ac5e))
+
 # [1.9.0-next.9](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.8...v1.9.0-next.9) (2026-01-28)
 
 

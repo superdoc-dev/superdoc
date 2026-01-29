@@ -7,15 +7,16 @@
  * - Token node conversion (page numbers, etc.)
  */
 
-import type { TextRun, Run, TabRun, TabStop, SdtMetadata, ParagraphAttrs } from '@superdoc/contracts';
-import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette } from '../types.js';
-import { applyMarksToRun } from '../marks/index.js';
-import { DEFAULT_HYPERLINK_CONFIG } from '../constants.js';
+import type { TextRun } from '@superdoc/contracts';
+import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette } from '../../types.js';
+import { applyMarksToRun } from '../../marks/index.js';
+import { DEFAULT_HYPERLINK_CONFIG } from '../../constants.js';
+import { applyInlineRunProperties, type InlineConverterParams } from './common.js';
 
 /**
  * Converts a text PM node to a TextRun.
  *
- * @param textNode - PM text node to convert
+ * @param node - PM text node to convert
  * @param positions - Position map for PM node tracking
  * @param defaultFont - Default font family
  * @param defaultSize - Default font size
@@ -24,75 +25,45 @@ import { DEFAULT_HYPERLINK_CONFIG } from '../constants.js';
  * @param hyperlinkConfig - Hyperlink configuration
  * @returns TextRun block
  */
-export function textNodeToRun(
-  textNode: PMNode,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  inheritedMarks: PMMark[] = [],
-  sdtMetadata?: SdtMetadata,
-  hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
-  themeColors?: ThemeColorPalette,
-): TextRun {
-  const run: TextRun = {
-    text: textNode.text || '',
+export function textNodeToRun({
+  node,
+  positions,
+  defaultFont,
+  defaultSize,
+  inheritedMarks = [],
+  sdtMetadata,
+  hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
+  themeColors,
+  enableComments,
+  runProperties,
+  converterContext,
+}: InlineConverterParams): TextRun {
+  let run: TextRun = {
+    text: node.text || '',
     fontFamily: defaultFont,
     fontSize: defaultSize,
   };
 
   // Attach PM position tracking
-  const pos = positions.get(textNode);
+  const pos = positions.get(node);
   if (pos) {
     run.pmStart = pos.start;
     run.pmEnd = pos.end;
     // Per-run creation logs removed to reduce noise
   }
 
-  applyMarksToRun(run, [...(textNode.marks ?? []), ...(inheritedMarks ?? [])], hyperlinkConfig, themeColors);
+  applyMarksToRun(
+    run,
+    [...(node.marks ?? []), ...(inheritedMarks ?? [])],
+    hyperlinkConfig,
+    themeColors,
+    converterContext?.backgroundColor,
+    enableComments,
+  );
   if (sdtMetadata) {
     run.sdt = sdtMetadata;
   }
-
-  return run;
-}
-
-/**
- * Converts a tab PM node to a TabRun.
- *
- * @param node - PM tab node to convert
- * @param positions - Position map for PM node tracking
- * @param tabIndex - Index of this tab in the paragraph
- * @param paragraph - Parent paragraph node (for tab stops and indent)
- * @param inheritedMarks - Marks inherited from parent nodes (e.g., underline for signature lines)
- * @returns TabRun block or null if position not found
- */
-export function tabNodeToRun(
-  node: PMNode,
-  positions: PositionMap,
-  tabIndex: number,
-  paragraphAttrs: ParagraphAttrs,
-  inheritedMarks: PMMark[] = [],
-): Run | null {
-  const pos = positions.get(node);
-  if (!pos) return null;
-  const tabStops: TabStop[] | undefined = paragraphAttrs.tabs;
-  const indent = paragraphAttrs.indent;
-  const run: TabRun = {
-    kind: 'tab',
-    text: '\t',
-    pmStart: pos.start,
-    pmEnd: pos.end,
-    tabIndex,
-    tabStops,
-    indent,
-    leader: (node.attrs?.leader as TabRun['leader']) ?? null,
-  };
-
-  // Apply marks (e.g., underline) to the tab run
-  const marks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
-  if (marks.length > 0) {
-    applyMarksToRun(run, marks);
-  }
+  run = applyInlineRunProperties(run, runProperties, converterContext);
 
   return run;
 }

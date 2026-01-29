@@ -114,6 +114,42 @@ describe('wrapTextInRunsPlugin', () => {
     expect(paragraph.textContent).toBe('あ');
   });
 
+  it('copies run properties from previous paragraph and applies marks to wrapped text', () => {
+    const schema = makeSchema();
+    const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [prevRun]), schema.node('paragraph')]);
+    const view = createView(schema, doc);
+
+    const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos)).insertText('Next');
+    view.dispatch(tr);
+
+    const secondParagraph = view.state.doc.child(1);
+    const run = secondParagraph.firstChild;
+    expect(run.type.name).toBe('run');
+    expect(run.attrs.runProperties).toEqual({ bold: true });
+    expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+  });
+
+  it('merges previous paragraph marks with existing text marks', () => {
+    const schema = makeSchema();
+    const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [prevRun]), schema.node('paragraph')]);
+    const view = createView(schema, doc);
+
+    const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos));
+    tr.addStoredMark(schema.marks.italic.create());
+    tr.insertText('X');
+    view.dispatch(tr);
+
+    const secondParagraph = view.state.doc.child(1);
+    const run = secondParagraph.firstChild;
+    const markNames = run.firstChild.marks.map((mark) => mark.type.name);
+    expect(markNames).toContain('bold');
+    expect(markNames).toContain('italic');
+  });
+
   describe('resolveRunPropertiesFromParagraphStyle', () => {
     it('resolves run properties from paragraph styleId', () => {
       const schema = makeSchema();

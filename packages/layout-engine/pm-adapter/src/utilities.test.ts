@@ -4,26 +4,20 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { FlowBlock, ParagraphIndent } from '@superdoc/contracts';
+import type { FlowBlock } from '@superdoc/contracts';
 import {
   twipsToPx,
   ptToPx,
-  pxToPt,
-  convertIndentTwipsToPx,
   isFiniteNumber,
   isPlainObject,
   normalizePrefix,
   pickNumber,
-  pickDecimalSeparator,
-  pickLang,
   normalizeColor,
   normalizeString,
   coerceNumber,
   coercePositiveNumber,
   coerceBoolean,
   toBoolean,
-  isTruthy,
-  isExplicitFalse,
   toBoxSpacing,
   normalizeMediaKey,
   inferExtensionFromPath,
@@ -76,72 +70,6 @@ describe('Unit Conversion', () => {
       expect(ptToPx(NaN)).toBeUndefined();
       expect(ptToPx(Infinity)).toBeUndefined();
       expect(ptToPx(-Infinity)).toBeUndefined();
-    });
-  });
-
-  describe('pxToPt', () => {
-    it('converts pixels to points', () => {
-      expect(pxToPt(16)).toBeCloseTo(12, 1);
-      expect(pxToPt(0)).toBe(0);
-      expect(pxToPt(96)).toBe(72); // 96px = 1 inch = 72pt
-    });
-
-    it('returns undefined for null/undefined/non-finite', () => {
-      expect(pxToPt(null)).toBeUndefined();
-      expect(pxToPt(undefined)).toBeUndefined();
-      expect(pxToPt(NaN)).toBeUndefined();
-      expect(pxToPt(Infinity)).toBeUndefined();
-    });
-  });
-
-  describe('convertIndentTwipsToPx', () => {
-    it('converts all indent properties', () => {
-      const result = convertIndentTwipsToPx({
-        left: 1440,
-        right: 720,
-        firstLine: 360,
-        hanging: 180,
-      });
-      expect(result).toEqual({
-        left: 96,
-        right: 48,
-        firstLine: 24,
-        hanging: 12,
-      });
-    });
-
-    it('handles partial indent objects', () => {
-      const result = convertIndentTwipsToPx({ left: 1440 });
-      expect(result).toEqual({ left: 96 });
-    });
-
-    it('returns undefined for null/undefined', () => {
-      expect(convertIndentTwipsToPx(null)).toBeUndefined();
-      expect(convertIndentTwipsToPx(undefined)).toBeUndefined();
-    });
-
-    it('returns undefined for empty indent', () => {
-      expect(convertIndentTwipsToPx({})).toBeUndefined();
-    });
-
-    it('ignores non-finite values', () => {
-      const result = convertIndentTwipsToPx({
-        left: 1440,
-        right: NaN,
-        firstLine: Infinity,
-      } as ParagraphIndent);
-      expect(result).toEqual({ left: 96 });
-    });
-
-    it('handles multiple valid properties', () => {
-      const result = convertIndentTwipsToPx({
-        left: 720,
-        hanging: 360,
-      });
-      expect(result).toEqual({
-        left: 48,
-        hanging: 24,
-      });
     });
   });
 });
@@ -241,47 +169,6 @@ describe('Normalization', () => {
       expect(pickNumber('abc')).toBeUndefined(); // Fixed: now filters out NaN from parseFloat
       expect(pickNumber(null)).toBeUndefined();
       expect(pickNumber(undefined)).toBeUndefined();
-    });
-  });
-
-  describe('pickDecimalSeparator', () => {
-    it('accepts valid decimal separators', () => {
-      expect(pickDecimalSeparator('.')).toBe('.');
-      expect(pickDecimalSeparator(',')).toBe(',');
-    });
-
-    it('trims whitespace', () => {
-      expect(pickDecimalSeparator('  .  ')).toBe('.');
-      expect(pickDecimalSeparator('  ,  ')).toBe(',');
-    });
-
-    it('returns undefined for invalid values', () => {
-      expect(pickDecimalSeparator(';')).toBeUndefined();
-      expect(pickDecimalSeparator('.')).toBe('.');
-      expect(pickDecimalSeparator(42 as never)).toBeUndefined();
-      expect(pickDecimalSeparator(null as never)).toBeUndefined();
-    });
-  });
-
-  describe('pickLang', () => {
-    it('normalizes language codes', () => {
-      expect(pickLang('en-US')).toBe('en-us');
-      expect(pickLang('FR')).toBe('fr');
-    });
-
-    it('trims whitespace', () => {
-      expect(pickLang('  en  ')).toBe('en');
-    });
-
-    it('returns undefined for non-strings', () => {
-      expect(pickLang(null as never)).toBeUndefined();
-      expect(pickLang(undefined as never)).toBeUndefined();
-      expect(pickLang(42 as never)).toBeUndefined();
-    });
-
-    it('returns undefined for empty strings', () => {
-      expect(pickLang('')).toBeUndefined();
-      expect(pickLang('   ')).toBeUndefined();
     });
   });
 
@@ -484,45 +371,6 @@ describe('Coercion', () => {
       expect(toBoolean(2)).toBeUndefined();
       expect(toBoolean(null)).toBeUndefined();
       expect(toBoolean(undefined)).toBeUndefined();
-    });
-  });
-
-  describe('isTruthy', () => {
-    it('returns true for explicit truthy values', () => {
-      expect(isTruthy(true)).toBe(true);
-      expect(isTruthy(1)).toBe(true);
-      expect(isTruthy('true')).toBe(true);
-      expect(isTruthy('1')).toBe(true);
-      expect(isTruthy('on')).toBe(true);
-    });
-
-    it('returns false for falsy and unknown values', () => {
-      expect(isTruthy(false)).toBe(false);
-      expect(isTruthy(0)).toBe(false);
-      expect(isTruthy('false')).toBe(false);
-      expect(isTruthy('no')).toBe(false);
-      expect(isTruthy('yes')).toBe(false); // Only recognizes true/1/on
-      expect(isTruthy(null)).toBe(false);
-      expect(isTruthy(undefined)).toBe(false);
-    });
-  });
-
-  describe('isExplicitFalse', () => {
-    it('returns true for explicit false values', () => {
-      expect(isExplicitFalse(false)).toBe(true);
-      expect(isExplicitFalse(0)).toBe(true);
-      expect(isExplicitFalse('false')).toBe(true);
-      expect(isExplicitFalse('FALSE')).toBe(true);
-      expect(isExplicitFalse('0')).toBe(true);
-      expect(isExplicitFalse('off')).toBe(true);
-    });
-
-    it('returns false for non-false values', () => {
-      expect(isExplicitFalse(true)).toBe(false);
-      expect(isExplicitFalse(1)).toBe(false);
-      expect(isExplicitFalse('true')).toBe(false);
-      expect(isExplicitFalse(null)).toBe(false);
-      expect(isExplicitFalse(undefined)).toBe(false);
     });
   });
 });
@@ -1642,157 +1490,5 @@ describe('normalizeEffectExtent', () => {
   it('treats zero as a valid value (not clamped)', () => {
     const result = normalizeEffectExtent({ left: 0, top: 0, right: 0, bottom: 10 });
     expect(result).toEqual({ left: 0, top: 0, right: 0, bottom: 10 });
-  });
-});
-
-// ============================================================================
-// OOXML Utilities Tests
-// ============================================================================
-
-import {
-  asOoxmlElement,
-  findOoxmlChild,
-  getOoxmlAttribute,
-  parseOoxmlNumber,
-  hasOwnProperty,
-  type OoxmlElement,
-} from './utilities.js';
-
-describe('OOXML Utilities', () => {
-  describe('asOoxmlElement', () => {
-    it('returns undefined for null/undefined', () => {
-      expect(asOoxmlElement(null)).toBeUndefined();
-      expect(asOoxmlElement(undefined)).toBeUndefined();
-    });
-
-    it('returns undefined for non-objects', () => {
-      expect(asOoxmlElement('string')).toBeUndefined();
-      expect(asOoxmlElement(42)).toBeUndefined();
-    });
-
-    it('returns undefined for empty objects', () => {
-      expect(asOoxmlElement({})).toBeUndefined();
-    });
-
-    it('returns element with name property', () => {
-      const element = { name: 'w:p' };
-      expect(asOoxmlElement(element)).toBe(element);
-    });
-
-    it('returns element with attributes property', () => {
-      const element = { attributes: { 'w:val': '240' } };
-      expect(asOoxmlElement(element)).toBe(element);
-    });
-
-    it('returns element with elements property', () => {
-      const element = { elements: [] };
-      expect(asOoxmlElement(element)).toBe(element);
-    });
-
-    it('returns full OOXML element', () => {
-      const element: OoxmlElement = {
-        name: 'w:pPr',
-        attributes: { 'w:rsidR': '00A77B3E' },
-        elements: [{ name: 'w:spacing', attributes: { 'w:before': '240' } }],
-      };
-      expect(asOoxmlElement(element)).toBe(element);
-    });
-  });
-
-  describe('findOoxmlChild', () => {
-    it('returns undefined for undefined parent', () => {
-      expect(findOoxmlChild(undefined, 'w:spacing')).toBeUndefined();
-    });
-
-    it('returns undefined for parent without elements', () => {
-      expect(findOoxmlChild({ name: 'w:pPr' }, 'w:spacing')).toBeUndefined();
-    });
-
-    it('returns undefined when child not found', () => {
-      const parent: OoxmlElement = {
-        name: 'w:pPr',
-        elements: [{ name: 'w:jc' }],
-      };
-      expect(findOoxmlChild(parent, 'w:spacing')).toBeUndefined();
-    });
-
-    it('finds child element by name', () => {
-      const spacingEl: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
-      const parent: OoxmlElement = {
-        name: 'w:pPr',
-        elements: [{ name: 'w:jc' }, spacingEl, { name: 'w:ind' }],
-      };
-      expect(findOoxmlChild(parent, 'w:spacing')).toBe(spacingEl);
-    });
-  });
-
-  describe('getOoxmlAttribute', () => {
-    it('returns undefined for undefined element', () => {
-      expect(getOoxmlAttribute(undefined, 'w:before')).toBeUndefined();
-    });
-
-    it('returns undefined for element without attributes', () => {
-      expect(getOoxmlAttribute({ name: 'w:spacing' }, 'w:before')).toBeUndefined();
-    });
-
-    it('gets attribute with w: prefix', () => {
-      const element: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
-      expect(getOoxmlAttribute(element, 'w:before')).toBe('240');
-    });
-
-    it('gets attribute without prefix when prefixed key requested', () => {
-      const element: OoxmlElement = { name: 'w:spacing', attributes: { before: '240' } };
-      expect(getOoxmlAttribute(element, 'w:before')).toBe('240');
-    });
-
-    it('gets attribute with prefix when unprefixed key requested', () => {
-      const element: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
-      expect(getOoxmlAttribute(element, 'before')).toBe('240');
-    });
-  });
-
-  describe('parseOoxmlNumber', () => {
-    it('returns undefined for null/undefined', () => {
-      expect(parseOoxmlNumber(null)).toBeUndefined();
-      expect(parseOoxmlNumber(undefined)).toBeUndefined();
-    });
-
-    it('returns number for number input', () => {
-      expect(parseOoxmlNumber(240)).toBe(240);
-      expect(parseOoxmlNumber(0)).toBe(0);
-      expect(parseOoxmlNumber(-100)).toBe(-100);
-    });
-
-    it('parses string to integer', () => {
-      expect(parseOoxmlNumber('240')).toBe(240);
-      expect(parseOoxmlNumber('0')).toBe(0);
-      expect(parseOoxmlNumber('-100')).toBe(-100);
-    });
-
-    it('returns undefined for non-numeric strings', () => {
-      expect(parseOoxmlNumber('abc')).toBeUndefined();
-      expect(parseOoxmlNumber('')).toBeUndefined();
-    });
-
-    it('returns undefined for non-finite results', () => {
-      expect(parseOoxmlNumber(NaN)).toBeUndefined();
-      expect(parseOoxmlNumber(Infinity)).toBeUndefined();
-    });
-  });
-
-  describe('hasOwnProperty', () => {
-    it('returns true for own properties', () => {
-      expect(hasOwnProperty({ a: 1 }, 'a')).toBe(true);
-      expect(hasOwnProperty({ a: undefined }, 'a')).toBe(true);
-    });
-
-    it('returns false for missing properties', () => {
-      expect(hasOwnProperty({ a: 1 }, 'b')).toBe(false);
-    });
-
-    it('returns false for inherited properties', () => {
-      expect(hasOwnProperty({ a: 1 }, 'toString')).toBe(false);
-      expect(hasOwnProperty({ a: 1 }, 'hasOwnProperty')).toBe(false);
-    });
   });
 });

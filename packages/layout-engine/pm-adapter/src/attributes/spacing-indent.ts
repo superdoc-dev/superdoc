@@ -146,7 +146,10 @@ export const normalizeParagraphSpacing = (
  * @param lineRule - Line rule ('auto', 'exact', 'atLeast')
  * @returns Normalized line spacing value as a multiplier, or undefined
  */
-const normalizeLineValue = (value: number | undefined, lineRule: ParagraphSpacing['lineRule'] | undefined): number => {
+export const normalizeLineValue = (
+  value: number | undefined,
+  lineRule: ParagraphSpacing['lineRule'] | undefined,
+): number => {
   if (value == null) return AUTO_SPACING_DEFAULT_MULTIPLIER;
   if (value > 0 && value <= MIN_AUTO_LINE_TWIPS) {
     value = value * AUTO_SPACING_LINE_DEFAULT;

@@ -37,7 +37,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Review for spec compliance
-        if: steps.changed.outputs.files != ''
+        if: steps.changed.outputs.files != '' && secrets.ANTHROPIC_API_KEY != ''
         id: review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -75,15 +75,18 @@ jobs:
           echo "review<<EOF" >> $GITHUB_OUTPUT
           echo "$REVIEW" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "## OOXML Spec Compliance Review"
+            echo
+            printf '%s\n' "$REVIEW"
+            echo
+            echo "---"
+            echo "*Automated review using [ECMA-376 MCP Server](https://ooxml.dev)*"
+          } > /tmp/review-comment.md
 
       - name: Post review comment
         if: steps.review.outputs.review != ''
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "## OOXML Spec Compliance Review
-
-          ${{ steps.review.outputs.review }}
-
-          ---
-          *Automated review using [ECMA-376 MCP Server](https://ooxml.dev)*"
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/review-comment.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

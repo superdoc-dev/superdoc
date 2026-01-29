@@ -145,6 +145,15 @@ export const useCommentsStore = defineStore('comments', () => {
     return source === 'super-editor';
   };
 
+  /**
+   * Check if a comment is part of a tracked-change thread.
+   * Returns true for tracked-change comments or replies to tracked changes.
+   *
+   * @param {Object} comment - The comment to check
+   * @returns {boolean} True if the comment is a tracked-change thread
+   */
+  const isTrackedChangeThread = (comment) => Boolean(comment?.trackedChange) || Boolean(comment?.trackedChangeParentId);
+
   const syncResolvedCommentsWithDocument = () => {
     const docPositions = editorCommentPositions.value || {};
     const activeKeys = new Set(Object.keys(docPositions));
@@ -155,7 +164,12 @@ export const useCommentsStore = defineStore('comments', () => {
       if (!key) return;
 
       const hasActiveAnchor = activeKeys.has(String(key));
-      if (hasActiveAnchor && comment.resolvedTime && isEditorBackedComment(comment)) {
+      if (
+        hasActiveAnchor &&
+        comment.resolvedTime &&
+        isEditorBackedComment(comment) &&
+        !isTrackedChangeThread(comment)
+      ) {
         clearResolvedMetadata(comment);
       }
     });

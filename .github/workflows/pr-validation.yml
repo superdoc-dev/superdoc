@@ -133,7 +133,7 @@ jobs:
       - name: Install Playwright browsers
         run: |
           cd e2e-tests
-          pnpx playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium
 
       - name: Run e2e tests
         id: run-e2e-tests
@@ -192,13 +192,13 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: |
           cd examples/tests
-          pnpx playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium
 
       - name: Install only system deps if cache hit
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: |
           cd examples/tests
-          pnpx playwright install-deps chromium
+          pnpm exec playwright install-deps chromium
 
       - name: Run visual tests
         id: run-visual-tests

@@ -5,6 +5,7 @@ import {
   calculateResolvedParagraphProperties,
   getResolvedParagraphProperties,
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
+import { carbonCopy } from '@core/utilities/carbonCopy';
 
 /**
  * ProseMirror plugin that recalculates inline `runProperties` whenever marks change on run nodes,
@@ -82,6 +83,18 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         );
         const inlineRunProperties = getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles);
         const runProperties = Object.keys(inlineRunProperties).length ? inlineRunProperties : null;
+
+        const isFirstInParagraph = $pos.parent.firstChild === runNode;
+
+        if (isFirstInParagraph) {
+          // Keep paragraph's default runProperties in sync for the first run
+          const inlineParagraphProperties = carbonCopy(paragraphNode.attrs.paragraphProperties) || {};
+          inlineParagraphProperties.runProperties = runProperties;
+          tr.setNodeMarkup($pos.before(), paragraphNode.type, {
+            ...paragraphNode.attrs,
+            paragraphProperties: inlineParagraphProperties,
+          });
+        }
 
         if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties)) return;
         tr.setNodeMarkup(pos, runNode.type, { ...runNode.attrs, runProperties }, runNode.marks);

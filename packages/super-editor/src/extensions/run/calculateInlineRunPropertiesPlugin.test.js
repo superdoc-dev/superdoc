@@ -25,7 +25,13 @@ const makeSchema = () =>
   new Schema({
     nodes: {
       doc: { content: 'block+' },
-      paragraph: { group: 'block', content: 'inline*' },
+      paragraph: {
+        group: 'block',
+        content: 'inline*',
+        attrs: {
+          paragraphProperties: { default: null },
+        },
+      },
       run: {
         inline: true,
         group: 'inline',
@@ -65,6 +71,17 @@ const runPos = (doc) => {
   return pos;
 };
 
+const runPositions = (doc) => {
+  const positions = [];
+  doc.descendants((node, nodePos) => {
+    if (node.type.name === 'run') {
+      positions.push(nodePos);
+    }
+    return true;
+  });
+  return positions;
+};
+
 const runTextRange = (doc, startIndex, endIndex) => {
   const base = runPos(doc);
   if (base == null) throw new Error('Run not found');
@@ -81,6 +98,10 @@ const createState = (schema, doc) =>
 describe('calculateInlineRunPropertiesPlugin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    decodeRPrFromMarksMock.mockImplementation((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ bold: false }));
+    calculateResolvedParagraphPropertiesMock.mockImplementation(() => ({ paragraph: 'calculated' }));
+    getResolvedParagraphPropertiesMock.mockImplementation(() => null);
   });
 
   it('stores inline run properties when marks differ from paragraph styles', () => {
@@ -137,5 +158,40 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(runNode?.attrs.runProperties).toEqual({ italic: true });
     expect(getResolvedParagraphPropertiesMock).toHaveBeenCalled();
     expect(calculateResolvedParagraphPropertiesMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps paragraph runProperties in sync with the first run', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema);
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 2);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const paragraph = nextState.doc.firstChild;
+    expect(paragraph.attrs.paragraphProperties).toEqual({ runProperties: { bold: true } });
+  });
+
+  it('does not update paragraph runProperties when a non-first run changes', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [
+        schema.node('run', null, schema.text('First')),
+        schema.node('run', null, schema.text('Second')),
+      ]),
+    ]);
+    const state = createState(schema, doc);
+    const [firstRunPos, secondRunPos] = runPositions(state.doc);
+    const from = secondRunPos + 1;
+    const to = secondRunPos + 3;
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const paragraph = nextState.doc.firstChild;
+    expect(paragraph.attrs.paragraphProperties).toBeNull();
+    const firstRun = nextState.doc.nodeAt(firstRunPos);
+    expect(firstRun?.attrs.runProperties).toBeNull();
   });
 });

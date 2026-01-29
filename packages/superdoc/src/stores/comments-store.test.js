@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createPinia, setActivePinia, defineStore } from 'pinia';
-import { ref, reactive } from 'vue';
+import { ref, reactive, nextTick } from 'vue';
 
 vi.mock('./superdoc-store.js', () => {
   const documents = ref([]);
@@ -638,6 +638,92 @@ describe('comments-store', () => {
       };
 
       expect(store.getCommentAnchoredText('c-1')).toBe('');
+    });
+  });
+
+  describe('document-driven resolution state', () => {
+    it('clears resolved metadata when document anchors reappear', async () => {
+      const comment = {
+        commentId: 'reopen-1',
+        resolvedTime: 123,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'reopen-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBeNull();
+      expect(comment.resolvedByEmail).toBeNull();
+      expect(comment.resolvedByName).toBeNull();
+    });
+
+    it('preserves resolved metadata for non-editor comments', async () => {
+      const comment = useCommentMock({
+        commentId: 'pdf-1',
+        fileType: 'pdf',
+        selection: { source: 'pdf', selectionBounds: {} },
+        resolvedTime: 555,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      });
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'pdf-1': { start: 1, end: 2, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(555);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
+    });
+
+    it('preserves resolved metadata for tracked-change comments', async () => {
+      const comment = {
+        commentId: 'tc-1',
+        trackedChange: true,
+        resolvedTime: 999,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'tc-1': { start: 3, end: 6, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(999);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
+    });
+
+    it('preserves resolved metadata for replies to tracked-change comments', async () => {
+      const comment = {
+        commentId: 'tc-reply-1',
+        trackedChangeParentId: 'tc-parent',
+        resolvedTime: 888,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'tc-reply-1': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(888);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
     });
   });
 });

@@ -253,6 +253,7 @@ export const TrackChanges = Extension.create({
             user,
             comment,
             addToHistory = true,
+            emitCommentEvent = true,
           } = options;
 
           // Validate bounds to prevent RangeError
@@ -350,6 +351,7 @@ export const TrackChanges = Extension.create({
             deletionMark: deletionMark || null,
             deletionNodes,
             step: mockStep,
+            emitCommentEvent,
           });
           tr.setMeta(CommentsPluginKey, { type: 'force' });
           tr.setMeta('skipTrackChanges', true);

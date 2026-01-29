@@ -206,6 +206,8 @@ export class EditorInputManager {
   #boundHandleClick: ((e: MouseEvent) => void) | null = null;
   #boundHandleKeyDown: ((e: KeyboardEvent) => void) | null = null;
   #boundHandleFocusIn: ((e: FocusEvent) => void) | null = null;
+  #boundHandleEditorFocus: ((payload: unknown) => void) | null = null;
+  #boundHandleEditorBlur: ((payload: unknown) => void) | null = null;
 
   // ==========================================================================
   // Constructor
@@ -252,6 +254,8 @@ export class EditorInputManager {
     this.#boundHandleClick = this.#handleClick.bind(this);
     this.#boundHandleKeyDown = this.#handleKeyDown.bind(this);
     this.#boundHandleFocusIn = this.#handleFocusIn.bind(this);
+    this.#boundHandleEditorFocus = this.#handleEditorFocus.bind(this);
+    this.#boundHandleEditorBlur = this.#handleEditorBlur.bind(this);
 
     // Attach pointer event listeners
     viewportHost.addEventListener('pointerdown', this.#boundHandlePointerDown);
@@ -269,6 +273,9 @@ export class EditorInputManager {
 
     // Focus events on visible host
     visibleHost.addEventListener('focusin', this.#boundHandleFocusIn);
+    const editor = this.#deps.getEditor();
+    editor.on?.('focus', this.#boundHandleEditorFocus);
+    editor.on?.('blur', this.#boundHandleEditorBlur);
   }
 
   /**
@@ -307,6 +314,12 @@ export class EditorInputManager {
     if (this.#boundHandleFocusIn) {
       visibleHost.removeEventListener('focusin', this.#boundHandleFocusIn);
     }
+    if (this.#boundHandleEditorFocus) {
+      this.#deps.getEditor().off?.('focus', this.#boundHandleEditorFocus);
+    }
+    if (this.#boundHandleEditorBlur) {
+      this.#deps.getEditor().off?.('blur', this.#boundHandleEditorBlur);
+    }
 
     // Clear bound handlers
     this.#boundHandlePointerDown = null;
@@ -317,6 +330,8 @@ export class EditorInputManager {
     this.#boundHandleClick = null;
     this.#boundHandleKeyDown = null;
     this.#boundHandleFocusIn = null;
+    this.#boundHandleEditorFocus = null;
+    this.#boundHandleEditorBlur = null;
   }
 
   /**
@@ -705,6 +720,11 @@ export class EditorInputManager {
       }
     }
 
+    const hasFocus = editor.view?.hasFocus?.() ?? false;
+    if (!hasFocus) {
+      this.#focusEditor();
+    }
+
     // Set selection for single click
     if (!handledByDepth) {
       try {
@@ -724,7 +744,6 @@ export class EditorInputManager {
     }
 
     this.#callbacks.scheduleSelectionUpdate?.();
-    this.#focusEditor();
   }
 
   #handlePointerMove(event: PointerEvent): void {
@@ -904,6 +923,17 @@ export class EditorInputManager {
     } catch {
       // Ignore focus failures
     }
+    this.#callbacks.scheduleSelectionUpdate?.();
+  }
+
+  #handleEditorFocus(): void {
+    if (!this.#deps) return;
+    this.#callbacks.scheduleSelectionUpdate?.();
+  }
+
+  #handleEditorBlur(): void {
+    if (!this.#deps) return;
+    this.#callbacks.scheduleSelectionUpdate?.();
   }
 
   // ==========================================================================

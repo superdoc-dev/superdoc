@@ -466,4 +466,21 @@ describe('CommentDialog.vue', () => {
     expect(headers[1].props('comment').commentId).toBe('range-root');
     expect(headers[2].props('comment').commentId).toBe('range-reply');
   });
+
+  it('calls cancelComment with superdoc instance when cancel button is clicked', async () => {
+    const { wrapper, baseComment, superdocStub } = await mountDialog();
+
+    // Set up as active comment to show the cancel button
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
+    // Find the cancel button in the comment footer (add new comment section)
+    const cancelButton = wrapper.findAll('button.sd-button').find((btn) => btn.text() === 'Cancel');
+    expect(cancelButton).toBeDefined();
+
+    await cancelButton.trigger('click');
+
+    // Verify cancelComment was called with the superdoc instance
+    expect(commentsStoreStub.cancelComment).toHaveBeenCalledWith(superdocStub);
+  });
 });

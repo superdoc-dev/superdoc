@@ -945,7 +945,7 @@ export type ExclusionZone = {
 export type ParagraphSpacing = {
   before?: number;
   after?: number;
-  line?: number;
+  line?: number; // multiple of font size
   lineRule?: 'auto' | 'exact' | 'atLeast';
   beforeAutospacing?: boolean;
   afterAutospacing?: boolean;

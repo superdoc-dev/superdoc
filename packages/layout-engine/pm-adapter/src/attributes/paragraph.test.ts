@@ -96,7 +96,7 @@ describe('computeParagraphAttrs', () => {
       attrs: {
         paragraphProperties: {
           justification: 'center',
-          spacing: { before: 240, after: 120, line: 2, lineRule: 'auto' },
+          spacing: { before: 240, after: 120, line: 2, lineRule: 'exact' },
           indent: { left: 720, hanging: 360 },
           tabStops: [{ val: 'left', pos: 48 }],
         },

@@ -66,7 +66,6 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   documentSection: handleDocumentSectionNode,
   table: handleTableNode,
   documentPartObject: handleDocumentPartObjectNode,
-  // orderedList and bulletList removed - list handling moved out of layout-engine
   image: handleImageNode,
   vectorShape: handleVectorShapeNode,
   shapeGroup: handleShapeGroupNode,
@@ -74,7 +73,7 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   shapeTextbox: handleShapeTextboxNode,
 };
 
-export const converters: NestedConverters = {
+const converters: NestedConverters = {
   contentBlockNodeToDrawingBlock,
   imageNodeToBlock,
   vectorShapeNodeToDrawingBlock,
@@ -204,7 +203,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     const lastSectionIndex = sectionRanges.length - 1;
     const lastSection = sectionRanges[lastSectionIndex];
     // Only emit if we haven't processed the last section yet
-    if (handlerContext.sectionState.currentSectionIndex < lastSectionIndex) {
+    if (handlerContext.sectionState!.currentSectionIndex < lastSectionIndex) {
       const sectionBreak = createSectionBreakBlock(lastSection, nextBlockId);
       blocks.push(sectionBreak);
       recordBlockKind(sectionBreak.kind);

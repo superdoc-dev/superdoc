@@ -112,13 +112,26 @@ const encode = (params, encodedAttrs) => {
 
   if (encodedAttrs.tableProperties.tableWidth) {
     const tableWidthMeasurement = encodedAttrs.tableProperties.tableWidth;
-    const widthPx = twipsToPixels(tableWidthMeasurement.value);
-    if (widthPx != null) {
+    if (tableWidthMeasurement.type === 'pct' && typeof tableWidthMeasurement.value === 'number') {
+      // For percentage widths, preserve the raw OOXML value (in 1/50th of a percent units)
+      // using { value, type } shape. This allows downstream code to calculate the actual
+      // percentage (value / 50) without precision loss from pixel conversion.
       encodedAttrs.tableWidth = {
-        width: widthPx,
+        value: tableWidthMeasurement.value,
         type: tableWidthMeasurement.type,
       };
-    } else if (tableWidthMeasurement.type === 'auto') {
+    } else {
+      // For fixed widths (dxa), convert to pixels using { width, type } shape.
+      const widthPx = twipsToPixels(tableWidthMeasurement.value);
+      if (widthPx != null) {
+        encodedAttrs.tableWidth = {
+          width: widthPx,
+          type: tableWidthMeasurement.type,
+        };
+      }
+    }
+
+    if (!encodedAttrs.tableWidth && tableWidthMeasurement.type === 'auto') {
       encodedAttrs.tableWidth = {
         width: 0,
         type: tableWidthMeasurement.type,

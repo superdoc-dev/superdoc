@@ -119,7 +119,7 @@ describe('importCommentData edge cases', () => {
 });
 
 describe('importCommentData metadata parsing', () => {
-  it('uses generated UUID when custom internal id is absent', () => {
+  it('uses stable imported id when custom internal id is absent', () => {
     const docx = buildDocx({
       comments: [
         {
@@ -131,12 +131,64 @@ describe('importCommentData metadata parsing', () => {
     });
 
     const [comment] = importCommentData({ docx });
-    expect(comment.commentId).toBe('00000000-0000-4000-8000-000000000001');
-    expect(uuidv4).toHaveBeenCalledTimes(1);
+    const createdTime = new Date('2024-02-10T12:30:00Z').getTime();
+    expect(comment.commentId).toBe('imported-58b122b1');
+    expect(uuidv4).not.toHaveBeenCalled();
     expect(comment.creatorName).toBe('Casey Commenter');
-    expect(comment.createdTime).toBe(new Date('2024-02-10T12:30:00Z').getTime());
+    expect(comment.createdTime).toBe(createdTime);
     expect(comment.initials).toBeUndefined();
     expect(comment.isDone).toBe(false);
+  });
+
+  it('falls back to uuid when created date is missing', () => {
+    const docx = buildDocx({
+      comments: [
+        {
+          id: 2,
+          author: 'Date-less Commenter',
+          date: '2024-02-10T12:30:00Z',
+        },
+      ],
+    });
+
+    delete docx['word/comments.xml'].elements[0].elements[0].attributes['w:date'];
+
+    const [comment] = importCommentData({ docx });
+    expect(comment.commentId).toBe('00000000-0000-4000-8000-000000000001');
+    expect(uuidv4).toHaveBeenCalledTimes(1);
+    expect(comment.creatorName).toBe('Date-less Commenter');
+    expect(comment.createdTime).toBeNaN();
+  });
+
+  it('produces stable imported ids for the same input', () => {
+    const docx = buildDocx({
+      comments: [
+        {
+          id: 7,
+          author: 'Stable Commenter',
+          date: '2024-04-01T09:15:00Z',
+        },
+      ],
+    });
+
+    const [first] = importCommentData({ docx });
+    const [second] = importCommentData({ docx });
+
+    expect(first.commentId).toBe(second.commentId);
+    expect(uuidv4).not.toHaveBeenCalled();
+
+    const changedDocx = buildDocx({
+      comments: [
+        {
+          id: 8,
+          author: 'Stable Commenter',
+          date: '2024-04-01T09:15:01Z',
+        },
+      ],
+    });
+
+    const [changed] = importCommentData({ docx: changedDocx });
+    expect(changed.commentId).not.toBe(first.commentId);
   });
 
   it('respects provided internal metadata and tracked change fields', () => {

@@ -301,7 +301,7 @@ export function imageNodeToBlock(
  * @param node - Image node to process
  * @param context - Shared handler context
  */
-export function handleImageNode(node: PMNode, context: NodeHandlerContext): void {
+export function handleImageNode(node: PMNode, context: NodeHandlerContext): ImageBlock | void {
   const { blocks, recordBlockKind, nextBlockId, positions, trackedChangesConfig } = context;
 
   const trackedMeta = trackedChangesConfig.enabled ? collectTrackedChangeFromMarks(node.marks ?? []) : undefined;
@@ -312,6 +312,7 @@ export function handleImageNode(node: PMNode, context: NodeHandlerContext): void
   if (imageBlock && imageBlock.kind === 'image') {
     annotateBlockWithTrackedChange(imageBlock, trackedMeta, trackedChangesConfig);
     blocks.push(imageBlock);
-    recordBlockKind(imageBlock.kind);
+    recordBlockKind?.(imageBlock.kind);
+    return imageBlock;
   }
 }

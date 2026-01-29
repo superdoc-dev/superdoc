@@ -2724,7 +2724,7 @@ export class DomPainter {
     container.style.position = 'relative';
     container.style.overflow = 'hidden';
 
-    const { offsetX, offsetY, innerWidth, innerHeight } = this.getEffectExtentMetrics(block);
+    const { offsetX, offsetY, innerWidth, innerHeight } = this.getEffectExtentMetrics(block, geometry);
     const contentContainer = this.doc!.createElement('div');
     contentContainer.style.position = 'absolute';
     contentContainer.style.left = `${offsetX}px`;
@@ -3056,7 +3056,10 @@ export class DomPainter {
     sanitize(element);
   }
 
-  private getEffectExtentMetrics(block: VectorShapeDrawingWithEffects): {
+  private getEffectExtentMetrics(
+    block: VectorShapeDrawingWithEffects,
+    geometry?: DrawingGeometry,
+  ): {
     offsetX: number;
     offsetY: number;
     innerWidth: number;
@@ -3066,8 +3069,9 @@ export class DomPainter {
     const top = block.effectExtent?.top ?? 0;
     const right = block.effectExtent?.right ?? 0;
     const bottom = block.effectExtent?.bottom ?? 0;
-    const width = block.geometry.width ?? 0;
-    const height = block.geometry.height ?? 0;
+    const sourceGeometry = geometry ?? block.geometry;
+    const width = sourceGeometry.width ?? 0;
+    const height = sourceGeometry.height ?? 0;
     const innerWidth = Math.max(0, width - left - right);
     const innerHeight = Math.max(0, height - top - bottom);
     return { offsetX: left, offsetY: top, innerWidth, innerHeight };

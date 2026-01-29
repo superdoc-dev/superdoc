@@ -61,8 +61,7 @@ const tableNodeToBlock = (
       },
     } as ConverterContext);
 
-  return baseTableNodeToBlock({
-    node,
+  return baseTableNodeToBlock(node, {
     nextBlockId,
     positions,
     trackedChangesConfig,
@@ -324,8 +323,7 @@ describe('table converter', () => {
       const imageBlock: ImageBlock = { kind: 'image', id: 'image-1', src: 'image.png' };
       const imageConverter = vi.fn().mockReturnValue(imageBlock);
 
-      const result = baseTableNodeToBlock({
-        node,
+      const result = baseTableNodeToBlock(node, {
         nextBlockId: mockBlockIdGenerator,
         positions: mockPositionMap,
         defaultFont: 'Arial',
@@ -376,8 +374,7 @@ describe('table converter', () => {
         } as ParagraphBlock,
       ]);
 
-      const result = baseTableNodeToBlock({
-        node,
+      const result = baseTableNodeToBlock(node, {
         nextBlockId: mockBlockIdGenerator,
         positions: mockPositionMap,
         defaultFont: 'Arial',
@@ -448,8 +445,7 @@ describe('table converter', () => {
 
       const tableConverter = vi.fn().mockReturnValue(nestedTableBlock);
 
-      const result = baseTableNodeToBlock({
-        node,
+      const result = baseTableNodeToBlock(node, {
         nextBlockId: mockBlockIdGenerator,
         positions: mockPositionMap,
         defaultFont: 'Arial',

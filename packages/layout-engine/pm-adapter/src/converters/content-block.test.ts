@@ -64,6 +64,22 @@ describe('contentBlock converter', () => {
     expect(result?.attrs?.isFullWidth).toBe(true);
   });
 
+  it('does not promote effectExtent for horizontal rules', () => {
+    const node: PMNode = {
+      type: 'contentBlock',
+      attrs: {
+        horizontalRule: true,
+        size: { width: '100%', height: 2 },
+        effectExtent: { left: 4, top: 2, right: 6, bottom: 3 },
+      },
+    };
+
+    const result = contentBlockNodeToDrawingBlock(node, mockBlockIdGenerator, new Map());
+
+    // Horizontal rules are full-width vector shapes; effectExtent is not part of the drawing block.
+    expect(result?.effectExtent).toBeUndefined();
+  });
+
   it('propagates paragraph indent into drawing attrs', () => {
     const node: PMNode = {
       type: 'contentBlock',

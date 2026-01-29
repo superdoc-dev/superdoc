@@ -721,7 +721,7 @@ const findTrackedMark = ({
 };
 
 const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEditorState, editor) => {
-  const { insertedMark, deletionMark, formatMark, deletionNodes } = trackedChangeMeta;
+  const { insertedMark, deletionMark, formatMark, deletionNodes, emitCommentEvent = true } = trackedChangeMeta;
 
   if (!insertedMark && !deletionMark && !formatMark) {
     return;
@@ -772,7 +772,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     newEditorState,
   });
 
-  if (emitParams) editor.emit('commentsUpdate', emitParams);
+  if (emitParams && emitCommentEvent) editor.emit('commentsUpdate', emitParams);
 
   return newTrackedChanges;
 };

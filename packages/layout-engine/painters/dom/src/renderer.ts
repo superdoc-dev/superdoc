@@ -2724,7 +2724,7 @@ export class DomPainter {
     container.style.position = 'relative';
     container.style.overflow = 'hidden';
 
-    const { offsetX, offsetY, innerWidth, innerHeight } = this.getEffectExtentMetrics(block);
+    const { offsetX, offsetY, innerWidth, innerHeight } = this.getEffectExtentMetrics(block, geometry);
     const contentContainer = this.doc!.createElement('div');
     contentContainer.style.position = 'absolute';
     contentContainer.style.left = `${offsetX}px`;
@@ -3056,7 +3056,10 @@ export class DomPainter {
     sanitize(element);
   }
 
-  private getEffectExtentMetrics(block: VectorShapeDrawingWithEffects): {
+  private getEffectExtentMetrics(
+    block: VectorShapeDrawingWithEffects,
+    geometry?: DrawingGeometry,
+  ): {
     offsetX: number;
     offsetY: number;
     innerWidth: number;
@@ -3066,8 +3069,9 @@ export class DomPainter {
     const top = block.effectExtent?.top ?? 0;
     const right = block.effectExtent?.right ?? 0;
     const bottom = block.effectExtent?.bottom ?? 0;
-    const width = block.geometry.width ?? 0;
-    const height = block.geometry.height ?? 0;
+    const sourceGeometry = geometry ?? block.geometry;
+    const width = sourceGeometry.width ?? 0;
+    const height = sourceGeometry.height ?? 0;
     const innerWidth = Math.max(0, width - left - right);
     const innerHeight = Math.max(0, height - top - bottom);
     return { offsetX: left, offsetY: top, innerWidth, innerHeight };
@@ -4192,10 +4196,39 @@ export class DomPainter {
     }
     annotation.dataset.layoutEpoch = String(this.layoutEpoch);
 
+    this.appendAnnotationCaretAnchor(annotation, run);
+
     // Apply SDT metadata
     this.applySdtDataset(annotation, run.sdt);
 
     return annotation;
+  }
+
+  /**
+   * Adds a hidden DOM anchor at pmEnd so caret placement after the annotation is correct.
+   */
+  private appendAnnotationCaretAnchor(annotation: HTMLElement, run: FieldAnnotationRun): void {
+    if (!this.doc || run.pmEnd == null) return;
+
+    const caretAnchor = this.doc.createElement('span');
+    caretAnchor.dataset.pmStart = String(run.pmEnd);
+    caretAnchor.dataset.pmEnd = String(run.pmEnd);
+    caretAnchor.dataset.layoutEpoch = String(this.layoutEpoch);
+    caretAnchor.classList.add('annotation-caret-anchor');
+    caretAnchor.style.position = 'absolute';
+    caretAnchor.style.left = '100%';
+    caretAnchor.style.top = '0';
+    caretAnchor.style.width = '0';
+    caretAnchor.style.height = '1em';
+    caretAnchor.style.overflow = 'hidden';
+    caretAnchor.style.pointerEvents = 'none';
+    caretAnchor.style.userSelect = 'none';
+    caretAnchor.style.opacity = '0';
+    caretAnchor.textContent = '\u200B';
+    if (!annotation.style.position) {
+      annotation.style.position = 'relative';
+    }
+    annotation.appendChild(caretAnchor);
   }
 
   /**

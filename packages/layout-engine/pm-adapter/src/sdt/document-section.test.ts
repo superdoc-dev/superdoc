@@ -447,8 +447,8 @@ describe('document-section', () => {
         );
 
         expect(mockTableConverter).toHaveBeenCalledWith(
+          children[0],
           expect.objectContaining({
-            node: children[0],
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
             hyperlinkConfig: mockHyperlinkConfig,

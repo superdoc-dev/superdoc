@@ -46,8 +46,8 @@ import { TableProperties } from '@superdoc/style-engine/ooxml';
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  trackedChangesConfig?: TrackedChangesConfig;
-  bookmarks?: Map<string, number>;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
   converterContext: ConverterContext;
@@ -280,8 +280,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
           continue;
         }
         if (nestedNode.type === 'table' && tableNodeToBlock) {
-          const tableBlock = tableNodeToBlock({
-            node: nestedNode,
+          const tableBlock = tableNodeToBlock(nestedNode, {
             nextBlockId: context.nextBlockId,
             positions: context.positions,
             trackedChangesConfig: context.trackedChangesConfig,
@@ -303,8 +302,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     }
 
     if (childNode.type === 'table' && tableNodeToBlock) {
-      const tableBlock = tableNodeToBlock({
-        node: childNode,
+      const tableBlock = tableNodeToBlock(childNode, {
         nextBlockId: context.nextBlockId,
         positions: context.positions,
         trackedChangesConfig: context.trackedChangesConfig,
@@ -652,18 +650,20 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
  * @param paragraphToFlowBlocks - Paragraph converter function (injected to avoid circular deps)
  * @returns TableBlock or null if conversion fails
  */
-export function tableNodeToBlock({
-  node,
-  nextBlockId,
-  positions,
-  trackedChangesConfig,
-  bookmarks,
-  hyperlinkConfig,
-  themeColors,
-  converterContext,
-  converters,
-  enableComments,
-}: TableNodeToBlockParams): FlowBlock | null {
+export function tableNodeToBlock(
+  node: PMNode,
+  {
+    nextBlockId,
+    positions,
+    trackedChangesConfig,
+    bookmarks,
+    hyperlinkConfig,
+    themeColors,
+    converterContext,
+    converters,
+    enableComments,
+  }: TableNodeToBlockParams,
+): FlowBlock | null {
   if (!Array.isArray(node.content) || node.content.length === 0) return null;
   const paragraphConverter = converters.paragraphToFlowBlocks;
   if (!paragraphConverter) return null;
@@ -866,8 +866,7 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     enableComments,
   } = context;
 
-  const tableBlock = tableNodeToBlock({
-    node,
+  const tableBlock = tableNodeToBlock(node, {
     nextBlockId,
     positions,
     trackedChangesConfig,
@@ -880,6 +879,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
   });
   if (tableBlock) {
     blocks.push(tableBlock);
-    recordBlockKind(tableBlock.kind);
+    recordBlockKind?.(tableBlock.kind);
   }
 }

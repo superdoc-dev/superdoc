@@ -1,0 +1,92 @@
+name: OOXML Spec Compliance Review
+
+on:
+  pull_request:
+    paths:
+      - 'packages/super-editor/src/core/super-converter/v3/handlers/**'
+
+jobs:
+  spec-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Get changed files
+        id: changed
+        run: |
+          FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only | grep 'v3/handlers/' || true)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Review for spec compliance
+        if: steps.changed.outputs.files != '' && secrets.ANTHROPIC_API_KEY != ''
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Configure MCP server
+          claude mcp add --transport http ecma-spec https://api.ooxml.dev/mcp
+
+          # Get the diff for review
+          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr-diff.txt
+
+          # Run Claude Code review
+          REVIEW=$(claude --print "You are reviewing a PR for OOXML spec compliance in the SuperDoc project.
+
+          The changed files are OOXML element handlers that convert between XML and ProseMirror JSON.
+
+          Use the ecma-spec MCP tools to look up relevant spec sections for any OOXML elements being handled.
+
+          Review the diff below and check:
+          1. Are OOXML elements handled according to the ECMA-376 spec?
+          2. Are any required attributes missing?
+          3. Are there any spec violations or edge cases not handled?
+
+          For each finding, cite the relevant spec section.
+
+          If everything looks correct, say so briefly.
+
+          Changed files:
+          ${{ steps.changed.outputs.files }}
+
+          Diff:
+          $(cat /tmp/pr-diff.txt)")
+
+          # Save review output
+          echo "review<<EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "## OOXML Spec Compliance Review"
+            echo
+            printf '%s\n' "$REVIEW"
+            echo
+            echo "---"
+            echo "*Automated review using [ECMA-376 MCP Server](https://ooxml.dev)*"
+          } > /tmp/review-comment.md
+
+      - name: Post review comment
+        if: steps.review.outputs.review != ''
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/review-comment.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

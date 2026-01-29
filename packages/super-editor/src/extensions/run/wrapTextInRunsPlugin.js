@@ -69,6 +69,20 @@ const getParagraphAtPos = (doc, pos) => {
   return null;
 };
 
+/**
+ * Converts an array of mark definitions into ProseMirror Mark instances.
+ * @param {import('prosemirror-model').Schema} schema - The ProseMirror schema
+ * @param {Array<{ type: string, attrs?: Record<string, unknown> }>} markDefs - Mark definitions with type and optional attrs
+ * @returns {import('prosemirror-model').Mark[]} Array of Mark instances (invalid types are filtered out)
+ */
+const createMarksFromDefs = (schema, markDefs = []) =>
+  markDefs
+    .map((def) => {
+      const markType = schema.marks[def.type];
+      return markType ? markType.create(def.attrs) : null;
+    })
+    .filter(Boolean);
+
 // Keep collapsed selections inside run nodes so caret geometry maps to text positions.
 const normalizeSelectionIntoRun = (tr, runType) => {
   const selection = tr.selection;
@@ -126,10 +140,11 @@ const copyRunPropertiesFromPreviousParagraph = (state, pos, textNode, runType, e
   return { runProperties, textNode: updatedTextNode };
 };
 
-const buildWrapTransaction = (state, ranges, runType, editor) => {
+const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta = []) => {
   if (!ranges.length) return null;
 
   const replacements = [];
+  const metaStyleMarks = createMarksFromDefs(state.schema, markDefsFromMeta);
 
   ranges.forEach(({ from, to }) => {
     state.doc.nodesBetween(from, to, (node, pos, parent, index) => {
@@ -142,12 +157,27 @@ const buildWrapTransaction = (state, ranges, runType, editor) => {
       let runProperties;
       let textNode = node;
 
+      // For the first node in a paragraph, inherit run properties from previous paragraph
+      // and merge marks (this preserves existing marks like italic while adding inherited ones like bold)
       if (index === 0) {
-        // First node in parent. Copy run properties from the preceding paragraph's last run, if any.
         ({ runProperties, textNode } = copyRunPropertiesFromPreviousParagraph(state, pos, textNode, runType, editor));
-      } else {
-        runProperties = decodeRPrFromMarks(node.marks);
       }
+
+      // Apply explicit toolbar style marks (e.g., highlight color selected by user)
+      // These take priority and are merged with any existing marks
+      if (metaStyleMarks.length) {
+        const mergedMarks = metaStyleMarks.reduce((set, mark) => mark.addToSet(set), textNode.marks);
+        textNode = textNode.mark(mergedMarks);
+        // Merge toolbar-selected properties with inherited properties
+        const metaRunProps = decodeRPrFromMarks(metaStyleMarks);
+        runProperties = { ...runProperties, ...metaRunProps };
+      }
+
+      // If we still don't have runProperties, decode from the final marks
+      if (!runProperties) {
+        runProperties = decodeRPrFromMarks(textNode.marks);
+      }
+
       const runNode = runType.create({ runProperties }, textNode);
       replacements.push({ from: pos, to: pos + node.nodeSize, runNode });
     });
@@ -165,6 +195,7 @@ const buildWrapTransaction = (state, ranges, runType, editor) => {
 export const wrapTextInRunsPlugin = (editor) => {
   let view = null;
   let pendingRanges = [];
+  let lastStyleMarksMeta = [];
 
   const flush = () => {
     if (!view) return;
@@ -173,7 +204,7 @@ export const wrapTextInRunsPlugin = (editor) => {
       pendingRanges = [];
       return;
     }
-    const tr = buildWrapTransaction(view.state, pendingRanges, runType, editor);
+    const tr = buildWrapTransaction(view.state, pendingRanges, runType, editor, lastStyleMarksMeta);
     pendingRanges = [];
     if (tr) {
       view.dispatch(tr);
@@ -194,6 +225,7 @@ export const wrapTextInRunsPlugin = (editor) => {
           editorView.dom.removeEventListener('compositionend', onCompositionEnd);
           view = null;
           pendingRanges = [];
+          lastStyleMarksMeta = [];
         },
       };
     },
@@ -211,7 +243,17 @@ export const wrapTextInRunsPlugin = (editor) => {
         return null;
       }
 
-      const tr = buildWrapTransaction(newState, pendingRanges, runType, editor);
+      // Extract style marks from the most recent transaction that has them.
+      // These marks persist across transactions until new ones are provided (sticky toolbar behavior).
+      const metaFromTxn = [...transactions]
+        .reverse()
+        .map((txn) => txn.getMeta('sdStyleMarks'))
+        .find(Boolean);
+      if (metaFromTxn?.length) {
+        lastStyleMarksMeta = metaFromTxn;
+      }
+
+      const tr = buildWrapTransaction(newState, pendingRanges, runType, editor, lastStyleMarksMeta);
       pendingRanges = [];
       return tr;
     },

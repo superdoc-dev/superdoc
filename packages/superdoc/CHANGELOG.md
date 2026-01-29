@@ -1,3 +1,34 @@
+# [1.10.0-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.10.0-next.2...v1.10.0-next.3) (2026-01-29)
+
+
+### Bug Fixes
+
+* horizontal rule ([#1875](https://github.com/superdoc-dev/superdoc/issues/1875)) ([4b3b92e](https://github.com/superdoc-dev/superdoc/commit/4b3b92ee168adcc06c7c4c927716ebcfec94311e))
+
+
+### Features
+
+* **track-changes:** add emitCommentEvent option to suppress sidebar bubbles ([#1880](https://github.com/superdoc-dev/superdoc/issues/1880)) ([87a2f24](https://github.com/superdoc-dev/superdoc/commit/87a2f2417322665f9f041f1a7d28642e95b5ea83))
+
+# [1.10.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.10.0-next.1...v1.10.0-next.2) (2026-01-29)
+
+
+### Bug Fixes
+
+* **super-editor:** preserve toolbar style marks when wrapping runs ([9dbcdd2](https://github.com/superdoc-dev/superdoc/commit/9dbcdd21023f0467ca689bb6d21bb79431bf4370))
+
+# [1.10.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.9.1-next.1...v1.10.0-next.1) (2026-01-29)
+
+
+### Bug Fixes
+
+* table width ([#1876](https://github.com/superdoc-dev/superdoc/issues/1876)) ([46a635c](https://github.com/superdoc-dev/superdoc/commit/46a635cc946900beebccd284f6ab9d750365b4bf))
+
+
+### Features
+
+* add CLAUDE.md/AGENTS.md navigation files for AI tools ([#1878](https://github.com/superdoc-dev/superdoc/issues/1878)) ([db98d62](https://github.com/superdoc-dev/superdoc/commit/db98d62dde6d6ccb28142af46c0abff8bee3d469))
+
 ## [1.9.1-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.9.0...v1.9.1-next.1) (2026-01-29)
 
 

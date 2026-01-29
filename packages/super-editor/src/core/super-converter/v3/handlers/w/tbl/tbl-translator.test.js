@@ -147,7 +147,7 @@ describe('w:tbl translator', () => {
       });
       expect(result.attrs.grid).toEqual([{ col: 2000 }]);
       expect(result.attrs.tableStyleId).toBe('TableGrid');
-      expect(result.attrs.tableWidth).toEqual({ width: 250, type: 'pct' });
+      expect(result.attrs.tableWidth).toEqual({ value: 5000, type: 'pct' });
       expect(result.attrs.justification).toBe('center');
       expect(result.attrs.tableIndent).toEqual({ width: 7.2, type: 'dxa' });
       expect(result.attrs.tableLayout).toBe('fixed');

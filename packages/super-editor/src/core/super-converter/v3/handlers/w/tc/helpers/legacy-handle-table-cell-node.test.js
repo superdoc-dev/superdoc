@@ -280,6 +280,129 @@ describe('legacy-handle-table-cell-node', () => {
     expect(out.attrs.colwidth).toEqual([50]);
   });
 
+  it('skips pixel conversion for percentage cell widths and falls back to columnWidth', () => {
+    const cellNode = {
+      name: 'w:tc',
+      elements: [
+        {
+          name: 'w:tcPr',
+          elements: [{ name: 'w:tcW', attributes: { 'w:w': '5000', 'w:type': 'pct' } }],
+        },
+        { name: 'w:p' },
+      ],
+    };
+    const row = { name: 'w:tr', elements: [cellNode] };
+    const table = { name: 'w:tbl', elements: [row] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: 200,
+      allColumnWidths: [200],
+      preferTableGridWidths: false,
+      _referencedStyles: null,
+    });
+
+    // Should use columnWidth fallback (200px) instead of converting 5000 pct to pixels
+    expect(out.attrs.colwidth).toEqual([200]);
+    expect(out.attrs.widthType).toBe('pct');
+    expect(out.attrs.widthUnit).toBe('px');
+  });
+
+  it('converts dxa cell widths to pixels when not using percentage type', () => {
+    const cellNode = {
+      name: 'w:tc',
+      elements: [
+        {
+          name: 'w:tcPr',
+          elements: [{ name: 'w:tcW', attributes: { 'w:w': '1440', 'w:type': 'dxa' } }],
+        },
+        { name: 'w:p' },
+      ],
+    };
+    const row = { name: 'w:tr', elements: [cellNode] };
+    const table = { name: 'w:tbl', elements: [row] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: 50,
+      allColumnWidths: [50],
+      preferTableGridWidths: false,
+      _referencedStyles: null,
+    });
+
+    // Should convert 1440 twips to pixels (1440 twips = 1 inch = 96px) instead of using columnWidth
+    expect(out.attrs.colwidth).toEqual([96]);
+    expect(out.attrs.widthType).toBe('dxa');
+    expect(out.attrs.widthUnit).toBe('px');
+  });
+
+  it('falls back to columnWidth when percentage cell width has no columnWidth fallback', () => {
+    const cellNode = {
+      name: 'w:tc',
+      elements: [
+        {
+          name: 'w:tcPr',
+          elements: [{ name: 'w:tcW', attributes: { 'w:w': '5000', 'w:type': 'pct' } }],
+        },
+        { name: 'w:p' },
+      ],
+    };
+    const row = { name: 'w:tr', elements: [cellNode] };
+    const table = { name: 'w:tbl', elements: [row] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [],
+      preferTableGridWidths: false,
+      _referencedStyles: null,
+    });
+
+    // With no columnWidth fallback and pct type, colwidth should not be set
+    expect(out.attrs.colwidth).toBeUndefined();
+    expect(out.attrs.widthType).toBe('pct');
+    expect(out.attrs.widthUnit).toBeUndefined();
+  });
+
   it('skips firstRow conditional borders when tblLook disables it', () => {
     const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
     const row1 = { name: 'w:tr', elements: [cellNode] };

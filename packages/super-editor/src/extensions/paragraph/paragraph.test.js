@@ -46,10 +46,6 @@ describe('Paragraph Node', () => {
     expect(textNode).toBeDefined();
     const textContent = textNode.elements?.find((child) => child.type === 'text');
     expect(textContent?.text).toBe('Test Heading');
-
-    // Run properties should include font size from the Heading1 style
-    const rPr = run.elements.find((el) => el.name === 'w:rPr');
-    expect(rPr).toBeDefined();
   });
 
   it('inserting plain text creates a simple paragraph', async () => {

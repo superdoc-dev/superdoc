@@ -230,16 +230,6 @@ export type Position = { start: number; end: number };
 export type PositionMap = WeakMap<PMNode, Position>;
 
 /**
- * Bookmark pair tracking
- */
-export type BookmarkPair = number;
-
-/**
- * Block position data
- */
-export type BlockPositionData = Position;
-
-/**
  * PM document map for batch processing
  */
 export type PMDocumentMap = Record<string, PMNode | object | null | undefined>;
@@ -269,7 +259,7 @@ export type FlowBlocksResult = {
 export interface NodeHandlerContext {
   // Block accumulation
   blocks: FlowBlock[];
-  recordBlockKind: (kind: FlowBlock['kind']) => void;
+  recordBlockKind?: (kind: FlowBlock['kind']) => void;
 
   // ID generation & positions
   nextBlockId: BlockIdGenerator;
@@ -291,7 +281,7 @@ export interface NodeHandlerContext {
   bookmarks: Map<string, number>;
 
   // Section state (mutable)
-  sectionState: {
+  sectionState?: {
     ranges: SectionRange[];
     currentSectionIndex: number;
     currentParagraphIndex: number;
@@ -312,21 +302,20 @@ export type ParagraphToFlowBlocksParams = {
   para: PMNode;
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  trackedChangesConfig?: TrackedChangesConfig;
+  trackedChangesConfig: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
-  bookmarks?: Map<string, number>;
+  bookmarks: Map<string, number>;
   converters: NestedConverters;
   enableComments: boolean;
   converterContext: ConverterContext;
 };
 
 export type TableNodeToBlockParams = {
-  node: PMNode;
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  trackedChangesConfig?: TrackedChangesConfig;
-  bookmarks?: Map<string, number>;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
   converterContext: ConverterContext;
@@ -343,27 +332,6 @@ export type NestedConverters = {
   shapeGroupNodeToDrawingBlock: typeof shapeGroupNodeToDrawingBlock;
   shapeContainerNodeToDrawingBlock: typeof shapeContainerNodeToDrawingBlock;
   shapeTextboxNodeToDrawingBlock: typeof shapeTextboxNodeToDrawingBlock;
-};
-
-/**
- * List rendering attributes
- */
-export type ListRenderingAttrs = {
-  markerText: string;
-  justification: 'left' | 'right' | 'center';
-  path: number[];
-  numberingType: string;
-  suffix: 'tab' | 'space' | 'nothing';
-};
-
-/**
- * Marker parameters for list items
- */
-export type MarkerParams = {
-  listType: 'bullet' | 'ordered';
-  listNode: PMNode;
-  itemNode: PMNode;
-  fallbackOrder: number;
 };
 
 /**

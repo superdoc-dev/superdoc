@@ -2,6 +2,8 @@ import { getTestDataByFileName, loadTestDataForEditorTests, initTestEditor } fro
 import { importCommentData } from '@converter/v2/importer/documentCommentsImporter.js';
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 
+const importedCommentIdPattern = /^imported-[0-9a-f]{8}$/;
+
 const extractNodeText = (node) => {
   if (!node) return '';
   if (typeof node.text === 'string') return node.text;
@@ -29,7 +31,7 @@ describe('basic comment import [basic-comment.docx]', () => {
     expect(comments).toHaveLength(1);
 
     const comment = comments[0];
-    expect(comment.commentId).toHaveLength(36); // UUID is generated at import
+    expect(comment.commentId).toMatch(importedCommentIdPattern);
     expect(comment.creatorName).toBe('Nick Bernal');
     expect(comment.creatorEmail).toBeUndefined();
     expect(comment.createdTime).toBe(1739389620000);
@@ -120,7 +122,7 @@ describe('comment import without extended metadata [gdocs-comments-export.docx]'
     expect(comments).toHaveLength(2);
 
     const firstComment = comments[0];
-    expect(firstComment.commentId).toHaveLength(36);
+    expect(firstComment.commentId).toMatch(importedCommentIdPattern);
     expect(firstComment.creatorName).toBe('Nick Bernal');
     expect(firstComment.createdTime).toBe(1758674262000);
     expect(firstComment.isDone).toBe(false);
@@ -179,7 +181,7 @@ describe('python-docx generated comments [python_docx_comment_test.docx]', () =>
     expect(comments).toHaveLength(1);
 
     const comment = comments[0];
-    expect(comment.commentId).toHaveLength(36);
+    expect(comment.commentId).toMatch(importedCommentIdPattern);
     expect(comment.creatorName).toBe('Python-docx Script');
     expect(comment.initials).toBe('PS');
   });

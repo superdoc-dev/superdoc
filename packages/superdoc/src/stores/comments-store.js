@@ -132,6 +132,19 @@ export const useCommentsStore = defineStore('comments', () => {
     comment.resolvedByName = null;
   };
 
+  /**
+   * Check if a comment originated from the super-editor (or has no explicit source).
+   * Comments without a source are assumed to be editor-backed for backward compatibility.
+   *
+   * @param {Object} comment - The comment to check
+   * @returns {boolean} True if the comment is editor-backed
+   */
+  const isEditorBackedComment = (comment) => {
+    const source = comment?.selection?.source;
+    if (source == null) return true;
+    return source === 'super-editor';
+  };
+
   const syncResolvedCommentsWithDocument = () => {
     const docPositions = editorCommentPositions.value || {};
     const activeKeys = new Set(Object.keys(docPositions));
@@ -142,7 +155,7 @@ export const useCommentsStore = defineStore('comments', () => {
       if (!key) return;
 
       const hasActiveAnchor = activeKeys.has(String(key));
-      if (hasActiveAnchor && comment.resolvedTime) {
+      if (hasActiveAnchor && comment.resolvedTime && isEditorBackedComment(comment)) {
         clearResolvedMetadata(comment);
       }
     });

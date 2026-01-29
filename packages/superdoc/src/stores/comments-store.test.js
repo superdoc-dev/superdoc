@@ -663,12 +663,14 @@ describe('comments-store', () => {
     });
 
     it('preserves resolved metadata for non-editor comments', async () => {
-      const comment = {
+      const comment = useCommentMock({
         commentId: 'pdf-1',
+        fileType: 'pdf',
+        selection: { source: 'pdf', selectionBounds: {} },
         resolvedTime: 555,
         resolvedByEmail: 'user@example.com',
         resolvedByName: 'User',
-      };
+      });
 
       store.commentsList = [comment];
 

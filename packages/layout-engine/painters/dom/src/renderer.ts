@@ -805,6 +805,7 @@ export class DomPainter {
   private virtualPaddingTop: number | null = null; // px; computed from mount if not provided
   private topSpacerEl: HTMLElement | null = null;
   private bottomSpacerEl: HTMLElement | null = null;
+  private virtualPagesEl: HTMLElement | null = null;
   private virtualGapSpacers: HTMLElement[] = [];
   private virtualPinnedPages: number[] = [];
   private virtualMountedKey = '';
@@ -1065,8 +1066,8 @@ export class DomPainter {
     applyStyles(mount, containerStyles);
 
     if (this.virtualEnabled) {
-      // Override container gap for consistent spacer math
-      mount.style.gap = `${this.virtualGap}px`;
+      // Keep container gap at 0 so spacers don't introduce extra offsets.
+      mount.style.gap = '0px';
       this.renderVirtualized(layout, mount);
       this.currentLayout = layout;
       this.changedBlocks.clear();
@@ -1096,7 +1097,7 @@ export class DomPainter {
     this.currentLayout = layout;
 
     // First-time init or mount changed
-    const needsInit = !this.topSpacerEl || !this.bottomSpacerEl || this.mount !== mount;
+    const needsInit = !this.topSpacerEl || !this.bottomSpacerEl || !this.virtualPagesEl || this.mount !== mount;
     if (needsInit) {
       this.ensureVirtualizationSetup(mount);
     }
@@ -1121,7 +1122,16 @@ export class DomPainter {
     this.configureSpacerElement(this.topSpacerEl, 'top');
     this.configureSpacerElement(this.bottomSpacerEl, 'bottom');
 
+    // Create and configure pages container (handles the inter-page gap)
+    this.virtualPagesEl = this.doc.createElement('div');
+    this.virtualPagesEl.style.display = 'flex';
+    this.virtualPagesEl.style.flexDirection = 'column';
+    this.virtualPagesEl.style.alignItems = 'center';
+    this.virtualPagesEl.style.width = '100%';
+    this.virtualPagesEl.style.gap = `${this.virtualGap}px`;
+
     mount.appendChild(this.topSpacerEl);
+    mount.appendChild(this.virtualPagesEl);
     mount.appendChild(this.bottomSpacerEl);
 
     // Bind scroll and resize handlers
@@ -1219,7 +1229,7 @@ export class DomPainter {
   }
 
   private updateVirtualWindow(): void {
-    if (!this.mount || !this.topSpacerEl || !this.bottomSpacerEl || !this.currentLayout) return;
+    if (!this.mount || !this.topSpacerEl || !this.bottomSpacerEl || !this.virtualPagesEl || !this.currentLayout) return;
     const layout = this.currentLayout;
     const N = layout.pages.length;
     if (N === 0) {
@@ -1305,7 +1315,7 @@ export class DomPainter {
         newState.element.dataset.pageIndex = String(i);
         // Ensure virtualization uses page margin 0
         applyStyles(newState.element, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
-        this.mount.insertBefore(newState.element, this.bottomSpacerEl);
+        this.virtualPagesEl.appendChild(newState.element);
         this.pageIndexToState.set(i, newState);
       } else {
         // Patch in place
@@ -1313,9 +1323,12 @@ export class DomPainter {
       }
     }
 
-    // Ensure top spacer is first and bottom spacer is last.
+    // Ensure top spacer is first, pages container is in the middle, and bottom spacer is last.
     if (this.mount.firstChild !== this.topSpacerEl) {
       this.mount.insertBefore(this.topSpacerEl, this.mount.firstChild);
+    }
+    if (this.virtualPagesEl.parentElement !== this.mount) {
+      this.mount.insertBefore(this.virtualPagesEl, this.bottomSpacerEl);
     }
     this.mount.appendChild(this.bottomSpacerEl);
 
@@ -1331,10 +1344,10 @@ export class DomPainter {
           this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.virtualGap * 2;
         gap.style.height = `${Math.max(0, Math.floor(gapHeight))}px`;
         this.virtualGapSpacers.push(gap);
-        this.mount.insertBefore(gap, this.bottomSpacerEl);
+        this.virtualPagesEl.appendChild(gap);
       }
       const state = this.pageIndexToState.get(idx)!;
-      this.mount.insertBefore(state.element, this.bottomSpacerEl);
+      this.virtualPagesEl.appendChild(state.element);
       prevIndex = idx;
     }
 
@@ -1699,6 +1712,7 @@ export class DomPainter {
     this.pageIndexToState.clear();
     this.topSpacerEl = null;
     this.bottomSpacerEl = null;
+    this.virtualPagesEl = null;
     this.onScrollHandler = null;
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;

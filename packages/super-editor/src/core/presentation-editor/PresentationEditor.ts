@@ -62,7 +62,7 @@ import { DragDropManager } from './input/DragDropManager.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
-import { toFlowBlocks, ConverterContext } from '@superdoc/pm-adapter';
+import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import {
   incrementalLayout,
   selectionToRects,
@@ -78,11 +78,12 @@ import type {
   HeaderFooterLayoutResult,
   HeaderFooterType,
   PositionHit,
-  MultiSectionHeaderFooterIdentifier,
   TableHitResult,
 } from '@superdoc/layout-bridge';
+
 import { createDomPainter } from '@superdoc/painter-dom';
-import type { LayoutMode, PageDecorationProvider, RulerOptions } from '@superdoc/painter-dom';
+
+import type { LayoutMode } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -254,6 +255,8 @@ export class PresentationEditor extends EventEmitter {
   #hiddenHost: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
+  /** Cache for incremental toFlowBlocks conversion */
+  #flowBlockCache: FlowBlockCache = new FlowBlockCache();
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -275,6 +278,8 @@ export class PresentationEditor extends EventEmitter {
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
   #rafHandle: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
+  #scrollHandler: (() => void) | null = null;
+  #scrollContainer: Element | Window | null = null;
   #sectionMetadata: SectionMetadata[] = [];
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
   #inputBridge: PresentationInputBridge | null = null;
@@ -1031,6 +1036,8 @@ export class PresentationEditor extends EventEmitter {
     // Re-render if mode changed OR tracked changes preferences changed.
     // Mode change affects enableComments in toFlowBlocks even if tracked changes didn't change.
     if (modeChanged || trackedChangesChanged) {
+      // Clear flow block cache since conversion-affecting settings changed
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1068,6 +1075,8 @@ export class PresentationEditor extends EventEmitter {
     this.#layoutOptions.trackedChanges = overrides;
     const trackedChangesChanged = this.#syncTrackedChangesPreferences();
     if (trackedChangesChanged) {
+      // Clear flow block cache since conversion-affecting settings changed
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1102,6 +1111,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (hasChanges) {
+      // Clear flow block cache since comment settings affect block conversion
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -2136,6 +2147,15 @@ export class PresentationEditor extends EventEmitter {
       }, 'Editor input manager');
     }
 
+    if (this.#scrollHandler) {
+      if (this.#scrollContainer) {
+        this.#scrollContainer.removeEventListener('scroll', this.#scrollHandler);
+      }
+      const win = this.#visibleHost?.ownerDocument?.defaultView;
+      win?.removeEventListener('scroll', this.#scrollHandler);
+      this.#scrollHandler = null;
+      this.#scrollContainer = null;
+    }
     this.#inputBridge?.notifyTargetChanged();
     this.#inputBridge?.destroy();
     this.#inputBridge = null;
@@ -2155,6 +2175,9 @@ export class PresentationEditor extends EventEmitter {
       this.#headerFooterSession?.destroy();
       this.#headerFooterSession = null;
     }, 'Header/footer session manager');
+
+    // Clear flow block cache to free memory
+    this.#flowBlockCache.clear();
 
     this.#domPainter = null;
     this.#pageGeometryHelper = null;
@@ -2429,6 +2452,52 @@ export class PresentationEditor extends EventEmitter {
   #setupPointerHandlers() {
     // Delegate to EditorInputManager for pointer events
     this.#editorInputManager?.bind();
+
+    // Scroll handler for virtualization - find the actual scroll container
+    // by walking up the DOM tree to find the first scrollable ancestor
+    this.#scrollHandler = () => {
+      this.#domPainter?.onScroll?.();
+    };
+
+    // Find the scrollable ancestor and attach listener there
+    this.#scrollContainer = this.#findScrollableAncestor(this.#visibleHost);
+    if (this.#scrollContainer) {
+      this.#scrollContainer.addEventListener('scroll', this.#scrollHandler, { passive: true });
+    }
+
+    // Also listen on window as fallback
+    const win = this.#visibleHost.ownerDocument?.defaultView;
+    if (win && this.#scrollContainer !== win) {
+      win.addEventListener('scroll', this.#scrollHandler, { passive: true });
+    }
+  }
+
+  /**
+   * Finds the first scrollable ancestor of an element.
+   * Returns the element itself if it's scrollable, or walks up the tree.
+   *
+   * Note: We only check for overflow CSS property, not whether content currently
+   * overflows. At setup time, content may not be laid out yet, but the element
+   * with overflow:auto/scroll will become the scroll container once content grows.
+   */
+  #findScrollableAncestor(element: HTMLElement): Element | Window | null {
+    const win = element.ownerDocument?.defaultView;
+    if (!win) return null;
+
+    let current: Element | null = element;
+    while (current) {
+      const style = win.getComputedStyle(current);
+      const overflowY = style.overflowY;
+      // Check for scrollable overflow property - don't require hasScroll since
+      // content may not be laid out yet at setup time
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    // If no scrollable ancestor found, return window
+    return win;
   }
 
   /**
@@ -2812,6 +2881,7 @@ export class PresentationEditor extends EventEmitter {
           enableRichHyperlinks: true,
           themeColors: this.#editor?.converter?.themeColors ?? undefined,
           converterContext,
+          flowBlockCache: this.#flowBlockCache,
           ...(positionMap ? { positions: positionMap } : {}),
           ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
         });

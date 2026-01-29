@@ -1207,6 +1207,17 @@ export class DomPainter {
     return 0;
   }
 
+  /**
+   * Public method to trigger virtualization window update on scroll.
+   * Call this from external scroll handlers when the scroll container
+   * is different from the painter's mount element.
+   */
+  public onScroll(): void {
+    if (this.virtualEnabled) {
+      this.updateVirtualWindow();
+    }
+  }
+
   private updateVirtualWindow(): void {
     if (!this.mount || !this.topSpacerEl || !this.bottomSpacerEl || !this.currentLayout) return;
     const layout = this.currentLayout;
@@ -1440,9 +1451,10 @@ export class DomPainter {
       pageNumberText: page.numberText,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup);
+    const fragments = this.dedupeFragments(page);
+    const sdtBoundaries = computeSdtBoundaries(fragments, this.blockLookup);
 
-    page.fragments.forEach((fragment, index) => {
+    fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
       el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary));
     });
@@ -1747,7 +1759,8 @@ export class DomPainter {
 
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup);
+    const fragments = this.dedupeFragments(page);
+    const sdtBoundaries = computeSdtBoundaries(fragments, this.blockLookup);
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -1756,7 +1769,7 @@ export class DomPainter {
       pageNumberText: page.numberText,
     };
 
-    page.fragments.forEach((fragment, index) => {
+    fragments.forEach((fragment, index) => {
       const key = fragmentKey(fragment);
       const current = existing.get(key);
       const sdtBoundary = sdtBoundaries.get(index);
@@ -1883,9 +1896,9 @@ export class DomPainter {
       section: 'body',
     };
 
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup);
-
-    const fragments: FragmentDomState[] = page.fragments.map((fragment, index) => {
+    const fragments = this.dedupeFragments(page);
+    const sdtBoundaries = computeSdtBoundaries(fragments, this.blockLookup);
+    const fragmentStates: FragmentDomState[] = fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
       const fragmentEl = this.renderFragment(fragment, contextBase, sdtBoundary);
       el.appendChild(fragmentEl);
@@ -1899,7 +1912,27 @@ export class DomPainter {
     });
 
     this.renderDecorationsForPage(el, page);
-    return { element: el, fragments };
+    return { element: el, fragments: fragmentStates };
+  }
+
+  private dedupeFragments(page: Page): Fragment[] {
+    const fragments = page.fragments;
+    if (fragments.length <= 1) return fragments;
+    const seen = new Set<string>();
+    const result: Fragment[] = [];
+
+    for (let i = fragments.length - 1; i >= 0; i -= 1) {
+      const fragment = fragments[i];
+      const key = fragmentKey(fragment);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      result.push(fragment);
+    }
+    result.reverse();
+
+    return result;
   }
 
   private getEffectivePageStyles(): PageStyles | undefined {
@@ -2001,7 +2034,6 @@ export class DomPainter {
       // Use fragment.lines if available (set when paragraph was remeasured for narrower column).
       // Otherwise, fall back to slicing from the original measure.
       const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
-
       applyParagraphBlockStyles(fragmentEl, block.attrs);
       const { shadingLayer, borderLayer } = createParagraphDecorationLayers(this.doc, fragment.width, block.attrs);
       if (shadingLayer) {

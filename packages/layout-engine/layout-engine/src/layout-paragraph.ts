@@ -23,7 +23,6 @@ import {
 import { computeAnchorX } from './floating-objects.js';
 
 const spacingDebugEnabled = false;
-
 /**
  * Type definition for Word layout attributes attached to paragraph blocks.
  * This is a subset of the WordParagraphLayoutOutput from @superdoc/word-layout.
@@ -796,7 +795,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
     // Store remeasured lines in fragment so renderer can use them.
     // This is needed because the original measure has different line breaks.
-    if (didRemeasureForColumnWidth) {
+    if (didRemeasureForColumnWidth || didRemeasureForFloats) {
       fragment.lines = lines.slice(fromLine, slice.toLine);
     }
 

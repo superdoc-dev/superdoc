@@ -881,6 +881,87 @@ describe('getListDefinitionDetails', () => {
       expect(mockEditor.converter.numbering.abstracts[newAbstractId]).toBeTruthy();
     });
   });
+
+  describe('getAllListDefinitions', () => {
+    it('should include cloned list definitions even when translatedNumbering is stale', () => {
+      mockEditor.converter.numbering.definitions[1] = {
+        elements: [{ name: 'w:abstractNumId', attributes: { 'w:val': '10' } }],
+      };
+      mockEditor.converter.numbering.abstracts['10'] = {
+        attributes: { 'w:abstractNumId': '10' },
+        elements: [
+          {
+            name: 'w:lvl',
+            attributes: { 'w:ilvl': '0' },
+            elements: [
+              { name: 'w:start', attributes: { 'w:val': '1' } },
+              { name: 'w:numFmt', attributes: { 'w:val': 'decimal' } },
+              { name: 'w:lvlText', attributes: { 'w:val': '%1.' } },
+            ],
+          },
+        ],
+      };
+
+      mockEditor.converter.translatedNumbering = {
+        definitions: {
+          1: { abstractNumId: 10 },
+        },
+        abstracts: {
+          10: {
+            levels: {
+              0: {
+                ilvl: 0,
+                start: 1,
+                numFmt: { val: 'decimal' },
+                lvlText: '%1.',
+              },
+            },
+          },
+        },
+      };
+
+      const newNumId = ListHelpers.changeNumIdSameAbstract(1, 0, 'orderedList', mockEditor);
+
+      const allDefinitions = listHelpers.getAllListDefinitions(mockEditor);
+
+      expect(allDefinitions[newNumId]).toBeTruthy();
+      expect(allDefinitions[newNumId]?.[0]).toEqual(expect.objectContaining({ listNumberingType: 'decimal' }));
+    });
+
+    it('should preserve startOverride=0 when resolving list start', () => {
+      mockEditor.converter.translatedNumbering = {
+        definitions: {
+          5: {
+            abstractNumId: 20,
+            lvlOverrides: {
+              0: { startOverride: 0 },
+            },
+          },
+        },
+        abstracts: {
+          20: {
+            levels: {
+              0: {
+                ilvl: 0,
+                start: 1,
+                numFmt: { val: 'decimal' },
+                lvlText: '%1.',
+              },
+            },
+          },
+        },
+      };
+
+      const allDefinitions = listHelpers.getAllListDefinitions(mockEditor);
+
+      expect(allDefinitions[5][0]).toEqual(
+        expect.objectContaining({
+          start: 0,
+          startOverridden: true,
+        }),
+      );
+    });
+  });
 });
 
 vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({

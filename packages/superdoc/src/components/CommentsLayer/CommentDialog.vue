@@ -423,7 +423,7 @@ onMounted(() => {
       <CommentInput ref="commentInput" :users="usersFiltered" :config="getConfig" :comment="props.comment" />
 
       <div class="comment-footer" v-if="showButtons && !getConfig.readOnly">
-        <button class="sd-button" @click.stop.prevent="cancelComment">Cancel</button>
+        <button class="sd-button" @click.stop.prevent="handleCancel">Cancel</button>
         <button
           class="sd-button primary"
           @click.stop.prevent="handleAddComment"

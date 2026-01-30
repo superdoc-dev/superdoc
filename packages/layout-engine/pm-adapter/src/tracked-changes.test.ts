@@ -21,7 +21,6 @@ import {
   buildTrackedChangeMetaFromMark,
   selectTrackedChangeMeta,
   trackedChangesCompatible,
-  collectTrackedChangeFromMarks,
   shouldHideTrackedNode,
   annotateBlockWithTrackedChange,
   resetRunFormatting,
@@ -489,54 +488,6 @@ describe('tracked-changes', () => {
         trackedChange: { kind: 'insert', id: 'ins-2' },
       };
       expect(trackedChangesCompatible(a, b)).toBe(false);
-    });
-  });
-
-  describe('collectTrackedChangeFromMarks', () => {
-    it('should return undefined for empty marks array', () => {
-      expect(collectTrackedChangeFromMarks([])).toBeUndefined();
-    });
-
-    it('should return undefined for undefined marks', () => {
-      expect(collectTrackedChangeFromMarks(undefined)).toBeUndefined();
-    });
-
-    it('should return undefined when no tracked change marks present', () => {
-      const marks: PMMark[] = [{ type: 'bold' }, { type: 'italic' }];
-      expect(collectTrackedChangeFromMarks(marks)).toBeUndefined();
-    });
-
-    it('should collect single tracked change mark', () => {
-      const marks: PMMark[] = [{ type: 'trackInsert', attrs: { id: 'ins-1' } }, { type: 'bold' }];
-      const result = collectTrackedChangeFromMarks(marks);
-      expect(result).toEqual({ kind: 'insert', id: 'ins-1' });
-    });
-
-    it('should prioritize insert over format when both present', () => {
-      const marks: PMMark[] = [
-        { type: 'trackFormat', attrs: { id: 'fmt-1' } },
-        { type: 'trackInsert', attrs: { id: 'ins-1' } },
-      ];
-      const result = collectTrackedChangeFromMarks(marks);
-      expect(result?.kind).toBe('insert');
-    });
-
-    it('should prioritize delete over format when both present', () => {
-      const marks: PMMark[] = [
-        { type: 'trackFormat', attrs: { id: 'fmt-1' } },
-        { type: 'trackDelete', attrs: { id: 'del-1' } },
-      ];
-      const result = collectTrackedChangeFromMarks(marks);
-      expect(result?.kind).toBe('delete');
-    });
-
-    it('should keep first insert when multiple inserts present', () => {
-      const marks: PMMark[] = [
-        { type: 'trackInsert', attrs: { id: 'ins-1' } },
-        { type: 'trackInsert', attrs: { id: 'ins-2' } },
-      ];
-      const result = collectTrackedChangeFromMarks(marks);
-      expect(result?.id).toBe('ins-1');
     });
   });
 

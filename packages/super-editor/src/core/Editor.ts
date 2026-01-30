@@ -2458,11 +2458,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 
-      // Normalize commentJSON property (imported comments use textJson)
-      const preparedComments = effectiveComments.map((comment: Comment) => ({
-        ...comment,
-        commentJSON: comment.commentJSON ?? (comment as Record<string, unknown>).textJson,
-      }));
+      // Normalize commentJSON property (imported comments provide `elements`)
+      const preparedComments = effectiveComments.map((comment: Comment) => {
+        const elements = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : undefined;
+        return {
+          ...comment,
+          commentJSON: comment.commentJSON ?? elements,
+        };
+      });
 
       // Pre-process the document state to prepare for export
       const json = this.#prepareDocumentForExport(preparedComments);

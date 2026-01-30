@@ -2387,6 +2387,7 @@ export class PresentationEditor extends EventEmitter {
       getEpochMapper: () => this.#epochMapper,
       getViewportHost: () => this.#viewportHost,
       getVisibleHost: () => this.#visibleHost,
+      getLayoutMode: () => this.#layoutOptions.layoutMode ?? 'vertical',
       getHeaderFooterSession: () => this.#headerFooterSession,
       getPageGeometryHelper: () => this.#pageGeometryHelper,
       getZoom: () => this.#layoutOptions.zoom ?? 1,
@@ -2796,8 +2797,6 @@ export class PresentationEditor extends EventEmitter {
         converterContext = converter
           ? {
               docx: converter.convertedXml,
-              numbering: converter.numbering,
-              linkedStyles: converter.linkedStyles,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
@@ -3248,8 +3247,20 @@ export class PresentationEditor extends EventEmitter {
       }
       return;
     }
+
+    const activeEditor = this.getActiveEditor();
+    const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
+
+    if (!hasFocus) {
+      try {
+        this.#clearSelectedFieldAnnotationClass();
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
     const layout = this.#layoutState.layout;
-    const editorState = this.getActiveEditor().state;
+    const editorState = activeEditor.state;
     const selection = editorState?.selection;
 
     if (!selection) {

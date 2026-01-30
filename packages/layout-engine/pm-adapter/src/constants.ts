@@ -4,7 +4,6 @@
 
 import type { TextRun, TrackedChangeKind } from '@superdoc/contracts';
 import type { HyperlinkConfig } from './types.js';
-import { SectionType } from './types.js';
 
 /**
  * Unit conversion constants
@@ -12,43 +11,6 @@ import { SectionType } from './types.js';
 export const TWIPS_PER_INCH = 1440;
 export const PX_PER_INCH = 96;
 export const PX_PER_PT = 96 / 72;
-
-/**
- * Default typography settings
- */
-export const DEFAULT_FONT = 'Arial';
-export const DEFAULT_SIZE = 16;
-
-/**
- * List formatting defaults
- */
-export const DEFAULT_LIST_INDENT_BASE_PX = 24;
-export const DEFAULT_LIST_INDENT_STEP_PX = 24;
-export const DEFAULT_LIST_HANGING_PX = 18;
-export const DEFAULT_NUMBERING_TYPE = 'decimal';
-export const DEFAULT_LVL_TEXT = '%1.';
-
-/**
- * Locale defaults
- */
-export const DEFAULT_DECIMAL_SEPARATOR = '.';
-
-/**
- * Section defaults
- */
-export const DEFAULT_COLUMN_GAP_INCHES = 0.5; // 720 twips = 0.5 inches
-
-/**
- * BiDi indentation defaults
- */
-export const MIN_BIDI_CLAMP_INDENT_PX = 1;
-export const DEFAULT_BIDI_INDENT_PX = 24;
-
-/**
- * Section type defaults
- */
-export const DEFAULT_PARAGRAPH_SECTION_TYPE: SectionType = SectionType.NEXT_PAGE; // Word's default when w:type omitted
-export const DEFAULT_BODY_SECTION_TYPE: SectionType = SectionType.CONTINUOUS; // Body sectPr doesn't force page break at end
 
 /**
  * Tracked changes mark types
@@ -142,6 +104,7 @@ export const ATOMIC_INLINE_TYPES = new Set([
   'footnoteReference',
   'passthroughInline',
   'bookmarkEnd',
+  'fieldAnnotation',
 ]);
 
 /**
@@ -151,43 +114,3 @@ export const TOKEN_INLINE_TYPES = new Map<string, TextRun['token']>([
   ['page-number', 'pageNumber'],
   ['total-page-number', 'totalPageCount'],
 ]);
-
-/**
- * Valid link target values
- */
-export const VALID_LINK_TARGETS = new Set(['_blank', '_self', '_parent', '_top']);
-
-/**
- * Bullet marker characters
- */
-export const BULLET_MARKERS = ['•', '◦', '▪', '‣'];
-
-/**
- * Valid wrap types for images/drawings
- */
-export const WRAP_TYPES = new Set(['None', 'Square', 'Tight', 'Through', 'TopAndBottom', 'Inline']);
-
-/**
- * Valid wrap text values
- */
-export const WRAP_TEXT_VALUES = new Set(['bothSides', 'left', 'right', 'largest']);
-
-/**
- * Valid horizontal relative positioning values
- */
-export const H_RELATIVE_VALUES = new Set(['column', 'page', 'margin']);
-
-/**
- * Valid vertical relative positioning values
- */
-export const V_RELATIVE_VALUES = new Set(['paragraph', 'page', 'margin']);
-
-/**
- * Valid horizontal alignment values
- */
-export const H_ALIGN_VALUES = new Set(['left', 'center', 'right']);
-
-/**
- * Valid vertical alignment values
- */
-export const V_ALIGN_VALUES = new Set(['top', 'center', 'bottom']);

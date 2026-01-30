@@ -1,0 +1,121 @@
+name: OOXML Spec Compliance Review
+
+on:
+  pull_request:
+    paths:
+      - 'packages/super-editor/src/core/super-converter/v3/handlers/**'
+
+concurrency:
+  group: spec-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  spec-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4 # shallow-clone as default
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Get changed files
+        id: changed
+        run: |
+          FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only | grep 'v3/handlers/' || true)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Review for spec compliance
+        if: steps.changed.outputs.files != ''
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Skip if API key not configured
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ANTHROPIC_API_KEY not set, skipping review"
+            exit 0
+          fi
+
+          # Configure MCP server
+          claude mcp add --transport http ecma-spec https://api.ooxml.dev/mcp
+
+          # Get the diff for review
+          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr-diff.txt
+
+          # Run Claude Code review
+          REVIEW=$(claude --print "Review this PR for OOXML spec compliance.
+
+          Context: These are OOXML element handlers (XML ↔ ProseMirror JSON converters).
+
+          Use the ecma-spec MCP tools to verify elements/attributes against ECMA-376.
+
+          Check for:
+          - Non-existent attributes or elements
+          - Missing required attributes
+          - Incorrect default values
+          - Spec violations
+
+          Write a natural, conversational review. Start with one of these status lines:
+
+          **Status: PASS** - if no issues found
+          **Status: FAIL** - if spec violations detected
+
+          If FAIL, explain each issue briefly:
+          - What element/attribute is wrong
+          - Why it violates the spec (one sentence)
+          - File and line number
+
+          Keep it concise. Don't quote the spec extensively - link to https://ooxml.dev/spec?q=<element name> for details.
+
+          Changed files:
+          ${{ steps.changed.outputs.files }}
+
+          Diff:
+          $(cat /tmp/pr-diff.txt)")
+
+          # Save review output
+          echo "$REVIEW" > /tmp/review-raw.txt
+
+          # Check if review found violations (look for "Status: FAIL")
+          if echo "$REVIEW" | grep -qi "Status: FAIL"; then
+            echo "has_violations=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_violations=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Build comment
+          {
+            printf '%s\n' "$REVIEW"
+          } > /tmp/review-comment.md
+
+          echo "review<<EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post review comment
+        if: steps.review.outputs.review != ''
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/review-comment.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fail if violations found
+        if: steps.review.outputs.has_violations == 'true'
+        run: |
+          echo "::error::OOXML spec violations detected. See PR comment for details."
+          exit 1

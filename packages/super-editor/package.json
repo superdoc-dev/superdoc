@@ -9,12 +9,12 @@
   "exports": {
     ".": {
       "source": "./src/index.js",
-      "types": "./dist/index.d.ts",
+      "types": "./dist/src/index.d.ts",
       "import": "./dist/super-editor.es.js"
     },
     "./types": {
       "source": "./src/types.ts",
-      "types": "./dist/types.d.ts",
+      "types": "./dist/src/types.d.ts",
       "import": "./dist/types.js"
     },
     "./*": {

@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { NumberingManager } from './NumberingManager.js';
+import { createNumberingManager } from './NumberingManager.js';
 
 describe('NumberingManager', () => {
   describe.each([
     { cacheEnabled: false, mode: 'with cache disabled' },
     { cacheEnabled: true, mode: 'with cache enabled' },
   ])('when running $mode', ({ cacheEnabled }) => {
-    function createNumberingManager() {
-      const manager = NumberingManager();
+    function makeNumberingManager() {
+      const manager = createNumberingManager();
       if (cacheEnabled) {
         manager.enableCache();
       }
@@ -20,7 +20,7 @@ describe('NumberingManager', () => {
      * - (11) Level 0, second item
      */
     it('increments sequential level 0 counters and caches the last seen entry', () => {
-      const numberingManager = createNumberingManager();
+      const numberingManager = makeNumberingManager();
       numberingManager.setStartSettings('list1', 0, 1, null);
 
       expect(numberingManager.getCounter('list1', 0, 10)).toBeNull();
@@ -37,6 +37,51 @@ describe('NumberingManager', () => {
       expect(numberingManager.calculatePath('list1', 0, 11)).toEqual([2]);
     });
 
+    it('tracks counters by abstractId across numbering definitions', () => {
+      const numberingManager = makeNumberingManager();
+      numberingManager.setStartSettings('numA', 0, 1, null);
+      numberingManager.setStartSettings('numB', 0, 1, null);
+
+      const first = numberingManager.calculateCounter('numA', 0, 10, 'abs-1');
+      expect(first).toBe(1);
+      numberingManager.setCounter('numA', 0, 10, first, 'abs-1');
+
+      const second = numberingManager.calculateCounter('numB', 0, 20, 'abs-1');
+      expect(second).toBe(2);
+      numberingManager.setCounter('numB', 0, 20, second, 'abs-1');
+
+      expect(numberingManager.getCounter('numA', 0, 10)).toBe(1);
+      expect(numberingManager.getCounter('numB', 0, 20)).toBe(2);
+      expect(numberingManager.calculatePath('numB', 0, 20)).toEqual([2]);
+    });
+
+    it('uses the highest previous position even if counters are set out of order', () => {
+      const numberingManager = makeNumberingManager();
+      numberingManager.setStartSettings('list1', 0, 1, null);
+
+      numberingManager.setCounter('list1', 0, 20, 2, 'abs-3');
+      numberingManager.setCounter('list1', 0, 10, 1, 'abs-3');
+
+      const next = numberingManager.calculateCounter('list1', 0, 30, 'abs-3');
+      expect(next).toBe(3);
+    });
+
+    it('respects startOverridden by isolating cache lookups to the numId', () => {
+      const numberingManager = makeNumberingManager();
+      numberingManager.setStartSettings('numA', 0, 1, null);
+      numberingManager.setStartSettings('numB', 0, 1, null, true);
+
+      const first = numberingManager.calculateCounter('numA', 0, 10, 'abs-2');
+      numberingManager.setCounter('numA', 0, 10, first, 'abs-2');
+
+      const next = numberingManager.calculateCounter('numB', 0, 20, 'abs-2');
+      if (cacheEnabled) {
+        expect(next).toBe(1);
+      } else {
+        expect(next).toBe(2);
+      }
+    });
+
     /*
      * list1
      * - (10) Level 0, first item
@@ -47,7 +92,7 @@ describe('NumberingManager', () => {
      *   - (16) Level 1, first item (should restart to 1)
      */
     it('restarts level 1 numbering when a new level 0 item appears with default restart rules', () => {
-      const numberingManager = createNumberingManager();
+      const numberingManager = makeNumberingManager();
       numberingManager.setStartSettings('list1', 0, 1, null);
       numberingManager.setStartSettings('list1', 1, 1, null);
 
@@ -91,7 +136,7 @@ describe('NumberingManager', () => {
      *     - (21) Level 2, second item (should continue as 2)
      */
     it('continues level 2 numbering when restart setting is zero despite lower-level usage', () => {
-      const numberingManager = createNumberingManager();
+      const numberingManager = makeNumberingManager();
       numberingManager.setStartSettings('list1', 0, 1, null);
       numberingManager.setStartSettings('list1', 2, 1, 0);
 
@@ -142,7 +187,7 @@ describe('NumberingManager', () => {
      *     - (104) Level 2, second item (should restart to 4 because restart setting = 1)
      */
     it('restarts level 2 numbering when restart threshold is met', () => {
-      const numberingManager = createNumberingManager();
+      const numberingManager = makeNumberingManager();
       numberingManager.setStartSettings('list2', 0, 1, null);
       numberingManager.setStartSettings('list2', 2, 4, 1);
 
@@ -179,7 +224,7 @@ describe('NumberingManager', () => {
      *       - (408) Level 3, third item (restarts to 7 because level 1 used)
      */
     it('restarts when the restart threshold is two levels below the current level after intermediate siblings', () => {
-      const numberingManager = createNumberingManager();
+      const numberingManager = makeNumberingManager();
       numberingManager.setStartSettings('list3', 0, 1, null);
       numberingManager.setStartSettings('list3', 3, 7, 1);
 

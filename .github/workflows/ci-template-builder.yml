@@ -1,0 +1,45 @@
+name: CI Template Builder
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'packages/template-builder/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-template-builder-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build superdoc (dependency)
+        run: pnpm run build:superdoc
+
+      - name: Lint
+        run: pnpm --filter @superdoc-dev/template-builder lint
+
+      - name: Type check
+        run: pnpm --filter @superdoc-dev/template-builder type-check
+
+      - name: Build
+        run: pnpm --filter @superdoc-dev/template-builder build
+
+      - name: Test
+        run: pnpm --filter @superdoc-dev/template-builder test

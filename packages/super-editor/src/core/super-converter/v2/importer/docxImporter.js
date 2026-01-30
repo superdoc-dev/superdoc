@@ -37,6 +37,7 @@ import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attrib
 import { translator as wStylesTranslator } from '@converter/v3/handlers/w/styles/index.js';
 import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/numbering/index.js';
 import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
+import { patchNumberingDefinitions } from './patchNumberingDefinitions.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -142,6 +143,7 @@ export const createDocumentJson = (docx, converter, editor) => {
     const lists = {};
     const inlineDocumentFonts = [];
 
+    patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });

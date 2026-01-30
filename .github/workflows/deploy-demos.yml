@@ -1,0 +1,36 @@
+name: Deploy Demos
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/template-builder/**'
+      # Add more demo paths here as needed
+  workflow_dispatch:
+
+jobs:
+  deploy-template-builder-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install
+      - name: Build template-builder
+        run: pnpm --filter @superdoc-dev/template-builder build
+      - name: Build demo
+        run: pnpm --filter superdoc-template-builder-demo build
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./packages/template-builder/demo/dist
+          cname: template-builder.superdoc.dev
+
+  # Add more demo deploy jobs here as needed
+  # deploy-another-demo:
+  #   runs-on: ubuntu-latest
+  #   steps: ...

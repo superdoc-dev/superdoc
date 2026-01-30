@@ -22,6 +22,21 @@ describe('w:tcW translator (tcW)', () => {
       const result = tcWTranslator.encode({ nodes: [{ attributes: { 'w:type': 'dxa' } }] });
       expect(result).toBeUndefined();
     });
+
+    // SD-1633: ECMA-376 percentage string handling for cell widths
+    it('converts percentage string "62%" with type="pct" to fiftieths (3100)', () => {
+      const result = tcWTranslator.encode({
+        nodes: [{ attributes: { 'w:w': '62%', 'w:type': 'pct' } }],
+      });
+      expect(result).toEqual({ value: 3100, type: 'pct' });
+    });
+
+    it('converts percentage string "8%" with type="pct" to fiftieths (400)', () => {
+      const result = tcWTranslator.encode({
+        nodes: [{ attributes: { 'w:w': '8%', 'w:type': 'pct' } }],
+      });
+      expect(result).toEqual({ value: 400, type: 'pct' });
+    });
   });
 
   describe('decode', () => {

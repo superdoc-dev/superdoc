@@ -6,12 +6,25 @@ packages:
   - shared/*
 
 catalog:
+  # React dependencies (for template-builder)
+  '@vitejs/plugin-react': ^5.1.1
+  '@testing-library/react': ^16.3.0
+  '@testing-library/jest-dom': ^6.9.1
+  '@testing-library/user-event': ^14.6.1
+  '@types/react': ^19.2.6
+  '@types/react-dom': ^19.2.3
+  react: ^19.2.0
+  react-dom: ^19.2.0
+  eslint-plugin-react: ^7.37.5
+  eslint-plugin-react-hooks: ^7.0.1
+  # Core dependencies
   '@commitlint/cli': ^19.8.1
   '@commitlint/config-conventional': ^19.8.1
   '@eslint/js': ^9.31.0
   '@floating-ui/dom': ^1.7.0
   '@fontsource/inter': ^5.2.8
   '@hocuspocus/provider': ^2.13.6
+  '@hocuspocus/server': ^2.13.6
   '@linear/sdk': ^53.0.0
   '@playwright/test': ^1.57.0
   '@semantic-release/changelog': ^6.0.3
@@ -34,12 +47,11 @@ catalog:
   eventemitter3: ^5.0.1
   happy-dom: ^20.3.4
   he: ^1.2.0
-  husky: ^9.1.7
+  lefthook: ^1.11.13
   jimp: ^1.6.0
   jsdom: ^27.3.0
   jszip: 3.10.1
   lib0: ^0.2.114
-  lint-staged: ^16.1.4
   marked: ^16.2.0
   naive-ui: ^2.43.1
   nodemon: ^3.1.10
@@ -95,6 +107,8 @@ catalog:
 onlyBuiltDependencies:
   - canvas
   - esbuild
+  - puppeteer
+  - sharp
   - unrs-resolver
   - vue-demi
 

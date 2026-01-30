@@ -218,7 +218,10 @@ describe('HeaderFooterEditorManager', () => {
       'rId-header-default',
       'header',
     );
-    expect(mockUpdateYdocDocxData).toHaveBeenCalledWith(editor, undefined);
+    // Note: updateYdocDocxData is NOT called directly from header/footer updates.
+    // The full DOCX sync is handled by the debounced main document listener,
+    // which picks up header/footer changes via Y.Doc afterTransaction events.
+    expect(mockUpdateYdocDocxData).not.toHaveBeenCalled();
   });
 
   it('tears down editors on destroy without throwing', async () => {
@@ -424,8 +427,10 @@ describe('HeaderFooterEditorManager', () => {
     const syncErrorHandler = vi.fn();
     manager.on('syncError', syncErrorHandler);
 
-    // Mock updateYdocDocxData to throw an error
-    mockUpdateYdocDocxData.mockRejectedValueOnce(new Error('Sync failed'));
+    // Mock onHeaderFooterDataUpdate to throw an error
+    mockOnHeaderFooterDataUpdate.mockImplementationOnce(() => {
+      throw new Error('Sync failed');
+    });
 
     await manager.ensureEditor(descriptor);
     const sectionEditor = createdEditors.at(-1)?.editor;
@@ -433,9 +438,6 @@ describe('HeaderFooterEditorManager', () => {
 
     // Trigger update which should fail during sync
     sectionEditor?.emit('update', { transaction: { docChanged: true } });
-
-    // Wait for async error handling
-    await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(syncErrorHandler).toHaveBeenCalledWith({
       descriptor,

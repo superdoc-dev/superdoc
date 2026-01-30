@@ -26,7 +26,13 @@ export const prepareCommentParaIds = (comment) => {
  * @returns {Object} The w:comment node for the comment
  */
 export const getCommentDefinition = (comment, commentId, allComments, editor) => {
-  const translatedText = wPTranslator.decode({ editor, node: comment.commentJSON });
+  const nodes = Array.isArray(comment.commentJSON)
+    ? comment.commentJSON
+    : comment.commentJSON
+      ? [comment.commentJSON]
+      : [];
+  const translatedParagraphs = nodes.map((node) => wPTranslator.decode({ editor, node })).filter(Boolean);
+
   const attributes = {
     'w:id': String(commentId),
     'w:author': comment.creatorName || comment.importedAuthor?.name,
@@ -56,7 +62,7 @@ export const getCommentDefinition = (comment, commentId, allComments, editor) =>
     type: 'element',
     name: 'w:comment',
     attributes,
-    elements: [translatedText],
+    elements: translatedParagraphs,
   };
 };
 
@@ -100,16 +106,26 @@ export const updateCommentsXml = (commentDefs = [], commentsXml) => {
 
   // Re-build the comment definitions
   commentDefs.forEach((commentDef) => {
-    // Ensure we always have a paragraph node and attributes container
-    const paraNode = commentDef.elements[0];
-    if (!paraNode.attributes) paraNode.attributes = {};
+    const paragraphs = commentDef.elements || [];
+    if (!paragraphs.length) return;
+
+    const firstParagraph = paragraphs.find((node) => node?.name === 'w:p') ?? paragraphs[0];
+    const lastParagraph =
+      paragraphs
+        .slice()
+        .reverse()
+        .find((node) => node?.name === 'w:p') ?? paragraphs[paragraphs.length - 1];
+
+    if (!firstParagraph?.attributes) firstParagraph.attributes = {};
+    if (!lastParagraph?.attributes) lastParagraph.attributes = {};
 
     // NOTE: Per ECMA-376, w:pPr should be first child of w:p
-    const elements = paraNode.elements;
+    const elements = firstParagraph.elements || [];
+    firstParagraph.elements = elements;
     elements.unshift(COMMENT_REF);
 
     const paraId = commentDef.attributes['w15:paraId'];
-    paraNode.attributes['w14:paraId'] = paraId;
+    lastParagraph.attributes['w14:paraId'] = paraId;
 
     commentDef.attributes = {
       'w:id': commentDef.attributes['w:id'],

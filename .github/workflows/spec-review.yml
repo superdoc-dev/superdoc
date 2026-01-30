@@ -14,9 +14,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4 # shallow-clone as default
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -55,46 +53,30 @@ jobs:
           # Get the diff for review
           gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr-diff.txt
 
-          # Run Claude Code review with structured output format
-          REVIEW=$(claude --print "You are reviewing a PR for OOXML spec compliance in the SuperDoc project.
+          # Run Claude Code review
+          REVIEW=$(claude --print "Review this PR for OOXML spec compliance.
 
-          The changed files are OOXML element handlers that convert between XML and ProseMirror JSON.
+          Context: These are OOXML element handlers (XML ↔ ProseMirror JSON converters).
 
-          Use the ecma-spec MCP tools to look up relevant spec sections for any OOXML elements being handled.
+          Use the ecma-spec MCP tools to verify elements/attributes against ECMA-376.
 
-          Review the diff and check:
-          1. Are OOXML elements handled according to the ECMA-376 spec?
-          2. Are any required attributes missing?
-          3. Are there any spec violations or edge cases not handled?
-          4. Are any non-existent attributes being referenced?
+          Check for:
+          - Non-existent attributes or elements
+          - Missing required attributes
+          - Incorrect default values
+          - Spec violations
 
-          OUTPUT FORMAT (use exactly this structure):
+          Write a natural, conversational review. Start with one of these status lines:
 
-          ### Status
-          - [ ] PASS - No spec violations found
-          - [ ] FAIL - Spec violations detected
+          **Status: PASS** - if no issues found
+          **Status: FAIL** - if spec violations detected
 
-          (Check exactly ONE of the above)
+          If FAIL, explain each issue briefly:
+          - What element/attribute is wrong
+          - Why it violates the spec (one sentence)
+          - File and line number
 
-          ### Changed Files
-          (list files reviewed)
-
-          ### Findings
-          (If FAIL, list each issue briefly. Keep it concise - one line per issue.)
-
-          | Element | Issue | Location |
-          |---------|-------|----------|
-          | w:element | Brief description of the problem | file.js:123 |
-
-          ### Recommendation
-          (Brief fix suggestion, or 'No action required' if passing)
-
-          IMPORTANT:
-          - Keep findings BRIEF - just identify the problem, don't explain the full spec
-          - Do NOT include lengthy spec quotations in the output
-          - Users can look up spec details at https://ooxml.dev/spec
-
-          ---
+          Keep it concise. Don't quote the spec extensively - link to https://ooxml.dev/spec?q=<element name> for details.
 
           Changed files:
           ${{ steps.changed.outputs.files }}
@@ -105,8 +87,8 @@ jobs:
           # Save review output
           echo "$REVIEW" > /tmp/review-raw.txt
 
-          # Check if review found violations
-          if echo "$REVIEW" | grep -q "\[x\] FAIL"; then
+          # Check if review found violations (look for "Status: FAIL")
+          if echo "$REVIEW" | grep -qi "Status: FAIL"; then
             echo "has_violations=true" >> $GITHUB_OUTPUT
           else
             echo "has_violations=false" >> $GITHUB_OUTPUT
@@ -114,12 +96,7 @@ jobs:
 
           # Build comment
           {
-            echo "## OOXML Spec Compliance Review"
-            echo
             printf '%s\n' "$REVIEW"
-            echo
-            echo "---"
-            echo "Look up elements in the spec: [ooxml.dev/spec](https://ooxml.dev/spec)"
           } > /tmp/review-comment.md
 
           echo "review<<EOF" >> $GITHUB_OUTPUT

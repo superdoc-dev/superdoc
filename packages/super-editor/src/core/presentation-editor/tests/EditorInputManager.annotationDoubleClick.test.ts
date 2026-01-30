@@ -83,6 +83,7 @@ describe('EditorInputManager - Annotation Double Click', () => {
       })) as unknown as EditorInputDependencies['getEpochMapper'],
       getViewportHost: vi.fn(() => viewportHost),
       getVisibleHost: vi.fn(() => visibleHost),
+      getLayoutMode: vi.fn(() => 'vertical'),
       getHeaderFooterSession: vi.fn(() => null),
       getPageGeometryHelper: vi.fn(() => null),
       getZoom: vi.fn(() => 1),

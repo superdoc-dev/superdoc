@@ -2383,6 +2383,7 @@ export class PresentationEditor extends EventEmitter {
       getEpochMapper: () => this.#epochMapper,
       getViewportHost: () => this.#viewportHost,
       getVisibleHost: () => this.#visibleHost,
+      getLayoutMode: () => this.#layoutOptions.layoutMode ?? 'vertical',
       getHeaderFooterSession: () => this.#headerFooterSession,
       getPageGeometryHelper: () => this.#pageGeometryHelper,
       getZoom: () => this.#layoutOptions.zoom ?? 1,

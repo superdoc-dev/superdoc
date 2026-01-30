@@ -20,8 +20,7 @@
         "rootDir": "src"
     },
     "include": [
-        "src",
-        "dev/index copy.tsx"
+        "src"
     ],
     "exclude": [
         "node_modules",

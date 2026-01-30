@@ -324,8 +324,6 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
       if (!isValid || isDisabled || isSubmitting) return;
 
       setIsSubmitting(true);
-      addAuditEvent({ type: 'submit' });
-
       const nextAuditTrail = addAuditEvent({ type: 'submit' });
 
       const submitData: Types.SubmitData = {

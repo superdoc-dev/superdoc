@@ -43,3 +43,38 @@ export function normalizeClientPoint(
     y: baseY,
   };
 }
+
+export function denormalizeClientPoint(
+  options: {
+    viewportHost: HTMLElement;
+    visibleHost: HTMLElement;
+    zoom: number;
+    getPageOffsetX: (pageIndex: number) => number | null;
+  },
+  layoutX: number,
+  layoutY: number,
+  pageIndex?: number,
+): { x: number; y: number } | null {
+  if (!Number.isFinite(layoutX) || !Number.isFinite(layoutY)) {
+    return null;
+  }
+
+  const rect = options.viewportHost.getBoundingClientRect();
+  const scrollLeft = options.visibleHost.scrollLeft ?? 0;
+  const scrollTop = options.visibleHost.scrollTop ?? 0;
+
+  // Convert from layout coordinates to screen coordinates by multiplying by zoom
+  // and reversing the scroll/viewport offsets.
+  let baseX = layoutX;
+  if (Number.isFinite(pageIndex)) {
+    const pageOffsetX = options.getPageOffsetX(pageIndex);
+    if (pageOffsetX != null) {
+      baseX = layoutX + pageOffsetX;
+    }
+  }
+
+  return {
+    x: baseX * options.zoom - scrollLeft + rect.left,
+    y: layoutY * options.zoom - scrollTop + rect.top,
+  };
+}

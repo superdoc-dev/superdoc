@@ -16,7 +16,10 @@ import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
 } from './dom/CoordinateTransform.js';
-import { normalizeClientPoint as normalizeClientPointFromPointer } from './dom/PointerNormalization.js';
+import {
+  normalizeClientPoint as normalizeClientPointFromPointer,
+  denormalizeClientPoint as denormalizeClientPointFromPointer,
+} from './dom/PointerNormalization.js';
 import { getPageElementByIndex } from './dom/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
@@ -4516,6 +4519,20 @@ export class PresentationEditor extends EventEmitter {
       },
       clientX,
       clientY,
+    );
+  }
+
+  denormalizeClientPoint(layoutX: number, layoutY: number, pageIndex?: number): { x: number; y: number } | null {
+    return denormalizeClientPointFromPointer(
+      {
+        viewportHost: this.#viewportHost,
+        visibleHost: this.#visibleHost,
+        zoom: this.#layoutOptions.zoom ?? 1,
+        getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+      },
+      layoutX,
+      layoutY,
+      pageIndex,
     );
   }
 

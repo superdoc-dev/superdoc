@@ -6,6 +6,18 @@ packages:
   - shared/*
 
 catalog:
+  # React dependencies (for template-builder)
+  '@vitejs/plugin-react': ^5.1.1
+  '@testing-library/react': ^16.3.0
+  '@testing-library/jest-dom': ^6.9.1
+  '@testing-library/user-event': ^14.6.1
+  '@types/react': ^19.2.6
+  '@types/react-dom': ^19.2.3
+  react: ^19.2.0
+  react-dom: ^19.2.0
+  eslint-plugin-react: ^7.37.5
+  eslint-plugin-react-hooks: ^7.0.1
+  # Core dependencies
   '@commitlint/cli': ^19.8.1
   '@commitlint/config-conventional': ^19.8.1
   '@eslint/js': ^9.31.0

@@ -1,4 +1,4 @@
-name: PR Validation [auto]
+name: CI SuperDoc
 
 permissions:
   contents: read
@@ -8,10 +8,11 @@ on:
     branches: [main, 'release/**']
     paths-ignore:
       - 'apps/docs/**'
+      - 'packages/template-builder/**'
       - '**/*.md'
 
 concurrency:
-  group: pr-${{ github.event.pull_request.number }}
+  group: ci-superdoc-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -23,7 +24,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # Pinned commit hash for @v4
+      - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -44,14 +45,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-      
+
       - name: Validate commits
         run: |
           BASE=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
           pnpx commitlint \
             --from "$BASE" \
             --to ${{ github.event.pull_request.head.sha }}
-          
+
   run-unit-tests:
     runs-on: ubuntu-latest
     steps:
@@ -59,7 +60,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # Pinned commit hash for @v4
+      - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -104,7 +105,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # Pinned commit hash for @v4
+      - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -129,7 +130,7 @@ jobs:
       - name: Build SuperDoc
         run: |
           pnpm run build
-        
+
       - name: Install Playwright browsers
         run: |
           cd e2e-tests
@@ -138,7 +139,7 @@ jobs:
       - name: Run e2e tests
         id: run-e2e-tests
         if: always()
-        run: cd e2e-tests && pnpm test 
+        run: cd e2e-tests && pnpm test
 
       - name: Upload e2e test results
         id: upload_artifact
@@ -156,7 +157,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # Pinned commit hash for @v4
+      - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:

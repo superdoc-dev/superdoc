@@ -1,0 +1,80 @@
+{
+  "name": "@superdoc-dev/template-builder",
+  "version": "0.1.0",
+  "description": "React template builder component for SuperDoc",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "tsc && vite build",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "test": "vitest run",
+    "test:watch": "vitest --watch",
+    "prepublishOnly": "pnpm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "directory": "packages/template-builder"
+  },
+  "keywords": [
+    "superdoc",
+    "template",
+    "template-builder",
+    "document",
+    "fields",
+    "sdt",
+    "docx",
+    "react"
+  ],
+  "author": "SuperDoc Team",
+  "license": "AGPL-3.0",
+  "bugs": {
+    "url": "https://github.com/superdoc-dev/superdoc/issues"
+  },
+  "homepage": "https://github.com/superdoc-dev/superdoc/tree/main/packages/template-builder#readme",
+  "peerDependencies": {
+    "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
+    "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
+    "superdoc": "^1.9.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "eslint-plugin-react": "catalog:",
+    "eslint-plugin-react-hooks": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "superdoc": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:",
+    "vitest": "catalog:",
+    "jsdom": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -829,11 +829,51 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Sync document mode dropdown UI with the current mode.
+   * @private
+   * @returns {void}
+   */
+  #syncDocumentModeUi() {
+    const documentModeItem = this.getToolbarItemByName('documentMode');
+    if (!documentModeItem) return;
+
+    const mode = (this.documentMode || 'editing').toLowerCase();
+    const texts = this.config.texts || {};
+    const icons = this.config.icons || {};
+    const map = {
+      editing: {
+        label: texts.documentEditingMode || 'Editing',
+        icon: icons.documentEditingMode || icons.documentMode,
+      },
+      suggesting: {
+        label: texts.documentSuggestingMode || 'Suggesting',
+        icon: icons.documentSuggestingMode || icons.documentMode,
+      },
+      viewing: {
+        label: texts.documentViewingMode || 'Viewing',
+        icon: icons.documentViewingMode || icons.documentMode,
+      },
+    };
+
+    const next = map[mode] || map.editing;
+    if (documentModeItem.label?.value !== undefined) {
+      documentModeItem.label.value = next.label;
+    }
+    if (documentModeItem.defaultLabel?.value !== undefined) {
+      documentModeItem.defaultLabel.value = next.label;
+    }
+    if (documentModeItem.icon?.value !== undefined && next.icon) {
+      documentModeItem.icon.value = next.icon;
+    }
+  }
+
+  /**
    * Update the toolbar state based on the current editor state
    * Updates active/inactive state of all toolbar items
    * @returns {void}
    */
   updateToolbarState() {
+    this.#syncDocumentModeUi();
     this.#updateToolbarHistory();
     this.#initDefaultFonts();
     this.#updateHighlightColors();

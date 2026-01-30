@@ -82,14 +82,17 @@ function createMockTableBlock(
  *   Format: lineHeightsPerRow[rowIndex] = [lineHeight1, lineHeight2, ...]
  *   If omitted, cells will have no lines. This parameter enables testing of mid-row
  *   splitting behavior where rows are split at line boundaries.
+ * @param cellSpacingPx - Optional cell spacing in pixels (border-spacing). When set,
+ *   column boundary x positions and fragment height include spacing.
  * @returns A TableMeasure object with mocked cell, row, and line data
  */
 function createMockTableMeasure(
   columnWidths: number[],
   rowHeights: number[],
   lineHeightsPerRow?: number[][],
+  cellSpacingPx?: number,
 ): TableMeasure {
-  return {
+  const base = {
     kind: 'table',
     rows: rowHeights.map((height, rowIdx) => ({
       cells: columnWidths.map((width) => ({
@@ -116,6 +119,10 @@ function createMockTableMeasure(
     totalWidth: columnWidths.reduce((sum, w) => sum + w, 0),
     totalHeight: rowHeights.reduce((sum, h) => sum + h, 0),
   };
+  if (cellSpacingPx !== undefined) {
+    return { ...base, cellSpacingPx };
+  }
+  return base;
 }
 
 describe('layoutTableBlock', () => {
@@ -332,6 +339,183 @@ describe('layoutTableBlock', () => {
 
       const fragment = fragments[0];
       expect(fragment.metadata?.rowBoundaries).toBeUndefined();
+    });
+  });
+
+  describe('cellSpacing', () => {
+    it('should position column boundaries with cellSpacingPx (space before first column and between columns)', () => {
+      const block = createMockTableBlock(1);
+      const measure = createMockTableMeasure([100, 150, 200], [20], undefined, 4);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 458, // 4 + 100 + 4 + 150 + 4 + 200 + 4
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      const boundaries = fragments[0].metadata?.columnBoundaries;
+      expect(boundaries).toBeDefined();
+      expect(boundaries!.length).toBe(3);
+      // First column: x = cellSpacingPx
+      expect(boundaries![0].x).toBe(4);
+      expect(boundaries![0].width).toBe(100);
+      // Second column: x = cellSpacingPx + col0 + cellSpacingPx
+      expect(boundaries![1].x).toBe(108); // 4 + 100 + 4
+      expect(boundaries![1].width).toBe(150);
+      // Third column: x = prev + col1 + cellSpacingPx
+      expect(boundaries![2].x).toBe(262); // 108 + 150 + 4
+      expect(boundaries![2].width).toBe(200);
+    });
+
+    it('should use zero column boundary offset when cellSpacingPx is 0', () => {
+      const block = createMockTableBlock(1);
+      const measure = createMockTableMeasure([100, 150], [20], undefined, 0);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 250,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      const boundaries = fragments[0].metadata?.columnBoundaries;
+      expect(boundaries).toBeDefined();
+      expect(boundaries![0].x).toBe(0);
+      expect(boundaries![1].x).toBe(100);
+    });
+
+    it('should include vertical cell spacing in fragment height', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([100, 150], [20, 25], undefined, 4);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 250,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 50,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 10,
+      });
+
+      expect(fragments).toHaveLength(1);
+      // Row heights 20 + 25 = 45; vertical gaps (rowCount+1)*cellSpacingPx = 3*4 = 12
+      expect(fragments[0].height).toBe(57); // 45 + 12
+    });
+
+    it('should not add vertical spacing when cellSpacingPx is 0', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([100, 150], [20, 25], undefined, 0);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 250,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 50,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 10,
+      });
+
+      expect(fragments).toHaveLength(1);
+      expect(fragments[0].height).toBe(45); // 20 + 25 only
+    });
+
+    it('should not add vertical spacing when measure.cellSpacingPx is undefined', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([100, 150], [20, 25]);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 250,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 50,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 10,
+      });
+
+      expect(fragments).toHaveLength(1);
+      expect(fragments[0].height).toBe(45);
+    });
+
+    it('should include cell spacing in fragment height when table splits across pages', () => {
+      const block = createMockTableBlock(4);
+      const measure = createMockTableMeasure([100], [20, 20, 20, 20], undefined, 2);
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY,
+          contentBottom: 50, // Fits 2 rows + spacing (2+20+2+20+2 = 46), not 3 rows (68)
+        }),
+        advanceColumn: (state) => {
+          cursorY = 0;
+          return {
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 50,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      expect(fragments.length).toBeGreaterThan(1);
+      // First fragment: 2 rows => height = 20+20 + (2+1)*2 = 46
+      expect(fragments[0].height).toBe(46);
+      // Second fragment: 2 rows => height = 46
+      expect(fragments[1].height).toBe(46);
     });
   });
 

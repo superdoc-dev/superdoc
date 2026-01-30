@@ -1619,8 +1619,8 @@ export function selectionToRects(
 
         const cellSpacingPx = tableMeasure.cellSpacingPx ?? 0;
         const tableBorderWidths = tableMeasure.tableBorderWidths;
-        const contentOffsetX = tableBorderWidths?.left ?? 0;
-        const contentOffsetY = tableBorderWidths?.top ?? 0;
+        const contentOffsetX = tableBlock.attrs?.borderCollapse === 'separate' ? (tableBorderWidths?.left ?? 0) : 0;
+        const contentOffsetY = tableBlock.attrs?.borderCollapse === 'separate' ? (tableBorderWidths?.top ?? 0) : 0;
 
         const calculateCellX = (cellIdx: number, cellMeasure: TableCellMeasure) => {
           const gridStart = cellMeasure.gridColumnStart ?? cellIdx;

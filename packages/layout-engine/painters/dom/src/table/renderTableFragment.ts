@@ -9,6 +9,7 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
+import { getCellSpacingPx } from '@superdoc/measuring-dom';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
@@ -17,24 +18,6 @@ import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-
 import { applyBorder, borderValueToSpec } from './border-utils.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
-
-/** 15 twips per pixel (96 dpi). Used when resolving raw dxa values in painter fallback. */
-const TWIPS_PER_PX = 15;
-
-/**
- * Resolves table cell spacing to pixels from block attrs (painter fallback when measure has no cellSpacingPx).
- * Editor/store often has value already in px; raw OOXML has twips (dxa). Only convert when value looks like twips.
- */
-function resolveCellSpacingPx(cellSpacing: CellSpacing | number | null | undefined): number {
-  if (cellSpacing == null) return 0;
-  if (typeof cellSpacing === 'number') return Math.max(0, cellSpacing);
-  const v = cellSpacing.value;
-  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
-  const t = (cellSpacing.type ?? '').toLowerCase();
-  const asPx = t === 'dxa' && v >= 20 ? v / TWIPS_PER_PX : v;
-  return Math.max(0, asPx);
-}
-
 /**
  * Dependencies required for rendering a table fragment.
  *
@@ -223,7 +206,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
 
   // Cell spacing in px (border-spacing). Use measure when present, else resolve from block attrs (e.g. stale/cached measure).
-  const cellSpacingPx = measure.cellSpacingPx ?? resolveCellSpacingPx(block.attrs?.cellSpacing) ?? 0;
+  const cellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing);
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {

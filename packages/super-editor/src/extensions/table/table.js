@@ -368,7 +368,7 @@ export const Table = Node.create({
       borders: {
         default: {},
         renderDOM({ borders, borderCollapse, tableCellSpacing }) {
-          if (!borders && borderCollapse !== 'separate' && !tableCellSpacing) return {};
+          if (!Object.keys(borders).length && borderCollapse !== 'separate' && !tableCellSpacing) return {};
 
           const style = Object.entries(borders).reduce((acc, [key, { size, color }]) => {
             return `${acc}border-${key}: ${Math.ceil(size)}px solid ${color || 'black'};`;

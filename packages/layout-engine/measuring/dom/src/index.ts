@@ -155,7 +155,7 @@ const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
  * already in pixels (twipsToPixels), so we use value as px. If value is in twips (raw OOXML),
  * type is 'dxa' and we convert; otherwise value is treated as px.
  */
-function getCellSpacingPx(cellSpacing: CellSpacing | number | null | undefined): number {
+export function getCellSpacingPx(cellSpacing: CellSpacing | number | null | undefined): number {
   if (cellSpacing == null) return 0;
   if (typeof cellSpacing === 'number') return Math.max(0, cellSpacing);
   const v = cellSpacing.value;

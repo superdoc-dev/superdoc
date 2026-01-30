@@ -1458,7 +1458,7 @@ export type TableMeasure = {
 };
 
 export type CellSpacing = {
-  type: string;
+  type: 'dxa' | 'px';
   value: number;
 };
 

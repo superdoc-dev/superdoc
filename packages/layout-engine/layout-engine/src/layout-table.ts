@@ -193,18 +193,24 @@ export function rescaleColumnWidths(
   return scaled;
 }
 
-/**
- * Calculate minimum width for a table column.
- *
- * Uses a conservative minimum of 10px per column to match PM's
- * columnResizing behavior.
- *
- * @returns Minimum width in pixels (10px)
- */
-function calculateColumnMinWidth(): number {
-  const DEFAULT_MIN_WIDTH = 10; // Minimum usable column width in pixels
+const COLUMN_MIN_WIDTH_PX = 25;
+const COLUMN_MAX_WIDTH_PX = 200;
 
-  return DEFAULT_MIN_WIDTH;
+/**
+ * Calculate minimum width for a table column from its measured width.
+ *
+ * Clamps the measured width to [COLUMN_MIN_WIDTH_PX, COLUMN_MAX_WIDTH_PX]
+ * so that resize handles enforce a sensible range (min 25px, max 200px).
+ * Invalid/negative/zero measured widths are treated as the minimum.
+ *
+ * @param measuredWidth - Measured width in pixels (may be invalid)
+ * @returns Clamped minimum width in pixels
+ */
+function calculateColumnMinWidth(measuredWidth: number): number {
+  if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
+    return COLUMN_MIN_WIDTH_PX;
+  }
+  return Math.max(COLUMN_MIN_WIDTH_PX, Math.min(COLUMN_MAX_WIDTH_PX, measuredWidth));
 }
 
 /**
@@ -236,7 +242,7 @@ function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: numbe
 
   for (let i = 0; i < widths.length; i++) {
     const width = widths[i];
-    const minWidth = calculateColumnMinWidth();
+    const minWidth = calculateColumnMinWidth(width);
 
     const boundary = {
       index: i,

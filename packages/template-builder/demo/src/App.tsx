@@ -198,7 +198,11 @@ export function App() {
             </p>
           </div>
           <div className='header-nav'>
-            <a href='https://github.com/superdoc-dev/template-builder' target='_blank' rel='noopener'>
+            <a
+              href='https://github.com/superdoc-dev/superdoc/tree/main/packages/template-builder'
+              target='_blank'
+              rel='noopener'
+            >
               GitHub
             </a>
             <a href='https://docs.superdoc.dev' target='_blank' rel='noopener'>

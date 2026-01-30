@@ -21,7 +21,15 @@ Complete eSign component API
     </ParamField>
     
     <ParamField path="mode" type="string">
-      Display mode: `'full'`
+      Display mode: `'full' | 'download'`
+    </ParamField>
+
+    <ParamField path="layoutMode" type="string">
+      Layout mode: `'paginated' | 'responsive'`
+    </ParamField>
+
+    <ParamField path="layoutMargins" type="object">
+      Custom margins (pixels) for `layoutMode: 'responsive'`
     </ParamField>
     
     <ParamField path="validation.scroll.required" type="boolean">
@@ -144,7 +152,7 @@ Data passed to `onSubmit`:
 interface SubmitData {
   eventId: string;           // Your session ID
   timestamp: string;         // ISO timestamp
-  duration: number;          // Time spent in ms
+  duration: number;          // Time spent in seconds
   auditTrail: AuditEvent[];  // All events
   documentFields: DocumentField[];  // Injected values
   signerFields: SignerFieldValue[]; // User inputs
@@ -159,7 +167,11 @@ Data passed to `onDownload`:
 ```typescript
 interface DownloadData {
   eventId: string;                   // Your session ID
-  documentSource: string | File | Blob;  // Original .docx file
+  documentSource: string | File | Blob;  // Original document source
+  fields: {
+    document: DocumentField[];
+    signer: SignerFieldValue[];
+  };
   fileName: string;                  // Suggested filename
 }
 ```
@@ -184,6 +196,7 @@ interface SignerField {
   id: string;                            // Required unique ID
   type: 'signature' | 'checkbox' | 'text';
   label?: string;                         // Display label
+  value?: FieldValue;                     // Initial value
   validation?: {
     required?: boolean;
   };
@@ -232,6 +245,9 @@ const audit = ref.current.getAuditTrail();
 // Reset everything
 ref.current.reset();
 
+// Update field in the document programatically
+ref.current.updateFieldInDocument({ id: '1', value: 'Updated value' });
+
 return <SuperDocESign ref={ref} ... />
 ```
 
@@ -240,6 +256,7 @@ return <SuperDocESign ref={ref} ... />
 - `getState()` - Returns current SigningState
 - `getAuditTrail()` - Returns audit events array
 - `reset()` - Clear all state and start over
+- `updateFieldInDocument()` - Update a document field by id
 
 ## Field Components
 
@@ -301,4 +318,18 @@ import type {
   AuditEvent,
   FieldComponentProps
 } from '@superdoc-dev/esign';
+```
+
+## Utils
+
+```typescript
+import { textToImageDataUrl } from '@superdoc-dev/esign';
+```
+
+### textToImageDataUrl
+
+Converts text to a base64 image data URL. This is useful if you want to generate the same base64 image that is created for typed signatures on the document.
+
+```typescript
+const imageDataUrl = textToImageDataUrl(text: string);
 ```

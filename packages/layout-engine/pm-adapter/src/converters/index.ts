@@ -10,9 +10,6 @@
  * - Table conversion and handler
  */
 
-// Text runs
-export { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
-
 // Paragraphs (converter + handler)
 export { paragraphToFlowBlocks, mergeAdjacentRuns, handleParagraphNode } from './paragraph.js';
 

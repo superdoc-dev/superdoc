@@ -364,6 +364,74 @@ describe('collaboration extension', () => {
     expect(editor.storage.image.media['word/media/image.png']).toEqual({ blob: true });
   });
 
+  describe('debounced docx sync', () => {
+    const DEBOUNCE_DELAY_MS = 1000;
+
+    const createDebouncedSyncTestContext = () => {
+      const updateSpy = vi.spyOn(CollaborationHelpers, 'updateYdocDocxData').mockResolvedValue();
+      const ydoc = createYDocStub();
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: false,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        view: { state: { doc: {} }, dispatch: vi.fn() },
+      };
+      const context = { editor, options: {} };
+      return { updateSpy, ydoc, editor, context };
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('debounces updateYdocDocxData for local non-docx transactions', () => {
+      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
+      Collaboration.config.addPmPlugins.call(context);
+
+      ydoc._listeners.afterTransaction({
+        local: true,
+        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
+      });
+
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(DEBOUNCE_DELAY_MS - 1);
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('coalesces rapid transactions into a single update', () => {
+      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
+      Collaboration.config.addPmPlugins.call(context);
+
+      const transaction = {
+        local: true,
+        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
+      };
+
+      ydoc._listeners.afterTransaction(transaction);
+      vi.advanceTimersByTime(400);
+      ydoc._listeners.afterTransaction(transaction);
+
+      vi.advanceTimersByTime(DEBOUNCE_DELAY_MS - 1);
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('creates sync plugin fragment via helper', () => {
     const ydoc = createYDocStub();
     const editor = {

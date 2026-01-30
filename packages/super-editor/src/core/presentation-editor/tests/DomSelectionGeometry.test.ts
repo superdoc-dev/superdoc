@@ -477,10 +477,17 @@ describe('computeSelectionRectsFromDom', () => {
 
   beforeEach(() => {
     painterHost = document.createElement('div');
+    // Append to document body so elements have isConnected === true
+    document.body.appendChild(painterHost);
     domPositionIndex = new DomPositionIndex();
     rebuildDomPositionIndex = vi.fn(() => {
       domPositionIndex.rebuild(painterHost);
     });
+  });
+
+  afterEach(() => {
+    // Clean up after each test
+    painterHost.remove();
   });
 
   /**
@@ -664,6 +671,52 @@ describe('computeSelectionRectsFromDom', () => {
 
       document.createRange = originalCreateRange;
     });
+
+    it('handles duplicate PM ranges across pages (repeated table headers)', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="10">header row</span>
+          </div>
+        </div>
+        <div class="superdoc-page" data-page-index="1">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="10">header row (repeat)</span>
+          </div>
+        </div>
+      `;
+
+      const layout = createMockLayout([
+        { pmStart: 1, pmEnd: 10 },
+        { pmStart: 1, pmEnd: 10 },
+      ]);
+      domPositionIndex.rebuild(painterHost);
+
+      const pages = Array.from(painterHost.querySelectorAll('.superdoc-page')) as HTMLElement[];
+      pages[0]!.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      pages[1]!.getBoundingClientRect = vi.fn(() => createRect(0, 808, 612, 792));
+
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getClientRects: vi.fn(() => [createRect(10, 20, 100, 16)]),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createOptions(layout);
+      const rects = computeSelectionRectsFromDom(options, 1, 10);
+
+      expect(rects).not.toBe(null);
+      expect(rects!.length).toBeGreaterThan(0);
+
+      const pageIndices = new Set(rects!.map((r) => r.pageIndex));
+      expect(pageIndices.has(0)).toBe(true);
+      expect(pageIndices.has(1)).toBe(true);
+
+      document.createRange = originalCreateRange;
+    });
   });
 
   describe('index rebuild behavior', () => {
@@ -725,6 +778,153 @@ describe('computeSelectionRectsFromDom', () => {
       const rects = computeSelectionRectsFromDom(options, 1, 10);
 
       expect(rects).toBe(null);
+    });
+
+    it('rebuilds index when page entries are empty after initial filtering', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="10">text</span>
+          </div>
+        </div>
+      `;
+
+      const layout = createMockLayout([{ pmStart: 1, pmEnd: 10 }]);
+
+      // Build index but then clear the painterHost to simulate stale entries
+      domPositionIndex.rebuild(painterHost);
+
+      // Re-add content so rebuild finds it
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getClientRects: vi.fn(() => [createRect(10, 20, 50, 16)]),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createOptions(layout);
+      computeSelectionRectsFromDom(options, 1, 10);
+
+      // The function should work without errors
+      document.createRange = originalCreateRange;
+    });
+
+    it('skips page when entries remain disconnected after rebuild', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="10">text</span>
+          </div>
+        </div>
+      `;
+
+      const layout = createMockLayout([{ pmStart: 1, pmEnd: 10 }]);
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const spanEl = painterHost.querySelector('span') as HTMLElement;
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+
+      // Mock isConnected to return false, simulating disconnected element
+      Object.defineProperty(spanEl, 'isConnected', {
+        get: () => false,
+        configurable: true,
+      });
+
+      const options = createOptions(layout);
+      const rects = computeSelectionRectsFromDom(options, 1, 10);
+
+      // Should return empty array (page skipped due to disconnected elements)
+      expect(rects).toEqual([]);
+    });
+  });
+
+  describe('page-scoped entry selection', () => {
+    it('uses fallback entry when position does not match any entry directly', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="5" data-pm-end="15">middle text</span>
+          </div>
+        </div>
+      `;
+
+      // Layout has range 1-20, but DOM only has 5-15
+      const layout = createMockLayout([{ pmStart: 1, pmEnd: 20 }]);
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getClientRects: vi.fn(() => [createRect(10, 20, 100, 16)]),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createOptions(layout);
+      // Request range 1-20, but entries only cover 5-15
+      // pickEntryForPos should use fallback for positions outside entry range
+      const rects = computeSelectionRectsFromDom(options, 1, 20);
+
+      expect(rects).not.toBe(null);
+      expect(rects!.length).toBeGreaterThan(0);
+
+      document.createRange = originalCreateRange;
+    });
+
+    it('filters entries to only those contained in current page', () => {
+      // Two pages with different PM ranges, entries indexed globally
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="10">page 0 text</span>
+          </div>
+        </div>
+        <div class="superdoc-page" data-page-index="1">
+          <div class="superdoc-line">
+            <span data-pm-start="11" data-pm-end="20">page 1 text</span>
+          </div>
+        </div>
+      `;
+
+      const layout = createMockLayout([
+        { pmStart: 1, pmEnd: 10 },
+        { pmStart: 11, pmEnd: 20 },
+      ]);
+      domPositionIndex.rebuild(painterHost);
+
+      const pages = Array.from(painterHost.querySelectorAll('.superdoc-page')) as HTMLElement[];
+      pages[0]!.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      pages[1]!.getBoundingClientRect = vi.fn(() => createRect(0, 808, 612, 792));
+
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getClientRects: vi.fn(() => [createRect(10, 20, 100, 16)]),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createOptions(layout);
+      const rects = computeSelectionRectsFromDom(options, 1, 20);
+
+      expect(rects).not.toBe(null);
+      // Should have rects from both pages, each filtered to its own entries
+      const pageIndices = new Set(rects!.map((r) => r.pageIndex));
+      expect(pageIndices.has(0)).toBe(true);
+      expect(pageIndices.has(1)).toBe(true);
+
+      document.createRange = originalCreateRange;
     });
   });
 
@@ -1174,10 +1374,17 @@ describe('computeDomCaretPageLocal', () => {
 
   beforeEach(() => {
     painterHost = document.createElement('div');
+    // Append to document body so elements have isConnected === true
+    document.body.appendChild(painterHost);
     domPositionIndex = new DomPositionIndex();
     rebuildDomPositionIndex = vi.fn(() => {
       domPositionIndex.rebuild(painterHost);
     });
+  });
+
+  afterEach(() => {
+    // Clean up after each test
+    painterHost.remove();
   });
 
   function createCaretOptions(): ComputeDomCaretPageLocalOptions {

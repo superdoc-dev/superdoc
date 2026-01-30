@@ -127,7 +127,9 @@ export function extractStrokeColor(spPr, style) {
 
   if (ln) {
     const noFill = ln.elements?.find((el) => el.name === 'a:noFill');
-    if (noFill) return null;
+    if (noFill) {
+      return null;
+    }
 
     const solidFill = ln.elements?.find((el) => el.name === 'a:solidFill');
     if (solidFill) {
@@ -157,13 +159,29 @@ export function extractStrokeColor(spPr, style) {
     }
   }
 
-  if (!style) return '#000000';
+  // No stroke specified in spPr, check style reference
+  // Per ECMA-376: when no stroke is specified and no style exists, shape should have no stroke
+  if (!style) {
+    return null;
+  }
 
   const lnRef = style.elements?.find((el) => el.name === 'a:lnRef');
-  if (!lnRef) return '#000000';
+  if (!lnRef) {
+    // No lnRef in style means no stroke specified - return null
+    return null;
+  }
+
+  // Per OOXML spec, lnRef idx="0" means "no stroke" - return null
+  const lnRefIdx = lnRef.attributes?.['idx'];
+  if (lnRefIdx === '0') {
+    return null;
+  }
 
   const schemeClr = lnRef.elements?.find((el) => el.name === 'a:schemeClr');
-  if (!schemeClr) return '#000000';
+  if (!schemeClr) {
+    // No schemeClr in lnRef - return null rather than default black
+    return null;
+  }
 
   const themeName = schemeClr.attributes?.['val'];
   let color = getThemeColor(themeName);
@@ -193,7 +211,9 @@ export function extractStrokeColor(spPr, style) {
  */
 export function extractFillColor(spPr, style) {
   const noFill = spPr?.elements?.find((el) => el.name === 'a:noFill');
-  if (noFill) return null;
+  if (noFill) {
+    return null;
+  }
 
   const solidFill = spPr?.elements?.find((el) => el.name === 'a:solidFill');
   if (solidFill) {
@@ -252,17 +272,30 @@ export function extractFillColor(spPr, style) {
     return '#cccccc'; // placeholder color for now
   }
 
-  if (!style) return '#5b9bd5';
+  // No fill specified in spPr, check style reference
+  // Per ECMA-376: when no fill is specified and no style exists, shape should be transparent
+  if (!style) {
+    return null;
+  }
 
   const fillRef = style.elements?.find((el) => el.name === 'a:fillRef');
-  if (!fillRef) return '#5b9bd5';
+  if (!fillRef) {
+    // No fillRef in style means no fill specified - return transparent
+    return null;
+  }
 
   // Per OOXML spec, fillRef idx="0" means "no fill" - return null to indicate transparent
   const fillRefIdx = fillRef.attributes?.['idx'];
-  if (fillRefIdx === '0') return null;
+
+  if (fillRefIdx === '0') {
+    return null;
+  }
 
   const schemeClr = fillRef.elements?.find((el) => el.name === 'a:schemeClr');
-  if (!schemeClr) return '#5b9bd5';
+  if (!schemeClr) {
+    // No schemeClr in fillRef - return transparent rather than default blue
+    return null;
+  }
 
   const themeName = schemeClr.attributes?.['val'];
   let color = getThemeColor(themeName);

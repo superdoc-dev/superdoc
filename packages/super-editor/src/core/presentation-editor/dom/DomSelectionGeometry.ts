@@ -170,6 +170,21 @@ export function computeSelectionRectsFromDom(
       continue;
     }
 
+    const filterPageEntries = (entries: DomPositionIndexEntry[]) =>
+      entries.filter((entry) => pageEl.contains(entry.el));
+
+    let pageEntries = filterPageEntries(sliceEntries);
+    if (pageEntries.length === 0 && !rebuiltOnce) {
+      options.rebuildDomPositionIndex();
+      rebuiltOnce = true;
+      sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
+      pageEntries = filterPageEntries(sliceEntries);
+    }
+
+    if (pageEntries.length === 0) {
+      continue;
+    }
+
     if (isVerbose) {
       debugLog(
         'verbose',
@@ -183,8 +198,33 @@ export function computeSelectionRectsFromDom(
       );
     }
 
-    let startEntry = options.domPositionIndex.findEntryAtPosition(sliceFrom) ?? sliceEntries[0]!;
-    let endEntry = options.domPositionIndex.findEntryAtPosition(sliceTo) ?? sliceEntries[sliceEntries.length - 1]!;
+    const pickEntryForPos = (entries: DomPositionIndexEntry[], pos: number, fallbackIndex: number) => {
+      const direct = entries.find((entry) => pos >= entry.pmStart && pos <= entry.pmEnd);
+      if (!direct) {
+        const fallback = entries[fallbackIndex]!;
+        return fallback;
+      }
+      return direct;
+    };
+
+    let startEntry = pickEntryForPos(pageEntries, sliceFrom, 0);
+    let endEntry = pickEntryForPos(pageEntries, sliceTo, pageEntries.length - 1);
+
+    if ((!startEntry?.el?.isConnected || !endEntry?.el?.isConnected) && !rebuiltOnce) {
+      options.rebuildDomPositionIndex();
+      rebuiltOnce = true;
+      sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
+      pageEntries = filterPageEntries(sliceEntries);
+      if (pageEntries.length === 0) {
+        continue;
+      }
+      startEntry = pickEntryForPos(pageEntries, sliceFrom, 0);
+      endEntry = pickEntryForPos(pageEntries, sliceTo, pageEntries.length - 1);
+    }
+
+    if (!startEntry?.el?.isConnected || !endEntry?.el?.isConnected) {
+      continue;
+    }
 
     if (isVerbose) {
       debugLog(
@@ -197,61 +237,6 @@ export function computeSelectionRectsFromDom(
           end: entryDebugInfo(endEntry),
         })}`,
       );
-    }
-
-    // If the index is stale (virtualization mount/unmount), rebuild once and retry.
-    let startContained = pageEl.contains(startEntry.el);
-    let endContained = pageEl.contains(endEntry.el);
-    if (!startContained || !endContained) {
-      if (isVerbose) {
-        debugLog(
-          'verbose',
-          `DOM selection rects: boundary containment ${JSON.stringify({
-            pageIndex,
-            sliceFrom,
-            sliceTo,
-            startContained,
-            endContained,
-          })}`,
-        );
-      }
-      if (!rebuiltOnce) {
-        options.rebuildDomPositionIndex();
-        rebuiltOnce = true;
-        sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
-        if (sliceEntries.length === 0) continue;
-        startEntry = options.domPositionIndex.findEntryAtPosition(sliceFrom) ?? sliceEntries[0]!;
-        endEntry = options.domPositionIndex.findEntryAtPosition(sliceTo) ?? sliceEntries[sliceEntries.length - 1]!;
-        startContained = pageEl.contains(startEntry.el);
-        endContained = pageEl.contains(endEntry.el);
-        if (isVerbose) {
-          debugLog(
-            'verbose',
-            `DOM selection rects: boundary containment after rebuild ${JSON.stringify({
-              pageIndex,
-              sliceFrom,
-              sliceTo,
-              startContained,
-              endContained,
-              start: entryDebugInfo(startEntry),
-              end: entryDebugInfo(endEntry),
-            })}`,
-          );
-        }
-      }
-      if (!startContained || !endContained) {
-        debugLog(
-          'warn',
-          `DOM selection rects: stale index after rebuild ${JSON.stringify({
-            pageIndex,
-            sliceFrom,
-            sliceTo,
-            start: entryDebugInfo(startEntry),
-            end: entryDebugInfo(endEntry),
-          })}`,
-        );
-        return null;
-      }
     }
 
     const doc = pageEl.ownerDocument ?? document;
@@ -280,7 +265,7 @@ export function computeSelectionRectsFromDom(
       }
       let missingEntries: DomPositionIndexEntry[] | null = null;
       if (typeof range.intersectsNode === 'function') {
-        for (const entry of sliceEntries) {
+        for (const entry of pageEntries) {
           try {
             if (!range.intersectsNode(entry.el)) {
               missingEntries ??= [];
@@ -304,7 +289,7 @@ export function computeSelectionRectsFromDom(
             })}`,
           );
         }
-        rawRects = collectClientRectsByLine(doc, sliceEntries, sliceFrom, sliceTo);
+        rawRects = collectClientRectsByLine(doc, pageEntries, sliceFrom, sliceTo);
         if (dumpRects) {
           debugLog(
             'verbose',

@@ -1,6 +1,7 @@
 import { Extension } from '@core/Extension.js';
-import { Plugin, PluginKey } from 'prosemirror-state';
+import { Plugin, PluginKey, TextSelection, NodeSelection } from 'prosemirror-state';
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
+import { CellSelection } from 'prosemirror-tables';
 
 export const VerticalNavigationPluginKey = new PluginKey('verticalNavigation');
 
@@ -81,11 +82,9 @@ export const VerticalNavigation = Extension.create({
 
           const hit = getHitFromLayoutCoords(editor, goalX, adjacent.clientY, coords, adjacent.pageIndex);
           if (!hit || !Number.isFinite(hit.pos)) return false;
-          view.dispatch(
-            view.state.tr
-              .setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX })
-              .setSelection(view.state.selection.constructor.near(view.state.doc.resolve(hit.pos))),
-          );
+          const selection = buildSelection(view.state, hit.pos, event.shiftKey);
+          if (!selection) return false;
+          view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX }).setSelection(selection));
           return true;
         },
         handleDOMEvents: {
@@ -156,6 +155,19 @@ function getHitFromLayoutCoords(editor, goalX, clientY, coords, pageIndex) {
   const clientX = clientPoint?.x;
   if (!Number.isFinite(clientX)) return null;
   return presentationEditor.hitTest(clientX, clientY);
+}
+
+function buildSelection(state, pos, extend) {
+  const { doc, selection } = state;
+  if (selection instanceof NodeSelection || selection instanceof CellSelection) {
+    return null;
+  }
+  const clamped = Math.max(0, Math.min(pos, doc.content.size));
+  if (extend) {
+    const anchor = selection.anchor ?? selection.from;
+    return TextSelection.create(doc, clamped, anchor);
+  }
+  return TextSelection.create(doc, clamped);
 }
 
 function findLineElementAtPoint(doc, x, y) {

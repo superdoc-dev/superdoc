@@ -4,7 +4,7 @@
  * Tests for cache invalidation logic for headers/footers and body content.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, spyOn } from 'bun:test';
 import type { FlowBlock, ParagraphBlock, SectionMetadata } from '@superdoc/contracts';
 import type { HeaderFooterConstraints } from '../../layout-engine';
 import {
@@ -420,7 +420,7 @@ describe('Cache Invalidation', () => {
     });
 
     it('should invalidate cache when content changes', () => {
-      const invalidateSpy = vi.spyOn(cache, 'invalidate');
+      const invalidateSpy = spyOn(cache, 'invalidate');
 
       const blocks1 = {
         default: [
@@ -452,7 +452,7 @@ describe('Cache Invalidation', () => {
     });
 
     it('should invalidate cache when constraints change', () => {
-      const invalidateSpy = vi.spyOn(cache, 'invalidate');
+      const invalidateSpy = spyOn(cache, 'invalidate');
 
       const blocks = {
         default: [
@@ -485,7 +485,7 @@ describe('Cache Invalidation', () => {
     });
 
     it('should invalidate cache when section metadata changes', () => {
-      const invalidateSpy = vi.spyOn(cache, 'invalidate');
+      const invalidateSpy = spyOn(cache, 'invalidate');
 
       const blocks = {
         default: [
@@ -522,7 +522,7 @@ describe('Cache Invalidation', () => {
     });
 
     it('should not invalidate when nothing has changed', () => {
-      const invalidateSpy = vi.spyOn(cache, 'invalidate');
+      const invalidateSpy = spyOn(cache, 'invalidate');
 
       const blocks = {
         default: [
@@ -550,7 +550,7 @@ describe('Cache Invalidation', () => {
     });
 
     it('should invalidate cache when overflowBaseHeight changes', () => {
-      const invalidateSpy = vi.spyOn(cache, 'invalidate');
+      const invalidateSpy = spyOn(cache, 'invalidate');
 
       const blocks = {
         default: [

@@ -2,7 +2,7 @@
  * Tests for LayoutCoordinator
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, mock, spyOn } from 'bun:test';
 import { LayoutCoordinator, type LayoutResult } from '../src/layout-coordinator';
 import { Priority } from '../src/layout-scheduler';
 import { LayoutVersionManager } from '../src/layout-version-manager';
@@ -10,9 +10,9 @@ import { LayoutVersionManager } from '../src/layout-version-manager';
 describe('LayoutCoordinator', () => {
   let coordinator: LayoutCoordinator;
   let versionManager: LayoutVersionManager;
-  let executeP0: ReturnType<typeof vi.fn>;
-  let executeP1: ReturnType<typeof vi.fn>;
-  let executeWorker: ReturnType<typeof vi.fn>;
+  let executeP0: ReturnType<typeof mock>;
+  let executeP1: ReturnType<typeof mock>;
+  let executeWorker: ReturnType<typeof mock>;
 
   const mockLayout = { pages: [], pageSize: { w: 612, h: 792 } };
 
@@ -28,9 +28,9 @@ describe('LayoutCoordinator', () => {
       aborted: false,
     };
 
-    executeP0 = vi.fn().mockReturnValue(mockResult);
-    executeP1 = vi.fn().mockResolvedValue(mockResult);
-    executeWorker = vi.fn().mockResolvedValue(mockResult);
+    executeP0 = mock(() => mockResult);
+    executeP1 = mock(() => Promise.resolve(mockResult));
+    executeWorker = mock(() => Promise.resolve(mockResult));
 
     coordinator = new LayoutCoordinator({
       layoutVersionManager: versionManager,
@@ -144,7 +144,7 @@ describe('LayoutCoordinator', () => {
 
   describe('version management integration', () => {
     it('should notify version manager on P0 completion', () => {
-      const spy = vi.spyOn(versionManager, 'onLayoutComplete');
+      const spy = spyOn(versionManager, 'onLayoutComplete');
 
       coordinator.scheduleLayout(1, Priority.P0, { scope: 'paragraph' });
 
@@ -152,7 +152,7 @@ describe('LayoutCoordinator', () => {
     });
 
     it('should notify version manager on async completion', async () => {
-      const spy = vi.spyOn(versionManager, 'onLayoutComplete');
+      const spy = spyOn(versionManager, 'onLayoutComplete');
 
       coordinator.scheduleLayout(1, Priority.P1, { scope: 'viewport' });
 

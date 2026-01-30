@@ -7,7 +7,7 @@
  * 3. Integration with incrementalLayout
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect,  mock } from 'bun:test';
 import type { FlowBlock, Measure, ParagraphBlock, TextRun, SectionMetadata } from '@superdoc/contracts';
 import { incrementalLayout } from '../src/incrementalLayout';
 import type { HeaderFooterBatch } from '../src/layoutHeaderFooter';
@@ -79,7 +79,7 @@ describe('End-to-End Header/Footer Token Resolution', () => {
     ];
 
     // Mock measureBlock function
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     // Run incremental layout with headers
     const result = await incrementalLayout(
@@ -133,7 +133,7 @@ describe('End-to-End Header/Footer Token Resolution', () => {
       default: [makePageNumberParagraph('header-large-doc')],
     };
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await incrementalLayout(
       [],
@@ -187,7 +187,7 @@ describe('End-to-End Header/Footer Token Resolution', () => {
       default: [makePageNumberParagraph('footer-default')],
     };
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await incrementalLayout(
       [],
@@ -239,7 +239,7 @@ describe('End-to-End Header/Footer Token Resolution', () => {
       default: [originalHeaderBlock],
     };
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     await incrementalLayout(
       [],
@@ -278,7 +278,7 @@ describe('End-to-End Header/Footer Token Resolution', () => {
       },
     ];
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await incrementalLayout(
       [],
@@ -315,7 +315,7 @@ describe('End-to-End Header/Footer Token Resolution', () => {
       default: [makePageNumberParagraph('header-single')],
     };
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await incrementalLayout(
       [],
@@ -345,7 +345,7 @@ describe('End-to-End Header/Footer Token Resolution', () => {
       makeTextParagraph(`body-${i}`, `Content ${i + 1}`),
     );
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await incrementalLayout(
       [],

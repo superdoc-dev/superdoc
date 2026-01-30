@@ -10,7 +10,7 @@
  * - Backward compatibility with legacy API
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect,  mock } from 'bun:test';
 import type { FlowBlock, Measure, ParagraphBlock, TextRun } from '@superdoc/contracts';
 import {
   layoutHeaderFooterWithCache,
@@ -148,7 +148,7 @@ describe('layoutHeaderFooterWithCache - Backward Compatibility', () => {
       default: [makeBlock('header-1', 'Header text')],
     };
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -168,7 +168,7 @@ describe('layoutHeaderFooterWithCache - Backward Compatibility', () => {
       default: [makePageTokenBlock('header-with-tokens')],
     };
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -196,7 +196,7 @@ describe('layoutHeaderFooterWithCache - No-Token Fast Path', () => {
       totalPages: 150,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -222,7 +222,7 @@ describe('layoutHeaderFooterWithCache - No-Token Fast Path', () => {
       totalPages: 50,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -248,7 +248,7 @@ describe('layoutHeaderFooterWithCache - Per-Page Resolution (Small Docs)', () =>
       totalPages: 50, // < 100 pages
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -275,7 +275,7 @@ describe('layoutHeaderFooterWithCache - Per-Page Resolution (Small Docs)', () =>
       totalPages: 10,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -306,7 +306,7 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
       totalPages: 150, // >= 100 pages
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -337,7 +337,7 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
       totalPages: 1500, // All 4 buckets needed
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -367,7 +367,7 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
       totalPages: 250, // Only d1, d2, d3 needed
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -412,7 +412,7 @@ describe('layoutHeaderFooterWithCache - Section-Aware Token Resolution', () => {
       };
     };
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -441,7 +441,7 @@ describe('layoutHeaderFooterWithCache - Section-Aware Token Resolution', () => {
       };
     };
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
     const result = await layoutHeaderFooterWithCache(
       sections,
       { width: 400, height: 80 },
@@ -468,7 +468,7 @@ describe('layoutHeaderFooterWithCache - Cache Behavior', () => {
       totalPages: 50,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     // First call
     await layoutHeaderFooterWithCache(
@@ -514,7 +514,7 @@ describe('layoutHeaderFooterWithCache - Cache Behavior', () => {
       totalPages: 10,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     // First call
     await layoutHeaderFooterWithCache(
@@ -562,7 +562,7 @@ describe('layoutHeaderFooterWithCache - Per-Variant Cloning', () => {
       totalPages: 5,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     await layoutHeaderFooterWithCache(
       sections,
@@ -588,7 +588,7 @@ describe('layoutHeaderFooterWithCache - Per-Variant Cloning', () => {
     });
 
     const capturedBlocks: FlowBlock[][] = [];
-    const measureBlock = vi.fn(async (block: FlowBlock) => {
+    const measureBlock = mock(async (block: FlowBlock) => {
       capturedBlocks.push([block]);
       return makeMeasure(20);
     });
@@ -624,7 +624,7 @@ describe('layoutHeaderFooterWithCache - Multiple Variants', () => {
       totalPages: 20,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await layoutHeaderFooterWithCache(
       sections,
@@ -657,7 +657,7 @@ describe('layoutHeaderFooterWithCache - Multiple Variants', () => {
       totalPages: 50,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await layoutHeaderFooterWithCache(
       sections,
@@ -685,7 +685,7 @@ describe('layoutHeaderFooterWithCache - Edge Cases', () => {
       totalPages: 10,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await layoutHeaderFooterWithCache(
       sections,
@@ -710,7 +710,7 @@ describe('layoutHeaderFooterWithCache - Edge Cases', () => {
       totalPages: 1,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await layoutHeaderFooterWithCache(
       sections,
@@ -735,7 +735,7 @@ describe('layoutHeaderFooterWithCache - Edge Cases', () => {
       totalPages: 10000, // Very large document
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await layoutHeaderFooterWithCache(
       sections,
@@ -764,7 +764,7 @@ describe('layoutHeaderFooterWithCache - Edge Cases', () => {
       totalPages: 5,
     });
 
-    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const measureBlock = mock(async () => makeMeasure(20));
 
     const result = await layoutHeaderFooterWithCache(
       sections,

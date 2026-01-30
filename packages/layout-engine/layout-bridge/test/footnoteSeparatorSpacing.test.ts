@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect,  mock } from 'bun:test';
 import type { FlowBlock, Measure } from '@superdoc/contracts';
 import { incrementalLayout } from '../src/incrementalLayout';
 
@@ -43,7 +43,7 @@ const buildLayout = async ({
   const dividerHeight = 1;
   const topPadding = 4;
 
-  const measureBlock = vi.fn(async (block: FlowBlock) => {
+  const measureBlock = mock(async (block: FlowBlock) => {
     if (block.id.startsWith('footnote-')) {
       return makeMeasure(footnoteLineHeight);
     }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect,  mock } from 'bun:test';
 import type { FlowBlock, Measure } from '@superdoc/contracts';
 import { incrementalLayout } from '../src/incrementalLayout';
 
@@ -34,7 +34,7 @@ describe('Footnotes in columns', () => {
     const footnoteOne = makeParagraph('footnote-1-0-paragraph', 'Footnote one', 0);
     const footnoteTwo = makeParagraph('footnote-2-0-paragraph', 'Footnote two', 0);
 
-    const measureBlock = vi.fn(async (block: FlowBlock) => {
+    const measureBlock = mock(async (block: FlowBlock) => {
       if (block.kind === 'columnBreak') {
         return { kind: 'columnBreak' } as Measure;
       }

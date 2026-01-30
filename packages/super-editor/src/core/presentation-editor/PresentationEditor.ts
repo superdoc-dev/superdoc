@@ -257,6 +257,7 @@ export class PresentationEditor extends EventEmitter {
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
   /** Cache for incremental toFlowBlocks conversion */
   #flowBlockCache: FlowBlockCache = new FlowBlockCache();
+  #footnoteNumberSignature: string | null = null;
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -2837,6 +2838,7 @@ export class PresentationEditor extends EventEmitter {
         // Compute visible footnote numbering (1-based) by first appearance in the document.
         // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
         const footnoteNumberById: Record<string, number> = {};
+        const footnoteOrder: string[] = [];
         try {
           const seen = new Set<string>();
           let counter = 1;
@@ -2848,9 +2850,22 @@ export class PresentationEditor extends EventEmitter {
             if (!key || seen.has(key)) return;
             seen.add(key);
             footnoteNumberById[key] = counter;
+            footnoteOrder.push(key);
             counter += 1;
           });
-        } catch {}
+        } catch (e) {
+          // Log traversal errors - footnote numbering may be incorrect if this fails
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
+          }
+        }
+        // Invalidate flow block cache when footnote order changes, since footnote
+        // numbers are embedded in cached blocks and must be recomputed.
+        const footnoteSignature = footnoteOrder.join('|');
+        if (footnoteSignature !== this.#footnoteNumberSignature) {
+          this.#flowBlockCache.clear();
+          this.#footnoteNumberSignature = footnoteSignature;
+        }
         // Expose numbering to node views and layout adapter.
         try {
           if (converter && typeof converter === 'object') {

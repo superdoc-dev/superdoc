@@ -14,6 +14,8 @@ import { initSuperdocYdoc, initCollaborationComments, makeDocumentsCollaborative
 import { setupAwarenessHandler } from './collaboration/collaboration.js';
 import { normalizeDocumentEntry } from './helpers/file.js';
 import { isAllowed } from './collaboration/permissions.js';
+import { Whiteboard } from './whiteboard/Whiteboard';
+import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -56,6 +58,8 @@ export class SuperDoc extends EventEmitter {
 
   /** @type {import('@hocuspocus/provider').HocuspocusProvider | undefined} */
   provider;
+
+  whiteboard;
 
   /** @type {Config} */
   config = {
@@ -246,6 +250,7 @@ export class SuperDoc extends EventEmitter {
 
     this.#initVueApp();
     this.#initListeners();
+    this.#initWhiteboard();
 
     this.user = this.config.user; // The current user
     this.users = this.config.users || []; // All users who have access to this superdoc
@@ -273,6 +278,18 @@ export class SuperDoc extends EventEmitter {
 
     // If a toolbar element is provided, render a toolbar
     this.#addToolbar();
+  }
+
+  #initWhiteboard() {
+    const config = this.config.modules?.whiteboard ?? {};
+    const enabled = config.enabled ?? false;
+
+    this.whiteboard = new Whiteboard({
+      Renderer: WhiteboardRenderer,
+      superdoc: this,
+      enabled,
+    });
+    this.emit('whiteboard:ready', { whiteboard: this.whiteboard });
   }
 
   /**

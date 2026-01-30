@@ -49,6 +49,7 @@ catalog:
   jimp: ^1.6.0
   jsdom: ^27.3.0
   jszip: 3.10.1
+  konva: ^10.2.0
   lefthook: ^1.11.13
   lib0: ^0.2.114
   marked: ^16.2.0

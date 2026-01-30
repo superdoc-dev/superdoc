@@ -123,6 +123,9 @@ catalogs:
     jszip:
       specifier: 3.10.1
       version: 3.10.1
+    konva:
+      specifier: ^10.2.0
+      version: 10.2.0
     lefthook:
       specifier: ^1.11.13
       version: 1.13.6
@@ -359,6 +362,9 @@ importers:
       jsdom:
         specifier: 27.3.0
         version: 27.3.0(canvas@3.2.0)
+      konva:
+        specifier: 'catalog:'
+        version: 10.2.0
       lefthook:
         specifier: 'catalog:'
         version: 1.13.6
@@ -1137,6 +1143,9 @@ importers:
       jsdom:
         specifier: 27.3.0
         version: 27.3.0(canvas@3.2.0)
+      konva:
+        specifier: 'catalog:'
+        version: 10.2.0
       naive-ui:
         specifier: 'catalog:'
         version: 2.43.2(vue@3.5.25(typescript@5.9.3))
@@ -6757,6 +6766,9 @@ packages:
 
   konan@2.1.1:
     resolution: {integrity: sha512-7ZhYV84UzJ0PR/RJnnsMZcAbn+kLasJhVNWsu8ZyVEJYRpGA5XESQ9d/7zOa08U0Ou4cmB++hMNY/3OSV9KIbg==}
+
+  konva@10.2.0:
+    resolution: {integrity: sha512-JBoz0Xjbf49UPxCZegZ4WseqOzJ+C4AUDOtJ9eBve5RS5Fcq/u8TdBD5fDl/uPFInpC3a9uycm0sRyZpF4hheg==}
 
   lcm@0.0.3:
     resolution: {integrity: sha512-TB+ZjoillV6B26Vspf9l2L/vKaRY/4ep3hahcyVkCGFgsTNRUQdc24bQeNFiZeoxH0vr5+7SfNRMQuPHv/1IrQ==}
@@ -17407,6 +17419,8 @@ snapshots:
       '@babel/traverse': 7.29.0
     transitivePeerDependencies:
       - supports-color
+
+  konva@10.2.0: {}
 
   lcm@0.0.3:
     dependencies:

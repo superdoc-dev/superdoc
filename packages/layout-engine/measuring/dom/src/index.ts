@@ -3262,7 +3262,11 @@ const appendSegment = (
 };
 
 const resolveLineHeight = (spacing: ParagraphSpacing | undefined, fontSize: number, maxHeight: number = -1): number => {
-  const computedHeight = fontSize * (spacing?.line ?? WORD_SINGLE_LINE_SPACING_MULTIPLIER);
+  let computedHeight = spacing?.line ?? WORD_SINGLE_LINE_SPACING_MULTIPLIER;
+  if (spacing?.lineUnit === 'multiplier') {
+    computedHeight = computedHeight * fontSize;
+  }
+
   const lineRule = spacing?.lineRule ?? 'auto';
   if (['atLeast', 'auto'].includes(lineRule)) {
     return Math.max(computedHeight, maxHeight, WORD_SINGLE_LINE_SPACING_MULTIPLIER * fontSize);

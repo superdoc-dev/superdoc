@@ -35,17 +35,10 @@ describe('normalizeParagraphSpacing', () => {
     expect(result?.after).toBe(twipsToPx(360));
   });
 
-  it('converts line from twips to multiplier when lineRule is exact', () => {
+  it('converts line from twips to pixels when lineRule is exact', () => {
     const spacing = { line: 360, lineRule: 'exact' as const } as ParagraphSpacing; // 24px
     const result = normalizeParagraphSpacing(spacing, false);
-    expect(result?.line).toBe(1.5);
-    expect(result?.lineRule).toBe('exact');
-  });
-
-  it('treats auto line values <= 10 as multipliers', () => {
-    const spacing = { line: 1.15, lineRule: 'exact' as const } as ParagraphSpacing;
-    const result = normalizeParagraphSpacing(spacing, false);
-    expect(result?.line).toBe(1.15);
+    expect(result?.line).toBeCloseTo(24);
     expect(result?.lineRule).toBe('exact');
   });
 
@@ -80,12 +73,6 @@ describe('normalizeParagraphSpacing', () => {
     expect(result?.afterAutospacing).toBe(true);
   });
 
-  it('treats auto line values <= 10 as raw multipliers', () => {
-    const spacing = { line: 2, lineRule: 'exact' as const } as ParagraphSpacing;
-    const result = normalizeParagraphSpacing(spacing, false);
-    expect(result?.line).toBe(2);
-  });
-
   it('converts line to multiplier when lineRule is missing', () => {
     const spacing = { line: 360 } as ParagraphSpacing;
     const result = normalizeParagraphSpacing(spacing, false);
@@ -96,7 +83,7 @@ describe('normalizeParagraphSpacing', () => {
   it('returns undefined for empty or invalid inputs', () => {
     expect(normalizeParagraphSpacing(undefined, false)).toBeUndefined();
     expect(normalizeParagraphSpacing(null as never, false)).toBeUndefined();
-    expect(normalizeParagraphSpacing({} as ParagraphSpacing, false)).toEqual({ line: 1.15 });
+    expect(normalizeParagraphSpacing({} as ParagraphSpacing, false)).toEqual({ line: 1.15, lineUnit: 'multiplier' });
   });
 
   it('skips non-numeric values but preserves valid ones', () => {

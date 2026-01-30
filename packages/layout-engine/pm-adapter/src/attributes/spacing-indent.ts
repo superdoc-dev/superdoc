@@ -9,17 +9,6 @@ import type { ParagraphAttrs, ParagraphSpacing } from '@superdoc/contracts';
 import type { ParagraphSpacing as OoxmlParagraphSpacing } from '@superdoc/style-engine/ooxml';
 import { twipsToPx, pickNumber } from '../utilities.js';
 
-/**
- * Minimum threshold for distinguishing OOXML auto line spacing multipliers
- *
- * OOXML auto line spacing uses multipliers (e.g., 1.5 for 1.5x line spacing).
- * Values above this threshold are assumed to be OOXML "240ths of a line" values.
- *
- * Rationale: Typical multipliers are 1.0-3.0. The minimum meaningful twips
- * value for line spacing is ~240 (12pt font), so 10 provides a safe boundary.
- */
-const MIN_AUTO_LINE_TWIPS = 10;
-
 const AUTO_SPACING_DEFAULT_MULTIPLIER = 1.15;
 
 const AUTO_SPACING_LINE_DEFAULT = 240; // Default OOXML auto line spacing in twips
@@ -112,7 +101,7 @@ export const normalizeParagraphSpacing = (
   const lineRule = normalizeLineRule(value.lineRule);
   const beforeAutospacing = value.beforeAutospacing;
   const afterAutospacing = value.afterAutospacing;
-  const line = normalizeLineValue(lineRaw, lineRule);
+  const { value: line, unit: lineUnit } = normalizeLineValue(lineRaw, lineRule);
 
   if (beforeAutospacing) {
     if (isList) {
@@ -131,7 +120,8 @@ export const normalizeParagraphSpacing = (
 
   if (before != null) spacing.before = twipsToPx(before);
   if (after != null) spacing.after = twipsToPx(after);
-  if (line != null) spacing.line = line;
+  spacing.line = line;
+  spacing.lineUnit = lineUnit;
   if (lineRule != null) spacing.lineRule = lineRule;
   if (beforeAutospacing != null) spacing.beforeAutospacing = beforeAutospacing;
   if (afterAutospacing != null) spacing.afterAutospacing = afterAutospacing;
@@ -149,15 +139,15 @@ export const normalizeParagraphSpacing = (
 export const normalizeLineValue = (
   value: number | undefined,
   lineRule: ParagraphSpacing['lineRule'] | undefined,
-): number => {
-  if (value == null) return AUTO_SPACING_DEFAULT_MULTIPLIER;
-  if (value > 0 && value <= MIN_AUTO_LINE_TWIPS) {
-    value = value * AUTO_SPACING_LINE_DEFAULT;
+): { value: number; unit: 'multiplier' | 'px' } => {
+  if (value == null) return { value: AUTO_SPACING_DEFAULT_MULTIPLIER, unit: 'multiplier' };
+  if (lineRule == 'exact' || lineRule == 'atLeast') {
+    return { value: twipsToPx(value), unit: 'px' };
   }
   if (lineRule === 'auto') {
-    return (value * AUTO_SPACING_DEFAULT_MULTIPLIER) / AUTO_SPACING_LINE_DEFAULT;
+    return { value: (value * AUTO_SPACING_DEFAULT_MULTIPLIER) / AUTO_SPACING_LINE_DEFAULT, unit: 'multiplier' };
   }
-  return value / AUTO_SPACING_LINE_DEFAULT;
+  return { value: value / AUTO_SPACING_LINE_DEFAULT, unit: 'multiplier' };
 };
 
 /**

@@ -184,7 +184,8 @@ describe('hydrateTableStyleAttrs', () => {
 
       const resultExact = hydrateTableStyleAttrs(tableExact, { docx: mockDocxExact });
       // For 'exact' lineRule, use twipsToPx: (240/1440)*96 = 16
-      expect(resultExact?.paragraphProps?.spacing?.line).toBeCloseTo(1);
+      expect(resultExact?.paragraphProps?.spacing?.line).toBeCloseTo(16);
+      expect(resultExact?.paragraphProps?.spacing?.lineUnit).toBe('px');
       expect(resultExact?.paragraphProps?.spacing?.lineRule).toBe('exact');
 
       const mockDocxAtLeast = {

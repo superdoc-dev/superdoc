@@ -194,7 +194,9 @@ const extractTableStyleParagraphProps = (
     if (before != null) spacing.before = twipsToPx(before);
     if (after != null) spacing.after = twipsToPx(after);
     if (line != null) {
-      spacing.line = normalizeLineValue(line, lineRule);
+      const { value: normalizedLine, unit: lineUnit } = normalizeLineValue(line, lineRule);
+      spacing.line = normalizedLine;
+      spacing.lineUnit = lineUnit;
     }
     if (lineRule) spacing.lineRule = lineRule;
 

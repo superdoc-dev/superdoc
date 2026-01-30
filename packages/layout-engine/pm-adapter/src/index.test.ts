@@ -325,7 +325,7 @@ describe('toFlowBlocks', () => {
 
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
-        spacing: { before: 10, after: 6, line: 1.375, lineRule: 'exact' },
+        spacing: { before: 10, after: 6, line: 22, lineUnit: 'px', lineRule: 'exact' },
         indent: { left: 12, firstLine: 24 },
       });
     });

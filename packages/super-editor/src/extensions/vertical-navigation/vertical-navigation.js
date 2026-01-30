@@ -6,7 +6,6 @@ export const VerticalNavigationPluginKey = new PluginKey('verticalNavigation');
 
 const createDefaultState = () => ({
   goalX: null,
-  isHandlingVerticalMove: false,
 });
 
 export const VerticalNavigation = Extension.create({
@@ -26,7 +25,6 @@ export const VerticalNavigation = Extension.create({
           if (meta?.type === 'vertical-move') {
             return {
               goalX: meta.goalX ?? value.goalX ?? null,
-              isHandlingVerticalMove: false,
             };
           }
           if (meta?.type === 'set-goal-x') {
@@ -52,6 +50,7 @@ export const VerticalNavigation = Extension.create({
       },
       props: {
         handleKeyDown(view, event) {
+          if (view.composing || !editor.isEditable) return false;
           if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
             view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
             return false;
@@ -68,7 +67,8 @@ export const VerticalNavigation = Extension.create({
 
           const pluginState = VerticalNavigationPluginKey.getState(view.state);
           let goalX = pluginState?.goalX;
-          const coords = getCurrentCoords(editor, view.state.selection.head);
+          const coords = getCurrentCoords(editor, view.state.selection);
+          if (!coords) return false;
           if (goalX == null) {
             goalX = coords?.x;
             if (!Number.isFinite(goalX)) return false;
@@ -76,9 +76,17 @@ export const VerticalNavigation = Extension.create({
               view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'set-goal-x', goalX }),
             );
           }
-          const newY = getAdjacentLineClientY(editor, coords, event.key === 'ArrowUp' ? -1 : 1);
-          if (!Number.isFinite(newY)) return false;
-          return false;
+          const adjacent = getAdjacentLineClientTarget(editor, coords, event.key === 'ArrowUp' ? -1 : 1);
+          if (!adjacent) return false;
+
+          const hit = getHitFromLayoutCoords(editor, goalX, adjacent.clientY, coords, adjacent.pageIndex);
+          if (!hit || !Number.isFinite(hit.pos)) return false;
+          view.dispatch(
+            view.state.tr
+              .setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX })
+              .setSelection(view.state.selection.constructor.near(view.state.doc.resolve(hit.pos))),
+          );
+          return true;
         },
         handleDOMEvents: {
           mousedown: (view) => {
@@ -108,24 +116,21 @@ function isPresenting(editor) {
   return activeEditor === editor;
 }
 
-function getCurrentCoords(editor, pos) {
+function getCurrentCoords(editor, selection) {
+
   const presentationEditor = editor.presentationEditor;
-  const coords = presentationEditor.coordsAtPos(pos);
-  if (!coords) return null;
-
-  const layoutSpaceCoords = presentationEditor.normalizeClientPoint(coords.left, coords.top);
-  if (!layoutSpaceCoords) return null;
-
+  const layoutSpaceCoords = presentationEditor.computeCaretLayoutRect(selection.head);
+  const clientCoords = presentationEditor.denormalizeClientPoint(layoutSpaceCoords.x, layoutSpaceCoords.y, layoutSpaceCoords.pageIndex)
   return {
-    clientX: coords.left,
-    clientY: coords.top,
-    height: coords.height,
+    clientX: clientCoords.x,
+    clientY: clientCoords.y,
+    height: layoutSpaceCoords.height,
     x: layoutSpaceCoords.x,
     y: layoutSpaceCoords.y,
   };
 }
 
-function getAdjacentLineClientY(editor, coords, direction) {
+function getAdjacentLineClientTarget(editor, coords, direction) {
   const presentationEditor = editor.presentationEditor;
   const doc = presentationEditor.visibleHost?.ownerDocument ?? document;
   const caretX = coords.clientX;
@@ -134,8 +139,23 @@ function getAdjacentLineClientY(editor, coords, direction) {
   if (!currentLine) return null;
   const adjacentLine = findAdjacentLineElement(currentLine, direction);
   if (!adjacentLine) return null;
+  const pageEl = adjacentLine.closest?.(`.${DOM_CLASS_NAMES.PAGE}`);
+  const pageIndex = pageEl ? Number(pageEl.dataset.pageIndex ?? 'NaN') : null;
   const rect = adjacentLine.getBoundingClientRect();
-  return rect.top + rect.height / 2;
+  const clientY = rect.top + rect.height / 2;
+  if (!Number.isFinite(clientY)) return null;
+  return {
+    clientY: rect.top + rect.height / 2,
+    pageIndex: Number.isFinite(pageIndex) ? pageIndex : undefined,
+  };
+}
+
+function getHitFromLayoutCoords(editor, goalX, clientY, coords, pageIndex) {
+  const presentationEditor = editor.presentationEditor;
+  const clientPoint = presentationEditor.denormalizeClientPoint(goalX, coords.y, pageIndex);
+  const clientX = clientPoint?.x;
+  if (!Number.isFinite(clientX)) return null;
+  return presentationEditor.hitTest(clientX, clientY);
 }
 
 function findLineElementAtPoint(doc, x, y) {
@@ -151,6 +171,8 @@ function findAdjacentLineElement(currentLine, direction) {
   const lineClass = DOM_CLASS_NAMES.LINE;
   const fragmentClass = DOM_CLASS_NAMES.FRAGMENT;
   const pageClass = DOM_CLASS_NAMES.PAGE;
+  const headerClass = 'superdoc-page-header';
+  const footerClass = 'superdoc-page-footer';
   const fragment = currentLine.closest?.(`.${fragmentClass}`);
   const page = currentLine.closest?.(`.${pageClass}`);
   if (!fragment || !page) return null;
@@ -162,7 +184,10 @@ function findAdjacentLineElement(currentLine, direction) {
     if (nextInFragment) return nextInFragment;
   }
 
-  const fragments = Array.from(page.querySelectorAll(`.${fragmentClass}`));
+  const fragments = Array.from(page.querySelectorAll(`.${fragmentClass}`)).filter((frag) => {
+    const parent = frag.closest?.(`.${headerClass}, .${footerClass}`);
+    return !parent;
+  });
   const fragmentIndex = fragments.indexOf(fragment);
   if (fragmentIndex !== -1) {
     const nextFragment = fragments[fragmentIndex + direction];
@@ -175,7 +200,10 @@ function findAdjacentLineElement(currentLine, direction) {
   if (pageIndex === -1) return null;
   const nextPage = pages[pageIndex + direction];
   if (!nextPage) return null;
-  const pageFragments = Array.from(nextPage.querySelectorAll(`.${fragmentClass}`));
+  const pageFragments = Array.from(nextPage.querySelectorAll(`.${fragmentClass}`)).filter((frag) => {
+    const parent = frag.closest?.(`.${headerClass}, .${footerClass}`);
+    return !parent;
+  });
   if (direction > 0) {
     return getEdgeLineFromFragment(pageFragments[0], direction);
   }

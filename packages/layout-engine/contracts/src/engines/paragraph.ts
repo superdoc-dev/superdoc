@@ -8,7 +8,8 @@
 export interface ParagraphSpacing {
   before: number; // pt
   after: number; // pt
-  line: number; // pt or multiplier (depends on lineRule)
+  line: number; // pt or multiplier (depends on lineUnit)
+  lineUnit?: 'px' | 'multiplier'; // unit for line spacing value
   lineRule: 'auto' | 'exact' | 'atLeast';
 }
 

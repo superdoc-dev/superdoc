@@ -80,5 +80,11 @@ export const applyInlineRunProperties = (
     return run;
   }
   const runAttrs = computeRunAttrs(runProperties, converterContext);
-  return { ...run, ...runAttrs };
+  const merged = { ...run, ...runAttrs };
+  // Preserve existing run color when runProperties doesn't specify one.
+  // Object spread with undefined values overwrites the original, so we restore it.
+  if (runAttrs.color === undefined && run.color !== undefined) {
+    merged.color = run.color;
+  }
+  return merged;
 };

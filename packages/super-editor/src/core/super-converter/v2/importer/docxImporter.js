@@ -167,6 +167,7 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     // Safety: drop any inline-only nodes that accidentally landed at the doc root
     parsedContent = filterOutRootInlineNodes(parsedContent);
+    parsedContent = normalizeTableBookmarksInContent(parsedContent, editor);
     collapseWhitespaceNextToInlinePassthrough(parsedContent);
 
     const result = {
@@ -839,6 +840,160 @@ export function filterOutRootInlineNodes(content = []) {
   });
 
   return result;
+}
+
+/**
+ * Normalize bookmark nodes that appear as direct table children.
+ * Moves bookmarkStart/End into the first/last cell textblock of the table.
+ *
+ * @param {Array<{type: string, content?: any[], attrs?: any}>} content
+ * @param {Editor} [editor]
+ * @returns {Array}
+ */
+export function normalizeTableBookmarksInContent(content = [], editor) {
+  if (!Array.isArray(content) || content.length === 0) return content;
+
+  return content.map((node) => normalizeTableBookmarksInNode(node, editor));
+}
+
+function normalizeTableBookmarksInNode(node, editor) {
+  if (!node || typeof node !== 'object') return node;
+
+  if (node.type === 'table') {
+    node = normalizeTableBookmarksInTable(node, editor);
+  }
+
+  if (Array.isArray(node.content)) {
+    node.content = normalizeTableBookmarksInContent(node.content, editor);
+  }
+
+  return node;
+}
+
+function normalizeTableBookmarksInTable(tableNode, editor) {
+  if (!tableNode || tableNode.type !== 'table' || !Array.isArray(tableNode.content)) return tableNode;
+
+  const leading = [];
+  const trailing = [];
+  let seenRow = false;
+
+  const rows = tableNode.content.filter((child) => child?.type === 'tableRow');
+  if (!rows.length) return tableNode;
+
+  const updatedRows = rows.slice();
+  let rowCursor = 0;
+
+  const normalizedContent = tableNode.content.reduce((acc, child) => {
+    if (child?.type === 'tableRow') {
+      acc.push(updatedRows[rowCursor] ?? child);
+      rowCursor += 1;
+      seenRow = true;
+      return acc;
+    }
+
+    if (isBookmarkNode(child)) {
+      if (seenRow) {
+        trailing.push(child);
+      } else {
+        leading.push(child);
+      }
+      return acc;
+    }
+
+    acc.push(child);
+    return acc;
+  }, []);
+
+  if (leading.length) {
+    updatedRows[0] = insertInlineIntoRow(updatedRows[0], leading, editor, 'start');
+  }
+  if (trailing.length) {
+    const lastIndex = updatedRows.length - 1;
+    updatedRows[lastIndex] = insertInlineIntoRow(updatedRows[lastIndex], trailing, editor, 'end');
+  }
+
+  // Rebuild content with updated rows (preserve any non-row nodes in place).
+  let updatedRowIndex = 0;
+  const rebuiltContent = normalizedContent.map((child) => {
+    if (child?.type === 'tableRow') {
+      const replacement = updatedRows[updatedRowIndex] ?? child;
+      updatedRowIndex += 1;
+      return replacement;
+    }
+    return child;
+  });
+
+  return {
+    ...tableNode,
+    content: rebuiltContent,
+  };
+}
+
+function insertInlineIntoRow(rowNode, inlineNodes, editor, position) {
+  if (!rowNode || !inlineNodes?.length || !Array.isArray(rowNode.content)) return rowNode;
+
+  const targetIndex = position === 'end' ? rowNode.content.length - 1 : 0;
+  const targetCell = rowNode.content[targetIndex];
+  const updatedCell = insertInlineIntoCell(targetCell, inlineNodes, editor, position);
+
+  if (updatedCell === targetCell) return rowNode;
+
+  const nextContent = rowNode.content.slice();
+  nextContent[targetIndex] = updatedCell;
+  return { ...rowNode, content: nextContent };
+}
+
+function insertInlineIntoCell(cellNode, inlineNodes, editor, position) {
+  if (!cellNode || !inlineNodes?.length) return cellNode;
+
+  const content = Array.isArray(cellNode.content) ? cellNode.content.slice() : [];
+  let targetIndex = -1;
+
+  if (position === 'end') {
+    for (let i = content.length - 1; i >= 0; i -= 1) {
+      if (isTextblockNode(content[i], editor)) {
+        targetIndex = i;
+        break;
+      }
+    }
+  } else {
+    for (let i = 0; i < content.length; i += 1) {
+      if (isTextblockNode(content[i], editor)) {
+        targetIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (targetIndex === -1) {
+    const paragraph = { type: 'paragraph', content: inlineNodes };
+    if (position === 'end') {
+      content.push(paragraph);
+    } else {
+      content.unshift(paragraph);
+    }
+    return { ...cellNode, content };
+  }
+
+  const targetBlock = content[targetIndex] || { type: 'paragraph', content: [] };
+  const blockContent = Array.isArray(targetBlock.content) ? targetBlock.content.slice() : [];
+  const nextBlockContent = position === 'end' ? blockContent.concat(inlineNodes) : inlineNodes.concat(blockContent);
+
+  content[targetIndex] = { ...targetBlock, content: nextBlockContent };
+  return { ...cellNode, content };
+}
+
+function isBookmarkNode(node) {
+  const typeName = node?.type;
+  return typeName === 'bookmarkStart' || typeName === 'bookmarkEnd';
+}
+
+function isTextblockNode(node, editor) {
+  const typeName = node?.type;
+  if (!typeName) return false;
+  const nodeType = editor?.schema?.nodes?.[typeName];
+  if (nodeType && typeof nodeType.isTextblock === 'boolean') return nodeType.isTextblock;
+  return typeName === 'paragraph';
 }
 
 /**

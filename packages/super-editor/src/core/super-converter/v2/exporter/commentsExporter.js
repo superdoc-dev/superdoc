@@ -106,16 +106,26 @@ export const updateCommentsXml = (commentDefs = [], commentsXml) => {
 
   // Re-build the comment definitions
   commentDefs.forEach((commentDef) => {
-    // Ensure we always have a paragraph node and attributes container
-    const paraNode = commentDef.elements[0];
-    if (!paraNode.attributes) paraNode.attributes = {};
+    const paragraphs = commentDef.elements || [];
+    if (!paragraphs.length) return;
+
+    const firstParagraph = paragraphs.find((node) => node?.name === 'w:p') ?? paragraphs[0];
+    const lastParagraph =
+      paragraphs
+        .slice()
+        .reverse()
+        .find((node) => node?.name === 'w:p') ?? paragraphs[paragraphs.length - 1];
+
+    if (!firstParagraph?.attributes) firstParagraph.attributes = {};
+    if (!lastParagraph?.attributes) lastParagraph.attributes = {};
 
     // NOTE: Per ECMA-376, w:pPr should be first child of w:p
-    const elements = paraNode.elements;
+    const elements = firstParagraph.elements || [];
+    firstParagraph.elements = elements;
     elements.unshift(COMMENT_REF);
 
     const paraId = commentDef.attributes['w15:paraId'];
-    paraNode.attributes['w14:paraId'] = paraId;
+    lastParagraph.attributes['w14:paraId'] = paraId;
 
     commentDef.attributes = {
       'w:id': commentDef.attributes['w:id'],

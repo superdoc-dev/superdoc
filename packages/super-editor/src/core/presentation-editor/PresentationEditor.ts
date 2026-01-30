@@ -1040,6 +1040,10 @@ export class PresentationEditor extends EventEmitter {
   #syncDocumentModeClass() {
     if (!this.#visibleHost) return;
     this.#visibleHost.classList.toggle('presentation-editor--viewing', this.#documentMode === 'viewing');
+    this.#visibleHost.classList.toggle(
+      'presentation-editor--allow-selection',
+      this.#documentMode === 'viewing' && !!this.#options.allowSelectionInViewMode,
+    );
   }
 
   /**
@@ -4600,12 +4604,16 @@ export class PresentationEditor extends EventEmitter {
    * Determines whether the current viewing mode should block edits.
    * When documentMode is viewing but the active editor has been toggled
    * back to editable (e.g. permission ranges), we treat the view as editable.
+   * Also returns false when allowSelectionInViewMode is enabled, allowing
+   * text selection while still blocking actual edits.
    */
   #isViewLocked(): boolean {
     if (this.#documentMode !== 'viewing') return false;
     const hasPermissionOverride = !!(this.#editor as Editor & { storage?: Record<string, any> })?.storage
       ?.permissionRanges?.hasAllowedRanges;
     if (hasPermissionOverride) return false;
+    // Allow selection visuals when allowSelectionInViewMode is enabled
+    if (this.#options.allowSelectionInViewMode) return false;
     return this.#documentMode === 'viewing';
   }
 

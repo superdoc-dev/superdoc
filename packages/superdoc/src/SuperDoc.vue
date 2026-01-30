@@ -88,6 +88,7 @@ const { isHighContrastMode } = useHighContrastMode();
 const { uiFontFamily } = useUiFontFamily();
 
 const isViewingMode = () => proxy?.$superdoc?.config?.documentMode === 'viewing';
+const allowSelectionInViewMode = () => !!proxy?.$superdoc?.config?.allowSelectionInViewMode;
 const isViewingCommentsVisible = computed(
   () => isViewingMode() && proxy?.$superdoc?.config?.comments?.visible === true,
 );
@@ -283,13 +284,13 @@ const onEditorSelectionChange = ({ editor, transaction }) => {
     // When comment is added selection will be equal to comment text
     // Should skip calculations to keep text selection for comments correct
     skipSelectionUpdate.value = false;
-    if (isViewingMode()) {
+    if (isViewingMode() && !allowSelectionInViewMode()) {
       resetSelection();
     }
     return;
   }
 
-  if (isViewingMode()) {
+  if (isViewingMode() && !allowSelectionInViewMode()) {
     resetSelection();
     return;
   }
@@ -463,6 +464,7 @@ const editorOptions = (doc) => {
     html: doc.html,
     markdown: doc.markdown,
     documentMode: proxy.$superdoc.config.documentMode,
+    allowSelectionInViewMode: proxy.$superdoc.config.allowSelectionInViewMode,
     rulers: doc.rulers,
     rulerContainer: proxy.$superdoc.config.rulerContainer,
     isInternal: proxy.$superdoc.config.isInternal,
@@ -688,7 +690,7 @@ const getSelectionPosition = computed(() => {
 });
 
 const handleSelectionChange = (selection) => {
-  if (isViewingMode()) {
+  if (isViewingMode() && !allowSelectionInViewMode()) {
     resetSelection();
     return;
   }

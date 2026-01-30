@@ -6,11 +6,17 @@ import { Extension } from '../Extension.js';
  *
  * When editable is false, all user interactions are blocked:
  * - Text input via beforeinput events
- * - Mouse interactions via mousedown
- * - Focus via automatic blur
- * - Click, double-click, and triple-click events
+ * - Mouse interactions via mousedown (unless allowSelectionInViewMode is true)
+ * - Focus via automatic blur (unless allowSelectionInViewMode is true)
+ * - Click, double-click, and triple-click events (unless allowSelectionInViewMode is true)
  * - Keyboard shortcuts via handleKeyDown
  * - Paste and drop events
+ *
+ * When allowSelectionInViewMode is true and editable is false:
+ * - Mouse interactions are allowed for text selection
+ * - Focus is allowed
+ * - Click events are allowed for selection
+ * - But text input, keyboard shortcuts, paste, and drop remain blocked
  */
 export const Editable = Extension.create({
   name: 'editable',
@@ -30,14 +36,16 @@ export const Editable = Extension.create({
             return false;
           },
           mousedown: (_view, event) => {
-            if (!editor.options.editable) {
+            // Allow mousedown for selection when allowSelectionInViewMode is enabled
+            if (!editor.options.editable && !editor.options.allowSelectionInViewMode) {
               event.preventDefault();
               return true;
             }
             return false;
           },
           focus: (view, event) => {
-            if (!editor.options.editable) {
+            // Allow focus when allowSelectionInViewMode is enabled
+            if (!editor.options.editable && !editor.options.allowSelectionInViewMode) {
               event.preventDefault();
               view.dom.blur();
               return true;
@@ -45,10 +53,22 @@ export const Editable = Extension.create({
             return false;
           },
         },
-        handleClick: () => !editor.options.editable,
-        handleDoubleClick: () => !editor.options.editable,
-        handleTripleClick: () => !editor.options.editable,
-        handleKeyDown: () => !editor.options.editable,
+        // Allow click events for selection when allowSelectionInViewMode is enabled
+        handleClick: () => !editor.options.editable && !editor.options.allowSelectionInViewMode,
+        handleDoubleClick: () => !editor.options.editable && !editor.options.allowSelectionInViewMode,
+        handleTripleClick: () => !editor.options.editable && !editor.options.allowSelectionInViewMode,
+        // Always block keyboard input, paste, and drop when not editable
+        handleKeyDown: (_view, event) => {
+          if (!editor.options.editable) {
+            // Allow Ctrl+C / Cmd+C for copy when allowSelectionInViewMode is enabled
+            if (editor.options.allowSelectionInViewMode) {
+              const isCopy = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c';
+              if (isCopy) return false;
+            }
+            return true;
+          }
+          return false;
+        },
         handlePaste: () => !editor.options.editable,
         handleDrop: () => !editor.options.editable,
       },

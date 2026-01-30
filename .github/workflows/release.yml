@@ -82,6 +82,14 @@ jobs:
         working-directory: packages/template-builder
         run: pnpx semantic-release
 
+      - name: Release esign
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: packages/esign
+        run: pnpx semantic-release
+
       # Sync stable back to main after stable release
       # - name: Sync stable to main
       #   if: github.ref == 'refs/heads/stable'

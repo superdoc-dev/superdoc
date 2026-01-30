@@ -9,6 +9,7 @@ on:
     paths-ignore:
       - 'apps/docs/**'
       - 'packages/template-builder/**'
+      - 'packages/esign/**'
       - '**/*.md'
 
 concurrency:

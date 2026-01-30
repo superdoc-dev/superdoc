@@ -1,0 +1,40 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.superdoc-esign-document {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.superdoc-esign-document-toolbar {
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.superdoc-esign-document-controls {
+    justify-content: flex-end;
+}
+
+.superdoc-esign-document-viewer {
+    background: #ffffff;
+}
+
+.superdoc-esign-form-actions {
+    justify-content: flex-end;
+}

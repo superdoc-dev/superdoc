@@ -1,0 +1,45 @@
+name: CI eSign
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'packages/esign/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-esign-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build superdoc (dependency)
+        run: pnpm run build:superdoc
+
+      - name: Lint
+        run: pnpm --filter @superdoc-dev/esign lint
+
+      - name: Type check
+        run: pnpm --filter @superdoc-dev/esign type-check
+
+      - name: Build
+        run: pnpm --filter @superdoc-dev/esign build
+
+      - name: Test
+        run: pnpm --filter @superdoc-dev/esign test

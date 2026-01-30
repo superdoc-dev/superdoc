@@ -1,0 +1,543 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f5f5f7;
+}
+
+.demo {
+    min-height: 100vh;
+}
+
+header {
+    background: white;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #e5e5e7;
+}
+
+header h1 {
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+header p {
+    color: #86868b;
+    margin: 0.25rem 0 0 0;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 2rem;
+    max-width: 1400px;
+    margin: 2rem auto;
+    padding: 0 2rem;
+}
+
+/* Application Side */
+.app-side {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.app-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.app-header h2 {
+    font-size: 1.25rem;
+}
+
+.badge {
+    background: #f0f0f2;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: #86868b;
+}
+
+.document-section label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #1d1d1f;
+}
+
+.document-container {
+    height: 400px;
+    border: 2px solid #007aff;
+    border-radius: 8px;
+    overflow: auto;
+    background: white;
+    margin-bottom: 2rem;
+}
+
+.form-section {
+    margin-bottom: 1.5rem;
+}
+
+.form-section label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #1d1d1f;
+}
+
+.signature-input {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1.5rem;
+    font-family: cursive;
+    border: none;
+    border-bottom: 2px solid #d2d2d7;
+    transition: border-color 0.2s;
+}
+
+.signature-input:focus {
+    outline: none;
+    border-color: #007aff;
+}
+
+.checkbox-input {
+    padding: 1rem;
+    background: #f5f5f7;
+    border-radius: 8px;
+}
+
+.checkbox-input label {
+    display: flex;
+    align-items: center;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.checkbox-input input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin-right: 0.75rem;
+}
+
+small {
+    display: block;
+    color: #86868b;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+}
+
+.check {
+    color: #34c759;
+    margin-left: 0.5rem;
+}
+
+.success-message {
+    padding: 1.5rem;
+    background: #34c759;
+    color: white;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.success-message button {
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: white;
+    color: #34c759;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Control Side */
+.control-side {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.panel {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.panel h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: #1d1d1f;
+}
+
+.panel label {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0;
+    cursor: pointer;
+}
+
+.panel input[type="checkbox"] {
+    margin-right: 0.75rem;
+}
+
+.status-list>div {
+    padding: 0.5rem;
+    margin-bottom: 0.25rem;
+    border-radius: 6px;
+    background: #f5f5f7;
+    color: #86868b;
+    transition: all 0.2s;
+}
+
+.status-list>div.active {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.event-log {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.event-item {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+    border-bottom: 1px solid #f0f0f2;
+    font-family: monospace;
+}
+
+.empty {
+    color: #86868b;
+    font-style: italic;
+    padding: 1rem;
+    text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .layout {
+        grid-template-columns: 1fr;
+    }
+
+    .control-side {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+}
+
+/* Updated demo/src/App.css - key changes */
+
+.success-state {
+    text-align: center;
+    padding: 3rem 2rem;
+}
+
+.success-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.success-state h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: #1d1d1f;
+}
+
+.success-state p {
+    color: #86868b;
+    margin-bottom: 2rem;
+}
+
+.audit-info {
+    background: #f5f5f7;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    text-align: left;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.audit-info p {
+    margin: 0.5rem 0;
+    font-size: 0.875rem;
+}
+
+.primary-button {
+    padding: 1rem 2rem;
+    background: #007aff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.hint {
+    background: #fff3cd;
+    color: #856404;
+    padding: 0.5rem;
+    text-align: center;
+    font-size: 0.875rem;
+    margin-top: -2px;
+    border-radius: 0 0 8px 8px;
+}
+
+.checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background: #f5f5f7;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.checkbox-item input {
+    width: 20px;
+    height: 20px;
+    margin-right: 0.75rem;
+}
+
+.accept-button {
+    width: 100%;
+    padding: 1rem;
+    background: #34c759;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.accept-button:disabled {
+    background: #d2d2d7;
+    cursor: not-allowed;
+}
+
+.config-options label {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0;
+}
+
+.config-options code {
+    background: #f5f5f7;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    margin-left: 0.5rem;
+}
+
+.fields-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.field-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.field-item label {
+    font-size: 0.75rem;
+    color: #86868b;
+}
+
+.field-item input {
+    padding: 0.5rem;
+    border: 1px solid #e5e5e7;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-family: inherit;
+}
+
+.field-item input:focus {
+    outline: none;
+    border-color: #007aff;
+}
+
+.indicator {
+    display: inline-block;
+    width: 12px;
+    margin-right: 0.5rem;
+    color: #86868b;
+}
+
+.status-list .active .indicator {
+    color: #34c759;
+}
+
+header {
+    background: white;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #e5e5e7;
+}
+
+.header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-left h1 {
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+.header-left p {
+    color: #86868b;
+    margin: 0.25rem 0 0 0;
+}
+
+.header-nav {
+    display: flex;
+    gap: 2rem;
+}
+
+.header-nav a {
+    color: #1d1d1f;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: color 0.2s;
+}
+
+.header-nav a:hover {
+    color: #007aff;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .header-nav {
+        gap: 1.5rem;
+    }
+}
+
+/* ===========================================
+   eSign Component Customization Example
+   =========================================== */
+
+/*
+ * The eSign component exposes CSS classes that you can target directly.
+ * No special CSS variables needed - just write standard CSS!
+ *
+ * Available classes:
+ *   .superdoc-esign-container          - Root container (also accepts className prop)
+ *   .superdoc-esign-document           - Document section wrapper
+ *   .superdoc-esign-document-toolbar   - Toolbar with download button
+ *   .superdoc-esign-document-controls  - Control buttons container
+ *   .superdoc-esign-document-viewer    - Scroll container (SuperDoc mounts inside)
+ *   .superdoc-esign-controls           - Bottom section with fields + submit
+ *   .superdoc-esign-fields             - Signer fields container
+ *   .superdoc-esign-actions            - Action buttons container
+ *   .superdoc-esign-form-actions       - Form submit button container
+ */
+
+/* Example: Card-like styling */
+.superdoc-esign-container {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.superdoc-esign-document-viewer {
+    background: #f9fafb;
+}
+
+.superdoc-esign-controls {
+    margin-top: 0; /* Remove gap between viewer and controls */
+    padding: 16px 20px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+}
+
+.superdoc-esign-fields {
+    margin-bottom: 16px;
+}
+
+.superdoc-esign-actions {
+    gap: 12px;
+}
+
+/* Main layout container */
+.main-layout-container {
+    display: flex;
+    gap: 24px;
+}
+
+/* Main content area */
+.main-content-area {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Right sidebar */
+.document-fields-sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    padding: 16px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    align-self: flex-start;
+}
+
+.document-fields-sidebar h3 {
+    margin: 0 0 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.document-fields-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.document-field {
+    /* Individual field styles handled inline for now */
+}
+
+/* Responsive layout - stack vertically on small screens */
+@media (max-width: 768px) {
+    .main-layout-container {
+        flex-direction: column;
+    }
+
+    .document-fields-sidebar {
+        width: 100%;
+        order: 2; /* Move sidebar below the main content */
+    }
+
+    .main-content-area {
+        order: 1;
+    }
+}

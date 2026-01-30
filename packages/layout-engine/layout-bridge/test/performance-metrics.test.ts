@@ -2,7 +2,7 @@
  * Tests for PerformanceMetricsCollector
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { PerformanceMetricsCollector } from '../src/performance-metrics';
 
 describe('PerformanceMetricsCollector', () => {

@@ -2,7 +2,7 @@
  * Tests for LayoutWorkerManager
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { LayoutWorkerManager } from '../src/layout-worker';
 import { Priority } from '../src/layout-scheduler';
 

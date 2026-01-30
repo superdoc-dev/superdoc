@@ -6,7 +6,7 @@
  * the system.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { Page, HeaderFooterPage, HeaderFooterLayout } from '@superdoc/contracts';
 import { getBucketForPageNumber, getBucketRepresentative } from '../src/layoutHeaderFooter';
 

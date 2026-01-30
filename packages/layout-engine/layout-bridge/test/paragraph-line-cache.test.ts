@@ -2,7 +2,7 @@
  * Tests for ParagraphLineCache
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { ParagraphLineCache, type ParagraphLines, type LineInfo } from '../src/paragraph-line-cache';
 
 // Helper to create line info

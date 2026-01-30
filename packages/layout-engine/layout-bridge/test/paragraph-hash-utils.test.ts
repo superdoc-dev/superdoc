@@ -4,7 +4,7 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { hashBorderSpec, hashTableBorderValue, hashTableBorders, hashCellBorders } from '../src/paragraph-hash-utils';
 import type { BorderSpec, TableBorders, CellBorders } from '@superdoc/contracts';
 

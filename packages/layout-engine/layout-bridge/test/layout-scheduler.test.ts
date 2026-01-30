@@ -2,7 +2,7 @@
  * Tests for LayoutScheduler
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { LayoutScheduler, Priority, type LayoutRequest } from '../src/layout-scheduler';
 
 describe('LayoutScheduler', () => {

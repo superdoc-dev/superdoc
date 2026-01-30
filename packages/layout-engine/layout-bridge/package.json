@@ -16,7 +16,9 @@
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --tsconfig tsconfig.build.json",
-    "test": "vitest run",
+    "test": "bun test $(grep -l \"from 'bun:test'\" test/*.test.ts)",
+    "test:vitest": "vitest run $(grep -l \"from 'vitest'\" test/*.test.ts)",
+    "test:all": "pnpm test && pnpm test:vitest",
     "lint": "eslint src --ext .ts",
     "dev": "tsup src/index.ts --format esm --watch"
   },

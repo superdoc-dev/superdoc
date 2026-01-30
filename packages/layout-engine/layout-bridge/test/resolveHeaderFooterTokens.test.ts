@@ -4,7 +4,7 @@
  * Tests the resolution of page number tokens in header and footer blocks.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { resolveHeaderFooterTokens, cloneHeaderFooterBlocks } from '../src/resolveHeaderFooterTokens';
 import type { FlowBlock, ParagraphBlock, TextRun } from '@superdoc/contracts';
 

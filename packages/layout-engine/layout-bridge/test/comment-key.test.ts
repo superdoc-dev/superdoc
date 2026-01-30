@@ -3,7 +3,7 @@
  * Tests the comment hashing logic used for cache invalidation
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { Run } from '@superdoc/contracts';
 
 // Import the internal function for testing

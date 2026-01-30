@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import type { FlowBlock, Line, Run } from '@superdoc/contracts';
 import { findCharacterAtX, measureCharacterX, charOffsetToPm } from '../src/text-measurement.ts';
 

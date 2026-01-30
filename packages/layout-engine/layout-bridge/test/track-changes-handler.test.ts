@@ -2,7 +2,7 @@
  * Tests for TrackChangesHandler
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { TrackChangesHandler, type TrackChangeSpan } from '../src/track-changes-handler';
 
 describe('TrackChangesHandler', () => {

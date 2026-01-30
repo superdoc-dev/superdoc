@@ -8,7 +8,7 @@
  * different environment variable configurations.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { FeatureFlags, isFeatureEnabled, getAllFeatureFlags, type FeatureFlagKey } from '../src/featureFlags';
 
 describe('Feature Flags', () => {

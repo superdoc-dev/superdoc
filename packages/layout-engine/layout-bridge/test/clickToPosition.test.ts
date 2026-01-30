@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { clickToPosition, hitTestPage } from '../src/index.ts';
 import type { Layout } from '@superdoc/contracts';
 import {

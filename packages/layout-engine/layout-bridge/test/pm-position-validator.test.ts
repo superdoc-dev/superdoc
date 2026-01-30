@@ -2,7 +2,7 @@
  * Tests for PmPositionValidator
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { PmPositionValidator } from '../src/pm-position-validator';
 import type { FlowBlock } from '@superdoc/contracts';
 

@@ -10,7 +10,7 @@
  * - Edge cases (empty runs, very narrow widths, whitespace-only content)
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import type { ParagraphBlock, Run, TabStop } from '@superdoc/contracts';
 import { remeasureParagraph } from '../src/remeasure.ts';
 

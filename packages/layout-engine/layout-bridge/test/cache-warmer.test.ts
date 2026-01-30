@@ -2,7 +2,7 @@
  * Tests for CacheWarmer
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { CacheWarmer } from '../src/cache-warmer';
 import { FontMetricsCache } from '../src/font-metrics-cache';
 import { ParagraphLineCache } from '../src/paragraph-line-cache';

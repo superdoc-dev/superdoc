@@ -5,7 +5,7 @@
  * and edge cases for mixed page sizes.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { PageGeometryHelper } from '../src/page-geometry-helper';
 import type { Layout } from '@superdoc/contracts';
 

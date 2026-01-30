@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { hasTrackedChange, resolveTrackedChangesEnabled } from '../src/tracked-changes-utils';
 import type { Run, TextRun, TabRun, TrackedChangeMeta, ParagraphBlock } from '@superdoc/contracts';
 

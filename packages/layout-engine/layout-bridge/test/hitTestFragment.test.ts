@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { hitTestPage, hitTestFragment } from '../src/index.ts';
 import { columnsLayout, blocks, measures } from './mock-data';
 

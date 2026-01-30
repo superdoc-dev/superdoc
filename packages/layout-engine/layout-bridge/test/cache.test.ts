@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { MeasureCache } from '../src/cache';
 import type { FlowBlock, ImageRun, TableBlock, TableCell } from '@superdoc/contracts';
 

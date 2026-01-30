@@ -6,7 +6,7 @@
  * with bucket fallback when exact page matches are not found.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { getBucketForPageNumber, getBucketRepresentative, type DigitBucket } from '../src/layoutHeaderFooter';
 import type { HeaderFooterLayout, HeaderFooterPage } from '@superdoc/contracts';
 

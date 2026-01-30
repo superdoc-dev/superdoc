@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { computeLinePmRange } from '../src/index.ts';
 import type { FlowBlock, Line } from '@superdoc/contracts';
 

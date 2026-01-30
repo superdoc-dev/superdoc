@@ -19,6 +19,7 @@ export const translator = NodeTranslator.from({
     'w:themeShade',
     'w:themeTint',
     'w:val',
+    'w:opacity', // TEST: This attribute doesn't exist in ECMA-376 spec for w:shd
   ].map((attr) => createAttributeHandler(attr)),
   encode: (params, encodedAttrs) => {
     void params;

@@ -46,6 +46,12 @@ Fields use a unique `id` system for identifying and updating content:
 
 ### Document fields (injected values)
 
+Document fields populate placeholders in your document. Three types are supported:
+
+#### Text fields
+
+Simple text replacement (type is optional, defaults to `'text'`):
+
 ```jsx
 fields={{
   document: [
@@ -56,7 +62,31 @@ fields={{
 }}
 ```
 
+#### Table fields
+
+Populate table rows with a 2D array. The first row in the document serves as a template and is preserved, while new rows are appended with the same styling:
+
+```jsx
+fields={{
+  document: [
+    {
+      id: '1',
+      type: 'table',
+      value: [
+        ['Item 1', '$100', '2'],
+        ['Item 2', '$200', '1'],
+        ['Item 3', '$150', '3']
+      ]
+    }
+  ]
+}}
+```
+
 These update fields with matching IDs in your document.
+
+<Note>
+Signature fields from the signer are automatically converted to images when injected into the document. Use the `textToImageDataUrl` utility if you need to generate signature images programmatically.
+</Note>
 
 ### Signer fields (interactive)
 

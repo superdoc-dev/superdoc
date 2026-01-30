@@ -272,7 +272,8 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         let commandResult = false;
         try {
           commandResult = editor.commands.deleteStructuredContentById?.(id) ?? false;
-        } catch {
+        } catch (err) {
+          console.warn('[TemplateBuilder] Failed to delete structured content:', id, err);
           commandResult = false;
         }
 

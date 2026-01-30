@@ -1,4 +1,4 @@
-import { describe, it, expect,  mock } from 'bun:test';
+import { describe, it, expect, mock } from 'bun:test';
 import type { FlowBlock, Measure } from '@superdoc/contracts';
 import { incrementalLayout } from '../src/incrementalLayout';
 

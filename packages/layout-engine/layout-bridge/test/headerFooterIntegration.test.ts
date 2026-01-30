@@ -7,7 +7,7 @@
  * 3. Integration with incrementalLayout
  */
 
-import { describe, it, expect,  mock } from 'bun:test';
+import { describe, it, expect, mock } from 'bun:test';
 import type { FlowBlock, Measure, ParagraphBlock, TextRun, SectionMetadata } from '@superdoc/contracts';
 import { incrementalLayout } from '../src/incrementalLayout';
 import type { HeaderFooterBatch } from '../src/layoutHeaderFooter';

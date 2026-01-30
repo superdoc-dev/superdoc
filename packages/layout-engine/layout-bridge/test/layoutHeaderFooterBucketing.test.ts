@@ -10,7 +10,7 @@
  * - Backward compatibility with legacy API
  */
 
-import { describe, it, expect,  mock } from 'bun:test';
+import { describe, it, expect, mock } from 'bun:test';
 import type { FlowBlock, Measure, ParagraphBlock, TextRun } from '@superdoc/contracts';
 import {
   layoutHeaderFooterWithCache,

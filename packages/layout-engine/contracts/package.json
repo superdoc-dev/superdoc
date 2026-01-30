@@ -15,6 +15,9 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "test": "vitest run"
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "happy-dom": "catalog:"
   }
 }

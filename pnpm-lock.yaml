@@ -642,7 +642,11 @@ importers:
 
   packages/layout-engine: {}
 
-  packages/layout-engine/contracts: {}
+  packages/layout-engine/contracts:
+    devDependencies:
+      happy-dom:
+        specifier: 'catalog:'
+        version: 20.3.4
 
   packages/layout-engine/geometry-utils:
     devDependencies:

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { calculateTabWidth, computeTabStops, layoutWithTabs } from './tabs.js';
 
 describe('engines-tabs computeTabStops', () => {

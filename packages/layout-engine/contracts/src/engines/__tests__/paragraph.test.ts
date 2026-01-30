@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { resolveSpacingIndent } from '../paragraph.js';
 
 describe('engines-paragraph resolveSpacingIndent', () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import { computeWordParagraphLayout, DEFAULT_LIST_HANGING_PX } from '../src/index.js';
 import type { WordParagraphLayoutInput } from '../src/types.js';

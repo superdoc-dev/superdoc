@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { extractHeaderFooterSpace } from './index.js';
 import type { FlowBlock, Layout, PainterDOM, PainterPDF } from './index.js';
 

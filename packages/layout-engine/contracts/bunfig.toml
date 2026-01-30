@@ -1,0 +1,3 @@
+[test]
+timeout = 5000
+preload = ["./happydom.ts"]

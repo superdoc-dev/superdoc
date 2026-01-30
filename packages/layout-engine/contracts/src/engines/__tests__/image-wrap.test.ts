@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { computeWrapExclusion, scaleWrapPolygon } from '../image-wrap.js';
 
 describe('engines-image-wrap scaleWrapPolygon', () => {

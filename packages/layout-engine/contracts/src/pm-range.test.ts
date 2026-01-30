@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { computeFragmentPmRange, computeLinePmRange } from './index.js';
 import type { Line, ParagraphBlock } from './index.js';
 

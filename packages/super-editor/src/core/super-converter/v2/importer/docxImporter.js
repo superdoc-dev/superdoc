@@ -873,13 +873,11 @@ function normalizeTableBookmarksInNode(node, editor) {
 function normalizeTableBookmarksInTable(tableNode, editor) {
   if (!tableNode || tableNode.type !== 'table' || !Array.isArray(tableNode.content)) return tableNode;
 
-  const leading = [];
-  const trailing = [];
-  let seenRow = false;
-
   const rows = tableNode.content.filter((child) => child?.type === 'tableRow');
   if (!rows.length) return tableNode;
 
+  const rowStartInlines = rows.map(() => []);
+  const rowEndInlines = rows.map(() => []);
   const updatedRows = rows.slice();
   let rowCursor = 0;
 
@@ -887,15 +885,25 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
     if (child?.type === 'tableRow') {
       acc.push(updatedRows[rowCursor] ?? child);
       rowCursor += 1;
-      seenRow = true;
       return acc;
     }
 
     if (isBookmarkNode(child)) {
-      if (seenRow) {
-        trailing.push(child);
+      const prevRowIndex = rowCursor > 0 ? rowCursor - 1 : null;
+      const nextRowIndex = rowCursor < rows.length ? rowCursor : null;
+
+      if (child.type === 'bookmarkStart') {
+        if (nextRowIndex != null) {
+          rowStartInlines[nextRowIndex].push(child);
+        } else if (prevRowIndex != null) {
+          rowEndInlines[prevRowIndex].push(child);
+        }
       } else {
-        leading.push(child);
+        if (prevRowIndex != null) {
+          rowEndInlines[prevRowIndex].push(child);
+        } else if (nextRowIndex != null) {
+          rowStartInlines[nextRowIndex].push(child);
+        }
       }
       return acc;
     }
@@ -904,13 +912,14 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
     return acc;
   }, []);
 
-  if (leading.length) {
-    updatedRows[0] = insertInlineIntoRow(updatedRows[0], leading, editor, 'start');
-  }
-  if (trailing.length) {
-    const lastIndex = updatedRows.length - 1;
-    updatedRows[lastIndex] = insertInlineIntoRow(updatedRows[lastIndex], trailing, editor, 'end');
-  }
+  updatedRows.forEach((row, index) => {
+    if (rowStartInlines[index]?.length) {
+      updatedRows[index] = insertInlineIntoRow(row, rowStartInlines[index], editor, 'start');
+    }
+    if (rowEndInlines[index]?.length) {
+      updatedRows[index] = insertInlineIntoRow(updatedRows[index], rowEndInlines[index], editor, 'end');
+    }
+  });
 
   // Rebuild content with updated rows (preserve any non-row nodes in place).
   let updatedRowIndex = 0;

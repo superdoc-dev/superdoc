@@ -231,4 +231,28 @@ describe('normalizeTableBookmarksInContent', () => {
       { type: 'bookmarkEnd', attrs: { id: 'b1' } },
     ]);
   });
+
+  it('anchors bookmark boundaries to adjacent rows when markers appear between rows', () => {
+    const input = [
+      table([
+        bookmarkStart('b1'),
+        row([cell([paragraph([text('R1')])])]),
+        bookmarkEnd('b1'),
+        row([cell([paragraph([text('R2')])])]),
+      ]),
+    ];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+
+    const row1Content = normalizedTable.content[0].content[0].content[0].content;
+    expect(row1Content).toEqual([
+      { type: 'bookmarkStart', attrs: { id: 'b1' } },
+      { type: 'text', text: 'R1', marks: [] },
+      { type: 'bookmarkEnd', attrs: { id: 'b1' } },
+    ]);
+
+    const row2Content = normalizedTable.content[1].content[0].content[0].content;
+    expect(row2Content).toEqual([{ type: 'text', text: 'R2', marks: [] }]);
+  });
 });

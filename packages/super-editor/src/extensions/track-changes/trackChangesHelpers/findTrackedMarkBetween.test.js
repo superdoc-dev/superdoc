@@ -177,4 +177,36 @@ describe('findTrackedMarkBetween', () => {
     expect(found).not.toBeNull();
     expect(found.mark.attrs.id).toBe('def67890-5678-5678-5678-567890123def');
   });
+
+  it('finds trackInsert mark on text node directly when nodeAfter is a text node', () => {
+    // This tests the nodeAfter branch of the fix - when the text node comes
+    // after the search position (e.g., inserting at paragraph start)
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ghi01234-9012-9012-9012-901234567ghi',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    // Create: paragraph > text("xy" with trackInsert)
+    // Search at position 2 (start of paragraph content) where text node is nodeAfter
+    const textNode = schema.text('xy', [insertMark]);
+    const paragraph = schema.nodes.paragraph.create({}, [textNode]);
+    const doc = schema.nodes.doc.create({}, paragraph);
+
+    const state = createState(doc);
+    const tr = state.tr;
+
+    // Position 2 is at the start of paragraph content (after doc open + paragraph open)
+    // At this position, nodeAfter should be the text node "xy"
+    const found = findTrackedMarkBetween({
+      tr,
+      from: 2,
+      to: 3,
+      markName: TrackInsertMarkName,
+      attrs: { authorEmail: user.email },
+    });
+
+    expect(found).not.toBeNull();
+    expect(found.mark.attrs.id).toBe('ghi01234-9012-9012-9012-901234567ghi');
+  });
 });

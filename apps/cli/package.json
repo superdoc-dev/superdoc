@@ -21,7 +21,7 @@
     "release:dry-run": "pnpx semantic-release --dry-run"
   },
   "dependencies": {
-    "fast-glob": "^3.3.2",
+    "fast-glob": "catalog:",
     "superdoc": "workspace:*"
   },
   "devDependencies": {

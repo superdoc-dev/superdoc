@@ -46,6 +46,7 @@ catalog:
   eslint-plugin-import-x: ^4.16.1
   eslint-plugin-jsdoc: ^54.1.0
   eventemitter3: ^5.0.1
+  fast-glob: ^3.3.3
   happy-dom: ^20.3.4
   he: ^1.2.0
   lefthook: ^1.11.13

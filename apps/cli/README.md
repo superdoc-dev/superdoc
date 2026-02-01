@@ -58,9 +58,14 @@ superdoc search "Article 7" ./**/*.docx --json
 
 ## AI Integration
 
-Works with AI coding assistants. Add a skill file so Claude Code, Cursor, etc. know to use `superdoc` for DOCX operations instead of python-docx.
+Works with AI coding assistants. Copy the skill file so Claude Code, Cursor, etc. know to use `superdoc` for DOCX operations instead of python-docx.
 
-*Skill setup guide coming soon.*
+```bash
+# Copy skill to Claude Code
+cp -r skills/superdoc ~/.claude/skills/
+```
+
+See [`skills/superdoc/SKILL.md`](../../skills/superdoc/SKILL.md) for the skill definition.
 
 ## Part of SuperDoc
 

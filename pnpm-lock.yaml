@@ -114,6 +114,9 @@ catalogs:
     eventemitter3:
       specifier: ^5.0.1
       version: 5.0.1
+    fast-glob:
+      specifier: ^3.3.3
+      version: 3.3.3
     happy-dom:
       specifier: ^20.3.4
       version: 20.3.4
@@ -390,7 +393,7 @@ importers:
   apps/cli:
     dependencies:
       fast-glob:
-        specifier: ^3.3.2
+        specifier: 'catalog:'
         version: 3.3.3
       superdoc:
         specifier: workspace:*

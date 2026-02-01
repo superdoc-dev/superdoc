@@ -11,6 +11,14 @@ pre-commit:
       glob: "*.{js,jsx,ts,tsx}"
       run: pnpm exec eslint --fix {staged_files}
       stage_fixed: true
+    cli-build:
+      root: "apps/cli/"
+      glob: "apps/cli/**/*.ts"
+      run: pnpm run build
+    cli-test:
+      root: "apps/cli/"
+      glob: "apps/cli/**/*.ts"
+      run: pnpm run test
 
 commit-msg:
   commands:

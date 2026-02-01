@@ -1,0 +1,14 @@
+# dependencies (bun install)
+node_modules
+
+# output
+dist
+
+# env files
+.env
+
+# caches
+*.tsbuildinfo
+
+# Finder (MacOS) folder config
+.DS_Store

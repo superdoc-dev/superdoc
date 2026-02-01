@@ -1,0 +1,33 @@
+{
+  "name": "@superdoc-dev/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "superdoc": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm",
+    "test": "bun test",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build",
+    "release": "pnpx semantic-release",
+    "release:dry-run": "pnpx semantic-release --dry-run"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.2",
+    "superdoc": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "module": "src/index.ts"
+}

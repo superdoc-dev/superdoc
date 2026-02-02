@@ -255,4 +255,21 @@ describe('normalizeTableBookmarksInContent', () => {
     const row2Content = normalizedTable.content[1].content[0].content[0].content;
     expect(row2Content).toEqual([{ type: 'text', text: 'R2', marks: [] }]);
   });
+
+  it('creates a cell when a row is empty', () => {
+    const input = [table([bookmarkStart('b1'), row([]), bookmarkEnd('b1')])];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+
+    const rowContent = normalizedTable.content[0].content;
+    expect(rowContent).toHaveLength(1);
+    expect(rowContent[0].type).toBe('tableCell');
+
+    const paraContent = rowContent[0].content[0].content;
+    expect(paraContent).toEqual([
+      { type: 'bookmarkStart', attrs: { id: 'b1' } },
+      { type: 'bookmarkEnd', attrs: { id: 'b1' } },
+    ]);
+  });
 });

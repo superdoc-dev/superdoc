@@ -939,7 +939,15 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
 }
 
 function insertInlineIntoRow(rowNode, inlineNodes, editor, position) {
-  if (!rowNode || !inlineNodes?.length || !Array.isArray(rowNode.content)) return rowNode;
+  if (!rowNode || !inlineNodes?.length) return rowNode;
+
+  if (!Array.isArray(rowNode.content) || rowNode.content.length === 0) {
+    const cellType = editor?.schema?.nodes?.tableCell ? 'tableCell' : 'tableCell';
+    const paragraph = { type: 'paragraph', content: inlineNodes };
+    const newCell = { type: cellType, content: [paragraph], attrs: {}, marks: [] };
+    const nextContent = [newCell];
+    return { ...rowNode, content: nextContent };
+  }
 
   const targetIndex = position === 'end' ? rowNode.content.length - 1 : 0;
   const targetCell = rowNode.content[targetIndex];

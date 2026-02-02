@@ -559,7 +559,7 @@ export function computeDomCaretPageLocal(
     options.rebuildDomPositionIndex();
   }
 
-  let entry = options.domPositionIndex.findEntryAtPosition(pos);
+  let entry = options.domPositionIndex.findEntryClosestToPosition(pos);
   if (entry && !entry.el.isConnected) {
     options.rebuildDomPositionIndex();
     entry = options.domPositionIndex.findEntryAtPosition(pos);

@@ -1,7 +1,7 @@
 import { Extension } from '@core/index.js';
 import { PluginKey } from 'prosemirror-state';
 import { encodeStateAsUpdate } from 'yjs';
-import { ySyncPlugin, prosemirrorToYDoc } from 'y-prosemirror';
+import { ySyncPlugin, ySyncPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
 import { updateYdocDocxData, applyRemoteHeaderFooterChanges } from '@extensions/collaboration/collaboration-helpers.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
@@ -57,6 +57,17 @@ export const Collaboration = Extension.create({
     });
 
     return [syncPlugin];
+  },
+
+  onCreate() {
+    // In headless mode, manually initialize the Y.js binding since no EditorView is created
+    // This must happen in onCreate (after state is created) because we need access to the plugin state
+    if (this.editor.options.isHeadless && this.editor.options.ydoc) {
+      const cleanup = initHeadlessBinding(this.editor);
+      if (cleanup) {
+        this.editor.once('destroy', cleanup);
+      }
+    }
   },
 
   addCommands() {
@@ -153,4 +164,65 @@ export const generateCollaborationData = async (editor) => {
   initializeMetaMap(ydoc, editor);
   await updateYdocDocxData(editor, ydoc);
   return encodeStateAsUpdate(ydoc);
+};
+
+/**
+ * Initialize Y.js sync binding for headless mode.
+ *
+ * In normal (non-headless) mode, ySyncPlugin's `view` callback calls
+ * `binding.initView(view)` when the EditorView is created. In headless
+ * mode, no EditorView exists, so we create a minimal shim that satisfies
+ * y-prosemirror's requirements.
+ *
+ * @param {Editor} editor - The SuperEditor instance in headless mode
+ * @returns {Function|undefined} Cleanup function to remove event listeners
+ */
+const initHeadlessBinding = (editor) => {
+  const syncState = ySyncPluginKey.getState(editor.state);
+  if (!syncState?.binding) {
+    console.warn('[Collaboration] Headless binding init: no sync state or binding found');
+    return;
+  }
+
+  const binding = syncState.binding;
+
+  // Create a minimal EditorView shim that satisfies y-prosemirror's interface
+  // See: y-prosemirror/src/plugins/sync-plugin.js initView() and _typeChanged()
+  const headlessViewShim = {
+    get state() {
+      return editor.state;
+    },
+    dispatch: (tr) => {
+      editor.dispatch(tr);
+    },
+    hasFocus: () => false,
+    // Minimal DOM stubs required by y-prosemirror's renderSnapshot/undo operations
+    _root: {
+      getSelection: () => null,
+      createRange: () => ({}),
+    },
+  };
+
+  // Initialize the binding with our shim
+  binding.initView(headlessViewShim);
+
+  // Listen for ProseMirror transactions and sync to Y.js
+  // This replicates the behavior of ySyncPlugin's view.update callback
+  // Note: _prosemirrorChanged is internal to y-prosemirror but is the recommended
+  // approach for headless mode (see y-prosemirror issue #75)
+  const transactionHandler = ({ transaction }) => {
+    // Skip if this transaction originated from Y.js (avoid infinite loop)
+    const meta = transaction.getMeta(ySyncPluginKey);
+    if (meta?.isChangeOrigin) return;
+
+    // Sync ProseMirror changes to Y.js
+    binding._prosemirrorChanged(editor.state.doc);
+  };
+
+  editor.on('transaction', transactionHandler);
+
+  // Return cleanup function to remove listener on destroy
+  return () => {
+    editor.off('transaction', transactionHandler);
+  };
 };

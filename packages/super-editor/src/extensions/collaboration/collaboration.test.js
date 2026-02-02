@@ -1,9 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('y-prosemirror', () => ({
-  ySyncPlugin: vi.fn(() => 'y-sync-plugin'),
-  prosemirrorToYDoc: vi.fn(),
-}));
+// Mock binding object - we'll configure this in tests
+const mockBinding = {
+  initView: vi.fn(),
+  _prosemirrorChanged: vi.fn(),
+};
+
+vi.mock('y-prosemirror', () => {
+  const mockSyncPluginKey = {
+    getState: vi.fn(() => ({ binding: mockBinding })),
+  };
+  return {
+    ySyncPlugin: vi.fn(() => 'y-sync-plugin'),
+    ySyncPluginKey: mockSyncPluginKey,
+    prosemirrorToYDoc: vi.fn(),
+  };
+});
 
 vi.mock('yjs', () => ({
   encodeStateAsUpdate: vi.fn(() => new Uint8Array([1, 2, 3])),
@@ -656,6 +668,311 @@ describe('collaboration extension', () => {
 
       // Verify the local version was NOT overwritten (since it already exists)
       expect(editor.storage.image.media['word/media/local-image.png']).toBe('base64-local-version');
+    });
+  });
+
+  describe('headless mode Y.js sync', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockBinding.initView.mockClear();
+      mockBinding._prosemirrorChanged.mockClear();
+      YProsemirror.ySyncPluginKey.getState.mockReturnValue({ binding: mockBinding });
+    });
+
+    it('initializes Y.js binding with headless view shim when isHeadless is true', () => {
+      const ydoc = createYDocStub();
+      const editorState = { doc: { type: 'doc' } };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        state: editorState,
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        once: vi.fn(),
+        dispatch: vi.fn(),
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      // Headless binding is initialized in onCreate (after state is created)
+      Collaboration.config.onCreate.call(context);
+
+      // Verify binding.initView was called with the headless shim
+      expect(mockBinding.initView).toHaveBeenCalledTimes(1);
+      const shimArg = mockBinding.initView.mock.calls[0][0];
+      expect(shimArg).toHaveProperty('state');
+      expect(shimArg).toHaveProperty('dispatch');
+      expect(shimArg).toHaveProperty('hasFocus');
+      expect(shimArg).toHaveProperty('_root');
+      expect(shimArg.hasFocus()).toBe(false);
+    });
+
+    it('does not initialize headless binding when isHeadless is false', () => {
+      const ydoc = createYDocStub();
+      const editorState = { doc: {} };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: false,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        view: { state: editorState, dispatch: vi.fn() },
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      // Verify binding.initView was NOT called
+      expect(mockBinding.initView).not.toHaveBeenCalled();
+    });
+
+    it('registers transaction listener in headless mode', () => {
+      const ydoc = createYDocStub();
+      const editorState = { doc: { type: 'doc' } };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        state: editorState,
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        once: vi.fn(),
+        dispatch: vi.fn(),
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      // Verify transaction listener was registered
+      expect(editor.on).toHaveBeenCalledWith('transaction', expect.any(Function));
+    });
+
+    it('syncs PM changes to Y.js via transaction listener', () => {
+      const ydoc = createYDocStub();
+      const editorState = { doc: { type: 'doc', content: [] } };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        state: editorState,
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        once: vi.fn(),
+        dispatch: vi.fn(),
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      // Get the transaction listener
+      const transactionListener = editor.on.mock.calls.find((call) => call[0] === 'transaction')?.[1];
+      expect(transactionListener).toBeDefined();
+
+      // Simulate a local transaction (not from Y.js)
+      const mockTransaction = {
+        getMeta: vi.fn().mockReturnValue(null),
+      };
+      transactionListener({ transaction: mockTransaction });
+
+      // Verify binding._prosemirrorChanged was called
+      expect(mockBinding._prosemirrorChanged).toHaveBeenCalledWith(editorState.doc);
+    });
+
+    it('skips sync for transactions originating from Y.js', () => {
+      const ydoc = createYDocStub();
+      const editorState = { doc: { type: 'doc' } };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        state: editorState,
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        once: vi.fn(),
+        dispatch: vi.fn(),
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      // Get the transaction listener
+      const transactionListener = editor.on.mock.calls.find((call) => call[0] === 'transaction')?.[1];
+
+      // Simulate a transaction that originated from Y.js (has isChangeOrigin meta)
+      const mockTransaction = {
+        getMeta: vi.fn().mockReturnValue({ isChangeOrigin: true }),
+      };
+      transactionListener({ transaction: mockTransaction });
+
+      // Verify binding._prosemirrorChanged was NOT called (to avoid infinite loop)
+      expect(mockBinding._prosemirrorChanged).not.toHaveBeenCalled();
+    });
+
+    it('handles missing binding gracefully', () => {
+      YProsemirror.ySyncPluginKey.getState.mockReturnValue(null);
+
+      const ydoc = createYDocStub();
+      const editorState = { doc: { type: 'doc' } };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        state: editorState,
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        once: vi.fn(),
+        dispatch: vi.fn(),
+      };
+
+      const context = { editor, options: {} };
+
+      // Should not throw
+      Collaboration.config.addPmPlugins.call(context);
+      expect(() => Collaboration.config.onCreate.call(context)).not.toThrow();
+
+      // Should log a warning
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('no sync state or binding found'));
+
+      consoleSpy.mockRestore();
+    });
+
+    it('headless shim state getter returns current editor state', () => {
+      const ydoc = createYDocStub();
+      const initialState = { doc: { type: 'doc', content: 'initial' } };
+      const updatedState = { doc: { type: 'doc', content: 'updated' } };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        state: initialState,
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        once: vi.fn(),
+        dispatch: vi.fn(),
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const shimArg = mockBinding.initView.mock.calls[0][0];
+
+      // Initial state
+      expect(shimArg.state).toBe(initialState);
+
+      // Update editor state
+      editor.state = updatedState;
+
+      // Shim should return the updated state (it's a getter)
+      expect(shimArg.state).toBe(updatedState);
+    });
+
+    it('headless shim dispatch calls editor.dispatch', () => {
+      const ydoc = createYDocStub();
+      const editorState = { doc: { type: 'doc' } };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const dispatchMock = vi.fn();
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        state: editorState,
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        once: vi.fn(),
+        dispatch: dispatchMock,
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const shimArg = mockBinding.initView.mock.calls[0][0];
+      const mockTr = { steps: [] };
+
+      shimArg.dispatch(mockTr);
+
+      expect(dispatchMock).toHaveBeenCalledWith(mockTr);
+    });
+
+    it('cleans up transaction listener on editor destroy', () => {
+      const ydoc = createYDocStub();
+      const editorState = { doc: { type: 'doc' } };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const onMock = vi.fn();
+      const offMock = vi.fn();
+      const onceMock = vi.fn();
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        state: editorState,
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: onMock,
+        off: offMock,
+        once: onceMock,
+        dispatch: vi.fn(),
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      // Verify that cleanup is registered on 'destroy' event
+      expect(onceMock).toHaveBeenCalledWith('destroy', expect.any(Function));
+
+      // Get the cleanup function that was registered
+      const cleanupFn = onceMock.mock.calls.find((call) => call[0] === 'destroy')?.[1];
+      expect(cleanupFn).toBeDefined();
+
+      // Get the transaction handler that was registered
+      const transactionHandler = onMock.mock.calls.find((call) => call[0] === 'transaction')?.[1];
+      expect(transactionHandler).toBeDefined();
+
+      // Call the cleanup function (simulates editor destroy)
+      cleanupFn();
+
+      // Verify that the transaction listener was removed
+      expect(offMock).toHaveBeenCalledWith('transaction', transactionHandler);
     });
   });
 });

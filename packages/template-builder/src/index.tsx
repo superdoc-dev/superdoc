@@ -112,6 +112,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       menu = {},
       list = {},
       toolbar,
+      cspNonce,
       onReady,
       onTrigger,
       onFieldInsert,
@@ -468,6 +469,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           documentMode: document?.mode || 'editing',
           modules,
           toolbar: toolbarSettings?.selector,
+          cspNonce,
           onReady: handleReady,
         });
 
@@ -489,7 +491,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         superdocRef.current = null;
       };
-    }, [document?.source, document?.mode, trigger, discoverFields, onReady, onTrigger, toolbarSettings]);
+    }, [document?.source, document?.mode, trigger, discoverFields, onReady, onTrigger, toolbarSettings, cspNonce]);
 
     const handleMenuSelect = useCallback(
       async (field: Types.FieldDefinition) => {

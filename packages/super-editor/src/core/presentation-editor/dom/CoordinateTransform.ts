@@ -66,6 +66,29 @@ export function getPageOffsetX(options: {
   return getPageOffsets(options)?.x ?? null;
 }
 
+export function getPageOffsetY(options: {
+  painterHost: HTMLElement | null;
+  viewportHost: HTMLElement | null;
+  zoom: number;
+  pageIndex: number;
+}): number | null {
+  if (!options.painterHost || !options.viewportHost) {
+    return null;
+  }
+
+  const pageEl = options.painterHost.querySelector(
+    `.superdoc-page[data-page-index="${options.pageIndex}"]`,
+  ) as HTMLElement | null;
+  if (!pageEl) return null;
+
+  const pageRect = pageEl.getBoundingClientRect();
+  const viewportRect = options.viewportHost.getBoundingClientRect();
+
+  const offsetY = (pageRect.top - viewportRect.top) / options.zoom;
+
+  return offsetY;
+}
+
 /**
  * Converts page-local coordinates to overlay-absolute coordinates.
  *

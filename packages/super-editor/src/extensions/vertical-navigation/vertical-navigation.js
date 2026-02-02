@@ -119,6 +119,7 @@ function getCurrentCoords(editor, selection) {
 
   const presentationEditor = editor.presentationEditor;
   const layoutSpaceCoords = presentationEditor.computeCaretLayoutRect(selection.head);
+  if (!layoutSpaceCoords) return null;
   const clientCoords = presentationEditor.denormalizeClientPoint(layoutSpaceCoords.x, layoutSpaceCoords.y, layoutSpaceCoords.pageIndex)
   return {
     clientX: clientCoords.x,

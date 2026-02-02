@@ -50,6 +50,7 @@ export function denormalizeClientPoint(
     visibleHost: HTMLElement;
     zoom: number;
     getPageOffsetX: (pageIndex: number) => number | null;
+    getPageOffsetY: (pageIndex: number) => number | null;
   },
   layoutX: number,
   layoutY: number,
@@ -70,6 +71,11 @@ export function denormalizeClientPoint(
     const pageOffsetX = options.getPageOffsetX(pageIndex);
     if (pageOffsetX != null) {
       baseX = layoutX + pageOffsetX;
+    }
+
+    const pageOffsetY = options.getPageOffsetY(pageIndex);
+    if (pageOffsetY != null) {
+      layoutY += pageOffsetY;
     }
   }
 

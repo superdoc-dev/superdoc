@@ -15,6 +15,7 @@ import {
 import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
+  getPageOffsetY as getPageOffsetYFromTransform,
 } from './dom/CoordinateTransform.js';
 import {
   normalizeClientPoint as normalizeClientPointFromPointer,
@@ -4450,6 +4451,15 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  #getPageOffsetY(pageIndex: number): number | null {
+    return getPageOffsetYFromTransform({
+      painterHost: this.#painterHost,
+      viewportHost: this.#viewportHost,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageIndex,
+    });
+  }
+
   #convertPageLocalToOverlayCoords(
     pageIndex: number,
     pageLocalX: number,
@@ -4529,6 +4539,7 @@ export class PresentationEditor extends EventEmitter {
         visibleHost: this.#visibleHost,
         zoom: this.#layoutOptions.zoom ?? 1,
         getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
       },
       layoutX,
       layoutY,

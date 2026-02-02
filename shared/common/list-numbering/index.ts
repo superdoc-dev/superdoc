@@ -49,7 +49,8 @@ export const generateOrderedListIndex = ({
   return handler ? handler(listLevel, lvlText, customFormat) : null;
 };
 
-const createNumbering = (values: string[], lvlText: string): string => {
+const createNumbering = (values: string[], lvlText: string | null): string | null => {
+  if (lvlText == null) return null;
   return values.reduce<string>((acc, value, index) => {
     return Number(value) > 9
       ? acc.replace(/^0/, '').replace(`%${index + 1}`, value)
@@ -57,7 +58,8 @@ const createNumbering = (values: string[], lvlText: string): string => {
   }, lvlText);
 };
 
-const generateNumbering = (path: number[], lvlText: string, formatter: NumberFormatter): string => {
+const generateNumbering = (path: number[], lvlText: string | null, formatter: NumberFormatter): string | null => {
+  if (lvlText == null) return null;
   const formattedValues = path.map((entry, idx) => formatter(entry, idx));
   return createNumbering(formattedValues, lvlText);
 };
@@ -74,7 +76,8 @@ const decimalZeroFormatter: NumberFormatter = (value, idx) => {
   return `0${value}`;
 };
 
-const generateFromCustom = (path: number[], lvlText: string, customFormat: string): string => {
+const generateFromCustom = (path: number[], lvlText: string | null, customFormat: string): string | null => {
+  if (lvlText == null) return null;
   if (customFormat.match(/(?:[0]+\d,\s){3}\.{3}/) == null) {
     return generateNumbering(path, lvlText, numberToStringFormatter);
   }

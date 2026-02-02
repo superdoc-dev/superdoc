@@ -66,6 +66,12 @@ export function getPageOffsetX(options: {
   return getPageOffsets(options)?.x ?? null;
 }
 
+/**
+ * Calculates the vertical offset of a page element within the viewport.
+ *
+ * @param options - Configuration object containing DOM elements and page information.
+ * @returns The Y offset in layout-space units, or null if calculation fails.
+ */
 export function getPageOffsetY(options: {
   painterHost: HTMLElement | null;
   viewportHost: HTMLElement | null;

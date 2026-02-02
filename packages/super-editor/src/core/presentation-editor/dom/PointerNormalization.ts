@@ -1,3 +1,15 @@
+/**
+ * Convert a client (screen) point into layout coordinates relative to the
+ * document content.
+ *
+ * The result accounts for the viewport's scroll offsets, zoom factor, and
+ * optional per-page X offsets when the pointer is over a page element.
+ *
+ * @param options - Context needed to map between client and layout coordinates.
+ * @param clientX - The client X position, in screen pixels.
+ * @param clientY - The client Y position, in screen pixels.
+ * @returns The normalized layout point, or null if inputs are not finite.
+ */
 export function normalizeClientPoint(
   options: {
     viewportHost: HTMLElement;
@@ -44,6 +56,19 @@ export function normalizeClientPoint(
   };
 }
 
+/**
+ * Convert layout coordinates back into client (screen) coordinates.
+ *
+ * The result accounts for zoom, viewport scroll, and optional per-page offsets.
+ * When a height is provided, it is scaled by the zoom factor.
+ *
+ * @param options - Context needed to map between layout and client coordinates.
+ * @param layoutX - The layout X position, in document units.
+ * @param layoutY - The layout Y position, in document units.
+ * @param pageIndex - Optional page index used to apply per-page offsets.
+ * @param height - Optional layout height to scale into screen pixels.
+ * @returns The client-space point (and optional height), or null if inputs are not finite.
+ */
 export function denormalizeClientPoint(
   options: {
     viewportHost: HTMLElement;

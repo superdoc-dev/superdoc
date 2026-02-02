@@ -5,13 +5,27 @@ import { CellSelection } from 'prosemirror-tables';
 
 export const VerticalNavigationPluginKey = new PluginKey('verticalNavigation');
 
+/**
+ * Creates the default plugin state for vertical navigation.
+ * @returns {{ goalX: number | null }} State with no goal X position set.
+ */
 const createDefaultState = () => ({
   goalX: null,
 });
 
+/**
+ * Enables vertical caret navigation in presentation mode by preserving a goal X
+ * column and translating Up/Down arrow presses into layout-engine hit tests.
+ * This keeps the caret aligned across wrapped lines, fragments, and pages while
+ * respecting selection extension and avoiding non-text selections.
+ */
 export const VerticalNavigation = Extension.create({
   name: 'verticalNavigation',
 
+  /**
+   * Registers ProseMirror plugins used for vertical navigation.
+   * @returns {import('prosemirror-state').Plugin[]} Plugin list, empty when disabled.
+   */
   addPmPlugins() {
     if (this.editor.options?.isHeaderOrFooter) return [];
     if (this.editor.options?.isHeadless) return [];
@@ -20,7 +34,17 @@ export const VerticalNavigation = Extension.create({
     const plugin = new Plugin({
       key: VerticalNavigationPluginKey,
       state: {
+        /**
+         * Initializes plugin state.
+         * @returns {{ goalX: number | null }} Initial plugin state.
+         */
         init: () => createDefaultState(),
+        /**
+         * Updates plugin state based on transaction metadata and selection changes.
+         * @param {import('prosemirror-state').Transaction} tr
+         * @param {{ goalX: number | null }} value
+         * @returns {{ goalX: number | null }}
+         */
         apply(tr, value) {
           const meta = tr.getMeta(VerticalNavigationPluginKey);
           if (meta?.type === 'vertical-move') {
@@ -50,7 +74,15 @@ export const VerticalNavigation = Extension.create({
         },
       },
       props: {
+        /**
+         * Handles vertical navigation key presses while presenting.
+         * @param {import('prosemirror-view').EditorView} view
+         * @param {KeyboardEvent} event
+         * @returns {boolean} Whether the event was handled.
+         */
         handleKeyDown(view, event) {
+
+          // Guard clauses
           if (view.composing || !editor.isEditable) return false;
           if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
             view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
@@ -66,6 +98,13 @@ export const VerticalNavigation = Extension.create({
             return false;
           }
 
+          // Basic logic:
+          // 1. On first vertical move, record goal X from current caret position (in layout space coordinates).
+          // 2. Find adjacent line element in the desired direction.
+          // 3. Perform hit test at (goal X, adjacent line center Y) to find target position.
+          // 4. Move selection to target position, extending if Shift is held.
+
+          // 1. Get or set goal X
           const pluginState = VerticalNavigationPluginKey.getState(view.state);
           let goalX = pluginState?.goalX;
           const coords = getCurrentCoords(editor, view.state.selection);
@@ -77,25 +116,45 @@ export const VerticalNavigation = Extension.create({
               view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'set-goal-x', goalX }),
             );
           }
+
+          // 2. Find adjacent line
           const adjacent = getAdjacentLineClientTarget(editor, coords, event.key === 'ArrowUp' ? -1 : 1);
           if (!adjacent) return false;
 
+          // 3. Hit test at (goal X, adjacent line center Y)
           const hit = getHitFromLayoutCoords(editor, goalX, adjacent.clientY, coords, adjacent.pageIndex);
           if (!hit || !Number.isFinite(hit.pos)) return false;
+
+          // 4. Move selection
           const selection = buildSelection(view.state, hit.pos, event.shiftKey);
           if (!selection) return false;
           view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX }).setSelection(selection));
           return true;
         },
         handleDOMEvents: {
+          /**
+           * Resets goal X on pointer-driven selection changes.
+           * @param {import('prosemirror-view').EditorView} view
+           * @returns {boolean}
+           */
           mousedown: (view) => {
             view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
             return false;
           },
+          /**
+           * Resets goal X on touch-driven selection changes.
+           * @param {import('prosemirror-view').EditorView} view
+           * @returns {boolean}
+           */
           touchstart: (view) => {
             view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
             return false;
           },
+          /**
+           * Resets goal X when IME composition starts.
+           * @param {import('prosemirror-view').EditorView} view
+           * @returns {boolean}
+           */
           compositionstart: (view) => {
             view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
             return false;
@@ -108,6 +167,11 @@ export const VerticalNavigation = Extension.create({
   },
 });
 
+/**
+ * Determines whether the editor is the active presentation editor.
+ * @param {Object} editor
+ * @returns {boolean}
+ */
 function isPresenting(editor) {
   const presentationCtx = editor?.presentationEditor;
   if (!presentationCtx) return false;
@@ -115,6 +179,12 @@ function isPresenting(editor) {
   return activeEditor === editor;
 }
 
+/**
+ * Gets the current caret coordinates in both layout and client space.
+ * @param {Object} editor
+ * @param {import('prosemirror-state').Selection} selection
+ * @returns {{ clientX: number, clientY: number, height: number, x: number, y: number } | null}
+ */
 function getCurrentCoords(editor, selection) {
 
   const presentationEditor = editor.presentationEditor;
@@ -130,6 +200,13 @@ function getCurrentCoords(editor, selection) {
   };
 }
 
+/**
+ * Finds the adjacent line center Y in client space and associated page index.
+ * @param {Object} editor
+ * @param {{ clientX: number, clientY: number, height: number }} coords
+ * @param {number} direction -1 for up, 1 for down.
+ * @returns {{ clientY: number, pageIndex?: number } | null}
+ */
 function getAdjacentLineClientTarget(editor, coords, direction) {
   const presentationEditor = editor.presentationEditor;
   const doc = presentationEditor.visibleHost?.ownerDocument ?? document;
@@ -150,6 +227,15 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
   };
 }
 
+/**
+ * Converts layout coords to client coords and performs a hit test.
+ * @param {Object} editor
+ * @param {number} goalX
+ * @param {number} clientY
+ * @param {{ y: number }} coords
+ * @param {number | undefined} pageIndex
+ * @returns {{ pos: number } | null}
+ */
 function getHitFromLayoutCoords(editor, goalX, clientY, coords, pageIndex) {
   const presentationEditor = editor.presentationEditor;
   const clientPoint = presentationEditor.denormalizeClientPoint(goalX, coords.y, pageIndex);
@@ -158,6 +244,13 @@ function getHitFromLayoutCoords(editor, goalX, clientY, coords, pageIndex) {
   return presentationEditor.hitTest(clientX, clientY);
 }
 
+/**
+ * Builds a text selection for the target position, optionally extending.
+ * @param {import('prosemirror-state').EditorState} state
+ * @param {number} pos
+ * @param {boolean} extend
+ * @returns {import('prosemirror-state').Selection | null}
+ */
 function buildSelection(state, pos, extend) {
   const { doc, selection } = state;
   if (selection instanceof NodeSelection || selection instanceof CellSelection) {
@@ -171,6 +264,13 @@ function buildSelection(state, pos, extend) {
   return TextSelection.create(doc, clamped);
 }
 
+/**
+ * Finds a line element at the given client point.
+ * @param {Document} doc
+ * @param {number} x
+ * @param {number} y
+ * @returns {Element | null}
+ */
 function findLineElementAtPoint(doc, x, y) {
   if (typeof doc?.elementsFromPoint !== 'function') return null;
   const chain = doc.elementsFromPoint(x, y) ?? [];
@@ -180,6 +280,12 @@ function findLineElementAtPoint(doc, x, y) {
   return null;
 }
 
+/**
+ * Locates the next or previous line element across fragments/pages.
+ * @param {Element} currentLine
+ * @param {number} direction -1 for up, 1 for down.
+ * @returns {Element | null}
+ */
 function findAdjacentLineElement(currentLine, direction) {
   const lineClass = DOM_CLASS_NAMES.LINE;
   const fragmentClass = DOM_CLASS_NAMES.FRAGMENT;
@@ -223,6 +329,12 @@ function findAdjacentLineElement(currentLine, direction) {
   return getEdgeLineFromFragment(pageFragments[pageFragments.length - 1], direction);
 }
 
+/**
+ * Returns the first or last line in a fragment, depending on direction.
+ * @param {Element | null | undefined} fragment
+ * @param {number} direction
+ * @returns {Element | null}
+ */
 function getEdgeLineFromFragment(fragment, direction) {
   if (!fragment) return null;
   const lineEls = Array.from(fragment.querySelectorAll(`.${DOM_CLASS_NAMES.LINE}`));

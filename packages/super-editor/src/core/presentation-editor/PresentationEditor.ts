@@ -4619,6 +4619,10 @@ export class PresentationEditor extends EventEmitter {
     return geometry;
   }
 
+  computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null {
+    return this.#computeCaretLayoutRect(pos);
+  }
+
   #getCurrentPageIndex(): number {
     const session = this.#headerFooterSession?.session;
     if (session && session.mode !== 'body') {

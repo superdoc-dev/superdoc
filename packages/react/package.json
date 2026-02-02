@@ -1,0 +1,73 @@
+{
+  "name": "@superdoc/react",
+  "version": "0.1.0",
+  "description": "React wrapper for SuperDoc document editor",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js"
+    },
+    "./style.css": {
+      "import": "./style.css",
+      "require": "./style.css"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts,.tsx",
+    "prepublishOnly": "pnpm run build",
+    "version:next": "pnpm version prerelease --preid=next --no-git-tag-version",
+    "version:beta": "pnpm version prerelease --preid=beta --no-git-tag-version",
+    "version:patch": "pnpm version patch --no-git-tag-version",
+    "version:minor": "pnpm version minor --no-git-tag-version",
+    "version:major": "pnpm version major --no-git-tag-version",
+    "publish:next": "pnpm run build && pnpm run test && pnpm publish --tag next --access public",
+    "publish:beta": "pnpm run build && pnpm run test && pnpm publish --tag beta --access public",
+    "publish:latest": "pnpm run build && pnpm run test && pnpm publish --tag latest --access public",
+    "release:next": "pnpm run version:next && pnpm run publish:next",
+    "release:beta": "pnpm run version:beta && pnpm run publish:beta"
+  },
+  "keywords": [
+    "superdoc",
+    "react",
+    "document",
+    "editor",
+    "docx",
+    "word"
+  ],
+  "license": "AGPL-3.0",
+  "dependencies": {
+    "superdoc": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "react-dom": ">=16.8.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "eslint": "catalog:",
+    "happy-dom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "files": [
+    "dist",
+    "style.css",
+    "README.md"
+  ]
+}

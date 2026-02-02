@@ -15,3 +15,4 @@ onlyBuiltDependencies:
 
 overrides:
   superdoc: file:../packages/superdoc/superdoc.tgz
+  '@superdoc/react': file:../packages/react/react.tgz

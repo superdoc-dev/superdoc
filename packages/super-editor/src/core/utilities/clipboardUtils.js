@@ -53,6 +53,35 @@ export async function ensureClipboardPermission() {
 }
 
 /**
+ * Reads raw HTML and text from the system clipboard (for use in paste actions).
+ * @returns {Promise<{ html: string, text: string }>}
+ */
+export async function readClipboardRaw() {
+  let html = '';
+  let text = '';
+  const hasPermission = await ensureClipboardPermission();
+
+  if (hasPermission && navigator.clipboard && navigator.clipboard.read) {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        if (item.types.includes('text/html')) {
+          html = await (await item.getType('text/html')).text();
+        }
+        if (item.types.includes('text/plain')) {
+          text = await (await item.getType('text/plain')).text();
+        }
+      }
+    } catch {
+      try {
+        text = await navigator.clipboard.readText();
+      } catch {}
+    }
+  }
+  return { html, text: text || '' };
+}
+
+/**
  * Reads content from the system clipboard and parses it into a ProseMirror fragment.
  * Attempts to read HTML first, falling back to plain text if necessary.
  * @param {EditorState} state - The ProseMirror editor state, used for schema and parsing.

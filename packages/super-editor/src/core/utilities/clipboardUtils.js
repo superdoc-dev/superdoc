@@ -61,18 +61,24 @@ export async function readClipboardRaw() {
   let text = '';
   const hasPermission = await ensureClipboardPermission();
 
-  if (hasPermission && navigator.clipboard && navigator.clipboard.read) {
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        if (item.types.includes('text/html')) {
-          html = await (await item.getType('text/html')).text();
+  if (hasPermission && navigator.clipboard) {
+    if (navigator.clipboard.read) {
+      try {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          if (item.types.includes('text/html')) {
+            html = await (await item.getType('text/html')).text();
+          }
+          if (item.types.includes('text/plain')) {
+            text = await (await item.getType('text/plain')).text();
+          }
         }
-        if (item.types.includes('text/plain')) {
-          text = await (await item.getType('text/plain')).text();
-        }
+      } catch {
+        try {
+          text = await navigator.clipboard.readText();
+        } catch {}
       }
-    } catch {
+    } else {
       try {
         text = await navigator.clipboard.readText();
       } catch {}

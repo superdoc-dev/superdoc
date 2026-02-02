@@ -70,8 +70,8 @@ catalogs:
       specifier: ^5.1.1
       version: 5.1.2
     '@vitejs/plugin-vue':
-      specifier: 6.0.2
-      version: 6.0.2
+      specifier: 6.0.4
+      version: 6.0.4
     '@vitest/coverage-v8':
       specifier: ^3.2.4
       version: 3.2.4
@@ -446,7 +446,7 @@ importers:
         version: 22.19.2
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.4(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       jimp:
         specifier: 'catalog:'
         version: 1.6.0
@@ -474,7 +474,7 @@ importers:
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.4(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       vite:
         specifier: 'catalog:'
         version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
@@ -492,7 +492,7 @@ importers:
         version: 8.49.0(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.3)
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.4(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       eslint:
         specifier: 'catalog:'
         version: 9.39.1(jiti@2.6.1)
@@ -974,7 +974,7 @@ importers:
         version: link:../word-layout
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.4(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       '@vue/test-utils':
         specifier: 'catalog:'
         version: 2.4.6
@@ -1062,7 +1062,7 @@ importers:
         version: link:../super-editor
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.4(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       '@vue/test-utils':
         specifier: 'catalog:'
         version: 2.4.6
@@ -1207,7 +1207,7 @@ importers:
         version: 22.19.2
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.4(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -2732,11 +2732,11 @@ packages:
   '@radix-ui/rect@1.1.1':
     resolution: {integrity: sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==}
 
-  '@rolldown/pluginutils@1.0.0-beta.50':
-    resolution: {integrity: sha512-5e76wQiQVeL1ICOZVUg4LSOVYg9jyhGCin+icYozhsUzM+fHE7kddi1bdiE0jwVqTfkjba3jUFbEkoC9WkdvyA==}
-
   '@rolldown/pluginutils@1.0.0-beta.53':
     resolution: {integrity: sha512-vENRlFU4YbrwVqNDZ7fLvy+JR1CRkyr01jhSiDpE1u6py3OMzQfztQU2jxykW3ALNxO4kSlqIDeYyD0Y9RcQeQ==}
+
+  '@rolldown/pluginutils@1.0.0-rc.2':
+    resolution: {integrity: sha512-izyXV/v+cHiRfozX62W9htOAvwMo4/bXKDrQ+vom1L1qRuexPock/7VZDAhnpHCLNejd3NJ6hiab+tO0D44Rgw==}
 
   '@rollup/plugin-inject@5.0.5':
     resolution: {integrity: sha512-2+DEJbNBoPROPkgTDNe8/1YXWcqxbN5DTjASVIOx8HS+pITXushyNiBV56RB08zuptzz8gT3YfkqriTBVycepg==}
@@ -3507,11 +3507,11 @@ packages:
     peerDependencies:
       vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
 
-  '@vitejs/plugin-vue@6.0.2':
-    resolution: {integrity: sha512-iHmwV3QcVGGvSC1BG5bZ4z6iwa1SOpAPWmnjOErd4Ske+lZua5K9TtAVdx0gMBClJ28DViCbSmZitjWZsWO3LA==}
+  '@vitejs/plugin-vue@6.0.4':
+    resolution: {integrity: sha512-uM5iXipgYIn13UUQCZNdWkYk+sysBeA97d5mHsAoAt1u/wpN3+zxOmsVJWosuzX+IMGRzeYUNytztrYznboIkQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
-      vite: ^5.0.0 || ^6.0.0 || ^7.0.0
+      vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0
       vue: ^3.2.25
 
   '@vitest/coverage-v8@3.2.4':
@@ -12036,9 +12036,9 @@ snapshots:
 
   '@radix-ui/rect@1.1.1': {}
 
-  '@rolldown/pluginutils@1.0.0-beta.50': {}
-
   '@rolldown/pluginutils@1.0.0-beta.53': {}
+
+  '@rolldown/pluginutils@1.0.0-rc.2': {}
 
   '@rollup/plugin-inject@5.0.5(rollup@4.53.3)':
     dependencies:
@@ -13006,9 +13006,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitejs/plugin-vue@6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))':
+  '@vitejs/plugin-vue@6.0.4(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))':
     dependencies:
-      '@rolldown/pluginutils': 1.0.0-beta.50
+      '@rolldown/pluginutils': 1.0.0-rc.2
       vite: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
       vue: 3.5.25(typescript@5.9.3)
 

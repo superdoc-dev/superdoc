@@ -646,7 +646,12 @@ export class EditorInputManager {
       const resolved = this.#resolveStructuredContentBlockFromElement(doc, structuredContentLabel);
       if (resolved) {
         try {
-          const tr = editor.state.tr.setSelection(TextSelection.create(doc, resolved.start, resolved.end));
+          const contentRange = this.#findStructuredContentBlockContentRange(resolved);
+          const selection =
+            contentRange != null
+              ? TextSelection.create(doc, contentRange.from, contentRange.to)
+              : NodeSelection.create(editor.state.doc, resolved.pos);
+          const tr = editor.state.tr.setSelection(selection);
           editor.view?.dispatch(tr);
         } catch {}
 
@@ -1053,6 +1058,12 @@ export class EditorInputManager {
       if (match) return match;
     }
 
+    const containerSdtId = container.dataset?.sdtContainerId;
+    if (containerSdtId) {
+      const match = this.#findStructuredContentBlockById(doc, containerSdtId);
+      if (match) return match;
+    }
+
     const pmStartRaw = container.dataset?.pmStart;
     const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
     if (Number.isFinite(pmStart)) {
@@ -1082,6 +1093,26 @@ export class EditorInputManager {
     }
 
     return null;
+  }
+
+  #findStructuredContentBlockContentRange(
+    resolved: StructuredContentSelection,
+  ): { from: number; to: number } | null {
+    let from: number | null = null;
+    let to: number | null = null;
+    resolved.node.descendants((child, pos) => {
+      if (!child.isTextblock) return true;
+      const basePos = resolved.pos + 1 + pos;
+      const childFrom = basePos + 1;
+      const childTo = basePos + child.nodeSize - 1;
+      if (from == null) {
+        from = childFrom;
+      }
+      to = childTo;
+      return true;
+    });
+    if (from == null || to == null) return null;
+    return { from, to };
   }
 
   #handleClickWithoutLayout(event: PointerEvent, isDraggableAnnotation: boolean): void {

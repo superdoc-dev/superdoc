@@ -164,11 +164,25 @@ export function computeSelectionRectsFromDom(
     if (sliceFrom >= sliceTo) continue;
 
     // Identify representative DOM elements for the slice boundaries on this mounted page.
-    let sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
-    if (sliceEntries.length === 0) {
-      // Nothing mounted for this PM interval on this page (virtualized or empty).
-      continue;
-    }
+    const sliceEntriesAll = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
+    if (sliceEntriesAll.length === 0) continue;
+
+    const sliceEntries = sliceEntriesAll.filter((entry) => pageEl.contains(entry.el));
+    if (sliceEntries.length === 0) continue;
+
+    const findEntryAtPositionIn = (entries: DomPositionIndexEntry[], pos: number): DomPositionIndexEntry | null => {
+      if (!Number.isFinite(pos)) return null;
+      let candidate: DomPositionIndexEntry | null = null;
+      for (const entry of entries) {
+        if (entry.pmStart <= pos && pos <= entry.pmEnd) {
+          return entry;
+        }
+        if (entry.pmStart <= pos) {
+          candidate = entry;
+        }
+      }
+      return candidate;
+    };
 
     if (isVerbose) {
       debugLog(
@@ -183,8 +197,8 @@ export function computeSelectionRectsFromDom(
       );
     }
 
-    let startEntry = options.domPositionIndex.findEntryAtPosition(sliceFrom) ?? sliceEntries[0]!;
-    let endEntry = options.domPositionIndex.findEntryAtPosition(sliceTo) ?? sliceEntries[sliceEntries.length - 1]!;
+    let startEntry = findEntryAtPositionIn(sliceEntries, sliceFrom) ?? sliceEntries[0]!;
+    let endEntry = findEntryAtPositionIn(sliceEntries, sliceTo) ?? sliceEntries[sliceEntries.length - 1]!;
 
     if (isVerbose) {
       debugLog(
@@ -218,10 +232,11 @@ export function computeSelectionRectsFromDom(
       if (!rebuiltOnce) {
         options.rebuildDomPositionIndex();
         rebuiltOnce = true;
-        sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
-        if (sliceEntries.length === 0) continue;
-        startEntry = options.domPositionIndex.findEntryAtPosition(sliceFrom) ?? sliceEntries[0]!;
-        endEntry = options.domPositionIndex.findEntryAtPosition(sliceTo) ?? sliceEntries[sliceEntries.length - 1]!;
+        const rebuiltEntriesAll = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
+        const rebuiltEntries = rebuiltEntriesAll.filter((entry) => pageEl.contains(entry.el));
+        if (rebuiltEntries.length === 0) continue;
+        startEntry = findEntryAtPositionIn(rebuiltEntries, sliceFrom) ?? rebuiltEntries[0]!;
+        endEntry = findEntryAtPositionIn(rebuiltEntries, sliceTo) ?? rebuiltEntries[rebuiltEntries.length - 1]!;
         startContained = pageEl.contains(startEntry.el);
         endContained = pageEl.contains(endEntry.el);
         if (isVerbose) {
@@ -250,7 +265,9 @@ export function computeSelectionRectsFromDom(
             end: entryDebugInfo(endEntry),
           })}`,
         );
-        return null;
+        // Skip this page instead of aborting the entire selection.
+        // This allows other pages with mounted content to still render highlights.
+        continue;
       }
     }
 

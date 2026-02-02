@@ -3451,6 +3451,7 @@ export class DomPainter {
       renderDrawingContent: renderDrawingContentForTableCell,
       applyFragmentFrame: applyFragmentFrameWithSection,
       applySdtDataset: this.applySdtDataset.bind(this),
+      applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
       applyStyles,
     });
   }

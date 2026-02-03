@@ -1,3 +1,5 @@
+/** @module utils */
+
 /**
  * Generate a unique ID for SuperDoc container elements.
  *

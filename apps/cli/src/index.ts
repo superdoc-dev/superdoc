@@ -73,6 +73,8 @@ function formatSearchResult(result: SearchResult): string {
 
 /**
  * Format replace results for human-readable output
+ * @param result - Replace operation result
+ * @returns Formatted string with replacement summary
  */
 function formatReplaceResult(result: ReplaceResult): string {
   const lines: string[] = [];

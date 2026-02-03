@@ -1,0 +1,126 @@
+---
+title: Document API
+sidebarTitle: Overview
+description: A stable, engine-agnostic interface for programmatic document access
+keywords: "document api, programmatic access, query documents, document manipulation, headless docx"
+---
+
+The Document API is a new way to interact with documents programmatically. Query content, make changes, and build automations — all without touching editor internals.
+
+<Info>
+**Coming Soon** — The Document API is currently in development. This page previews what's coming.
+</Info>
+
+## Why Document API?
+
+Today, programmatic access requires using internal editor methods:
+
+```javascript
+// Current approach - uses internal APIs
+editor.commands.insertContent(content);
+editor.state.doc.descendants((node) => { ... });
+```
+
+This works, but:
+- Internal APIs can change between versions
+- Requires understanding ProseMirror internals
+- Tightly coupled to the editor implementation
+
+## What's Coming
+
+The Document API provides a stable, high-level interface:
+
+```javascript
+// Document API - stable public interface
+const paragraphs = doc.query({ type: 'paragraph' });
+const tables = doc.query({ type: 'table', contains: 'Revenue' });
+
+doc.replace(paragraphs[0], { text: 'New content' });
+```
+
+<CardGroup cols={2}>
+  <Card title="Query DSL" icon="search">
+    Find content by type, attributes, or text. Filter tables, paragraphs, lists — anything in the document.
+  </Card>
+  <Card title="Stable Interface" icon="shield-check">
+    Public API that won't break between versions. Build with confidence.
+  </Card>
+  <Card title="Engine Agnostic" icon="repeat">
+    Works the same whether you're in the browser, Node.js, or headless mode.
+  </Card>
+  <Card title="Type Safe" icon="code">
+    Full TypeScript support with autocomplete and type checking.
+  </Card>
+</CardGroup>
+
+## Feature Preview
+
+### Querying Content
+
+Find any content in your document:
+
+```javascript
+// Find all paragraphs
+const paragraphs = doc.query({ type: 'paragraph' });
+
+// Find tables containing specific text
+const tables = doc.query({
+  type: 'table',
+  contains: 'Q4 Revenue'
+});
+
+// Find content by attributes
+const signatures = doc.query({
+  type: 'field-annotation',
+  attrs: { fieldType: 'signature' }
+});
+```
+
+### Making Changes
+
+Modify documents with a clean API:
+
+```javascript
+// Replace content
+doc.replace(address, { text: 'Updated text' });
+
+// Insert at position
+doc.insert(address, { type: 'paragraph', text: 'New paragraph' });
+
+// Delete content
+doc.delete(address);
+```
+
+### Working with Tables
+
+First-class table operations:
+
+```javascript
+// Add a row
+doc.table(tableAddress).addRow({ after: 2 });
+
+// Update a cell
+doc.table(tableAddress).cell(1, 2).replace({ text: 'New value' });
+```
+
+## Timeline
+
+<Steps>
+  <Step title="v0 — Read-only API">
+    Query DSL for finding and reading document content
+  </Step>
+  <Step title="v1 — Mutations">
+    Insert, replace, and delete operations
+  </Step>
+  <Step title="v2 — Advanced Operations">
+    Table operations, list manipulation, track changes integration
+  </Step>
+</Steps>
+
+## Stay Updated
+
+Join our Discord to get notified when Document API launches:
+
+<Card title="Join Discord" icon="discord" href="https://discord.com/invite/b9UuaZRyaB">
+  Get early access and share feedback
+</Card>

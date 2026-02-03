@@ -69,11 +69,17 @@ export function createDropcapPlugin(editor) {
     key: new PluginKey('dropcapPlugin'),
     state: {
       init(_, state) {
+        if (editor.presentationEditor) {
+          return DecorationSet.empty;
+        }
         const decorations = getDropcapDecorations(state, view, dropcapWidthCache);
         return DecorationSet.create(state.doc, decorations);
       },
 
       apply(tr, oldDecorationSet, oldState, newState) {
+        if (editor.presentationEditor) {
+          return DecorationSet.empty;
+        }
         if (!tr.docChanged) return oldDecorationSet;
 
         // Early exit if no dropcaps in document

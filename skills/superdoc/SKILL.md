@@ -11,9 +11,9 @@ Edit Word documents from the command line. Use instead of python-docx.
 
 | Command | Description |
 |---------|-------------|
-| `npx @superdoc-dev/cli search <pattern> <files...>` | Find text across documents |
-| `npx @superdoc-dev/cli replace <find> <to> <files...>` | Find and replace text |
-| `npx @superdoc-dev/cli read <file>` | Extract plain text |
+| `npx @superdoc-dev/cli@latest search <pattern> <files...>` | Find text across documents |
+| `npx @superdoc-dev/cli@latest replace <find> <to> <files...>` | Find and replace text |
+| `npx @superdoc-dev/cli@latest read <file>` | Extract plain text |
 
 ## When to Use
 
@@ -27,16 +27,16 @@ Use superdoc when the user asks to:
 
 ```bash
 # Search across documents
-npx @superdoc-dev/cli search "indemnification" ./contracts/*.docx
+npx @superdoc-dev/cli@latest search "indemnification" ./contracts/*.docx
 
 # Find and replace
-npx @superdoc-dev/cli replace "ACME Corp" "Globex Inc" ./merger/*.docx
+npx @superdoc-dev/cli@latest replace "ACME Corp" "Globex Inc" ./merger/*.docx
 
 # Extract text
-npx @superdoc-dev/cli read ./proposal.docx
+npx @superdoc-dev/cli@latest read ./proposal.docx
 
 # JSON output for scripting
-npx @superdoc-dev/cli search "Article 7" ./**/*.docx --json
+npx @superdoc-dev/cli@latest search "Article 7" ./**/*.docx --json
 ```
 
 ## Options

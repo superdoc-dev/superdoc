@@ -193,6 +193,18 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #isDestroyed = false;
 
   /**
+   * Monotonic counter for transaction performance logs.
+   */
+  #perfTxnId = 0;
+
+  /**
+   * Expose current performance transaction id for instrumentation.
+   */
+  getPerfTxnId(): number {
+    return this.#perfTxnId;
+  }
+
+  /**
    * Editor lifecycle state.
    * Tracks the current phase of the editor's document lifecycle.
    */
@@ -2006,12 +2018,18 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #dispatchTransaction(transaction: Transaction): void {
     if (this.isDestroyed) return;
-    const start = Date.now();
+    const perf = this.view?.dom?.ownerDocument?.defaultView?.performance ?? globalThis.performance;
+    const perfNow = () => (perf?.now ? perf.now() : Date.now());
+    const perfId = ++this.#perfTxnId;
+    const perfStart = perfNow();
 
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    let trackTime = 0;
+    let applyTime = 0;
     try {
+      const trackStart = perfNow();
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
@@ -2024,34 +2042,47 @@ export class Editor extends EventEmitter<EditorEventMap> {
               user: this.options.user!,
             })
           : transactionToApply;
+      trackTime = perfNow() - trackStart;
 
+      const applyStart = perfNow();
       const { state: appliedState } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
+      applyTime = perfNow() - applyStart;
     } catch (error) {
+      const applyStart = perfNow();
       // just in case
       nextState = prevState.apply(transactionToApply);
+      applyTime = perfNow() - applyStart;
       console.log(error);
     }
 
     const selectionHasChanged = !prevState.selection.eq(nextState.selection);
 
     this._state = nextState;
+    let updateStateTime = 0;
     if (this.view) {
+      const updateStateStart = perfNow();
       this.view.updateState(nextState);
+      updateStateTime = perfNow() - updateStateStart;
     }
 
-    const end = Date.now();
+    const end = perfNow();
+    const emitTransactionStart = perfNow();
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
-      duration: end - start,
+      duration: end - perfStart,
     });
+    const emitTransactionTime = perfNow() - emitTransactionStart;
 
+    let selectionEmitTime = 0;
     if (selectionHasChanged) {
+      const selectionStart = perfNow();
       this.emit('selectionUpdate', {
         editor: this,
         transaction: transactionToApply,
       });
+      selectionEmitTime = perfNow() - selectionStart;
     }
 
     const focus = transactionToApply.getMeta('focus');
@@ -2072,23 +2103,31 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (!transactionToApply.docChanged) {
-      return;
-    }
-
-    // Track document modifications and promote to GUID if needed
-    if (transaction.docChanged && this.converter) {
-      if (!this.converter.documentGuid) {
-        this.converter.promoteToGuid();
-        console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+    let emitUpdateTime = 0;
+    if (transactionToApply.docChanged) {
+      // Track document modifications and promote to GUID if needed
+      if (transaction.docChanged && this.converter) {
+        if (!this.converter.documentGuid) {
+          this.converter.promoteToGuid();
+          console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+        }
+        this.converter.documentModified = true;
       }
-      this.converter.documentModified = true;
+
+      const emitUpdateStart = perfNow();
+      this.emit('update', {
+        editor: this,
+        transaction: transactionToApply,
+      });
+      emitUpdateTime = perfNow() - emitUpdateStart;
     }
 
-    this.emit('update', {
-      editor: this,
-      transaction: transactionToApply,
-    });
+    const totalTime = perfNow() - perfStart;
+    const inputType = transactionToApply.getMeta('inputType');
+    const inputLabel = inputType ? ` input=${String(inputType)}` : '';
+    console.log(
+      `[Perf] dispatchTransaction#${perfId}: total=${totalTime.toFixed(2)}ms track=${trackTime.toFixed(2)}ms apply=${applyTime.toFixed(2)}ms updateState=${updateStateTime.toFixed(2)}ms emitTx=${emitTransactionTime.toFixed(2)}ms selection=${selectionEmitTime.toFixed(2)}ms emitUpdate=${emitUpdateTime.toFixed(2)}ms steps=${transactionToApply.steps.length} docChanged=${transactionToApply.docChanged}${inputLabel}`,
+    );
   }
 
   /**

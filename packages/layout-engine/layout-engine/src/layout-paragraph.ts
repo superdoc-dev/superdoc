@@ -23,7 +23,6 @@ import {
 import { computeAnchorX } from './floating-objects.js';
 
 const spacingDebugEnabled = false;
-
 /**
  * Type definition for Word layout attributes attached to paragraph blocks.
  * This is a subset of the WordParagraphLayoutOutput from @superdoc/word-layout.

@@ -80,6 +80,7 @@ const coercePmEnd = (run: unknown): number | undefined => {
  * - Handles first/last run slicing based on line.fromChar and line.toChar
  */
 export function computeLinePmRange(block: FlowBlock, line: Line): LinePmRange {
+  if (!line) return {};
   if (block.kind !== 'paragraph') return {};
 
   let pmStart: number | undefined;
@@ -149,7 +150,9 @@ export function computeFragmentPmRange(
   let pmEnd: number | undefined;
 
   for (let index = fromLine; index < toLine; index += 1) {
-    const range = computeLinePmRange(block, lines[index]);
+    const line = lines[index];
+    if (!line) continue;
+    const range = computeLinePmRange(block, line);
     if (range.pmStart != null && pmStart == null) {
       pmStart = range.pmStart;
     }

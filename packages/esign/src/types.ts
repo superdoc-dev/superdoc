@@ -3,6 +3,7 @@ import type { SuperDoc } from 'superdoc'; // eslint-disable-line
 /** Value types for esign fields */
 export type FieldValue = string | boolean | number | null | undefined;
 
+/** Base interface for field identification */
 export interface FieldReference {
   id: string;
 }

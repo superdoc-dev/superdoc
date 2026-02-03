@@ -6,7 +6,7 @@ import { type ReplaceResult, replace } from './commands/replace';
 import { type SearchResult, search } from './commands/search';
 
 const HELP = `
-superdoc - DOCX editing in your terminal
+superdoc - docx editing in your terminal
 
 Commands:
   search <pattern> <files...>    Find text across documents

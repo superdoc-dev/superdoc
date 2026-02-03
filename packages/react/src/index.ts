@@ -1,3 +1,8 @@
+/**
+ * @superdoc-dev/react - Official React wrapper for SuperDoc
+ * @packageDocumentation
+ */
+
 // Main component
 export { SuperDocEditor, default } from './SuperDocEditor';
 

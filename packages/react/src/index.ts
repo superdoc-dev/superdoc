@@ -1,6 +1,7 @@
 /**
  * @superdoc-dev/react - Official React wrapper for SuperDoc
  * @packageDocumentation
+ * @version 1.0.0
  */
 
 // Main component

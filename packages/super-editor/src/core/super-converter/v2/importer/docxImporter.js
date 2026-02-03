@@ -893,6 +893,13 @@ function getCellIndexForBookmark(bookmarkNode, position, rowCellCount) {
   return Math.min(col, rowCellCount - 1);
 }
 
+function addBookmarkToRowCellInlines(rowCellInlines, rowIndex, position, bookmarkNode, rowCellCount) {
+  const cellIndex = getCellIndexForBookmark(bookmarkNode, position, rowCellCount);
+  const bucket = rowCellInlines[rowIndex][position];
+  if (!bucket[cellIndex]) bucket[cellIndex] = [];
+  bucket[cellIndex].push(bookmarkNode);
+}
+
 function normalizeTableBookmarksInTable(tableNode, editor) {
   if (!tableNode || tableNode.type !== 'table' || !Array.isArray(tableNode.content)) return tableNode;
 
@@ -917,34 +924,18 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
     if (isBookmarkNode(child)) {
       const prevRowIndex = rowCursor > 0 ? rowCursor - 1 : null;
       const nextRowIndex = rowCursor < rows.length ? rowCursor : null;
-      const rowIndex = nextRowIndex ?? prevRowIndex;
-      const row = rowIndex != null ? rows[rowIndex] : null;
-      const rowCellCount = row && Array.isArray(row.content) ? row.content.length : 0;
+      const row = (nextRowIndex ?? prevRowIndex) != null ? rows[nextRowIndex ?? prevRowIndex] : null;
+      const rowCellCount = row?.content?.length ?? 0;
 
       if (child.type === 'bookmarkStart') {
-        if (nextRowIndex != null) {
-          const cellIndex = getCellIndexForBookmark(child, 'start', rowCellCount);
-          const bucket = rowCellInlines[nextRowIndex].start;
-          if (!bucket[cellIndex]) bucket[cellIndex] = [];
-          bucket[cellIndex].push(child);
-        } else if (prevRowIndex != null) {
-          const cellIndex = getCellIndexForBookmark(child, 'end', rowCellCount);
-          const bucket = rowCellInlines[prevRowIndex].end;
-          if (!bucket[cellIndex]) bucket[cellIndex] = [];
-          bucket[cellIndex].push(child);
-        }
+        if (nextRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, nextRowIndex, 'start', child, rowCellCount);
+        else if (prevRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, prevRowIndex, 'end', child, rowCellCount);
       } else {
-        if (prevRowIndex != null) {
-          const cellIndex = getCellIndexForBookmark(child, 'end', rowCellCount);
-          const bucket = rowCellInlines[prevRowIndex].end;
-          if (!bucket[cellIndex]) bucket[cellIndex] = [];
-          bucket[cellIndex].push(child);
-        } else if (nextRowIndex != null) {
-          const cellIndex = getCellIndexForBookmark(child, 'start', rowCellCount);
-          const bucket = rowCellInlines[nextRowIndex].start;
-          if (!bucket[cellIndex]) bucket[cellIndex] = [];
-          bucket[cellIndex].push(child);
-        }
+        if (prevRowIndex != null) addBookmarkToRowCellInlines(rowCellInlines, prevRowIndex, 'end', child, rowCellCount);
+        else if (nextRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, nextRowIndex, 'start', child, rowCellCount);
       }
       return acc;
     }
@@ -954,19 +945,17 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
   }, []);
 
   updatedRows.forEach((row, index) => {
-    const { start: startByCell, end: endByCell } = rowCellInlines[index] ?? { start: {}, end: {} };
-    const allCellIndices = [
+    const { start: startByCell, end: endByCell } = rowCellInlines[index];
+    const cellIndices = [
       ...new Set([...Object.keys(startByCell).map(Number), ...Object.keys(endByCell).map(Number)]),
     ].sort((a, b) => a - b);
-    for (const cellIndex of allCellIndices) {
+    for (const cellIndex of cellIndices) {
       const startNodes = startByCell[cellIndex];
       const endNodes = endByCell[cellIndex];
-      if (startNodes?.length) {
+      if (startNodes?.length)
         updatedRows[index] = insertInlineIntoRow(updatedRows[index], startNodes, editor, 'start', cellIndex);
-      }
-      if (endNodes?.length) {
+      if (endNodes?.length)
         updatedRows[index] = insertInlineIntoRow(updatedRows[index], endNodes, editor, 'end', cellIndex);
-      }
     }
   });
 
@@ -994,11 +983,9 @@ function insertInlineIntoRow(rowNode, inlineNodes, editor, position, cellIndex) 
   if (!rowNode || !inlineNodes?.length) return rowNode;
 
   if (!Array.isArray(rowNode.content) || rowNode.content.length === 0) {
-    const cellType = editor?.schema?.nodes?.tableCell ? 'tableCell' : 'tableCell';
     const paragraph = { type: 'paragraph', content: inlineNodes };
-    const newCell = { type: cellType, content: [paragraph], attrs: {}, marks: [] };
-    const nextContent = [newCell];
-    return { ...rowNode, content: nextContent };
+    const newCell = { type: 'tableCell', content: [paragraph], attrs: {}, marks: [] };
+    return { ...rowNode, content: [newCell] };
   }
 
   const lastCellIndex = rowNode.content.length - 1;
@@ -1014,35 +1001,26 @@ function insertInlineIntoRow(rowNode, inlineNodes, editor, position, cellIndex) 
   return { ...rowNode, content: nextContent };
 }
 
+function findTextblockIndex(content, editor, fromEnd) {
+  const start = fromEnd ? content.length - 1 : 0;
+  const end = fromEnd ? -1 : content.length;
+  const step = fromEnd ? -1 : 1;
+  for (let i = start; fromEnd ? i > end : i < end; i += step) {
+    if (isTextblockNode(content[i], editor)) return i;
+  }
+  return -1;
+}
+
 function insertInlineIntoCell(cellNode, inlineNodes, editor, position) {
   if (!cellNode || !inlineNodes?.length) return cellNode;
 
   const content = Array.isArray(cellNode.content) ? cellNode.content.slice() : [];
-  let targetIndex = -1;
-
-  if (position === 'end') {
-    for (let i = content.length - 1; i >= 0; i -= 1) {
-      if (isTextblockNode(content[i], editor)) {
-        targetIndex = i;
-        break;
-      }
-    }
-  } else {
-    for (let i = 0; i < content.length; i += 1) {
-      if (isTextblockNode(content[i], editor)) {
-        targetIndex = i;
-        break;
-      }
-    }
-  }
+  const targetIndex = findTextblockIndex(content, editor, position === 'end');
 
   if (targetIndex === -1) {
     const paragraph = { type: 'paragraph', content: inlineNodes };
-    if (position === 'end') {
-      content.push(paragraph);
-    } else {
-      content.unshift(paragraph);
-    }
+    if (position === 'end') content.push(paragraph);
+    else content.unshift(paragraph);
     return { ...cellNode, content };
   }
 

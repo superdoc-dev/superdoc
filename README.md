@@ -53,7 +53,30 @@ Or install with CDN
 <script type="module" src="https://unpkg.com/superdoc/dist/superdoc.umd.js"></script>
 ```
 
-### Basic usage
+### React
+
+```bash
+npm install @superdoc/react
+```
+
+```tsx
+import { SuperDocEditor } from '@superdoc/react';
+import '@superdoc/react/style.css';
+
+function App() {
+  return (
+    <SuperDocEditor
+      document={file}
+      documentMode="editing"
+      onReady={() => console.log('Ready!')}
+    />
+  );
+}
+```
+
+See the [@superdoc/react README](packages/react/README.md) for full documentation.
+
+### Vanilla JavaScript
 
 ```javascript
 import 'superdoc/style.css';

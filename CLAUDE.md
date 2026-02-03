@@ -25,6 +25,7 @@ State flows from super-editor → Layout Engine via:
 ```
 packages/
   superdoc/          Main entry point (npm: superdoc)
+  react/             React wrapper (@superdoc/react)
   super-editor/      ProseMirror editor (@superdoc/super-editor)
   layout-engine/     Layout & pagination pipeline
     contracts/       - Shared type definitions
@@ -37,17 +38,20 @@ packages/
   collaboration-yjs/ Collaboration server
 shared/              Internal utilities
 e2e-tests/           Playwright tests
+examples/
+  react-wrapper/     React wrapper demo app
 ```
 
 ## Where to Look
 
 | Task | Location |
 |------|----------|
+| React integration | `packages/react/src/SuperDocEditor.tsx` |
 | Editing features | `super-editor/src/extensions/` |
 | Presentation mode visuals | `layout-engine/painters/dom/src/renderer.ts` |
 | DOCX import/export | `super-editor/src/core/super-converter/` |
 | Style resolution | `layout-engine/style-engine/` |
-| Main entry point | `superdoc/src/SuperDoc.vue` |
+| Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
 
 ## When to Modify Which System
 
@@ -60,3 +64,27 @@ e2e-tests/           Playwright tests
 - `pnpm build` - Build all packages
 - `pnpm test` - Run tests
 - `pnpm dev` - Start dev server (from examples/)
+
+## Git Commit Rules
+
+See `.claude/rules/git-commits.md` for full details. Key points:
+- Follow conventional commits: `type(scope): description`
+- **Never mention AI tools** in commits or PRs
+
+## Framework Wrappers
+
+| Framework | Package | Entry |
+|-----------|---------|-------|
+| React | `@superdoc/react` | `<SuperDocEditor>` component |
+| Vue | `superdoc` | `<SuperDoc>` component (built-in) |
+
+### React Quick Start
+
+```tsx
+import { SuperDocEditor } from '@superdoc/react';
+import '@superdoc/react/style.css';
+
+<SuperDocEditor document={file} documentMode="editing" />
+```
+
+See `packages/react/CLAUDE.md` for implementation details.

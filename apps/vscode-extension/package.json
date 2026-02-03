@@ -1,0 +1,93 @@
+{
+  "name": "superdoc-vscode-extension",
+  "displayName": "SuperDoc for VS Code",
+  "description": "Open and edit Word documents (.docx) directly in VS Code using SuperDoc",
+  "version": "0.1.0",
+  "publisher": "superdoc",
+  "repository": "https://github.com/superdoc-dev/vscode-extension",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "docx",
+    "word",
+    "document",
+    "editor",
+    "superdoc"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "superdoc.docxEditor",
+        "displayName": "SuperDoc Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.docx"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "superdoc.openWithSuperdoc",
+        "title": "Open with SuperDoc"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .docx",
+          "command": "superdoc.openWithSuperdoc",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SuperDoc",
+      "properties": {
+        "superdoc.autoSaveDelay": {
+          "type": "number",
+          "default": 1000,
+          "description": "Delay in milliseconds before auto-saving after an edit"
+        },
+        "superdoc.enableAutoSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic saving of document changes"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "npm run compile-extension && npm run compile-webview && npm run copy-assets",
+    "compile-extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "compile-webview": "esbuild webview/main.js --bundle --outfile=dist/webview/main.js --format=esm --platform=browser --target=es2020 --loader:.css=text",
+    "copy-assets": "cp webview/style.css dist/webview/",
+    "watch": "npm run compile -- --watch",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.27",
+    "@types/vscode": "^1.107.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.19.12",
+    "eslint": "^8.57.1",
+    "typescript": "^5.9.3"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "superdoc": "^1.5.0"
+  }
+}

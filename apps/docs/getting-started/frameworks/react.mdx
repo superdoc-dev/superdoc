@@ -520,16 +520,22 @@ The component handles React 18 Strict Mode correctly. The internal cleanup flag 
 2. Check that `document` prop is a `File`, `Blob`, URL string, or config object
 3. Listen for `onContentError` events for parsing errors
 
-### Mode Changes Cause Flicker
+### Changing Document Mode
 
-Use instance methods for mode changes instead of prop changes:
+The component handles `documentMode` prop changes efficiently without rebuilding:
 
 ```jsx
-// Preferred - no rebuild
-editorRef.current?.getInstance()?.setDocumentMode('viewing');
+const [mode, setMode] = useState('editing');
 
-// Avoid - causes full rebuild
+// Just update state - no rebuild, no flicker
+<button onClick={() => setMode('viewing')}>View</button>
 <SuperDocEditor documentMode={mode} />
+```
+
+You can also use the imperative API if preferred:
+
+```jsx
+editorRef.current?.getInstance()?.setDocumentMode('viewing');
 ```
 
 ---

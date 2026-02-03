@@ -21,6 +21,24 @@ function App() {
 }
 ```
 
+## Changing Mode
+
+Just update the `documentMode` prop - the component handles it efficiently (no rebuild):
+
+```tsx
+function App() {
+  const [mode, setMode] = useState<DocumentMode>('editing');
+
+  return (
+    <>
+      <button onClick={() => setMode('viewing')}>View</button>
+      <button onClick={() => setMode('editing')}>Edit</button>
+      <SuperDocEditor document={file} documentMode={mode} />
+    </>
+  );
+}
+```
+
 ## Using the Ref
 
 Access SuperDoc methods via `getInstance()`:
@@ -36,15 +54,10 @@ function App() {
     await ref.current?.getInstance()?.export({ triggerDownload: true });
   };
 
-  const switchMode = () => {
-    ref.current?.getInstance()?.setDocumentMode('viewing');
-  };
-
   return (
     <>
       <SuperDocEditor ref={ref} document={file} />
       <button onClick={handleExport}>Export</button>
-      <button onClick={switchMode}>View Mode</button>
     </>
   );
 }

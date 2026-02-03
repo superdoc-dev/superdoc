@@ -2,16 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: [
-"styled-jsx/babel"
-        ],
-      },
-    }),
-  ],
+  plugins: [react()],
   optimizeDeps: {
-    include: ['superdoc']
-  }
+    include: ['@superdoc/react'],
+  },
 });

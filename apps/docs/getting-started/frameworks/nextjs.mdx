@@ -3,124 +3,322 @@ title: Next.js
 keywords: "nextjs docx editor, next word editor, superdoc nextjs, ssr document editor, dynamic import docx"
 ---
 
-SuperDoc works with Next.js using dynamic imports to avoid SSR issues.
+SuperDoc works seamlessly with Next.js. The recommended approach is using `@superdoc/react`, which handles SSR automatically.
 
-## Installation
+## Recommended: Using @superdoc/react
+
+The React wrapper is the simplest way to integrate SuperDoc with Next.js:
 
 ```bash
-npm install @harbour-enterprises/superdoc
+npm install @superdoc/react
 ```
 
-## Basic component
-
-```jsx
-// components/DocumentEditor.jsx
-import { useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
-
-// Prevent SSR issues
-const DocumentEditor = dynamic(
-  () => Promise.resolve(DocumentEditorComponent),
-  { ssr: false }
-);
-
-function DocumentEditorComponent({ document }) {
-  const containerRef = useRef(null);
-  const superdocRef = useRef(null);
-
-  useEffect(() => {
-    const initEditor = async () => {
-      const { SuperDoc } = await import('@harbour-enterprises/superdoc');
-      
-      if (containerRef.current) {
-        superdocRef.current = new SuperDoc({
-          selector: containerRef.current,
-          document
-        });
-      }
-    };
-
-    initEditor();
-
-    return () => {
-      superdocRef.current = null;
-    };
-  }, [document]);
-
-  return <div ref={containerRef} style={{ height: '700px' }} />;
-}
-
-export default DocumentEditor;
-```
-
-## App Router (Next.js 13+)
+### App Router (Next.js 13+)
 
 ```jsx
 // app/editor/page.jsx
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const DocumentEditor = dynamic(
-  () => import('@/components/DocumentEditor'),
-  { 
-    ssr: false,
-    loading: () => <div>Loading editor...</div>
-  }
-);
+import { SuperDocEditor } from '@superdoc/react';
+import '@superdoc/react/style.css';
 
 export default function EditorPage() {
   return (
-    <main>
-      <DocumentEditor document="/sample.docx" />
+    <SuperDocEditor
+      document="/sample.docx"
+      documentMode="editing"
+      onReady={() => console.log('Editor ready!')}
+      style={{ height: '100vh' }}
+    />
+  );
+}
+```
+
+### Pages Router
+
+```jsx
+// pages/editor.jsx
+import { SuperDocEditor } from '@superdoc/react';
+import '@superdoc/react/style.css';
+
+export default function EditorPage() {
+  return (
+    <SuperDocEditor
+      document="/sample.docx"
+      documentMode="editing"
+      style={{ height: '100vh' }}
+    />
+  );
+}
+```
+
+<Tip>
+The React wrapper handles SSR internally via dynamic imports, so you typically don't need additional configuration.
+</Tip>
+
+---
+
+## With Dynamic Import (Optional)
+
+For additional control over loading behavior, use Next.js dynamic imports:
+
+```jsx
+// components/DocumentEditor.jsx
+'use client';
+
+import dynamic from 'next/dynamic';
+
+const SuperDocEditor = dynamic(
+  () => import('@superdoc/react').then(mod => mod.SuperDocEditor),
+  {
+    ssr: false,
+    loading: () => <div className="editor-loading">Loading editor...</div>
+  }
+);
+
+export default function DocumentEditor({ document }) {
+  return (
+    <SuperDocEditor
+      document={document}
+      documentMode="editing"
+      style={{ height: '700px' }}
+    />
+  );
+}
+```
+
+---
+
+## Complete Example
+
+Here's a full example with file upload and export:
+
+```jsx
+// app/editor/page.jsx
+'use client';
+
+import { useState, useRef } from 'react';
+import { SuperDocEditor } from '@superdoc/react';
+import '@superdoc/react/style.css';
+
+export default function EditorPage() {
+  const [file, setFile] = useState(null);
+  const editorRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const selected = e.target.files?.[0];
+    if (selected) setFile(selected);
+  };
+
+  const handleExport = async () => {
+    await editorRef.current?.export({ triggerDownload: true });
+  };
+
+  return (
+    <main className="editor-page">
+      <div className="toolbar">
+        <input type="file" accept=".docx" onChange={handleFileChange} />
+        {file && (
+          <>
+            <button onClick={handleExport}>Export</button>
+            <button onClick={() => editorRef.current?.setDocumentMode('editing')}>
+              Edit
+            </button>
+            <button onClick={() => editorRef.current?.setDocumentMode('suggesting')}>
+              Review
+            </button>
+          </>
+        )}
+      </div>
+
+      {file && (
+        <SuperDocEditor
+          ref={editorRef}
+          document={file}
+          documentMode="editing"
+          user={{ name: 'User', email: 'user@example.com' }}
+          onReady={() => console.log('Ready!')}
+          style={{ height: 'calc(100vh - 60px)' }}
+        />
+      )}
     </main>
   );
 }
 ```
 
-## API route for document handling
+---
 
-```javascript
-// pages/api/documents/[id].js (Pages Router)
-// app/api/documents/[id]/route.js (App Router)
+## API Route for Documents
+
+Serve documents from an API route:
+
+<CodeGroup>
+
+```javascript App Router
+// app/api/documents/[id]/route.js
+import { NextResponse } from 'next/server';
+import fs from 'fs/promises';
+import path from 'path';
 
 export async function GET(request, { params }) {
-  const docId = params.id;
-  
-  // Fetch document from storage
-  const document = await fetchDocumentFromStorage(docId);
-  
-  return new Response(document, {
-    headers: {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    }
-  });
+  const { id } = params;
+  const filePath = path.join(process.cwd(), 'documents', `${id}.docx`);
+
+  try {
+    const file = await fs.readFile(filePath);
+    return new NextResponse(file, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition': `attachment; filename="${id}.docx"`
+      }
+    });
+  } catch {
+    return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+  }
 }
 ```
 
-## With authentication
+```javascript Pages Router
+// pages/api/documents/[id].js
+import fs from 'fs/promises';
+import path from 'path';
+
+export default async function handler(req, res) {
+  const { id } = req.query;
+  const filePath = path.join(process.cwd(), 'documents', `${id}.docx`);
+
+  try {
+    const file = await fs.readFile(filePath);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.send(file);
+  } catch {
+    res.status(404).json({ error: 'Document not found' });
+  }
+}
+```
+
+</CodeGroup>
+
+Then use the API route as the document source:
 
 ```jsx
-// components/SecureEditor.jsx
-import { useSession } from 'next-auth/react';
-import dynamic from 'next/dynamic';
+<SuperDocEditor document="/api/documents/contract" />
+```
 
-const DocumentEditor = dynamic(() => import('./DocumentEditor'), { ssr: false });
+---
+
+## With Authentication
+
+```jsx
+// app/editor/page.jsx
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { SuperDocEditor } from '@superdoc/react';
+import '@superdoc/react/style.css';
 
 export default function SecureEditor() {
   const { data: session, status } = useSession();
 
   if (status === 'loading') return <div>Loading...</div>;
-  if (!session) return <div>Please sign in</div>;
+  if (!session) return <div>Please sign in to access the editor</div>;
 
   return (
-    <DocumentEditor 
-      document="/protected-doc.docx"
+    <SuperDocEditor
+      document="/api/documents/protected-doc"
       user={{
         name: session.user.name,
-        email: session.user.email
+        email: session.user.email,
+        image: session.user.image
       }}
+      style={{ height: '100vh' }}
     />
   );
 }
 ```
+
+---
+
+## CSS Import
+
+Import styles in your layout or page:
+
+```jsx
+// app/layout.jsx
+import '@superdoc/react/style.css';
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+Or import in individual components where needed.
+
+---
+
+## Alternative: Vanilla JavaScript
+
+If you prefer not to use the React wrapper, you can use the vanilla SuperDoc directly:
+
+```jsx
+// components/VanillaEditor.jsx
+'use client';
+
+import { useEffect, useRef } from 'react';
+
+export default function VanillaEditor({ document }) {
+  const containerRef = useRef(null);
+  const superdocRef = useRef(null);
+
+  useEffect(() => {
+    let destroyed = false;
+
+    const initEditor = async () => {
+      const { SuperDoc } = await import('superdoc');
+
+      if (destroyed || !containerRef.current) return;
+
+      superdocRef.current = new SuperDoc({
+        selector: containerRef.current,
+        document
+      });
+    };
+
+    initEditor();
+
+    return () => {
+      destroyed = true;
+      superdocRef.current?.destroy?.();
+    };
+  }, [document]);
+
+  return <div ref={containerRef} style={{ height: '700px' }} />;
+}
+```
+
+<Note>
+The React wrapper (`@superdoc/react`) is recommended over this approach as it handles lifecycle management, cleanup, and provides a cleaner API.
+</Note>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="React Integration" icon="react" href="/getting-started/frameworks/react">
+  Full React wrapper documentation
+</Card>
+<Card title="Configuration" icon="gear" href="/core/superdoc/configuration">
+  Configuration options
+</Card>
+<Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
+  Real-time collaboration
+</Card>
+<Card title="Examples" icon="github" href="https://github.com/superdoc-dev/SuperDoc/tree/main/examples/react-wrapper">
+  Working examples
+</Card>
+</CardGroup>

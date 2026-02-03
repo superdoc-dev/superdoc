@@ -62,5 +62,17 @@
     "dist",
     "style.css",
     "README.md"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/superdoc-dev/superdoc/issues"
+  },
+  "homepage": "https://github.com/superdoc-dev/superdoc/tree/main/packages/react#readme"
 }

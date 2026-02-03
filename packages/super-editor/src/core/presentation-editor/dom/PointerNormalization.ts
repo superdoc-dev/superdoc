@@ -80,7 +80,8 @@ export function denormalizeClientPoint(
   layoutX: number,
   layoutY: number,
   pageIndex?: number,
-): { x: number; y: number } | null {
+  height?: number,
+): { x: number; y: number, height?: number } | null {
   if (!Number.isFinite(layoutX) || !Number.isFinite(layoutY)) {
     return null;
   }
@@ -104,8 +105,13 @@ export function denormalizeClientPoint(
     }
   }
 
-  return {
+  const result = {
     x: baseX * options.zoom - scrollLeft + rect.left,
     y: layoutY * options.zoom - scrollTop + rect.top,
   };
+  if (Number.isFinite(height)) {
+    result['height'] = height * options.zoom;
+  }
+  return result;
+
 }

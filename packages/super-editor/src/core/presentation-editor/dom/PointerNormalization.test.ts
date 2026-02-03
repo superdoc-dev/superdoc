@@ -149,5 +149,20 @@ describe('PointerNormalization', () => {
       const result = denormalizeClientPoint(options, 50, 60, 3);
       expect(result).toEqual({ x: 120, y: 140 });
     });
+
+    it('scales height based on the zoom level when provided', () => {
+      const { viewportHost, visibleHost } = makeHosts();
+
+      const options = {
+        viewportHost,
+        visibleHost,
+        zoom: 1.5,
+        getPageOffsetX: () => 0,
+        getPageOffsetY: () => 0,
+      };
+
+      const result = denormalizeClientPoint(options, 10, 12, undefined, 8);
+      expect(result).toEqual({ x: 5, y: -12, height: 12 });
+    });
   });
 });

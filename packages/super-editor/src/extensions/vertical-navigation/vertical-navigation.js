@@ -190,11 +190,11 @@ function getCurrentCoords(editor, selection) {
   const presentationEditor = editor.presentationEditor;
   const layoutSpaceCoords = presentationEditor.computeCaretLayoutRect(selection.head);
   if (!layoutSpaceCoords) return null;
-  const clientCoords = presentationEditor.denormalizeClientPoint(layoutSpaceCoords.x, layoutSpaceCoords.y, layoutSpaceCoords.pageIndex)
+  const clientCoords = presentationEditor.denormalizeClientPoint(layoutSpaceCoords.x, layoutSpaceCoords.y, layoutSpaceCoords.pageIndex, layoutSpaceCoords.height);
   return {
     clientX: clientCoords.x,
     clientY: clientCoords.y,
-    height: layoutSpaceCoords.height,
+    height: clientCoords.height,
     x: layoutSpaceCoords.x,
     y: layoutSpaceCoords.y,
   };

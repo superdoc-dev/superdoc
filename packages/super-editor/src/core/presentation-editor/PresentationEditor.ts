@@ -4532,7 +4532,7 @@ export class PresentationEditor extends EventEmitter {
     );
   }
 
-  denormalizeClientPoint(layoutX: number, layoutY: number, pageIndex?: number): { x: number; y: number } | null {
+  denormalizeClientPoint(layoutX: number, layoutY: number, pageIndex?: number, height?: number): { x: number; y: number, height?: number } | null {
     return denormalizeClientPointFromPointer(
       {
         viewportHost: this.#viewportHost,
@@ -4544,6 +4544,7 @@ export class PresentationEditor extends EventEmitter {
       layoutX,
       layoutY,
       pageIndex,
+      height,
     );
   }
 

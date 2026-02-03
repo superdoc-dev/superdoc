@@ -2968,7 +2968,9 @@ export class PresentationEditor extends EventEmitter {
           previousMeasures,
         );
         const incrementalLayoutEnd = perfNow();
-        perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
+        perfLog(
+          `[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`,
+        );
 
         // Type guard: validate incrementalLayout return value
         if (!result || typeof result !== 'object') {

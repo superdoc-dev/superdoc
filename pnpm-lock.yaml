@@ -862,7 +862,7 @@ importers:
   packages/react:
     dependencies:
       superdoc:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../superdoc
     devDependencies:
       '@testing-library/react':

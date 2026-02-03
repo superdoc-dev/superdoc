@@ -35,7 +35,7 @@
   ],
   "license": "AGPL-3.0",
   "dependencies": {
-    "superdoc": "workspace:*"
+    "superdoc": "workspace:^"
   },
   "peerDependencies": {
     "react": ">=16.8.0",

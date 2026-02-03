@@ -39,7 +39,7 @@ packages/
 shared/              Internal utilities
 e2e-tests/           Playwright tests
 examples/
-  react-wrapper/     React wrapper demo app
+  getting-started/react-typescript/  React wrapper demo app
 ```
 
 ## Where to Look

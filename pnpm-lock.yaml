@@ -268,8 +268,8 @@ catalogs:
       specifier: ^6.1.6
       version: 6.2.4
     vite:
-      specifier: ^7.2.7
-      version: 7.2.7
+      specifier: ^7.3.1
+      version: 7.3.1
     vite-plugin-dts:
       specifier: ~4.5.4
       version: 4.5.4
@@ -381,7 +381,7 @@ importers:
         version: 6.2.4(typanion@3.14.0)
       vite-plugin-node-polyfills:
         specifier: 'catalog:'
-        version: 0.24.0(patch_hash=b69b54a87bfd9531260555cfb2fda7c94e6f75c124e3a3fae26d64272bbe86ff)(rollup@4.53.3)(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 0.24.0(patch_hash=b69b54a87bfd9531260555cfb2fda7c94e6f75c124e3a3fae26d64272bbe86ff)(rollup@4.53.3)(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(happy-dom@20.3.4)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0)(postcss@8.5.6))(tsx@4.21.0)(yaml@2.8.2)
@@ -446,7 +446,7 @@ importers:
         version: 22.19.2
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       jimp:
         specifier: 'catalog:'
         version: 1.6.0
@@ -458,7 +458,7 @@ importers:
         version: 7.1.0
       vite:
         specifier: 'catalog:'
-        version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   e2e-tests/templates/vue:
     dependencies:
@@ -474,10 +474,10 @@ importers:
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       vite:
         specifier: 'catalog:'
-        version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/ai:
     devDependencies:
@@ -492,7 +492,7 @@ importers:
         version: 8.49.0(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.3)
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       eslint:
         specifier: 'catalog:'
         version: 9.39.1(jiti@2.6.1)
@@ -586,7 +586,7 @@ importers:
         version: 19.2.3(@types/react@19.2.9)
       '@vitejs/plugin-react':
         specifier: 'catalog:'
-        version: 5.1.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 5.1.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       eslint-plugin-react:
         specifier: 'catalog:'
         version: 7.37.5(eslint@9.39.1(jiti@2.6.1))
@@ -610,10 +610,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: 'catalog:'
-        version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
       vite-plugin-dts:
         specifier: 'catalog:'
-        version: 4.5.4(@types/node@22.19.2)(rollup@4.53.3)(typescript@5.9.3)(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 4.5.4(@types/node@22.19.2)(rollup@4.53.3)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0)(postcss@8.5.6))(tsx@4.21.0)(yaml@2.8.2)
@@ -644,13 +644,13 @@ importers:
         version: 19.2.3(@types/react@19.2.9)
       '@vitejs/plugin-react':
         specifier: 'catalog:'
-        version: 5.1.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 5.1.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
       vite:
         specifier: 'catalog:'
-        version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/esign/demo/server:
     dependencies:
@@ -974,7 +974,7 @@ importers:
         version: link:../word-layout
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       '@vue/test-utils':
         specifier: 'catalog:'
         version: 2.4.6
@@ -1001,10 +1001,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: 'catalog:'
-        version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
       vite-plugin-node-polyfills:
         specifier: 'catalog:'
-        version: 0.24.0(patch_hash=b69b54a87bfd9531260555cfb2fda7c94e6f75c124e3a3fae26d64272bbe86ff)(rollup@4.53.3)(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 0.24.0(patch_hash=b69b54a87bfd9531260555cfb2fda7c94e6f75c124e3a3fae26d64272bbe86ff)(rollup@4.53.3)(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(happy-dom@20.3.4)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0)(postcss@8.5.6))(tsx@4.21.0)(yaml@2.8.2)
@@ -1062,7 +1062,7 @@ importers:
         version: link:../super-editor
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       '@vue/test-utils':
         specifier: 'catalog:'
         version: 2.4.6
@@ -1098,13 +1098,13 @@ importers:
         version: 5.9.3
       vite:
         specifier: 'catalog:'
-        version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
       vite-plugin-dts:
         specifier: 'catalog:'
-        version: 4.5.4(@types/node@22.19.2)(rollup@4.53.3)(typescript@5.9.3)(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 4.5.4(@types/node@22.19.2)(rollup@4.53.3)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       vite-plugin-node-polyfills:
         specifier: 'catalog:'
-        version: 0.24.0(patch_hash=b69b54a87bfd9531260555cfb2fda7c94e6f75c124e3a3fae26d64272bbe86ff)(rollup@4.53.3)(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 0.24.0(patch_hash=b69b54a87bfd9531260555cfb2fda7c94e6f75c124e3a3fae26d64272bbe86ff)(rollup@4.53.3)(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0)(postcss@8.5.6))(tsx@4.21.0)(yaml@2.8.2)
@@ -1131,7 +1131,7 @@ importers:
         version: 19.2.3(@types/react@19.2.9)
       '@vitejs/plugin-react':
         specifier: 'catalog:'
-        version: 5.1.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 5.1.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       eslint-plugin-react:
         specifier: 'catalog:'
         version: 7.37.5(eslint@9.39.1(jiti@2.6.1))
@@ -1155,10 +1155,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: 'catalog:'
-        version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
       vite-plugin-dts:
         specifier: 'catalog:'
-        version: 4.5.4(@types/node@22.19.2)(rollup@4.53.3)(typescript@5.9.3)(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 4.5.4(@types/node@22.19.2)(rollup@4.53.3)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0)(postcss@8.5.6))(tsx@4.21.0)(yaml@2.8.2)
@@ -1186,13 +1186,13 @@ importers:
         version: 19.2.3(@types/react@19.2.9)
       '@vitejs/plugin-react':
         specifier: 'catalog:'
-        version: 5.1.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 5.1.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
       vite:
         specifier: 'catalog:'
-        version: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/word-layout:
     devDependencies:
@@ -1207,7 +1207,7 @@ importers:
         version: 22.19.2
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
-        version: 6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
+        version: 6.0.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -9772,6 +9772,46 @@ packages:
       yaml:
         optional: true
 
+  vite@7.3.1:
+    resolution: {integrity: sha512-w+N7Hifpc3gRjZ63vYBXA56dvvRlNWRczTdmCBBa+CotUzAPf5b7YMdMR/8CQoeYE5LX3W4wj6RYTgonm1b9DA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    hasBin: true
+    peerDependencies:
+      '@types/node': ^20.19.0 || >=22.12.0
+      jiti: '>=1.21.0'
+      less: ^4.0.0
+      lightningcss: ^1.21.0
+      sass: ^1.70.0
+      sass-embedded: ^1.70.0
+      stylus: '>=0.54.8'
+      sugarss: ^5.0.0
+      terser: ^5.16.0
+      tsx: ^4.8.1
+      yaml: ^2.4.2
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+      jiti:
+        optional: true
+      less:
+        optional: true
+      lightningcss:
+        optional: true
+      sass:
+        optional: true
+      sass-embedded:
+        optional: true
+      stylus:
+        optional: true
+      sugarss:
+        optional: true
+      terser:
+        optional: true
+      tsx:
+        optional: true
+      yaml:
+        optional: true
+
   vitest@3.2.4:
     resolution: {integrity: sha512-LUCP5ev3GURDysTWiP47wRRUpLKMOfPh+yKTx3kVIEiu5KOMeqzpnYNsKyOoVrULivR8tLcks4+lga33Whn90A==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
@@ -12994,7 +13034,7 @@ snapshots:
       lodash: 4.17.21
       minimatch: 7.4.6
 
-  '@vitejs/plugin-react@5.1.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))':
+  '@vitejs/plugin-react@5.1.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@babel/core': 7.28.6
       '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.28.6)
@@ -13002,14 +13042,14 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-beta.53
       '@types/babel__core': 7.20.5
       react-refresh: 0.18.0
-      vite: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     transitivePeerDependencies:
       - supports-color
 
-  '@vitejs/plugin-vue@6.0.2(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))':
+  '@vitejs/plugin-vue@6.0.2(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.25(typescript@5.9.3))':
     dependencies:
       '@rolldown/pluginutils': 1.0.0-beta.50
-      vite: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
       vue: 3.5.25(typescript@5.9.3)
 
   '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(happy-dom@20.3.4)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0)(postcss@8.5.6))(tsx@4.21.0)(yaml@2.8.2))':
@@ -20967,7 +21007,7 @@ snapshots:
       - tsx
       - yaml
 
-  vite-plugin-dts@4.5.4(@types/node@22.19.2)(rollup@4.53.3)(typescript@5.9.3)(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)):
+  vite-plugin-dts@4.5.4(@types/node@22.19.2)(rollup@4.53.3)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)):
     dependencies:
       '@microsoft/api-extractor': 7.55.2(@types/node@22.19.2)
       '@rollup/pluginutils': 5.3.0(rollup@4.53.3)
@@ -20980,23 +21020,38 @@ snapshots:
       magic-string: 0.30.21
       typescript: 5.9.3
     optionalDependencies:
-      vite: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     transitivePeerDependencies:
       - '@types/node'
       - rollup
       - supports-color
 
-  vite-plugin-node-polyfills@0.24.0(patch_hash=b69b54a87bfd9531260555cfb2fda7c94e6f75c124e3a3fae26d64272bbe86ff)(rollup@4.53.3)(vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)):
+  vite-plugin-node-polyfills@0.24.0(patch_hash=b69b54a87bfd9531260555cfb2fda7c94e6f75c124e3a3fae26d64272bbe86ff)(rollup@4.53.3)(vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)):
     dependencies:
       '@rollup/plugin-inject': 5.0.5(rollup@4.53.3)
       node-stdlib-browser: 1.3.1
-      vite: 7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     transitivePeerDependencies:
       - rollup
 
   vite@7.2.7(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
       esbuild: 0.25.12
+      fdir: 6.5.0(picomatch@4.0.3)
+      picomatch: 4.0.3
+      postcss: 8.5.6
+      rollup: 4.53.3
+      tinyglobby: 0.2.15
+    optionalDependencies:
+      '@types/node': 22.19.2
+      fsevents: 2.3.3
+      jiti: 2.6.1
+      tsx: 4.21.0
+      yaml: 2.8.2
+
+  vite@7.3.1(@types/node@22.19.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2):
+    dependencies:
+      esbuild: 0.27.1
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
       postcss: 8.5.6

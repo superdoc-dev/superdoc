@@ -8,7 +8,8 @@ import type { DocumentMode, SuperDocEditorProps, SuperDocInstance, SuperDocRef }
  * Provides a component-based API with proper lifecycle management
  * and React Strict Mode compatibility.
  *
- * NOTE: This is a client-only component. It returns null during SSR.
+ * NOTE: This is a client-only component. During SSR, it renders the
+ * `renderLoading` placeholder if provided, otherwise returns null.
  * For Next.js, use dynamic import with { ssr: false }.
  */
 function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<SuperDocRef>) {
@@ -219,7 +220,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
 
-  // Client-only: render nothing on server, show loading until hydrated
+  // Client-only: show renderLoading placeholder on server if provided, otherwise null
   if (!isClient) {
     return renderLoading ? (
       <div className={wrapperClassName} style={style}>

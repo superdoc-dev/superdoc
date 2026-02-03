@@ -4,8 +4,8 @@
  * Uses a combination of timestamp and random string to ensure uniqueness
  * across multiple instances without relying on a global counter.
  *
- * Note: The component is client-only (returns null on server), so this
- * function only runs on the client after hydration.
+ * Note: This function only runs on the client after hydration since
+ * IDs are generated in a ref initializer (not during SSR render).
  *
  * @returns A unique identifier string
  */

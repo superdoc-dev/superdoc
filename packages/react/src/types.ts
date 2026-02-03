@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { SuperDoc } from 'superdoc';
 
 /**
- * Types for @superdoc/react
+ * Types for @superdoc-dev/react
  *
  * Core types are extracted from the SuperDoc constructor parameter type,
  * ensuring they stay in sync with the superdoc package.

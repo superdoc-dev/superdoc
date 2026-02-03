@@ -1,6 +1,6 @@
 # SuperDoc React + TypeScript Example
 
-A TypeScript example demonstrating `@superdoc/react` integration with full type safety.
+A TypeScript example demonstrating `@superdoc-dev/react` integration with full type safety.
 
 ## Features Demonstrated
 
@@ -23,7 +23,7 @@ pnpm -C examples/getting-started/react-with-typescript dev
 ## Key Types Used
 
 ```typescript
-import type { SuperDocRef, DocumentMode } from '@superdoc/react';
+import type { SuperDocRef, DocumentMode } from '@superdoc-dev/react';
 
 // Ref for accessing instance methods
 const editorRef = useRef<SuperDocRef>(null);

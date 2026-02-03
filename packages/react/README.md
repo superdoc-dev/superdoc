@@ -1,11 +1,11 @@
-# @superdoc/react
+# @superdoc-dev/react
 
 Official React wrapper for [SuperDoc](https://www.superdoc.dev).
 
 ## Installation
 
 ```bash
-npm install @superdoc/react
+npm install @superdoc-dev/react
 ```
 
 > `superdoc` is included as a dependency - no need to install it separately.
@@ -13,8 +13,8 @@ npm install @superdoc/react
 ## Quick Start
 
 ```tsx
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 function App() {
   return <SuperDocEditor document={file} />;
@@ -45,7 +45,7 @@ Access SuperDoc methods via `getInstance()`:
 
 ```tsx
 import { useRef } from 'react';
-import { SuperDocEditor, SuperDocRef } from '@superdoc/react';
+import { SuperDocEditor, SuperDocRef } from '@superdoc-dev/react';
 
 function App() {
   const ref = useRef<SuperDocRef>(null);
@@ -134,7 +134,7 @@ function Editor() {
 import dynamic from 'next/dynamic';
 
 const SuperDocEditor = dynamic(
-  () => import('@superdoc/react').then((m) => m.SuperDocEditor),
+  () => import('@superdoc-dev/react').then((m) => m.SuperDocEditor),
   { ssr: false }
 );
 ```
@@ -148,7 +148,7 @@ import type {
   DocumentMode,
   UserRole,
   SuperDocUser,
-} from '@superdoc/react';
+} from '@superdoc-dev/react';
 ```
 
 Types are extracted from the `superdoc` package, ensuring they stay in sync.

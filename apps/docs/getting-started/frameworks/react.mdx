@@ -1,15 +1,15 @@
 ---
 title: React Integration
 sidebarTitle: React
-keywords: "react docx editor, react word component, superdoc react, microsoft word react, document editor react hooks, @superdoc/react"
+keywords: "react docx editor, react word component, superdoc react, microsoft word react, document editor react hooks, @superdoc-dev/react"
 ---
 
-SuperDoc provides `@superdoc/react` - a first-party wrapper with proper lifecycle management, SSR safety, and React Strict Mode compatibility.
+SuperDoc provides `@superdoc-dev/react` - a first-party wrapper with proper lifecycle management, SSR safety, and React Strict Mode compatibility.
 
 ## Installation
 
 ```bash
-npm install @superdoc/react
+npm install @superdoc-dev/react
 ```
 
 <Note>
@@ -19,8 +19,8 @@ npm install @superdoc/react
 ## Quick Start
 
 ```jsx
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 function App() {
   return (
@@ -88,8 +88,8 @@ For programmatic control, use a ref to access the SuperDoc instance:
 
 ```jsx
 import { useRef } from 'react';
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 function App() {
   const editorRef = useRef(null);
@@ -155,8 +155,8 @@ Once you have the SuperDoc instance via `getInstance()`, you can call any SuperD
 
 ```jsx
 import { useState, useRef } from 'react';
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 function FileEditor() {
   const [file, setFile] = useState(null);
@@ -260,9 +260,9 @@ The wrapper includes full TypeScript support:
 
 ```tsx
 import { useRef } from 'react';
-import { SuperDocEditor } from '@superdoc/react';
-import type { SuperDocRef } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import type { SuperDocRef } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 interface EditorProps {
   document: string | File | Blob;
@@ -311,7 +311,7 @@ import type {
   SuperDocModules,
   SuperDocConfig,
   SuperDocInstance,
-} from '@superdoc/react';
+} from '@superdoc-dev/react';
 ```
 
 ---
@@ -328,7 +328,7 @@ The wrapper handles SSR automatically. For additional control:
 import dynamic from 'next/dynamic';
 
 const SuperDocEditor = dynamic(
-  () => import('@superdoc/react').then(mod => mod.SuperDocEditor),
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
   {
     ssr: false,
     loading: () => <div>Loading editor...</div>
@@ -346,7 +346,7 @@ export default function EditorPage() {
 import dynamic from 'next/dynamic';
 
 const SuperDocEditor = dynamic(
-  () => import('@superdoc/react').then(mod => mod.SuperDocEditor),
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
   { ssr: false }
 );
 
@@ -360,8 +360,8 @@ export default function EditorPage() {
 Works out of the box - just import and use:
 
 ```jsx
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 function App() {
   return <SuperDocEditor document={file} />;
@@ -520,7 +520,7 @@ The component handles SSR internally, but if you still see errors:
 ```jsx
 // Use dynamic import in Next.js
 const SuperDocEditor = dynamic(
-  () => import('@superdoc/react').then(mod => mod.SuperDocEditor),
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
   { ssr: false }
 );
 ```

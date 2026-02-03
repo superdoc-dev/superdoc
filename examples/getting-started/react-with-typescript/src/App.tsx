@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import { SuperDocEditor } from '@superdoc/react';
-import type { SuperDocRef, DocumentMode } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import type { SuperDocRef, DocumentMode } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 import './App.css';
 
 /**

@@ -3,14 +3,14 @@ title: Next.js
 keywords: "nextjs docx editor, next word editor, superdoc nextjs, ssr document editor, dynamic import docx"
 ---
 
-SuperDoc works seamlessly with Next.js. The recommended approach is using `@superdoc/react`, which handles SSR automatically.
+SuperDoc works seamlessly with Next.js. The recommended approach is using `@superdoc-dev/react`, which handles SSR automatically.
 
-## Recommended: Using @superdoc/react
+## Recommended: Using @superdoc-dev/react
 
 The React wrapper is the simplest way to integrate SuperDoc with Next.js:
 
 ```bash
-npm install @superdoc/react
+npm install @superdoc-dev/react
 ```
 
 ### App Router (Next.js 13+)
@@ -19,8 +19,8 @@ npm install @superdoc/react
 // app/editor/page.jsx
 'use client';
 
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 export default function EditorPage() {
   return (
@@ -38,8 +38,8 @@ export default function EditorPage() {
 
 ```jsx
 // pages/editor.jsx
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 export default function EditorPage() {
   return (
@@ -69,7 +69,7 @@ For additional control over loading behavior, use Next.js dynamic imports:
 import dynamic from 'next/dynamic';
 
 const SuperDocEditor = dynamic(
-  () => import('@superdoc/react').then(mod => mod.SuperDocEditor),
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
   {
     ssr: false,
     loading: () => <div className="editor-loading">Loading editor...</div>
@@ -98,8 +98,8 @@ Here's a full example with file upload and export:
 'use client';
 
 import { useState, useRef } from 'react';
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 export default function EditorPage() {
   const [file, setFile] = useState(null);
@@ -151,7 +151,7 @@ Import styles in your layout or page:
 
 ```jsx
 // app/layout.jsx
-import '@superdoc/react/style.css';
+import '@superdoc-dev/react/style.css';
 
 export default function RootLayout({ children }) {
   return (
@@ -207,7 +207,7 @@ export default function VanillaEditor({ document }) {
 ```
 
 <Note>
-The React wrapper (`@superdoc/react`) is recommended over this approach as it handles lifecycle management, cleanup, and provides a cleaner API.
+The React wrapper (`@superdoc-dev/react`) is recommended over this approach as it handles lifecycle management, cleanup, and provides a cleaner API.
 </Note>
 
 ---

@@ -4,6 +4,6 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    include: ['@superdoc/react'],
+    include: ['@superdoc-dev/react'],
   },
 });

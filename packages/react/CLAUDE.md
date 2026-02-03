@@ -1,4 +1,4 @@
-# @superdoc/react
+# @superdoc-dev/react
 
 React wrapper for SuperDoc.
 
@@ -79,6 +79,6 @@ Other props like `documentMode` and callbacks are handled without rebuild.
 ## Commands
 
 ```bash
-pnpm --filter @superdoc/react build
-pnpm --filter @superdoc/react test
+pnpm --filter @superdoc-dev/react build
+pnpm --filter @superdoc-dev/react test
 ```

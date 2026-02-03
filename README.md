@@ -56,12 +56,12 @@ Or install with CDN
 ### React
 
 ```bash
-npm install @superdoc/react
+npm install @superdoc-dev/react
 ```
 
 ```tsx
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 function App() {
   return (
@@ -74,7 +74,7 @@ function App() {
 }
 ```
 
-See the [@superdoc/react README](packages/react/README.md) for full documentation.
+See the [@superdoc-dev/react README](packages/react/README.md) for full documentation.
 
 ### Vanilla JavaScript
 

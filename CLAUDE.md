@@ -25,7 +25,7 @@ State flows from super-editor → Layout Engine via:
 ```
 packages/
   superdoc/          Main entry point (npm: superdoc)
-  react/             React wrapper (@superdoc/react)
+  react/             React wrapper (@superdoc-dev/react)
   super-editor/      ProseMirror editor (@superdoc/super-editor)
   layout-engine/     Layout & pagination pipeline
     contracts/       - Shared type definitions
@@ -74,14 +74,14 @@ examples/
 
 | Framework | Package | Entry |
 |-----------|---------|-------|
-| React | `@superdoc/react` | `<SuperDocEditor>` component |
+| React | `@superdoc-dev/react` | `<SuperDocEditor>` component |
 | Vue | `superdoc` | `<SuperDoc>` component (built-in) |
 
 ### React Quick Start
 
 ```tsx
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 <SuperDocEditor document={file} documentMode="editing" />
 ```

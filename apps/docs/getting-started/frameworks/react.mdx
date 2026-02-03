@@ -13,7 +13,7 @@ npm install @superdoc/react
 ```
 
 <Note>
-`superdoc` is bundled as a dependency - you don't need to install it separately.
+`superdoc` is included as a dependency - you don't need to install it separately.
 </Note>
 
 ## Quick Start
@@ -46,7 +46,7 @@ That's it! You now have a fully functional DOCX editor in your React app.
 - **Mounting** - Creates a SuperDoc instance when the component mounts
 - **Updates** - Rebuilds automatically when the `document` prop changes
 - **Cleanup** - Properly destroys the instance on unmount
-- **SSR Safety** - Uses dynamic imports internally
+- **Client-Only** - Returns null on server, renders only after hydration
 
 ### Document Modes
 
@@ -63,7 +63,7 @@ SuperDoc supports three editing modes:
 ```
 
 <Tip>
-To change modes at runtime without rebuilding, use `getInstance()?.setDocumentMode()` instead of changing the prop.
+Changing `documentMode` via props is efficient - the component calls `setDocumentMode()` internally without rebuilding. You can also use `getInstance()?.setDocumentMode()` directly if preferred.
 </Tip>
 
 ### User Roles
@@ -467,8 +467,9 @@ const getHtmlContent = () => {
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
+| `id` | `string` | auto-generated | Custom container ID |
 | `hideToolbar` | `boolean` | `false` | Hide the toolbar |
-| `rulers` | `boolean` | `false` | Show/hide rulers |
+| `rulers` | `boolean` | - | Show/hide rulers (SuperDoc default) |
 | `className` | `string` | - | CSS class for wrapper |
 | `style` | `CSSProperties` | - | Inline styles |
 | `renderLoading` | `() => ReactNode` | - | Custom loading UI |
@@ -493,6 +494,20 @@ const getHtmlContent = () => {
 <Note>
 All SuperDoc config options are available as props. The component extends `SuperDocConfig`, so any option from the core package can be passed directly.
 </Note>
+
+### Props That Trigger Rebuild
+
+These props trigger a full instance rebuild when changed:
+
+| Prop | Reason |
+|------|--------|
+| `document` | New document to load |
+| `user` | User identity changed |
+| `users` | Users list changed |
+| `modules` | Module configuration changed |
+| `role` | Permission level changed |
+
+Other props like `documentMode` and callbacks are handled efficiently without rebuild.
 
 ---
 

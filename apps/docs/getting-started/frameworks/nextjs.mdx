@@ -53,7 +53,7 @@ export default function EditorPage() {
 ```
 
 <Tip>
-The React wrapper handles SSR internally via dynamic imports, so you typically don't need additional configuration.
+The React wrapper is client-only (returns null on server, renders after hydration). For custom loading UI during SSR, use Next.js dynamic imports with a `loading` component.
 </Tip>
 
 ---
@@ -103,6 +103,7 @@ import '@superdoc/react/style.css';
 
 export default function EditorPage() {
   const [file, setFile] = useState(null);
+  const [mode, setMode] = useState('editing');
   const editorRef = useRef(null);
 
   const handleFileChange = (e) => {
@@ -121,12 +122,8 @@ export default function EditorPage() {
         {file && (
           <>
             <button onClick={handleExport}>Export</button>
-            <button onClick={() => editorRef.current?.getInstance()?.setDocumentMode('editing')}>
-              Edit
-            </button>
-            <button onClick={() => editorRef.current?.getInstance()?.setDocumentMode('suggesting')}>
-              Review
-            </button>
+            <button onClick={() => setMode('editing')}>Edit</button>
+            <button onClick={() => setMode('suggesting')}>Review</button>
           </>
         )}
       </div>
@@ -135,7 +132,7 @@ export default function EditorPage() {
         <SuperDocEditor
           ref={editorRef}
           document={file}
-          documentMode="editing"
+          documentMode={mode}
           user={{ name: 'User', email: 'user@example.com' }}
           onReady={() => console.log('Ready!')}
           style={{ height: 'calc(100vh - 60px)' }}

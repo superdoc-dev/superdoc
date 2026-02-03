@@ -69,6 +69,7 @@ All [SuperDoc config options](https://docs.superdoc.dev) are available as props,
 
 | Prop | Type | Description |
 |------|------|-------------|
+| `id` | `string` | Custom container ID (auto-generated if not provided) |
 | `renderLoading` | `() => ReactNode` | Loading UI |
 | `hideToolbar` | `boolean` | Hide toolbar (default: false) |
 | `className` | `string` | Wrapper CSS class |

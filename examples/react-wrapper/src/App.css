@@ -1,74 +1,209 @@
+/* App Layout */
 .app {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  background: #f0f0f0;
 }
 
-.header {
-  padding: 1rem;
-  background: #f5f5f5;
-  border-bottom: 1px solid #ddd;
+.app-header {
+  padding: 0.75rem 1rem;
+  background: #1a1a2e;
+  color: white;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  flex-shrink: 0;
 }
 
-.header h1 {
-  font-size: 1.25rem;
-  margin-right: auto;
+.app-header h1 {
+  font-size: 1.1rem;
+  font-weight: 500;
 }
 
-.controls {
+/* Tabs Layout */
+.tabs-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tab-bar {
+  display: flex;
+  background: #e5e5e5;
+  padding: 0.5rem 0.5rem 0;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tab {
+  padding: 0.6rem 1.25rem;
+  background: #d0d0d0;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #555;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  background: #c5c5c5;
+}
+
+.tab.active {
+  background: white;
+  color: #1a1a2e;
+  font-weight: 500;
+}
+
+.tab-content {
+  flex: 1;
+  min-height: 0;
+  background: white;
+}
+
+/* Editor Panel */
+.editor-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.panel-header {
+  padding: 0.5rem 0.75rem;
+  background: #fafafa;
+  border-bottom: 1px solid #e5e5e5;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  min-height: fit-content;
+}
+
+.panel-header h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   flex-wrap: wrap;
 }
 
-.controls button {
-  padding: 0.5rem 1rem;
+.panel-controls button,
+.panel-controls select {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.panel-controls button {
   background: #1355ff;
   color: white;
   border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
 }
 
-.controls button:hover {
-  background: #0044ff;
+.panel-controls button:hover {
+  background: #0044dd;
 }
 
-.mode-selector {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.mode-selector label {
-  font-size: 0.875rem;
-  color: #666;
-}
-
-.mode-selector select {
-  padding: 0.5rem;
+.panel-controls select {
+  background: white;
   border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 0.875rem;
 }
 
-.main {
+.panel-content {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
-.superdoc-editor {
+/* Search Controls */
+.search-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.search-controls input[type="text"] {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  width: 120px;
+}
+
+.search-controls .result-count {
+  font-size: 0.7rem;
+  color: #666;
+  min-width: 40px;
+  text-align: center;
+}
+
+/* Badge */
+.badge {
+  padding: 0.2rem 0.5rem;
+  background: #e0e7ff;
+  color: #3730a3;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+/* Empty State */
+.empty-state {
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f9f9f9;
+  color: #888;
+  font-size: 0.9rem;
 }
 
-/* SuperDoc wrapper styling */
+/* Loading */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.loading p {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e5e5e5;
+  border-top-color: #1355ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* SuperDoc Wrapper Overrides */
 .superdoc-wrapper {
   display: flex;
   flex-direction: column;
@@ -96,28 +231,218 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   z-index: 100;
 }
 
-.loading {
+/* Tab bar scrollable for many tabs */
+.tab-bar {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+
+.tab {
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+}
+
+/* Control Label */
+.control-label {
+  font-size: 0.7rem;
+  color: #666;
+  margin-right: 0.25rem;
+}
+
+/* Toggle Button Active State */
+.panel-controls button.active {
+  background: #10b981;
+}
+
+.panel-controls button.active:hover {
+  background: #059669;
+}
+
+/* Split View Layout */
+.split-view {
+  display: flex;
+  height: 100%;
+  flex-wrap: wrap;
+}
+
+.editor-side {
+  flex: 1 1 400px;
+  min-width: 300px;
+  border-right: 1px solid #e5e5e5;
+}
+
+.editor-side.full {
+  border-right: none;
+}
+
+.events-side,
+.html-side {
+  flex: 0 0 240px;
+  min-width: 200px;
+  max-width: 300px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1rem;
+  background: #fafafa;
+  border-left: 1px solid #e5e5e5;
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #eee;
-  border-top-color: #1355ff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
+/* Responsive: Stack sidebar below editor on narrow screens */
+@media (max-width: 700px) {
+  .split-view {
+    flex-direction: column;
+  }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+  .editor-side {
+    flex: 1 1 auto;
+    min-height: 300px;
+    border-right: none;
+    border-bottom: 1px solid #e5e5e5;
+  }
+
+  .events-side,
+  .html-side {
+    flex: 0 0 200px;
+    max-width: none;
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid #e5e5e5;
   }
 }
+
+/* Events Log */
+.events-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+.empty-log {
+  color: #999;
+  text-align: center;
+  padding: 1rem;
+  font-style: italic;
+}
+
+.event-item {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.event-time {
+  color: #999;
+  flex-shrink: 0;
+}
+
+.event-name {
+  color: #1355ff;
+  font-weight: 500;
+}
+
+/* HTML Output */
+.html-output {
+  flex: 1;
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #1a1a2e;
+  color: #e5e5e5;
+}
+
+/* User Chips */
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.4rem;
+  background: #f0f0f0;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  color: #555;
+}
+
+/* Minimal Editor Panel */
+.editor-panel.minimal .panel-content {
+  background: #fafafa;
+}
+
+/* Responsive Toolbar */
+.superdoc-toolbar-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* General responsive adjustments */
+@media (max-width: 900px) {
+  .tab {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  .panel-header h3 {
+    font-size: 0.8rem;
+  }
+
+  .panel-controls button,
+  .panel-controls select {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .search-controls input[type="text"] {
+    width: 100px;
+  }
+}
+
+@media (max-width: 600px) {
+  .app-header h1 {
+    font-size: 0.95rem;
+  }
+
+  .tab-bar {
+    padding: 0.25rem 0.25rem 0;
+  }
+
+  .tab {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .panel-header {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .panel-header h3 {
+    font-size: 0.75rem;
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
+
+  .badge {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+  }
+
+  .events-log {
+    font-size: 0.7rem;
+  }
+
+  .event-item {
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+}
+

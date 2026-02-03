@@ -34,4 +34,4 @@ export type {
 } from './types';
 
 // Utilities
-export { useStableId } from './utils';
+export { generateId } from './utils';

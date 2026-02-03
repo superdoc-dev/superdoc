@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
-import { useStableId } from './utils';
+import { generateId } from './utils';
 import type {
   DocumentMode,
   ExportOptions,
@@ -39,12 +39,17 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     style,
   } = props;
 
-  const containerId = useStableId();
-  const toolbarId = `${containerId}-toolbar`;
-
   const instanceRef = useRef<SuperDocInstance | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const toolbarContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Generate stable IDs once per component instance
+  const idsRef = useRef<{ containerId: string; toolbarId: string } | null>(null);
+  if (idsRef.current === null) {
+    const id = generateId();
+    idsRef.current = { containerId: id, toolbarId: `${id}-toolbar` };
+  }
+  const { containerId, toolbarId } = idsRef.current;
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -232,21 +237,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
         instanceRef.current = null;
       }
     };
-  }, [
-    // Only rebuild on these changes
-    containerId,
-    toolbarId,
-    documentProp,
-    role,
-    user,
-    users,
-    modules,
-    toolbar,
-    rulers,
-    pagination,
-    config,
-    // Note: documentMode is handled imperatively, not included here
-  ]);
+  }, [documentProp, role, user, users, modules, toolbar, rulers, pagination, config]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
 
@@ -260,7 +251,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
 }
 
 /**
- * SuperDocEditor component with forwardRef
+ * SuperDocEditor component with forwardRef - Initializes SuperDoc instance and handles cleanup.
  */
 export const SuperDocEditor = forwardRef<SuperDocRef, SuperDocEditorProps>(SuperDocEditorInner);
 

@@ -273,9 +273,9 @@ describe('normalizeTableBookmarksInContent', () => {
     ]);
   });
 
-  it('places bookmarks in the cell indicated by colFirst/colLast when present', () => {
+  it('places bookmarkStart in the cell indicated by colFirst when present; bookmarkEnd uses first/last cell only', () => {
     const twoCells = row([cell([paragraph([text('A')])]), cell([paragraph([text('B')])])]);
-    const input = [table([bookmarkStart('b1', { colFirst: '1' }), twoCells, bookmarkEnd('b1', { colLast: '1' })])];
+    const input = [table([bookmarkStart('b1', { colFirst: '1' }), twoCells, bookmarkEnd('b1')])];
 
     const result = normalizeTableBookmarksInContent(input);
     const normalizedTable = result[0];
@@ -290,6 +290,6 @@ describe('normalizeTableBookmarksInContent', () => {
     const secondCellContent = rowContent[1].content[0].content;
     expect(secondCellContent[0]).toMatchObject({ type: 'bookmarkStart', attrs: { id: 'b1', colFirst: '1' } });
     expect(secondCellContent[1]).toMatchObject({ type: 'text', text: 'B', marks: [] });
-    expect(secondCellContent[2]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'b1', colLast: '1' } });
+    expect(secondCellContent[2]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'b1' } });
   });
 });

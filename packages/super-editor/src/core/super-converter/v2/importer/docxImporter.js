@@ -882,10 +882,13 @@ function parseColIndex(val) {
   return Number.isNaN(n) ? null : Math.max(0, n);
 }
 
+/** colFirst/colLast apply only to bookmarkStart; bookmarkEnd always uses first/last cell by position. */
 function getCellIndexForBookmark(bookmarkNode, position, rowCellCount) {
   if (!rowCellCount) return 0;
-  const attrs = bookmarkNode?.attrs ?? {};
-  const col = position === 'start' ? parseColIndex(attrs.colFirst) : parseColIndex(attrs.colLast);
+  if (bookmarkNode?.type === 'bookmarkEnd') {
+    return position === 'start' ? 0 : rowCellCount - 1;
+  }
+  const col = parseColIndex(bookmarkNode?.attrs?.colFirst);
   if (col == null) return position === 'start' ? 0 : rowCellCount - 1;
   return Math.min(col, rowCellCount - 1);
 }

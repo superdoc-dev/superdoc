@@ -66,6 +66,5 @@ reports/
 
 codex.config.json
 perf-baseline-results.json
-# Claude Code - ignore local files, keep shared rules
-.claude/*
+.claude
 dev/

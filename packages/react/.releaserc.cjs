@@ -5,8 +5,6 @@ const config = {
   branches: [
     { name: 'stable', channel: 'latest' },
     { name: 'main', prerelease: 'next', channel: 'next' },
-    // TEMPORARY: Remove before merging to main
-    { name: 'feat/react-wrapper', prerelease: 'canary', channel: 'canary' },
   ],
   tagFormat: 'react-v${version}',
   plugins: [

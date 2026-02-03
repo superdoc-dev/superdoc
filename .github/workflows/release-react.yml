@@ -6,6 +6,8 @@ on:
   push:
     branches:
       - main
+      # TEMPORARY: Remove before merging to main
+      - feat/react-wrapper
     paths:
       - 'packages/react/**'
       - '!**/*.md'

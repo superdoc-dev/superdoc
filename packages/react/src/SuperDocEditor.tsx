@@ -136,9 +136,9 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
         // Build configuration - pass through all props
         const superdocConfig = {
           ...restProps,
-          selector: `#${containerId}`,
+          selector: `#${CSS.escape(containerId)}`,
           // Use internal toolbar container unless hideToolbar is true
-          ...(!hideToolbar && toolbarContainerRef.current ? { toolbar: `#${toolbarId}` } : {}),
+          ...(!hideToolbar && toolbarContainerRef.current ? { toolbar: `#${CSS.escape(toolbarId)}` } : {}),
           documentMode,
           role,
           ...(documentProp != null ? { document: documentProp } : {}),

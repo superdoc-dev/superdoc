@@ -21,6 +21,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   // Destructure React-specific props and key rebuild triggers
   const {
     // React-specific
+    id,
     renderLoading,
     hideToolbar = false,
     className,
@@ -48,11 +49,11 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const instanceRef = useRef<SuperDocInstance | null>(null);
   const toolbarContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Generate stable IDs once per component instance
+  // Generate stable IDs once per component instance (use provided id if available)
   const idsRef = useRef<{ containerId: string; toolbarId: string } | null>(null);
   if (idsRef.current === null) {
-    const id = generateId();
-    idsRef.current = { containerId: id, toolbarId: `${id}-toolbar` };
+    const baseId = id ?? generateId();
+    idsRef.current = { containerId: baseId, toolbarId: `${baseId}-toolbar` };
   }
   const { containerId, toolbarId } = idsRef.current;
 

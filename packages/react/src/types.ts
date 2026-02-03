@@ -53,6 +53,9 @@ type OptionalInReact = 'documentMode';
  * React-specific props added on top of SuperDocConfig.
  */
 interface ReactProps {
+  /** Optional ID for the editor container. Auto-generated if not provided. */
+  id?: string;
+
   /** Render function for loading state */
   renderLoading?: () => ReactNode;
 

@@ -5,10 +5,19 @@ import type { DocumentMode, SuperDocEditorProps, SuperDocInstance, SuperDocRef }
 /**
  * SuperDocEditor - React wrapper component for SuperDoc
  *
- * Provides a component-based API with proper lifecycle management,
- * SSR safety, and React Strict Mode compatibility.
+ * Provides a component-based API with proper lifecycle management
+ * and React Strict Mode compatibility.
+ *
+ * NOTE: This is a client-only component. It returns null during SSR.
+ * For Next.js, use dynamic import with { ssr: false }.
  */
 function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<SuperDocRef>) {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Destructure React-specific props and key rebuild triggers
   const {
     // React-specific
@@ -208,6 +217,15 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   }, [documentProp, user, users, modules, role, hideToolbar]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
+
+  // Client-only: render nothing on server, show loading until hydrated
+  if (!isClient) {
+    return renderLoading ? (
+      <div className={wrapperClassName} style={style}>
+        {renderLoading()}
+      </div>
+    ) : null;
+  }
 
   return (
     <div className={wrapperClassName} style={style}>

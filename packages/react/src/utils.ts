@@ -2,9 +2,10 @@
  * Generate a unique ID for SuperDoc container elements.
  *
  * Uses a combination of timestamp and random string to ensure uniqueness
- * without relying on a global counter. This avoids SSR hydration mismatches
- * since the ID is only used for DOM element targeting after client-side
- * initialization (SuperDoc is dynamically imported and only runs on the client).
+ * across multiple instances without relying on a global counter.
+ *
+ * Note: The component is client-only (returns null on server), so this
+ * function only runs on the client after hydration.
  *
  * @returns A unique identifier string
  */

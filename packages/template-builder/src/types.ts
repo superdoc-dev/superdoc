@@ -110,6 +110,9 @@ export interface SuperDocTemplateBuilderProps {
   list?: ListConfig;
   toolbar?: boolean | string | ToolbarConfig;
 
+  /** Content Security Policy nonce for dynamically injected styles */
+  cspNonce?: string;
+
   // Events
   onReady?: () => void;
   onTrigger?: (event: TriggerEvent) => void;

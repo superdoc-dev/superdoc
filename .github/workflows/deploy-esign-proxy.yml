@@ -1,0 +1,68 @@
+name: Deploy eSign Proxy Server
+
+on:
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  SERVICE_NAME: esign-demo-proxy-server
+  SUPERDOC_SERVICES_BASE_URL: ${{ vars.SUPERDOC_SERVICES_BASE_URL }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Build and push container with Cloud Build
+        run: |
+          REGION="${REGION:-us-central1}"
+          SERVICE_NAME="${SERVICE_NAME:-esign-demo-proxy-server}"
+          IMAGE="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+
+          echo "REGION=${REGION}" >> $GITHUB_ENV
+          echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
+          echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
+
+          gcloud builds submit packages/esign/demo/server --tag "${IMAGE}"
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          REGION: ${{ env.REGION }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+
+      - name: Deploy container to Cloud Run
+        run: |
+          REGION="${REGION:-us-central1}"
+          SERVICE_NAME="${SERVICE_NAME:-esign-demo-proxy-server}"
+          IMAGE="${IMAGE}"
+          SUPERDOC_SERVICES_BASE_URL="${SUPERDOC_SERVICES_BASE_URL:-https://api.superdoc.dev}"
+
+          gcloud run deploy "${SERVICE_NAME}" \
+            --image "${IMAGE}" \
+            --region "${REGION}" \
+            --memory=1Gi \
+            --cpu=1 \
+            --allow-unauthenticated \
+            --set-env-vars SUPERDOC_SERVICES_BASE_URL="${SUPERDOC_SERVICES_BASE_URL}" \
+            --set-secrets="SUPERDOC_SERVICES_API_KEY=esign-demo-sd-services-api-key:latest"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          REGION: ${{ env.REGION }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          SUPERDOC_SERVICES_BASE_URL: ${{ env.SUPERDOC_SERVICES_BASE_URL }}

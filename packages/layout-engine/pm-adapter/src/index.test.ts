@@ -325,7 +325,7 @@ describe('toFlowBlocks', () => {
 
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
-        spacing: { before: 10, after: 6, line: 22, lineRule: 'exact' },
+        spacing: { before: 10, after: 6, line: 22, lineUnit: 'px', lineRule: 'exact' },
         indent: { left: 12, firstLine: 24 },
       });
     });
@@ -1202,6 +1202,24 @@ describe('toFlowBlocks', () => {
       blocks.forEach((block) => {
         expect(block.id.startsWith('header-default-')).toBe(true);
       });
+    });
+
+    it('applies blockIdPrefix to stable paragraph ids', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { sdBlockId: 'ABC123' },
+            content: [{ type: 'text', text: 'Alpha' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { blockIdPrefix: 'doc-' });
+      const paragraph = blocks.find((block) => block.kind === 'paragraph');
+
+      expect(paragraph?.id).toBe('doc-ABC123');
     });
   });
 

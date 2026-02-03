@@ -133,6 +133,7 @@ export default [
           // Temporarily all "@"-prefixed imports. This should likely be changed to use https://github.com/pzmosquito/eslint-import-resolver-vite to properly resolve these aliases
           ignore: [
             '^@.*$',
+            '^bun:.*$', // Bun built-in modules
           ],
         }
       ]

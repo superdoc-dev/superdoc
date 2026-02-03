@@ -30,49 +30,65 @@ const getIndent = (indent: ParagraphIndent | null | undefined) => {
 describe('normalizeParagraphSpacing', () => {
   it('converts before/after from twips to px', () => {
     const spacing = { before: 240, after: 360 } as ParagraphSpacing; // 16px, 24px
-    const result = normalizeParagraphSpacing(spacing);
+    const result = normalizeParagraphSpacing(spacing, false);
     expect(result?.before).toBe(twipsToPx(240));
     expect(result?.after).toBe(twipsToPx(360));
   });
 
-  it('converts line from twips to px when lineRule is exact', () => {
+  it('converts line from twips to pixels when lineRule is exact', () => {
     const spacing = { line: 360, lineRule: 'exact' as const } as ParagraphSpacing; // 24px
-    const result = normalizeParagraphSpacing(spacing);
-    expect(result?.line).toBe(twipsToPx(360));
+    const result = normalizeParagraphSpacing(spacing, false);
+    expect(result?.line).toBeCloseTo(24);
     expect(result?.lineRule).toBe('exact');
-  });
-
-  it('treats auto line values <= 10 as multipliers', () => {
-    const spacing = { line: 1.15, lineRule: 'auto' as const } as ParagraphSpacing;
-    const result = normalizeParagraphSpacing(spacing);
-    expect(result?.line).toBe(1.15);
-    expect(result?.lineRule).toBe('auto');
   });
 
   it('converts auto line values > 10 from 240ths of a line', () => {
     const spacing = { line: 360, lineRule: 'auto' as const } as ParagraphSpacing; // 1.5x
-    const result = normalizeParagraphSpacing(spacing);
-    expect(result?.line).toBe(1.5);
+    const result = normalizeParagraphSpacing(spacing, false);
+    expect(result?.line).toBeCloseTo(1.725, 5);
     expect(result?.lineRule).toBe('auto');
   });
 
   it('preserves contextual spacing flags', () => {
     const spacing = { before: 240, beforeAutospacing: true, afterAutospacing: false } as ParagraphSpacing;
-    const result = normalizeParagraphSpacing(spacing);
-    expect(result?.before).toBe(twipsToPx(240));
+    const result = normalizeParagraphSpacing(spacing, false);
+    expect(result?.before).toBeCloseTo(twipsToPx(276), 5);
     expect(result?.beforeAutospacing).toBe(true);
     expect(result?.afterAutospacing).toBe(false);
   });
 
+  it('uses default line value for auto spacing when line is missing', () => {
+    const spacing = { beforeAutospacing: true, afterAutospacing: true } as ParagraphSpacing;
+    const result = normalizeParagraphSpacing(spacing, false);
+    expect(result?.before).toBeCloseTo(twipsToPx(276), 5);
+    expect(result?.after).toBeCloseTo(twipsToPx(276), 5);
+  });
+
+  it('drops auto spacing values for lists', () => {
+    const spacing = { beforeAutospacing: true, afterAutospacing: true, line: 360 } as ParagraphSpacing;
+    const result = normalizeParagraphSpacing(spacing, true);
+    expect(result?.before).toBeUndefined();
+    expect(result?.after).toBeUndefined();
+    expect(result?.beforeAutospacing).toBe(true);
+    expect(result?.afterAutospacing).toBe(true);
+  });
+
+  it('converts line to multiplier when lineRule is missing', () => {
+    const spacing = { line: 360 } as ParagraphSpacing;
+    const result = normalizeParagraphSpacing(spacing, false);
+    expect(result?.line).toBe(1.5);
+    expect(result?.lineRule).toBeUndefined();
+  });
+
   it('returns undefined for empty or invalid inputs', () => {
-    expect(normalizeParagraphSpacing(undefined)).toBeUndefined();
-    expect(normalizeParagraphSpacing(null as never)).toBeUndefined();
-    expect(normalizeParagraphSpacing({} as ParagraphSpacing)).toBeUndefined();
+    expect(normalizeParagraphSpacing(undefined, false)).toBeUndefined();
+    expect(normalizeParagraphSpacing(null as never, false)).toBeUndefined();
+    expect(normalizeParagraphSpacing({} as ParagraphSpacing, false)).toEqual({ line: 1.15, lineUnit: 'multiplier' });
   });
 
   it('skips non-numeric values but preserves valid ones', () => {
     const spacing = { before: 'not-a-number', after: 300 } as unknown as ParagraphSpacing;
-    const result = normalizeParagraphSpacing(spacing);
+    const result = normalizeParagraphSpacing(spacing, false);
     expect(result?.before).toBeUndefined();
     expect(result?.after).toBe(twipsToPx(300));
   });

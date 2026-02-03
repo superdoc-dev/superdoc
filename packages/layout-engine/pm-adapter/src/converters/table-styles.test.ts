@@ -98,7 +98,7 @@ describe('hydrateTableStyleAttrs', () => {
       expect(result?.paragraphProps?.spacing?.before).toBeCloseTo((120 / 1440) * 96);
       expect(result?.paragraphProps?.spacing?.after).toBeCloseTo((240 / 1440) * 96);
       // For 'auto' lineRule, line is in 240ths: 276/240 = 1.15
-      expect(result?.paragraphProps?.spacing?.line).toBeCloseTo(1.15);
+      expect(result?.paragraphProps?.spacing?.line).toBeCloseTo(1.3225);
       expect(result?.paragraphProps?.spacing?.lineRule).toBe('auto');
     });
 
@@ -185,6 +185,7 @@ describe('hydrateTableStyleAttrs', () => {
       const resultExact = hydrateTableStyleAttrs(tableExact, { docx: mockDocxExact });
       // For 'exact' lineRule, use twipsToPx: (240/1440)*96 = 16
       expect(resultExact?.paragraphProps?.spacing?.line).toBeCloseTo(16);
+      expect(resultExact?.paragraphProps?.spacing?.lineUnit).toBe('px');
       expect(resultExact?.paragraphProps?.spacing?.lineRule).toBe('exact');
 
       const mockDocxAtLeast = {

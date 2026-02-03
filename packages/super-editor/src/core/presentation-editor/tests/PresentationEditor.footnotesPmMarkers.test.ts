@@ -36,17 +36,21 @@ vi.mock('../../Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: vi.fn((_: unknown, opts?: any) => {
-    if (typeof opts?.blockIdPrefix === 'string' && opts.blockIdPrefix.startsWith('footnote-')) {
-      return {
-        blocks: [{ kind: 'paragraph', runs: [{ kind: 'text', text: 'Body', pmStart: 5, pmEnd: 9 }] }],
-        bookmarks: new Map(),
-      };
-    }
-    return { blocks: [], bookmarks: new Map() };
-  }),
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: vi.fn((_: unknown, opts?: any) => {
+      if (typeof opts?.blockIdPrefix === 'string' && opts.blockIdPrefix.startsWith('footnote-')) {
+        return {
+          blocks: [{ kind: 'paragraph', runs: [{ kind: 'text', text: 'Body', pmStart: 5, pmEnd: 9 }] }],
+          bookmarks: new Map(),
+        };
+      }
+      return { blocks: [], bookmarks: new Map() };
+    }),
+  };
+});
 
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: vi.fn(async (...args: any[]) => {

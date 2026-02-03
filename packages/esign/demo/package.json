@@ -1,0 +1,24 @@
+{
+  "name": "superdoc-esign-demo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "@superdoc-dev/esign": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "signature_pad": "^5.1.1",
+    "superdoc": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

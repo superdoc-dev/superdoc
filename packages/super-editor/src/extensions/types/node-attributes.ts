@@ -185,6 +185,8 @@ export interface ParagraphAttrs extends TextContainerAttributes {
   listRendering: ListRendering | null;
   /** SuperDoc block tracking ID */
   sdBlockId: string | null;
+  /** Incrementing revision for block-level changes */
+  sdBlockRev: number | null;
   /** Additional HTML attributes */
   extraAttrs: Record<string, string>;
   /** Paragraph identifier (w:paraId) */

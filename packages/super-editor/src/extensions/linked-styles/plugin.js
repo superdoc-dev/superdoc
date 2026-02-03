@@ -33,6 +33,9 @@ export const createLinkedStylesPlugin = (editor) => {
        */
       init() {
         if (!editor.converter || editor.options.mode !== 'docx') return {};
+        if (editor.presentationEditor) {
+          return { styles: editor.converter?.linkedStyles || [], decorations: DecorationSet.empty };
+        }
         const styles = editor.converter?.linkedStyles || [];
         return {
           styles,
@@ -50,6 +53,9 @@ export const createLinkedStylesPlugin = (editor) => {
        */
       apply(tr, prev, oldEditorState, newEditorState) {
         if (!editor.converter || editor.options.mode !== 'docx') return { ...prev };
+        if (editor.presentationEditor) {
+          return { ...prev, decorations: DecorationSet.empty };
+        }
         let decorations = prev.decorations || DecorationSet.empty;
 
         // Only regenerate decorations when styles are affected

@@ -946,6 +946,7 @@ export type ParagraphSpacing = {
   before?: number;
   after?: number;
   line?: number;
+  lineUnit?: 'px' | 'multiplier';
   lineRule?: 'auto' | 'exact' | 'atLeast';
   beforeAutospacing?: boolean;
   afterAutospacing?: boolean;

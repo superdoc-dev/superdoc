@@ -21,7 +21,15 @@ Complete eSign component API
     </ParamField>
     
     <ParamField path="mode" type="string">
-      Display mode: `'full'`
+      Display mode: `'full' | 'download'`
+    </ParamField>
+
+    <ParamField path="layoutMode" type="string">
+      Layout mode: `'paginated' | 'responsive'`
+    </ParamField>
+
+    <ParamField path="layoutMargins" type="object">
+      Custom margins (pixels) for `layoutMode: 'responsive'`
     </ParamField>
     
     <ParamField path="validation.scroll.required" type="boolean">
@@ -144,7 +152,7 @@ Data passed to `onSubmit`:
 interface SubmitData {
   eventId: string;           // Your session ID
   timestamp: string;         // ISO timestamp
-  duration: number;          // Time spent in ms
+  duration: number;          // Time spent in seconds
   auditTrail: AuditEvent[];  // All events
   documentFields: DocumentField[];  // Injected values
   signerFields: SignerFieldValue[]; // User inputs
@@ -159,7 +167,11 @@ Data passed to `onDownload`:
 ```typescript
 interface DownloadData {
   eventId: string;                   // Your session ID
-  documentSource: string | File | Blob;  // Original .docx file
+  documentSource: string | File | Blob;  // Original document source
+  fields: {
+    document: DocumentField[];
+    signer: SignerFieldValue[];
+  };
   fileName: string;                  // Suggested filename
 }
 ```
@@ -169,11 +181,17 @@ interface DownloadData {
 Values injected into document:
 
 ```typescript
+type FieldValue = string | boolean | number | null | undefined;
+type TableFieldValue = string[][];
+
 interface DocumentField {
-  id: string;         // Unique field ID
-  value: FieldValue;  // The value
+  id: string;                        // Unique field ID
+  type?: 'text' | 'table';           // Field type (default: 'text')
+  value: FieldValue | TableFieldValue;  // The value
 }
 ```
+
+For table fields, the value is a 2D array where each inner array represents a row.
 
 ### SignerField
 
@@ -184,6 +202,7 @@ interface SignerField {
   id: string;                            // Required unique ID
   type: 'signature' | 'checkbox' | 'text';
   label?: string;                         // Display label
+  value?: FieldValue;                     // Initial value
   validation?: {
     required?: boolean;
   };
@@ -216,21 +235,53 @@ interface AuditEvent {
 }
 ```
 
+### LayoutMargins
+
+Custom margins for responsive layout mode:
+
+```typescript
+interface LayoutMargins {
+  top?: number;    // pixels
+  bottom?: number; // pixels
+  left?: number;   // pixels
+  right?: number;  // pixels
+}
+```
+
+### SuperDocESignHandle
+
+Ref type for accessing component methods:
+
+```typescript
+interface SuperDocESignHandle {
+  getState: () => SigningState;
+  getAuditTrail: () => AuditEvent[];
+  reset: () => void;
+  updateFieldInDocument: (field: DocumentField) => void;
+}
+```
+
 ## Ref Methods
 
 Access via ref:
 
-```jsx
-const ref = useRef();
+```tsx
+import { useRef } from 'react';
+import type { SuperDocESignHandle } from '@superdoc-dev/esign';
+
+const ref = useRef<SuperDocESignHandle>(null);
 
 // Get current state
-const state = ref.current.getState();
+const state = ref.current?.getState();
 
 // Get audit trail
-const audit = ref.current.getAuditTrail();
+const audit = ref.current?.getAuditTrail();
 
 // Reset everything
-ref.current.reset();
+ref.current?.reset();
+
+// Update field in the document programatically
+ref.current?.updateFieldInDocument({ id: '1', value: 'Updated value' });
 
 return <SuperDocESign ref={ref} ... />
 ```
@@ -240,6 +291,7 @@ return <SuperDocESign ref={ref} ... />
 - `getState()` - Returns current SigningState
 - `getAuditTrail()` - Returns audit events array
 - `reset()` - Clear all state and start over
+- `updateFieldInDocument()` - Update a document field by id
 
 ## Field Components
 
@@ -292,13 +344,31 @@ All types are exported:
 ```typescript
 import type {
   SuperDocESignProps,
+  SuperDocESignHandle,
   SubmitData,
   DownloadData,
   SigningState,
   DocumentField,
   SignerField,
+  FieldValue,
+  TableFieldValue,
   FieldChange,
   AuditEvent,
-  FieldComponentProps
+  FieldComponentProps,
+  LayoutMargins
 } from '@superdoc-dev/esign';
+```
+
+## Utils
+
+```typescript
+import { textToImageDataUrl } from '@superdoc-dev/esign';
+```
+
+### textToImageDataUrl
+
+Converts text to a base64 image data URL. This is useful if you want to generate the same base64 image that is created for typed signatures on the document.
+
+```typescript
+const imageDataUrl = textToImageDataUrl(text: string);
 ```

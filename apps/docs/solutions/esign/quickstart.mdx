@@ -14,7 +14,7 @@ npm install @superdoc-dev/esign
 
 ```jsx
 import SuperDocESign from '@superdoc-dev/esign';
-import 'superdoc/dist/style.css';
+import 'superdoc/style.css';
 
 function AgreementForm() {
   const handleSubmit = async (data) => {
@@ -26,7 +26,7 @@ function AgreementForm() {
   return (
     <SuperDocESign
       eventId="agreement-001"
-      document={{ source: "terms.pdf" }}
+      document={{ source: "terms.docx" }}
       onSubmit={handleSubmit}
     />
   );
@@ -44,7 +44,7 @@ Make users scroll and provide a signature:
   eventId="agreement-002"
   
   document={{
-    source: "contract.pdf",
+    source: "contract.docx",
     validation: {
       scroll: { required: true }  // Must scroll to bottom
     }
@@ -53,7 +53,7 @@ Make users scroll and provide a signature:
   fields={{
     signer: [
       {
-        id: 'signature',
+        id: '1',
         type: 'signature',
         validation: { required: true },
         label: 'Type your full name'
@@ -78,8 +78,8 @@ Replace placeholders in your document using field IDs:
   
   fields={{
     document: [
-      { id: 'field_client_name', value: 'John Doe' },
-      { id: 'field_company', value: 'Acme Corp' }
+      { id: '1', value: 'John Doe' },
+      { id: '2', value: 'Acme Corp' }
     ]
   }}
   
@@ -93,13 +93,13 @@ Replace placeholders in your document using field IDs:
 fields={{
   signer: [
     {
-      id: 'terms',
+      id: '1',
       type: 'checkbox',
       validation: { required: true },
       label: 'I accept the terms and conditions'
     },
     {
-      id: 'privacy',
+      id: '2',
       type: 'checkbox', 
       validation: { required: true },
       label: 'I acknowledge the privacy policy'
@@ -117,13 +117,13 @@ const handleSubmit = async (data) => {
   // data contains:
   // - eventId: Your unique session ID
   // - timestamp: When submitted
-  // - duration: Time spent (ms)
+  // - duration: Time spent in seconds
   // - auditTrail: Array of timestamped events
   // - signerFields: Values from interactive fields
   // - isFullyCompleted: All requirements met
   
   console.log('Audit trail:', data.auditTrail);
-  console.log('Signature:', data.signerFields.find(f => f.id === 'signature'));
+  console.log('Signature:', data.signerFields.find(f => f.id === '1'));
   
   await saveToDatabase(data);
 };

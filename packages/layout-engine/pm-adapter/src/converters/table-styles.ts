@@ -4,6 +4,7 @@ import type { PMNode } from '../types.js';
 import type { ConverterContext, TableStyleParagraphProps } from '../converter-context.js';
 import { hasTableStyleContext } from '../converter-context.js';
 import { twipsToPx } from '../utilities.js';
+import { normalizeLineValue } from '../attributes/spacing-indent.js';
 
 export type TableStyleHydration = {
   borders?: Record<string, unknown>;
@@ -193,14 +194,9 @@ const extractTableStyleParagraphProps = (
     if (before != null) spacing.before = twipsToPx(before);
     if (after != null) spacing.after = twipsToPx(after);
     if (line != null) {
-      // For 'auto' line rule, value is in 240ths of a line (not twips)
-      // e.g., 240 = single spacing, 480 = double spacing
-      if (lineRule === 'auto') {
-        // Convert to multiplier: 240 → 1.0, 276 → 1.15, etc.
-        spacing.line = line / 240;
-      } else {
-        spacing.line = twipsToPx(line);
-      }
+      const { value: normalizedLine, unit: lineUnit } = normalizeLineValue(line, lineRule);
+      spacing.line = normalizedLine;
+      spacing.lineUnit = lineUnit;
     }
     if (lineRule) spacing.lineRule = lineRule;
 

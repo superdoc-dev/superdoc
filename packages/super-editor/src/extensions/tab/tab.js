@@ -71,19 +71,27 @@ export const TabNode = Node.create({
       return [];
     }
 
-    const { view, helpers } = this.editor;
+    const editor = this.editor;
+    const { view, helpers } = editor;
 
     const tabPlugin = new Plugin({
       name: 'tabPlugin',
       key: new PluginKey('tabPlugin'),
       state: {
         init() {
+          if (editor.presentationEditor) {
+            return { decorations: DecorationSet.empty, revision: 0 };
+          }
           const initialDecorations = buildInitialDecorations(view.state.doc, view, helpers, 0);
           return { decorations: initialDecorations, revision: 0 };
         },
         apply(tr, { decorations, revision }, _oldState, newState) {
           const currentDecorations =
             decorations && decorations.map ? decorations.map(tr.mapping, tr.doc) : DecorationSet.empty;
+
+          if (editor.presentationEditor) {
+            return { decorations: DecorationSet.empty, revision };
+          }
 
           // Early return for non-document changes
           if (!tr.docChanged || tr.getMeta('blockNodeInitialUpdate')) {
@@ -163,6 +171,16 @@ function buildInitialDecorations(doc, view, helpers, revision) {
 }
 
 function buildParagraphDecorations(doc, paragraphContentPos, paragraphNode, view, helpers, revision) {
+  let hasTab = false;
+  paragraphNode.descendants((child) => {
+    if (child.type.name === 'tab') {
+      hasTab = true;
+      return false;
+    }
+    return true;
+  });
+  if (!hasTab) return [];
+
   const request = createLayoutRequest(doc, paragraphContentPos, view, helpers, revision);
   if (!request) return [];
   const result = calculateTabLayout(request, undefined, view);

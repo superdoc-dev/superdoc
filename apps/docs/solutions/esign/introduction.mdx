@@ -7,8 +7,8 @@ The eSign component wraps SuperDoc to provide a complete document acceptance wor
 
 ## What it does
 
-- **Document display** - Shows DOCX, Markdown, or HTML documents
-- **Requirement tracking** - Monitors scroll, signature, and consent status
+- **Document display** - Shows the document source in the SuperDoc viewer
+- **Requirement tracking** - Monitors scroll and required signer fields
 - **Field management** - Populates document placeholders and collects signer input
 - **Audit trail** - Records all interactions for compliance
 - **UI agnostic** - Bring your own buttons and components
@@ -37,12 +37,12 @@ Add document signing to larger forms like onboarding flows.
 <SuperDocESign
   eventId="session-123"
   document={{
-    source: "agreement.pdf",
+    source: "agreement.docx",
     validation: { scroll: { required: true } },
   }}
   fields={{
-    document: [{ id: "company_name", value: "Acme Corp" }],
-    signer: [{ id: "sig1", type: "signature", label: "Your Signature" }],
+    document: [{ id: "1", value: "Acme Corp" }],
+    signer: [{ id: "1", type: "signature", label: "Your Signature" }],
   }}
   onSubmit={async (data) => {
     // data includes audit trail, field values, timestamps

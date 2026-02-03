@@ -192,6 +192,7 @@
  * @property {string} [markdown] Markdown content to initialize the editor with
  * @property {boolean} [isDebug=false] Whether to enable debug mode
  * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
+ * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
  */
 
 export {};

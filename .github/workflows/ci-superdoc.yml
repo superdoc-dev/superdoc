@@ -7,8 +7,10 @@ on:
   pull_request:
     branches: [main, 'release/**']
     paths-ignore:
+      - '.github/workflows/**'
       - 'apps/docs/**'
       - 'packages/template-builder/**'
+      - 'packages/esign/**'
       - '**/*.md'
 
 concurrency:

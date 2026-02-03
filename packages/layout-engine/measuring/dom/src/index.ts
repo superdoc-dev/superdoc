@@ -391,14 +391,7 @@ function calculateTypographyMetrics(
     descent = roundValue(resolvedFontSize * 0.2);
   }
 
-  // Calculate base line height using Word's default 1.15 line spacing multiplier.
-  // Word 2007+ uses 1.15× font size as "single" line spacing, not just ascent+descent.
-  // The Canvas TextMetrics API doesn't expose lineGap, so we use this multiplier.
-  // For 12pt (16px) font: 16 * 1.15 = 18.4px - matches Word exactly.
-  // Also clamp to actual glyph bounds (ascent + descent) to prevent overlap/clipping
-  // for fonts with unusually tall glyphs that exceed the 1.15 multiplier.
-  const baseLineHeight = Math.max(resolvedFontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER, ascent + descent);
-  const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
+  const lineHeight = resolveLineHeight(spacing, fontSize, ascent + descent);
 
   return {
     ascent,
@@ -456,8 +449,8 @@ function calculateEmptyParagraphMetrics(
   }
 
   // Word treats empty paragraphs as a single font-sized line unless line spacing is explicitly set.
-  const baseLineHeight = Math.max(resolvedFontSize, ascent + descent);
-  const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
+  const maxLineHeight = Math.max(resolvedFontSize, ascent + descent);
+  const lineHeight = roundValue(resolveLineHeight(spacing, resolvedFontSize, maxLineHeight));
 
   return {
     ascent,
@@ -3268,28 +3261,17 @@ const appendSegment = (
   segments.push({ runIndex, fromChar, toChar, width, x });
 };
 
-const resolveLineHeight = (spacing: ParagraphSpacing | undefined, baseLineHeight: number): number => {
-  if (!spacing || spacing.line == null || spacing.line <= 0) {
-    return baseLineHeight;
+const resolveLineHeight = (spacing: ParagraphSpacing | undefined, fontSize: number, maxHeight: number = -1): number => {
+  let computedHeight = spacing?.line ?? WORD_SINGLE_LINE_SPACING_MULTIPLIER;
+  if (spacing?.lineUnit === 'multiplier') {
+    computedHeight = computedHeight * fontSize;
   }
 
-  const raw = spacing.line;
-  const isAuto = spacing.lineRule === 'auto';
-  const treatAsMultiplier = (isAuto || spacing.lineRule == null) && raw > 0 && (isAuto || raw <= 10);
-
-  if (treatAsMultiplier) {
-    return raw * baseLineHeight;
+  const lineRule = spacing?.lineRule ?? 'auto';
+  if (['atLeast', 'auto'].includes(lineRule)) {
+    return Math.max(computedHeight, maxHeight, WORD_SINGLE_LINE_SPACING_MULTIPLIER * fontSize);
   }
-
-  if (spacing.lineRule === 'exact') {
-    return raw;
-  }
-
-  if (spacing.lineRule === 'atLeast') {
-    return Math.max(baseLineHeight, raw);
-  }
-
-  return Math.max(baseLineHeight, raw);
+  return computedHeight;
 };
 
 const sanitizePositive = (value: number | undefined): number =>
@@ -3356,8 +3338,8 @@ const measureDropCap = (
 
   // Calculate height based on the number of lines the drop cap should span
   // This uses the base line height calculation from the paragraph's spacing
-  const baseLineHeight = resolveLineHeight(spacing, run.fontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER);
-  const height = roundValue(baseLineHeight * lines);
+  const lineHeight = resolveLineHeight(spacing, run.fontSize);
+  const height = roundValue(lineHeight * lines);
 
   return {
     width,

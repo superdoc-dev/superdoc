@@ -9,16 +9,9 @@ import type { ParagraphAttrs, ParagraphSpacing } from '@superdoc/contracts';
 import type { ParagraphSpacing as OoxmlParagraphSpacing } from '@superdoc/style-engine/ooxml';
 import { twipsToPx, pickNumber } from '../utilities.js';
 
-/**
- * Maximum line spacing multiplier for auto line spacing.
- *
- * OOXML auto line spacing uses multipliers (e.g., 1.5 for 1.5x line spacing).
- * Values above this threshold are assumed to be OOXML "240ths of a line" values.
- *
- * Rationale: Typical multipliers are 1.0-3.0. The minimum meaningful twips
- * value for line spacing is ~240 (12pt font), so 10 provides a safe boundary.
- */
-const MAX_AUTO_LINE_MULTIPLIER = 10;
+const AUTO_SPACING_DEFAULT_MULTIPLIER = 1.15;
+
+const AUTO_SPACING_LINE_DEFAULT = 240; // Default OOXML auto line spacing in twips
 
 /**
  * Threshold for distinguishing pixel values from twips in indent values.
@@ -108,19 +101,27 @@ export const normalizeParagraphSpacing = (
   const lineRule = normalizeLineRule(value.lineRule);
   const beforeAutospacing = value.beforeAutospacing;
   const afterAutospacing = value.afterAutospacing;
+  const { value: line, unit: lineUnit } = normalizeLineValue(lineRaw, lineRule);
 
-  if (beforeAutospacing && isList) {
-    before = undefined;
+  if (beforeAutospacing) {
+    if (isList) {
+      before = undefined;
+    } else {
+      before = (lineRaw ?? AUTO_SPACING_LINE_DEFAULT) * AUTO_SPACING_DEFAULT_MULTIPLIER;
+    }
   }
-  if (afterAutospacing && isList) {
-    after = undefined;
+  if (afterAutospacing) {
+    if (isList) {
+      after = undefined;
+    } else {
+      after = (lineRaw ?? AUTO_SPACING_LINE_DEFAULT) * AUTO_SPACING_DEFAULT_MULTIPLIER;
+    }
   }
-
-  const line = normalizeLineValue(lineRaw, lineRule);
 
   if (before != null) spacing.before = twipsToPx(before);
   if (after != null) spacing.after = twipsToPx(after);
-  if (line != null) spacing.line = line;
+  spacing.line = line;
+  spacing.lineUnit = lineUnit;
   if (lineRule != null) spacing.lineRule = lineRule;
   if (beforeAutospacing != null) spacing.beforeAutospacing = beforeAutospacing;
   if (afterAutospacing != null) spacing.afterAutospacing = afterAutospacing;
@@ -128,18 +129,25 @@ export const normalizeParagraphSpacing = (
   return Object.keys(spacing).length > 0 ? spacing : undefined;
 };
 
-const normalizeLineValue = (
+/**
+ * Normalizes line spacing value based on line rule.
+ * Converts OOXML line spacing values to a multiplier of font size.
+ * @param value - OOXML line spacing value in twips
+ * @param lineRule - Line rule ('auto', 'exact', 'atLeast')
+ * @returns Normalized line spacing value as a multiplier, or undefined
+ */
+export const normalizeLineValue = (
   value: number | undefined,
   lineRule: ParagraphSpacing['lineRule'] | undefined,
-): number | undefined => {
-  if (value == null) return undefined;
-  if (lineRule === 'auto') {
-    if (value > 0 && value <= MAX_AUTO_LINE_MULTIPLIER) {
-      return value;
-    }
-    return value / 240;
+): { value: number; unit: 'multiplier' | 'px' } => {
+  if (value == null) return { value: AUTO_SPACING_DEFAULT_MULTIPLIER, unit: 'multiplier' };
+  if (lineRule == 'exact' || lineRule == 'atLeast') {
+    return { value: twipsToPx(value), unit: 'px' };
   }
-  return twipsToPx(value);
+  if (lineRule === 'auto') {
+    return { value: (value * AUTO_SPACING_DEFAULT_MULTIPLIER) / AUTO_SPACING_LINE_DEFAULT, unit: 'multiplier' };
+  }
+  return { value: value / AUTO_SPACING_LINE_DEFAULT, unit: 'multiplier' };
 };
 
 /**

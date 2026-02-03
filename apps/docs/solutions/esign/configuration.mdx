@@ -14,10 +14,11 @@ document={{
   source: File | Blob | string,
 
   // Display mode
-  mode: 'full',        // Default: full editor
+  mode: 'full',        // 'full' (default) or 'download'
 
-  // View options (for mobile/accessibility)
-  viewOptions: { layout: 'web' },  // 'print' (default) or 'web'
+  // Layout mode
+  layoutMode: 'responsive',  // 'paginated' (default) or 'responsive'
+  layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
 
   // Requirements
   validation: {
@@ -26,18 +27,16 @@ document={{
 }}
 ```
 
-### View options
+### Layout modes
 
 Control how the document is displayed:
 
-- **`print`** (default) - Fixed page width with page breaks
-- **`web`** - 100% width, text reflows to fit container
+- **`paginated`** (default) - Fixed page width with page breaks
+- **`responsive`** - 100% width, text reflows to fit container
 
-Use `web` layout for mobile devices or WCAG AA accessibility compliance (Success Criterion 1.4.10).
+Use `responsive` when you want text to reflow to fit the container (useful for mobile/accessibility). Optional `layoutMargins` sets custom margins (in pixels) for responsive mode.
 
-<Warning>
-**Migrating from v0.x?** The `layoutMode` and `layoutMargins` options are deprecated. Use `viewOptions: { layout: 'web' }` instead of `layoutMode: 'responsive'`.
-</Warning>
+When `mode` is set to `download`, the submit button is hidden.
 
 ## Field system
 
@@ -47,17 +46,47 @@ Fields use a unique `id` system for identifying and updating content:
 
 ### Document fields (injected values)
 
+Document fields populate placeholders in your document. Three types are supported:
+
+#### Text fields
+
+Simple text replacement (type is optional, defaults to `'text'`):
+
 ```jsx
 fields={{
   document: [
-    { id: 'field_customer_name', value: 'Jane Smith' },
-    { id: 'field_contract_date', value: '2024-01-15' },
-    { id: 'field_amount', value: '$50,000' }
+    { id: '1', value: 'Jane Smith' },
+    { id: '2', value: '2024-01-15' },
+    { id: '3', value: '$50,000' }
+  ]
+}}
+```
+
+#### Table fields
+
+Populate table rows with a 2D array. The first row in the document serves as a template and is preserved, while new rows are appended with the same styling:
+
+```jsx
+fields={{
+  document: [
+    {
+      id: '1',
+      type: 'table',
+      value: [
+        ['Item 1', '$100', '2'],
+        ['Item 2', '$200', '1'],
+        ['Item 3', '$150', '3']
+      ]
+    }
   ]
 }}
 ```
 
 These update fields with matching IDs in your document.
+
+<Note>
+Signature fields from the signer are automatically converted to images when injected into the document. Use the `textToImageDataUrl` utility if you need to generate signature images programmatically.
+</Note>
 
 ### Signer fields (interactive)
 
@@ -65,19 +94,19 @@ These update fields with matching IDs in your document.
 fields={{
   signer: [
     {
-      id: 'sig1',
+      id: '1',
       type: 'signature',
       label: 'Your Signature',
       validation: { required: true }
     },
     {
-      id: 'accept_terms',
+      id: '2',
       type: 'checkbox',
       label: 'I accept the terms',
       validation: { required: true }
     },
     {
-      id: 'newsletter',
+      id: '3',
       type: 'checkbox',
       label: 'Send me updates',
       validation: { required: false }
@@ -88,7 +117,7 @@ fields={{
 
 Field types:
 
-- `signature` - Text input or canvas (detects automatically)
+- `signature` - Default text input (use a custom component for other UI)
 - `checkbox` - Checkbox field
 - `text` - Text input field
 
@@ -99,7 +128,7 @@ Three levels of customization:
 ### Level 1: Use defaults
 
 ```jsx
-<SuperDocESign document={{ source: "doc.pdf" }} onSubmit={handleSubmit} />
+<SuperDocESign document={{ source: "document.docx" }} onSubmit={handleSubmit} />
 ```
 
 ### Level 2: Customize labels
@@ -128,7 +157,7 @@ submit={{
 // Custom signature field
 fields={{
   signer: [{
-    id: 'sig',
+    id: '1',
     type: 'signature',
     component: ({ value, onChange, isDisabled, label }) => (
       <SignaturePad
@@ -311,25 +340,26 @@ Style the component to match your brand.
   document={{
     source: contractFile,
     mode: "full",
-    viewOptions: { layout: "web" },
+    layoutMode: "responsive",
+    layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
     validation: {
       scroll: { required: true },
     },
   }}
   fields={{
     document: [
-      { id: "field_company", value: companyName },
-      { id: "field_date", value: new Date().toLocaleDateString() },
+      { id: "1", value: companyName },
+      { id: "2", value: new Date().toLocaleDateString() },
     ],
     signer: [
       {
-        id: "signature",
+        id: "1",
         type: "signature",
         validation: { required: true },
         label: "Sign here",
       },
       {
-        id: "terms",
+        id: "2",
         type: "checkbox",
         validation: { required: true },
         label: "I accept all terms",

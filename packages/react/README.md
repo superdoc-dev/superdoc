@@ -156,3 +156,4 @@ Types are extracted from the `superdoc` package, ensuring they stay in sync.
 ## License
 
 AGPL-3.0
+

@@ -202,7 +202,9 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
         instanceRef.current = null;
       }
     };
-    // Key props that trigger a full rebuild when changed
+    // Only these props trigger a full rebuild. Other props (rulers, etc.) are
+    // initial values - use getInstance() methods to change them at runtime.
+    // Note: restProps is intentionally excluded to avoid rebuilds on every render.
   }, [documentProp, user, users, modules, role, hideToolbar]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');

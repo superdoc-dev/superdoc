@@ -67,7 +67,6 @@ examples/
 
 ## Git Commit Rules
 
-See `.claude/rules/git-commits.md` for full details. Key points:
 - Follow conventional commits: `type(scope): description`
 - **Never mention AI tools** in commits or PRs
 

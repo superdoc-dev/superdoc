@@ -15,6 +15,3 @@ export type {
   SuperDocConfig,
   SuperDocInstance,
 } from './types';
-
-// Utilities
-export { generateId } from './utils';

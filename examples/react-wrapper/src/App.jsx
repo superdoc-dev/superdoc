@@ -36,15 +36,17 @@ const COMMENTS_MODULE = {
 function BasicEditor({ document, title, user }) {
   const editorRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
+  // Track mode in state for UI only - actual mode changes use getInstance()
   const [mode, setMode] = useState('editing');
 
   const handleExport = async () => {
     await editorRef.current?.getInstance()?.export({ triggerDownload: true });
   };
 
+  // Use imperative API to change mode (no rebuild)
   const handleModeChange = (newMode) => {
-    setMode(newMode);
     editorRef.current?.getInstance()?.setDocumentMode(newMode);
+    setMode(newMode); // Update UI state to reflect the change
   };
 
   return (
@@ -67,7 +69,7 @@ function BasicEditor({ document, title, user }) {
         <SuperDocEditor
           ref={editorRef}
           document={document}
-          documentMode={mode}
+          documentMode="editing"
           user={user}
           rulers={true}
           renderLoading={() => (

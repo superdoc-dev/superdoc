@@ -5,8 +5,10 @@ Official React wrapper for [SuperDoc](https://www.superdoc.dev).
 ## Installation
 
 ```bash
-npm install @superdoc/react superdoc
+npm install @superdoc/react
 ```
+
+> `superdoc` is included as a dependency - no need to install it separately.
 
 ## Quick Start
 

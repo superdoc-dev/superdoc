@@ -111,7 +111,7 @@ export default function EditorPage() {
   };
 
   const handleExport = async () => {
-    await editorRef.current?.export({ triggerDownload: true });
+    await editorRef.current?.getInstance()?.export({ triggerDownload: true });
   };
 
   return (
@@ -121,10 +121,10 @@ export default function EditorPage() {
         {file && (
           <>
             <button onClick={handleExport}>Export</button>
-            <button onClick={() => editorRef.current?.setDocumentMode('editing')}>
+            <button onClick={() => editorRef.current?.getInstance()?.setDocumentMode('editing')}>
               Edit
             </button>
-            <button onClick={() => editorRef.current?.setDocumentMode('suggesting')}>
+            <button onClick={() => editorRef.current?.getInstance()?.setDocumentMode('suggesting')}>
               Review
             </button>
           </>

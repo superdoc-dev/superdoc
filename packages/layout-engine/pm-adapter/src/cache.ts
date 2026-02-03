@@ -173,6 +173,11 @@ export class FlowBlockCache {
  *
  * Always returns a shallow copy to prevent cache pollution from downstream mutations.
  *
+ * PM positions may be stored in different locations depending on block type:
+ * - Paragraph blocks: positions in each run (run.pmStart, run.pmEnd)
+ * - Atomic blocks (image, drawing): positions in attrs (block.attrs.pmStart, block.attrs.pmEnd)
+ * - Other blocks: positions at block level (block.pmStart, block.pmEnd)
+ *
  * @param block - The block to shift
  * @param delta - The position delta (newPmStart - oldPmStart)
  * @returns A new block (shallow copy) with shifted positions
@@ -191,8 +196,34 @@ export function shiftBlockPositions(block: FlowBlock, delta: number): FlowBlock 
     };
   }
 
+  // Handle atomic blocks (image, drawing) that store PM positions in attrs
+  // These blocks store pmStart/pmEnd in block.attrs rather than at the block level
+  if (block.kind === 'image' || block.kind === 'drawing') {
+    const blockWithAttrs = block as FlowBlock & { attrs?: Record<string, unknown> };
+    if (blockWithAttrs.attrs) {
+      const attrsPmStart = blockWithAttrs.attrs.pmStart;
+      const attrsPmEnd = blockWithAttrs.attrs.pmEnd;
+      const hasAttrsPositions =
+        (typeof attrsPmStart === 'number' && Number.isFinite(attrsPmStart)) ||
+        (typeof attrsPmEnd === 'number' && Number.isFinite(attrsPmEnd));
+
+      if (hasAttrsPositions) {
+        return {
+          ...block,
+          attrs: {
+            ...blockWithAttrs.attrs,
+            pmStart:
+              typeof attrsPmStart === 'number' && Number.isFinite(attrsPmStart) ? attrsPmStart + delta : attrsPmStart,
+            pmEnd: typeof attrsPmEnd === 'number' && Number.isFinite(attrsPmEnd) ? attrsPmEnd + delta : attrsPmEnd,
+          },
+        } as unknown as FlowBlock;
+      }
+    }
+    // Fall through to shallow copy if no attrs positions
+  }
+
   // For other block types, always create a shallow copy to prevent cache pollution.
-  // If the block has position tracking, shift the positions.
+  // If the block has position tracking at the block level, shift the positions.
   const blockWithPos = block as FlowBlock & { pmStart?: number; pmEnd?: number };
   if (blockWithPos.pmStart != null || blockWithPos.pmEnd != null) {
     return {

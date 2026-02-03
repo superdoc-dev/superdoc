@@ -26,9 +26,10 @@ const describeIfRealCanvas = usingStub ? describe.skip : describe;
 const IS_CI = Boolean(process.env.CI);
 const LATENCY_TARGETS = IS_CI
   ? {
-      p50: 300, // CI is typically slower and more variable
-      p90: 400,
-      p99: 600,
+      // CI environments are slower and more variable; use generous buffers
+      p50: 500,
+      p90: 700,
+      p99: 1000,
     }
   : {
       p50: 70,

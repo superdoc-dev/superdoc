@@ -1096,8 +1096,13 @@ export class DomPainter {
     // Always keep the latest layout reference for handlers
     this.currentLayout = layout;
 
-    // First-time init or mount changed
-    const needsInit = !this.topSpacerEl || !this.bottomSpacerEl || !this.virtualPagesEl || this.mount !== mount;
+    // First-time init, mount changed, or spacers were detached (e.g., by innerHTML='' on zero-page layout)
+    const needsInit =
+      !this.topSpacerEl ||
+      !this.bottomSpacerEl ||
+      !this.virtualPagesEl ||
+      this.mount !== mount ||
+      this.topSpacerEl.parentElement !== mount;
     if (needsInit) {
       this.ensureVirtualizationSetup(mount);
     }

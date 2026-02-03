@@ -112,8 +112,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
 
   // Main effect: create and destroy SuperDoc instance
   useEffect(() => {
-    // Skip on server-side
-    if (typeof window === 'undefined') return;
+    // Wait for client-side render so the container div exists in DOM
+    if (!isClient) return;
 
     // Reset loading state when document changes
     setIsLoading(true);
@@ -216,7 +216,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // Only these props trigger a full rebuild. Other props (rulers, etc.) are
     // initial values - use getInstance() methods to change them at runtime.
     // Note: restProps is intentionally excluded to avoid rebuilds on every render.
-  }, [documentProp, user, users, modules, role, hideToolbar]);
+  }, [isClient, documentProp, user, users, modules, role, hideToolbar]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
 

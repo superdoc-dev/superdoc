@@ -189,8 +189,8 @@ describe('normalizeTableBookmarksInContent', () => {
   const cell = (content) => ({ type: 'tableCell', content, attrs: {}, marks: [] });
   const paragraph = (content) => ({ type: 'paragraph', content, attrs: {}, marks: [] });
   const text = (value) => ({ type: 'text', text: value, marks: [] });
-  const bookmarkStart = (id) => ({ type: 'bookmarkStart', attrs: { id } });
-  const bookmarkEnd = (id) => ({ type: 'bookmarkEnd', attrs: { id } });
+  const bookmarkStart = (id, attrs = {}) => ({ type: 'bookmarkStart', attrs: { id, ...attrs } });
+  const bookmarkEnd = (id, attrs = {}) => ({ type: 'bookmarkEnd', attrs: { id, ...attrs } });
 
   it('moves leading bookmarkStart into the first cell paragraph', () => {
     const input = [table([bookmarkStart('b1'), row([cell([paragraph([text('Cell')])])])])];
@@ -271,5 +271,25 @@ describe('normalizeTableBookmarksInContent', () => {
       { type: 'bookmarkStart', attrs: { id: 'b1' } },
       { type: 'bookmarkEnd', attrs: { id: 'b1' } },
     ]);
+  });
+
+  it('places bookmarks in the cell indicated by colFirst/colLast when present', () => {
+    const twoCells = row([cell([paragraph([text('A')])]), cell([paragraph([text('B')])])]);
+    const input = [table([bookmarkStart('b1', { colFirst: '1' }), twoCells, bookmarkEnd('b1', { colLast: '1' })])];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+    const rowContent = normalizedTable.content[0].content;
+
+    expect(normalizedTable.content.some((node) => node.type === 'bookmarkStart')).toBe(false);
+    expect(normalizedTable.content.some((node) => node.type === 'bookmarkEnd')).toBe(false);
+
+    const firstCellContent = rowContent[0].content[0].content;
+    expect(firstCellContent).toEqual([{ type: 'text', text: 'A', marks: [] }]);
+
+    const secondCellContent = rowContent[1].content[0].content;
+    expect(secondCellContent[0]).toMatchObject({ type: 'bookmarkStart', attrs: { id: 'b1', colFirst: '1' } });
+    expect(secondCellContent[1]).toMatchObject({ type: 'text', text: 'B', marks: [] });
+    expect(secondCellContent[2]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'b1', colLast: '1' } });
   });
 });

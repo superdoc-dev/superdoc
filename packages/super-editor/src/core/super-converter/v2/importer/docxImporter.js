@@ -846,6 +846,12 @@ export function filterOutRootInlineNodes(content = []) {
  * Normalize bookmark nodes that appear as direct table children.
  * Moves bookmarkStart/End into the first/last cell textblock of the table.
  *
+ * Some non-conformant DOCX producers place bookmarks as direct table children.
+ * Per ECMA-376 §17.13.6.2, they should be inside cells (bookmarkStart) or
+ * as children of rows (bookmarkEnd).
+ * PM can't accept bookmarks as a direct child of table row and that is why
+ * we relocate them for compatibility.
+ *
  * @param {Array<{type: string, content?: any[], attrs?: any}>} content
  * @param {Editor} [editor]
  * @returns {Array}
@@ -870,14 +876,31 @@ function normalizeTableBookmarksInNode(node, editor) {
   return node;
 }
 
+function parseColIndex(val) {
+  if (val == null || val === '') return null;
+  const n = parseInt(String(val), 10);
+  return Number.isNaN(n) ? null : Math.max(0, n);
+}
+
+function getCellIndexForBookmark(bookmarkNode, position, rowCellCount) {
+  if (!rowCellCount) return 0;
+  const attrs = bookmarkNode?.attrs ?? {};
+  const col = position === 'start' ? parseColIndex(attrs.colFirst) : parseColIndex(attrs.colLast);
+  if (col == null) return position === 'start' ? 0 : rowCellCount - 1;
+  return Math.min(col, rowCellCount - 1);
+}
+
 function normalizeTableBookmarksInTable(tableNode, editor) {
   if (!tableNode || tableNode.type !== 'table' || !Array.isArray(tableNode.content)) return tableNode;
 
   const rows = tableNode.content.filter((child) => child?.type === 'tableRow');
   if (!rows.length) return tableNode;
 
-  const rowStartInlines = rows.map(() => []);
-  const rowEndInlines = rows.map(() => []);
+  /** @type {{ start: Record<number, unknown[]>, end: Record<number, unknown[]> }[]} */
+  const rowCellInlines = rows.map(() => ({
+    start: /** @type {Record<number, unknown[]>} */ ({}),
+    end: /** @type {Record<number, unknown[]>} */ ({}),
+  }));
   const updatedRows = rows.slice();
   let rowCursor = 0;
 
@@ -891,18 +914,33 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
     if (isBookmarkNode(child)) {
       const prevRowIndex = rowCursor > 0 ? rowCursor - 1 : null;
       const nextRowIndex = rowCursor < rows.length ? rowCursor : null;
+      const rowIndex = nextRowIndex ?? prevRowIndex;
+      const row = rowIndex != null ? rows[rowIndex] : null;
+      const rowCellCount = row && Array.isArray(row.content) ? row.content.length : 0;
 
       if (child.type === 'bookmarkStart') {
         if (nextRowIndex != null) {
-          rowStartInlines[nextRowIndex].push(child);
+          const cellIndex = getCellIndexForBookmark(child, 'start', rowCellCount);
+          const bucket = rowCellInlines[nextRowIndex].start;
+          if (!bucket[cellIndex]) bucket[cellIndex] = [];
+          bucket[cellIndex].push(child);
         } else if (prevRowIndex != null) {
-          rowEndInlines[prevRowIndex].push(child);
+          const cellIndex = getCellIndexForBookmark(child, 'end', rowCellCount);
+          const bucket = rowCellInlines[prevRowIndex].end;
+          if (!bucket[cellIndex]) bucket[cellIndex] = [];
+          bucket[cellIndex].push(child);
         }
       } else {
         if (prevRowIndex != null) {
-          rowEndInlines[prevRowIndex].push(child);
+          const cellIndex = getCellIndexForBookmark(child, 'end', rowCellCount);
+          const bucket = rowCellInlines[prevRowIndex].end;
+          if (!bucket[cellIndex]) bucket[cellIndex] = [];
+          bucket[cellIndex].push(child);
         } else if (nextRowIndex != null) {
-          rowStartInlines[nextRowIndex].push(child);
+          const cellIndex = getCellIndexForBookmark(child, 'start', rowCellCount);
+          const bucket = rowCellInlines[nextRowIndex].start;
+          if (!bucket[cellIndex]) bucket[cellIndex] = [];
+          bucket[cellIndex].push(child);
         }
       }
       return acc;
@@ -913,11 +951,19 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
   }, []);
 
   updatedRows.forEach((row, index) => {
-    if (rowStartInlines[index]?.length) {
-      updatedRows[index] = insertInlineIntoRow(row, rowStartInlines[index], editor, 'start');
-    }
-    if (rowEndInlines[index]?.length) {
-      updatedRows[index] = insertInlineIntoRow(updatedRows[index], rowEndInlines[index], editor, 'end');
+    const { start: startByCell, end: endByCell } = rowCellInlines[index] ?? { start: {}, end: {} };
+    const allCellIndices = [
+      ...new Set([...Object.keys(startByCell).map(Number), ...Object.keys(endByCell).map(Number)]),
+    ].sort((a, b) => a - b);
+    for (const cellIndex of allCellIndices) {
+      const startNodes = startByCell[cellIndex];
+      const endNodes = endByCell[cellIndex];
+      if (startNodes?.length) {
+        updatedRows[index] = insertInlineIntoRow(updatedRows[index], startNodes, editor, 'start', cellIndex);
+      }
+      if (endNodes?.length) {
+        updatedRows[index] = insertInlineIntoRow(updatedRows[index], endNodes, editor, 'end', cellIndex);
+      }
     }
   });
 
@@ -938,7 +984,10 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
   };
 }
 
-function insertInlineIntoRow(rowNode, inlineNodes, editor, position) {
+/**
+ * @param {number} [cellIndex] - If set, insert into this cell; otherwise first (start) or last (end) cell.
+ */
+function insertInlineIntoRow(rowNode, inlineNodes, editor, position, cellIndex) {
   if (!rowNode || !inlineNodes?.length) return rowNode;
 
   if (!Array.isArray(rowNode.content) || rowNode.content.length === 0) {
@@ -949,7 +998,9 @@ function insertInlineIntoRow(rowNode, inlineNodes, editor, position) {
     return { ...rowNode, content: nextContent };
   }
 
-  const targetIndex = position === 'end' ? rowNode.content.length - 1 : 0;
+  const lastCellIndex = rowNode.content.length - 1;
+  const targetIndex =
+    cellIndex != null ? Math.min(Math.max(0, cellIndex), lastCellIndex) : position === 'end' ? lastCellIndex : 0;
   const targetCell = rowNode.content[targetIndex];
   const updatedCell = insertInlineIntoCell(targetCell, inlineNodes, editor, position);
 

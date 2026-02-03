@@ -888,7 +888,8 @@ function getCellIndexForBookmark(bookmarkNode, position, rowCellCount) {
   if (bookmarkNode?.type === 'bookmarkEnd') {
     return position === 'start' ? 0 : rowCellCount - 1;
   }
-  const col = parseColIndex(bookmarkNode?.attrs?.colFirst);
+  const attrs = bookmarkNode?.attrs ?? {};
+  const col = parseColIndex(position === 'start' ? attrs.colFirst : attrs.colLast);
   if (col == null) return position === 'start' ? 0 : rowCellCount - 1;
   return Math.min(col, rowCellCount - 1);
 }

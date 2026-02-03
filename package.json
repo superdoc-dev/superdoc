@@ -21,6 +21,7 @@
     "dev:superdoc": "pnpm --prefix packages/superdoc run dev",
     "dev:super-editor": "pnpm --prefix packages/super-editor run dev",
     "dev:collab": "pnpm --prefix packages/superdoc run dev:collab",
+    "dev:docs": "pnpm --prefix apps/docs run dev",
     "build:superdoc": "pnpm --prefix packages/superdoc run build",
     "build:super-editor": "pnpm --prefix packages/super-editor run build",
     "build": "pnpm run clean:packages && pnpm --prefix packages/super-editor run types:build && pnpm run build:superdoc && pnpm run type-check",

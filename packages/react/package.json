@@ -1,5 +1,5 @@
 {
-  "name": "@superdoc/react",
+  "name": "@superdoc-dev/react",
   "version": "0.1.0",
   "description": "Official React wrapper for SuperDoc document editor",
   "type": "module",

@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
-import DocumentEditor from './components/DocumentEditor';
+import { SuperDocEditor } from '@superdoc/react';
+import '@superdoc/react/style.css';
 
 function App() {
   const [documentFile, setDocumentFile] = useState(null);
   const fileInputRef = useRef(null);
+  const editorRef = useRef(null);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -12,34 +14,53 @@ function App() {
     }
   };
 
-  const handleEditorReady = (editor) => {
-    console.log('SuperDoc editor is ready', editor);
+  const handleExport = async () => {
+    await editorRef.current?.getInstance()?.export({ triggerDownload: true });
   };
 
   return (
     <div className="app">
       <header>
-        <h1>SuperDoc Example</h1>
+        <h1>SuperDoc React Example</h1>
         <button onClick={() => fileInputRef.current?.click()}>
           Load Document
         </button>
         <input
           type="file"
           ref={fileInputRef}
-          accept=".docx, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept=".docx"
           onChange={handleFileChange}
           style={{ display: 'none' }}
         />
+        {documentFile && (
+          <button onClick={handleExport}>
+            Export DOCX
+          </button>
+        )}
       </header>
 
       <main>
-        <DocumentEditor
-          initialData={documentFile}
-          onEditorReady={handleEditorReady}
-        />
+        {documentFile ? (
+          <SuperDocEditor
+            ref={editorRef}
+            document={documentFile}
+            documentMode="editing"
+            rulers
+            onReady={({ superdoc }) => console.log('SuperDoc ready', superdoc)}
+            onEditorCreate={({ editor }) => console.log('Editor created', editor)}
+            renderLoading={() => (
+              <div className="loading">Loading document...</div>
+            )}
+            style={{ height: '100%' }}
+          />
+        ) : (
+          <div className="empty-state">
+            <p>Click "Load Document" to open a .docx file</p>
+          </div>
+        )}
       </main>
 
-      <style jsx>{`
+      <style>{`
         .app {
           height: 100vh;
           display: flex;
@@ -66,6 +87,20 @@ function App() {
         main {
           flex: 1;
           min-height: 0;
+        }
+        .empty-state {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          color: #666;
+        }
+        .loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          color: #666;
         }
       `}</style>
     </div>

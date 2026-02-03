@@ -1,5 +1,5 @@
 {
-  "name": "react-wrapper-example",
+  "name": "react-typescript-example",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -7,12 +7,15 @@
     "dev": "vite"
   },
   "dependencies": {
-    "@superdoc/react": "workspace:*",
-    "react": "catalog:",
-    "react-dom": "catalog:"
+    "@superdoc/react": "*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.0.4",
+    "typescript": "^5.7.0",
     "vite": "^6.2.0"
   }
 }

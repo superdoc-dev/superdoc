@@ -1,36 +1,19 @@
 // Main component
 export { SuperDocEditor, default } from './SuperDocEditor';
 
-// Types
+// Types - extracted from superdoc package for convenience
 export type {
   // Component props and ref
   SuperDocEditorProps,
   SuperDocRef,
 
-  // Common types
+  // Core types (extracted from superdoc constructor)
   DocumentMode,
   UserRole,
   SuperDocUser,
   SuperDocModules,
   SuperDocConfig,
   SuperDocInstance,
-  EditorInstance,
-
-  // Options
-  ExportOptions,
-  TrackedChangesPreferences,
-  LayoutEngineOptions,
-  ViewOptions,
-
-  // Search
-  SearchResult,
-
-  // Event payloads
-  ReadyEvent,
-  EditorCreateEvent,
-  EditorUpdateEvent,
-  ContentErrorEvent,
-  ExceptionEvent,
 } from './types';
 
 // Utilities

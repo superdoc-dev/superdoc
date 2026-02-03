@@ -39,12 +39,12 @@ function BasicEditor({ document, title, user }) {
   const [mode, setMode] = useState('editing');
 
   const handleExport = async () => {
-    await editorRef.current?.export({ triggerDownload: true });
+    await editorRef.current?.getInstance()?.export({ triggerDownload: true });
   };
 
   const handleModeChange = (newMode) => {
     setMode(newMode);
-    editorRef.current?.setDocumentMode(newMode);
+    editorRef.current?.getInstance()?.setDocumentMode(newMode);
   };
 
   return (
@@ -59,7 +59,7 @@ function BasicEditor({ document, title, user }) {
               <option value="viewing">View</option>
             </select>
             <button onClick={handleExport}>Export</button>
-            <button onClick={() => editorRef.current?.focus()}>Focus</button>
+            <button onClick={() => editorRef.current?.getInstance()?.focus()}>Focus</button>
           </div>
         )}
       </div>
@@ -96,7 +96,7 @@ function FileUploadEditor({ title }) {
   };
 
   const handleExport = async () => {
-    const blob = await editorRef.current?.export({ triggerDownload: false });
+    const blob = await editorRef.current?.getInstance()?.export({ triggerDownload: false });
     if (blob) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -161,7 +161,7 @@ function ViewOnlyEditor({ document, title }) {
         <SuperDocEditor
           document={document}
           documentMode="viewing"
-          toolbar={false}
+          hideToolbar
           style={{ height: '100%' }}
         />
       </div>
@@ -178,11 +178,12 @@ function SearchEditor({ document, title }) {
 
   const handleSearch = () => {
     if (!searchTerm.trim()) return;
-    const matches = editorRef.current?.search(searchTerm) || [];
+    const instance = editorRef.current?.getInstance();
+    const matches = instance?.search(searchTerm) || [];
     setResults(matches);
     setCurrentIndex(matches.length > 0 ? 0 : -1);
     if (matches.length > 0) {
-      editorRef.current?.goToSearchResult(matches[0]);
+      instance?.goToSearchResult(matches[0]);
     }
   };
 
@@ -190,7 +191,7 @@ function SearchEditor({ document, title }) {
     if (results.length === 0) return;
     const newIndex = (currentIndex + direction + results.length) % results.length;
     setCurrentIndex(newIndex);
-    editorRef.current?.goToSearchResult(results[newIndex]);
+    editorRef.current?.getInstance()?.goToSearchResult(results[newIndex]);
   };
 
   return (
@@ -237,7 +238,7 @@ function TrackChangesEditor({ document, title }) {
 
   const handleTcModeChange = (mode) => {
     setTcMode(mode);
-    editorRef.current?.setTrackedChangesPreferences({ mode, enabled: true });
+    editorRef.current?.getInstance()?.setTrackedChangesPreferences({ mode, enabled: true });
   };
 
   return (
@@ -279,12 +280,12 @@ function AccessibilityEditor({ document, title }) {
   const toggleHighContrast = () => {
     const next = !highContrast;
     setHighContrast(next);
-    editorRef.current?.setHighContrastMode(next);
+    editorRef.current?.getInstance()?.setHighContrastMode(next);
   };
 
   const toggleRulers = () => {
     setShowRulers(!showRulers);
-    editorRef.current?.toggleRuler();
+    editorRef.current?.getInstance()?.toggleRuler();
   };
 
   return (
@@ -422,7 +423,7 @@ function HtmlExportEditor({ document, title }) {
   const [showHtml, setShowHtml] = useState(false);
 
   const extractHtml = () => {
-    const result = editorRef.current?.getHTML() || [];
+    const result = editorRef.current?.getInstance()?.getHTML() || [];
     setHtml(result.join('\n\n--- Document Break ---\n\n'));
     setShowHtml(true);
   };
@@ -471,8 +472,8 @@ function MinimalEditor({ document, title }) {
         <h3>{title}</h3>
         {isReady && (
           <div className="panel-controls">
-            <button onClick={() => editorRef.current?.focus()}>Focus</button>
-            <button onClick={() => editorRef.current?.export({ triggerDownload: true })}>
+            <button onClick={() => editorRef.current?.getInstance()?.focus()}>Focus</button>
+            <button onClick={() => editorRef.current?.getInstance()?.export({ triggerDownload: true })}>
               Export
             </button>
           </div>
@@ -482,7 +483,7 @@ function MinimalEditor({ document, title }) {
         <SuperDocEditor
           ref={editorRef}
           document={document}
-          toolbar={false}
+          hideToolbar
           rulers={false}
           user={USERS.minimalist}
           onReady={() => setIsReady(true)}

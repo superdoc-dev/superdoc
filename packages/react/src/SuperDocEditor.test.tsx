@@ -22,8 +22,8 @@ describe('SuperDocEditor', () => {
       expect(container.querySelector('.superdoc-toolbar-container')).toBeTruthy();
     });
 
-    it('should hide toolbar when toolbar={false}', () => {
-      const { container } = render(<SuperDocEditor toolbar={false} />);
+    it('should hide toolbar when hideToolbar={true}', () => {
+      const { container } = render(<SuperDocEditor hideToolbar />);
 
       expect(container.querySelector('.superdoc-toolbar-container')).toBeFalsy();
     });
@@ -48,49 +48,32 @@ describe('SuperDocEditor', () => {
   });
 
   describe('ref methods', () => {
-    it('should expose ref methods', () => {
+    it('should expose getInstance method only', () => {
       const ref = createRef<SuperDocRef>();
       render(<SuperDocEditor ref={ref} />);
 
-      // Ref should be available immediately
+      // Ref should be available immediately with getInstance
       expect(ref.current).not.toBeNull();
       expect(typeof ref.current?.getInstance).toBe('function');
-      expect(typeof ref.current?.setDocumentMode).toBe('function');
-      expect(typeof ref.current?.export).toBe('function');
-      expect(typeof ref.current?.getHTML).toBe('function');
-      expect(typeof ref.current?.focus).toBe('function');
-      expect(typeof ref.current?.search).toBe('function');
-      expect(typeof ref.current?.setLocked).toBe('function');
-      expect(typeof ref.current?.save).toBe('function');
-      expect(typeof ref.current?.toggleRuler).toBe('function');
     });
 
-    it('should return empty array from getHTML before ready', () => {
+    it('should return null from getInstance before ready', () => {
       const ref = createRef<SuperDocRef>();
       render(<SuperDocEditor ref={ref} />);
 
-      // Before async init completes
-      const result = ref.current?.getHTML();
-      expect(result).toEqual([]);
+      // Before async init completes, getInstance returns null
+      const instance = ref.current?.getInstance();
+      expect(instance).toBeNull();
     });
 
-    it('should return empty array from search before ready', () => {
+    it('should safely handle calls through getInstance before ready', () => {
       const ref = createRef<SuperDocRef>();
       render(<SuperDocEditor ref={ref} />);
 
-      // Before async init completes
-      const result = ref.current?.search('test');
-      expect(result).toEqual([]);
-    });
-
-    it('should not throw when calling methods before ready', () => {
-      const ref = createRef<SuperDocRef>();
-      render(<SuperDocEditor ref={ref} />);
-
-      // All methods should be safe to call before initialization
-      expect(() => ref.current?.focus()).not.toThrow();
-      expect(() => ref.current?.setDocumentMode('viewing')).not.toThrow();
-      expect(() => ref.current?.toggleRuler()).not.toThrow();
+      // Using optional chaining through getInstance is safe
+      expect(() => ref.current?.getInstance()?.focus()).not.toThrow();
+      expect(() => ref.current?.getInstance()?.setDocumentMode('viewing')).not.toThrow();
+      expect(() => ref.current?.getInstance()?.toggleRuler()).not.toThrow();
     });
   });
 

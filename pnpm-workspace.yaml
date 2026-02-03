@@ -4,6 +4,7 @@ packages:
   - apps/*
   - packages/**/*
   - shared/*
+  - examples/*
 
 catalog:
   '@commitlint/cli': ^19.8.1
@@ -76,8 +77,8 @@ catalog:
   prosemirror-test-builder: ^1.1.1
   prosemirror-transform: ^1.9.0
   prosemirror-view: ^1.33.8
-  react: 19.2.0
-  react-dom: 19.2.0
+  react: 19.2.4
+  react-dom: 19.2.4
   rehype-parse: ^9.0.1
   rehype-remark: ^10.0.1
   remark-gfm: ^4.0.1

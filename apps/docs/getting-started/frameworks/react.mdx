@@ -63,7 +63,7 @@ SuperDoc supports three editing modes:
 ```
 
 <Tip>
-To change modes at runtime without rebuilding, use the ref method `setDocumentMode()` instead of changing the prop.
+To change modes at runtime without rebuilding, use `getInstance()?.setDocumentMode()` instead of changing the prop.
 </Tip>
 
 ### User Roles
@@ -84,7 +84,7 @@ Roles control what actions a user can perform:
 
 ## Working with Refs
 
-For programmatic control, use a ref:
+For programmatic control, use a ref to access the SuperDoc instance:
 
 ```jsx
 import { useRef } from 'react';
@@ -96,12 +96,12 @@ function App() {
 
   const handleExport = async () => {
     // Export as DOCX and trigger download
-    await editorRef.current?.export({ triggerDownload: true });
+    await editorRef.current?.getInstance()?.export({ triggerDownload: true });
   };
 
   const handleModeSwitch = () => {
     // Switch mode without rebuilding
-    editorRef.current?.setDocumentMode('suggesting');
+    editorRef.current?.getInstance()?.setDocumentMode('suggesting');
   };
 
   return (
@@ -119,11 +119,24 @@ function App() {
 }
 ```
 
-### Available Ref Methods
+### Ref API
+
+The ref exposes a single method:
 
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `getInstance()` | `SuperDoc \| null` | Access the underlying SuperDoc instance |
+
+<Note>
+`getInstance()` returns `null` before the editor is ready. Use optional chaining (`?.`) for safe access.
+</Note>
+
+### Available Instance Methods
+
+Once you have the SuperDoc instance via `getInstance()`, you can call any SuperDoc method:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
 | `setDocumentMode(mode)` | `void` | Change mode without rebuild |
 | `export(options?)` | `Promise<Blob \| void>` | Export document as DOCX |
 | `getHTML(options?)` | `string[]` | Get document as HTML |
@@ -133,10 +146,6 @@ function App() {
 | `setLocked(locked)` | `void` | Lock/unlock editing |
 | `toggleRuler()` | `void` | Toggle ruler visibility |
 | `save()` | `Promise<void[]>` | Save (in collaboration mode) |
-
-<Note>
-All ref methods safely return `undefined` or empty arrays if called before the editor is ready.
-</Note>
 
 ---
 
@@ -159,7 +168,7 @@ function FileEditor() {
   };
 
   const handleExport = async () => {
-    const blob = await editorRef.current?.export({ triggerDownload: false });
+    const blob = await editorRef.current?.getInstance()?.export({ triggerDownload: false });
     // Use blob for custom handling...
   };
 
@@ -222,7 +231,7 @@ function MultiDocEditor() {
   document={file}
   documentMode="viewing"
   role="viewer"
-  toolbar={false}
+  hideToolbar
 />
 ```
 
@@ -252,7 +261,7 @@ The wrapper includes full TypeScript support:
 ```tsx
 import { useRef } from 'react';
 import { SuperDocEditor } from '@superdoc/react';
-import type { SuperDocRef, ReadyEvent } from '@superdoc/react';
+import type { SuperDocRef } from '@superdoc/react';
 import '@superdoc/react/style.css';
 
 interface EditorProps {
@@ -263,12 +272,12 @@ interface EditorProps {
 function DocEditor({ document, userId }: EditorProps) {
   const editorRef = useRef<SuperDocRef>(null);
 
-  const handleReady = ({ superdoc }: ReadyEvent) => {
+  const handleReady = ({ superdoc }: { superdoc: any }) => {
     console.log('SuperDoc ready');
   };
 
   const handleExport = async () => {
-    const blob = await editorRef.current?.export({
+    const blob = await editorRef.current?.getInstance()?.export({
       triggerDownload: true
     });
     return blob;
@@ -299,8 +308,9 @@ import type {
   DocumentMode,
   UserRole,
   SuperDocUser,
-  ExportOptions,
-  ReadyEvent,
+  SuperDocModules,
+  SuperDocConfig,
+  SuperDocInstance,
 } from '@superdoc/react';
 ```
 
@@ -415,9 +425,10 @@ function CollaborativeEditor() {
 const editorRef = useRef(null);
 
 const handleSearch = (query) => {
-  const results = editorRef.current?.search(query);
+  const instance = editorRef.current?.getInstance();
+  const results = instance?.search(query);
   if (results?.length) {
-    editorRef.current?.goToSearchResult(results[0]);
+    instance?.goToSearchResult(results[0]);
   }
 };
 ```
@@ -428,7 +439,7 @@ const handleSearch = (query) => {
 const editorRef = useRef(null);
 
 const getHtmlContent = () => {
-  const htmlArray = editorRef.current?.getHTML();
+  const htmlArray = editorRef.current?.getInstance()?.getHTML();
   console.log(htmlArray); // Array of HTML strings per section
 };
 ```
@@ -456,11 +467,11 @@ const getHtmlContent = () => {
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `toolbar` | `boolean` | `true` | Show/hide toolbar |
+| `hideToolbar` | `boolean` | `false` | Hide the toolbar |
 | `rulers` | `boolean` | `false` | Show/hide rulers |
-| `pagination` | `boolean` | `true` | Enable pagination |
 | `className` | `string` | - | CSS class for wrapper |
 | `style` | `CSSProperties` | - | Inline styles |
+| `renderLoading` | `() => ReactNode` | - | Custom loading UI |
 
 ### Event Callbacks
 
@@ -478,8 +489,10 @@ const getHtmlContent = () => {
 | Prop | Type | Description |
 |------|------|-------------|
 | `modules` | `object` | Configure collaboration, AI, comments |
-| `config` | `Partial<SuperDocConfig>` | Pass-through to SuperDoc constructor |
-| `renderLoading` | `() => ReactNode` | Custom loading UI |
+
+<Note>
+All SuperDoc config options are available as props. The component extends `SuperDocConfig`, so any option from the core package can be passed directly.
+</Note>
 
 ---
 
@@ -509,11 +522,11 @@ The component handles React 18 Strict Mode correctly. The internal cleanup flag 
 
 ### Mode Changes Cause Flicker
 
-Use ref methods for mode changes instead of prop changes:
+Use instance methods for mode changes instead of prop changes:
 
 ```jsx
 // Preferred - no rebuild
-editorRef.current?.setDocumentMode('viewing');
+editorRef.current?.getInstance()?.setDocumentMode('viewing');
 
 // Avoid - causes full rebuild
 <SuperDocEditor documentMode={mode} />

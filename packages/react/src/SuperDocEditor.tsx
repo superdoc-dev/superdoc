@@ -1,14 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
 import { generateId } from './utils';
-import type {
-  DocumentMode,
-  ExportOptions,
-  SearchResult,
-  SuperDocEditorProps,
-  SuperDocInstance,
-  SuperDocRef,
-  TrackedChangesPreferences,
-} from './types';
+import type { DocumentMode, SuperDocEditorProps, SuperDocInstance, SuperDocRef } from './types';
 
 /**
  * SuperDocEditor - React wrapper component for SuperDoc
@@ -17,30 +9,34 @@ import type {
  * SSR safety, and React Strict Mode compatibility.
  */
 function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<SuperDocRef>) {
+  // Destructure React-specific props and key rebuild triggers
   const {
-    document: documentProp,
-    documentMode = 'editing',
-    role = 'editor',
-    user,
-    users,
-    modules,
-    toolbar = true,
-    rulers,
-    pagination,
+    // React-specific
     renderLoading,
+    hideToolbar = false,
+    className,
+    style,
+    // Callbacks (stored in ref to avoid triggering rebuilds)
     onReady,
     onEditorCreate,
     onEditorDestroy,
     onEditorUpdate,
     onContentError,
     onException,
-    config,
-    className,
-    style,
+    // Key props that trigger rebuild when changed
+    document: documentProp,
+    user,
+    users,
+    modules,
+    // All other props passed through
+    ...restProps
   } = props;
 
+  // Apply defaults
+  const documentMode = props.documentMode ?? 'editing';
+  const role = props.role ?? 'editor';
+
   const instanceRef = useRef<SuperDocInstance | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const toolbarContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Generate stable IDs once per component instance
@@ -75,76 +71,30 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     };
   }, [onReady, onEditorCreate, onEditorDestroy, onEditorUpdate, onContentError, onException]);
 
+  // Queue mode changes that happen during init
+  const pendingModeRef = useRef<DocumentMode | null>(null);
+  const isInitializingRef = useRef(false);
+
   // Track documentMode changes and apply imperatively
   const prevDocumentModeRef = useRef(documentMode);
   useEffect(() => {
-    if (prevDocumentModeRef.current !== documentMode && instanceRef.current) {
-      instanceRef.current.setDocumentMode(documentMode);
+    if (prevDocumentModeRef.current !== documentMode) {
+      if (instanceRef.current) {
+        // Instance exists, apply immediately
+        instanceRef.current.setDocumentMode(documentMode);
+      } else if (isInitializingRef.current) {
+        // Instance is initializing, queue the mode change
+        pendingModeRef.current = documentMode;
+      }
     }
     prevDocumentModeRef.current = documentMode;
   }, [documentMode]);
 
-  // Expose ref methods
+  // Expose ref methods - simplified API with just getInstance()
   useImperativeHandle(
     ref,
     () => ({
       getInstance: () => instanceRef.current,
-
-      setDocumentMode: (mode: DocumentMode) => {
-        instanceRef.current?.setDocumentMode(mode);
-      },
-
-      export: async (options?: ExportOptions) => {
-        return instanceRef.current?.export(options);
-      },
-
-      getHTML: (options?: object) => {
-        return instanceRef.current?.getHTML(options) ?? [];
-      },
-
-      focus: () => {
-        instanceRef.current?.focus();
-      },
-
-      search: (text: string | RegExp) => {
-        return instanceRef.current?.search(text) ?? [];
-      },
-
-      goToSearchResult: (match: SearchResult) => {
-        instanceRef.current?.goToSearchResult(match);
-      },
-
-      setLocked: (locked: boolean) => {
-        instanceRef.current?.setLocked(locked);
-      },
-
-      setHighContrastMode: (enabled: boolean) => {
-        instanceRef.current?.setHighContrastMode(enabled);
-      },
-
-      setTrackedChangesPreferences: (prefs: TrackedChangesPreferences) => {
-        instanceRef.current?.setTrackedChangesPreferences(prefs);
-      },
-
-      save: async () => {
-        return instanceRef.current?.save() ?? Promise.resolve([]);
-      },
-
-      toggleRuler: () => {
-        instanceRef.current?.toggleRuler();
-      },
-
-      setDisableContextMenu: (disabled: boolean) => {
-        instanceRef.current?.setDisableContextMenu(disabled);
-      },
-
-      addCommentsList: (element: HTMLElement) => {
-        instanceRef.current?.addCommentsList(element);
-      },
-
-      removeCommentsList: () => {
-        instanceRef.current?.removeCommentsList();
-      },
     }),
     [],
   );
@@ -154,14 +104,16 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // Skip on server-side
     if (typeof window === 'undefined') return;
 
+    // Reset loading state when document changes
+    setIsLoading(true);
+    isInitializingRef.current = true;
+
     let destroyed = false;
     let instance: SuperDocInstance | null = null;
 
     const initSuperDoc = async () => {
       try {
         // Dynamic import for SSR safety
-        // We use a runtime-resolved module path to avoid TypeScript analyzing
-        // the import during build. The superdoc package is a peer dependency.
         const modulePath = 'superdoc';
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const superdocModule: any = await import(/* @vite-ignore */ modulePath);
@@ -170,29 +122,37 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
         // Check if we were destroyed while loading
         if (destroyed) return;
 
-        // Build configuration
+        // Build configuration - pass through all props
         const superdocConfig = {
+          ...restProps,
           selector: `#${containerId}`,
-          ...(toolbar && toolbarContainerRef.current ? { toolbar: `#${toolbarId}` } : {}),
+          // Use internal toolbar container unless hideToolbar is true
+          ...(!hideToolbar && toolbarContainerRef.current ? { toolbar: `#${toolbarId}` } : {}),
           documentMode,
           role,
-          ...(documentProp !== undefined ? { document: documentProp } : {}),
+          ...(documentProp != null ? { document: documentProp } : {}),
           ...(user ? { user } : {}),
           ...(users ? { users } : {}),
           ...(modules ? { modules } : {}),
-          ...(rulers !== undefined ? { rulers } : {}),
-          ...(pagination !== undefined ? { pagination } : {}),
-          ...config,
-          // Wire up callbacks
+          // Wire up callbacks with lifecycle guards
           onReady: (event: { superdoc: SuperDocInstance }) => {
             if (!destroyed) {
               setIsLoading(false);
+              isInitializingRef.current = false;
+
+              // Apply any pending mode changes
+              if (pendingModeRef.current && pendingModeRef.current !== documentMode) {
+                event.superdoc.setDocumentMode(pendingModeRef.current);
+                pendingModeRef.current = null;
+              }
+
               callbacksRef.current.onReady?.(event);
             }
           },
-          onEditorCreate: (event: { editor: object }) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onEditorCreate: (event: any) => {
             if (!destroyed) {
-              callbacksRef.current.onEditorCreate?.(event as { editor: import('./types').EditorInstance });
+              callbacksRef.current.onEditorCreate?.(event);
             }
           },
           onEditorDestroy: () => {
@@ -200,14 +160,16 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
               callbacksRef.current.onEditorDestroy?.();
             }
           },
-          onEditorUpdate: (event: { editor: object }) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onEditorUpdate: (event: any) => {
             if (!destroyed) {
-              callbacksRef.current.onEditorUpdate?.(event as { editor: import('./types').EditorInstance });
+              callbacksRef.current.onEditorUpdate?.(event);
             }
           },
-          onContentError: (event: object) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onContentError: (event: any) => {
             if (!destroyed) {
-              callbacksRef.current.onContentError?.(event as import('./types').ContentErrorEvent);
+              callbacksRef.current.onContentError?.(event);
             }
           },
           onException: (event: { error: Error }) => {
@@ -221,6 +183,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
         instanceRef.current = instance;
       } catch (error) {
         if (!destroyed) {
+          isInitializingRef.current = false;
           console.error('[SuperDocEditor] Failed to initialize SuperDoc:', error);
           callbacksRef.current.onException?.({ error: error as Error });
         }
@@ -232,19 +195,22 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // Cleanup function
     return () => {
       destroyed = true;
+      isInitializingRef.current = false;
+      pendingModeRef.current = null;
       if (instance) {
         instance.destroy();
         instanceRef.current = null;
       }
     };
-  }, [documentProp, role, user, users, modules, toolbar, rulers, pagination, config]);
+    // Key props that trigger a full rebuild when changed
+  }, [documentProp, user, users, modules, role, hideToolbar]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
 
   return (
     <div className={wrapperClassName} style={style}>
-      {toolbar && <div ref={toolbarContainerRef} id={toolbarId} className='superdoc-toolbar-container' />}
-      <div ref={containerRef} id={containerId} className='superdoc-editor-container' />
+      {!hideToolbar && <div ref={toolbarContainerRef} id={toolbarId} className='superdoc-toolbar-container' />}
+      <div id={containerId} className='superdoc-editor-container' />
       {isLoading && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
     </div>
   );

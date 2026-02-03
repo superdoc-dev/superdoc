@@ -36,12 +36,16 @@ vi.mock('../../Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: vi.fn((_, opts) => {
-    capturedMediaFiles = opts?.mediaFiles;
-    return { blocks: [], bookmarks: new Map() };
-  }),
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: vi.fn((_, opts) => {
+      capturedMediaFiles = opts?.mediaFiles;
+      return { blocks: [], bookmarks: new Map() };
+    }),
+  };
+});
 
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: vi.fn(async () => ({ layout: { pages: [] }, measures: [] })),

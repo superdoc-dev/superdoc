@@ -302,4 +302,189 @@ describe('numberingPlugin', () => {
     expect(result).toBeNull();
     expect(tr.setMeta).not.toHaveBeenCalled();
   });
+
+  describe('bumpBlockRev', () => {
+    it('increments numeric sdBlockRev when listRendering is updated', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          sdBlockRev: 5,
+          listRendering: { markerText: 'old' },
+          paragraphProperties: {
+            numberingProperties: { numId: 1, ilvl: 0 },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: paragraph, pos: 3 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      numberingManager.calculateCounter.mockReturnValue(1);
+      numberingManager.calculatePath.mockReturnValue([1]);
+      generateOrderedListIndex.mockReturnValue('1.');
+      ListHelpers.getListDefinitionDetails.mockReturnValue({
+        lvlText: '%1.',
+        listNumberingType: 'decimal',
+        suffix: '.',
+        justification: 'left',
+        abstractId: 'a1',
+      });
+
+      appendTransaction(transactions, {}, { doc, tr });
+
+      expect(tr.setNodeAttribute).toHaveBeenCalledWith(3, 'listRendering', expect.any(Object));
+      expect(tr.setNodeAttribute).toHaveBeenCalledWith(3, 'sdBlockRev', 6);
+    });
+
+    it('increments sdBlockRev when listRendering is cleared due to missing definition', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          sdBlockRev: 10,
+          paragraphProperties: {
+            numberingProperties: { numId: 2, ilvl: 0 },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: paragraph, pos: 5 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      ListHelpers.getListDefinitionDetails.mockReturnValue(null);
+
+      appendTransaction(transactions, {}, { doc, tr });
+
+      expect(tr.setNodeAttribute).toHaveBeenCalledWith(5, 'listRendering', null);
+      expect(tr.setNodeAttribute).toHaveBeenCalledWith(5, 'sdBlockRev', 11);
+    });
+
+    it('parses string sdBlockRev values and increments correctly', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          sdBlockRev: '7',
+          listRendering: null,
+          paragraphProperties: {
+            numberingProperties: { numId: 1, ilvl: 0 },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: paragraph, pos: 2 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      numberingManager.calculateCounter.mockReturnValue(1);
+      numberingManager.calculatePath.mockReturnValue([1]);
+      generateOrderedListIndex.mockReturnValue('1.');
+      ListHelpers.getListDefinitionDetails.mockReturnValue({
+        lvlText: '%1.',
+        listNumberingType: 'decimal',
+        suffix: '.',
+        justification: 'left',
+        abstractId: 'a1',
+      });
+
+      appendTransaction(transactions, {}, { doc, tr });
+
+      expect(tr.setNodeAttribute).toHaveBeenCalledWith(2, 'sdBlockRev', 8);
+    });
+
+    it('does not bump sdBlockRev when listRendering has not changed', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const existingRendering = {
+        markerText: '1.',
+        suffix: '.',
+        justification: 'left',
+        path: [1],
+        numberingType: 'decimal',
+      };
+
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          sdBlockRev: 3,
+          listRendering: existingRendering,
+          paragraphProperties: {
+            numberingProperties: { numId: 1, ilvl: 0 },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: paragraph, pos: 4 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      numberingManager.calculateCounter.mockReturnValue(1);
+      numberingManager.calculatePath.mockReturnValue([1]);
+      generateOrderedListIndex.mockReturnValue('1.');
+      ListHelpers.getListDefinitionDetails.mockReturnValue({
+        lvlText: '%1.',
+        listNumberingType: 'decimal',
+        suffix: '.',
+        justification: 'left',
+        abstractId: 'a1',
+      });
+
+      appendTransaction(transactions, {}, { doc, tr });
+
+      // setNodeAttribute should not be called at all since listRendering is unchanged
+      expect(tr.setNodeAttribute).not.toHaveBeenCalled();
+    });
+
+    it('does not bump sdBlockRev when it is undefined', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          // no sdBlockRev
+          listRendering: null,
+          paragraphProperties: {
+            numberingProperties: { numId: 1, ilvl: 0 },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: paragraph, pos: 6 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      numberingManager.calculateCounter.mockReturnValue(1);
+      numberingManager.calculatePath.mockReturnValue([1]);
+      generateOrderedListIndex.mockReturnValue('1.');
+      ListHelpers.getListDefinitionDetails.mockReturnValue({
+        lvlText: '%1.',
+        listNumberingType: 'decimal',
+        suffix: '.',
+        justification: 'left',
+        abstractId: 'a1',
+      });
+
+      appendTransaction(transactions, {}, { doc, tr });
+
+      // Should set listRendering but not sdBlockRev since it was undefined
+      expect(tr.setNodeAttribute).toHaveBeenCalledWith(6, 'listRendering', expect.any(Object));
+      expect(tr.setNodeAttribute).not.toHaveBeenCalledWith(6, 'sdBlockRev', expect.anything());
+    });
+  });
 });

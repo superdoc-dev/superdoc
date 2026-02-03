@@ -64,9 +64,14 @@ if (!isPrerelease) {
 }
 
 // Linear integration - labels issues with version on release
-config.plugins.push(['semantic-release-linear-app', { teamKeys: ['SD'], addComment: true }])
+config.plugins.push(['semantic-release-linear-app', { teamKeys: ['SD'], addComment: true, packageName: 'superdoc' }])
 
 // GitHub plugin comes last
-config.plugins.push('@semantic-release/github')
+config.plugins.push([
+  '@semantic-release/github',
+  {
+    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc** v${nextRelease.version}\n\nThe release is available on [GitHub release](<github_release_url>)',
+  }
+])
 
 module.exports = config

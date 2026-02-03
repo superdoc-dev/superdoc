@@ -8,6 +8,114 @@ import { callOrGet } from './utilities/callOrGet.js';
 import { isExtensionRulesEnabled } from './helpers/isExtentionRulesEnabled.js';
 import { inputRulesPlugin } from './InputRule.js';
 
+const PERF_PLUGIN_LOG_THRESHOLD_MS = 1;
+
+const perfNow = () => {
+  const perf = globalThis?.performance;
+  return perf?.now ? perf.now() : Date.now();
+};
+
+const getPluginLabel = (plugin, fallbackLabel) => {
+  const key = plugin?.spec?.key?.key || plugin?.key?.key;
+  if (key) return key;
+  if (fallbackLabel) return fallbackLabel;
+  return 'pm-plugin';
+};
+
+const logPluginPerf = (kind, label, duration, editor) => {
+  if (duration < PERF_PLUGIN_LOG_THRESHOLD_MS) return;
+  const txnId = typeof editor?.getPerfTxnId === 'function' ? editor.getPerfTxnId() : null;
+  const txnLabel = Number.isFinite(txnId) ? `#${txnId}` : '';
+  console.log(`[Perf] pm.${kind}${txnLabel} ${label}: ${duration.toFixed(2)}ms`);
+};
+
+const instrumentPmPlugin = (plugin, label, editor) => {
+  if (!plugin || !plugin.spec) return plugin;
+  const pluginLabel = getPluginLabel(plugin, label);
+  const { spec } = plugin;
+
+  if (spec.state?.apply && !spec.state.apply.__sdPerfWrapped) {
+    const originalApply = spec.state.apply;
+    spec.state.apply = function applyWithPerf(tr, value, oldState, newState) {
+      const start = perfNow();
+      const result = originalApply.call(this, tr, value, oldState, newState);
+      const duration = perfNow() - start;
+      logPluginPerf('apply', pluginLabel, duration, editor);
+      return result;
+    };
+    spec.state.apply.__sdPerfWrapped = true;
+  }
+
+  if (typeof spec.appendTransaction === 'function' && !spec.appendTransaction.__sdPerfWrapped) {
+    const originalAppend = spec.appendTransaction;
+    spec.appendTransaction = function appendWithPerf(transactions, oldState, newState) {
+      const start = perfNow();
+      const result = originalAppend.call(this, transactions, oldState, newState);
+      const duration = perfNow() - start;
+      logPluginPerf('appendTransaction', pluginLabel, duration, editor);
+      return result;
+    };
+    spec.appendTransaction.__sdPerfWrapped = true;
+  }
+
+  if (typeof spec.filterTransaction === 'function' && !spec.filterTransaction.__sdPerfWrapped) {
+    const originalFilter = spec.filterTransaction;
+    spec.filterTransaction = function filterWithPerf(tr, state) {
+      const start = perfNow();
+      const result = originalFilter.call(this, tr, state);
+      const duration = perfNow() - start;
+      logPluginPerf('filterTransaction', pluginLabel, duration, editor);
+      return result;
+    };
+    spec.filterTransaction.__sdPerfWrapped = true;
+  }
+
+  if (typeof spec.props?.decorations === 'function' && !spec.props.decorations.__sdPerfWrapped) {
+    const originalDecorations = spec.props.decorations;
+    spec.props.decorations = function decorationsWithPerf(state) {
+      const start = perfNow();
+      const result = originalDecorations.call(this, state);
+      const duration = perfNow() - start;
+      logPluginPerf('decorations', pluginLabel, duration, editor);
+      return result;
+    };
+    spec.props.decorations.__sdPerfWrapped = true;
+  }
+
+  if (typeof spec.view === 'function' && !spec.view.__sdPerfWrapped) {
+    const originalView = spec.view;
+    spec.view = function viewWithPerf(view) {
+      const pluginView = originalView.call(this, view);
+      if (pluginView && typeof pluginView.update === 'function' && !pluginView.update.__sdPerfWrapped) {
+        const originalUpdate = pluginView.update;
+        pluginView.update = function updateWithPerf(view, prevState) {
+          const start = perfNow();
+          const result = originalUpdate.call(this, view, prevState);
+          const duration = perfNow() - start;
+          logPluginPerf('view.update', pluginLabel, duration, editor);
+          return result;
+        };
+        pluginView.update.__sdPerfWrapped = true;
+      }
+      if (pluginView && typeof pluginView.destroy === 'function' && !pluginView.destroy.__sdPerfWrapped) {
+        const originalDestroy = pluginView.destroy;
+        pluginView.destroy = function destroyWithPerf() {
+          const start = perfNow();
+          const result = originalDestroy.call(this);
+          const duration = perfNow() - start;
+          logPluginPerf('view.destroy', pluginLabel, duration, editor);
+          return result;
+        };
+        pluginView.destroy.__sdPerfWrapped = true;
+      }
+      return pluginView;
+    };
+    spec.view.__sdPerfWrapped = true;
+  }
+
+  return plugin;
+};
+
 /**
  * ExtensionService is the main class to work with extensions.
  */
@@ -174,7 +282,7 @@ export class ExtensionService {
           bindingsObject = { ...Object.fromEntries(entries) };
         }
 
-        plugins.push(keymap(bindingsObject));
+        plugins.push(instrumentPmPlugin(keymap(bindingsObject), `${extension.name}:keymap`, editor));
 
         const addInputRules = getExtensionConfigField(extension, 'addInputRules', context);
 
@@ -186,7 +294,9 @@ export class ExtensionService {
 
         if (addPmPlugins) {
           const pmPlugins = addPmPlugins();
-          plugins.push(...pmPlugins);
+          pmPlugins.forEach((plugin, index) => {
+            plugins.push(instrumentPmPlugin(plugin, `${extension.name}:pm${index}`, editor));
+          });
         }
 
         return plugins;
@@ -194,10 +304,14 @@ export class ExtensionService {
       .flat();
 
     return [
-      inputRulesPlugin({
+      instrumentPmPlugin(
+        inputRulesPlugin({
+          editor,
+          rules: inputRules,
+        }),
+        'inputRules',
         editor,
-        rules: inputRules,
-      }),
+      ),
       ...allPlugins,
     ];
   }

@@ -29,6 +29,9 @@ export type {
   PMDocumentMap,
   BatchAdapterOptions,
   FlowBlocksResult,
+  ConverterContext,
 } from './types.js';
 export { SectionType } from './types.js';
-export { toFlowBlocks } from './internal.js';
+export { toFlowBlocks, toFlowBlocksMap } from './internal.js';
+export { FlowBlockCache } from './cache.js';
+export type { CachedParagraphEntry, FlowBlockCacheStats, CacheLookupResult } from './cache.js';

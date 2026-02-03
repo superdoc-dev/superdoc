@@ -45,10 +45,12 @@ import type {
   HyperlinkConfig,
   FlowBlocksResult,
   AdapterOptions,
+  BatchAdapterOptions,
   NodeHandlerContext,
   NodeHandler,
   NestedConverters,
   ConverterContext,
+  PMDocumentMap,
 } from './types.js';
 
 const DEFAULT_FONT = 'Times New Roman';
@@ -118,8 +120,13 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   const idPrefix = normalizePrefix(options?.blockIdPrefix);
 
   const doc = pmDoc as PMNode;
+  const flowBlockCache = options?.flowBlockCache;
+
+  // Begin cache cycle if cache is provided
+  flowBlockCache?.begin();
 
   if (!doc.content) {
+    flowBlockCache?.commit();
     return { blocks: [], bookmarks: new Map() };
   }
 
@@ -133,6 +140,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     enableRichHyperlinks: options?.enableRichHyperlinks ?? false,
   };
   const enableComments = options?.enableComments ?? true;
+  const themeColors = options?.themeColors;
   const converterContext: ConverterContext = normalizeConverterContext(
     options?.converterContext,
     defaultFont,
@@ -171,6 +179,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     blocks,
     recordBlockKind,
     nextBlockId,
+    blockIdPrefix: idPrefix,
     positions,
     defaultFont,
     defaultSize,
@@ -185,7 +194,8 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
       currentParagraphIndex: 0,
     },
     converters,
-    themeColors: options?.themeColors,
+    themeColors,
+    flowBlockCache,
   };
 
   // Process nodes using handler dispatch pattern
@@ -216,7 +226,32 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   // Post-process: Merge drop-cap paragraphs with their following text paragraphs
   const mergedBlocks = mergeDropCapParagraphs(hydratedBlocks);
 
+  // Commit cache cycle - swaps next to previous, retaining only blocks seen this render
+  flowBlockCache?.commit();
+
   return { blocks: mergedBlocks, bookmarks };
+}
+
+/**
+ * Batch convert a map of ProseMirror documents to FlowBlocks.
+ *
+ * Applies optional per-document block ID prefixes via blockIdPrefixFactory.
+ *
+ * @param documents - Map of document keys to PM nodes
+ * @param options - Optional batch options (shared across documents)
+ * @returns Map of document keys to FlowBlock arrays
+ */
+export function toFlowBlocksMap(documents: PMDocumentMap, options?: BatchAdapterOptions): Record<string, FlowBlock[]> {
+  const results: Record<string, FlowBlock[]> = {};
+  const prefixFactory = options?.blockIdPrefixFactory;
+
+  Object.entries(documents).forEach(([key, doc]) => {
+    const blockIdPrefix = prefixFactory ? prefixFactory(key) : options?.blockIdPrefix;
+    const result = toFlowBlocks(doc, { ...options, blockIdPrefix });
+    results[key] = result.blocks;
+  });
+
+  return results;
 }
 
 /**

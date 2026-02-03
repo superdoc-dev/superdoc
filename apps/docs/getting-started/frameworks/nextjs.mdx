@@ -145,38 +145,6 @@ export default function EditorPage() {
 
 ---
 
-## With Authentication
-
-```jsx
-// app/editor/page.jsx
-'use client';
-
-import { useSession } from 'next-auth/react';
-import { SuperDocEditor } from '@superdoc/react';
-import '@superdoc/react/style.css';
-
-export default function SecureEditor() {
-  const { data: session, status } = useSession();
-
-  if (status === 'loading') return <div>Loading...</div>;
-  if (!session) return <div>Please sign in to access the editor</div>;
-
-  return (
-    <SuperDocEditor
-      document="/api/documents/protected-doc"
-      user={{
-        name: session.user.name,
-        email: session.user.email,
-        image: session.user.image
-      }}
-      style={{ height: '100vh' }}
-    />
-  );
-}
-```
-
----
-
 ## CSS Import
 
 Import styles in your layout or page:

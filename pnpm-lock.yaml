@@ -862,8 +862,8 @@ importers:
   packages/react:
     dependencies:
       superdoc:
-        specifier: workspace:^
-        version: link:../superdoc
+        specifier: ^1.0.0
+        version: 1.10.0(@hocuspocus/provider@2.15.3(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19))(canvas@3.2.0)(pdfjs-dist@4.3.136)(postcss@8.5.6)(typescript@5.9.3)(y-prosemirror@1.3.7(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.4)(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19))(yjs@13.6.19)
     devDependencies:
       '@testing-library/react':
         specifier: 'catalog:'
@@ -9171,6 +9171,14 @@ packages:
   super-regex@1.1.0:
     resolution: {integrity: sha512-WHkws2ZflZe41zj6AolvvmaTrWds/VuyeYr9iPVv/oQeaIoVxMKaushfFWpOGDT+GuBrM/sVqF8KUCYQlSSTdQ==}
     engines: {node: '>=18'}
+
+  superdoc@1.10.0:
+    resolution: {integrity: sha512-3I3c5B2ja5HXEpgSesXMiRadJXoWezeYlwpwAvGr8Uh47gCT773LXbL7GrH49xTZCR0lzPvTNyrZRj0Uz+SCUw==}
+    peerDependencies:
+      '@hocuspocus/provider': ^2.13.6
+      pdfjs-dist: '>=4.3.136 <=4.6.82'
+      y-prosemirror: ^1.3.7
+      yjs: 13.6.19
 
   supports-color@5.5.0:
     resolution: {integrity: sha512-QjVjwdXIt408MIiAqCX4oUKsgU2EqAGzs2Ppkm4aQYbjm+ZEWEcW4SfFNTr4uMNZma0ey4f5lgLrkB0aX0QMow==}
@@ -20362,6 +20370,30 @@ snapshots:
       function-timeout: 1.0.2
       make-asynchronous: 1.0.1
       time-span: 5.1.0
+
+  superdoc@1.10.0(@hocuspocus/provider@2.15.3(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19))(canvas@3.2.0)(pdfjs-dist@4.3.136)(postcss@8.5.6)(typescript@5.9.3)(y-prosemirror@1.3.7(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.4)(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19))(yjs@13.6.19):
+    dependencies:
+      '@hocuspocus/provider': 2.15.3(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19)
+      buffer-crc32: 1.0.0
+      eventemitter3: 5.0.1
+      jsdom: 27.3.0(canvas@3.2.0)(postcss@8.5.6)
+      naive-ui: 2.43.2(vue@3.5.25(typescript@5.9.3))
+      pdfjs-dist: 4.3.136
+      pinia: 2.3.1(typescript@5.9.3)(vue@3.5.25(typescript@5.9.3))
+      rollup-plugin-copy: 3.5.0
+      uuid: 9.0.1
+      vue: 3.5.25(typescript@5.9.3)
+      y-prosemirror: 1.3.7(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.4)(y-protocols@1.0.6(yjs@13.6.19))(yjs@13.6.19)
+      y-websocket: 3.0.0(yjs@13.6.19)
+      yjs: 13.6.19
+    transitivePeerDependencies:
+      - '@vue/composition-api'
+      - bufferutil
+      - canvas
+      - postcss
+      - supports-color
+      - typescript
+      - utf-8-validate
 
   supports-color@5.5.0:
     dependencies:

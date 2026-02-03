@@ -145,65 +145,6 @@ export default function EditorPage() {
 
 ---
 
-## API Route for Documents
-
-Serve documents from an API route:
-
-<CodeGroup>
-
-```javascript App Router
-// app/api/documents/[id]/route.js
-import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
-
-export async function GET(request, { params }) {
-  const { id } = params;
-  const filePath = path.join(process.cwd(), 'documents', `${id}.docx`);
-
-  try {
-    const file = await fs.readFile(filePath);
-    return new NextResponse(file, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${id}.docx"`
-      }
-    });
-  } catch {
-    return NextResponse.json({ error: 'Document not found' }, { status: 404 });
-  }
-}
-```
-
-```javascript Pages Router
-// pages/api/documents/[id].js
-import fs from 'fs/promises';
-import path from 'path';
-
-export default async function handler(req, res) {
-  const { id } = req.query;
-  const filePath = path.join(process.cwd(), 'documents', `${id}.docx`);
-
-  try {
-    const file = await fs.readFile(filePath);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.send(file);
-  } catch {
-    res.status(404).json({ error: 'Document not found' });
-  }
-}
-```
-
-</CodeGroup>
-
-Then use the API route as the document source:
-
-```jsx
-<SuperDocEditor document="/api/documents/contract" />
-```
-
----
-
 ## With Authentication
 
 ```jsx
@@ -315,7 +256,7 @@ The React wrapper (`@superdoc/react`) is recommended over this approach as it ha
 <Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
   Real-time collaboration
 </Card>
-<Card title="Examples" icon="github" href="https://github.com/superdoc-dev/SuperDoc/tree/main/examples/getting-started/react-typescript">
+<Card title="Examples" icon="github" href="https://github.com/superdoc-dev/SuperDoc/tree/main/examples/getting-started/react-with-typescript">
   Working examples
 </Card>
 </CardGroup>

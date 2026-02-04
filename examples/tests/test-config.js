@@ -2,7 +2,6 @@ export default {
   packages: [
     "getting-started/cdn",
     "getting-started/react",
-    "getting-started/react-with-typescript",
     "getting-started/vanilla",
     "getting-started/vue",
     // Customization

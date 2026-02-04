@@ -264,7 +264,7 @@ function buildSelection(state, pos, extend) {
   const clamped = Math.max(0, Math.min(pos, doc.content.size));
   if (extend) {
     const anchor = selection.anchor ?? selection.from;
-    return TextSelection.create(doc, clamped, anchor);
+    return TextSelection.create(doc, anchor, clamped);
   }
   return TextSelection.create(doc, clamped);
 }

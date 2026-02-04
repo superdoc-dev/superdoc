@@ -1,3 +1,5 @@
+import { getPageElementByIndex } from './PageDom.js';
+
 /**
  * Calculates the offset of a page element within the viewport.
  *
@@ -37,9 +39,7 @@ function getPageOffsets(options: {
     return null;
   }
 
-  const pageEl = options.painterHost.querySelector(
-    `.superdoc-page[data-page-index="${options.pageIndex}"]`,
-  ) as HTMLElement | null;
+  const pageEl = getPageElementByIndex(options.painterHost, options.pageIndex);
   if (!pageEl) return null;
 
   const pageRect = pageEl.getBoundingClientRect();
@@ -82,9 +82,7 @@ export function getPageOffsetY(options: {
     return null;
   }
 
-  const pageEl = options.painterHost.querySelector(
-    `.superdoc-page[data-page-index="${options.pageIndex}"]`,
-  ) as HTMLElement | null;
+  const pageEl = getPageElementByIndex(options.painterHost, options.pageIndex);
   if (!pageEl) return null;
 
   const pageRect = pageEl.getBoundingClientRect();

@@ -1705,9 +1705,7 @@ export class PresentationEditor extends EventEmitter {
     const isLeftMargin = marginLeft > 0 && x < marginLeft;
     const isRightMargin = marginRight > 0 && x > pageWidth - marginRight;
 
-    const pageEl = this.#viewportHost.querySelector(
-      `.superdoc-page[data-page-index="${pageIndex}"]`,
-    ) as HTMLElement | null;
+    const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
     if (!pageEl) {
       return null;
     }

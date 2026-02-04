@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Telemetry } from '@superdoc/common';
+import { Editor } from './Editor.js';
 
 // Mock the Telemetry class to verify it's called correctly
 vi.mock('@superdoc/common', () => ({
@@ -15,9 +16,11 @@ vi.mock('@superdoc/common', () => ({
 // This mirrors the #initTelemetry method in Editor.ts
 function initTelemetry(options: {
   telemetry?: { enabled: boolean; endpoint?: string; metadata?: Record<string, unknown> } | null;
-  licenseKey?: string | null;
+  licenseKey?: string;
 }): Telemetry | null {
-  const { telemetry: telemetryConfig, licenseKey } = options;
+  // Use default license key if not provided (mirrors Editor.options default)
+  const licenseKey = options.licenseKey ?? Editor.COMMUNITY_LICENSE_KEY;
+  const { telemetry: telemetryConfig } = options;
 
   // Skip if telemetry is not enabled
   if (!telemetryConfig?.enabled) {
@@ -29,7 +32,7 @@ function initTelemetry(options: {
       config: {
         enabled: true,
         endpoint: telemetryConfig.endpoint,
-        licenseKey: licenseKey || undefined,
+        licenseKey,
         metadata: telemetryConfig.metadata,
       },
     });
@@ -95,8 +98,8 @@ describe('Editor Telemetry Integration', () => {
     });
   });
 
-  describe('telemetry without license key', () => {
-    it('creates Telemetry instance when enabled without license key', () => {
+  describe('default license key', () => {
+    it('uses default community license key when licenseKey is not provided', () => {
       const result = initTelemetry({
         telemetry: { enabled: true },
       });
@@ -107,16 +110,21 @@ describe('Editor Telemetry Integration', () => {
         config: {
           enabled: true,
           endpoint: undefined,
-          licenseKey: undefined,
+          licenseKey: Editor.COMMUNITY_LICENSE_KEY,
           metadata: undefined,
         },
       });
     });
 
-    it('creates Telemetry instance when license key is null', () => {
+    it('uses default community license key value "community-and-eval-agplv3"', () => {
+      expect(Editor.COMMUNITY_LICENSE_KEY).toBe('community-and-eval-agplv3');
+    });
+
+    it('overrides default license key when custom key is provided', () => {
+      const customKey = 'my-custom-license-key';
       const result = initTelemetry({
         telemetry: { enabled: true },
-        licenseKey: null,
+        licenseKey: customKey,
       });
 
       expect(result).not.toBeNull();
@@ -124,7 +132,7 @@ describe('Editor Telemetry Integration', () => {
         config: {
           enabled: true,
           endpoint: undefined,
-          licenseKey: undefined,
+          licenseKey: customKey,
           metadata: undefined,
         },
       });
@@ -187,7 +195,7 @@ describe('Editor Telemetry Integration', () => {
         config: {
           enabled: true,
           endpoint: undefined,
-          licenseKey: undefined,
+          licenseKey: Editor.COMMUNITY_LICENSE_KEY,
           metadata,
         },
       });

@@ -42,8 +42,7 @@ interface TelemetryOptions {
   config: TelemetryConfig;
 }
 
-const DEFAULT_ENDPOINT = 'http://localhost:3051/v1/collect';
-// const DEFAULT_ENDPOINT = 'https://livetest-3---superdoc-telemetry-4yffz5xqqq-uc.a.run.app/v1/collect';
+const DEFAULT_ENDPOINT = 'https://livetest-3---superdoc-telemetry-4yffz5xqqq-uc.a.run.app/v1/collect';
 
 function getSuperdocVersion(): string {
   try {

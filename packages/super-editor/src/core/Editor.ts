@@ -149,9 +149,22 @@ export interface SaveOptions {
 export type ExportOptions = SaveOptions;
 
 /**
+ * Community license key for AGPLv3 / evaluation usage.
+ * This is the default license key
+ */
+const COMMUNITY_LICENSE_KEY = 'community-and-eval-agplv3';
+
+/**
  * Main editor class that manages document state, extensions, and user interactions
  */
 export class Editor extends EventEmitter<EditorEventMap> {
+  /**
+   * Community license key for AGPLv3 / evaluation usage.
+   * This is the default license key - you don't need to set it explicitly
+   * unless you have a commercial license to override it.
+   */
+  static readonly COMMUNITY_LICENSE_KEY = COMMUNITY_LICENSE_KEY;
+
   /**
    * Command service for handling editor commands
    */
@@ -331,8 +344,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
 
-    // License key for billing
-    licenseKey: null,
+    // License key (defaults to community license)
+    licenseKey: COMMUNITY_LICENSE_KEY,
 
     // Telemetry configuration
     telemetry: null,

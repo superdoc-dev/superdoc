@@ -78,19 +78,7 @@ export function getPageOffsetY(options: {
   zoom: number;
   pageIndex: number;
 }): number | null {
-  if (!options.painterHost || !options.viewportHost) {
-    return null;
-  }
-
-  const pageEl = getPageElementByIndex(options.painterHost, options.pageIndex);
-  if (!pageEl) return null;
-
-  const pageRect = pageEl.getBoundingClientRect();
-  const viewportRect = options.viewportHost.getBoundingClientRect();
-
-  const offsetY = (pageRect.top - viewportRect.top) / options.zoom;
-
-  return offsetY;
+  return getPageOffsets(options)?.y ?? null;
 }
 
 /**

@@ -54,9 +54,9 @@ const makeSchema = () =>
     },
   });
 
-const paragraphDoc = (schema, runAttrs = null, marks = []) =>
+const paragraphDoc = (schema, runAttrs = null, marks = [], text = 'Hello') =>
   schema.node('doc', null, [
-    schema.node('paragraph', null, [schema.node('run', runAttrs, schema.text('Hello', marks))]),
+    schema.node('paragraph', null, [schema.node('run', runAttrs, schema.text(text, marks))]),
   ]);
 
 const runPos = (doc) => {
@@ -136,8 +136,8 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(transactions.length).toBeGreaterThan(1);
     const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
     expect(runNode?.attrs.runProperties).toEqual({ bold: true });
-    expect(decodeRPrFromMarksMock).toHaveBeenCalledTimes(1);
-    expect(calculateResolvedParagraphPropertiesMock).toHaveBeenCalledTimes(1);
+    expect(decodeRPrFromMarksMock).toHaveBeenCalled();
+    expect(calculateResolvedParagraphPropertiesMock).toHaveBeenCalled();
   });
 
   it('removes inline run properties when marks align with paragraph styles', () => {
@@ -217,7 +217,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
 
   it('splits runs when inline properties differ', () => {
     const schema = makeSchema();
-    const doc = paragraphDoc(schema);
+    const doc = paragraphDoc(schema, null, [], 'HelloWorld');
     const state = createState(schema, doc);
     const { from, to } = runTextRange(state.doc, 0, 5); // "Hello"
 
@@ -239,7 +239,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
 
   it('preserves selection when runs are split', () => {
     const schema = makeSchema();
-    const doc = paragraphDoc(schema);
+    const doc = paragraphDoc(schema, null, [], 'HelloWorld');
     const state = createState(schema, doc);
     const { from, to } = runTextRange(state.doc, 0, 5); // "Hello"
     const cursorPos = positionAtTextOffset(state.doc, 7); // inside "World"

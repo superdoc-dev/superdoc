@@ -56,8 +56,8 @@ describe('normalizeDocumentEntry', () => {
       name: 'doc.docx',
       type: DOCX,
     });
-    // isNewFile is not set by normalizeDocumentEntry for direct files
-    // It should be set by the caller based on context
+    // isNewFile is not set by normalizeDocumentEntry - the Editor determines this
+    // automatically based on whether content was provided
     expect(out.isNewFile).toBeUndefined();
     expect(out.data).toBeInstanceOf(File);
     expect(out.data).toBe(f);

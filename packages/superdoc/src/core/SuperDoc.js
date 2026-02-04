@@ -315,7 +315,6 @@ export class SuperDoc extends EventEmitter {
           type: DOCX,
           url: this.config.document,
           name: 'document.docx',
-          isNewFile: true,
         },
       ];
     } else if (hasDocumentFile) {

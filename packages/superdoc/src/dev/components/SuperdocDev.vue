@@ -32,13 +32,6 @@ const activeEditor = shallowRef(null);
 
 const title = ref('initial title');
 const currentFile = ref(null);
-// Note: isNewFile is tracked here because the dev shell manually loads blank.docx on mount.
-// In production, consumers don't need to track this - just omit the `document` config for new
-// documents and SuperDoc will automatically create a blank document with isNewFile: true.
-// This flag only matters when explicitly providing a document to distinguish between:
-// - New document from template (isNewFile: true) → updates dcterms:created timestamp
-// - Imported existing document (isNewFile: false) → preserves original timestamp
-const isNewFile = ref(false);
 const commentsPanel = ref(null);
 const showCommentsPanel = ref(true);
 const sidebarInstanceKey = ref(0);
@@ -102,9 +95,8 @@ const commentPermissionResolver = ({ permission, comment, defaultDecision, curre
   return defaultDecision;
 };
 
-const handleNewFile = async (file, isNew = false) => {
+const handleNewFile = async (file) => {
   uploadedFileName.value = file?.name || '';
-  isNewFile.value = isNew;
   // Generate a file url
   const url = URL.createObjectURL(file);
 
@@ -115,10 +107,8 @@ const handleNewFile = async (file, isNew = false) => {
 
   if (isMarkdown || isHtml) {
     // For text-based files, read the content and use a blank DOCX as base
-    // These are considered "new" documents since they use the blank template
     const content = await readFileAsText(file);
     currentFile.value = await getFileObject(BlankDOCX, 'blank.docx', DOCX);
-    isNewFile.value = true; // Using blank template as base = new document
 
     // Store the content to be passed to SuperDoc
     if (isMarkdown) {
@@ -129,11 +119,6 @@ const handleNewFile = async (file, isNew = false) => {
   } else {
     // For binary files (DOCX, PDF), use as-is
     currentFile.value = await getFileObject(url, file.name, file.type);
-    // Only set to false if not explicitly passed as new file
-    // (onMounted passes isNew=true for the initial blank.docx)
-    if (!isNew) {
-      isNewFile.value = false; // Imported file = not new
-    }
   }
 
   nextTick(() => {
@@ -168,21 +153,22 @@ const init = async () => {
   // eslint-disable-next-line no-unused-vars
   const testDocumentId = 'doc123';
 
-  // Prepare document config with content if available
-  // isNewFile should only be true for blank/new documents, not imported files
-  // This ensures imported documents keep their original dcterms:created timestamp
-  const documentConfig = {
-    data: currentFile.value,
-    id: testId,
-    isNewFile: isNewFile.value,
-  };
+  // Prepare document config only if a file was uploaded
+  // If no file, SuperDoc will automatically create a blank document
+  let documentConfig = null;
+  if (currentFile.value) {
+    documentConfig = {
+      data: currentFile.value,
+      id: testId,
+    };
 
-  // Add markdown/HTML content if present
-  if (currentFile.value.markdownContent) {
-    documentConfig.markdown = currentFile.value.markdownContent;
-  }
-  if (currentFile.value.htmlContent) {
-    documentConfig.html = currentFile.value.htmlContent;
+    // Add markdown/HTML content if present
+    if (currentFile.value.markdownContent) {
+      documentConfig.markdown = currentFile.value.markdownContent;
+    }
+    if (currentFile.value.htmlContent) {
+      documentConfig.html = currentFile.value.htmlContent;
+    }
   }
 
   const config = {
@@ -194,7 +180,7 @@ const init = async () => {
     documentMode: 'editing',
     licenseKey: 'community-and-eval-agplv3',
     telemetry: {
-      enabled: false
+      enabled: true
     },
     comments: {
       visible: true,
@@ -221,12 +207,12 @@ const init = async () => {
       { name: 'Nick Bernal', email: 'nick@harbourshare.com', access: 'internal' },
       { name: 'Eric Doversberger', email: 'eric@harbourshare.com', access: 'external' },
     ],
-    document: documentConfig,
+    // Only pass document config if a file was uploaded, otherwise SuperDoc creates blank
+    ...(documentConfig ? { document: documentConfig } : {}),
     // documents: [
     //   {
     //     data: currentFile.value,
     //     id: testId,
-    //     isNewFile: true,
     //   },
     // ],
     // cspNonce: 'testnonce123',
@@ -546,8 +532,8 @@ onMounted(async () => {
     console.log('[collab] Provider synced, initializing SuperDoc');
   }
 
-  const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
-  handleNewFile(blankFile, true); // true = new document, needs unique timestamp
+  // Initialize SuperDoc - it will automatically create a blank document
+  init();
 });
 
 onBeforeUnmount(() => {
@@ -795,7 +781,7 @@ if (scrollTestMode.value) {
 
       <div class="dev-app__main">
         <div class="dev-app__view">
-          <div class="dev-app__content" v-if="currentFile">
+          <div class="dev-app__content">
             <div class="dev-app__content-container" :class="{ 'dev-app__content-container--web-layout': useWebLayout }">
               <div id="superdoc"></div>
             </div>

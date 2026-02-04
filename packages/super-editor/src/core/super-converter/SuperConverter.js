@@ -688,10 +688,23 @@ class SuperConverter {
    * For new files created from template, updates dcterms:created to make identifier unique
    */
   resolveDocumentGuid() {
+    const originalTimestamp = this.getDocumentCreatedTimestamp();
+
     // If this is a new file created from template, update dcterms:created to current time
     // This ensures documents created from the same template get unique identifiers
     if (this.isNewFile) {
-      this.setDocumentCreatedTimestamp(new Date().toISOString());
+      const newTimestamp = new Date().toISOString();
+      this.setDocumentCreatedTimestamp(newTimestamp);
+      console.debug('[super-converter] New file: updated dcterms:created', {
+        isNewFile: this.isNewFile,
+        originalTimestamp,
+        newTimestamp,
+      });
+    } else {
+      console.debug('[super-converter] Existing file: preserving dcterms:created', {
+        isNewFile: this.isNewFile,
+        timestamp: originalTimestamp,
+      });
     }
 
     // 1. Check Microsoft's docId (READ ONLY)
@@ -741,7 +754,6 @@ class SuperConverter {
    *
    * This provides a unique identifier that:
    * - Stays the same for the same document opened multiple times
-   * - Changes when a document is "Saved As" (dcterms:created changes)
    * - Is unique for documents created from template (dcterms:created updated on creation)
    * - Works with documents that don't have docId (uses generated UUID)
    *
@@ -751,6 +763,10 @@ class SuperConverter {
     // Generate and cache the hash if not already done
     if (!this.documentHash) {
       this.documentHash = this.#generateIdentifierHash();
+      console.debug('[super-converter] Generated document identifier:', {
+        documentId: this.documentHash,
+        createdAt: this.getDocumentCreatedTimestamp(),
+      });
     }
 
     return this.documentHash;

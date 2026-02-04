@@ -460,8 +460,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   #emitCreateAsync(): void {
-    // Fire telemetry immediately - don't defer it since the editor might be
-    // destroyed before the next tick (e.g., in headless/CLI usage)
+    // Fire telemetry immediately
     this.#trackDocumentOpen();
 
     setTimeout(() => {
@@ -504,6 +503,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
     try {
       const documentId = this.getDocumentIdentifier();
       const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+      const telemetryPayload = {
+        documentId: documentId || null,
+        documentCreatedAt,
+        isNewFile: this.options.isNewFile,
+      };
+      console.debug('[super-editor] Document info:', telemetryPayload);
       this.#telemetry.trackDocumentOpen(documentId || null, documentCreatedAt);
     } catch {
       // Fail silently - telemetry should never break the app
@@ -2176,7 +2181,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Get document identifier using hash(docId + dcterms:created)
    * Returns a unique identifier that stays the same for the same document
-   * but changes on "Save As" or when creating from template.
    */
   getDocumentIdentifier(): string | null {
     return this.converter?.getDocumentIdentifier() || null;

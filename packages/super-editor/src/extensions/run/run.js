@@ -4,7 +4,6 @@ import { Attribute, OxmlNode } from '@core/index.js';
 import { splitRunToParagraph, splitRunAtCursor } from './commands/index.js';
 import { cleanupEmptyRunsPlugin } from './cleanupEmptyRunsPlugin.js';
 import { wrapTextInRunsPlugin } from './wrapTextInRunsPlugin.js';
-import { splitRunsAfterMarkPlugin } from './splitRunsAfterMarkPlugin.js';
 import { calculateInlineRunPropertiesPlugin } from './calculateInlineRunPropertiesPlugin.js';
 
 /**
@@ -72,7 +71,6 @@ export const Run = OxmlNode.create({
   addPmPlugins() {
     return [
       wrapTextInRunsPlugin(this.editor),
-      splitRunsAfterMarkPlugin,
       calculateInlineRunPropertiesPlugin(this.editor),
       cleanupEmptyRunsPlugin,
     ];

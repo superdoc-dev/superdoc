@@ -106,7 +106,11 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         } else {
           const newRuns = segments.map((segment) => {
             const props = segment.inlineProps ?? null;
-            return runType.create({ runProperties: props }, Fragment.fromArray(segment.content));
+            return runType.create(
+              { ...(runNode.attrs ?? {}), runProperties: props },
+              Fragment.fromArray(segment.content),
+              runNode.marks,
+            );
           });
           const replacement = Fragment.fromArray(newRuns);
           tr.replaceWith(mappedPos, mappedPos + runNode.nodeSize, replacement);

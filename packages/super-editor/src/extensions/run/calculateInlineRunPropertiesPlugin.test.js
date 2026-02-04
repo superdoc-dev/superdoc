@@ -40,6 +40,9 @@ const makeSchema = () =>
         content: 'inline*',
         attrs: {
           runProperties: { default: null },
+          rsidR: { default: null },
+          rsidRPr: { default: null },
+          rsidDel: { default: null },
         },
       },
       text: { group: 'inline' },
@@ -238,6 +241,32 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(secondRun?.textContent).toBe('World');
     expect(firstRun?.attrs.runProperties).toEqual({ bold: true });
     expect(secondRun?.attrs.runProperties).toBeNull();
+  });
+
+  it('preserves run attributes when splitting runs', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(
+      schema,
+      { runProperties: null, rsidR: 'r1', rsidRPr: 'p1', rsidDel: 'd1' },
+      [],
+      'HelloWorld',
+    );
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5); // "Hello"
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const [firstRunPos, secondRunPos] = runPositions(nextState.doc);
+    const firstRun = nextState.doc.nodeAt(firstRunPos);
+    const secondRun = nextState.doc.nodeAt(secondRunPos);
+
+    expect(firstRun?.attrs.rsidR).toBe('r1');
+    expect(firstRun?.attrs.rsidRPr).toBe('p1');
+    expect(firstRun?.attrs.rsidDel).toBe('d1');
+    expect(secondRun?.attrs.rsidR).toBe('r1');
+    expect(secondRun?.attrs.rsidRPr).toBe('p1');
+    expect(secondRun?.attrs.rsidDel).toBe('d1');
   });
 
   it('preserves selection when runs are split', () => {

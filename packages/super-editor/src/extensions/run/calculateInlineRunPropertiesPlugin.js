@@ -1,6 +1,6 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
 import { Fragment } from 'prosemirror-model';
-import { decodeRPrFromMarks, resolveRunProperties } from '@converter/styles.js';
+import { decodeRPrFromMarks, encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
 import {
   calculateResolvedParagraphProperties,
   getResolvedParagraphProperties,
@@ -215,6 +215,7 @@ function computeInlineRunProps(marks, existingRunProperties, paragraphNode, $pos
     runPropertiesFromMarks,
     runPropertiesFromStyles,
     existingRunProperties,
+    editor,
   );
   const inlineProps = Object.keys(inlineRunProperties).length ? inlineRunProperties : null;
   const inlineKey = stableStringifyInlineProps(inlineProps);
@@ -229,13 +230,21 @@ function computeInlineRunProps(marks, existingRunProperties, paragraphNode, $pos
  * @param {Record<string, any>|null} existingRunProperties Existing runProperties on the run node.
  * @returns {Record<string, any>} Inline run properties that override styled defaults.
  */
-function getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles, existingRunProperties) {
+function getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles, existingRunProperties, editor) {
   const inlineRunProperties = {};
   for (const key in runPropertiesFromMarks) {
     const valueFromMarks = runPropertiesFromMarks[key];
     const valueFromStyles = runPropertiesFromStyles[key];
     if (JSON.stringify(valueFromMarks) !== JSON.stringify(valueFromStyles)) {
-      inlineRunProperties[key] = valueFromMarks;
+      if (key === 'fontFamily') {
+        const markFromStyles = encodeMarksFromRPr({ [key]: valueFromStyles }, editor.converter?.convertedXml ?? {})[0];
+        const markFromMarks = encodeMarksFromRPr({ [key]: valueFromMarks }, editor.converter?.convertedXml ?? {})[0];
+        if (JSON.stringify(markFromMarks?.attrs) !== JSON.stringify(markFromStyles?.attrs)) {
+          inlineRunProperties[key] = valueFromMarks;
+        }
+      } else {
+        inlineRunProperties[key] = valueFromMarks;
+      }
     }
   }
 

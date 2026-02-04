@@ -37,6 +37,13 @@ export type SuperDocConfig = SuperDocConstructorConfig;
 // Callback Event Types
 // =============================================================================
 
+/**
+ * ProseMirror Editor instance from super-editor.
+ * Use `editor.view` for ProseMirror EditorView, `editor.state` for EditorState.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Editor = any;
+
 /** Event passed to onReady callback */
 export interface SuperDocReadyEvent {
   superdoc: SuperDocInstance;
@@ -44,17 +51,20 @@ export interface SuperDocReadyEvent {
 
 /** Event passed to onEditorCreate callback */
 export interface SuperDocEditorCreateEvent {
-  editor: unknown;
+  editor: Editor;
 }
 
 /** Event passed to onEditorUpdate callback */
 export interface SuperDocEditorUpdateEvent {
-  editor: unknown;
+  editor: Editor;
 }
 
 /** Event passed to onContentError callback */
 export interface SuperDocContentErrorEvent {
-  error: unknown;
+  error: Error;
+  editor: Editor;
+  documentId: string;
+  file: File;
 }
 
 /** Event passed to onException callback */

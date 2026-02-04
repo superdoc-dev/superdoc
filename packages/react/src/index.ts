@@ -22,6 +22,7 @@ export type {
   SuperDocInstance,
 
   // Callback event types
+  Editor,
   SuperDocReadyEvent,
   SuperDocEditorCreateEvent,
   SuperDocEditorUpdateEvent,

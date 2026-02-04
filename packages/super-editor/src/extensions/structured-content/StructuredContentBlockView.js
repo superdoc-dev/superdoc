@@ -40,14 +40,12 @@ export class StructuredContentBlockView extends StructuredContentViewBase {
     element.addEventListener('dragstart', (e) => this.onDragStart(e));
     this.root = element;
     this.updateContentEditability();
-    this.updateLockStateClasses();
   }
 
   updateView() {
     const domAttrs = Attribute.mergeAttributes(this.htmlAttributes);
     updateDOMAttributes(this.dom, { ...domAttrs });
     this.updateContentEditability();
-    this.updateLockStateClasses();
   }
 
   update(node, decorations, innerDecorations) {

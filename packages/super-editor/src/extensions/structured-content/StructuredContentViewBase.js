@@ -194,27 +194,10 @@ export class StructuredContentViewBase {
     return lockMode === 'contentLocked' || lockMode === 'sdtContentLocked';
   }
 
-  isSdtLocked() {
-    const lockMode = this.node.attrs.lockMode;
-    return lockMode === 'sdtLocked' || lockMode === 'sdtContentLocked';
-  }
-
   updateContentEditability() {
     if (this.contentDOM) {
       this.contentDOM.setAttribute('contenteditable', this.isContentLocked() ? 'false' : 'true');
     }
-  }
-
-  updateLockStateClasses() {
-    const lockMode = this.node.attrs.lockMode || 'unlocked';
-    this.dom.classList.toggle(
-      'sd-structured-content--content-locked',
-      lockMode === 'contentLocked' || lockMode === 'sdtContentLocked',
-    );
-    this.dom.classList.toggle(
-      'sd-structured-content--sdt-locked',
-      lockMode === 'sdtLocked' || lockMode === 'sdtContentLocked',
-    );
   }
 
   onDragStart(event) {

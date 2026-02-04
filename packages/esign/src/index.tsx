@@ -209,6 +209,7 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
         modules: {
           comments: false,
         },
+        // @ts-expect-error - layoutMode is a valid SuperDoc option
         layoutMode: document.layoutMode,
         layoutMargins: document.layoutMargins,
         onReady: () => {
@@ -237,7 +238,6 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
       superdocRef.current = null;
     };
     // Compare margin primitives to avoid re-init on every render
-     
   }, [
     document.source,
     document.mode,

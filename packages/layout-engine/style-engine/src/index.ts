@@ -247,33 +247,9 @@ function normalizeStructuredContentMetadata(
     id: toNullableString(attrs.id),
     tag: toOptionalString(attrs.tag),
     alias: toOptionalString(attrs.alias),
-    lockMode: normalizeLockMode(attrs.lockMode),
+    lockMode: attrs.lockMode as StructuredContentMetadata['lockMode'],
     sdtPr: attrs.sdtPr,
   };
-}
-
-function normalizeLockMode(value: unknown): StructuredContentMetadata['lockMode'] {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.toLowerCase();
-  if (
-    normalized === 'unlocked' ||
-    normalized === 'sdtlocked' ||
-    normalized === 'contentlocked' ||
-    normalized === 'sdtcontentlocked'
-  ) {
-    // Normalize to proper camelCase format
-    switch (normalized) {
-      case 'sdtlocked':
-        return 'sdtLocked';
-      case 'contentlocked':
-        return 'contentLocked';
-      case 'sdtcontentlocked':
-        return 'sdtContentLocked';
-      default:
-        return 'unlocked';
-    }
-  }
-  return undefined;
 }
 
 function normalizeDocumentSectionMetadata(attrs: Record<string, unknown>): DocumentSectionMetadata {

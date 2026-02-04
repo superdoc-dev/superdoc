@@ -154,9 +154,9 @@ describe('Telemetry', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      // Default endpoint is http://localhost:3051/v1/collect
+      // Default endpoint is https://livetest-3---superdoc-telemetry-4yffz5xqqq-uc.a.run.app/v1/collect
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3051/v1/collect',
+        'https://livetest-3---superdoc-telemetry-4yffz5xqqq-uc.a.run.app/v1/collect',
         expect.objectContaining({ method: 'POST' }),
       );
     });

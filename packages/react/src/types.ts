@@ -85,6 +85,42 @@ type InternalProps = 'selector';
 type OptionalInReact = 'documentMode';
 
 /**
+ * Callback props that are explicitly typed in CallbackProps.
+ * These are excluded from SuperDocConfig to avoid type conflicts.
+ */
+type ExplicitCallbackProps =
+  | 'onReady'
+  | 'onEditorCreate'
+  | 'onEditorDestroy'
+  | 'onEditorUpdate'
+  | 'onContentError'
+  | 'onException';
+
+/**
+ * Explicitly typed callback props to ensure proper TypeScript inference.
+ * These override any loosely-typed callbacks from SuperDocConfig.
+ */
+interface CallbackProps {
+  /** Callback when SuperDoc is ready */
+  onReady?: (event: SuperDocReadyEvent) => void;
+
+  /** Callback after an editor is created */
+  onEditorCreate?: (event: SuperDocEditorCreateEvent) => void;
+
+  /** Callback when editor is destroyed */
+  onEditorDestroy?: () => void;
+
+  /** Callback when document content is updated */
+  onEditorUpdate?: (event: SuperDocEditorUpdateEvent) => void;
+
+  /** Callback when there is a content parsing error */
+  onContentError?: (event: SuperDocContentErrorEvent) => void;
+
+  /** Callback when an exception is thrown */
+  onException?: (event: SuperDocExceptionEvent) => void;
+}
+
+/**
  * React-specific props added on top of SuperDocConfig.
  */
 interface ReactProps {
@@ -110,12 +146,12 @@ interface ReactProps {
  * Extends SuperDocConfig (minus internal props) with React-specific additions.
  * When new props are added to SuperDoc core, they're automatically available here.
  *
- * Note: All callback types (onReady, onEditorCreate, etc.) come directly from
- * SuperDocConfig, ensuring type compatibility with the core package.
+ * Callback props are explicitly typed to ensure proper TypeScript inference.
  */
 export interface SuperDocEditorProps
-  extends Omit<SuperDocConfig, InternalProps | OptionalInReact>,
+  extends Omit<SuperDocConfig, InternalProps | OptionalInReact | ExplicitCallbackProps>,
     Partial<Pick<SuperDocConfig, OptionalInReact>>,
+    CallbackProps,
     ReactProps {}
 
 /**

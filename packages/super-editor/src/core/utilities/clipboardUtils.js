@@ -94,30 +94,7 @@ export async function readClipboardRaw() {
  * @returns {Promise<Fragment|ProseMirrorNode|null>} A promise that resolves to a ProseMirror fragment or text node, or null if reading fails.
  */
 export async function readFromClipboard(state) {
-  let html = '';
-  let text = '';
-  const hasPermission = await ensureClipboardPermission();
-
-  if (hasPermission && navigator.clipboard && navigator.clipboard.read) {
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        if (item.types.includes('text/html')) {
-          html = await (await item.getType('text/html')).text();
-          break;
-        } else if (item.types.includes('text/plain')) {
-          text = await (await item.getType('text/plain')).text();
-        }
-      }
-    } catch {
-      // Fallback to plain text read; may still fail if permission denied
-      try {
-        text = await navigator.clipboard.readText();
-      } catch {}
-    }
-  } else {
-    // permissions denied or API unavailable; leave content empty
-  }
+  const { html, text } = await readClipboardRaw();
   let content = null;
   if (html) {
     try {

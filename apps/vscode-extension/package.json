@@ -86,7 +86,7 @@
     "@types/node": "catalog:",
     "@types/vscode": "^1.107.0",
     "@vscode/vsce": "^2.32.0",
-    "esbuild": "^0.19.12",
+    "esbuild": "^0.25.0",
     "typescript": "catalog:"
   },
   "dependencies": {

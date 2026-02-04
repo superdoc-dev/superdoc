@@ -33,13 +33,13 @@ jobs:
         run: pnpm run build:superdoc
 
       - name: Lint
-        run: pnpm --filter @superdoc/react lint
+        run: pnpm --filter @superdoc-dev/react lint
 
       - name: Type check
-        run: pnpm --filter @superdoc/react type-check
+        run: pnpm --filter @superdoc-dev/react type-check
 
       - name: Build
-        run: pnpm --filter @superdoc/react build
+        run: pnpm --filter @superdoc-dev/react build
 
       - name: Test
-        run: pnpm --filter @superdoc/react test
+        run: pnpm --filter @superdoc-dev/react test

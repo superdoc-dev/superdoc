@@ -66,8 +66,5 @@ reports/
 
 codex.config.json
 perf-baseline-results.json
-# Claude Code - ignore plans but allow rules
-.claude/*
-!.claude/rules/
-!.claude/CLAUDE.md
+.claude
 dev/

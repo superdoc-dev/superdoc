@@ -44,11 +44,18 @@ export function createStructuredContentLockPlugin() {
       const changedRanges = collectChangedRanges(tr);
       if (changedRanges.length === 0) return true;
 
+      const docSize = state.doc.content.size;
+
       // Check only nodes within the changed ranges for locked SDTs
       for (const { from, to } of changedRanges) {
+        // Clamp range to valid document bounds
+        const safeFrom = Math.max(0, Math.min(from, docSize));
+        const safeTo = Math.max(0, Math.min(to, docSize));
+        if (safeFrom >= safeTo) continue;
+
         // Use nodesBetween to only traverse affected range
         let hasLockedNode = false;
-        state.doc.nodesBetween(from, to, (node, pos) => {
+        state.doc.nodesBetween(safeFrom, safeTo, (node, pos) => {
           if (isLockedSdt(node)) {
             // Check if this locked node would be deleted
             const mappedPos = tr.mapping.mapResult(pos);

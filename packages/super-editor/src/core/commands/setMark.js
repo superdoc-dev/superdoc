@@ -54,7 +54,10 @@ function canSetMark(editor, state, tr, newMarkType) {
 //prettier-ignore
 export const setMark = (typeOrName, attributes = {}) => ({ tr, state, dispatch, editor }) => {
     let { selection } = tr;
-    if (editor.options.isHeaderOrFooter) {
+    // [IT-126 FIX]: Use lastSelection if we're in header/footer OR if the current selection
+    // is empty but we have a preserved selection (e.g., from toolbar dropdown interaction)
+    const hasPreservedSelection = editor.options.lastSelection && !editor.options.lastSelection.empty;
+    if (editor.options.isHeaderOrFooter || (selection.empty && hasPreservedSelection)) {
       selection = editor.options.lastSelection;
     }
     const { empty, ranges } = selection;
@@ -79,6 +82,12 @@ export const setMark = (typeOrName, attributes = {}) => ({ tr, state, dispatch, 
             const trimmedFrom = Math.max(pos, from);
             const trimmedTo = Math.min(pos + node.nodeSize, to);
             const someHasMark = node.marks.find((mark) => mark.type === type);
+
+            // [IT-126 FIX]: Only process text nodes - skip inline containers like 'run' nodes
+            // to avoid breaking document schema (paragraph > run > text)
+            if (!node.isText) {
+              return;
+            }
 
             // if there is already a mark of this type
             // we know that we have to merge its attributes

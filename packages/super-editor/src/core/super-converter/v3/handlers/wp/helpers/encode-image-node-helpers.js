@@ -433,6 +433,7 @@ export function handleImageNode(node, params, isAnchor) {
     wrapTopAndBottom: wrap.type === 'TopAndBottom',
     shouldCover,
     ...(clipPath ? { clipPath } : {}),
+    rawSrcRect: srcRect,
     originalPadding: {
       distT: attributes['distT'],
       distB: attributes['distB'],

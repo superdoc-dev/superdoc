@@ -270,6 +270,10 @@ export const Image = Node.create({
         default: null,
         rendered: false,
       },
+      rawSrcRect: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

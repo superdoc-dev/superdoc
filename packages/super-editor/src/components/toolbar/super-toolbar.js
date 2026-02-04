@@ -1137,7 +1137,9 @@ export class SuperToolbar extends EventEmitter {
 
     // If the editor wasn't focused and this is a mark toggle, queue it and keep the button active
     // until the next selection update (after the user clicks into the editor).
-    if (!wasFocused && isMarkToggle) {
+    // [IT-126 FIX]: Skip pending mechanism for font commands - they should execute immediately
+    // via the intercepted commands path using the preserved lastSelection.
+    if (!wasFocused && isMarkToggle && !isFontCommand) {
       this.pendingMarkCommands.push({ command, argument, item });
       item?.activate?.();
       if (this.activeEditor && !this.activeEditor.options.isHeaderOrFooter) {

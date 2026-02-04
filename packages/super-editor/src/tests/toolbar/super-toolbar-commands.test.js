@@ -260,25 +260,23 @@ describe('SuperToolbar sticky mark persistence', () => {
     expect(toolbar.updateToolbarState).toHaveBeenCalledTimes(2);
   });
 
-  it('uses intercepted command implementation (setFontSize) instead of direct editor command when replaying pending mark commands', () => {
-    const throwingSetFontSize = vi.fn(() => {
-      throw new Error('should not be called directly');
-    });
-
-    mockEditor.commands.setFontSize = throwingSetFontSize;
+  it('executes font commands immediately via intercepted commands, skipping the pending mechanism', () => {
+    // [IT-126 FIX]: Font commands now execute immediately rather than being queued
+    // This test verifies the new behavior where font commands skip the pending mechanism
+    mockEditor.commands.setFontSize = vi.fn();
     mockEditor.commands.setFieldAnnotationsFontSize = vi.fn();
     mockEditor.view.hasFocus = vi.fn(() => false);
 
     const item = { command: 'setFontSize', name: { value: 'fontSize' }, activate: vi.fn() };
 
-    toolbar.emitCommand({ item });
+    toolbar.emitCommand({ item, argument: '14pt' });
 
-    expect(toolbar.pendingMarkCommands).toHaveLength(1);
-
-    // Should use intercepted command, so the direct command never runs
-    expect(() => toolbar.onEditorSelectionUpdate()).not.toThrow();
-    expect(throwingSetFontSize).not.toHaveBeenCalled();
+    // Font commands should NOT be queued - they execute immediately
     expect(toolbar.pendingMarkCommands).toHaveLength(0);
+
+    // The command should have been executed via #runCommandWithArgumentOnly
+    // which uses the intercepted command flow (setFieldAnnotationsFontSize or setFontSize)
+    expect(mockEditor.commands.setFontSize).toHaveBeenCalledWith('14pt');
   });
 });
 

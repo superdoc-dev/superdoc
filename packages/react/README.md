@@ -75,6 +75,31 @@ All [SuperDoc config options](https://docs.superdoc.dev) are available as props,
 | `className` | `string` | Wrapper CSS class |
 | `style` | `CSSProperties` | Wrapper inline styles |
 
+### Props That Trigger Rebuilds
+
+These props cause the SuperDoc instance to be destroyed and recreated when changed:
+
+- `document` - The document to load
+- `user` - Current user identity
+- `users` - List of users
+- `modules` - Module configuration (collaboration, comments, etc.)
+- `role` - User permission level
+- `hideToolbar` - Toolbar visibility
+
+### Props Handled Efficiently
+
+These props are applied without rebuilding:
+
+- `documentMode` - Calls `setDocumentMode()` internally
+
+### Initial-Only Props
+
+Other SuperDoc options (`rulers`, `pagination`, etc.) are applied only on initialization. To change them at runtime, use `getInstance()`:
+
+```tsx
+ref.current?.getInstance()?.toggleRuler();
+```
+
 ### Common Props
 
 ```tsx

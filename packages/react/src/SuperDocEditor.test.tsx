@@ -37,10 +37,16 @@ describe('SuperDocEditor', () => {
     });
 
     it('should handle unmount without throwing', async () => {
-      const { unmount } = render(<SuperDocEditor />);
+      const onReady = vi.fn();
+      const { unmount } = render(<SuperDocEditor onReady={onReady} />);
 
-      // Wait a bit for async initialization
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Wait for initialization to complete
+      await waitFor(
+        () => {
+          expect(onReady).toHaveBeenCalled();
+        },
+        { timeout: 5000 },
+      );
 
       // Unmount should not throw
       expect(() => unmount()).not.toThrow();

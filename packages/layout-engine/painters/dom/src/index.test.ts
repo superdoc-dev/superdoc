@@ -4528,6 +4528,77 @@ describe('DomPainter', () => {
       expect(img).toBeNull();
     });
 
+    it('renders cropped inline image with clipPath in wrapper (overflow hidden, img with clip-path and transform)', () => {
+      const clipPath = 'inset(10% 20% 30% 40%)';
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-block',
+        runs: [
+          {
+            kind: 'image',
+            src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            width: 80,
+            height: 60,
+            clipPath,
+          },
+        ],
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 0,
+            width: 80,
+            ascent: 60,
+            descent: 0,
+            lineHeight: 60,
+          },
+        ],
+        totalHeight: 60,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 80,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+
+      const wrapper = mount.querySelector('.superdoc-inline-image-clip-wrapper');
+      expect(wrapper).toBeTruthy();
+      expect((wrapper as HTMLElement).style.overflow).toBe('hidden');
+      expect((wrapper as HTMLElement).style.width).toBe('80px');
+      expect((wrapper as HTMLElement).style.height).toBe('60px');
+
+      const img = wrapper?.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.clipPath).toBe(clipPath);
+      expect((img as HTMLElement).style.transformOrigin).toBe('0 0');
+      expect((img as HTMLElement).style.transform).toMatch(
+        /translate\([-\d.]+%,\s*[-\d.]+%\)\s*scale\([-\d.]+,\s*[-\d.]+\)/,
+      );
+    });
+
     it('returns null for data URLs exceeding MAX_DATA_URL_LENGTH (10MB)', () => {
       // Create a data URL that exceeds 10MB
       const largeBase64 = 'A'.repeat(10 * 1024 * 1024 + 1);

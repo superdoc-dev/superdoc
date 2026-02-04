@@ -1308,10 +1308,13 @@ export class EditorInputManager {
   ): boolean {
     if (!targetImg) return false;
 
-    const imgPmStart = targetImg.dataset?.pmStart ? Number(targetImg.dataset.pmStart) : null;
+    // When image has clipPath it is wrapped in .superdoc-inline-image-clip-wrapper; pm-start is on the wrapper
+    const wrapper = targetImg.closest?.('.superdoc-inline-image-clip-wrapper') as HTMLElement | null;
+    const pmStartSource = wrapper ?? targetImg;
+    const imgPmStart = pmStartSource?.dataset?.pmStart ? Number(pmStartSource.dataset.pmStart) : null;
     if (Number.isNaN(imgPmStart) || imgPmStart == null) return false;
 
-    const imgLayoutEpochRaw = targetImg.dataset?.layoutEpoch;
+    const imgLayoutEpochRaw = pmStartSource?.dataset?.layoutEpoch;
     const imgLayoutEpoch = imgLayoutEpochRaw != null ? Number(imgLayoutEpochRaw) : NaN;
     const rawLayoutEpoch = Number.isFinite(rawHit.layoutEpoch) ? rawHit.layoutEpoch : NaN;
     const effectiveEpoch =
@@ -1343,11 +1346,14 @@ export class EditorInputManager {
       const tr = editor!.state.tr.setSelection(NodeSelection.create(doc, clampedImgPos));
       editor!.view?.dispatch(tr);
 
-      const selector = `.superdoc-inline-image[data-pm-start="${imgPmStart}"]`;
+      // Prefer wrapper (clip container) so selection outline is on the visible cropped box only, not the full image
       const viewportHost = this.#deps?.getViewportHost();
-      const targetElement = viewportHost?.querySelector(selector);
+      const wrapperSelector = `.superdoc-inline-image-clip-wrapper[data-pm-start="${imgPmStart}"]`;
+      const inlineSelector = `.superdoc-inline-image[data-pm-start="${imgPmStart}"]`;
+      const targetElement = viewportHost?.querySelector(wrapperSelector) ?? viewportHost?.querySelector(inlineSelector);
+      const elementForHighlight = (wrapper ?? targetElement ?? targetImg) as HTMLElement;
       this.#callbacks.emit?.('imageSelected', {
-        element: targetElement ?? targetImg,
+        element: elementForHighlight,
         blockId: null,
         pmStart: clampedImgPos,
       });

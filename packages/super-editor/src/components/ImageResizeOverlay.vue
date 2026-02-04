@@ -267,7 +267,11 @@ function parseImageMetadata() {
   }
 
   try {
-    const metadataAttr = props.imageElement.getAttribute('data-image-metadata');
+    // When image has clipPath the overlay receives the wrapper; metadata is on the inner img
+    const metaEl = props.imageElement.hasAttribute('data-image-metadata')
+      ? props.imageElement
+      : props.imageElement.querySelector?.('[data-image-metadata]');
+    const metadataAttr = metaEl?.getAttribute?.('data-image-metadata');
     if (!metadataAttr) {
       imageMetadata.value = null;
       return;
@@ -300,9 +304,14 @@ function parseImageMetadata() {
     imageMetadata.value = parsed;
   } catch (error) {
     imageMetadata.value = null;
+    const metaElForError = props.imageElement?.hasAttribute('data-image-metadata')
+      ? props.imageElement
+      : props.imageElement?.querySelector?.('[data-image-metadata]');
     emit('resize-error', {
       error: error instanceof Error ? error.message : 'Failed to parse image metadata',
-      rawMetadata: props.imageElement?.getAttribute('data-image-metadata'),
+      rawMetadata:
+        metaElForError?.getAttribute?.('data-image-metadata') ??
+        props.imageElement?.getAttribute?.('data-image-metadata'),
     });
   }
 }

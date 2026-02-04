@@ -565,6 +565,11 @@ const IMAGE_SELECTION_STYLES = `
 .superdoc-inline-image.superdoc-image-selected {
   outline-offset: 2px;
 }
+
+/* Selection on clip wrapper so outline matches the visible cropped portion, not the scaled image */
+.superdoc-inline-image-clip-wrapper.superdoc-image-selected {
+  outline-offset: 2px;
+}
 `;
 
 /**

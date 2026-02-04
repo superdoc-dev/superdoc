@@ -68,6 +68,7 @@ import { DOM_CLASS_NAMES } from './constants.js';
 import { sanitizeHref, encodeTooltip } from '@superdoc/url-validation';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { assertPmPositions, assertFragmentPmPositions } from './pm-position-validation.js';
+import { applyImageClipPath } from './utils/image-clip-path.js';
 import {
   applySdtContainerStyling,
   getSdtContainerKey,
@@ -2614,6 +2615,11 @@ export class DomPainter {
         fragmentEl.setAttribute('data-image-metadata', JSON.stringify(fragment.metadata));
       }
 
+      // When clipPath is applied we scale the image so the cropped portion fills the box; clip overflow so it doesn't overlap text
+      if (block.attrs?.clipPath) {
+        fragmentEl.style.overflow = 'hidden';
+      }
+
       // behindDoc images are supported via z-index; suppress noisy debug logs
 
       const img = this.doc.createElement('img');
@@ -2628,6 +2634,7 @@ export class DomPainter {
       if (block.objectFit === 'cover') {
         img.style.objectPosition = 'left top';
       }
+      applyImageClipPath(img, block.attrs?.clipPath);
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
@@ -2755,6 +2762,7 @@ export class DomPainter {
     if (drawing.objectFit === 'cover') {
       img.style.objectPosition = 'left top';
     }
+    applyImageClipPath(img, drawing.attrs?.clipPath);
     img.style.display = 'block';
     return img;
   }
@@ -3404,12 +3412,14 @@ export class DomPainter {
       const attrs = child.attrs as PositionedDrawingGeometry & {
         src: string;
         alt?: string;
+        clipPath?: string;
       };
       const img = this.doc!.createElement('img');
       img.src = attrs.src;
       img.alt = attrs.alt ?? '';
       img.style.objectFit = 'contain';
       img.style.display = 'block';
+      applyImageClipPath(img, attrs.clipPath);
       return img;
     }
     return this.createDrawingPlaceholder();
@@ -3892,6 +3902,8 @@ export class DomPainter {
       return null;
     }
 
+    const hasClipPath = typeof run.clipPath === 'string' && run.clipPath.trim().length > 0;
+
     // Create img element
     const img = this.doc.createElement('img');
     img.classList.add('superdoc-inline-image');
@@ -3921,9 +3933,20 @@ export class DomPainter {
       }
     }
 
-    // Set dimensions
-    img.width = run.width;
-    img.height = run.height;
+    // Set dimensions: when we have clipPath we put img in a wrapper that has the layout size and overflow:hidden; img fills wrapper so cropped portion stays within after resize
+    if (!hasClipPath) {
+      img.width = run.width;
+      img.height = run.height;
+    } else {
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '100%';
+      img.style.boxSizing = 'border-box';
+      img.style.minWidth = '0';
+      img.style.minHeight = '0';
+    }
+    applyImageClipPath(img, run.clipPath);
 
     // Add metadata for interactive image resizing (inline images)
     // Only add metadata if dimensions are valid (positive, non-zero values)
@@ -3980,7 +4003,40 @@ export class DomPainter {
     // Assert PM positions are present for cursor fallback
     assertPmPositions(run, 'inline image run');
 
-    // Apply PM position tracking for cursor placement
+    // When clipPath is set, scale makes the img paint outside its box;
+    // wrap in a clip container so only the cropped portion occupies space in the document.
+    // Wrapper size is the only layout box (position calculation uses run.width/run.height).
+    // PM position attributes go on the wrapper only so selection highlight and selection rects use the wrapper, not the scaled img.
+    if (hasClipPath && run.width > 0 && run.height > 0) {
+      // Margins live on the wrapper only; img must fill wrapper exactly so transform percentages stay correct after resize
+      img.style.marginTop = '0';
+      img.style.marginBottom = '0';
+      img.style.marginLeft = '0';
+      img.style.marginRight = '0';
+      img.style.verticalAlign = 'unset';
+      const wrapper = this.doc.createElement('span');
+      wrapper.classList.add('superdoc-inline-image-clip-wrapper');
+      wrapper.style.display = 'inline-block';
+      wrapper.style.width = `${run.width}px`;
+      wrapper.style.height = `${run.height}px`;
+      wrapper.style.boxSizing = 'border-box';
+      wrapper.style.overflow = 'hidden';
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
+      if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
+      if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
+      if (run.distRight) wrapper.style.marginRight = `${run.distRight}px`;
+      wrapper.style.zIndex = '1';
+      if (run.pmStart != null) wrapper.dataset.pmStart = String(run.pmStart);
+      if (run.pmEnd != null) wrapper.dataset.pmEnd = String(run.pmEnd);
+      wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
+      this.applySdtDataset(wrapper, run.sdt);
+      if (run.dataAttrs) applyRunDataAttributes(wrapper, run.dataAttrs);
+      wrapper.appendChild(img);
+      return wrapper;
+    }
+
+    // Apply PM position tracking for cursor placement (only on img when not wrapped)
     if (run.pmStart != null) {
       img.dataset.pmStart = String(run.pmStart);
     }

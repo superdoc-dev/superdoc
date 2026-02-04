@@ -767,6 +767,42 @@ describe('handleImageNode', () => {
       expect(result.attrs.shouldCover).toBe(true);
     });
 
+    it('sets clipPath when srcRect has positive values', () => {
+      const node = makeNodeWithBlipFill([
+        {
+          name: 'a:stretch',
+          elements: [{ name: 'a:fillRect' }],
+        },
+        {
+          name: 'a:srcRect',
+          attributes: { r: '84800' },
+        },
+      ]);
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBe('inset(0% 84.8% 0% 0%)');
+    });
+
+    it('does not set clipPath when srcRect has negative values', () => {
+      const node = makeNodeWithBlipFill([
+        {
+          name: 'a:stretch',
+          elements: [{ name: 'a:fillRect' }],
+        },
+        {
+          name: 'a:srcRect',
+          attributes: { b: '-3978' },
+        },
+      ]);
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBeUndefined();
+    });
+
     it('sets shouldCover=true when stretch+fillRect with multiple positive srcRect values', () => {
       const node = makeNodeWithBlipFill([
         {

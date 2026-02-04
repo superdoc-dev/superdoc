@@ -596,12 +596,23 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
       return;
     }
 
-    // Check for inline images (ImageRun inside paragraphs)
-    if (target.classList?.contains('superdoc-inline-image') && target.hasAttribute('data-image-metadata')) {
+    // Check for clip wrapper first (cropped inline image): use wrapper so resizer works on cropped portion
+    if (
+      target.classList?.contains('superdoc-inline-image-clip-wrapper') &&
+      target.querySelector?.('[data-image-metadata]')
+    ) {
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
-      // Inline images don't have block IDs, use pmStart as identifier
       imageResizeState.blockId = target.getAttribute('data-pm-start');
+      return;
+    }
+    // Check for inline images (ImageRun inside paragraphs). When image has clipPath it is wrapped;
+    // use the wrapper so the resizer works on the cropped portion's box.
+    if (target.classList?.contains('superdoc-inline-image') && target.hasAttribute('data-image-metadata')) {
+      imageResizeState.visible = true;
+      const wrapper = target.closest?.('.superdoc-inline-image-clip-wrapper') as HTMLElement | null;
+      imageResizeState.imageElement = (wrapper ?? target) as HTMLElement;
+      imageResizeState.blockId = (wrapper ?? target).getAttribute('data-pm-start');
       return;
     }
     target = target.parentElement;
@@ -815,13 +826,18 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
       if (imageResizeState.visible && imageResizeState.blockId) {
         // Re-acquire element reference (may have been recreated after re-render)
         const escapedBlockId = CSS.escape(imageResizeState.blockId);
-        const newElement = editorElem.value?.querySelector(
+        let newElement = editorElem.value?.querySelector(
           `.superdoc-image-fragment[data-sd-block-id="${escapedBlockId}"]`,
         );
+        if (!newElement) {
+          // Inline images (and cropped inline use wrapper): re-acquire by pmStart
+          newElement = editorElem.value?.querySelector(
+            `.superdoc-inline-image-clip-wrapper[data-pm-start="${escapedBlockId}"], .superdoc-inline-image[data-pm-start="${escapedBlockId}"]`,
+          );
+        }
         if (newElement) {
-          imageResizeState.imageElement = newElement;
+          imageResizeState.imageElement = newElement as HTMLElement;
         } else {
-          // Image virtualized away - hide overlay
           imageResizeState.visible = false;
           imageResizeState.imageElement = null;
           imageResizeState.blockId = null;
@@ -838,7 +854,7 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
         } else {
           // Try pmStart-based re-acquisition (inline images)
           if (selectedImageState.pmStart != null) {
-            const pmSelector = `.superdoc-image-fragment[data-pm-start="${selectedImageState.pmStart}"], .superdoc-inline-image[data-pm-start="${selectedImageState.pmStart}"]`;
+            const pmSelector = `.superdoc-image-fragment[data-pm-start="${selectedImageState.pmStart}"], .superdoc-inline-image-clip-wrapper[data-pm-start="${selectedImageState.pmStart}"], .superdoc-inline-image[data-pm-start="${selectedImageState.pmStart}"]`;
             const pmElement = editorElem.value?.querySelector(pmSelector);
             if (pmElement) {
               setSelectedImage(pmElement, selectedImageState.blockId, selectedImageState.pmStart);

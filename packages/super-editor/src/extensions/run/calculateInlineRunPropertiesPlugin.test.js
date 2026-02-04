@@ -5,12 +5,14 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 const decodeRPrFromMarksMock = vi.hoisted(() =>
   vi.fn((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') })),
 );
+const encodeMarksFromRPrMock = vi.hoisted(() => vi.fn(() => []));
 const resolveRunPropertiesMock = vi.hoisted(() => vi.fn(() => ({ bold: false })));
 const calculateResolvedParagraphPropertiesMock = vi.hoisted(() => vi.fn(() => ({ paragraph: 'calculated' })));
 const getResolvedParagraphPropertiesMock = vi.hoisted(() => vi.fn(() => null));
 
 vi.mock('@converter/styles.js', () => ({
   decodeRPrFromMarks: decodeRPrFromMarksMock,
+  encodeMarksFromRPr: encodeMarksFromRPrMock,
   resolveRunProperties: resolveRunPropertiesMock,
 }));
 
@@ -119,6 +121,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     decodeRPrFromMarksMock.mockImplementation((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') }));
+    encodeMarksFromRPrMock.mockImplementation(() => []);
     resolveRunPropertiesMock.mockImplementation(() => ({ bold: false }));
     calculateResolvedParagraphPropertiesMock.mockImplementation(() => ({ paragraph: 'calculated' }));
     getResolvedParagraphPropertiesMock.mockImplementation(() => null);
@@ -251,5 +254,52 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     const expectedPos = positionAtTextOffset(nextState.doc, 7);
     expect(nextState.selection.from).toBe(expectedPos);
     expect(nextState.selection.to).toBe(expectedPos);
+  });
+
+  it('preserves non-mark-derived runProperties while removing mark-derived ones', () => {
+    const schema = makeSchema();
+    const boldMark = schema.marks.bold.create();
+    const doc = paragraphDoc(schema, { runProperties: { bold: true, styleId: 'Style1' } }, [boldMark]);
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, doc.textContent.length);
+
+    const tr = state.tr.removeMark(from, to, schema.marks.bold);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({ styleId: 'Style1' });
+  });
+
+  it('does not carry over mark-derived properties from existing runProperties', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: { ascii: 'Times' }, rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 1);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({ rsidR: 'r1' });
+  });
+
+  it('avoids inline fontFamily when mark-derived values match after encoding', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Times' } }));
+    encodeMarksFromRPrMock.mockImplementation(() => [{ attrs: { fontFamily: 'Same' } }]);
+
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: { ascii: 'Times' }, rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 1);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({ rsidR: 'r1' });
   });
 });

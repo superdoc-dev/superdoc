@@ -395,6 +395,108 @@ describe('wrapTextInRunsPlugin', () => {
     });
   });
 
+  describe('IT-126: mark-only transactions', () => {
+    it('does not wrap or modify document structure when transaction only adds marks', () => {
+      const schema = makeSchema();
+      // Create a document with existing runs containing text
+      const run1 = schema.node('run', { runProperties: null }, [schema.text('Hello')]);
+      const run2 = schema.node('run', { runProperties: null }, [schema.text(' world')]);
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [run1, run2])]);
+      const view = createView(schema, doc);
+
+      // Apply a mark to the entire text range (simulating select-all + font change)
+      const tr = view.state.tr.addMark(1, 12, schema.marks.textStyle.create({ fontFamily: 'Arial' }));
+      view.dispatch(tr);
+
+      // Document structure should be preserved (marks added but no wrapping changes)
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.childCount).toBe(2); // Still 2 runs
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.child(1).type.name).toBe('run');
+
+      // Marks should be applied to text inside runs
+      expect(paragraph.firstChild.firstChild.marks.some((m) => m.type.name === 'textStyle')).toBe(true);
+    });
+
+    it('does not wrap or modify document structure when transaction only removes marks', () => {
+      const schema = makeSchema();
+      // Create a document with existing runs containing marked text
+      const markedText = schema.text('Hello', [schema.marks.bold.create()]);
+      const run = schema.node('run', { runProperties: null }, [markedText]);
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [run])]);
+      const view = createView(schema, doc);
+
+      // Remove the mark
+      const tr = view.state.tr.removeMark(1, 6, schema.marks.bold);
+      view.dispatch(tr);
+
+      // Document structure should be preserved
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.childCount).toBe(1);
+      expect(paragraph.firstChild.type.name).toBe('run');
+
+      // Mark should be removed
+      expect(paragraph.firstChild.firstChild.marks.some((m) => m.type.name === 'bold')).toBe(false);
+    });
+
+    it('still wraps text when transaction contains structural changes', () => {
+      const schema = makeSchema();
+      const doc = paragraphDoc(schema);
+      const view = createView(schema, doc);
+
+      // Insert text (structural change) - this should trigger wrapping
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
+
+    it('handles mixed transactions with both marks and structural changes', () => {
+      const schema = makeSchema();
+      const doc = paragraphDoc(schema);
+      const view = createView(schema, doc);
+
+      // Insert text AND add a mark in the same transaction
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      tr.addMark(1, 5, schema.marks.bold.create());
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+      // The bold mark should be applied
+      expect(paragraph.firstChild.firstChild.marks.some((m) => m.type.name === 'bold')).toBe(true);
+    });
+
+    it('clears pending ranges when processing mark-only transactions', () => {
+      const schema = makeSchema();
+      const run = schema.node('run', { runProperties: null }, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [run])]);
+      const view = createView(schema, doc);
+
+      // First, do a mark-only transaction
+      const tr1 = view.state.tr.addMark(2, 7, schema.marks.bold.create());
+      view.dispatch(tr1);
+
+      // Then insert text at end of paragraph - it should be wrapped (pending ranges were cleared)
+      // Position after the run: 1 (para start) + 1 (run start) + 5 (text) + 1 (run end) = 8
+      const insertPos = view.state.doc.firstChild.nodeSize - 1; // end of paragraph, before closing
+      const tr2 = view.state.tr.setSelection(TextSelection.create(view.state.doc, insertPos)).insertText(' world');
+      view.dispatch(tr2);
+
+      const paragraph = view.state.doc.firstChild;
+      // Should have the new text added
+      expect(paragraph.textContent).toContain('Hello');
+      expect(paragraph.textContent).toContain('world');
+      // All content should be in runs
+      paragraph.forEach((child) => {
+        expect(child.type.name).toBe('run');
+      });
+    });
+  });
+
   describe('sdStyleMarks meta', () => {
     it('applies marks from sdStyleMarks transaction meta to wrapped text', () => {
       const schema = makeSchema();

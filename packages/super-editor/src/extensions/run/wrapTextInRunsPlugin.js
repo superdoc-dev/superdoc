@@ -1,4 +1,5 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
+import { AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 import { decodeRPrFromMarks, encodeMarksFromRPr } from '@converter/styles.js';
 import { carbonCopy } from '@core/utilities/carbonCopy';
 
@@ -28,6 +29,13 @@ const collectChangedRanges = (trs, docSize) => {
   const ranges = [];
   trs.forEach((tr) => {
     if (!tr.docChanged) return;
+    // Skip transactions that only contain AddMarkStep or RemoveMarkStep
+    // These don't change document structure and shouldn't trigger run wrapping
+    const hasStructuralChanges = tr.steps.some(
+      (step) => !(step instanceof AddMarkStep || step instanceof RemoveMarkStep),
+    );
+    if (!hasStructuralChanges) return;
+
     tr.mapping.maps.forEach((map) => {
       map.forEach((oldStart, oldEnd, newStart, newEnd) => {
         if (newStart !== oldStart || oldEnd !== newEnd) {
@@ -234,6 +242,19 @@ export const wrapTextInRunsPlugin = (editor) => {
       const docSize = newState.doc.content.size;
       const runType = newState.schema.nodes.run;
       if (!runType) return null;
+
+      // [IT-126 FIX]: Completely skip appendTransaction for mark-only transactions
+      // These don't change document structure and shouldn't trigger run wrapping
+      const isMarkOnlyTransaction = transactions.every((tr) => {
+        if (!tr.docChanged) return true; // Skip non-changing transactions
+        return tr.steps.every((step) => step instanceof AddMarkStep || step instanceof RemoveMarkStep);
+      });
+
+      if (isMarkOnlyTransaction) {
+        // Clear pending ranges to prevent them from accumulating
+        pendingRanges = [];
+        return null;
+      }
 
       pendingRanges = mapRangesThroughTransactions(pendingRanges, transactions, docSize);
       const changedRanges = collectChangedRanges(transactions, docSize);

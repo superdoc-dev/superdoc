@@ -1,6 +1,5 @@
-import { Plugin } from 'prosemirror-state';
+import { Plugin, TextSelection } from 'prosemirror-state';
 import { Fragment } from 'prosemirror-model';
-import { AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 import { decodeRPrFromMarks, resolveRunProperties } from '@converter/styles.js';
 import {
   calculateResolvedParagraphProperties,
@@ -51,11 +50,16 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
 
       if (!runPositions.size) return null;
 
-      runPositions.forEach((pos) => {
-        const runNode = tr.doc.nodeAt(pos);
+      const selectionPreserver = createSelectionPreserver(tr, newState.selection);
+
+      const sortedRunPositions = Array.from(runPositions).sort((a, b) => b - a);
+
+      sortedRunPositions.forEach((pos) => {
+        const mappedPos = tr.mapping.map(pos);
+        const runNode = tr.doc.nodeAt(mappedPos);
         if (!runNode) return;
 
-        const $pos = tr.doc.resolve(pos);
+        const $pos = tr.doc.resolve(mappedPos);
         let paragraphNode = null;
         for (let depth = $pos.depth; depth >= 0; depth--) {
           const node = $pos.node(depth);
@@ -83,16 +87,20 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
 
         if (segments.length === 1) {
           if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties)) return;
-          tr.setNodeMarkup(pos, runNode.type, { ...runNode.attrs, runProperties }, runNode.marks);
-          return;
-        }
+          tr.setNodeMarkup(mappedPos, runNode.type, { ...runNode.attrs, runProperties }, runNode.marks);
+        } else {
+          const newRuns = segments.map((segment) => {
+            const props = segment.inlineProps ?? null;
+            return runType.create({ runProperties: props }, Fragment.fromArray(segment.content));
+          });
+          const replacement = Fragment.fromArray(newRuns);
+          tr.replaceWith(mappedPos, mappedPos + runNode.nodeSize, replacement);
 
-        const newRuns = segments.map((segment) => {
-          const props = segment.inlineProps ?? null;
-          return runType.create({ runProperties: props }, Fragment.fromArray(segment.content));
-        });
-        tr.replaceWith(pos, pos + runNode.nodeSize, Fragment.fromArray(newRuns));
+          selectionPreserver?.mapReplacement(mappedPos, runNode.nodeSize, replacement);
+        }
       });
+
+      selectionPreserver?.finalize();
 
       return tr.docChanged ? tr : null;
     },
@@ -226,4 +234,96 @@ function stableStringifyInlineProps(inlineProps) {
     sorted[key] = inlineProps[key];
   });
   return JSON.stringify(sorted);
+}
+
+/**
+ * Track and reapply selection across run replacements.
+ *
+ * @param {import('prosemirror-state').Transaction} tr
+ * @param {import('prosemirror-state').Selection} originalSelection
+ * @returns {{ mapReplacement: (startPos: number, nodeSize: number, replacement: Fragment) => void, finalize: () => void }|null}
+ */
+function createSelectionPreserver(tr, originalSelection) {
+  if (!originalSelection) return null;
+
+  const isTextSelection = originalSelection instanceof TextSelection;
+  let preservedAnchor = isTextSelection ? originalSelection.anchor : null;
+  let preservedHead = isTextSelection ? originalSelection.head : null;
+  const anchorAssoc = preservedAnchor != null && preservedHead != null && preservedAnchor <= preservedHead ? -1 : 1;
+  const headAssoc = preservedAnchor != null && preservedHead != null && preservedHead >= preservedAnchor ? 1 : -1;
+
+  /**
+   * Map an offset inside a run's content to a position in the replacement fragment.
+   *
+   * @param {number} startPos
+   * @param {Fragment} replacement
+   * @param {number} offset
+   * @returns {number}
+   */
+  function mapOffsetThroughReplacement(startPos, replacement, offset) {
+    let currentPos = startPos;
+    let remaining = offset;
+    let mapped = null;
+
+    replacement.forEach((node) => {
+      if (mapped != null) return;
+      const contentSize = node.content.size;
+      if (remaining <= contentSize) {
+        mapped = currentPos + 1 + remaining;
+        return;
+      }
+      remaining -= contentSize;
+      currentPos += node.nodeSize;
+    });
+
+    return mapped ?? currentPos;
+  }
+
+  /**
+   * Remap preserved selection positions through a run replacement.
+   *
+   * @param {number} startPos
+   * @param {number} nodeSize
+   * @param {Fragment} replacement
+   * @returns {void}
+   */
+  const mapReplacement = (startPos, nodeSize, replacement) => {
+    if (!isTextSelection || preservedAnchor == null || preservedHead == null) return;
+
+    const stepMap = tr.mapping.maps[tr.mapping.maps.length - 1];
+    /**
+     * Map a selection endpoint through the replacement while preserving association.
+     *
+     * @param {number|null} posToMap
+     * @param {number} assoc
+     * @returns {number|null}
+     */
+    const mapSelectionPos = (posToMap, assoc) => {
+      if (posToMap == null) return null;
+      if (posToMap < startPos || posToMap > startPos + nodeSize) {
+        return stepMap.map(posToMap, assoc);
+      }
+      const offsetInRun = posToMap - (startPos + 1);
+      return mapOffsetThroughReplacement(startPos, replacement, offsetInRun);
+    };
+
+    preservedAnchor = mapSelectionPos(preservedAnchor, anchorAssoc);
+    preservedHead = mapSelectionPos(preservedHead, headAssoc);
+  };
+
+  /**
+   * Apply the preserved selection after all replacements are complete.
+   *
+   * @returns {void}
+   */
+  const finalize = () => {
+    if (!tr.docChanged) return;
+    if (isTextSelection && preservedAnchor != null && preservedHead != null) {
+      tr.setSelection(TextSelection.create(tr.doc, preservedAnchor, preservedHead));
+      return;
+    }
+    tr.setSelection(originalSelection.map(tr.doc, tr.mapping));
+  };
+
+  return { mapReplacement, finalize };
 }

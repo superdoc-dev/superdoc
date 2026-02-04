@@ -38,8 +38,6 @@ packages/
   collaboration-yjs/ Collaboration server
 shared/              Internal utilities
 e2e-tests/           Playwright tests
-examples/
-  getting-started/react-typescript/  React wrapper demo app
 ```
 
 ## Where to Look
@@ -64,26 +62,3 @@ examples/
 - `pnpm build` - Build all packages
 - `pnpm test` - Run tests
 - `pnpm dev` - Start dev server (from examples/)
-
-## Git Commit Rules
-
-- Follow conventional commits: `type(scope): description`
-- **Never mention AI tools** in commits or PRs
-
-## Framework Wrappers
-
-| Framework | Package | Entry |
-|-----------|---------|-------|
-| React | `@superdoc-dev/react` | `<SuperDocEditor>` component |
-| Vue | `superdoc` | `<SuperDoc>` component (built-in) |
-
-### React Quick Start
-
-```tsx
-import { SuperDocEditor } from '@superdoc-dev/react';
-import '@superdoc-dev/react/style.css';
-
-<SuperDocEditor document={file} documentMode="editing" />
-```
-
-See `packages/react/CLAUDE.md` for implementation details.

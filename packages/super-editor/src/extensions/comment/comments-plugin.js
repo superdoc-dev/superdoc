@@ -868,11 +868,21 @@ const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes
   // When isDeletionInsertion is true, nodesWithMark should contain both types
   let nodesToUse;
   if (isDeletionInsertion) {
-    // For replacements, use nodes found in document (which should include both insertion and deletion)
-    // Also include nodes from step.slice and deletionNodes if they exist (for newly created replacements)
-    const allNodes = [...nodesWithMark, ...nodes, ...(deletionNodes || [])];
+    // For replacements, prefer nodes found in the document to avoid duplicating text
+    // when step.slice/deletionNodes include overlapping content.
+    const hasInsertNode = nodesWithMark.some((node) =>
+      node.marks.find((nodeMark) => nodeMark.type.name === TrackInsertMarkName),
+    );
+    const hasDeleteNode = nodesWithMark.some((node) =>
+      node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName),
+    );
+
+    const fallbackNodes = [];
+    if (!hasInsertNode && nodes?.length) fallbackNodes.push(...nodes);
+    if (!hasDeleteNode && deletionNodes?.length) fallbackNodes.push(...deletionNodes);
+
     // Remove duplicates by comparing node identity
-    nodesToUse = Array.from(new Set(allNodes));
+    nodesToUse = Array.from(new Set([...nodesWithMark, ...fallbackNodes]));
   } else {
     // For non-replacements, use nodes found in document or fall back to step nodes
     nodesToUse = nodesWithMark.length ? nodesWithMark : node ? [node] : [];

@@ -32,6 +32,13 @@ const activeEditor = shallowRef(null);
 
 const title = ref('initial title');
 const currentFile = ref(null);
+// Note: isNewFile is tracked here because the dev shell manually loads blank.docx on mount.
+// In production, consumers don't need to track this - just omit the `document` config for new
+// documents and SuperDoc will automatically create a blank document with isNewFile: true.
+// This flag only matters when explicitly providing a document to distinguish between:
+// - New document from template (isNewFile: true) → updates dcterms:created timestamp
+// - Imported existing document (isNewFile: false) → preserves original timestamp
+const isNewFile = ref(false);
 const commentsPanel = ref(null);
 const showCommentsPanel = ref(true);
 const sidebarInstanceKey = ref(0);
@@ -95,8 +102,9 @@ const commentPermissionResolver = ({ permission, comment, defaultDecision, curre
   return defaultDecision;
 };
 
-const handleNewFile = async (file) => {
+const handleNewFile = async (file, isNew = false) => {
   uploadedFileName.value = file?.name || '';
+  isNewFile.value = isNew;
   // Generate a file url
   const url = URL.createObjectURL(file);
 
@@ -107,8 +115,10 @@ const handleNewFile = async (file) => {
 
   if (isMarkdown || isHtml) {
     // For text-based files, read the content and use a blank DOCX as base
+    // These are considered "new" documents since they use the blank template
     const content = await readFileAsText(file);
     currentFile.value = await getFileObject(BlankDOCX, 'blank.docx', DOCX);
+    isNewFile.value = true; // Using blank template as base = new document
 
     // Store the content to be passed to SuperDoc
     if (isMarkdown) {
@@ -119,6 +129,11 @@ const handleNewFile = async (file) => {
   } else {
     // For binary files (DOCX, PDF), use as-is
     currentFile.value = await getFileObject(url, file.name, file.type);
+    // Only set to false if not explicitly passed as new file
+    // (onMounted passes isNew=true for the initial blank.docx)
+    if (!isNew) {
+      isNewFile.value = false; // Imported file = not new
+    }
   }
 
   nextTick(() => {
@@ -154,10 +169,12 @@ const init = async () => {
   const testDocumentId = 'doc123';
 
   // Prepare document config with content if available
+  // isNewFile should only be true for blank/new documents, not imported files
+  // This ensures imported documents keep their original dcterms:created timestamp
   const documentConfig = {
     data: currentFile.value,
     id: testId,
-    isNewFile: true,
+    isNewFile: isNewFile.value,
   };
 
   // Add markdown/HTML content if present
@@ -175,6 +192,10 @@ const init = async () => {
     toolbarGroups: ['center'],
     role: userRole,
     documentMode: 'editing',
+    licenseKey: 'community-and-eval-agplv3',
+    telemetry: {
+      enabled: false
+    },
     comments: {
       visible: true,
     },
@@ -526,7 +547,7 @@ onMounted(async () => {
   }
 
   const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
-  handleNewFile(blankFile);
+  handleNewFile(blankFile, true); // true = new document, needs unique timestamp
 });
 
 onBeforeUnmount(() => {

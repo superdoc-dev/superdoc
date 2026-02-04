@@ -55,8 +55,10 @@ describe('normalizeDocumentEntry', () => {
     expect(out).toMatchObject({
       name: 'doc.docx',
       type: DOCX,
-      isNewFile: true,
     });
+    // isNewFile is not set by normalizeDocumentEntry for direct files
+    // It should be set by the caller based on context
+    expect(out.isNewFile).toBeUndefined();
     expect(out.data).toBeInstanceOf(File);
     expect(out.data).toBe(f);
   });

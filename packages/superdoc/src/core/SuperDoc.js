@@ -72,6 +72,12 @@ export class SuperDoc extends EventEmitter {
     modules: {}, // Optional: Modules to load. Use modules.ai.{your_key} to pass in your key
     permissionResolver: null, // Optional: Override for permission checks
 
+    // License key for organization identification
+    licenseKey: null,
+
+    // Telemetry settings
+    telemetry: { enabled: false }, // Enable to track document opens
+
     title: 'SuperDoc',
     conversations: [],
     isInternal: false,

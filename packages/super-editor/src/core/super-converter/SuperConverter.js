@@ -245,6 +245,9 @@ class SuperConverter {
     this.documentHash = null; // Temporary hash for unmodified documents
     this.documentModified = false; // Track if document has been edited
 
+    // Track if this is a new file created from template
+    this.isNewFile = params?.isNewFile || false;
+
     // Parse the initial XML, if provided
     if (this.docx.length || this.xml) this.parseFromXml();
   }
@@ -589,6 +592,48 @@ class SuperConverter {
   }
 
   /**
+   * Get the dcterms:created timestamp from the already-parsed core.xml
+   * @returns {string|null} The created timestamp in ISO format, or null if not found
+   */
+  getDocumentCreatedTimestamp() {
+    const coreXml = this.convertedXml['docProps/core.xml'];
+    if (!coreXml) return null;
+
+    const coreProps = coreXml.elements?.find(
+      (el) => el.name === 'cp:coreProperties' || SuperConverter._matchesElementName(el.name, 'coreProperties'),
+    );
+    if (!coreProps?.elements) return null;
+
+    const createdElement = coreProps.elements.find(
+      (el) => el.name === 'dcterms:created' || SuperConverter._matchesElementName(el.name, 'created'),
+    );
+
+    return createdElement?.elements?.[0]?.text || null;
+  }
+
+  /**
+   * Set the dcterms:created timestamp in the already-parsed core.xml
+   * @param {string} timestamp - The timestamp to set (ISO format)
+   */
+  setDocumentCreatedTimestamp(timestamp) {
+    const coreXml = this.convertedXml['docProps/core.xml'];
+    if (!coreXml) return;
+
+    const coreProps = coreXml.elements?.find(
+      (el) => el.name === 'cp:coreProperties' || SuperConverter._matchesElementName(el.name, 'coreProperties'),
+    );
+    if (!coreProps?.elements) return;
+
+    const createdElement = coreProps.elements.find(
+      (el) => el.name === 'dcterms:created' || SuperConverter._matchesElementName(el.name, 'created'),
+    );
+
+    if (createdElement?.elements?.[0]) {
+      createdElement.elements[0].text = timestamp;
+    }
+  }
+
+  /**
    * Get document GUID from docx files (static method)
    * @static
    * @param {Array} docx - Array of docx file objects
@@ -640,8 +685,15 @@ class SuperConverter {
 
   /**
    * Resolve existing document GUID (synchronous)
+   * For new files created from template, updates dcterms:created to make identifier unique
    */
   resolveDocumentGuid() {
+    // If this is a new file created from template, update dcterms:created to current time
+    // This ensures documents created from the same template get unique identifiers
+    if (this.isNewFile) {
+      this.setDocumentCreatedTimestamp(new Date().toISOString());
+    }
+
     // 1. Check Microsoft's docId (READ ONLY)
     const microsoftGuid = this.getMicrosoftDocId();
     if (microsoftGuid) {
@@ -669,43 +721,36 @@ class SuperConverter {
   }
 
   /**
-   * Generate document hash (async, lazy)
+   * Generate document identifier hash from docId and created timestamp
+   * Uses CRC32 of the combined string for a compact identifier
+   * @returns {string} Hash identifier in format "HASH-XXXXXXXX"
    */
-  async #generateDocumentHash() {
-    if (!this.fileSource) return `HASH-${Date.now()}`;
+  #generateIdentifierHash() {
+    const docId = this.documentGuid || uuidv4();
+    const created = this.getDocumentCreatedTimestamp() || new Date().toISOString();
 
-    try {
-      let buffer;
+    const combined = `${docId}|${created}`;
+    const buffer = Buffer.from(combined, 'utf8');
+    const hash = crc32(buffer);
 
-      if (Buffer.isBuffer(this.fileSource)) {
-        buffer = this.fileSource;
-      } else if (this.fileSource instanceof ArrayBuffer) {
-        buffer = Buffer.from(this.fileSource);
-      } else if (this.fileSource instanceof Blob || this.fileSource instanceof File) {
-        const arrayBuffer = await this.fileSource.arrayBuffer();
-        buffer = Buffer.from(arrayBuffer);
-      } else {
-        return `HASH-${Date.now()}`;
-      }
-
-      const hash = crc32(buffer);
-      return `HASH-${hash.toString('hex').toUpperCase()}`;
-    } catch (e) {
-      console.warn('Could not generate document hash:', e);
-      return `HASH-${Date.now()}`;
-    }
+    return `HASH-${hash.toString('hex').toUpperCase()}`;
   }
 
   /**
-   * Get document identifier (GUID or hash) - async for lazy hash generation
+   * Get document identifier using hash(docId + dcterms:created)
+   *
+   * This provides a unique identifier that:
+   * - Stays the same for the same document opened multiple times
+   * - Changes when a document is "Saved As" (dcterms:created changes)
+   * - Is unique for documents created from template (dcterms:created updated on creation)
+   * - Works with documents that don't have docId (uses generated UUID)
+   *
+   * @returns {string} Document identifier
    */
-  async getDocumentIdentifier() {
-    if (this.documentGuid) {
-      return this.documentGuid;
-    }
-
-    if (!this.documentHash && this.fileSource) {
-      this.documentHash = await this.#generateDocumentHash();
+  getDocumentIdentifier() {
+    // Generate and cache the hash if not already done
+    if (!this.documentHash) {
+      this.documentHash = this.#generateIdentifierHash();
     }
 
     return this.documentHash;

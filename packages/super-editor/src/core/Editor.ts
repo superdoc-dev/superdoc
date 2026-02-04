@@ -54,6 +54,7 @@ import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
+import { Telemetry } from '@superdoc/common';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -240,6 +241,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   setHighContrastMode?: (enabled: boolean) => void;
 
+  /**
+   * Telemetry instance for tracking document opens
+   */
+  #telemetry: Telemetry | null = null;
+
   options: EditorOptions = {
     element: null,
     selector: null,
@@ -324,6 +330,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
+
+    // License key for billing
+    licenseKey: null,
+
+    // Telemetry configuration
+    telemetry: null,
   };
 
   /**
@@ -390,6 +402,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#checkHeadless(resolvedOptions);
     this.setOptions(resolvedOptions);
     this.#renderer = resolvedOptions.renderer ?? (domAvailable ? new ProseMirrorRenderer() : null);
+    this.#initTelemetry();
 
     const { setHighContrastMode } = useHighContrastMode();
     this.setHighContrastMode = setHighContrastMode;
@@ -447,10 +460,54 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   #emitCreateAsync(): void {
+    // Fire telemetry immediately - don't defer it since the editor might be
+    // destroyed before the next tick (e.g., in headless/CLI usage)
+    this.#trackDocumentOpen();
+
     setTimeout(() => {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+  }
+
+  /**
+   * Initialize telemetry if configured
+   */
+  #initTelemetry(): void {
+    const { telemetry: telemetryConfig, licenseKey } = this.options;
+
+    // Skip if telemetry is not enabled
+    if (!telemetryConfig?.enabled) {
+      return;
+    }
+
+    try {
+      this.#telemetry = new Telemetry({
+        config: {
+          enabled: true,
+          endpoint: telemetryConfig.endpoint,
+          licenseKey,
+          metadata: telemetryConfig.metadata,
+        },
+      });
+    } catch {
+      // Fail silently - telemetry should never break the app
+    }
+  }
+
+  /**
+   * Track document open event for telemetry
+   */
+  #trackDocumentOpen(): void {
+    if (!this.#telemetry) return;
+
+    try {
+      const documentId = this.getDocumentIdentifier();
+      const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+      this.#telemetry.trackDocumentOpen(documentId || null, documentCreatedAt);
+    } catch {
+      // Fail silently - telemetry should never break the app
+    }
   }
 
   /**
@@ -988,6 +1045,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     setTimeout(() => {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
+      this.#trackDocumentOpen();
     }, 0);
   }
 
@@ -1550,6 +1608,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         documentId: this.options.documentId,
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
+        isNewFile: this.options.isNewFile ?? false,
       });
     }
   }
@@ -2115,10 +2174,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get document identifier (async - may generate hash)
+   * Get document identifier using hash(docId + dcterms:created)
+   * Returns a unique identifier that stays the same for the same document
+   * but changes on "Save As" or when creating from template.
    */
-  async getDocumentIdentifier(): Promise<string | null> {
-    return (await this.converter?.getDocumentIdentifier()) || null;
+  getDocumentIdentifier(): string | null {
+    return this.converter?.getDocumentIdentifier() || null;
   }
 
   /**

@@ -32,3 +32,7 @@ export { default as vClickOutside } from './helpers/v-click-outside';
 
 // Collaboration/Awareness
 export * from './collaboration/awareness';
+
+// Telemetry
+export { Telemetry } from './Telemetry';
+export type { TelemetryConfig, TelemetryPayload, DocumentOpenEvent, BrowserInfo } from './Telemetry';

@@ -148,7 +148,7 @@ const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta =
 
   ranges.forEach(({ from, to }) => {
     state.doc.nodesBetween(from, to, (node, pos, parent, index) => {
-      if (!node.isText || !parent || parent.type === runType) return;
+      if (!node.isText || !parent || parent.type === runType || parent.type?.name === 'structuredContent') return;
 
       const match = parent.contentMatchAt ? parent.contentMatchAt(index) : null;
       if (match && !match.matchType(runType)) return;

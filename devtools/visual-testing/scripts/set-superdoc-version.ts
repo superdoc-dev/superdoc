@@ -23,9 +23,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { colors } from './terminal.js';
+import { findWorkspaceRoot } from './workspace-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
+const workspaceRoot = findWorkspaceRoot(rootDir) ?? rootDir;
 const harnessPkgPath = path.resolve(rootDir, 'packages/harness/package.json');
 const harnessDir = path.dirname(harnessPkgPath);
 
@@ -54,21 +56,6 @@ export interface ResolveOptions {
 }
 
 const WORKSPACE_SPECIFIERS = new Set(['local', 'workspace']);
-
-function findWorkspaceRoot(startDir: string): string | null {
-  let current = path.resolve(startDir);
-  while (true) {
-    const marker = path.join(current, 'pnpm-workspace.yaml');
-    if (fs.existsSync(marker)) {
-      return current;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return null;
-    }
-    current = parent;
-  }
-}
 
 /**
  * Convert a path to POSIX format (forward slashes).
@@ -110,10 +97,6 @@ export function resolveSpecifier(input: string, options: ResolveOptions = {}): R
   }
 
   const resolvedPath = path.resolve(_rootDir, input);
-  const workspaceRoot = findWorkspaceRoot(_rootDir);
-  const isInWorkspace = (value: string): boolean =>
-    Boolean(workspaceRoot) && value.startsWith(`${workspaceRoot}${path.sep}`);
-
   // Handle explicit file: prefix
   if (input.startsWith('file:')) {
     const rawPath = input.slice('file:'.length);
@@ -132,13 +115,6 @@ export function resolveSpecifier(input: string, options: ResolveOptions = {}): R
     if (stat.isDirectory()) {
       // Check if this is the superdoc package directory itself
       if (isSuperdocPackage(resolvedPath, { fs: _fs })) {
-        if (isInWorkspace(resolvedPath)) {
-          return {
-            specifier: 'workspace:*',
-            isFile: false,
-            installPath: resolvedPath,
-          };
-        }
         const relativePath = path.relative(_harnessDir, resolvedPath) || '.';
         return {
           specifier: `file:${toPosixPath(relativePath)}`,
@@ -150,13 +126,6 @@ export function resolveSpecifier(input: string, options: ResolveOptions = {}): R
       // Check packages/superdoc subdirectory (monorepo root)
       const packagesSuperdocDir = path.join(resolvedPath, 'packages', 'superdoc');
       if (isSuperdocPackage(packagesSuperdocDir, { fs: _fs })) {
-        if (isInWorkspace(packagesSuperdocDir)) {
-          return {
-            specifier: 'workspace:*',
-            isFile: false,
-            installPath: packagesSuperdocDir,
-          };
-        }
         const relativePath = path.relative(_harnessDir, packagesSuperdocDir) || '.';
         return {
           specifier: `file:${toPosixPath(relativePath)}`,
@@ -253,20 +222,13 @@ function main(): void {
     const isTarball = exists && !isDir && installPath.endsWith('.tgz');
 
     if (isDir) {
-      const workspaceRoot = findWorkspaceRoot(rootDir);
-      const isWithinWorkspace = Boolean(workspaceRoot) && installPath.startsWith(`${workspaceRoot}${path.sep}`);
-
-      if (isWithinWorkspace) {
-        console.log(colors.info(`Using workspace path: ${installPath}`));
+      const tarballPath = path.join(installPath, 'superdoc.tgz');
+      if (fs.existsSync(tarballPath)) {
+        const relativeTarballPath = path.relative(harnessDir, tarballPath);
+        finalSpecifier = `file:${toPosixPath(relativeTarballPath)}`;
+        console.log(colors.info(`Using existing tarball: ${tarballPath}`));
       } else {
-        const tarballPath = path.join(installPath, 'superdoc.tgz');
-        if (fs.existsSync(tarballPath)) {
-          const relativeTarballPath = path.relative(harnessDir, tarballPath);
-          finalSpecifier = `file:${toPosixPath(relativeTarballPath)}`;
-          console.log(colors.info(`Using existing tarball: ${tarballPath}`));
-        } else {
-          console.log(colors.warning('Using local superdoc path; make sure it is already built/packed.'));
-        }
+        console.log(colors.warning('Using local superdoc path; make sure it is already built/packed.'));
       }
     } else if (isTarball) {
       console.log(colors.info(`Using tarball: ${installPath}`));
@@ -278,34 +240,27 @@ function main(): void {
   fs.writeFileSync(harnessPkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
   console.log(colors.success(`Updated packages/harness superdoc dependency to "${finalSpecifier}"`));
 
-  // Install the package
-  console.log('');
-  console.log(colors.info('Installing...'));
-
   if (isFile) {
-    // Remove any previous install so local builds are reapplied
     const installedPath = path.join(harnessDir, 'node_modules', 'superdoc');
-    fs.rmSync(installedPath, { recursive: true, force: true });
-
-    // Also remove pnpm lockfile entry to force re-resolution
-    const lockfilePath = path.join(rootDir, 'pnpm-lock.yaml');
-    if (fs.existsSync(lockfilePath)) {
-      let lockContent = fs.readFileSync(lockfilePath, 'utf8');
-      // Remove superdoc entries from lockfile to force fresh install
-      lockContent = lockContent.replace(/^\s*superdoc[@:].*$/gm, '');
-      lockContent = lockContent.replace(/^\s*'superdoc[@:].*$/gm, '');
-      fs.writeFileSync(lockfilePath, lockContent, 'utf8');
+    if (fs.existsSync(installedPath)) {
+      fs.rmSync(installedPath, { recursive: true, force: true });
+      console.log(colors.muted('Cleared cached superdoc install.'));
     }
   }
 
+  console.log('');
+  console.log(colors.info('Installing...'));
+
   const installResult = spawnSync('pnpm', ['--filter', '@superdoc-testing/harness', 'install', '--loglevel', 'error'], {
-    cwd: rootDir,
+    cwd: workspaceRoot,
     stdio: 'inherit',
     env: {
       ...process.env,
       PNPM_IGNORE_PEER_DEPENDENCIES: '1',
       PNPM_LOG_LEVEL: 'error',
       NPM_CONFIG_LOGLEVEL: 'error',
+      PNPM_LINK_WORKSPACE_PACKAGES: 'false',
+      PNPM_PREFER_WORKSPACE_PACKAGES: 'false',
     },
   });
 

@@ -22,6 +22,12 @@ const CONTENT_TYPES: Record<string, string> = {
 /** Default local cache directory for downloaded baselines. */
 const DEFAULT_BASELINES_CACHE_DIR = path.join(os.tmpdir(), 'superdoc-baselines-cache');
 
+/** Maximum concurrent S3 operations for downloads/uploads. */
+const S3_CONCURRENCY_LIMIT = 6;
+
+/** Width of the progress bar in characters. */
+const PROGRESS_BAR_WIDTH = 24;
+
 /**
  * Normalize a file path to use forward slashes and remove leading ./ or /.
  *
@@ -60,6 +66,82 @@ function walk(dir: string, onFile: (filePath: string) => void): void {
       onFile(fullPath);
     }
   }
+}
+
+function formatBytes(value: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 ? 0 : 1;
+  return `${size.toFixed(precision)}${units[unitIndex]}`;
+}
+
+function renderProgressLine(options: {
+  label: string;
+  uploaded: number;
+  total: number;
+  uploadedBytes: number;
+  totalBytes: number;
+  lastLineLength: number;
+}): number {
+  const percent = options.total === 0 ? 100 : Math.round((options.uploaded / options.total) * 100);
+  const barWidth = PROGRESS_BAR_WIDTH;
+  const filled = Math.min(barWidth, Math.round((percent / 100) * barWidth));
+  const bar = `${'='.repeat(filled)}${'-'.repeat(barWidth - filled)}`;
+  const bytesInfo =
+    options.totalBytes > 0 ? ` ${formatBytes(options.uploadedBytes)}/${formatBytes(options.totalBytes)}` : '';
+  const line = `${options.label} [${bar}] ${options.uploaded}/${options.total} (${percent}%)${bytesInfo}`;
+  const padded = line.padEnd(options.lastLineLength, ' ');
+  process.stdout.write(`\r${padded}`);
+  return padded.length;
+}
+
+function shouldRenderProgress(): boolean {
+  return Boolean(process.stdout.isTTY);
+}
+
+/** Browser names that can appear as top-level folders in baseline directories. */
+const KNOWN_BROWSERS = new Set(['chromium', 'firefox', 'webkit']);
+
+type BaselineFilterOptions = {
+  filters?: string[];
+  matches?: string[];
+  excludes?: string[];
+  browsers?: string[];
+};
+
+function normalizeFilterList(values?: string[]): string[] {
+  if (!values) return [];
+  return Array.from(new Set(values.map((value) => value.toLowerCase()).filter(Boolean)));
+}
+
+function shouldIncludeBaselineKey(relativePath: string, options: BaselineFilterOptions): boolean {
+  const filters = normalizeFilterList(options.filters);
+  const matches = normalizeFilterList(options.matches);
+  const excludes = normalizeFilterList(options.excludes);
+  const normalized = relativePath.toLowerCase();
+
+  const matchesFilter = filters.length === 0 || filters.some((value) => normalized.startsWith(value));
+  const matchesMatch = matches.length === 0 || matches.some((value) => normalized.includes(value));
+  const isExcluded = excludes.some((value) => normalized.startsWith(value));
+
+  return matchesFilter && matchesMatch && !isExcluded;
+}
+
+function splitBrowserPrefix(relative: string): { browser?: string; path: string } {
+  const parts = relative.split('/');
+  if (parts.length === 0) {
+    return { path: relative };
+  }
+  const first = parts[0];
+  if (KNOWN_BROWSERS.has(first)) {
+    return { browser: first, path: parts.slice(1).join('/') };
+  }
+  return { path: relative };
 }
 
 /**
@@ -240,8 +322,12 @@ export async function getLatestBaselineVersion(prefix: string): Promise<string |
  * @param bucketName - Bucket name
  * @returns Array of object keys
  */
-async function listObjects(prefix: string, client: S3Client, bucketName: string): Promise<string[]> {
-  const keys: string[] = [];
+async function listObjects(
+  prefix: string,
+  client: S3Client,
+  bucketName: string,
+): Promise<Array<{ key: string; size: number }>> {
+  const keys: Array<{ key: string; size: number }> = [];
   let continuationToken: string | undefined;
 
   do {
@@ -254,7 +340,7 @@ async function listObjects(prefix: string, client: S3Client, bucketName: string)
     );
     for (const item of response.Contents ?? []) {
       if (item.Key) {
-        keys.push(item.Key);
+        keys.push({ key: item.Key, size: item.Size ?? 0 });
       }
     }
     continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
@@ -334,20 +420,62 @@ export async function ensureBaselineDownloaded(options: {
   ensureDir(localVersionDir);
 
   const remotePrefix = `${normalizedPrefix}/${version}/`;
-  const keys = await listObjects(remotePrefix, client, bucketName);
+  const objects = await listObjects(remotePrefix, client, bucketName);
 
-  if (keys.length === 0) {
+  if (objects.length === 0) {
     throw new Error(`No baseline objects found at ${remotePrefix}`);
   }
 
   let downloaded = 0;
-  await runWithConcurrency(keys, 6, async (key) => {
+  let downloadedBytes = 0;
+  const totalBytes = objects.reduce((sum, item) => sum + item.size, 0);
+  const showProgress = shouldRenderProgress();
+  let lastUpdate = 0;
+  let lastLineLength = 0;
+
+  if (showProgress) {
+    lastLineLength = renderProgressLine({
+      label: 'Downloading',
+      uploaded: 0,
+      total: objects.length,
+      uploadedBytes: 0,
+      totalBytes,
+      lastLineLength: 0,
+    });
+  } else {
+    console.log(`Downloading ${objects.length} baseline file(s)...`);
+  }
+
+  await runWithConcurrency(objects, S3_CONCURRENCY_LIMIT, async (item) => {
+    const key = item.key;
     const relative = key.startsWith(`${normalizedPrefix}/`) ? key.slice(normalizedPrefix.length + 1) : key;
     const destination = path.join(localRoot, relative);
     ensureDir(path.dirname(destination));
     await downloadObject(client, bucketName, key, destination);
     downloaded += 1;
+    downloadedBytes += item.size;
+
+    if (showProgress) {
+      const now = Date.now();
+      if (now - lastUpdate > 100 || downloaded === objects.length) {
+        lastLineLength = renderProgressLine({
+          label: 'Downloading',
+          uploaded: downloaded,
+          total: objects.length,
+          uploadedBytes: downloadedBytes,
+          totalBytes,
+          lastLineLength,
+        });
+        lastUpdate = now;
+      }
+    } else if (downloaded === objects.length || downloaded % 25 === 0) {
+      console.log(`Downloaded ${downloaded}/${objects.length} files...`);
+    }
   });
+
+  if (showProgress) {
+    process.stdout.write('\n');
+  }
 
   fs.writeFileSync(
     markerPath,
@@ -364,6 +492,123 @@ export async function ensureBaselineDownloaded(options: {
   );
 
   return { baselineRoot: localRoot, localVersionDir, downloaded, fromCache: false };
+}
+
+/**
+ * Refresh a subset of baseline files from R2 (filtered by path and/or browser).
+ * Downloads only the files matching the provided filters, overwriting local copies.
+ *
+ * @param options - Configuration options
+ * @param options.prefix - Baseline prefix (e.g., 'baselines')
+ * @param options.version - Version to refresh (e.g., 'v.1.5.0')
+ * @param options.localRoot - Optional custom local root directory
+ * @param options.cacheRoot - Optional custom cache root directory
+ * @param options.filters - Prefix filters for doc/story paths
+ * @param options.matches - Substring filters for doc/story paths
+ * @param options.excludes - Exclusion prefix filters
+ * @param options.browsers - Optional list of browsers to refresh (e.g., ['chromium', 'firefox'])
+ * @returns Object with baselineRoot, localVersionDir, downloaded count, and matched count
+ * @throws {Error} If no baseline objects found at the specified prefix/version in R2
+ */
+export async function refreshBaselineSubset(options: {
+  prefix: string;
+  version: string;
+  localRoot?: string;
+  cacheRoot?: string;
+  filters?: string[];
+  matches?: string[];
+  excludes?: string[];
+  browsers?: string[];
+}): Promise<{ baselineRoot: string; localVersionDir: string; downloaded: number; matched: number }> {
+  const normalizedPrefix = normalizePrefix(options.prefix);
+  const localRoot = options.localRoot ?? getBaselineLocalRoot(normalizedPrefix, options.cacheRoot);
+  const version = options.version;
+  const localVersionDir = path.join(localRoot, version);
+  const { client, bucketName } = createR2Client();
+
+  ensureDir(localVersionDir);
+
+  const remotePrefix = `${normalizedPrefix}/${version}/`;
+  const objects = await listObjects(remotePrefix, client, bucketName);
+
+  if (objects.length === 0) {
+    throw new Error(`No baseline objects found at ${remotePrefix}`);
+  }
+
+  const browserFilters = normalizeFilterList(options.browsers);
+  const matched = objects.filter((item) => {
+    const relative = item.key.startsWith(remotePrefix) ? item.key.slice(remotePrefix.length) : item.key;
+    const { browser, path: docPath } = splitBrowserPrefix(relative);
+
+    if (browserFilters.length > 0) {
+      if (browser) {
+        if (!browserFilters.includes(browser)) {
+          return false;
+        }
+      } else if (!browserFilters.includes('chromium')) {
+        return false;
+      }
+    }
+
+    return shouldIncludeBaselineKey(docPath, options);
+  });
+
+  if (matched.length === 0) {
+    return { baselineRoot: localRoot, localVersionDir, downloaded: 0, matched: 0 };
+  }
+
+  let downloaded = 0;
+  let downloadedBytes = 0;
+  const totalBytes = matched.reduce((sum, item) => sum + item.size, 0);
+  const showProgress = shouldRenderProgress();
+  let lastUpdate = 0;
+  let lastLineLength = 0;
+
+  if (showProgress) {
+    lastLineLength = renderProgressLine({
+      label: 'Refreshing',
+      uploaded: 0,
+      total: matched.length,
+      uploadedBytes: 0,
+      totalBytes,
+      lastLineLength: 0,
+    });
+  } else {
+    console.log(`Refreshing ${matched.length} baseline file(s)...`);
+  }
+
+  await runWithConcurrency(matched, S3_CONCURRENCY_LIMIT, async (item) => {
+    const key = item.key;
+    const relative = key.startsWith(`${normalizedPrefix}/`) ? key.slice(normalizedPrefix.length + 1) : key;
+    const destination = path.join(localRoot, relative);
+    ensureDir(path.dirname(destination));
+    await downloadObject(client, bucketName, key, destination);
+    downloaded += 1;
+    downloadedBytes += item.size;
+
+    if (showProgress) {
+      const now = Date.now();
+      if (now - lastUpdate > 100 || downloaded === matched.length) {
+        lastLineLength = renderProgressLine({
+          label: 'Refreshing',
+          uploaded: downloaded,
+          total: matched.length,
+          uploadedBytes: downloadedBytes,
+          totalBytes,
+          lastLineLength,
+        });
+        lastUpdate = now;
+      }
+    } else if (downloaded === matched.length || downloaded % 25 === 0) {
+      console.log(`Refreshed ${downloaded}/${matched.length} files...`);
+    }
+  });
+
+  if (showProgress) {
+    process.stdout.write('\n');
+  }
+
+  return { baselineRoot: localRoot, localVersionDir, downloaded, matched: matched.length };
 }
 
 /**
@@ -388,6 +633,20 @@ export async function uploadDirectoryToR2(options: { localDir: string; remotePre
 
   walk(localDir, (filePath) => files.push(filePath));
 
+  if (files.length === 0) {
+    return 0;
+  }
+
+  let totalBytes = 0;
+  for (const filePath of files) {
+    totalBytes += fs.statSync(filePath).size;
+  }
+
+  const showProgress = shouldRenderProgress();
+  let lastUpdate = 0;
+  let lastLineLength = 0;
+  let uploadedBytes = 0;
+
   for (const filePath of files) {
     const relative = normalizePath(path.relative(localDir, filePath));
     const key = normalizedPrefix ? `${normalizedPrefix}/${relative}` : relative;
@@ -405,6 +664,28 @@ export async function uploadDirectoryToR2(options: { localDir: string; remotePre
     );
 
     uploaded += 1;
+    uploadedBytes += body.length;
+
+    if (showProgress) {
+      const now = Date.now();
+      if (now - lastUpdate > 100 || uploaded === files.length) {
+        lastLineLength = renderProgressLine({
+          label: 'Uploading',
+          uploaded,
+          total: files.length,
+          uploadedBytes,
+          totalBytes,
+          lastLineLength,
+        });
+        lastUpdate = now;
+      }
+    } else if (uploaded === files.length || uploaded % 25 === 0) {
+      console.log(`Uploaded ${uploaded}/${files.length} files...`);
+    }
+  }
+
+  if (showProgress) {
+    process.stdout.write('\n');
   }
 
   return uploaded;

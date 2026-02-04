@@ -46,7 +46,7 @@ import {
   type BrowserName,
 } from './browser-utils.js';
 import { sleep, createLogBuffer } from './utils.js';
-import { ensureBaselineDownloaded, getLatestBaselineVersion } from './r2-baselines.js';
+import { ensureBaselineDownloaded, getLatestBaselineVersion, refreshBaselineSubset } from './r2-baselines.js';
 import {
   buildStorageArgs,
   findLatestBaselineLocal,
@@ -65,6 +65,7 @@ import {
   ensureHarnessRunning,
   stopHarness,
 } from './harness-utils.js';
+import { ensureLocalTarballInstalled } from './workspace-utils.js';
 
 // Configuration
 const SCREENSHOTS_DIR = 'screenshots';
@@ -1138,8 +1139,8 @@ export async function runComparison(
     normalizedIgnorePrefixes.some((prefix) => relativePath.startsWith(prefix));
   let baselineHasAnyBrowser = false;
   let resultsHasAnyBrowser = false;
-  let baselineBrowserPrefix: string | null = null;
-  let resultsBrowserPrefix: string | null = null;
+  let baselineBrowserPrefix: string | undefined;
+  let resultsBrowserPrefix: string | undefined;
 
   // Determine baseline version to use
   let version: string;
@@ -1732,7 +1733,9 @@ function parseArgs(): {
   reportAll: boolean;
   includeWord: boolean;
   browsers: BrowserName[];
+  browserArg?: string;
   scaleFactor: number;
+  refreshBaselines: boolean;
   mode: StorageMode;
   docsDir?: string;
 } {
@@ -1754,6 +1757,7 @@ function parseArgs(): {
   let includeWord = false;
   let browserArg: string | undefined;
   let scaleFactor = 1.5;
+  let refreshBaselines = false;
   const storage = parseStorageFlags(args);
   const docsDir = resolveDocsDir(storage.mode, storage.docsDir);
 
@@ -1810,6 +1814,8 @@ function parseArgs(): {
       reportAll = true;
     } else if (args[i] === '--include-word') {
       includeWord = true;
+    } else if (args[i] === '--refresh-baselines') {
+      refreshBaselines = true;
     } else if (args[i] === '--browser' && args[i + 1]) {
       browserArg = args[i + 1];
       i++;
@@ -1848,7 +1854,9 @@ function parseArgs(): {
     reportAll,
     includeWord,
     browsers,
+    browserArg,
     scaleFactor,
+    refreshBaselines,
     mode: storage.mode,
     docsDir,
   };
@@ -1875,7 +1883,9 @@ async function main(): Promise<void> {
     reportAll,
     includeWord,
     browsers,
+    browserArg,
     scaleFactor,
+    refreshBaselines,
     mode,
     docsDir,
   } = parseArgs();
@@ -1935,7 +1945,7 @@ async function main(): Promise<void> {
           Boolean(versionSpec) &&
           !targetVersion &&
           currentSpec &&
-          normalizeVersionSpecifier(currentSpec) !== normalizeVersionSpecifier(versionSpec);
+          normalizeVersionSpecifier(currentSpec) !== normalizeVersionSpecifier(versionSpec!);
         await runBaseline({
           script,
           versionSpec,
@@ -1957,6 +1967,34 @@ async function main(): Promise<void> {
       console.log(colors.success(`✓ Baselines: ${version} ${colors.muted('(local)')}`));
       return;
     }
+
+    const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
+    const browserFilters = browserArg ? browsers : undefined;
+    if (refreshBaselines) {
+      if (hasFilters || browserFilters) {
+        const refreshed = await refreshBaselineSubset({
+          prefix: baselinePrefix,
+          version,
+          localRoot: baselineDir,
+          filters,
+          matches,
+          excludes,
+          browsers: browserFilters,
+        });
+        if (refreshed.matched === 0) {
+          console.warn(colors.warning('No baseline files matched the filters to refresh.'));
+        } else {
+          console.log(
+            colors.success(
+              `↻ Refreshed ${refreshed.downloaded} baseline file(s) for ${version} ${colors.muted('(R2)')}`,
+            ),
+          );
+        }
+        return;
+      }
+      force = true;
+    }
+
     const result = await ensureBaselineDownloaded({
       prefix: baselinePrefix,
       version,
@@ -2019,6 +2057,10 @@ async function main(): Promise<void> {
 
   if (!resultsFolderName) {
     resultsFolderName = generateResultsFolderName(undefined, new Date(), true);
+
+    if (!targetVersion) {
+      await ensureLocalTarballInstalled(process.cwd(), runVersionSwitch, (msg) => console.log(colors.muted(msg)));
+    }
 
     const { child, started } = await ensureHarnessRunning();
     try {

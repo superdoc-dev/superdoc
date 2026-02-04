@@ -93,7 +93,6 @@ export async function waitForPort(
  */
 export async function ensureHarnessRunning(): Promise<{ child: ChildProcess | null; started: boolean }> {
   if (await isPortOpen(HARNESS_PORT)) {
-    console.log(colors.info(`Harness already running at ${HARNESS_URL}`));
     return { child: null, started: false };
   }
 

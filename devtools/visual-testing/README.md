@@ -65,6 +65,7 @@ Examples:
 - `pnpm compare:visual` compare visual snapshots only.
 - `pnpm compare:interactions` compare interaction snapshots only.
 - `pnpm upload --folder <name> <file.docx>` upload a single docx into the corpus and update `registry.json`.
+- `pnpm get-corpus [dest] --filter <name>` download corpus docs into a local folder (default: `./test-docs`).
 - `pnpm filters` list filterable folders for `--filter`.
 - `pnpm clear:all` remove all baselines, screenshots, and results.
 - `pnpm test` run tests.
@@ -79,6 +80,7 @@ Notes:
 - `--target` compares two versions (or a version vs a local path). It uses existing baselines in R2 and generates fresh results.
 - `--target` cannot be used with `--folder`.
 - `--target` is supported on compare commands (not on generate).
+- If `packages/superdoc/superdoc.tgz` exists, compare will auto-switch to it when no `--target` or `--folder` is provided.
 
 ## Common flags
 
@@ -93,6 +95,7 @@ Notes:
 - Default is **all browsers** when `--browser` is omitted. Use `--browser chromium` to run just one.
 - `SUPERDOC_TEST_BROWSER=<list>` env var can be used instead of `--browser`.
 - Running all browsers requires Playwright browsers installed: `pnpm exec playwright install`
+- `--refresh-baselines` re-download baseline files from R2 for the current filters (or full baseline if no filters).
 - `--local` use local docs and local baselines/results (no R2).
 - `--docs <path>` local docs root (required when using `--local`).
 

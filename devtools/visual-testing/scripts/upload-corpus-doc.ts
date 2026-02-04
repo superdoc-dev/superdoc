@@ -123,7 +123,7 @@ async function fetchRegistry(client: S3Client, bucket: string): Promise<CorpusRe
   } catch (error) {
     const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
     if (status === 404 || (error as Error).name === 'NoSuchKey') {
-      throw new Error('registry.json not found. Run pnpm sync-corpus first.');
+      throw new Error('registry.json not found. Run pnpm upload-corpus first.');
     }
     throw error;
   }

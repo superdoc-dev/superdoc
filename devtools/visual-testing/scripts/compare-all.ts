@@ -24,7 +24,7 @@ import {
 import { findMissingDocuments } from './compare.js';
 import { resolveBrowserNames, resolveBaselineFolderForBrowser, type BrowserName } from './browser-utils.js';
 import { runCommand, isPortOpen, HARNESS_PORT, HARNESS_URL } from './harness-utils.js';
-import { ensureBaselineDownloaded, getLatestBaselineVersion } from './r2-baselines.js';
+import { ensureBaselineDownloaded, getLatestBaselineVersion, refreshBaselineSubset } from './r2-baselines.js';
 import {
   buildStorageArgs,
   findLatestBaselineLocal,
@@ -49,7 +49,9 @@ interface CompareAllArgs {
   includeWord?: boolean;
   compareBaselines?: boolean;
   browsers: BrowserName[];
+  browserArg?: string;
   scaleFactor: number;
+  refreshBaselines: boolean;
   mode: StorageMode;
   docsDir?: string;
 }
@@ -68,6 +70,7 @@ function parseArgs(): CompareAllArgs {
   let compareBaselines = false;
   let browserArg: string | undefined;
   let scaleFactor = 1.5;
+  let refreshBaselines = false;
   const storage = parseStorageFlags(args);
   const docsDir = resolveDocsDir(storage.mode, storage.docsDir);
 
@@ -118,6 +121,8 @@ function parseArgs(): CompareAllArgs {
     } else if (arg === '--browser' && args[i + 1]) {
       browserArg = args[i + 1];
       i++;
+    } else if (arg === '--refresh-baselines') {
+      refreshBaselines = true;
     } else if (arg === '--docs' && args[i + 1]) {
       i++;
     } else if (!arg.startsWith('--') && !baselineVersion) {
@@ -139,7 +144,9 @@ function parseArgs(): CompareAllArgs {
     includeWord,
     compareBaselines,
     browsers,
+    browserArg,
     scaleFactor,
+    refreshBaselines,
     mode: storage.mode,
     docsDir,
   };
@@ -505,7 +512,9 @@ async function main(): Promise<void> {
     includeWord,
     compareBaselines,
     browsers,
+    browserArg,
     scaleFactor,
+    refreshBaselines,
     mode,
     docsDir,
   } = parseArgs();
@@ -571,6 +580,32 @@ async function main(): Promise<void> {
       console.log(colors.success(`✓ Visual baselines: ${version} ${colors.muted('(local)')}`));
       return;
     }
+    const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
+    const browserFilters = browserArg ? browsers : undefined;
+    if (refreshBaselines) {
+      if (hasFilters || browserFilters) {
+        const refreshed = await refreshBaselineSubset({
+          prefix: BASELINES_DIR,
+          version,
+          localRoot: baselineDir,
+          filters,
+          matches,
+          excludes,
+          browsers: browserFilters,
+        });
+        if (refreshed.matched === 0) {
+          console.warn(colors.warning('No visual baseline files matched the filters to refresh.'));
+        } else {
+          console.log(
+            colors.success(
+              `↻ Refreshed ${refreshed.downloaded} visual baseline file(s) for ${version} ${colors.muted('(R2)')}`,
+            ),
+          );
+        }
+        return;
+      }
+      force = true;
+    }
     const result = await ensureBaselineDownloaded({
       prefix: BASELINES_DIR,
       version,
@@ -611,6 +646,32 @@ async function main(): Promise<void> {
       }
       console.log(colors.success(`✓ Interaction baselines: ${version} ${colors.muted('(local)')}`));
       return;
+    }
+    const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
+    const browserFilters = browserArg ? browsers : undefined;
+    if (refreshBaselines) {
+      if (hasFilters || browserFilters) {
+        const refreshed = await refreshBaselineSubset({
+          prefix: 'baselines-interactions',
+          version,
+          localRoot: interactionsBaselineDir,
+          filters,
+          matches,
+          excludes,
+          browsers: browserFilters,
+        });
+        if (refreshed.matched === 0) {
+          console.warn(colors.warning('No interaction baseline files matched the filters to refresh.'));
+        } else {
+          console.log(
+            colors.success(
+              `↻ Refreshed ${refreshed.downloaded} interaction baseline file(s) for ${version} ${colors.muted('(R2)')}`,
+            ),
+          );
+        }
+        return;
+      }
+      force = true;
     }
     const result = await ensureBaselineDownloaded({
       prefix: 'baselines-interactions',

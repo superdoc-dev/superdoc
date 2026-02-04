@@ -25,7 +25,7 @@ import {
   parseVersionInput,
 } from './version-utils.js';
 import { runCommand, isPortOpen, HARNESS_PORT, HARNESS_URL } from './harness-utils.js';
-import { ensureBaselineDownloaded, getLatestBaselineVersion } from './r2-baselines.js';
+import { ensureBaselineDownloaded, getLatestBaselineVersion, refreshBaselineSubset } from './r2-baselines.js';
 import {
   buildStorageArgs,
   findLatestBaselineLocal,
@@ -34,6 +34,7 @@ import {
   resolveDocsDir,
   type StorageMode,
 } from './storage-flags.js';
+import { ensureLocalTarballInstalled } from './workspace-utils.js';
 
 const BASELINES_DIR = 'baselines-interactions';
 
@@ -49,6 +50,7 @@ interface CompareInteractionArgs {
   excludes: string[];
   browserArg?: string;
   scaleFactor: number;
+  refreshBaselines: boolean;
   mode: StorageMode;
   docsDir?: string;
 }
@@ -66,6 +68,7 @@ function parseArgs(): CompareInteractionArgs {
   const excludes: string[] = [];
   let browserArg: string | undefined;
   let scaleFactor = 1.5;
+  let refreshBaselines = false;
   const storage = parseStorageFlags(args);
   const docsDir = resolveDocsDir(storage.mode, storage.docsDir);
 
@@ -115,6 +118,8 @@ function parseArgs(): CompareInteractionArgs {
     } else if (arg === '--browser' && args[i + 1]) {
       browserArg = args[i + 1];
       i++;
+    } else if (arg === '--refresh-baselines') {
+      refreshBaselines = true;
     } else if (arg === '--docs' && args[i + 1]) {
       i++;
     } else if (!arg.startsWith('--') && !baselineVersion) {
@@ -138,6 +143,7 @@ function parseArgs(): CompareInteractionArgs {
     excludes,
     browserArg,
     scaleFactor,
+    refreshBaselines,
     mode: storage.mode,
     docsDir,
   };
@@ -293,6 +299,7 @@ async function main(): Promise<void> {
     excludes,
     browserArg,
     scaleFactor,
+    refreshBaselines,
     mode,
     docsDir,
   } = parseArgs();
@@ -332,7 +339,7 @@ async function main(): Promise<void> {
           Boolean(versionSpec) &&
           !targetVersion &&
           currentSpec &&
-          normalizeVersionSpecifier(currentSpec) !== normalizeVersionSpecifier(versionSpec);
+          normalizeVersionSpecifier(currentSpec) !== normalizeVersionSpecifier(versionSpec!);
         await runBaselineLocal({
           versionSpec,
           filters,
@@ -353,6 +360,34 @@ async function main(): Promise<void> {
       console.log(colors.success(`✓ Interaction baselines: ${version} ${colors.muted('(local)')}`));
       return;
     }
+
+    const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
+    const browserFilters = browserArg ? browsers : undefined;
+    if (refreshBaselines) {
+      if (hasFilters || browserFilters) {
+        const refreshed = await refreshBaselineSubset({
+          prefix: BASELINES_DIR,
+          version,
+          localRoot: baselineDir,
+          filters,
+          matches,
+          excludes,
+          browsers: browserFilters,
+        });
+        if (refreshed.matched === 0) {
+          console.warn(colors.warning('No interaction baseline files matched the filters to refresh.'));
+        } else {
+          console.log(
+            colors.success(
+              `↻ Refreshed ${refreshed.downloaded} interaction baseline file(s) for ${version} ${colors.muted('(R2)')}`,
+            ),
+          );
+        }
+        return;
+      }
+      force = true;
+    }
+
     const result = await ensureBaselineDownloaded({
       prefix: BASELINES_DIR,
       version,
@@ -409,6 +444,9 @@ async function main(): Promise<void> {
 
   if (!resultsFolderName) {
     resultsFolderName = output || generateResultsFolderName(undefined, new Date(), true);
+    if (!targetVersion) {
+      await ensureLocalTarballInstalled(process.cwd(), runVersionSwitch, (msg) => console.log(colors.muted(msg)));
+    }
     console.log(colors.muted(`Generating: ${resultsFolderName}`));
     await runGenerate(resultsFolderName, filters, matches, excludes, browserArg, scaleFactor, storageArgs);
   }

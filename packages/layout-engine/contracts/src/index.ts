@@ -56,12 +56,15 @@ export type FieldAnnotationMetadata = {
   marks?: Record<string, unknown>;
 };
 
+export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
+
 export type StructuredContentMetadata = {
   type: 'structuredContent';
   scope: 'inline' | 'block';
   id?: string | null;
   tag?: string | null;
   alias?: string | null;
+  lockMode?: StructuredContentLockMode;
   sdtPr?: unknown;
 };
 

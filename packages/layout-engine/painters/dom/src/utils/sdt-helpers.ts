@@ -6,7 +6,7 @@
  * duplication across rendering logic.
  */
 
-import type { SdtMetadata } from '@superdoc/contracts';
+import type { SdtMetadata, StructuredContentLockMode } from '@superdoc/contracts';
 
 /**
  * Type guard for StructuredContentMetadata with specific properties.
@@ -24,9 +24,12 @@ import type { SdtMetadata } from '@superdoc/contracts';
  * }
  * ```
  */
-export function isStructuredContentMetadata(
-  sdt: SdtMetadata | null | undefined,
-): sdt is { type: 'structuredContent'; scope: 'inline' | 'block'; alias?: string | null } {
+export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is {
+  type: 'structuredContent';
+  scope: 'inline' | 'block';
+  alias?: string | null;
+  lockMode?: StructuredContentLockMode;
+} {
   return (
     sdt !== null && sdt !== undefined && typeof sdt === 'object' && 'type' in sdt && sdt.type === 'structuredContent'
   );
@@ -256,6 +259,12 @@ export function applySdtContainerStyling(
   container.dataset.sdtContainerStart = String(isStart);
   container.dataset.sdtContainerEnd = String(isEnd);
   container.style.overflow = 'visible'; // Allow label to show above
+
+  if (isStructuredContentMetadata(sdt)) {
+    container.dataset.lockMode = sdt.lockMode || 'unlocked';
+  } else if (isStructuredContentMetadata(containerSdt)) {
+    container.dataset.lockMode = containerSdt.lockMode || 'unlocked';
+  }
 
   if (boundaryOptions?.widthOverride != null) {
     container.style.width = `${boundaryOptions.widthOverride}px`;

@@ -453,6 +453,43 @@ const SDT_CONTAINER_STYLES = `
   display: block;
 }
 
+/* Lock mode styles for structured content - matches Word appearance exactly */
+/* Default: background color only, no border. Border appears on hover/focus */
+
+/* unlocked: light mint green - fully editable and deletable */
+.superdoc-structured-content-block[data-lock-mode="unlocked"],
+.superdoc-structured-content-inline[data-lock-mode="unlocked"] {
+  background-color: #e6f4ea;
+  border: 1px solid transparent;
+}
+
+/* sdtLocked: golden yellow - SDT cannot be deleted but content can be edited */
+.superdoc-structured-content-block[data-lock-mode="sdtLocked"],
+.superdoc-structured-content-inline[data-lock-mode="sdtLocked"] {
+  background-color: #fff3cd;
+  border: 1px solid transparent;
+}
+
+/* contentLocked: light blue/lavender - content is read-only but SDT can be deleted */
+.superdoc-structured-content-block[data-lock-mode="contentLocked"],
+.superdoc-structured-content-inline[data-lock-mode="contentLocked"] {
+  background-color: #e8f0f8;
+  border: 1px solid transparent;
+}
+
+/* sdtContentLocked: light peach/salmon - fully locked */
+.superdoc-structured-content-block[data-lock-mode="sdtContentLocked"],
+.superdoc-structured-content-inline[data-lock-mode="sdtContentLocked"] {
+  background-color: #ffe8e0;
+  border: 1px solid transparent;
+}
+
+/* Show blue border on hover for all lock modes */
+.superdoc-structured-content-block[data-lock-mode]:hover,
+.superdoc-structured-content-inline[data-lock-mode]:hover {
+  border-color: #629be7;
+}
+
 /* Viewing mode: remove structured content affordances */
 .presentation-editor--viewing .superdoc-structured-content-block,
 .presentation-editor--viewing .superdoc-structured-content-inline {

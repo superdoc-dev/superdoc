@@ -5113,6 +5113,7 @@ export class DomPainter {
     'sdtScope',
     'sdtTag',
     'sdtAlias',
+    'lockMode',
     'sdtSectionTitle',
     'sdtSectionType',
     'sdtSectionLocked',
@@ -5169,6 +5170,7 @@ export class DomPainter {
       this.setDatasetString(el, 'sdtScope', metadata.scope);
       this.setDatasetString(el, 'sdtTag', metadata.tag);
       this.setDatasetString(el, 'sdtAlias', metadata.alias);
+      this.setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
     } else if (metadata.type === 'documentSection') {
       this.setDatasetString(el, 'sdtSectionTitle', metadata.title);
       this.setDatasetString(el, 'sdtSectionType', metadata.sectionType);

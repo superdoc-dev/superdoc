@@ -593,6 +593,8 @@ export interface HardBreakAttrs extends InlineNodeAttributes {
 // STRUCTURED CONTENT
 // ============================================
 
+export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
+
 /** Structured content node attributes */
 export interface StructuredContentAttrs extends BlockNodeAttributes {
   /** Unique identifier */
@@ -607,6 +609,8 @@ export interface StructuredContentAttrs extends BlockNodeAttributes {
   description?: string;
   /** Whether the content is locked */
   isLocked?: boolean;
+  /** Lock mode */
+  lockMode?: StructuredContentLockMode;
 }
 
 // ============================================

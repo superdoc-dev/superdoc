@@ -292,6 +292,19 @@ describe('collaboration helpers', () => {
     expect(useCommentMock).toHaveBeenCalledTimes(2);
   });
 
+  it('initCollaborationComments loads existing comments from ydoc on init', () => {
+    commentsArray.items = [
+      new MockYMap(Object.entries({ commentId: 'c1', text: 'Hello' })),
+      new MockYMap(Object.entries({ commentId: 'c1', text: 'Duplicate' })),
+      new MockYMap(Object.entries({ commentId: 'c2', text: 'Another' })),
+    ];
+
+    initCollaborationComments(superdoc);
+
+    expect(useCommentMock).toHaveBeenCalledTimes(2);
+    expect(superdoc.commentsStore.commentsList).toEqual([{ normalized: 'c1' }, { normalized: 'c2' }]);
+  });
+
   it('initCollaborationComments skips when module disabled', () => {
     superdoc.config.modules.comments = false;
     initCollaborationComments(superdoc);

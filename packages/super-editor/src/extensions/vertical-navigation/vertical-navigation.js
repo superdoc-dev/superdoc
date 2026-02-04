@@ -81,7 +81,6 @@ export const VerticalNavigation = Extension.create({
          * @returns {boolean} Whether the event was handled.
          */
         handleKeyDown(view, event) {
-
           // Guard clauses
           if (view.composing || !editor.isEditable) return false;
           if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
@@ -112,9 +111,7 @@ export const VerticalNavigation = Extension.create({
           if (goalX == null) {
             goalX = coords?.x;
             if (!Number.isFinite(goalX)) return false;
-            view.dispatch(
-              view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'set-goal-x', goalX }),
-            );
+            view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'set-goal-x', goalX }));
           }
 
           // 2. Find adjacent line
@@ -128,7 +125,11 @@ export const VerticalNavigation = Extension.create({
           // 4. Move selection
           const selection = buildSelection(view.state, hit.pos, event.shiftKey);
           if (!selection) return false;
-          view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX }).setSelection(selection));
+          view.dispatch(
+            view.state.tr
+              .setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX })
+              .setSelection(selection),
+          );
           return true;
         },
         handleDOMEvents: {
@@ -186,11 +187,15 @@ function isPresenting(editor) {
  * @returns {{ clientX: number, clientY: number, height: number, x: number, y: number } | null}
  */
 function getCurrentCoords(editor, selection) {
-
   const presentationEditor = editor.presentationEditor;
   const layoutSpaceCoords = presentationEditor.computeCaretLayoutRect(selection.head);
   if (!layoutSpaceCoords) return null;
-  const clientCoords = presentationEditor.denormalizeClientPoint(layoutSpaceCoords.x, layoutSpaceCoords.y, layoutSpaceCoords.pageIndex, layoutSpaceCoords.height);
+  const clientCoords = presentationEditor.denormalizeClientPoint(
+    layoutSpaceCoords.x,
+    layoutSpaceCoords.y,
+    layoutSpaceCoords.pageIndex,
+    layoutSpaceCoords.height,
+  );
   return {
     clientX: clientCoords.x,
     clientY: clientCoords.y,
@@ -222,7 +227,7 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
   const clientY = rect.top + rect.height / 2;
   if (!Number.isFinite(clientY)) return null;
   return {
-    clientY: rect.top + rect.height / 2,
+    clientY,
     pageIndex: Number.isFinite(pageIndex) ? pageIndex : undefined,
   };
 }

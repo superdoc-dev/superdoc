@@ -2,6 +2,8 @@ packages:
   - e2e-tests
   - e2e-tests/templates/vue
   - apps/*
+  - devtools/visual-testing
+  - devtools/visual-testing/packages/*
   - packages/**/*
   - shared/*
 
@@ -106,8 +108,11 @@ catalog:
   yjs: 13.6.19
 
 onlyBuiltDependencies:
+  - '@vscode/vsce-sign'
   - canvas
   - esbuild
+  - keytar
+  - lefthook
   - puppeteer
   - sharp
   - unrs-resolver

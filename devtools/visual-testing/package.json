@@ -1,0 +1,49 @@
+{
+  "name": "superdoc-visual-testing",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.25.0",
+  "scripts": {
+    "dev": "pnpm --filter @superdoc-testing/harness dev",
+    "build": "pnpm --filter @superdoc-testing/harness build",
+    "preview": "pnpm --filter @superdoc-testing/harness preview",
+    "version": "tsx scripts/set-superdoc-version.ts",
+    "superdoc": "tsx scripts/set-superdoc-version.ts",
+    "superdoc:version": "node -p \"require('./packages/harness/node_modules/superdoc/package.json').version\"",
+    "generate": "tsx scripts/generate-all.ts",
+    "generate:visual": "tsx scripts/generate-refs.ts",
+    "generate:interactions": "tsx scripts/generate-interactions.ts",
+    "baseline": "tsx scripts/baseline-all.ts",
+    "baseline:visual": "tsx scripts/baseline-visual.ts",
+    "baseline:interactions": "tsx scripts/baseline-interactions.ts",
+    "compare": "tsx scripts/compare-all.ts",
+    "compare:visual": "tsx scripts/compare.ts",
+    "compare:interactions": "tsx scripts/compare-interactions.ts",
+    "sync-corpus": "tsx scripts/sync-corpus-to-r2.ts",
+    "upload": "tsx scripts/upload-corpus-doc.ts",
+    "filters": "tsx scripts/list-filters.ts",
+    "clear:all": "read -p 'This will delete all baselines, screenshots, and results. Are you sure? (y/N) ' confirm && [ \"$confirm\" = 'y' ] && rm -rf baselines baselines-interactions screenshots results && echo 'Cleared!' || echo 'Aborted.'",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^22.15.21",
+    "@types/pngjs": "^6.0.5",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.500.0",
+    "kleur": "^4.1.5"
+  }
+}

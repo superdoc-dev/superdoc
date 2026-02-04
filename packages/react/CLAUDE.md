@@ -73,6 +73,7 @@ These props cause the SuperDoc instance to be destroyed and recreated:
 - `users` - users list changed
 - `modules` - module config changed
 - `role` - permission level changed
+- `hideToolbar` - toolbar visibility changed
 
 Other props like `documentMode` and callbacks are handled without rebuild.
 

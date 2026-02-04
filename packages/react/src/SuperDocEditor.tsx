@@ -1,6 +1,26 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
 import { generateId } from './utils';
-import type { DocumentMode, SuperDocEditorProps, SuperDocInstance, SuperDocRef } from './types';
+import type {
+  DocumentMode,
+  SuperDocEditorProps,
+  SuperDocInstance,
+  SuperDocRef,
+  SuperDocReadyEvent,
+  SuperDocEditorCreateEvent,
+  SuperDocEditorUpdateEvent,
+  SuperDocContentErrorEvent,
+  SuperDocExceptionEvent,
+} from './types';
+
+/** Callback props type for the ref */
+type CallbacksType = {
+  onReady?: (event: SuperDocReadyEvent) => void;
+  onEditorCreate?: (event: SuperDocEditorCreateEvent) => void;
+  onEditorDestroy?: () => void;
+  onEditorUpdate?: (event: SuperDocEditorUpdateEvent) => void;
+  onContentError?: (event: SuperDocContentErrorEvent) => void;
+  onException?: (event: SuperDocExceptionEvent) => void;
+};
 
 /**
  * SuperDocEditor - React wrapper component for SuperDoc
@@ -14,6 +34,7 @@ import type { DocumentMode, SuperDocEditorProps, SuperDocInstance, SuperDocRef }
  */
 function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<SuperDocRef>) {
   const [isClient, setIsClient] = useState(false);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -61,7 +82,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const [isLoading, setIsLoading] = useState(true);
 
   // Store callbacks in refs to avoid triggering effect on callback changes
-  const callbacksRef = useRef({
+  const callbacksRef = useRef<CallbacksType>({
     onReady,
     onEditorCreate,
     onEditorDestroy,
@@ -85,6 +106,9 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   // Queue mode changes that happen during init
   const pendingModeRef = useRef<DocumentMode | null>(null);
   const isInitializingRef = useRef(false);
+
+  // Capture the initial documentMode for the effect
+  const initialDocumentModeRef = useRef(documentMode);
 
   // Track documentMode changes and apply imperatively
   const prevDocumentModeRef = useRef(documentMode);
@@ -115,9 +139,14 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // Wait for client-side render so the container div exists in DOM
     if (!isClient) return;
 
-    // Reset loading state when document changes
+    // Reset states when document changes
     setIsLoading(true);
+    setHasError(false);
     isInitializingRef.current = true;
+
+    // Capture the current documentMode for this effect run
+    const effectDocumentMode = initialDocumentModeRef.current;
+    initialDocumentModeRef.current = documentMode;
 
     let destroyed = false;
     let instance: SuperDocInstance | null = null;
@@ -126,8 +155,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
       try {
         // Dynamic import for SSR safety
         const modulePath = 'superdoc';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const superdocModule: any = await import(/* @vite-ignore */ modulePath);
+        const superdocModule = await import(/* @vite-ignore */ modulePath);
         const SuperDoc = superdocModule.SuperDoc as new (config: Record<string, unknown>) => SuperDocInstance;
 
         // Check if we were destroyed while loading
@@ -139,20 +167,20 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
           selector: `#${CSS.escape(containerId)}`,
           // Use internal toolbar container unless hideToolbar is true
           ...(!hideToolbar && toolbarContainerRef.current ? { toolbar: `#${CSS.escape(toolbarId)}` } : {}),
-          documentMode,
+          documentMode: effectDocumentMode,
           role,
           ...(documentProp != null ? { document: documentProp } : {}),
           ...(user ? { user } : {}),
           ...(users ? { users } : {}),
           ...(modules ? { modules } : {}),
           // Wire up callbacks with lifecycle guards
-          onReady: (event: { superdoc: SuperDocInstance }) => {
+          onReady: (event: SuperDocReadyEvent) => {
             if (!destroyed) {
               setIsLoading(false);
               isInitializingRef.current = false;
 
               // Apply any pending mode changes
-              if (pendingModeRef.current && pendingModeRef.current !== documentMode) {
+              if (pendingModeRef.current && pendingModeRef.current !== effectDocumentMode) {
                 event.superdoc.setDocumentMode(pendingModeRef.current);
                 pendingModeRef.current = null;
               }
@@ -160,8 +188,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
               callbacksRef.current.onReady?.(event);
             }
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onEditorCreate: (event: any) => {
+          onEditorCreate: (event: SuperDocEditorCreateEvent) => {
             if (!destroyed) {
               callbacksRef.current.onEditorCreate?.(event);
             }
@@ -171,19 +198,17 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
               callbacksRef.current.onEditorDestroy?.();
             }
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onEditorUpdate: (event: any) => {
+          onEditorUpdate: (event: SuperDocEditorUpdateEvent) => {
             if (!destroyed) {
               callbacksRef.current.onEditorUpdate?.(event);
             }
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onContentError: (event: any) => {
+          onContentError: (event: SuperDocContentErrorEvent) => {
             if (!destroyed) {
               callbacksRef.current.onContentError?.(event);
             }
           },
-          onException: (event: { error: Error }) => {
+          onException: (event: SuperDocExceptionEvent) => {
             if (!destroyed) {
               callbacksRef.current.onException?.(event);
             }
@@ -195,6 +220,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
       } catch (error) {
         if (!destroyed) {
           isInitializingRef.current = false;
+          setIsLoading(false);
+          setHasError(true);
           console.error('[SuperDocEditor] Failed to initialize SuperDoc:', error);
           callbacksRef.current.onException?.({ error: error as Error });
         }
@@ -216,7 +243,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // Only these props trigger a full rebuild. Other props (rulers, etc.) are
     // initial values - use getInstance() methods to change them at runtime.
     // Note: restProps is intentionally excluded to avoid rebuilds on every render.
-  }, [isClient, documentProp, user, users, modules, role, hideToolbar]);
+    // documentMode is handled separately via setDocumentMode() for efficiency.
+  }, [isClient, documentProp, user, users, modules, role, hideToolbar, containerId, toolbarId]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
 
@@ -233,7 +261,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     <div className={wrapperClassName} style={style}>
       {!hideToolbar && <div ref={toolbarContainerRef} id={toolbarId} className='superdoc-toolbar-container' />}
       <div id={containerId} className='superdoc-editor-container' />
-      {isLoading && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
+      {isLoading && !hasError && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
+      {hasError && <div className='superdoc-error-container'>Failed to load editor. Check console for details.</div>}
     </div>
   );
 }

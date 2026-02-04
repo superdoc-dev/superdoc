@@ -17,7 +17,7 @@ A TypeScript example demonstrating `@superdoc-dev/react` integration with full t
 ```bash
 # From repo root
 pnpm install
-pnpm -C examples/getting-started/react-with-typescript dev
+pnpm -C examples/getting-started/react dev
 ```
 
 ## Key Types Used

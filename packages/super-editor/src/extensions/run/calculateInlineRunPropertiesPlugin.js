@@ -84,7 +84,7 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         const inlineRunProperties = getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles);
         const runProperties = Object.keys(inlineRunProperties).length ? inlineRunProperties : null;
 
-        const isFirstInParagraph = $pos.parent.firstChild === runNode;
+        const isFirstInParagraph = $pos.parent.firstChild === runNode && $pos.parent.type === paragraphNode.type;
 
         if (isFirstInParagraph) {
           // Keep paragraph's default runProperties in sync for the first run

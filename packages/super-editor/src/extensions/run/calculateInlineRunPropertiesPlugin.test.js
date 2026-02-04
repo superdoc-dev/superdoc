@@ -173,6 +173,25 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(paragraph.attrs.paragraphProperties).toEqual({ runProperties: { bold: true } });
   });
 
+  it('does not treat nested runs as the paragraph first run', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [schema.node('run', null, [schema.node('run', null, schema.text('Nested'))])]),
+    ]);
+    const state = createState(schema, doc);
+    const [, innerRunPos] = runPositions(state.doc);
+    const from = innerRunPos + 1;
+    const to = innerRunPos + 3;
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const paragraph = nextState.doc.firstChild;
+    expect(paragraph.attrs.paragraphProperties?.runProperties?.bold).toBeUndefined();
+    const innerRun = nextState.doc.nodeAt(innerRunPos);
+    expect(innerRun?.attrs.runProperties).toEqual({ bold: true });
+  });
+
   it('does not update paragraph runProperties when a non-first run changes', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [

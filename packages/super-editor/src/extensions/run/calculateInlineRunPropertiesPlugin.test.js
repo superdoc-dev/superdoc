@@ -93,6 +93,11 @@ const runTextRange = (doc, startIndex, endIndex) => {
   return { from: base + 1 + startIndex, to: base + 1 + endIndex };
 };
 
+const runTextRangeAtPos = (runNodePos, startIndex, endIndex) => ({
+  from: runNodePos + 1 + startIndex,
+  to: runNodePos + 1 + endIndex,
+});
+
 const positionAtTextOffset = (doc, offset) => {
   let remaining = offset;
   let pos = null;
@@ -330,5 +335,31 @@ describe('calculateInlineRunPropertiesPlugin', () => {
 
     const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
     expect(runNode?.attrs.runProperties).toEqual({ rsidR: 'r1' });
+  });
+
+  it('maps changed ranges through later transactions', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [schema.node('run', null, schema.text('AAA'))]),
+      schema.node('paragraph', null, [schema.node('run', null, schema.text('Hello'))]),
+    ]);
+    const state = createState(schema, doc);
+    const [firstRunPos, secondRunPos] = runPositions(state.doc);
+    const { from, to } = runTextRangeAtPos(secondRunPos, 0, 2); // "He"
+
+    const tr1 = state.tr.addMark(from, to, schema.marks.bold.create());
+    const state1 = state.apply(tr1);
+
+    const [firstRunPosAfter] = runPositions(state1.doc);
+    const tr2 = state1.tr.insertText('BBB', firstRunPosAfter + 1);
+    const state2 = state1.apply(tr2);
+
+    const plugin = calculateInlineRunPropertiesPlugin({ converter: { convertedXml: {}, numbering: {} } });
+    const appended = plugin.spec.appendTransaction([tr1, tr2], state, state2);
+    const finalState = appended ? state2.apply(appended) : state2;
+
+    const runs = runPositions(finalState.doc);
+    const boldRun = finalState.doc.nodeAt(runs[1]);
+    expect(boldRun?.attrs.runProperties).toEqual({ bold: true });
   });
 });

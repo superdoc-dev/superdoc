@@ -6,6 +6,7 @@ import {
   getResolvedParagraphProperties,
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { carbonCopy } from '@core/utilities/carbonCopy';
+import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 
 const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'strike',
@@ -47,17 +48,10 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
       if (!runType) return null;
 
       // Find all runs affected by changes, regardless of step type
-      const changedRanges = [];
-      transactions.forEach((tr) => {
-        tr.steps.forEach((step) => {
-          const from = tr.mapping.map(step.from, 1);
-          const to = tr.mapping.map(step.to, -1);
-          changedRanges.push({ from, to });
-        });
-      });
+      const changedRanges = collectChangedRangesThroughTransactions(transactions, newState.doc.content.size);
 
       const runPositions = new Set();
-      mergeRanges(changedRanges, newState.doc.content.size).forEach(({ from, to }) => {
+      changedRanges.forEach(({ from, to }) => {
         newState.doc.nodesBetween(from, to, (node, pos) => {
           if (node.type === runType) runPositions.add(pos);
         });
@@ -126,34 +120,6 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
   });
 
 /**
- * Merges overlapping ranges while clamping bounds to the document size.
- *
- * @param {{ from: number, to: number }[]} ranges Ranges to merge.
- * @param {number} docSize Size of the document to constrain ranges within.
- * @returns {{ from: number, to: number }[]} Sorted, non-overlapping ranges.
- */
-function mergeRanges(ranges, docSize) {
-  if (!ranges.length) return [];
-  const sorted = ranges
-    .map(({ from, to }) => ({
-      from: Math.max(0, from),
-      to: Math.min(docSize, to),
-    }))
-    .filter(({ from, to }) => from < to)
-    .sort((a, b) => a.from - b.from);
-
-  const merged = [];
-  for (const range of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && range.from <= last.to) {
-      last.to = Math.max(last.to, range.to);
-    } else {
-      merged.push({ ...range });
-    }
-  }
-  return merged;
-}
-
 /**
  * Split a run node into segments whose inline runProperties match for adjacent content.
  *

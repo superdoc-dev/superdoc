@@ -64,7 +64,12 @@ if (!isPrerelease) {
 }
 
 // Linear integration - labels issues with version on release
-config.plugins.push(['semantic-release-linear-app', { teamKeys: ['SD'], addComment: true, packageName: 'superdoc' }])
+config.plugins.push(['semantic-release-linear-app', {
+  teamKeys: ['SD'],
+  addComment: true,
+  packageName: 'superdoc',
+  commentTemplate: 'shipped in {package} {releaseLink} {channel}'
+}])
 
 // GitHub plugin comes last
 config.plugins.push([

@@ -19,6 +19,14 @@ pre-commit:
       root: "apps/cli/"
       glob: "apps/cli/**/*.ts"
       run: pnpm run test
+    vscode-build:
+      root: "apps/vscode-ext/"
+      glob: "apps/vscode-ext/**/*.{ts,js}"
+      run: pnpm run build
+    vscode-lint:
+      root: "apps/vscode-ext/"
+      glob: "apps/vscode-ext/**/*.{ts,js}"
+      run: pnpm run lint
 
 commit-msg:
   commands:

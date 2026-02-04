@@ -1,0 +1,96 @@
+{
+  "name": "superdoc-vscode-ext",
+  "displayName": "SuperDoc for VS Code",
+  "description": "Open and edit Word documents (.docx) directly in VS Code using SuperDoc",
+  "version": "0.0.0",
+  "publisher": "superdoc",
+  "repository": "https://github.com/superdoc-dev/superdoc",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "docx",
+    "word",
+    "document",
+    "editor",
+    "superdoc"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "superdoc.docxEditor",
+        "displayName": "SuperDoc Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.docx"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "superdoc.openWithSuperdoc",
+        "title": "Open with SuperDoc"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .docx",
+          "command": "superdoc.openWithSuperdoc",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SuperDoc",
+      "properties": {
+        "superdoc.autoSaveDelay": {
+          "type": "number",
+          "default": 1000,
+          "description": "Delay in milliseconds before auto-saving after an edit"
+        },
+        "superdoc.enableAutoSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic saving of document changes"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "pnpm run compile:ext && pnpm run compile:webview && pnpm run copy-assets",
+    "compile:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "compile:webview": "esbuild webview/main.js --bundle --outfile=dist/webview/main.js --format=esm --platform=browser --target=es2020 --loader:.css=text",
+    "copy-assets": "cp webview/style.css dist/webview/",
+    "build": "pnpm run compile",
+    "watch": "pnpm run compile:ext -- --watch",
+    "package": "vsce package --no-dependencies",
+    "publish:vsce": "vsce publish",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "release": "pnpx semantic-release",
+    "release:dry-run": "pnpx semantic-release --dry-run",
+    "vscode:prepublish": "pnpm run build"
+  },
+  "devDependencies": {
+    "@semantic-release/exec": "^6.0.3",
+    "@types/node": "catalog:",
+    "@types/vscode": "^1.107.0",
+    "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.19.12",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "superdoc": "workspace:*"
+  },
+  "license": "AGPL-3.0"
+}

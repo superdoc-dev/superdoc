@@ -1,7 +1,9 @@
 name: OOXML Spec Compliance Review
 
 on:
+  workflow_dispatch:
   pull_request:
+    types: [opened]
     paths:
       - 'packages/super-editor/src/core/super-converter/v2/importer/**'
       - 'packages/super-editor/src/core/super-converter/v2/exporter/**'

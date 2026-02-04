@@ -3,70 +3,164 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock');
 
 /**
- * Collects the ranges affected by a transaction, based on the document BEFORE the change.
- * @param {import('prosemirror-state').Transaction} tr
- * @returns {Array<{ from: number, to: number }>}
+ * Lock enforcement plugin for StructuredContent nodes.
+ *
+ * Lock modes (ECMA-376 w:lock):
+ * - unlocked: No restrictions
+ * - sdtLocked: Cannot delete the SDT wrapper (content editable)
+ * - contentLocked: Cannot edit content (can delete wrapper)
+ * - sdtContentLocked: Cannot delete wrapper OR edit content
+ *
+ * Strategy:
+ * 1. handleKeyDown - Intercept keys BEFORE transaction to prevent browser selection issues
+ * 2. filterTransaction - Safety net to catch programmatic changes
  */
-const collectChangedRanges = (tr) => {
-  const ranges = [];
-  tr.mapping.maps.forEach((map) => {
-    map.forEach((oldStart, oldEnd) => {
-      const from = Math.min(oldStart, oldEnd);
-      const to = Math.max(oldStart, oldEnd);
-      if (from !== to) {
-        ranges.push({ from, to });
-      }
-    });
-  });
-  return ranges;
-};
 
 /**
- * Checks if a node is a locked SDT (sdtLocked or sdtContentLocked).
- * @param {import('prosemirror-model').Node} node
- * @returns {boolean}
+ * Collect all SDT nodes from the document
  */
-const isLockedSdt = (node) => {
-  return (
-    (node.type.name === 'structuredContent' || node.type.name === 'structuredContentBlock') &&
-    (node.attrs.lockMode === 'sdtLocked' || node.attrs.lockMode === 'sdtContentLocked')
-  );
-};
+function collectSDTNodes(doc) {
+  const sdtNodes = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'structuredContent' || node.type.name === 'structuredContentBlock') {
+      sdtNodes.push({
+        type: node.type.name,
+        lockMode: node.attrs.lockMode,
+        pos,
+        end: pos + node.nodeSize,
+      });
+    }
+  });
+  return sdtNodes;
+}
+
+/**
+ * Check if a range [from, to] would violate any lock rules
+ * Returns { blocked: boolean, reason?: string }
+ */
+function checkLockViolation(sdtNodes, from, to) {
+  for (const sdt of sdtNodes) {
+    const overlaps = from < sdt.end && to > sdt.pos;
+    if (!overlaps) continue;
+
+    // Calculate relationship
+    const containsSDT = from <= sdt.pos && to >= sdt.end;
+    const insideSDT = from >= sdt.pos && to <= sdt.end;
+    const crossesStart = from < sdt.pos && to > sdt.pos && to < sdt.end;
+    const crossesEnd = from > sdt.pos && from < sdt.end && to > sdt.end;
+
+    const wouldDamageWrapper = containsSDT || crossesStart || crossesEnd;
+    // Content modification: inside SDT but NOT deleting the entire wrapper
+    const wouldModifyContent = insideSDT && !containsSDT;
+
+    const isSdtLocked = sdt.lockMode === 'sdtLocked' || sdt.lockMode === 'sdtContentLocked';
+    const isContentLocked = sdt.lockMode === 'contentLocked' || sdt.lockMode === 'sdtContentLocked';
+
+    if (isSdtLocked && wouldDamageWrapper) {
+      return { blocked: true, reason: `Cannot delete SDT wrapper (${sdt.lockMode})` };
+    }
+
+    if (isContentLocked && wouldModifyContent) {
+      return { blocked: true, reason: `Cannot modify content (${sdt.lockMode})` };
+    }
+  }
+  return { blocked: false };
+}
 
 export function createStructuredContentLockPlugin() {
   return new Plugin({
     key: STRUCTURED_CONTENT_LOCK_KEY,
 
-    filterTransaction(tr, state) {
-      if (!tr.docChanged) return true;
+    props: {
+      /**
+       * Intercept key events BEFORE any transaction is created.
+       * This prevents the browser selection from getting out of sync.
+       */
+      handleKeyDown(view, event) {
+        const { state } = view;
+        const { selection } = state;
+        const { from, to } = selection;
 
-      // Get only the ranges affected by this transaction
-      const changedRanges = collectChangedRanges(tr);
-      if (changedRanges.length === 0) return true;
+        // Only intercept destructive keys
+        const isDelete = event.key === 'Delete';
+        const isBackspace = event.key === 'Backspace';
+        const isCut = (event.metaKey || event.ctrlKey) && event.key === 'x';
 
-      const docSize = state.doc.content.size;
+        if (!isDelete && !isBackspace && !isCut) {
+          return false; // Let other handlers process
+        }
 
-      // Check only nodes within the changed ranges for locked SDTs
-      for (const { from, to } of changedRanges) {
-        // Clamp range to valid document bounds
-        const safeFrom = Math.max(0, Math.min(from, docSize));
-        const safeTo = Math.max(0, Math.min(to, docSize));
-        if (safeFrom >= safeTo) continue;
+        const sdtNodes = collectSDTNodes(state.doc);
+        if (sdtNodes.length === 0) {
+          return false;
+        }
 
-        // Use nodesBetween to only traverse affected range
-        let hasLockedNode = false;
-        state.doc.nodesBetween(safeFrom, safeTo, (node, pos) => {
-          if (isLockedSdt(node)) {
-            // Check if this locked node would be deleted
-            const mappedPos = tr.mapping.mapResult(pos);
-            const mappedEnd = tr.mapping.mapResult(pos + node.nodeSize);
-            if (mappedPos.deleted || mappedEnd.deleted) {
-              hasLockedNode = true;
-              return false; // Stop traversal
-            }
+        // Calculate the range that would be affected
+        let affectedFrom = from;
+        let affectedTo = to;
+
+        // If selection is collapsed, backspace/delete affects adjacent position
+        if (from === to) {
+          if (isBackspace && from > 0) {
+            affectedFrom = from - 1;
+          } else if (isDelete && to < state.doc.content.size) {
+            affectedTo = to + 1;
           }
-        });
-        if (hasLockedNode) return false; // Block transaction
+        }
+
+        const result = checkLockViolation(sdtNodes, affectedFrom, affectedTo);
+
+        if (result.blocked) {
+          event.preventDefault();
+          return true; // Stop event propagation
+        }
+
+        return false;
+      },
+
+      /**
+       * Handle text input (typing) for content-locked nodes
+       */
+      handleTextInput(view, from, to, _text) {
+        const sdtNodes = collectSDTNodes(view.state.doc);
+        if (sdtNodes.length === 0) {
+          return false;
+        }
+
+        const result = checkLockViolation(sdtNodes, from, to);
+
+        if (result.blocked) {
+          return true; // Prevent the input
+        }
+
+        return false;
+      },
+    },
+
+    /**
+     * Safety net: filter transactions that slip through
+     * (e.g., programmatic changes, paste, drag-drop)
+     */
+    filterTransaction(tr, state) {
+      if (!tr.docChanged) {
+        return true;
+      }
+
+      const sdtNodes = collectSDTNodes(state.doc);
+      if (sdtNodes.length === 0) {
+        return true;
+      }
+
+      for (const step of tr.steps) {
+        if (step.from === undefined || step.to === undefined) {
+          continue;
+        }
+
+        const result = checkLockViolation(sdtNodes, step.from, step.to);
+
+        if (result.blocked) {
+          return false;
+        }
       }
 
       return true;

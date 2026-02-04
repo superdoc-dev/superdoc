@@ -194,9 +194,20 @@ export class StructuredContentViewBase {
     return lockMode === 'contentLocked' || lockMode === 'sdtContentLocked';
   }
 
+  isSdtLocked() {
+    const lockMode = this.node.attrs.lockMode;
+    return lockMode === 'sdtLocked' || lockMode === 'sdtContentLocked';
+  }
+
   updateContentEditability() {
-    if (this.contentDOM) {
-      this.contentDOM.setAttribute('contenteditable', this.isContentLocked() ? 'false' : 'true');
+    // Note: We intentionally do NOT set contentEditable='false' for locked content.
+    // This allows cursor movement and selection within locked nodes.
+    // The lock plugin (structured-content-lock-plugin.js) handles blocking actual edits
+    // via handleKeyDown, handleTextInput, and filterTransaction.
+    // We only add CSS classes for visual feedback.
+    if (this.dom) {
+      this.dom.classList.toggle('sd-structured-content--content-locked', this.isContentLocked());
+      this.dom.classList.toggle('sd-structured-content--sdt-locked', this.isSdtLocked());
     }
   }
 

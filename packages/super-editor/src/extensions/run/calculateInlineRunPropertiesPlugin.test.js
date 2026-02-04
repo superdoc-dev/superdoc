@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Schema } from 'prosemirror-model';
-import { EditorState } from 'prosemirror-state';
+import { EditorState, TextSelection } from 'prosemirror-state';
 
 const decodeRPrFromMarksMock = vi.hoisted(() =>
   vi.fn((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') })),
@@ -86,6 +86,26 @@ const runTextRange = (doc, startIndex, endIndex) => {
   const base = runPos(doc);
   if (base == null) throw new Error('Run not found');
   return { from: base + 1 + startIndex, to: base + 1 + endIndex };
+};
+
+const positionAtTextOffset = (doc, offset) => {
+  let remaining = offset;
+  let pos = null;
+
+  doc.descendants((node, nodePos) => {
+    if (!node.isText || pos != null) return true;
+    if (remaining <= node.text.length) {
+      pos = nodePos + remaining;
+      return false;
+    }
+    remaining -= node.text.length;
+    return true;
+  });
+
+  if (pos == null) {
+    throw new Error('Offset exceeds text length');
+  }
+  return pos;
 };
 
 const createState = (schema, doc) =>
@@ -193,5 +213,43 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(paragraph.attrs.paragraphProperties).toBeNull();
     const firstRun = nextState.doc.nodeAt(firstRunPos);
     expect(firstRun?.attrs.runProperties).toBeNull();
+  });
+
+  it('splits runs when inline properties differ', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema);
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5); // "Hello"
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const [firstRunPos, secondRunPos] = runPositions(nextState.doc);
+    expect(firstRunPos).not.toBeNull();
+    expect(secondRunPos).not.toBeNull();
+
+    const firstRun = nextState.doc.nodeAt(firstRunPos);
+    const secondRun = nextState.doc.nodeAt(secondRunPos);
+
+    expect(firstRun?.textContent).toBe('Hello');
+    expect(secondRun?.textContent).toBe('World');
+    expect(firstRun?.attrs.runProperties).toEqual({ bold: true });
+    expect(secondRun?.attrs.runProperties).toBeNull();
+  });
+
+  it('preserves selection when runs are split', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema);
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5); // "Hello"
+    const cursorPos = positionAtTextOffset(state.doc, 7); // inside "World"
+
+    const tr = state.tr.setSelection(TextSelection.create(state.doc, cursorPos));
+    tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const expectedPos = positionAtTextOffset(nextState.doc, 7);
+    expect(nextState.selection.from).toBe(expectedPos);
+    expect(nextState.selection.to).toBe(expectedPos);
   });
 });

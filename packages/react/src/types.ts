@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { SuperDoc } from 'superdoc';
+import type { SuperDoc, Editor } from 'superdoc';
 
 /**
  * Types for @superdoc-dev/react
@@ -37,12 +37,8 @@ export type SuperDocConfig = SuperDocConstructorConfig;
 // Callback Event Types
 // =============================================================================
 
-/**
- * ProseMirror Editor instance from super-editor.
- * Use `editor.view` for ProseMirror EditorView, `editor.state` for EditorState.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Editor = any;
+// Re-export Editor type from superdoc
+export type { Editor } from 'superdoc';
 
 /** Event passed to onReady callback */
 export interface SuperDocReadyEvent {

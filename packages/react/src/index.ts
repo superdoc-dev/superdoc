@@ -20,4 +20,11 @@ export type {
   SuperDocModules,
   SuperDocConfig,
   SuperDocInstance,
+
+  // Callback event types
+  SuperDocReadyEvent,
+  SuperDocEditorCreateEvent,
+  SuperDocEditorUpdateEvent,
+  SuperDocContentErrorEvent,
+  SuperDocExceptionEvent,
 } from './types';

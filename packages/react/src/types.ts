@@ -34,6 +34,35 @@ export type SuperDocModules = NonNullable<SuperDocConstructorConfig['modules']>;
 export type SuperDocConfig = SuperDocConstructorConfig;
 
 // =============================================================================
+// Callback Event Types
+// =============================================================================
+
+/** Event passed to onReady callback */
+export interface SuperDocReadyEvent {
+  superdoc: SuperDocInstance;
+}
+
+/** Event passed to onEditorCreate callback */
+export interface SuperDocEditorCreateEvent {
+  editor: unknown;
+}
+
+/** Event passed to onEditorUpdate callback */
+export interface SuperDocEditorUpdateEvent {
+  editor: unknown;
+}
+
+/** Event passed to onContentError callback */
+export interface SuperDocContentErrorEvent {
+  error: unknown;
+}
+
+/** Event passed to onException callback */
+export interface SuperDocExceptionEvent {
+  error: Error;
+}
+
+// =============================================================================
 // React Component Types
 // =============================================================================
 

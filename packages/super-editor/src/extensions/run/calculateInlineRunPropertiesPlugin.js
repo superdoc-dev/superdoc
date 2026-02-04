@@ -7,6 +7,21 @@ import {
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { carbonCopy } from '@core/utilities/carbonCopy';
 
+const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
+  'strike',
+  'italic',
+  'bold',
+  'underline',
+  'highlight',
+  'textTransform',
+  'color',
+  'fontSize',
+  'letterSpacing',
+  'fontFamily',
+  'vertAlign',
+  'position',
+]);
+
 /**
  * ProseMirror plugin that recalculates inline `runProperties` whenever marks change on run nodes,
  * ensuring run attributes stay aligned with decoded mark styles and resolved paragraph styles.
@@ -151,7 +166,7 @@ function segmentRunByInlineProps(runNode, paragraphNode, $pos, editor) {
 
   runNode.forEach((child) => {
     if (child.isText) {
-      const { inlineProps, inlineKey } = computeInlineRunProps(child.marks, paragraphNode, $pos, editor);
+      const { inlineProps, inlineKey } = computeInlineRunProps(child.marks, runNode.attrs?.runProperties, paragraphNode, $pos, editor);
       const last = segments[segments.length - 1];
       if (last && inlineKey === lastKey) {
         last.content.push(child);
@@ -176,12 +191,13 @@ function segmentRunByInlineProps(runNode, paragraphNode, $pos, editor) {
  * Compute the inline runProperties for a set of marks at a paragraph position.
  *
  * @param {import('prosemirror-model').Mark[]} marks
+ * @param {Record<string, any>|null} existingRunProperties
  * @param {import('prosemirror-model').Node} paragraphNode
  * @param {import('prosemirror-model').ResolvedPos} $pos
  * @param {object} editor
  * @returns {{ inlineProps: Record<string, any>|null, inlineKey: string }}
  */
-function computeInlineRunProps(marks, paragraphNode, $pos, editor) {
+function computeInlineRunProps(marks, existingRunProperties, paragraphNode, $pos, editor) {
   const runPropertiesFromMarks = decodeRPrFromMarks(marks);
   const paragraphProperties =
     getResolvedParagraphProperties(paragraphNode) || calculateResolvedParagraphProperties(editor, paragraphNode, $pos);
@@ -190,12 +206,16 @@ function computeInlineRunProps(marks, paragraphNode, $pos, editor) {
       translatedNumbering: editor.converter?.translatedNumbering ?? {},
       translatedLinkedStyles: editor.converter?.translatedLinkedStyles ?? {},
     },
-    {},
+    existingRunProperties?.styleId != null ? {styleId: existingRunProperties?.styleId} : {},
     paragraphProperties,
     false,
     Boolean(paragraphNode.attrs.paragraphProperties?.numberingProperties),
   );
-  const inlineRunProperties = getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles);
+  const inlineRunProperties = getInlineRunProperties(
+    runPropertiesFromMarks,
+    runPropertiesFromStyles,
+    existingRunProperties,
+  );
   const inlineProps = Object.keys(inlineRunProperties).length ? inlineRunProperties : null;
   const inlineKey = stableStringifyInlineProps(inlineProps);
   return { inlineProps, inlineKey };
@@ -206,9 +226,10 @@ function computeInlineRunProps(marks, paragraphNode, $pos, editor) {
  *
  * @param {Record<string, any>} runPropertiesFromMarks Properties decoded from marks.
  * @param {Record<string, any>} runPropertiesFromStyles Properties resolved from styles and paragraphs.
+ * @param {Record<string, any>|null} existingRunProperties Existing runProperties on the run node.
  * @returns {Record<string, any>} Inline run properties that override styled defaults.
  */
-function getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles) {
+function getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles, existingRunProperties) {
   const inlineRunProperties = {};
   for (const key in runPropertiesFromMarks) {
     const valueFromMarks = runPropertiesFromMarks[key];
@@ -217,6 +238,16 @@ function getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles)
       inlineRunProperties[key] = valueFromMarks;
     }
   }
+
+  if (existingRunProperties != null) {
+    Object.keys(existingRunProperties).forEach((key) => {
+      if (RUN_PROPERTIES_DERIVED_FROM_MARKS.has(key)) return;
+      if (key in inlineRunProperties) return;
+      if (existingRunProperties[key] === undefined) return;
+      inlineRunProperties[key] = existingRunProperties[key];
+    });
+  }
+
   return inlineRunProperties;
 }
 

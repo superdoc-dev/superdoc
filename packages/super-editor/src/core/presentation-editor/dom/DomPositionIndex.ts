@@ -1,5 +1,5 @@
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
-
+import { sortedIndexBy } from 'lodash';
 import { debugLog, getSelectionDebugConfig } from '../selection/SelectionDebug.js';
 
 /**
@@ -242,22 +242,10 @@ export class DomPositionIndex {
     const entryAtPos = this.findEntryAtPosition(pos);
     if (entryAtPos) return entryAtPos;
 
-    // Upper-bound search for pmStart <= pos
-    let lo = 0;
-    let hi = entries.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      if (entries[mid].pmStart <= pos) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-
-    const idx = lo - 1;
+    const idx = sortedIndexBy(entries, { pmStart: pos } as never, 'pmStart') - 1;
 
     const beforeEntry = idx >= 0 ? entries[idx] : null;
-    const afterEntry = lo < entries.length ? entries[lo] : null;
+    const afterEntry = idx < entries.length - 1 ? entries[idx + 1] : null;
 
     if (beforeEntry && afterEntry) {
       const distBefore = pos - beforeEntry.pmEnd;

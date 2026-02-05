@@ -23,11 +23,19 @@ beforeAll(() => {
 
 const describeIfRealCanvas = usingStub ? describe.skip : describe;
 
-const LATENCY_TARGETS = {
-  p50: 420, // Relaxed for CI environments which are slower than local machines
-  p90: 480,
-  p99: 800,
-};
+const IS_CI = Boolean(process.env.CI);
+const LATENCY_TARGETS = IS_CI
+  ? {
+      // CI environments are slower and more variable; use generous buffers
+      p50: 500,
+      p90: 700,
+      p99: 1000,
+    }
+  : {
+      p50: 70,
+      p90: 80,
+      p99: 90,
+    };
 const MIN_HIT_RATE = 0.95;
 
 describeIfRealCanvas('incremental pipeline benchmarks', () => {

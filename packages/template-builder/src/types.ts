@@ -1,5 +1,6 @@
 import type { SuperDoc } from 'superdoc';
 
+/** Field definition for template builder */
 export interface FieldDefinition {
   id: string;
   label: string;
@@ -9,6 +10,7 @@ export interface FieldDefinition {
   group?: string;
 }
 
+/** Field instance in a template document */
 export interface TemplateField {
   id: string | number;
   alias: string;
@@ -109,6 +111,9 @@ export interface SuperDocTemplateBuilderProps {
   menu?: MenuConfig;
   list?: ListConfig;
   toolbar?: boolean | string | ToolbarConfig;
+
+  /** Content Security Policy nonce for dynamically injected styles */
+  cspNonce?: string;
 
   // Events
   onReady?: () => void;

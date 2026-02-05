@@ -30,6 +30,7 @@ const props = defineProps({
 
 const editor = shallowRef();
 const editorElem = ref(null);
+const contentElem = ref(null);
 const isFocused = ref(false);
 
 const onTransaction = ({ editor, transaction }) => {
@@ -54,9 +55,10 @@ const initEditor = async () => {
   props.options.onTransaction = onTransaction;
   props.options.onFocus = onFocus;
   props.options.onBlur = onBlur;
+  const initialHtml = props.modelValue ?? contentElem.value?.innerHTML ?? '';
   editor.value = new Editor({
     mode: 'text',
-    content: document.getElementById('currentContent'),
+    content: initialHtml,
     element: editorElem.value,
     extensions: getRichTextExtensions(),
     users: props.users,
@@ -64,9 +66,21 @@ const initEditor = async () => {
   });
 };
 
-const handleFocus = () => {
+const focus = (options = {}) => {
+  const { moveCursorToEnd = true } = options;
   isFocused.value = true;
-  editor.value?.view?.focus();
+  const instance = editor.value;
+  instance?.view?.focus();
+  if (moveCursorToEnd) {
+    const docSize = instance?.state?.doc?.content?.size;
+    if (typeof docSize === 'number' && instance?.commands?.setTextSelection) {
+      instance.commands.setTextSelection({ from: docSize, to: docSize });
+    }
+  }
+};
+
+const handleFocus = () => {
+  focus({ moveCursorToEnd: false });
 };
 
 const updateUsersState = () => {
@@ -81,11 +95,13 @@ onBeforeUnmount(() => {
   editor.value?.destroy();
   editor.value = null;
 });
+
+defineExpose({ focus });
 </script>
 
 <template>
   <div class="super-editor super-input" :class="{ 'super-input-active': isFocused }" @click.stop.prevent="handleFocus">
-    <div id="currentContent" style="display: none" v-html="modelValue"></div>
+    <div ref="contentElem" style="display: none" v-html="modelValue"></div>
     <div ref="editorElem" class="editor-element super-editor__element"></div>
   </div>
 </template>

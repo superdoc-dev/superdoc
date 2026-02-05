@@ -1,0 +1,84 @@
+# Auto-releases on push to main (@next channel)
+# For stable (@latest): cherry-pick commits to stable branch, then manually dispatch this workflow
+name: 📦 Release superdoc
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/superdoc/**'
+      - 'packages/layout-engine/**'
+      - 'packages/super-editor/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - '!**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-superdoc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: apt-canvas-${{ runner.os }}-v1
+
+      - name: Install canvas system dependencies
+        run: |
+          mkdir -p ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-cache" \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm run build
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+        run: pnpx semantic-release

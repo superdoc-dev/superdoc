@@ -805,6 +805,7 @@ export class DomPainter {
   private virtualPaddingTop: number | null = null; // px; computed from mount if not provided
   private topSpacerEl: HTMLElement | null = null;
   private bottomSpacerEl: HTMLElement | null = null;
+  private virtualPagesEl: HTMLElement | null = null;
   private virtualGapSpacers: HTMLElement[] = [];
   private virtualPinnedPages: number[] = [];
   private virtualMountedKey = '';
@@ -1065,8 +1066,8 @@ export class DomPainter {
     applyStyles(mount, containerStyles);
 
     if (this.virtualEnabled) {
-      // Override container gap for consistent spacer math
-      mount.style.gap = `${this.virtualGap}px`;
+      // Keep container gap at 0 so spacers don't introduce extra offsets.
+      mount.style.gap = '0px';
       this.renderVirtualized(layout, mount);
       this.currentLayout = layout;
       this.changedBlocks.clear();
@@ -1095,8 +1096,13 @@ export class DomPainter {
     // Always keep the latest layout reference for handlers
     this.currentLayout = layout;
 
-    // First-time init or mount changed
-    const needsInit = !this.topSpacerEl || !this.bottomSpacerEl || this.mount !== mount;
+    // First-time init, mount changed, or spacers were detached (e.g., by innerHTML='' on zero-page layout)
+    const needsInit =
+      !this.topSpacerEl ||
+      !this.bottomSpacerEl ||
+      !this.virtualPagesEl ||
+      this.mount !== mount ||
+      this.topSpacerEl.parentElement !== mount;
     if (needsInit) {
       this.ensureVirtualizationSetup(mount);
     }
@@ -1121,7 +1127,17 @@ export class DomPainter {
     this.configureSpacerElement(this.topSpacerEl, 'top');
     this.configureSpacerElement(this.bottomSpacerEl, 'bottom');
 
+    // Create and configure pages container (handles the inter-page gap)
+    // Use pageGap for visual consistency with non-virtualized mode.
+    this.virtualPagesEl = this.doc.createElement('div');
+    this.virtualPagesEl.style.display = 'flex';
+    this.virtualPagesEl.style.flexDirection = 'column';
+    this.virtualPagesEl.style.alignItems = 'center';
+    this.virtualPagesEl.style.width = '100%';
+    this.virtualPagesEl.style.gap = `${this.pageGap}px`;
+
     mount.appendChild(this.topSpacerEl);
+    mount.appendChild(this.virtualPagesEl);
     mount.appendChild(this.bottomSpacerEl);
 
     // Bind scroll and resize handlers
@@ -1174,10 +1190,11 @@ export class DomPainter {
       this.virtualHeights = this.currentLayout.pages.map((p) => p.size?.h ?? this.currentLayout!.pageSize.h);
     }
     // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap)
+    // Use pageGap for consistency with CSS gap on virtualPagesEl
     const offsets: number[] = new Array(this.virtualHeights.length + 1);
     offsets[0] = 0;
     for (let i = 0; i < this.virtualHeights.length; i += 1) {
-      offsets[i + 1] = offsets[i] + this.virtualHeights[i] + this.virtualGap;
+      offsets[i + 1] = offsets[i] + this.virtualHeights[i] + this.pageGap;
     }
     this.virtualOffsets = offsets;
   }
@@ -1192,7 +1209,7 @@ export class DomPainter {
     // Total content height without trailing gap after last page
     const n = this.virtualHeights.length;
     if (n <= 0) return 0;
-    return this.virtualOffsets[n] - this.virtualGap;
+    return this.virtualOffsets[n] - this.pageGap;
   }
 
   private getMountPaddingTopPx(): number {
@@ -1207,8 +1224,19 @@ export class DomPainter {
     return 0;
   }
 
+  /**
+   * Public method to trigger virtualization window update on scroll.
+   * Call this from external scroll handlers when the scroll container
+   * is different from the painter's mount element.
+   */
+  public onScroll(): void {
+    if (this.virtualEnabled) {
+      this.updateVirtualWindow();
+    }
+  }
+
   private updateVirtualWindow(): void {
-    if (!this.mount || !this.topSpacerEl || !this.bottomSpacerEl || !this.currentLayout) return;
+    if (!this.mount || !this.topSpacerEl || !this.bottomSpacerEl || !this.virtualPagesEl || !this.currentLayout) return;
     const layout = this.currentLayout;
     const N = layout.pages.length;
     if (N === 0) {
@@ -1294,7 +1322,7 @@ export class DomPainter {
         newState.element.dataset.pageIndex = String(i);
         // Ensure virtualization uses page margin 0
         applyStyles(newState.element, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
-        this.mount.insertBefore(newState.element, this.bottomSpacerEl);
+        this.virtualPagesEl.appendChild(newState.element);
         this.pageIndexToState.set(i, newState);
       } else {
         // Patch in place
@@ -1302,9 +1330,12 @@ export class DomPainter {
       }
     }
 
-    // Ensure top spacer is first and bottom spacer is last.
+    // Ensure top spacer is first, pages container is in the middle, and bottom spacer is last.
     if (this.mount.firstChild !== this.topSpacerEl) {
       this.mount.insertBefore(this.topSpacerEl, this.mount.firstChild);
+    }
+    if (this.virtualPagesEl.parentElement !== this.mount) {
+      this.mount.insertBefore(this.virtualPagesEl, this.bottomSpacerEl);
     }
     this.mount.appendChild(this.bottomSpacerEl);
 
@@ -1317,13 +1348,13 @@ export class DomPainter {
         gap.dataset.gapFrom = String(prevIndex);
         gap.dataset.gapTo = String(idx);
         const gapHeight =
-          this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.virtualGap * 2;
+          this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.pageGap * 2;
         gap.style.height = `${Math.max(0, Math.floor(gapHeight))}px`;
         this.virtualGapSpacers.push(gap);
-        this.mount.insertBefore(gap, this.bottomSpacerEl);
+        this.virtualPagesEl.appendChild(gap);
       }
       const state = this.pageIndexToState.get(idx)!;
-      this.mount.insertBefore(state.element, this.bottomSpacerEl);
+      this.virtualPagesEl.appendChild(state.element);
       prevIndex = idx;
     }
 
@@ -1355,7 +1386,7 @@ export class DomPainter {
     const clampedLast = Math.max(0, Math.min(last, Math.max(0, n - 1)));
 
     const top = this.topOfIndex(clampedFirst);
-    const bottom = this.topOfIndex(n) - this.topOfIndex(clampedLast + 1) - this.virtualGap;
+    const bottom = this.topOfIndex(n) - this.topOfIndex(clampedLast + 1) - this.pageGap;
     this.topSpacerEl.style.height = `${Math.max(0, Math.floor(top))}px`;
     this.bottomSpacerEl.style.height = `${Math.max(0, Math.floor(bottom))}px`;
   }
@@ -1687,6 +1718,7 @@ export class DomPainter {
     this.pageIndexToState.clear();
     this.topSpacerEl = null;
     this.bottomSpacerEl = null;
+    this.virtualPagesEl = null;
     this.onScrollHandler = null;
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;
@@ -1884,8 +1916,7 @@ export class DomPainter {
     };
 
     const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup);
-
-    const fragments: FragmentDomState[] = page.fragments.map((fragment, index) => {
+    const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
       const fragmentEl = this.renderFragment(fragment, contextBase, sdtBoundary);
       el.appendChild(fragmentEl);
@@ -1899,7 +1930,7 @@ export class DomPainter {
     });
 
     this.renderDecorationsForPage(el, page);
-    return { element: el, fragments };
+    return { element: el, fragments: fragmentStates };
   }
 
   private getEffectivePageStyles(): PageStyles | undefined {
@@ -2001,7 +2032,6 @@ export class DomPainter {
       // Use fragment.lines if available (set when paragraph was remeasured for narrower column).
       // Otherwise, fall back to slicing from the original measure.
       const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
-
       applyParagraphBlockStyles(fragmentEl, block.attrs);
       const { shadingLayer, borderLayer } = createParagraphDecorationLayers(this.doc, fragment.width, block.attrs);
       if (shadingLayer) {

@@ -927,3 +927,51 @@ describe('XML whitespace preservation', () => {
     expect(textNodes[2].elements[0].text).toBe('Trimmed text  ');
   });
 });
+
+describe('SuperConverter styles fallback', () => {
+  const baseDocumentXml = {
+    name: 'word/document.xml',
+    content: `<?xml version="1.0" encoding="UTF-8"?>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body><w:p><w:r><w:t>Test</w:t></w:r></w:p></w:body>
+      </w:document>`,
+  };
+
+  const buildStylesXml = (styleId) => ({
+    name: 'word/styles2.xml',
+    content: `<?xml version="1.0" encoding="UTF-8"?>
+      <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:style w:type="paragraph" w:styleId="${styleId}">
+          <w:name w:val="${styleId}"/>
+        </w:style>
+      </w:styles>`,
+  });
+
+  it('uses styles2.xml when styles.xml is missing', () => {
+    const styles2Xml = buildStylesXml('AltStyle2');
+    const converter = new SuperConverter({ docx: [baseDocumentXml, styles2Xml] });
+    const styles = converter.convertedXml['word/styles.xml'];
+
+    expect(styles).toBeTruthy();
+    expect(styles.elements?.[0]?.name).toBe('w:styles');
+    expect(styles.elements?.[0]?.elements?.[0]?.attributes?.['w:styleId']).toBe('AltStyle2');
+  });
+
+  it('prefers the lowest-indexed styles file when multiple exist', () => {
+    const styles2Xml = buildStylesXml('AltStyle2');
+    const styles4Xml = {
+      name: 'word/styles4.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:style w:type="paragraph" w:styleId="AltStyle4">
+            <w:name w:val="AltStyle4"/>
+          </w:style>
+        </w:styles>`,
+    };
+
+    const converter = new SuperConverter({ docx: [baseDocumentXml, styles4Xml, styles2Xml] });
+    const styles = converter.convertedXml['word/styles.xml'];
+
+    expect(styles?.elements?.[0]?.elements?.[0]?.attributes?.['w:styleId']).toBe('AltStyle2');
+  });
+});

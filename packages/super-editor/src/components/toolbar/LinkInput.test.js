@@ -781,5 +781,32 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
       expect(openLinkBtn.exists()).toBe(true);
       expect(openLinkBtn.classes()).not.toContain('disabled');
     });
+
+    it('should not call handleSubmit in viewing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'viewing' };
+      const linkMark = mockEditor.state.schema.marks.link;
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMark, attrs: { href: 'https://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      wrapper.vm.handleSubmit();
+
+      // Verify that link modification commands were not called
+      expect(mockEditor.commands.toggleLink).not.toHaveBeenCalled();
+      expect(mockEditor.commands.unsetLink).not.toHaveBeenCalled();
+      expect(mockClosePopover).not.toHaveBeenCalled();
+    });
   });
 });

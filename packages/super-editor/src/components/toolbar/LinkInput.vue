@@ -174,6 +174,9 @@ const handleSubmit = () => {
   const editor = props.editor;
   if (!editor) return;
 
+  // Prevent form submission in viewing mode
+  if (isViewingMode.value) return;
+
   // If the URL is cleared, simply remove the link.
   if (!rawUrl.value) {
     if (editor.commands?.unsetLink) editor.commands.unsetLink();
@@ -219,7 +222,7 @@ const handleRemove = () => {
       <!-- Text input -->
       <div class="input-row text-input-row">
         <div class="input-icon text-input-icon">T</div>
-        <input type="text" name="text" placeholder="Text" v-model="text" :readonly="isViewingMode" @keydown.enter.stop.prevent="handleSubmit" />
+        <input type="text" name="text" placeholder="Text" v-model="text" :readonly="isViewingMode" @keydown.enter.stop.prevent="!isViewingMode && handleSubmit" />
       </div>
 
       <!-- URL input -->
@@ -232,7 +235,7 @@ const handleRemove = () => {
           :class="{ error: urlError }"
           v-model="rawUrl"
           :readonly="isViewingMode"
-          @keydown.enter.stop.prevent="handleSubmit"
+          @keydown.enter.stop.prevent="!isViewingMode && handleSubmit"
           @keydown="urlError = false"
         />
 

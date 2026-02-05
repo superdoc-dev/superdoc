@@ -510,6 +510,9 @@ importers:
       '@playwright/test':
         specifier: '>=1.40.0'
         version: 1.58.1
+      '@superdoc-testing/harness':
+        specifier: workspace:*
+        version: link:../harness
     devDependencies:
       eslint_d:
         specifier: ^14.3.0

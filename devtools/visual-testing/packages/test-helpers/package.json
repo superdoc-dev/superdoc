@@ -16,5 +16,8 @@
   },
   "devDependencies": {
     "eslint_d": "^14.3.0"
+  },
+  "dependencies": {
+    "@superdoc-testing/harness": "workspace:*"
   }
 }

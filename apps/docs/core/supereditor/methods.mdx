@@ -529,6 +529,70 @@ const superdoc = new SuperDoc({
 In presentation mode, this method only works in body mode. It returns `null` when editing headers or footers.
 </Warning>
 
+## Helpers
+
+The `helpers` namespace provides utility functions for working with the document schema and selection. Import it for advanced use cases.
+
+```javascript
+import { helpers } from 'superdoc/super-editor';
+```
+
+### Document utilities
+
+```javascript
+// Create a new ProseMirror document from JSON
+const doc = helpers.createDocument(jsonContent, schema);
+
+// Get a schema type (node or mark) by name
+const nodeType = helpers.getSchemaTypeByName('paragraph', schema);
+
+// Get node/mark types with validation
+const tableType = helpers.getNodeType('table', schema);
+const boldType = helpers.getMarkType('bold', schema);
+```
+
+### Selection & marks
+
+```javascript
+// Check if a mark is active at the current selection
+const isBold = helpers.isMarkActive(state, schema.marks.bold);
+
+// Get the range of a mark around a position
+const range = helpers.getMarkRange(resolvedPos, schema.marks.link);
+
+// Check if a node or mark is active
+const isHeading = helpers.isActive(state, 'heading', { level: 2 });
+const isInTable = helpers.isInTable(state);
+```
+
+### Node traversal
+
+```javascript
+// Find the closest parent node matching a predicate
+const listItem = helpers.findParentNode(
+  (node) => node.type.name === 'listItem'
+)(state.selection);
+
+// Find all children matching a predicate
+const images = helpers.findChildren(
+  state.doc,
+  (node) => node.type.name === 'image'
+);
+
+// Convert a position to DOM coordinates
+const rect = helpers.posToDOMRect(view, from, to);
+```
+
+### Content import
+
+```javascript
+// Parse HTML into ProseMirror content
+const content = helpers.importHtml(htmlString, schema);
+
+// Parse Markdown into ProseMirror content
+const content = helpers.importMarkdown(markdownString, schema);
+```
+
 ## Properties
 
 <ResponseField name="state" type="EditorState">

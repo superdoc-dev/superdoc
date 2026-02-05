@@ -1,0 +1,119 @@
+---
+title: SuperConverter
+keywords: "docx converter, word parser, docx import, docx export, document converter, xml to docx"
+---
+
+SuperConverter is the DOCX parsing and export engine. Use it directly for server-side processing or custom import/export pipelines.
+
+<Note>For standard browser usage, `Editor.open()` and `editor.exportDocx()` handle conversion automatically. Use SuperConverter directly only when you need low-level control.</Note>
+
+## When to use SuperConverter
+
+- Server-side DOCX processing (Node.js)
+- Custom import/export pipelines
+- Extracting metadata from DOCX files
+- Font resolution and document analysis
+
+## Basic usage
+
+```javascript
+import { SuperConverter } from 'superdoc/super-editor';
+
+// Parse a DOCX file
+const converter = new SuperConverter({
+  docx: xmlFiles,    // Array of { name, content } from a DOCX zip
+  media: mediaUrls,  // Media URLs extracted from the DOCX
+  fonts: fontData,   // Font data
+});
+
+// The converter parses the XML on construction
+const { initialJSON, schema } = converter;
+```
+
+## Headless export
+
+Export a ProseMirror document back to DOCX:
+
+```javascript
+const blob = await converter.exportToDocx(
+  editorJson,       // ProseMirror JSON
+  editorSchema,     // ProseMirror Schema
+  documentMedia,    // Media files
+  false,            // isFinalDoc
+  'external',       // commentsType
+  [],               // comments array
+  editor,           // Editor instance
+);
+```
+
+## Static utilities
+
+### Font resolution
+
+```javascript
+// Get CSS font-family with fallbacks from the DOCX font table
+const cssFont = SuperConverter.toCssFontFamily('Calibri', docxFiles);
+// → "Calibri, Arial, sans-serif"
+
+// Look up a font entry in the DOCX font table
+const entry = SuperConverter.getFontTableEntry(docxFiles, 'Calibri');
+```
+
+### Document metadata
+
+```javascript
+// Extract the document GUID from settings.xml
+const guid = SuperConverter.extractDocumentGuid(docxFiles);
+
+// Read/write custom properties stored in the DOCX
+const value = SuperConverter.getStoredCustomProperty(docxFiles, 'myProperty');
+SuperConverter.setStoredCustomProperty(docxFiles, 'myProperty', 'newValue');
+
+// SuperDoc version tracking
+const version = SuperConverter.getStoredSuperdocVersion(docxFiles);
+SuperConverter.setStoredSuperdocVersion(docxFiles, '1.5.0');
+```
+
+### Document identifier
+
+```javascript
+// Get a stable identifier for the document (GUID or content hash)
+const id = await converter.getDocumentIdentifier();
+```
+
+## With Editor.open()
+
+In most cases, you don't need to use SuperConverter directly. `Editor.open()` handles everything:
+
+```javascript
+import { Editor } from 'superdoc/super-editor';
+
+// Editor.open() uses SuperConverter internally
+const editor = await Editor.open(docxFile, {
+  element: document.getElementById('editor'),
+});
+
+// Export uses SuperConverter internally
+const blob = await editor.exportDocx();
+```
+
+See [Editor Configuration](/core/supereditor/configuration) for full options.
+
+## createZip
+
+Bundle multiple exported files into a ZIP archive:
+
+```javascript
+import { createZip } from 'superdoc/super-editor';
+
+const blob1 = await editor1.exportDocx();
+const blob2 = await editor2.exportDocx();
+
+const zip = await createZip(
+  [blob1, blob2],
+  ['contract.docx', 'addendum.docx']
+);
+
+// Download the ZIP
+const url = URL.createObjectURL(zip);
+```

@@ -89,7 +89,8 @@
                   "core/supereditor/overview",
                   "core/supereditor/configuration",
                   "core/supereditor/methods",
-                  "core/supereditor/hooks"
+                  "core/supereditor/hooks",
+                  "core/supereditor/converter"
                 ]
               }
             ]
@@ -98,25 +99,6 @@
             "group": "Document API",
             "tag": "SOON",
             "pages": ["document-api/overview"]
-          },
-          {
-            "group": "AI",
-            "tag": "NEW",
-            "pages": [
-              {
-                "group": "AI Actions",
-                "pages": [
-                  "ai/ai-actions/overview",
-                  "ai/ai-actions/configuration",
-                  "ai/ai-actions/methods",
-                  "ai/ai-actions/hooks"
-                ]
-              },
-              {
-                "group": "AI Builder",
-                "pages": ["ai/ai-builder/overview"]
-              }
-            ]
           },
           {
             "group": "Modules",
@@ -151,7 +133,6 @@
             "group": "Extensions",
             "pages": [
               "extensions/overview",
-              "extensions/creating-extensions",
               {
                 "group": "All",
                 "pages": [

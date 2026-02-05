@@ -14,7 +14,7 @@ import { join, basename } from 'path';
 
 const ROOT = join(import.meta.dir, '../..');
 const SUPER_EDITOR_SRC = join(ROOT, 'packages/super-editor/src');
-const DOCS_EXTENSIONS = join(ROOT, 'apps/docs/extensions');
+const DOCS_DIR = join(ROOT, 'apps/docs');
 
 interface ExportInfo {
   name: string;
@@ -138,25 +138,79 @@ function parseExports(filePath: string): { name: string; isInternal: boolean }[]
 }
 
 /**
- * Get all documented extensions from MDX files
+ * Recursively get all MDX files from a directory
  */
-function getDocumentedExtensions(): Set<string> {
+function getMdxFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const results: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...getMdxFiles(fullPath));
+    } else if (entry.name.endsWith('.mdx')) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+/**
+ * Get all documented exports from MDX files across all docs directories
+ */
+function getDocumentedExports(): Set<string> {
   const documented = new Set<string>();
 
-  if (!existsSync(DOCS_EXTENSIONS)) {
-    return documented;
-  }
+  const mdxFiles = getMdxFiles(DOCS_DIR);
+  for (const filePath of mdxFiles) {
+    // Add filename as a documented name (e.g., "bold.mdx" → "bold")
+    const name = basename(filePath, '.mdx');
+    documented.add(name.toLowerCase());
 
-  const files = readdirSync(DOCS_EXTENSIONS);
-  for (const file of files) {
-    if (file.endsWith('.mdx')) {
-      const name = basename(file, '.mdx');
-      documented.add(name.toLowerCase());
+    const content = readFileSync(filePath, 'utf-8');
 
-      const content = readFileSync(join(DOCS_EXTENSIONS, file), 'utf-8');
-      const exportMatches = content.matchAll(/`(\w+)`/g);
-      for (const match of exportMatches) {
-        documented.add(match[1].toLowerCase());
+    // Match frontmatter title and keywords
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (frontmatterMatch) {
+      const fm = frontmatterMatch[1];
+      const titleMatch = fm.match(/title:\s*(.+)/);
+      if (titleMatch) {
+        for (const word of titleMatch[1].replace(/["']/g, '').split(/\s+/)) {
+          if (word.length > 1) documented.add(word.toLowerCase());
+        }
+      }
+      const kwMatch = fm.match(/keywords:\s*"([^"]+)"/);
+      if (kwMatch) {
+        for (const kw of kwMatch[1].split(',')) {
+          for (const word of kw.trim().split(/\s+/)) {
+            if (word.length > 1) documented.add(word.toLowerCase());
+          }
+        }
+      }
+    }
+
+    // Match backtick-quoted identifiers: `SuperConverter`, `Editor`, etc.
+    for (const match of content.matchAll(/`(\w+)`/g)) {
+      documented.add(match[1].toLowerCase());
+    }
+
+    // Match import statements: import { X, Y } from 'superdoc'
+    for (const match of content.matchAll(/import\s*\{([^}]+)\}/g)) {
+      const names = match[1].split(',').map((s) =>
+        s
+          .trim()
+          .split(/\s+as\s+/)[0]
+          .trim(),
+      );
+      for (const n of names) {
+        if (n) documented.add(n.toLowerCase());
+      }
+    }
+
+    // Match destructuring: const { X, Y } = helpers
+    for (const match of content.matchAll(/const\s*\{([^}]+)\}/g)) {
+      const names = match[1].split(',').map((s) => s.trim().split(/\s*:/)[0].trim());
+      for (const n of names) {
+        if (n) documented.add(n.toLowerCase());
       }
     }
   }
@@ -217,7 +271,7 @@ function isDocumented(name: string, documented: Set<string>): boolean {
  * Main scanner function
  */
 function scanCoverage(): CoverageReport {
-  const documented = getDocumentedExtensions();
+  const documented = getDocumentedExports();
 
   const entryPoints = [join(SUPER_EDITOR_SRC, 'index.js'), join(SUPER_EDITOR_SRC, 'extensions/index.js')];
 

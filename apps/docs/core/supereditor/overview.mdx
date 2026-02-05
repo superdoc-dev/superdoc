@@ -60,8 +60,13 @@ editor.state.doc.forEach((node) => {
 });
 ```
 
+## Components
+
+The `SuperEditor` Vue component wraps the `Editor` class with reactive props and events. Use it in Vue apps for automatic lifecycle management. For other frameworks, use `Editor.open()` directly.
+
 ## API structure
 
 - **[Configuration](/core/supereditor/configuration)** - Initialization options
 - **[Methods](/core/supereditor/methods)** - Control the editor
 - **[Hooks](/core/supereditor/hooks)** - React to changes
+- **[SuperConverter](/core/supereditor/converter)** - Low-level DOCX parsing/export

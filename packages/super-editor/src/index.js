@@ -83,6 +83,7 @@ export {
   helpers,
   fieldAnnotationHelpers,
   trackChangesHelpers,
+  /** @internal */
   AnnotatorHelpers,
   SectionHelpers,
   /** @internal */
@@ -90,6 +91,7 @@ export {
   /** @internal */
   getActiveFormatting,
   getStarterExtensions,
+  /** @internal */
   getRichTextExtensions,
   createZip,
   /** @internal */

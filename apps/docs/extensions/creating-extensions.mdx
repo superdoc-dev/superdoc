@@ -145,6 +145,87 @@ const ConfigurableExt = Extension.create({
 ConfigurableExt.configure({ color: '#FF0000' });
 ```
 
+## Type-safe factories
+
+Use `defineNode` and `defineMark` instead of `Node.create()` / `Mark.create()` for typed attributes:
+
+```typescript
+import { defineNode, defineMark } from 'superdoc/super-editor';
+
+const CustomBlock = defineNode({
+  name: 'customBlock',
+  group: 'block',
+  content: 'inline*',
+
+  addAttributes() {
+    return {
+      level: { default: 1 },
+      collapsed: { default: false },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'div[data-custom]' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', { 'data-custom': '' }, 0];
+  },
+});
+
+const CustomMark = defineMark({
+  name: 'customMark',
+
+  addAttributes() {
+    return {
+      color: { default: null },
+    };
+  },
+});
+```
+
+With TypeScript generics you get full attribute autocompletion:
+
+```typescript
+interface CustomBlockAttrs {
+  level: number;
+  collapsed: boolean;
+}
+
+const CustomBlock = defineNode<{}, {}, CustomBlockAttrs>({
+  name: 'customBlock',
+  // attrs are now typed as CustomBlockAttrs
+});
+```
+
+## Type guards
+
+Use type guards when traversing the document to get typed node/mark attributes:
+
+```typescript
+import { isNodeType, assertNodeType, isMarkType } from 'superdoc/super-editor';
+
+// Type guard — narrows the type in if blocks
+editor.state.doc.descendants((node) => {
+  if (isNodeType(node, 'paragraph')) {
+    // node.attrs is now typed as ParagraphAttrs
+    console.log(node.attrs.paragraphProperties?.styleId);
+  }
+});
+
+// Assertion — throws if type doesn't match
+const node = state.doc.nodeAt(pos);
+assertNodeType(node, 'table');
+// node.attrs is now typed as TableAttrs
+
+// Mark type guard
+for (const mark of node.marks) {
+  if (isMarkType(mark, 'bold')) {
+    // mark.attrs is typed
+  }
+}
+```
+
 ## Using your extension
 
 ```javascript

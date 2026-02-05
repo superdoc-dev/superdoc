@@ -209,9 +209,9 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
         modules: {
           comments: false,
         },
-        // @ts-expect-error - layoutMode is a valid SuperDoc option
-        layoutMode: document.layoutMode,
-        layoutMargins: document.layoutMargins,
+        viewOptions: document.viewOptions ?? {
+          layout: document.layoutMode === 'responsive' ? 'web' : 'print',
+        },
         onReady: () => {
           // Guard callback execution if cleanup already ran
           if (aborted) return;
@@ -238,16 +238,7 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
       superdocRef.current = null;
     };
     // Compare margin primitives to avoid re-init on every render
-  }, [
-    document.source,
-    document.mode,
-    document.layoutMode,
-    document.layoutMargins?.top,
-    document.layoutMargins?.bottom,
-    document.layoutMargins?.left,
-    document.layoutMargins?.right,
-    discoverAndApplyFields,
-  ]);
+  }, [document.source, document.mode, document.layoutMode, document.viewOptions, discoverAndApplyFields]);
 
   useEffect(() => {
     if (!document.validation?.scroll?.required || !isReady) return;

@@ -20,26 +20,15 @@ Everything in the UI is available via code:
 
 ```javascript
 // Headless document generation (Node/SSR-safe)
-import { JSDOM } from 'jsdom';
-import { Editor } from '@harbour-enterprises/super-editor';
+import { Editor } from 'superdoc/super-editor';
 
-const { window } = new JSDOM('<!DOCTYPE html>');
-const { document } = window;
-
-const editor = new Editor({
-  fileSource: docxBuffer, // or initialize with options.html/markdown/json
-  documentId: 'doc-1',
-  options: {
-    isHeadless: true,
-    mockDocument: document,
-    mockWindow: window,
-    documentMode: 'suggesting',
-  }
+const editor = await Editor.open(docxBuffer, {
+  documentMode: 'suggesting',
 });
 
 editor.commands.insertContent(aiContent, { contentType: 'html' });
 ```
-[See complete example →](https://github.com/Harbour-Enterprises/SuperDoc/tree/develop/examples/agentic-slack-redlining-example)
+[See complete example →](https://github.com/Harbour-Enterprises/superdoc/tree/main/examples/agentic-slack-redlining-example)
 
 ## The AI Document Workflow
 

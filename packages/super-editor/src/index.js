@@ -55,7 +55,6 @@ const Extensions = {
  * Exported classes and components.
  * @module exports
  * @see SuperConverter
- * @see DocxZipper
  * @see SuperEditor
  * @see Toolbar
  * @see AIWriter
@@ -63,14 +62,18 @@ const Extensions = {
 export {
   // Classes
   SuperConverter,
+  /** @internal */
   DocxZipper,
   SuperToolbar,
   Editor,
+  /** @internal */
   PresentationEditor,
 
   // Components
   SuperEditor,
+  /** @internal */
   SuperInput,
+  /** @internal */
   BasicUpload,
   Toolbar,
   AIWriter,
@@ -82,17 +85,23 @@ export {
   trackChangesHelpers,
   AnnotatorHelpers,
   SectionHelpers,
+  /** @internal */
   getMarksFromSelection,
+  /** @internal */
   getActiveFormatting,
   getStarterExtensions,
   getRichTextExtensions,
   createZip,
+  /** @internal */
   getAllowedImageDimensions,
+  /** @internal */
   registeredHandlers,
 
   // External extensions classes
   Extensions,
+  /** @internal */
   TrackChangesBasePluginKey,
+  /** @internal */
   CommentsPluginKey,
 
   // Type guards and extension helpers

@@ -38,8 +38,10 @@ editor.commands.toggleTrackChangesShowFinal();
 
 ## Working with changes
 
+<Accordion title="Helper functions (advanced)">
+
 ```javascript
-import { trackChangesHelpers } from '@harbour-enterprises/superdoc';
+import { trackChangesHelpers } from 'superdoc';
 
 // Get all changes
 const changes = trackChangesHelpers.getAllChanges(editor.state);
@@ -53,6 +55,8 @@ const userChanges = trackChangesHelpers.getChangesByUser(
 // Check state
 const isTracking = trackChangesHelpers.isTrackingEnabled(editor.state);
 ```
+
+</Accordion>
 
 ## Change types
 

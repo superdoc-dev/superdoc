@@ -291,7 +291,8 @@ headerFooterAnnotations.forEach(({ node, pos }) => {
 Get all field annotations in the document
 
 ```javascript
-import { getAllFieldAnnotations } from './fieldAnnotationHelpers';
+import { fieldAnnotationHelpers } from 'superdoc';
+const { getAllFieldAnnotations } = fieldAnnotationHelpers;
 
 const annotations = getAllFieldAnnotations(editor.state);
 console.log(`Document contains ${annotations.length} field annotations`);

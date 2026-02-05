@@ -26,42 +26,22 @@ SuperEditor is the core DOCX editing engine that powers SuperDoc. Use it directl
 
 ```javascript
 import "superdoc/style.css";
-import { Editor, getStarterExtensions } from "superdoc/super-editor";
+import { Editor } from "superdoc/super-editor";
 
-async function initEditor() {
-  // 1. Load and prepare the DOCX file
-  const response = await fetch("/document.docx");
-  const blob = await response.blob();
-  const file = new File([blob], "document.docx", {
-    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  });
+// Open a DOCX file in the browser
+const response = await fetch("/document.docx");
+const file = await response.blob();
 
-  // 2. Parse the DOCX file
-  const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(file);
-
-  // 3. Create the editor
-  const editor = new Editor({
-    mode: "docx",
-    documentMode: "editing",
-    element: document.getElementById("editor"),
-    documentId: "doc-123",
-    extensions: getStarterExtensions(),
-    fileSource: file,
-    content,
-    media,
-    mediaFiles,
-    fonts,
-  });
-}
-
-initEditor();
+const editor = await Editor.open(file, {
+  element: document.getElementById("editor"),
+  documentMode: "editing",
+});
 ```
 
 ## Key Initialization Steps
 
-1. **Import styles and modules** - Import the CSS and the Editor class with extensions
-2. **Parse the DOCX** - Use `Editor.loadXmlData(file)` to extract content, media, and fonts
-3. **Create the Editor** - Pass all parsed data plus required options like `extensions`
+1. **Import styles and the Editor class**
+2. **Call `Editor.open()`** - Pass a file source and options. The editor handles parsing, extensions, and mounting automatically.
 
 ## Direct ProseMirror access
 

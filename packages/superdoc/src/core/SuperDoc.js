@@ -368,6 +368,9 @@ export class SuperDoc extends EventEmitter {
     this.superdocStore.init(this.config);
     const commentsModuleConfig = this.config.modules.comments;
     this.commentsStore.init(commentsModuleConfig && commentsModuleConfig !== false ? commentsModuleConfig : {});
+    if (this.isCollaborative) {
+      initCollaborationComments(this);
+    }
     this.#syncViewingVisibility();
   }
 

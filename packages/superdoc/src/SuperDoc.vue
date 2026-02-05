@@ -453,6 +453,11 @@ const editorOptions = (doc) => {
     proxy.$superdoc.listeners?.('fonts-resolved')?.length > 0 ? proxy.$superdoc.listeners('fonts-resolved')[0] : null;
   const useLayoutEngine = proxy.$superdoc.config.useLayoutEngine !== false;
 
+  const ydocFragment = doc.ydoc?.getXmlFragment?.('supereditor');
+  const ydocMeta = doc.ydoc?.getMap?.('meta');
+  const ydocHasContent = (ydocFragment && ydocFragment.length > 0) || (ydocMeta && Boolean(ydocMeta.get('docx')));
+  const isNewFile = doc.isNewFile && !ydocHasContent;
+
   const options = {
     isDebug: proxy.$superdoc.config.isDebug || false,
     documentId: doc.id,
@@ -493,7 +498,7 @@ const editorOptions = (doc) => {
     onTransaction: onEditorTransaction,
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
-    isNewFile: doc.isNewFile || false,
+    isNewFile,
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
@@ -537,6 +542,7 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
     commentsStore.clearEditorCommentPositions?.();
     return;
   }
+  if (!allCommentPositions || Object.keys(allCommentPositions).length === 0) return;
 
   const presentation = PresentationEditor.getInstance(doc.id);
   if (!presentation) {
@@ -549,6 +555,7 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   // Note: PresentationEditor's 'commentPositions' event provides fresh positions
   // after every layout, so this is mainly for the initial load before layout completes.
   const mappedPositions = presentation.getCommentBounds(allCommentPositions, layers.value);
+  if (!mappedPositions || Object.keys(mappedPositions).length === 0) return;
   handleEditorLocationsUpdate(mappedPositions, activeThreadId);
 };
 

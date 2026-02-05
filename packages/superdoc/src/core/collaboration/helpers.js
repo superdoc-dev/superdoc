@@ -4,6 +4,35 @@ import useComment from '../../components/CommentsLayer/use-comment';
 import { addYComment, updateYComment, deleteYComment } from './collaboration-comments';
 
 /**
+ * Load comments from the ydoc into the comments store.
+ *
+ * @param {Object} superdoc The SuperDoc instance
+ * @returns {boolean} True if comments were loaded into the store
+ */
+export const loadCommentsFromYdoc = (superdoc) => {
+  if (!superdoc?.ydoc || !superdoc?.commentsStore) return false;
+  const commentsArray = superdoc.ydoc.getArray('comments');
+  const comments = commentsArray.toJSON();
+  const seen = new Set();
+  const filtered = [];
+  comments.forEach((c) => {
+    const key = c?.importedId ?? c?.commentId;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    if (!c?.commentId) {
+      filtered.push({ ...c, commentId: key });
+      return;
+    }
+    filtered.push(c);
+  });
+  superdoc.commentsStore.commentsList = filtered.map((c) => useComment(c));
+  if (superdoc.provider?.synced) {
+    superdoc.commentsStore.hasSyncedCollaborationComments = true;
+  }
+  return true;
+};
+
+/**
  * Initialize sync for comments if the module is enabled
  *
  * @param {Object} superdoc The SuperDoc instance
@@ -11,27 +40,15 @@ import { addYComment, updateYComment, deleteYComment } from './collaboration-com
  */
 export const initCollaborationComments = (superdoc) => {
   if (!superdoc.config.modules.comments || !superdoc.provider) return;
+  if (superdoc._commentsCollabInitialized) {
+    loadCommentsFromYdoc(superdoc);
+    return;
+  }
+  superdoc._commentsCollabInitialized = true;
 
   // If we have comments and collaboration, wait for sync and then let the store know when its ready
   const commentsArray = superdoc.ydoc.getArray('comments');
-  const updateCommentsStore = () => {
-    if (!superdoc.commentsStore) return false;
-    const comments = commentsArray.toJSON();
-    const seen = new Set();
-    const filtered = [];
-    comments.forEach((c) => {
-      const key = c?.importedId ?? c?.commentId;
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      if (!c?.commentId) {
-        filtered.push({ ...c, commentId: key });
-        return;
-      }
-      filtered.push(c);
-    });
-    superdoc.commentsStore.commentsList = filtered.map((c) => useComment(c));
-    return true;
-  };
+  const updateCommentsStore = () => loadCommentsFromYdoc(superdoc);
 
   const onSuperDocYdocSynced = () => {
     if (!updateCommentsStore()) {

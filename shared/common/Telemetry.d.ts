@@ -9,7 +9,7 @@
 export interface TelemetryConfig {
   enabled: boolean;
   endpoint?: string;
-  licenseKey?: string;
+  licenseKey?: string | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -36,12 +36,13 @@ export interface TelemetryPayload {
   events: DocumentOpenEvent[];
 }
 
-interface TelemetryOptions {
-  config: TelemetryConfig;
-}
+/**
+ * Community license key for AGPLv3 / evaluation usage.
+ */
+export declare const COMMUNITY_LICENSE_KEY: 'community-and-eval-agplv3';
 
 export declare class Telemetry {
-  constructor(options: TelemetryOptions);
+  constructor(config: TelemetryConfig);
 
   /**
    * Track a document open event - sends immediately
@@ -49,19 +50,4 @@ export declare class Telemetry {
    * @param documentCreatedAt - Document creation timestamp (dcterms:created), or null if unavailable
    */
   trackDocumentOpen(documentId: string | null, documentCreatedAt?: string | null): void;
-
-  /**
-   * Disable telemetry
-   */
-  disable(): void;
-
-  /**
-   * Enable telemetry
-   */
-  enable(): void;
-
-  /**
-   * Check if telemetry is enabled
-   */
-  isEnabled(): boolean;
 }

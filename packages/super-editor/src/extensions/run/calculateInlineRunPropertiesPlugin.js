@@ -57,12 +57,18 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
 
         const $pos = tr.doc.resolve(pos);
         let paragraphNode = null;
+        let child = runNode;
+        let isFirstInParagraph = $pos.parent.firstChild === child;
+        let paragraphPos;
         for (let depth = $pos.depth; depth >= 0; depth--) {
           const node = $pos.node(depth);
+          isFirstInParagraph = node.firstChild === child && isFirstInParagraph;
           if (node.type.name === 'paragraph') {
             paragraphNode = node;
+            paragraphPos = $pos.before(depth);
             break;
           }
+          child = node;
         }
         if (!paragraphNode) return;
 
@@ -84,13 +90,11 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         const inlineRunProperties = getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles);
         const runProperties = Object.keys(inlineRunProperties).length ? inlineRunProperties : null;
 
-        const isFirstInParagraph = $pos.parent.firstChild === runNode && $pos.parent.type === paragraphNode.type;
-
         if (isFirstInParagraph) {
           // Keep paragraph's default runProperties in sync for the first run
           const inlineParagraphProperties = carbonCopy(paragraphNode.attrs.paragraphProperties) || {};
           inlineParagraphProperties.runProperties = runProperties;
-          tr.setNodeMarkup($pos.before(), paragraphNode.type, {
+          tr.setNodeMarkup(paragraphPos, paragraphNode.type, {
             ...paragraphNode.attrs,
             paragraphProperties: inlineParagraphProperties,
           });

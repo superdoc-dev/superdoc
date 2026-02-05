@@ -480,16 +480,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
     return this.options.document ?? this.options.mockDocument ?? (canUseDOM() ? document : null);
   }
 
-  async #emitCreateAsync(): Promise<void> {
-    // Ensure document metadata (GUID, timestamp) is generated on import
-    // This must happen regardless of telemetry being enabled
-    await this.getDocumentIdentifier();
-    this.#trackDocumentOpen();
-
+  #emitCreateAsync(): void {
     setTimeout(() => {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
   }
 
   /**
@@ -516,24 +514,27 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Track document open event for telemetry
+   * Ensure document metadata is generated and track telemetry if enabled
    */
-  async #trackDocumentOpen(): Promise<void> {
-    if (!this.#telemetry || this.#documentOpenTracked) return;
+  #trackDocumentOpen(): void {
+    // Always generate metadata (GUID, timestamp) regardless of telemetry
+    this.getDocumentIdentifier().then((documentId) => {
+      // Only track if telemetry enabled and not already tracked
+      if (!this.#telemetry || this.#documentOpenTracked) return;
 
-    try {
-      const documentId = await this.getDocumentIdentifier();
-      const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
-      console.debug('[super-editor] Document info:', {
-        documentId,
-        documentCreatedAt,
-        isNewFile: this.options.isNewFile,
-      });
-      this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
-      this.#documentOpenTracked = true;
-    } catch {
-      // Fail silently - telemetry should never break the app
-    }
+      try {
+        const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+        console.debug('[super-editor] Document info:', {
+          documentId,
+          documentCreatedAt,
+          isNewFile: this.options.isNewFile,
+        });
+        this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
+        this.#documentOpenTracked = true;
+      } catch {
+        // Fail silently - telemetry should never break the app
+      }
+    });
   }
 
   /**
@@ -1065,16 +1066,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
   }
 
-  async mount(el: HTMLElement | null): Promise<void> {
+  mount(el: HTMLElement | null): void {
     this.#createView(el);
-
-    await this.getDocumentIdentifier();
 
     setTimeout(() => {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
-      this.#trackDocumentOpen();
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
   }
 
   unmount(): void {

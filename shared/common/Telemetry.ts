@@ -38,11 +38,8 @@ export interface TelemetryPayload {
   events: DocumentOpenEvent[];
 }
 
-interface TelemetryOptions {
-  config: TelemetryConfig;
-}
-
 const DEFAULT_ENDPOINT = 'https://livetest-3---superdoc-telemetry-4yffz5xqqq-uc.a.run.app/v1/collect';
+// const DEFAULT_ENDPOINT = 'http://localhost:3051/v1/collect';
 
 function getSuperdocVersion(): string {
   try {
@@ -59,11 +56,11 @@ export class Telemetry {
   private licenseKey: string;
   private metadata?: Record<string, unknown>;
 
-  constructor(options: TelemetryOptions) {
-    this.enabled = options.config.enabled;
-    this.endpoint = options.config.endpoint || DEFAULT_ENDPOINT;
-    this.licenseKey = options.config.licenseKey || '';
-    this.metadata = options.config.metadata;
+  constructor(config: TelemetryConfig) {
+    this.enabled = config.enabled;
+    this.endpoint = config.endpoint || DEFAULT_ENDPOINT;
+    this.licenseKey = config.licenseKey || '';
+    this.metadata = config.metadata;
     this.superdocVersion = getSuperdocVersion();
   }
 
@@ -131,26 +128,5 @@ export class Telemetry {
     } catch (error) {
       console.error('[Telemetry] Fetch error:', error);
     }
-  }
-
-  /**
-   * Disable telemetry
-   */
-  disable(): void {
-    this.enabled = false;
-  }
-
-  /**
-   * Enable telemetry
-   */
-  enable(): void {
-    this.enabled = true;
-  }
-
-  /**
-   * Check if telemetry is enabled
-   */
-  isEnabled(): boolean {
-    return this.enabled;
   }
 }

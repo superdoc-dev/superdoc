@@ -245,8 +245,8 @@ class SuperConverter {
     this.documentUniqueIdentifier = null; // Final identifier (identifierHash or contentHash)
     this.documentModified = false; // Track if document has been edited
 
-    // Track if this is a new file created from blank template
-    this.isNewFile = params?.isNewFile || false;
+    // Track if this is a blank document created from template
+    this.isBlankDoc = params?.isNewFile || false;
 
     // Parse the initial XML, if provided
     if (this.docx.length || this.xml) this.parseFromXml();
@@ -725,8 +725,8 @@ class SuperConverter {
       }
     }
 
-    // NEW FILE: set fresh timestamp (ensures unique identifier for each new doc from template)
-    if (this.isNewFile) {
+    // BLANK DOC: set fresh timestamp (ensures unique identifier for each new doc from template)
+    if (this.isBlankDoc) {
       this.setDocumentCreatedTimestamp(SuperConverter.generateWordTimestamp());
       console.debug('[super-converter] New file: set fresh timestamp', {
         documentGuid: this.documentGuid,
@@ -795,11 +795,11 @@ class SuperConverter {
   /**
    * Get document unique identifier (async)
    *
-   * For new files (isNewFile: true):
+   * For blank documents (isBlankDoc: true):
    * - GUID and timestamp already set in resolveDocumentGuid()
    * - Returns identifierHash(guid|timestamp)
    *
-   * For imported files (isNewFile: false):
+   * For imported files (isBlankDoc: false):
    * - If both documentGuid and dcterms:created exist: returns identifierHash
    * - Otherwise: returns contentHash and generates missing metadata for future exports
    *
@@ -822,7 +822,7 @@ class SuperConverter {
         documentUniqueIdentifier: this.documentUniqueIdentifier,
         documentGuid: this.documentGuid,
         createdAt: this.getDocumentCreatedTimestamp(),
-        isNewFile: this.isNewFile,
+        isBlankDoc: this.isBlankDoc,
       });
     } else {
       // Missing one or both: use contentHash for stability (same file = same hash)

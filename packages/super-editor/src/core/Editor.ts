@@ -502,12 +502,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     try {
       this.#telemetry = new Telemetry({
-        config: {
-          enabled: true,
-          endpoint: telemetryConfig.endpoint,
-          licenseKey,
-          metadata: telemetryConfig.metadata,
-        },
+        enabled: true,
+        endpoint: telemetryConfig.endpoint,
+        licenseKey,
+        metadata: telemetryConfig.metadata,
       });
     } catch {
       // Fail silently - telemetry should never break the app

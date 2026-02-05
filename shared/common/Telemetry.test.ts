@@ -19,18 +19,7 @@ describe('Telemetry', () => {
 
   describe('telemetry disabled', () => {
     it('does not send telemetry when disabled', async () => {
-      const telemetry = new Telemetry({
-        config: { ...testConfig, enabled: false },
-      });
-      telemetry.trackDocumentOpen('doc-123');
-
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(fetchSpy).not.toHaveBeenCalled();
-    });
-
-    it('does not send telemetry after being disabled at runtime', async () => {
-      const telemetry = new Telemetry({ config: testConfig });
-      telemetry.disable();
+      const telemetry = new Telemetry({ ...testConfig, enabled: false });
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -40,7 +29,7 @@ describe('Telemetry', () => {
 
   describe('telemetry enabled', () => {
     it('sends telemetry when enabled', async () => {
-      const telemetry = new Telemetry({ config: testConfig });
+      const telemetry = new Telemetry(testConfig);
       telemetry.trackDocumentOpen('doc-123', '2024-01-15T10:30:00Z');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -67,24 +56,11 @@ describe('Telemetry', () => {
       expect(payload.events[0].documentCreatedAt).toBe('2024-01-15T10:30:00Z');
       expect(payload.events[0].timestamp).toBeDefined();
     });
-
-    it('sends telemetry after being enabled at runtime', async () => {
-      const telemetry = new Telemetry({
-        config: { ...testConfig, enabled: false },
-      });
-      telemetry.enable();
-      telemetry.trackDocumentOpen('doc-123');
-
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe('telemetry without license key', () => {
     it('sends telemetry when enabled without license key', async () => {
-      const telemetry = new Telemetry({
-        config: { enabled: true, endpoint: 'https://test.example.com/collect' },
-      });
+      const telemetry = new Telemetry({ enabled: true, endpoint: 'https://test.example.com/collect' });
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -105,7 +81,7 @@ describe('Telemetry', () => {
 
   describe('telemetry without document id', () => {
     it('sends telemetry with null documentId', async () => {
-      const telemetry = new Telemetry({ config: testConfig });
+      const telemetry = new Telemetry(testConfig);
       telemetry.trackDocumentOpen(null, null);
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -118,7 +94,7 @@ describe('Telemetry', () => {
     });
 
     it('sends telemetry with documentId but no documentCreatedAt', async () => {
-      const telemetry = new Telemetry({ config: testConfig });
+      const telemetry = new Telemetry(testConfig);
       telemetry.trackDocumentOpen('doc-456');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -134,9 +110,7 @@ describe('Telemetry', () => {
   describe('telemetry with custom endpoint', () => {
     it('sends telemetry to custom endpoint when provided', async () => {
       const customEndpoint = 'https://custom.telemetry.com/v1/events';
-      const telemetry = new Telemetry({
-        config: { enabled: true, endpoint: customEndpoint },
-      });
+      const telemetry = new Telemetry({ enabled: true, endpoint: customEndpoint });
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -146,9 +120,7 @@ describe('Telemetry', () => {
     });
 
     it('sends telemetry to default endpoint when not provided', async () => {
-      const telemetry = new Telemetry({
-        config: { enabled: true },
-      });
+      const telemetry = new Telemetry({ enabled: true });
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -172,7 +144,7 @@ describe('Telemetry', () => {
           nested: { key: 'value' },
         },
       };
-      const telemetry = new Telemetry({ config: configWithMetadata });
+      const telemetry = new Telemetry(configWithMetadata);
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -187,7 +159,7 @@ describe('Telemetry', () => {
     });
 
     it('omits metadata from payload when not provided', async () => {
-      const telemetry = new Telemetry({ config: testConfig });
+      const telemetry = new Telemetry(testConfig);
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -199,9 +171,7 @@ describe('Telemetry', () => {
     });
 
     it('includes empty metadata object when provided as empty', async () => {
-      const telemetry = new Telemetry({
-        config: { ...testConfig, metadata: {} },
-      });
+      const telemetry = new Telemetry({ ...testConfig, metadata: {} });
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -215,7 +185,7 @@ describe('Telemetry', () => {
 
   describe('payload structure', () => {
     it('includes browser info at root level', async () => {
-      const telemetry = new Telemetry({ config: testConfig });
+      const telemetry = new Telemetry(testConfig);
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -229,7 +199,7 @@ describe('Telemetry', () => {
     });
 
     it('includes superdocVersion at root level', async () => {
-      const telemetry = new Telemetry({ config: testConfig });
+      const telemetry = new Telemetry(testConfig);
       telemetry.trackDocumentOpen('doc-123');
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -241,31 +211,11 @@ describe('Telemetry', () => {
     });
   });
 
-  describe('enable/disable', () => {
-    it('can disable telemetry', () => {
-      const telemetry = new Telemetry({ config: testConfig });
-      expect(telemetry.isEnabled()).toBe(true);
-
-      telemetry.disable();
-      expect(telemetry.isEnabled()).toBe(false);
-    });
-
-    it('can enable telemetry', () => {
-      const telemetry = new Telemetry({
-        config: { ...testConfig, enabled: false },
-      });
-      expect(telemetry.isEnabled()).toBe(false);
-
-      telemetry.enable();
-      expect(telemetry.isEnabled()).toBe(true);
-    });
-  });
-
   describe('error handling', () => {
     it('fails silently on fetch error', async () => {
       fetchSpy.mockRejectedValue(new Error('Network error'));
 
-      const telemetry = new Telemetry({ config: testConfig });
+      const telemetry = new Telemetry(testConfig);
 
       // Should not throw
       expect(() => telemetry.trackDocumentOpen('doc-123')).not.toThrow();

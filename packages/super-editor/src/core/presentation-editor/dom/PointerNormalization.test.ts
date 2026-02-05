@@ -40,6 +40,7 @@ describe('PointerNormalization', () => {
         visibleHost,
         zoom: 1,
         getPageOffsetX: () => 0,
+        getPageOffsetY: () => 0,
       };
 
       expect(normalizeClientPoint(options, NaN, 0)).toBe(null);
@@ -55,6 +56,7 @@ describe('PointerNormalization', () => {
         visibleHost,
         zoom: 2,
         getPageOffsetX: () => 0,
+        getPageOffsetY: () => 0,
       };
 
       const result = normalizeClientPoint(options, 200, 150);
@@ -76,10 +78,11 @@ describe('PointerNormalization', () => {
         visibleHost,
         zoom: 2,
         getPageOffsetX: (pageIndex: number) => (pageIndex === 2 ? 12 : null),
+        getPageOffsetY: (pageIndex: number) => (pageIndex === 2 ? 8 : null),
       };
 
       const result = normalizeClientPoint(options, 200, 150);
-      expect(result).toEqual({ x: 93, y: 90 });
+      expect(result).toEqual({ x: 93, y: 82 });
     });
 
     it('does not adjust X when page offset is unavailable', () => {
@@ -97,6 +100,7 @@ describe('PointerNormalization', () => {
         visibleHost,
         zoom: 2,
         getPageOffsetX: () => null,
+        getPageOffsetY: () => null,
       };
 
       const result = normalizeClientPoint(options, 200, 150);

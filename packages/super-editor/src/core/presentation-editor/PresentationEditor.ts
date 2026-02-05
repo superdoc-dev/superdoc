@@ -2970,9 +2970,7 @@ export class PresentationEditor extends EventEmitter {
           previousMeasures,
         );
         const incrementalLayoutEnd = perfNow();
-        perfLog(
-          `[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`,
-        );
+        perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
 
         // Type guard: validate incrementalLayout return value
         if (!result || typeof result !== 'object') {
@@ -4524,13 +4522,19 @@ export class PresentationEditor extends EventEmitter {
         visibleHost: this.#visibleHost,
         zoom: this.#layoutOptions.zoom ?? 1,
         getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
       },
       clientX,
       clientY,
     );
   }
 
-  denormalizeClientPoint(layoutX: number, layoutY: number, pageIndex?: number, height?: number): { x: number; y: number, height?: number } | null {
+  denormalizeClientPoint(
+    layoutX: number,
+    layoutY: number,
+    pageIndex?: number,
+    height?: number,
+  ): { x: number; y: number; height?: number } | null {
     return denormalizeClientPointFromPointer(
       {
         viewportHost: this.#viewportHost,

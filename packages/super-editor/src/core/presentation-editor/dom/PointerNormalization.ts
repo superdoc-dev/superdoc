@@ -16,6 +16,7 @@ export function normalizeClientPoint(
     visibleHost: HTMLElement;
     zoom: number;
     getPageOffsetX: (pageIndex: number) => number | null;
+    getPageOffsetY: (pageIndex: number) => number | null;
   },
   clientX: number,
   clientY: number,
@@ -35,6 +36,7 @@ export function normalizeClientPoint(
   // Adjust X by the actual page offset if the pointer is over a page. This keeps
   // geometry-based hit testing aligned with the centered page content.
   let adjustedX = baseX;
+  let adjustedY = baseY;
   const doc = options.visibleHost.ownerDocument ?? document;
   const hitChain = typeof doc.elementsFromPoint === 'function' ? doc.elementsFromPoint(clientX, clientY) : [];
   const pageEl = Array.isArray(hitChain)
@@ -47,12 +49,16 @@ export function normalizeClientPoint(
       if (pageOffsetX != null) {
         adjustedX = baseX - pageOffsetX;
       }
+      const pageOffsetY = options.getPageOffsetY(pageIndex);
+      if (pageOffsetY != null) {
+        adjustedY = baseY - pageOffsetY;
+      }
     }
   }
 
   return {
     x: adjustedX,
-    y: baseY,
+    y: adjustedY,
   };
 }
 
@@ -81,37 +87,31 @@ export function denormalizeClientPoint(
   layoutY: number,
   pageIndex?: number,
   height?: number,
-): { x: number; y: number, height?: number } | null {
+): { x: number; y: number; height?: number } | null {
   if (!Number.isFinite(layoutX) || !Number.isFinite(layoutY)) {
     return null;
+  }
+
+  let pageOffsetX = 0;
+  let pageOffsetY = 0;
+
+  // Convert from layout coordinates to screen coordinates by multiplying by zoom
+  // and reversing the scroll/viewport offsets.
+  if (Number.isFinite(pageIndex)) {
+    pageOffsetX = options.getPageOffsetX(Number(pageIndex)) ?? 0;
+
+    pageOffsetY = options.getPageOffsetY(Number(pageIndex)) ?? 0;
   }
 
   const rect = options.viewportHost.getBoundingClientRect();
   const scrollLeft = options.visibleHost.scrollLeft ?? 0;
   const scrollTop = options.visibleHost.scrollTop ?? 0;
-
-  // Convert from layout coordinates to screen coordinates by multiplying by zoom
-  // and reversing the scroll/viewport offsets.
-  let baseX = layoutX;
-  if (Number.isFinite(pageIndex)) {
-    const pageOffsetX = options.getPageOffsetX(pageIndex);
-    if (pageOffsetX != null) {
-      baseX = layoutX + pageOffsetX;
-    }
-
-    const pageOffsetY = options.getPageOffsetY(pageIndex);
-    if (pageOffsetY != null) {
-      layoutY += pageOffsetY;
-    }
-  }
-
-  const result = {
-    x: baseX * options.zoom - scrollLeft + rect.left,
-    y: layoutY * options.zoom - scrollTop + rect.top,
+  const result: { x: number; y: number; height?: number } = {
+    x: (layoutX + pageOffsetX) * options.zoom + rect.left - scrollLeft,
+    y: (layoutY + pageOffsetY) * options.zoom + rect.top - scrollTop,
   };
   if (Number.isFinite(height)) {
     result['height'] = height * options.zoom;
   }
   return result;
-
 }

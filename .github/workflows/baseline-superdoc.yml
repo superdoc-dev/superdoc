@@ -190,7 +190,7 @@ jobs:
           pnpm superdoc "$VERSION"
 
           # Verify installation
-          INSTALLED=$(pnpm superdoc:version)
+          INSTALLED=$(node -p "require('./packages/harness/node_modules/superdoc/package.json').version")
           echo "Installed version: $INSTALLED"
 
           if [ "$INSTALLED" != "$VERSION" ]; then
@@ -207,7 +207,7 @@ jobs:
           SD_TESTING_R2_BASELINES_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BASELINES_BUCKET_NAME }}
           SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
           SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}
-        run: pnpm baseline
+        run: pnpm baseline --ci
 
       - name: Summary
         if: steps.version.outputs.skip != 'true'
@@ -239,3 +239,8 @@ jobs:
 
           This is expected behavior and not an error.
           EOF
+
+      - name: Cleanup corpus cache
+        if: always()
+        run: |
+          rm -rf ~/.cache/superdoc-corpus || true

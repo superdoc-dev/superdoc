@@ -26,6 +26,8 @@
  *   pnpm baseline --fail-on-error       # Exit non-zero when any document fails
  *   pnpm baseline --parallel 6          # Use 6 parallel workers
  *   pnpm baseline --scale-factor 1.5    # Set Playwright deviceScaleFactor (default: 1.5)
+ *   pnpm baseline --ci                  # CI mode: hide doc names, show progress only
+ *   pnpm baseline --silent              # Alias for --ci
  */
 
 import fs from 'node:fs';
@@ -427,6 +429,7 @@ function parseArgs(): {
   skipExisting: boolean;
   failOnError: boolean;
   append: boolean;
+  ci: boolean;
   browsers: BrowserName[];
   scaleFactor: number;
   mode: StorageMode;
@@ -438,6 +441,7 @@ function parseArgs(): {
   const skipExisting = args.includes('--skip-existing');
   const failOnError = args.includes('--fail-on-error');
   const append = args.includes('--append');
+  const ci = args.includes('--ci') || args.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
   const storage = parseStorageFlags(args);
   const docsDir = resolveDocsDir(storage.mode, storage.docsDir);
 
@@ -509,10 +513,50 @@ function parseArgs(): {
     skipExisting,
     failOnError,
     append,
+    ci,
     browsers,
     scaleFactor,
     mode: storage.mode,
     docsDir,
+  };
+}
+
+type ProgressReporter = {
+  advance: () => void;
+};
+
+function createProgressReporter(total: number, enabled: boolean): ProgressReporter {
+  let completed = 0;
+  const barWidth = 24;
+  const step = Math.max(1, Math.floor(total / 100));
+  const isTty = Boolean(process.stdout.isTTY);
+
+  const render = () => {
+    const percent = total === 0 ? 100 : Math.round((completed / total) * 100);
+    const filled = Math.min(barWidth, Math.round((percent / 100) * barWidth));
+    const bar = `${'='.repeat(filled)}${'-'.repeat(barWidth - filled)}`;
+    return `Progress [${bar}] ${completed}/${total} (${percent}%)`;
+  };
+
+  const write = (line: string) => {
+    if (isTty) {
+      process.stdout.write(`\r${line}`);
+      if (completed >= total) {
+        process.stdout.write('\n');
+      }
+    } else {
+      console.log(line);
+    }
+  };
+
+  return {
+    advance: () => {
+      completed += 1;
+      if (!enabled || total === 0) return;
+      if (completed % step === 0 || completed === total) {
+        write(render());
+      }
+    },
   };
 }
 
@@ -535,6 +579,8 @@ async function processDocumentQueue(
   results: { screenshots: number; skipped: number; errors: Array<{ doc: string; error: string }> },
   skipExisting: boolean,
   provider: CorpusProvider,
+  progress: ProgressReporter | null,
+  quiet: boolean,
 ): Promise<void> {
   while (true) {
     const doc = queue.shift();
@@ -542,21 +588,34 @@ async function processDocumentQueue(
 
     // Skip if document already has screenshots (for baseline mode)
     if (skipExisting && hasExistingScreenshots(doc)) {
-      console.log(colors.muted(`[${workerId}] ⏭ ${doc.relativePath} (already exists)`));
+      if (!quiet) {
+        console.log(colors.muted(`[${workerId}] ⏭ ${doc.relativePath} (already exists)`));
+      }
       results.skipped++;
+      progress?.advance();
       continue;
     }
 
-    console.log(colors.info(`[${workerId}] 📄 ${doc.relativePath}`));
+    if (!quiet) {
+      console.log(colors.info(`[${workerId}] 📄 ${doc.relativePath}`));
+    }
 
     try {
       const screenshots = await captureDocument(page, doc, provider);
       results.screenshots += screenshots.length;
-      console.log(colors.success(`[${workerId}]    ✓ ${screenshots.length} page(s) captured`));
+      if (!quiet) {
+        console.log(colors.success(`[${workerId}]    ✓ ${screenshots.length} page(s) captured`));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(colors.error(`[${workerId}]    ✗ Error: ${message}`));
-      results.errors.push({ doc: doc.relativePath, error: message });
+      if (!quiet) {
+        console.log(colors.error(`[${workerId}]    ✗ Error: ${message}`));
+        results.errors.push({ doc: doc.relativePath, error: message });
+      } else {
+        results.errors.push({ doc: '', error: 'error' });
+      }
+    } finally {
+      progress?.advance();
     }
   }
 }
@@ -577,6 +636,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     failOnError,
     append,
     scaleFactor,
+    ci,
     mode,
     docsDir,
   } = options;
@@ -664,6 +724,8 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     errors: [] as Array<{ doc: string; error: string }>,
   };
 
+  const progress = createProgressReporter(documents.length, ci);
+
   // Create document queue (workers will pull from this)
   const queue = [...documents];
 
@@ -678,7 +740,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
       deviceScaleFactor: scaleFactor,
     });
     const page = await context.newPage();
-    workers.push(processDocumentQueue(i + 1, page, queue, results, shouldSkipExisting, provider));
+    workers.push(processDocumentQueue(i + 1, page, queue, results, shouldSkipExisting, provider, progress, ci));
   }
 
   // Wait for all workers to complete
@@ -708,9 +770,13 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
   }
 
   if (results.errors.length > 0) {
-    console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
-    for (const { doc, error } of results.errors) {
-      console.log(colors.error(`  - ${doc}: ${error}`));
+    if (ci) {
+      console.log(colors.warning(`\n⚠ ${results.errors.length} error(s) occurred. Re-run without --ci for details.`));
+    } else {
+      console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
+      for (const { doc, error } of results.errors) {
+        console.log(colors.error(`  - ${doc}: ${error}`));
+      }
     }
     if (failOnError) {
       return 1;

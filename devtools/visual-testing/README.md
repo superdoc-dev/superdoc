@@ -99,6 +99,7 @@ Notes:
 - `--refresh-baselines` re-download baseline files from R2 for the current filters (or full baseline if no filters).
 - `--local` use local docs and local baselines/results (no R2).
 - `--docs <path>` local docs root (required when using `--local`).
+- `--ci` or `--silent` hide per-doc/story logs and show progress only (CI-friendly).
 
 ## Multi-browser baselines
 

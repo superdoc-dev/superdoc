@@ -17,6 +17,8 @@
  *   pnpm generate:interactions --scale-factor 1.5
  *   pnpm baseline:interactions --fail-on-error
  *   pnpm baseline:interactions --scale-factor 1.5
+ *   pnpm baseline:interactions --ci      # CI mode: hide story names, show progress only
+ *   pnpm baseline:interactions --silent  # Alias for --ci
  */
 
 import fs from 'node:fs';
@@ -84,6 +86,7 @@ function parseArgs(): {
   output?: string;
   skipExisting: boolean;
   failOnError: boolean;
+  ci: boolean;
   browsers: BrowserName[];
   scaleFactor: number;
   mode: StorageMode;
@@ -94,6 +97,7 @@ function parseArgs(): {
   const force = args.includes('--force');
   const skipExisting = args.includes('--skip-existing');
   const failOnError = args.includes('--fail-on-error');
+  const ci = args.includes('--ci') || args.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
   const storage = parseStorageFlags(args);
   const docsDir = resolveDocsDir(storage.mode, storage.docsDir);
 
@@ -154,6 +158,7 @@ function parseArgs(): {
     output,
     skipExisting,
     failOnError,
+    ci,
     browsers,
     scaleFactor,
     mode: storage.mode,
@@ -203,7 +208,7 @@ function walkStoriesDir(dir: string, rootDir: string): string[] {
   return files;
 }
 
-async function loadStories(): Promise<LoadedStory[]> {
+async function loadStories(quiet: boolean): Promise<LoadedStory[]> {
   const { dir, isLegacy } = resolveStoriesDir();
   if (!fs.existsSync(dir)) {
     return [];
@@ -227,7 +232,11 @@ async function loadStories(): Promise<LoadedStory[]> {
       const module = await import(pathToFileURL(filePath).href);
       const story = module.default as InteractionStory;
       if (!story || typeof story.run !== 'function') {
-        console.warn(colors.warning(`Skipping invalid story: ${relativePath} (missing run())`));
+        if (!quiet) {
+          console.warn(colors.warning(`Skipping invalid story: ${relativePath} (missing run())`));
+        } else {
+          console.warn(colors.warning('Skipping invalid story (missing run())'));
+        }
         continue;
       }
 
@@ -237,9 +246,13 @@ async function loadStories(): Promise<LoadedStory[]> {
         relativeDir === '.' ? sanitizeFilename(name) : `${relativeDir.replace(/\\/g, '/')}/${sanitizeFilename(name)}`;
       stories.push({ id, name, filePath, story: { ...story, name } });
     } catch (error) {
-      console.warn(
-        colors.warning(`Skipping story ${relativePath}: ${error instanceof Error ? error.message : String(error)}`),
-      );
+      if (!quiet) {
+        console.warn(
+          colors.warning(`Skipping story ${relativePath}: ${error instanceof Error ? error.message : String(error)}`),
+        );
+      } else {
+        console.warn(colors.warning('Skipping story due to load error.'));
+      }
     }
   }
 
@@ -405,6 +418,45 @@ async function runStory(
 
 type ParsedArgs = ReturnType<typeof parseArgs>;
 
+type ProgressReporter = {
+  advance: () => void;
+};
+
+function createProgressReporter(total: number, enabled: boolean): ProgressReporter {
+  let completed = 0;
+  const barWidth = 24;
+  const step = Math.max(1, Math.floor(total / 100));
+  const isTty = Boolean(process.stdout.isTTY);
+
+  const render = () => {
+    const percent = total === 0 ? 100 : Math.round((completed / total) * 100);
+    const filled = Math.min(barWidth, Math.round((percent / 100) * barWidth));
+    const bar = `${'='.repeat(filled)}${'-'.repeat(barWidth - filled)}`;
+    return `Progress [${bar}] ${completed}/${total} (${percent}%)`;
+  };
+
+  const write = (line: string) => {
+    if (isTty) {
+      process.stdout.write(`\r${line}`);
+      if (completed >= total) {
+        process.stdout.write('\n');
+      }
+    } else {
+      console.log(line);
+    }
+  };
+
+  return {
+    advance: () => {
+      completed += 1;
+      if (!enabled || total === 0) return;
+      if (completed % step === 0 || completed === total) {
+        write(render());
+      }
+    },
+  };
+}
+
 async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise<number> {
   const {
     isBaseline,
@@ -417,6 +469,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     skipExisting,
     failOnError,
     scaleFactor,
+    ci,
     mode,
     docsDir,
   } = options;
@@ -452,7 +505,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     }
   }
 
-  const stories = await loadStories();
+  const stories = await loadStories(ci);
   const resolvedStoriesDir = resolveStoriesDir().dir;
 
   if (stories.length === 0) {
@@ -481,6 +534,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
 
   const provider = await createCorpusProvider({ mode, docsDir });
   const shouldSkipExisting = (isBaseline && !force) || skipExisting;
+  const progress = createProgressReporter(filtered.length, ci);
 
   const browserType = getBrowserType(browser);
   const browserInstance = await browserType.launch({ headless: true });
@@ -494,22 +548,35 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
   for (const story of filtered) {
     const storyDir = path.join(outputRoot, story.id);
     if (shouldSkipExisting && hasExistingSnapshots(storyDir)) {
-      console.log(colors.muted(`⏭ ${story.name} (already exists)`));
+      if (!ci) {
+        console.log(colors.muted(`⏭ ${story.name} (already exists)`));
+      }
       results.skipped += 1;
+      progress.advance();
       continue;
     }
 
-    console.log(colors.info(`▶ ${story.name}`));
+    if (!ci) {
+      console.log(colors.info(`▶ ${story.name}`));
+    }
     results.stories += 1;
 
     try {
       const count = await runStory(browserInstance, story, outputRoot, scaleFactor, provider);
       results.milestones += count;
-      console.log(colors.success(`   ✓ ${count} milestone(s)`));
+      if (!ci) {
+        console.log(colors.success(`   ✓ ${count} milestone(s)`));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(colors.error(`   ✗ Error: ${message}`));
-      results.errors.push({ story: story.name, error: message });
+      if (!ci) {
+        console.log(colors.error(`   ✗ Error: ${message}`));
+        results.errors.push({ story: story.name, error: message });
+      } else {
+        results.errors.push({ story: '', error: 'error' });
+      }
+    } finally {
+      progress.advance();
     }
   }
 
@@ -533,9 +600,13 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
   }
 
   if (results.errors.length > 0) {
-    console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
-    for (const { story, error } of results.errors) {
-      console.log(colors.error(`  - ${story}: ${error}`));
+    if (ci) {
+      console.log(colors.warning(`\n⚠ ${results.errors.length} error(s) occurred. Re-run without --ci for details.`));
+    } else {
+      console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
+      for (const { story, error } of results.errors) {
+        console.log(colors.error(`  - ${story}: ${error}`));
+      }
     }
     if (failOnError) {
       return 1;

@@ -1,81 +1,82 @@
 import { defineStory } from '@superdoc-testing/helpers';
-import { clickOnCommentedText, waitForCommentPanelStable } from '../../helpers/index.js';
 
-const WAIT_MS = 400;
-const START_DOC = 'comments-tcs/basic-comments.docx';
+const WAIT_MS = 300;
 
 /**
  * Tests the comment editing flow to prevent regression of SD-1731.
  *
  * Bug SD-1731: When clicking "Edit" on an existing comment, the comment text
  * was being cleared instead of being preserved in the input field.
- *
- * This test verifies:
- * - Clicking "Edit" from overflow menu shows the original comment text
- * - The edit input is properly focused and contains the existing text
- * - Editing can be cancelled, restoring the original view
  */
 export default defineStory({
   name: 'edit-comment-text',
   description: 'Test that editing a comment preserves and displays the original text',
   tickets: ['SD-1731'],
-  startDocument: START_DOC,
+  startDocument: null,
   layout: true,
   comments: 'panel',
-  hideCaret: false,
-  hideSelection: false,
 
   async run(page, helpers): Promise<void> {
-    const { step, waitForStable, milestone, type } = helpers;
+    const { type, waitForStable, milestone, pressTimes, pressShortcut } = helpers;
 
-    await step('Wait for document and comments to load', async () => {
-      await page.waitForSelector('.superdoc-comment-highlight', { timeout: 30_000 });
-      await waitForStable(WAIT_MS);
-      await milestone('initial', 'Document loaded with comment visible in panel');
-    });
+    // Type initial text
+    await type('hello comments');
+    await waitForStable(WAIT_MS);
+    await milestone('typed', 'Typed "hello comments"');
 
-    await step('Click on commented text to select the comment', async () => {
-      // Click on any commented text to activate the comment
-      const highlight = page.locator('.superdoc-comment-highlight').first();
-      await highlight.click();
-      await waitForCommentPanelStable(page, WAIT_MS);
-      await milestone('comment-selected', 'Comment is selected and active in panel');
-    });
+    // Select the word "comments" (8 characters from the end)
+    await pressShortcut('ArrowRight'); // Move to end
+    await pressTimes('Shift+ArrowLeft', 8); // Select "comments"
+    await waitForStable(WAIT_MS);
+    await milestone('selected', 'Selected the word "comments"');
 
-    await step('Click overflow menu to open options', async () => {
-      // Find the active comment dialog and click its overflow menu icon
-      const activeDialog = page.locator('.comments-dialog.is-active');
-      const overflowIcon = activeDialog.locator('.overflow-icon').first();
-      await overflowIcon.click();
-      await waitForStable(300);
-      await milestone('overflow-menu-open', 'Overflow menu is open showing Edit option');
-    });
+    // Click the comment tool button to open comment dialog
+    const commentTool = page.locator('.harness-main .tools-item[data-id="is-tool"]');
+    await commentTool.click();
+    await waitForStable(WAIT_MS);
+    await milestone('comment-dialog-open', 'Comment dialog opened');
 
-    await step('Click Edit to enter edit mode', async () => {
-      // Click the "Edit" option in the dropdown
-      // n-dropdown renders options in a portal, so we need to find it in the document
-      const editOption = page.locator('.n-dropdown-option').filter({ hasText: 'Edit' });
-      await editOption.click();
-      await waitForStable(WAIT_MS);
-      await milestone(
-        'edit-mode-active',
-        'Edit mode active - input should show original comment text (regression test for SD-1731)',
-      );
-    });
+    // Type into the auto-focused comment input
+    await page.keyboard.type('original comment');
+    await waitForStable(WAIT_MS);
+    await milestone('comment-typed', 'Typed "original comment" into comment input');
 
-    await step('Type additional text to verify editing works', async () => {
-      // The input should be focused, type some additional text
-      await type(' - edited');
-      await waitForStable(300);
-      await milestone('text-modified', 'Additional text typed into comment input');
-    });
+    // Click the Comment button to submit
+    const commentButton = page.locator('.harness-main .sd-button.primary').filter({ hasText: 'Comment' });
+    await commentButton.click();
+    await waitForStable(WAIT_MS);
+    await milestone('comment-submitted', 'Comment submitted');
 
-    await step('Cancel the edit to restore original state', async () => {
-      // Click the Cancel button
-      const cancelButton = page.locator('.comment-editing .sd-button').filter({ hasText: 'Cancel' });
-      await cancelButton.click();
-      await waitForCommentPanelStable(page, WAIT_MS);
-      await milestone('edit-cancelled', 'Edit cancelled - original comment text restored');
-    });
+    // Click the overflow menu icon (three dots) in the comment dialog
+    const overflowIcon = page.locator('.harness-main .floating-comment .overflow-icon').last();
+    await overflowIcon.click();
+    await waitForStable(WAIT_MS);
+    await milestone('overflow-menu-open', 'Overflow menu opened');
+
+    // Click the Edit option in the dropdown (rendered via teleport, outside harness-main)
+    const editOption = page.locator('.n-dropdown-option-body__label').filter({ hasText: 'Edit' });
+    await editOption.click();
+    await waitForStable(WAIT_MS);
+    await milestone('edit-mode-active', 'Edit mode active - input should show original comment text');
+
+    // Select the word "original" in the comment input
+    await pressShortcut('ArrowLeft'); // Move to start
+    await pressTimes('Shift+ArrowRight', 8); // Select "original"
+    await waitForStable(WAIT_MS);
+    await milestone('original-selected', 'Selected the word "original" in comment input');
+
+    // Type "changed" to replace the selected word
+    await page.keyboard.type('changed');
+    await waitForStable(WAIT_MS);
+    await milestone('text-changed', 'Replaced "original" with "changed"');
+
+    // Click the Update button to save the edited comment
+    const updateButton = page
+      .locator('.harness-main .comment-editing .sd-button.primary')
+      .filter({ hasText: 'Update' })
+      .last();
+    await updateButton.click();
+    await waitForStable(WAIT_MS);
+    await milestone('comment-updated', 'Comment updated - should now show "changed comment"');
   },
 });

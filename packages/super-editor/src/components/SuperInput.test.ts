@@ -63,4 +63,15 @@ describe('SuperInput.vue', () => {
     const editorInstance = EditorConstructor.mock.results[0].value;
     expect(editorInstance.commands.setTextSelection).toHaveBeenCalledWith({ from: 5, to: 5 });
   });
+
+  it('does not force cursor to end when wrapper is clicked', async () => {
+    const wrapper = mount(SuperInput, { props: { modelValue: '<p>Hello</p>' } });
+    await nextTick();
+
+    await wrapper.trigger('click');
+
+    const editorInstance = EditorConstructor.mock.results[0].value;
+    expect(editorInstance.view.focus).toHaveBeenCalledTimes(1);
+    expect(editorInstance.commands.setTextSelection).not.toHaveBeenCalled();
+  });
 });

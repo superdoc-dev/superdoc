@@ -66,18 +66,21 @@ const initEditor = async () => {
   });
 };
 
-const focus = () => {
+const focus = (options = {}) => {
+  const { moveCursorToEnd = true } = options;
   isFocused.value = true;
   const instance = editor.value;
   instance?.view?.focus();
-  const docSize = instance?.state?.doc?.content?.size;
-  if (typeof docSize === 'number' && instance?.commands?.setTextSelection) {
-    instance.commands.setTextSelection({ from: docSize, to: docSize });
+  if (moveCursorToEnd) {
+    const docSize = instance?.state?.doc?.content?.size;
+    if (typeof docSize === 'number' && instance?.commands?.setTextSelection) {
+      instance.commands.setTextSelection({ from: docSize, to: docSize });
+    }
   }
 };
 
 const handleFocus = () => {
-  focus();
+  focus({ moveCursorToEnd: false });
 };
 
 const updateUsersState = () => {

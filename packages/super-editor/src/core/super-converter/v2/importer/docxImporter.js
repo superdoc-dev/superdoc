@@ -759,7 +759,10 @@ const getHeaderFooterSectionData = (sectionData, docx) => {
   const target = sectionData.attributes.Target;
   const filePath = resolveOpcTargetPath(target, 'word');
   const referenceFile = filePath ? docx[filePath] : undefined;
-  const currentFileName = target;
+  // Extract just the filename for relationship file lookup.
+  // This handles both absolute paths (/word/header1.xml -> header1.xml)
+  // and relative paths (header1.xml -> header1.xml) per ECMA-376 OPC spec.
+  const currentFileName = filePath ? filePath.split('/').pop() : target.split('/').pop();
   return {
     rId,
     referenceFile,

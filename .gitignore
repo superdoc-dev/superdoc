@@ -1,6 +1,7 @@
 logs
 *.log
 .cache
+.vite
 .DS_Store
 .temp
 node_modules

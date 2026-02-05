@@ -2,6 +2,8 @@ packages:
   - e2e-tests
   - e2e-tests/templates/vue
   - apps/*
+  - devtools/visual-testing
+  - devtools/visual-testing/packages/*
   - packages/**/*
   - shared/*
 
@@ -85,6 +87,7 @@ catalog:
   rollup-plugin-copy: ^3.5.0
   rollup-plugin-visualizer: ^5.12.0
   semantic-release: ^24.2.7
+  semantic-release-commit-filter: ^1.0.2
   semantic-release-linear-app: ^0.7.0
   tippy.js: ^6.3.7
   tsx: ^4.20.6
@@ -105,8 +108,11 @@ catalog:
   yjs: 13.6.19
 
 onlyBuiltDependencies:
+  - '@vscode/vsce-sign'
   - canvas
   - esbuild
+  - keytar
+  - lefthook
   - puppeteer
   - sharp
   - unrs-resolver

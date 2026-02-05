@@ -259,6 +259,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #telemetry: Telemetry | null = null;
 
+  /**
+   * Guard flag to prevent double-tracking document open
+   */
+  #documentOpenTracked = false;
+
   options: EditorOptions = {
     element: null,
     selector: null,
@@ -472,8 +477,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     return this.options.document ?? this.options.mockDocument ?? (canUseDOM() ? document : null);
   }
 
-  #emitCreateAsync(): void {
-    // Fire telemetry immediately
+  async #emitCreateAsync(): Promise<void> {
+    // Ensure document metadata (GUID, timestamp) is generated on import
+    // This must happen regardless of telemetry being enabled
+    await this.getDocumentIdentifier();
     this.#trackDocumentOpen();
 
     setTimeout(() => {
@@ -510,19 +517,19 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Track document open event for telemetry
    */
-  #trackDocumentOpen(): void {
-    if (!this.#telemetry) return;
+  async #trackDocumentOpen(): Promise<void> {
+    if (!this.#telemetry || this.#documentOpenTracked) return;
 
     try {
-      const documentId = this.getDocumentIdentifier();
+      const documentId = await this.getDocumentIdentifier();
       const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
-      const telemetryPayload = {
-        documentId: documentId || null,
+      console.debug('[super-editor] Document info:', {
+        documentId,
         documentCreatedAt,
         isNewFile: this.options.isNewFile,
-      };
-      console.debug('[super-editor] Document info:', telemetryPayload);
-      this.#telemetry.trackDocumentOpen(documentId || null, documentCreatedAt);
+      });
+      this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
+      this.#documentOpenTracked = true;
     } catch {
       // Fail silently - telemetry should never break the app
     }
@@ -1057,8 +1064,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
   }
 
-  mount(el: HTMLElement | null): void {
+  async mount(el: HTMLElement | null): Promise<void> {
     this.#createView(el);
+
+    await this.getDocumentIdentifier();
 
     setTimeout(() => {
       if (this.isDestroyed) return;
@@ -2192,11 +2201,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get document identifier using hash(docId + dcterms:created)
-   * Returns a unique identifier that stays the same for the same document
+   * Get document unique identifier (async)
+   * Returns a stable identifier for the document (identifierHash or contentHash)
    */
-  getDocumentIdentifier(): string | null {
-    return this.converter?.getDocumentIdentifier() || null;
+  async getDocumentIdentifier(): Promise<string | null> {
+    return (await this.converter?.getDocumentIdentifier()) || null;
   }
 
   /**
@@ -2594,6 +2603,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
       const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+
+      // Export core.xml (contains dcterms:created timestamp)
+      const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
+      const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
+
       const updatedDocs: Record<string, string> = {
         ...this.options.customUpdatedFiles,
         'word/document.xml': String(documentXml),
@@ -2604,6 +2618,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         // Replace & with &amp; in styles.xml as DOCX viewers can't handle it
         'word/styles.xml': String(styles).replace(/&/gi, '&amp;'),
         ...updatedHeadersFooters,
+        ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };
 
       if (hasCustomSettings) {

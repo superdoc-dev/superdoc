@@ -41,8 +41,8 @@ public class DocumentController : Controller
 <div id="editor" style="height: 700px"></div>
 
 <script type="module">
-    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
-    
+    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
+
     new SuperDoc({
         selector: '#editor',
         document: '@Url.Action("Download", new { id = Model.Id })',
@@ -104,8 +104,8 @@ public class DocumentController : Controller
 let superdoc = null;
 
 export async function initSuperDoc(element, documentUrl, userName, userEmail) {
-    const { SuperDoc } = await import('https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js');
-    
+    const { SuperDoc } = await import('https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js');
+
     superdoc = new SuperDoc({
         selector: element,
         document: documentUrl,
@@ -153,8 +153,8 @@ export function cleanup() {
 ```javascript
 // wwwroot/index.html
 window.initEditorWithBlob = async (element, byteArray) => {
-    const { SuperDoc } = await import('https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js');
-    
+    const { SuperDoc } = await import('https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js');
+
     const blob = new Blob([byteArray], {
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     });

@@ -11,7 +11,7 @@ Add to your layout:
 
 ```erb
 <!-- app/views/layouts/application.html.erb -->
-<%= stylesheet_link_tag "https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" %>
+<%= stylesheet_link_tag "https://cdn.jsdelivr.net/npm/superdoc/dist/style.css" %>
 ```
 
 ## Basic view
@@ -21,7 +21,7 @@ Add to your layout:
 <div id="editor" style="height: 700px"></div>
 
 <script type="module">
-  import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+  import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
   
   new SuperDoc({
     selector: '#editor',
@@ -89,7 +89,7 @@ export default class extends Controller {
   }
   
   async connect() {
-    const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+    const { SuperDoc } = await import('superdoc');
     
     this.superdoc = new SuperDoc({
       selector: this.element,

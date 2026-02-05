@@ -29,7 +29,7 @@ Returns JSON schema summary with all nodes, marks, and their attributes. Useful 
 Supports different modes: `docx`, `html`, `text`
 
 ```javascript
-import { getSchemaIntrospection } from '@harbour-enterprises/superdoc';
+import { getSchemaIntrospection } from 'superdoc';
 
 const schema = await getSchemaIntrospection({ mode: 'docx' });
 // Returns: { version, nodes: [...], marks: [...] }

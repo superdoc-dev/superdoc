@@ -8,7 +8,7 @@ Create extensions to add custom features to SuperDoc.
 ## Basic extension
 
 ```javascript
-import { Extensions } from '@harbour-enterprises/superdoc';
+import { Extensions } from 'superdoc';
 const { Extension } = Extensions;
 
 const MyExtension = Extension.create({
@@ -34,7 +34,7 @@ editor.commands.myCommand();
 For document elements:
 
 ```javascript
-import { Extensions } from '@harbour-enterprises/superdoc';
+import { Extensions } from 'superdoc';
 
 const { Node } = Extensions;
 const CustomBlock = Node.create({
@@ -56,7 +56,7 @@ const CustomBlock = Node.create({
 For inline formatting:
 
 ```javascript
-import { Extensions } from '@harbour-enterprises/superdoc';
+import { Extensions } from 'superdoc';
 
 const { Mark } = Extensions;
 const Highlight = Mark.create({

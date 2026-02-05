@@ -8,7 +8,7 @@ SuperDoc works with Next.js using dynamic imports to avoid SSR issues.
 ## Installation
 
 ```bash
-npm install @harbour-enterprises/superdoc
+npm install superdoc
 ```
 
 ## Basic component
@@ -30,7 +30,7 @@ function DocumentEditorComponent({ document }) {
 
   useEffect(() => {
     const initEditor = async () => {
-      const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+      const { SuperDoc } = await import('superdoc');
       
       if (containerRef.current) {
         superdocRef.current = new SuperDoc({

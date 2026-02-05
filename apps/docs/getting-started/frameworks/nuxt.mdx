@@ -8,7 +8,7 @@ SuperDoc requires client-side rendering in Nuxt due to DOM dependencies.
 ## Installation
 
 ```bash
-npm install @harbour-enterprises/superdoc
+npm install superdoc
 ```
 
 ## Basic component
@@ -31,7 +31,7 @@ const editor = ref(null);
 let superdoc = null;
 
 onMounted(async () => {
-  const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+  const { SuperDoc } = await import('superdoc');
   
   superdoc = new SuperDoc({
     selector: editor.value,
@@ -59,7 +59,7 @@ export default defineNuxtPlugin(() => {
   return {
     provide: {
       initSuperDoc: async (element, options) => {
-        const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+        const { SuperDoc } = await import('superdoc');
         return new SuperDoc({ selector: element, ...options });
       }
     }
@@ -114,7 +114,7 @@ let superdoc = null;
 
 onMounted(async () => {
   if (user.value && editor.value) {
-    const { SuperDoc } = await import('@harbour-enterprises/superdoc');
+    const { SuperDoc } = await import('superdoc');
     
     superdoc = new SuperDoc({
       selector: editor.value,

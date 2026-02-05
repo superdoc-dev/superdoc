@@ -8,7 +8,7 @@ SuperDoc integrates with Svelte through lifecycle functions.
 ## Installation
 
 ```bash
-npm install @harbour-enterprises/superdoc
+npm install superdoc
 ```
 
 ## Basic component
@@ -16,8 +16,8 @@ npm install @harbour-enterprises/superdoc
 ```svelte
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { SuperDoc } from '@harbour-enterprises/superdoc';
-  import '@harbour-enterprises/superdoc/style.css';
+  import { SuperDoc } from 'superdoc';
+  import 'superdoc/style.css';
   
   let container;
   let superdoc = null;
@@ -55,7 +55,7 @@ npm install @harbour-enterprises/superdoc
 ```svelte
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { SuperDoc } from '@harbour-enterprises/superdoc';
+  import { SuperDoc } from 'superdoc';
   
   export let document;
   export let user = { name: 'User', email: 'user@example.com' };

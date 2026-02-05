@@ -11,14 +11,14 @@ SuperDoc runs client-side but PHP can handle document storage and serving.
 <!DOCTYPE html>
 <html>
 <head>
-    <link href="https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" 
+    <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css" 
           rel="stylesheet">
 </head>
 <body>
     <div id="editor"></div>
     
     <script type="module">
-        import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+        import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
         
         new SuperDoc({
             selector: '#editor',
@@ -95,7 +95,7 @@ $user = $_SESSION['user'] ?? ['name' => 'Guest', 'email' => 'guest@example.com']
 <html>
 <head>
     <title>Document Editor</title>
-    <link href="https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" 
+    <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css" 
           rel="stylesheet">
 </head>
 <body>
@@ -103,7 +103,7 @@ $user = $_SESSION['user'] ?? ['name' => 'Guest', 'email' => 'guest@example.com']
     <div id="editor"></div>
     
     <script type="module">
-        import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+        import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
         
         let superdoc = null;
         

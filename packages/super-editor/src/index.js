@@ -61,6 +61,7 @@ const Extensions = {
  */
 export {
   // Classes
+  /** @internal */
   SuperConverter,
   /** @internal */
   DocxZipper,

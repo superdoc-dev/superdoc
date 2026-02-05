@@ -89,8 +89,7 @@
                   "core/supereditor/overview",
                   "core/supereditor/configuration",
                   "core/supereditor/methods",
-                  "core/supereditor/hooks",
-                  "core/supereditor/converter"
+                  "core/supereditor/hooks"
                 ]
               }
             ]

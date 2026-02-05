@@ -139,6 +139,9 @@ export interface SaveOptions {
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
+
+  /** ZIP compression method for docx export. Defaults to 'DEFLATE'. Use 'STORE' for faster exports without compression. */
+  compression?: 'DEFLATE' | 'STORE';
 }
 
 /**
@@ -2090,7 +2093,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #dispatchTransaction(transaction: Transaction): void {
     if (this.isDestroyed) return;
-    const start = Date.now();
+    const perf = this.view?.dom?.ownerDocument?.defaultView?.performance ?? globalThis.performance;
+    const perfNow = () => (perf?.now ? perf.now() : Date.now());
+    const perfStart = perfNow();
 
     const prevState = this.state;
     let nextState: EditorState;
@@ -2124,11 +2129,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.view.updateState(nextState);
     }
 
-    const end = Date.now();
+    const end = perfNow();
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
-      duration: end - start,
+      duration: end - perfStart,
     });
 
     if (selectionHasChanged) {
@@ -2156,23 +2161,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (!transactionToApply.docChanged) {
-      return;
-    }
-
-    // Track document modifications and promote to GUID if needed
-    if (transaction.docChanged && this.converter) {
-      if (!this.converter.documentGuid) {
-        this.converter.promoteToGuid();
-        console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+    if (transactionToApply.docChanged) {
+      // Track document modifications and promote to GUID if needed
+      if (transaction.docChanged && this.converter) {
+        if (!this.converter.documentGuid) {
+          this.converter.promoteToGuid();
+          console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+        }
+        this.converter.documentModified = true;
       }
-      this.converter.documentModified = true;
-    }
 
-    this.emit('update', {
-      editor: this,
-      transaction: transactionToApply,
-    });
+      this.emit('update', {
+        editor: this,
+        transaction: transactionToApply,
+      });
+    }
   }
 
   /**
@@ -2530,6 +2533,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments,
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
+    compression,
   }: {
     isFinalDoc?: boolean;
     commentsType?: string;
@@ -2538,6 +2542,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments?: Comment[];
     getUpdatedDocs?: boolean;
     fieldsHighlightColor?: string | null;
+    compression?: 'DEFLATE' | 'STORE';
   } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
@@ -2675,6 +2680,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media,
         fonts: this.options.fonts,
         isHeadless: this.options.isHeadless,
+        compression,
       });
 
       return result;
@@ -2945,6 +2951,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       commentsType: options?.commentsType,
       comments: options?.comments,
       fieldsHighlightColor: options?.fieldsHighlightColor,
+      compression: options?.compression,
     });
 
     return result as Blob | Buffer;

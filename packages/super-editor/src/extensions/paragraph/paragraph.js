@@ -114,6 +114,11 @@ export const Paragraph = OxmlNode.create({
           return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
         },
       },
+      sdBlockRev: {
+        default: 0,
+        rendered: false,
+        keepOnSplit: false,
+      },
       attributes: {
         rendered: false,
       },

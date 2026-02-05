@@ -1,13 +1,15 @@
 import type { SuperDoc } from 'superdoc'; // eslint-disable-line
 
 export type FieldValue = string | boolean | number | null | undefined;
+export type TableFieldValue = string[][];
 
 export interface FieldReference {
   id: string;
 }
 
 export interface DocumentField extends FieldReference {
-  value: FieldValue;
+  type?: 'text' | 'table';
+  value: FieldValue | TableFieldValue;
 }
 
 export interface SignerField extends FieldReference {

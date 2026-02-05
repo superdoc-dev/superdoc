@@ -20,13 +20,11 @@
     "release": "pnpx semantic-release",
     "release:dry-run": "pnpx semantic-release --dry-run"
   },
-  "dependencies": {
-    "fast-glob": "catalog:",
-    "superdoc": "workspace:*"
-  },
   "devDependencies": {
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "fast-glob": "catalog:",
+    "superdoc": "workspace:*",
     "typescript": "catalog:"
   },
   "module": "src/index.ts",

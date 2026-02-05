@@ -2,6 +2,7 @@ pre-commit:
   parallel: true
   commands:
     typecheck:
+      glob: "*.{ts,tsx,vue}"
       run: pnpm run type-check
     format:
       glob: "*.{js,jsx,ts,tsx,css,scss,json,vue}"
@@ -19,6 +20,14 @@ pre-commit:
       root: "apps/cli/"
       glob: "apps/cli/**/*.ts"
       run: pnpm run test
+    vscode-build:
+      root: "apps/vscode-ext/"
+      glob: "apps/vscode-ext/**/*.{ts,js}"
+      run: pnpm run build
+    vscode-lint:
+      root: "apps/vscode-ext/"
+      glob: "apps/vscode-ext/**/*.{ts,js}"
+      run: pnpm run lint
 
 commit-msg:
   commands:

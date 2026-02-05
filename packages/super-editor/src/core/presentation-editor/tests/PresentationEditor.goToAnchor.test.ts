@@ -184,9 +184,13 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: mockToFlowBlocks,
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: mockToFlowBlocks,
+  };
+});
 
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({

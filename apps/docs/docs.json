@@ -95,6 +95,11 @@
             ]
           },
           {
+            "group": "Document API",
+            "tag": "SOON",
+            "pages": ["document-api/overview"]
+          },
+          {
             "group": "AI",
             "tag": "NEW",
             "pages": [
@@ -246,7 +251,7 @@
         ]
       },
       {
-        "tab": "Documents API",
+        "tab": "Backend Services",
         "groups": [
           {
             "group": "Getting Started",

@@ -21,6 +21,7 @@
     "dev:superdoc": "pnpm --prefix packages/superdoc run dev",
     "dev:super-editor": "pnpm --prefix packages/super-editor run dev",
     "dev:collab": "pnpm --prefix packages/superdoc run dev:collab",
+    "dev:docs": "pnpm --prefix apps/docs run dev",
     "build:superdoc": "pnpm --prefix packages/superdoc run build",
     "build:super-editor": "pnpm --prefix packages/super-editor run build",
     "build": "pnpm run clean:packages && pnpm --prefix packages/super-editor run types:build && pnpm run build:superdoc && pnpm run type-check",
@@ -39,7 +40,7 @@
     "release": "pnpm run build:superdoc && pnpm run type-check && pnpx semantic-release",
     "release:dry-run": "pnpm run build:superdoc && pnpm run type-check && pnpx semantic-release --dry-run",
     "release:local": "pnpm run build:superdoc && pnpm run type-check && pnpx semantic-release --no-ci",
-    "prepare": "lefthook install",
+    "prepare": "if [ -z \"$CI\" ]; then lefthook install; fi",
     "test:layout": "node ./scripts/test-layout.mjs",
     "watch": "pnpm --prefix packages/superdoc run watch:es",
     "check:all": "pnpm run format && pnpm run lint:fix && pnpm --prefix packages/super-editor run types:build && pnpm run test",
@@ -68,6 +69,7 @@
     "lefthook": "catalog:",
     "prettier": "catalog:",
     "semantic-release": "catalog:",
+    "semantic-release-commit-filter": "catalog:",
     "semantic-release-linear-app": "catalog:",
     "semantic-release-pnpm": "^1.0.2",
     "typescript": "catalog:",
@@ -78,5 +80,20 @@
   },
   "optionalDependencies": {
     "canvas": "catalog:"
+  },
+  "pnpm": {
+    "overrides": {
+      "canvas": "3.2.0",
+      "happy-dom": "20.4.0",
+      "jsdom": "27.3.0",
+      "vue": "3.5.25",
+      "@vue/compiler-core": "3.5.25",
+      "@vue/compiler-dom": "3.5.25",
+      "@vue/compiler-sfc": "3.5.25",
+      "@vue/runtime-core": "3.5.25",
+      "@vue/runtime-dom": "3.5.25",
+      "@vue/server-renderer": "3.5.25",
+      "@vue/shared": "3.5.25"
+    }
   }
 }

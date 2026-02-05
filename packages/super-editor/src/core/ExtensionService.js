@@ -185,8 +185,7 @@ export class ExtensionService {
         const addPmPlugins = getExtensionConfigField(extension, 'addPmPlugins', context);
 
         if (addPmPlugins) {
-          const pmPlugins = addPmPlugins();
-          plugins.push(...pmPlugins);
+          plugins.push(...addPmPlugins());
         }
 
         return plugins;

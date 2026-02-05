@@ -1438,8 +1438,20 @@ export function normalizeTextInsets(
 export const OOXML_Z_INDEX_BASE = 251658240;
 
 // ============================================================================
-// OOXML Element Utilities
+// OOXML Element Utilities (z-index from relativeHeight)
 // ============================================================================
+
+/**
+ * Coerces relativeHeight from OOXML (number or string) to a finite number.
+ */
+export function coerceRelativeHeight(raw: unknown): number | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
 
 /**
  * Normalizes z-index from OOXML relativeHeight value.
@@ -1463,8 +1475,25 @@ export const OOXML_Z_INDEX_BASE = 251658240;
  */
 export function normalizeZIndex(originalAttributes: unknown): number | undefined {
   if (!isPlainObject(originalAttributes)) return undefined;
-  const relativeHeight = originalAttributes.relativeHeight;
-  if (typeof relativeHeight !== 'number') return undefined;
-  // Subtract base to get relative z-index, ensuring non-negative values
+  const relativeHeight = coerceRelativeHeight(originalAttributes.relativeHeight);
+  if (relativeHeight === undefined) return undefined;
   return Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+}
+
+/**
+ * Returns z-index for an image or drawing block.
+ *
+ * We cannot rely on `block.zIndex` only: when the flow-block cache hits, the
+ * paragraph handler reuses cached blocks and never calls the image/shape
+ * converters, so those blocks never get `zIndex` set. This helper uses
+ * `block.zIndex` when present, otherwise derives from
+ * `block.attrs.originalAttributes.relativeHeight` via normalizeZIndex,
+ * otherwise behindDoc ? 0 : 1.
+ */
+export function getFragmentZIndex(block: ImageBlock | DrawingBlock): number {
+  if (typeof block.zIndex === 'number') return block.zIndex;
+  const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
+  const z = normalizeZIndex(attrs?.originalAttributes);
+  if (z !== undefined) return z;
+  return block.anchor?.behindDoc ? 0 : 1;
 }

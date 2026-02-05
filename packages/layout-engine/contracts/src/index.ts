@@ -529,6 +529,8 @@ export type ImageBlock = {
   margin?: BoxSpacing;
   anchor?: ImageAnchor;
   wrap?: ImageWrap;
+  /** Stacking order from OOXML relativeHeight (same formula as editor: Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE)) */
+  zIndex?: number;
   attrs?: ImageBlockAttrs;
   // VML image adjustments for watermark effects
   gain?: string | number; // Brightness/washout (VML hex string or number)

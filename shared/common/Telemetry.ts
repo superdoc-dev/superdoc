@@ -41,6 +41,11 @@ export interface TelemetryPayload {
 const DEFAULT_ENDPOINT = 'https://livetest-3---superdoc-telemetry-4yffz5xqqq-uc.a.run.app/v1/collect';
 // const DEFAULT_ENDPOINT = 'http://localhost:3051/v1/collect';
 
+/**
+ * Community license key for AGPLv3 / evaluation usage.
+ */
+export const COMMUNITY_LICENSE_KEY = 'community-and-eval-agplv3';
+
 function getSuperdocVersion(): string {
   try {
     return typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'unknown';

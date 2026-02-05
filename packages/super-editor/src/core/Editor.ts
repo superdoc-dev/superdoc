@@ -54,7 +54,7 @@ import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
-import { Telemetry } from '@superdoc/common';
+import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -152,22 +152,9 @@ export interface SaveOptions {
 export type ExportOptions = SaveOptions;
 
 /**
- * Community license key for AGPLv3 / evaluation usage.
- * This is the default license key
- */
-const COMMUNITY_LICENSE_KEY = 'community-and-eval-agplv3';
-
-/**
  * Main editor class that manages document state, extensions, and user interactions
  */
 export class Editor extends EventEmitter<EditorEventMap> {
-  /**
-   * Community license key for AGPLv3 / evaluation usage.
-   * This is the default license key - you don't need to set it explicitly
-   * unless you have a commercial license to override it.
-   */
-  static readonly COMMUNITY_LICENSE_KEY = COMMUNITY_LICENSE_KEY;
-
   /**
    * Command service for handling editor commands
    */
@@ -505,7 +492,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.#telemetry = new Telemetry({
         enabled: true,
         endpoint: telemetryConfig.endpoint,
-        licenseKey,
+        licenseKey: licenseKey === undefined ? COMMUNITY_LICENSE_KEY : licenseKey,
         metadata: telemetryConfig.metadata,
       });
     } catch {

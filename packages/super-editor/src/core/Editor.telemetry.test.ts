@@ -1,15 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Telemetry } from '@superdoc/common';
-import { Editor } from './Editor.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 
 // Mock the Telemetry class to verify it's called correctly
 vi.mock('@superdoc/common', () => ({
   Telemetry: vi.fn().mockImplementation(() => ({
     trackDocumentOpen: vi.fn(),
-    isEnabled: vi.fn().mockReturnValue(true),
-    disable: vi.fn(),
-    enable: vi.fn(),
   })),
+  COMMUNITY_LICENSE_KEY: 'community-and-eval-agplv3',
 }));
 
 // Test the telemetry initialization logic in isolation
@@ -18,9 +15,7 @@ function initTelemetry(options: {
   telemetry?: { enabled: boolean; endpoint?: string; metadata?: Record<string, unknown> } | null;
   licenseKey?: string;
 }): Telemetry | null {
-  // Use default license key if not provided (mirrors Editor.options default)
-  const licenseKey = options.licenseKey ?? Editor.COMMUNITY_LICENSE_KEY;
-  const { telemetry: telemetryConfig } = options;
+  const { telemetry: telemetryConfig, licenseKey } = options;
 
   // Skip if telemetry is not enabled
   if (!telemetryConfig?.enabled) {
@@ -29,12 +24,10 @@ function initTelemetry(options: {
 
   try {
     return new Telemetry({
-      config: {
-        enabled: true,
-        endpoint: telemetryConfig.endpoint,
-        licenseKey,
-        metadata: telemetryConfig.metadata,
-      },
+      enabled: true,
+      endpoint: telemetryConfig.endpoint,
+      licenseKey: licenseKey === undefined ? COMMUNITY_LICENSE_KEY : licenseKey,
+      metadata: telemetryConfig.metadata,
     });
   } catch {
     // Fail silently - telemetry should never break the app
@@ -88,18 +81,16 @@ describe('Editor Telemetry Integration', () => {
       expect(result).not.toBeNull();
       expect(Telemetry).toHaveBeenCalledTimes(1);
       expect(Telemetry).toHaveBeenCalledWith({
-        config: {
-          enabled: true,
-          endpoint: undefined,
-          licenseKey: 'test-key',
-          metadata: undefined,
-        },
+        enabled: true,
+        endpoint: undefined,
+        licenseKey: 'test-key',
+        metadata: undefined,
       });
     });
   });
 
-  describe('default license key', () => {
-    it('uses default community license key when licenseKey is not provided', () => {
+  describe('license key handling', () => {
+    it('uses COMMUNITY_LICENSE_KEY when licenseKey not provided', () => {
       const result = initTelemetry({
         telemetry: { enabled: true },
       });
@@ -107,20 +98,14 @@ describe('Editor Telemetry Integration', () => {
       expect(result).not.toBeNull();
       expect(Telemetry).toHaveBeenCalledTimes(1);
       expect(Telemetry).toHaveBeenCalledWith({
-        config: {
-          enabled: true,
-          endpoint: undefined,
-          licenseKey: Editor.COMMUNITY_LICENSE_KEY,
-          metadata: undefined,
-        },
+        enabled: true,
+        endpoint: undefined,
+        licenseKey: 'community-and-eval-agplv3',
+        metadata: undefined,
       });
     });
 
-    it('uses default community license key value "community-and-eval-agplv3"', () => {
-      expect(Editor.COMMUNITY_LICENSE_KEY).toBe('community-and-eval-agplv3');
-    });
-
-    it('overrides default license key when custom key is provided', () => {
+    it('passes custom license key when provided', () => {
       const customKey = 'my-custom-license-key';
       const result = initTelemetry({
         telemetry: { enabled: true },
@@ -129,12 +114,10 @@ describe('Editor Telemetry Integration', () => {
 
       expect(result).not.toBeNull();
       expect(Telemetry).toHaveBeenCalledWith({
-        config: {
-          enabled: true,
-          endpoint: undefined,
-          licenseKey: customKey,
-          metadata: undefined,
-        },
+        enabled: true,
+        endpoint: undefined,
+        licenseKey: customKey,
+        metadata: undefined,
       });
     });
   });
@@ -149,12 +132,10 @@ describe('Editor Telemetry Integration', () => {
 
       expect(result).not.toBeNull();
       expect(Telemetry).toHaveBeenCalledWith({
-        config: {
-          enabled: true,
-          endpoint: customEndpoint,
-          licenseKey: 'test-key',
-          metadata: undefined,
-        },
+        enabled: true,
+        endpoint: customEndpoint,
+        licenseKey: 'test-key',
+        metadata: undefined,
       });
     });
   });
@@ -172,12 +153,10 @@ describe('Editor Telemetry Integration', () => {
 
       expect(result).not.toBeNull();
       expect(Telemetry).toHaveBeenCalledWith({
-        config: {
-          enabled: true,
-          endpoint: undefined,
-          licenseKey: 'test-key',
-          metadata,
-        },
+        enabled: true,
+        endpoint: undefined,
+        licenseKey: 'test-key',
+        metadata,
       });
     });
 
@@ -188,16 +167,15 @@ describe('Editor Telemetry Integration', () => {
       };
       const result = initTelemetry({
         telemetry: { enabled: true, metadata },
+        licenseKey: 'test-key',
       });
 
       expect(result).not.toBeNull();
       expect(Telemetry).toHaveBeenCalledWith({
-        config: {
-          enabled: true,
-          endpoint: undefined,
-          licenseKey: Editor.COMMUNITY_LICENSE_KEY,
-          metadata,
-        },
+        enabled: true,
+        endpoint: undefined,
+        licenseKey: 'test-key',
+        metadata,
       });
     });
   });
@@ -217,12 +195,10 @@ describe('Editor Telemetry Integration', () => {
 
       expect(result).not.toBeNull();
       expect(Telemetry).toHaveBeenCalledWith({
-        config: {
-          enabled: true,
-          endpoint: 'https://custom.endpoint.com/collect',
-          licenseKey: 'license-key-123',
-          metadata: { customerId: 'abc', env: 'production' },
-        },
+        enabled: true,
+        endpoint: 'https://custom.endpoint.com/collect',
+        licenseKey: 'license-key-123',
+        metadata: { customerId: 'abc', env: 'production' },
       });
     });
   });

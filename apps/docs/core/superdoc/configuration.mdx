@@ -294,6 +294,18 @@ new SuperDoc({
   <Warning>**Deprecated since v1.8** — This option is no longer supported and will be ignored.</Warning>
 </ParamField>
 
+<ParamField path="jsonOverride" type="Object">
+  Override document content with a JSON schema. Used to load documents from a previously exported JSON representation instead of a DOCX file.
+
+  ```javascript
+  jsonOverride: { type: 'doc', content: [...] }
+  ```
+</ParamField>
+
+<ParamField path="uiDisplayFallbackFont" type="string" default="'Arial, Helvetica, sans-serif'">
+  Font family used for all SuperDoc UI elements (toolbar, comments, etc.)
+</ParamField>
+
 <ParamField path="suppressDefaultDocxStyles" type="boolean" default="false">
   Prevent default DOCX styles from being applied
 </ParamField>
@@ -320,9 +332,13 @@ All handlers are optional functions in the configuration:
   ```
 </ParamField>
 
+<ParamField path="onEditorBeforeCreate" type="function">
+  Called before an editor is created
+</ParamField>
+
 <ParamField path="onEditorCreate" type="function">
   Called when editor is created
-  
+
   ```javascript
   onEditorCreate: ({ editor }) => {
     editor.focus();
@@ -336,6 +352,20 @@ All handlers are optional functions in the configuration:
   ```javascript
   onEditorUpdate: ({ editor }) => {
     autoSave(editor.getJSON());
+  }
+  ```
+</ParamField>
+
+<ParamField path="onSidebarToggle" type="function">
+  Called when the comments sidebar is toggled
+</ParamField>
+
+<ParamField path="onException" type="function">
+  Called when an error occurs
+
+  ```javascript
+  onException: ({ error }) => {
+    console.error('SuperDoc error:', error);
   }
   ```
 </ParamField>

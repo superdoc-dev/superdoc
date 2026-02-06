@@ -125,6 +125,49 @@ superdoc.setHighContrastMode(true);
 
 ## UI Methods
 
+### `setActiveEditor`
+
+Set which editor is currently active. Useful when working with multiple documents.
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance to set as active
+</ParamField>
+
+```javascript
+superdoc.setActiveEditor(editor);
+```
+
+### `setDisableContextMenu`
+
+Toggle the custom context menu at runtime.
+
+<ParamField path="disabled" type="boolean" default="true">
+  Whether to disable the context menu
+</ParamField>
+
+```javascript
+superdoc.setDisableContextMenu(true);
+```
+
+### `setTrackedChangesPreferences`
+
+Override how tracked changes are rendered in the layout engine.
+
+<ParamField path="preferences" type="Object">
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="mode" type="string">
+      Rendering mode: `'review'`, `'original'`, `'final'`, or `'off'`
+    </ParamField>
+    <ParamField path="enabled" type="boolean">
+      Whether tracked change metadata is included
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```javascript
+superdoc.setTrackedChangesPreferences({ mode: 'final' });
+```
+
 ### `toggleRuler`
 
 Toggle ruler visibility.
@@ -337,6 +380,8 @@ if (superdoc.activeEditor) {
 | `superdocId` | `string` | Unique identifier for this instance |
 | `version` | `string` | SuperDoc version number |
 | `activeEditor` | `Editor \| null` | Currently active editor |
+| `element` | `HTMLElement \| null` | Container DOM element |
+| `state` | `{ documents, users }` | Current state snapshot |
 | `isLocked` | `boolean` | Whether the document is locked |
 | `lockedBy` | `User \| null` | User who locked the document |
 | `isCollaborative` | `boolean` | Whether collaboration is enabled |

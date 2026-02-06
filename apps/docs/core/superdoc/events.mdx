@@ -25,6 +25,16 @@ superdoc.on('ready', ({ superdoc }) => {
 });
 ```
 
+### `editorBeforeCreate`
+
+Fired before an editor is created. Use this to configure extensions or set up services.
+
+```javascript
+superdoc.on('editorBeforeCreate', ({ editor }) => {
+  // Configure before editor mounts
+});
+```
+
 ### `editorCreate`
 
 When an editor is created.
@@ -126,6 +136,30 @@ superdoc.on('locked', ({ isLocked, lockedBy }) => {
 });
 ```
 
+## UI Events
+
+### `sidebar-toggle`
+
+When the comments sidebar is toggled.
+
+```javascript
+superdoc.on('sidebar-toggle', (isOpened) => {
+  adjustLayout(isOpened);
+});
+```
+
+## Error Events
+
+### `exception`
+
+When an error occurs during document processing or runtime.
+
+```javascript
+superdoc.on('exception', ({ error, document, editor }) => {
+  console.error('SuperDoc error:', error);
+});
+```
+
 ## Configuration-Based Events
 
 Events can also be set during initialization:
@@ -135,16 +169,20 @@ new SuperDoc({
   selector: '#editor',
   document: 'document.docx',
   onReady: ({ superdoc }) => { },
+  onEditorBeforeCreate: ({ editor }) => { },
   onEditorCreate: ({ editor }) => { },
   onEditorUpdate: ({ editor }) => { },
   onFontsResolved: ({ documentFonts, unsupportedFonts }) => { },
+  onSidebarToggle: (isOpened) => { },
+  onException: ({ error }) => { },
 });
 ```
 
 ## Event Order
 
-1. `editorCreate` — Editor ready
-2. `ready` — All editors ready
-3. `collaboration-ready` — If collaboration enabled
-4. Runtime events (`editor-update`, `comments-update`, etc.)
-5. `editorDestroy` — Cleanup
+1. `editorBeforeCreate` — Before editor mounts
+2. `editorCreate` — Editor ready
+3. `ready` — All editors ready
+4. `collaboration-ready` — If collaboration enabled
+5. Runtime events (`editor-update`, `comments-update`, `sidebar-toggle`, etc.)
+6. `editorDestroy` — Cleanup

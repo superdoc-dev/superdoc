@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getItems } from '../menuItems.js';
-import { createMockEditor, createMockContext, assertMenuSectionsStructure, SlashMenuConfigs } from './testHelpers.js';
+import { createMockEditor, createMockContext, assertMenuSectionsStructure, ContextMenuConfigs } from './testHelpers.js';
 import { TRIGGERS } from '../constants.js';
 
 const clipboardMocks = vi.hoisted(() => ({
@@ -74,7 +74,7 @@ describe('menuItems.js', () => {
 
     mockEditor = createMockEditor({
       isAiEnabled: false,
-      slashMenuConfig: null,
+      contextMenuConfig: null,
     });
 
     mockContext = createMockContext({
@@ -229,7 +229,7 @@ describe('menuItems.js', () => {
 
   describe('getItems - custom configuration', () => {
     it('should add custom items when customItems is provided', () => {
-      mockEditor.options.slashMenuConfig = SlashMenuConfigs.customOnly;
+      mockEditor.options.contextMenuConfig = ContextMenuConfigs.customOnly;
       mockContext.editor = mockEditor;
 
       const sections = getItems(mockContext);
@@ -241,7 +241,7 @@ describe('menuItems.js', () => {
     });
 
     it('should exclude default items when includeDefaultItems is false', () => {
-      mockEditor.options.slashMenuConfig = {
+      mockEditor.options.contextMenuConfig = {
         includeDefaultItems: false,
         customItems: [
           {
@@ -284,7 +284,7 @@ describe('menuItems.js', () => {
         ];
       };
 
-      mockEditor.options.slashMenuConfig = SlashMenuConfigs.withProvider(customProvider);
+      mockEditor.options.contextMenuConfig = ContextMenuConfigs.withProvider(customProvider);
       mockContext.editor = mockEditor;
 
       const sections = getItems(mockContext);
@@ -296,7 +296,7 @@ describe('menuItems.js', () => {
 
     it('should handle menuProvider errors gracefully', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      mockEditor.options.slashMenuConfig = {
+      mockEditor.options.contextMenuConfig = {
         includeDefaultItems: true,
         menuProvider: () => {
           throw new Error('Provider error');
@@ -313,7 +313,7 @@ describe('menuItems.js', () => {
     it('should filter custom items with showWhen conditions', () => {
       mockContext.selectedText = '';
       mockContext.hasSelection = false;
-      mockEditor.options.slashMenuConfig = SlashMenuConfigs.withConditionalItems;
+      mockEditor.options.contextMenuConfig = ContextMenuConfigs.withConditionalItems;
       mockContext.editor = mockEditor;
 
       const sections = getItems(mockContext);
@@ -326,7 +326,7 @@ describe('menuItems.js', () => {
     it('should include conditional items when showWhen condition is met', () => {
       mockContext.selectedText = 'selected';
       mockContext.hasSelection = true;
-      mockEditor.options.slashMenuConfig = SlashMenuConfigs.withConditionalItems;
+      mockEditor.options.contextMenuConfig = ContextMenuConfigs.withConditionalItems;
       mockContext.editor = mockEditor;
 
       const sections = getItems(mockContext);
@@ -340,7 +340,7 @@ describe('menuItems.js', () => {
 
     it('should handle showWhen errors gracefully', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      mockEditor.options.slashMenuConfig = {
+      mockEditor.options.contextMenuConfig = {
         includeDefaultItems: false,
         customItems: [
           {
@@ -369,7 +369,7 @@ describe('menuItems.js', () => {
     });
 
     it('should remove empty sections after filtering', () => {
-      mockEditor.options.slashMenuConfig = {
+      mockEditor.options.contextMenuConfig = {
         includeDefaultItems: false,
         customItems: [
           {

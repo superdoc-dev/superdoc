@@ -65,7 +65,7 @@ const shouldShowItem = (item, context) => {
     try {
       return Boolean(item.showWhen(context));
     } catch (error) {
-      console.warn('[SlashMenu] showWhen error for item', item.id, ':', error);
+      console.warn('[ContextMenu] showWhen error for item', item.id, ':', error);
       return false;
     }
   }
@@ -92,9 +92,13 @@ const canPerformTrackedChange = (context, action) => {
 export function getItems(context, customItems = [], includeDefaultItems = true) {
   const { selectedText, editor } = context;
 
-  if (arguments.length === 1 && editor?.options?.slashMenuConfig) {
-    customItems = editor.options.slashMenuConfig.items || editor.options.slashMenuConfig.customItems || [];
-    includeDefaultItems = editor.options.slashMenuConfig.includeDefaultItems !== false;
+  if (editor?.options?.slashMenuConfig && !editor?.options?.contextMenuConfig) {
+    console.warn('[ContextMenu] editor.options.slashMenuConfig is deprecated. Use contextMenuConfig instead.');
+  }
+  const menuConfig = editor?.options?.contextMenuConfig ?? editor?.options?.slashMenuConfig;
+  if (arguments.length === 1 && menuConfig) {
+    customItems = menuConfig.items || menuConfig.customItems || [];
+    includeDefaultItems = menuConfig.includeDefaultItems !== false;
   }
 
   // Enhanced context object - ensure we have all necessary computed properties
@@ -343,11 +347,11 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
   }
 
   // Apply menuProvider if present - advanced use case
-  if (editor?.options?.slashMenuConfig?.menuProvider) {
+  if (menuConfig?.menuProvider) {
     try {
-      allSections = editor.options.slashMenuConfig.menuProvider(enhancedContext, allSections) || allSections;
+      allSections = menuConfig.menuProvider(enhancedContext, allSections) || allSections;
     } catch (error) {
-      console.warn('[SlashMenu] menuProvider error:', error);
+      console.warn('[ContextMenu] menuProvider error:', error);
     }
   }
 

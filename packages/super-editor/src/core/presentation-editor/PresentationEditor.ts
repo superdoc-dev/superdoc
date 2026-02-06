@@ -763,7 +763,7 @@ export class PresentationEditor extends EventEmitter {
    * - In body mode, returns the main editor's state
    * - In header/footer mode, returns the active header/footer editor's state
    *
-   * This enables components like SlashMenu and context menus to access document
+   * This enables components like ContextMenu to access document
    * state, selection, and schema information in the correct editing context.
    *
    * @returns The EditorState for the active editor
@@ -808,7 +808,7 @@ export class PresentationEditor extends EventEmitter {
    *
    * This property returns the options object from the appropriate editor instance,
    * providing access to configuration like document mode, AI settings, and custom
-   * slash menu configuration.
+   * context menu configuration.
    *
    * @returns The options object for the active editor
    *

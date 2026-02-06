@@ -40,7 +40,7 @@ const SUPPORTED = [
   'search',
   'shape-container',
   'shape-textbox',
-  'slash-menu',
+  'context-menu',
   'strike',
   'structured-content', // contains document-section
   'tab',

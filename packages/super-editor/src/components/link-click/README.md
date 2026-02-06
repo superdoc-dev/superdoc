@@ -173,7 +173,7 @@ The 15px offset positions the popover slightly below the click point.
 - Works with both legacy (`view.dom`) and layout-engine (`presentationEditor.element`) surfaces
 - Uses existing `getEditorSurfaceElement` utility for surface resolution
 - Integrates with existing `LinkInput` component (no duplication)
-- Follows patterns established by `SlashMenu` component
+- Follows patterns established by `ContextMenu` component
 
 ## Future Enhancements
 

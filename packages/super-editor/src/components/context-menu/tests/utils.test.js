@@ -418,7 +418,7 @@ describe('utils.js', () => {
     it('should defer clipboard reading to paste action handler', async () => {
       // This test documents the architectural decision: clipboard reading
       // was moved from eager (context gathering) to lazy (paste action).
-      // Actual paste functionality is tested in SlashMenu.test.js
+      // Actual paste functionality is tested in ContextMenu.test.js
       mockSelectionHasNodeOrMark.mockReturnValue(false);
 
       const context = await getEditorContext(mockEditor);

@@ -1,13 +1,13 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed, markRaw } from 'vue';
-import { SlashMenuPluginKey } from '../../extensions/slash-menu/slash-menu.js';
+import { ContextMenuPluginKey } from '../../extensions/context-menu/context-menu.js';
 import { getPropsByItemId } from './utils.js';
 import { shouldBypassContextMenu } from '../../utils/contextmenu-helpers.js';
 import { moveCursorToMouseEvent } from '../cursor-helpers.js';
 import { getEditorSurfaceElement } from '../../core/helpers/editorSurface.js';
 import { getItems } from './menuItems.js';
 import { getEditorContext } from './utils.js';
-import { SLASH_MENU_HANDLED_FLAG } from './event-flags.js';
+import { CONTEXT_MENU_HANDLED_FLAG } from './event-flags.js';
 import { isMacOS } from '../../core/utilities/isMacOS.js';
 
 const props = defineProps({
@@ -128,11 +128,11 @@ const defaultRender = (context) => {
   // Access item from the refData or context
   const item = context.item || context.currentItem;
   const container = document.createElement('div');
-  container.className = 'slash-menu-default-content';
+  container.className = 'context-menu-default-content';
 
   if (item.icon) {
     const iconSpan = document.createElement('span');
-    iconSpan.className = 'slash-menu-item-icon';
+    iconSpan.className = 'context-menu-item-icon';
     iconSpan.innerHTML = item.icon;
     container.appendChild(iconSpan);
   }
@@ -168,7 +168,7 @@ const renderCustomItem = async (itemId) => {
       element.hasCustomContent = true;
     }
   } catch (error) {
-    console.warn(`[SlashMenu] Error rendering custom item ${itemId}:`, error);
+    console.warn(`[ContextMenu] Error rendering custom item ${itemId}:`, error);
     // Fallback to default rendering
     const fallbackElement = defaultRender({ ...(currentContext.value || {}), currentItem: item });
     element.innerHTML = '';
@@ -252,12 +252,12 @@ const handleGlobalOutsideClick = (event) => {
 };
 
 /**
- * Determines whether the SlashMenu should handle a context menu event.
+ * Determines whether the ContextMenu should handle a context menu event.
  * Checks if the editor is editable, context menu is enabled, and the event
  * should not be bypassed (e.g., modifier keys are not pressed).
  *
  * @param {MouseEvent} event - The context menu event to validate
- * @returns {boolean} true if the SlashMenu should handle the event, false otherwise
+ * @returns {boolean} true if the ContextMenu should handle the event, false otherwise
  */
 const shouldHandleContextMenu = (event) => {
   const readOnly = !props.editor?.isEditable;
@@ -268,7 +268,7 @@ const shouldHandleContextMenu = (event) => {
 };
 
 /**
- * Capture phase handler for context menu events that marks the event as handled by SlashMenu.
+ * Capture phase handler for context menu events that marks the event as handled by ContextMenu.
  * This flag is used by PresentationInputBridge to skip forwarding the event to the hidden editor,
  * preventing duplicate context menu handling.
  *
@@ -280,12 +280,12 @@ const shouldHandleContextMenu = (event) => {
 const handleRightClickCapture = (event) => {
   try {
     if (shouldHandleContextMenu(event)) {
-      event[SLASH_MENU_HANDLED_FLAG] = true;
+      event[CONTEXT_MENU_HANDLED_FLAG] = true;
     }
   } catch (error) {
     // Prevent handler crashes from breaking the event flow
     // Log warning but don't throw to allow other handlers to run
-    console.warn('[SlashMenu] Error in capture phase context menu handler:', error);
+    console.warn('[ContextMenu] Error in capture phase context menu handler:', error);
   }
 };
 
@@ -325,7 +325,7 @@ const handleRightClick = async (event) => {
     if (!currentState) return;
 
     props.editor.dispatch(
-      currentState.tr.setMeta(SlashMenuPluginKey, {
+      currentState.tr.setMeta(ContextMenuPluginKey, {
         type: 'open',
         pos: context?.pos ?? currentState.selection.from,
         clientX: event.clientX,
@@ -333,7 +333,7 @@ const handleRightClick = async (event) => {
       }),
     );
   } catch (error) {
-    console.error('[SlashMenu] Error opening context menu:', error);
+    console.error('[ContextMenu] Error opening context menu:', error);
   }
 };
 
@@ -346,7 +346,7 @@ const executeCommand = async (item) => {
       const menuElement = menuRef.value;
       const componentProps = getPropsByItemId(item.id, props);
 
-      // Convert viewport-relative coordinates (used by fixed-position SlashMenu)
+      // Convert viewport-relative coordinates (used by fixed-position ContextMenu)
       // to container-relative coordinates (used by absolute-position GenericPopover)
       let popoverPosition = { left: menuPosition.value.left, top: menuPosition.value.top };
       if (menuElement) {
@@ -376,11 +376,11 @@ const closeMenu = (options = { restoreCursor: true }) => {
   const state = props.editor.state;
   if (!state) return;
   // Get plugin state to access anchorPos
-  const pluginState = SlashMenuPluginKey.getState(state);
+  const pluginState = ContextMenuPluginKey.getState(state);
   const anchorPos = pluginState?.anchorPos;
 
   // Update prosemirror state to close menu
-  props.editor.dispatch(state.tr.setMeta(SlashMenuPluginKey, { type: 'close' }));
+  props.editor.dispatch(state.tr.setMeta(ContextMenuPluginKey, { type: 'close' }));
 
   // Restore cursor position and focus only if requested
   if (options.restoreCursor && anchorPos !== null && anchorPos !== undefined) {
@@ -404,8 +404,8 @@ const closeMenu = (options = { restoreCursor: true }) => {
  * Lifecycle hooks on mount and onBeforeUnmount
  */
 let contextMenuTarget = null;
-let slashMenuOpenHandler = null;
-let slashMenuCloseHandler = null;
+let contextMenuOpenHandler = null;
+let contextMenuCloseHandler = null;
 
 onMounted(() => {
   if (!props.editor) return;
@@ -420,7 +420,7 @@ onMounted(() => {
   props.editor.on('update', handleEditorUpdate);
 
   // Listen for the slash menu to open
-  slashMenuOpenHandler = async (event) => {
+  contextMenuOpenHandler = async (event) => {
     // Prevent opening the menu in read-only mode
     const readOnly = !props.editor?.isEditable;
     if (readOnly) return;
@@ -439,7 +439,7 @@ onMounted(() => {
       selectedId.value = flattenedItems.value[0]?.id || null;
     }
   };
-  props.editor.on('slashMenu:open', slashMenuOpenHandler);
+  props.editor.on('contextMenu:open', contextMenuOpenHandler);
 
   // Attach context menu to the active surface (flow view.dom or presentation host)
   contextMenuTarget = getEditorSurfaceElement(props.editor);
@@ -448,13 +448,13 @@ onMounted(() => {
     contextMenuTarget.addEventListener('contextmenu', handleRightClick);
   }
 
-  slashMenuCloseHandler = () => {
+  contextMenuCloseHandler = () => {
     cleanupCustomItems();
     isOpen.value = false;
     searchQuery.value = '';
     currentContext.value = null;
   };
-  props.editor.on('slashMenu:close', slashMenuCloseHandler);
+  props.editor.on('contextMenu:close', contextMenuCloseHandler);
 });
 
 // Cleanup function for event listeners
@@ -467,47 +467,51 @@ onBeforeUnmount(() => {
   if (props.editor) {
     try {
       // Remove specific handlers to avoid removing other components' listeners
-      if (slashMenuOpenHandler) {
-        props.editor.off('slashMenu:open', slashMenuOpenHandler);
+      if (contextMenuOpenHandler) {
+        props.editor.off('contextMenu:open', contextMenuOpenHandler);
       }
-      if (slashMenuCloseHandler) {
-        props.editor.off('slashMenu:close', slashMenuCloseHandler);
+      if (contextMenuCloseHandler) {
+        props.editor.off('contextMenu:close', contextMenuCloseHandler);
       }
       props.editor.off('update', handleEditorUpdate);
       contextMenuTarget?.removeEventListener('contextmenu', handleRightClickCapture, true);
       contextMenuTarget?.removeEventListener('contextmenu', handleRightClick);
     } catch (error) {
-      console.warn('[SlashMenu] Error during cleanup:', error);
+      console.warn('[ContextMenu] Error during cleanup:', error);
     }
   }
 });
 </script>
 
 <template>
-  <div v-if="isOpen" ref="menuRef" class="slash-menu" :style="menuPosition" @pointerdown.stop>
+  <div v-if="isOpen" ref="menuRef" class="context-menu" :style="menuPosition" @pointerdown.stop>
     <!-- Hide the input visually but keep it focused for typing -->
     <input
       ref="searchInput"
       v-model="searchQuery"
       type="text"
-      class="slash-menu-hidden-input"
+      class="context-menu-hidden-input"
       @keydown="handleGlobalKeyDown"
       @keydown.stop
     />
 
-    <div class="slash-menu-items">
+    <div class="context-menu-items">
       <template v-for="(section, sectionIndex) in filteredSections" :key="section.id">
         <!-- Render divider before section (except for first section) -->
-        <div v-if="sectionIndex > 0 && section.items.length > 0" class="slash-menu-divider" tabindex="0"></div>
+        <div v-if="sectionIndex > 0 && section.items.length > 0" class="context-menu-divider" tabindex="0"></div>
 
         <!-- Render section items -->
         <template v-for="item in section.items" :key="item.id">
-          <div class="slash-menu-item" :class="{ 'is-selected': item.id === selectedId }" @click="executeCommand(item)">
+          <div
+            class="context-menu-item"
+            :class="{ 'is-selected': item.id === selectedId }"
+            @click="executeCommand(item)"
+          >
             <!-- Custom rendered content or default rendering -->
-            <div :ref="(el) => setCustomItemRef(el, item)" class="slash-menu-custom-item">
+            <div :ref="(el) => setCustomItemRef(el, item)" class="context-menu-custom-item">
               <!-- Fallback content for items without custom render (will be replaced by defaultRender) -->
               <template v-if="!item.render">
-                <span v-if="item.icon" class="slash-menu-item-icon" v-html="item.icon"></span>
+                <span v-if="item.icon" class="context-menu-item-icon" v-html="item.icon"></span>
                 <span>{{ item.label }}</span>
               </template>
             </div>
@@ -519,7 +523,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-.slash-menu {
+.context-menu {
   position: fixed;
   z-index: 50;
   width: 180px;
@@ -533,7 +537,7 @@ onBeforeUnmount(() => {
 }
 
 /* Hide the input but keep it functional */
-.slash-menu-hidden-input {
+.context-menu-hidden-input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -544,33 +548,33 @@ onBeforeUnmount(() => {
   border: none;
 }
 
-.slash-menu-items {
+.context-menu-items {
   max-height: 300px;
   overflow-y: auto;
 }
 
-.slash-menu-search {
+.context-menu-search {
   padding: 0.5rem;
   border-bottom: 1px solid #eee;
 }
 
-.slash-menu-search input {
+.context-menu-search input {
   width: 100%;
   padding: 0.25rem 0.5rem;
   border: 1px solid #ddd;
   outline: none;
 }
 
-.slash-menu-search input:focus {
+.context-menu-search input:focus {
   border-color: #0096fd;
 }
 
 /* Remove unused group styles */
-.slash-menu-group-label {
+.context-menu-group-label {
   display: none;
 }
 
-.slash-menu-item {
+.context-menu-item {
   padding: 0.25rem 0.5rem;
   cursor: pointer;
   user-select: none;
@@ -579,34 +583,34 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.slash-menu-item:hover {
+.context-menu-item:hover {
   background: #f5f5f5;
 }
 
-.slash-menu-item.is-selected {
+.context-menu-item.is-selected {
   background: #edf6ff;
   color: #0096fd;
   fill: #0096fd;
 }
 
-.slash-menu-item-icon {
+.context-menu-item-icon {
   display: flex;
   align-items: center;
   margin-right: 10px;
 }
 
-.slash-menu .slash-menu-item-icon svg {
+.context-menu .context-menu-item-icon svg {
   height: 12px;
   width: 12px;
 }
 
-.slash-menu-custom-item {
+.context-menu-custom-item {
   display: flex;
   align-items: center;
   width: 100%;
 }
 
-.slash-menu-default-content {
+.context-menu-default-content {
   display: flex;
   align-items: center;
   width: 100%;
@@ -621,7 +625,7 @@ onBeforeUnmount(() => {
   z-index: 100;
 }
 
-.slash-menu-divider {
+.context-menu-divider {
   height: 1px;
   background: #eee;
   margin: 4px 0;

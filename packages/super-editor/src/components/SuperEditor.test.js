@@ -43,8 +43,8 @@ vi.mock('./cursor-helpers.js', () => ({
   checkNodeSpecificClicks: checkNodeSpecificClicksMock,
 }));
 
-vi.mock('./slash-menu/SlashMenu.vue', () => ({
-  default: { name: 'SlashMenu', render: () => null },
+vi.mock('./context-menu/ContextMenu.vue', () => ({
+  default: { name: 'ContextMenu', render: () => null },
 }));
 
 vi.mock('./rulers/Ruler.vue', () => ({

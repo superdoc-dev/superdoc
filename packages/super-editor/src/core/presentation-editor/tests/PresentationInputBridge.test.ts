@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PresentationInputBridge } from '../input/PresentationInputBridge.js';
-import { SLASH_MENU_HANDLED_FLAG } from '../../../components/slash-menu/event-flags.js';
+import { CONTEXT_MENU_HANDLED_FLAG } from '../../../components/context-menu/event-flags.js';
 
 describe('PresentationInputBridge - Context Menu Handling', () => {
   let bridge: PresentationInputBridge;
@@ -50,7 +50,7 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
       );
     });
 
-    it('should NOT forward context menu event when SLASH_MENU_HANDLED_FLAG is set', () => {
+    it('should NOT forward context menu event when CONTEXT_MENU_HANDLED_FLAG is set', () => {
       const dispatchSpy = vi.spyOn(targetDom, 'dispatchEvent');
       const event = new MouseEvent('contextmenu', {
         bubbles: true,
@@ -59,12 +59,12 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
         clientY: 200,
       });
 
-      // Set the flag to indicate SlashMenu handled it
-      (event as MouseEvent & { [key: string]: boolean })[SLASH_MENU_HANDLED_FLAG] = true;
+      // Set the flag to indicate ContextMenu handled it
+      (event as MouseEvent & { [key: string]: boolean })[CONTEXT_MENU_HANDLED_FLAG] = true;
 
       layoutSurface.dispatchEvent(event);
 
-      // Should not dispatch to target because SlashMenu already handled it
+      // Should not dispatch to target because ContextMenu already handled it
       expect(dispatchSpy).not.toHaveBeenCalled();
     });
 
@@ -76,7 +76,7 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
       });
 
       // Set flag to any truthy value
-      (event as MouseEvent & { [key: string]: string })[SLASH_MENU_HANDLED_FLAG] = 'yes';
+      (event as MouseEvent & { [key: string]: string })[CONTEXT_MENU_HANDLED_FLAG] = 'yes';
 
       layoutSurface.dispatchEvent(event);
 
@@ -93,7 +93,7 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
       });
 
       // Explicitly set flag to false
-      (event as MouseEvent & { [key: string]: boolean })[SLASH_MENU_HANDLED_FLAG] = false;
+      (event as MouseEvent & { [key: string]: boolean })[CONTEXT_MENU_HANDLED_FLAG] = false;
 
       layoutSurface.dispatchEvent(event);
 
@@ -153,7 +153,7 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
         bubbles: true,
         cancelable: true,
       });
-      (event as MouseEvent & { [key: string]: boolean })[SLASH_MENU_HANDLED_FLAG] = true;
+      (event as MouseEvent & { [key: string]: boolean })[CONTEXT_MENU_HANDLED_FLAG] = true;
 
       layoutSurface.dispatchEvent(event);
 
@@ -210,10 +210,10 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
     });
   });
 
-  describe('integration with SlashMenu flag', () => {
-    it('should coordinate with SlashMenu capture phase handler', () => {
+  describe('integration with ContextMenu flag', () => {
+    it('should coordinate with ContextMenu capture phase handler', () => {
       // Simulate what happens in the real flow:
-      // 1. SlashMenu sets flag in capture phase
+      // 1. ContextMenu sets flag in capture phase
       // 2. PresentationInputBridge checks flag in bubble phase
       const dispatchSpy = vi.spyOn(targetDom, 'dispatchEvent');
 
@@ -222,11 +222,11 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
         cancelable: true,
       });
 
-      // Simulate SlashMenu setting the flag during capture phase
+      // Simulate ContextMenu setting the flag during capture phase
       layoutSurface.addEventListener(
         'contextmenu',
         (e) => {
-          (e as MouseEvent & { [key: string]: boolean })[SLASH_MENU_HANDLED_FLAG] = true;
+          (e as MouseEvent & { [key: string]: boolean })[CONTEXT_MENU_HANDLED_FLAG] = true;
         },
         true, // capture phase
       );

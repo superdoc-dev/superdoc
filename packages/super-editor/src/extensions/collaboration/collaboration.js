@@ -6,6 +6,17 @@ import { updateYdocDocxData, applyRemoteHeaderFooterChanges } from '@extensions/
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
+const headlessCleanupRegisteredEditors = new WeakSet();
+
+const registerHeadlessBindingCleanup = (editor, cleanup) => {
+  if (!cleanup || headlessCleanupRegisteredEditors.has(editor)) return;
+
+  headlessCleanupRegisteredEditors.add(editor);
+  editor.once('destroy', () => {
+    cleanup();
+    headlessCleanupRegisteredEditors.delete(editor);
+  });
+};
 
 export const Collaboration = Extension.create({
   name: 'collaboration',
@@ -61,9 +72,7 @@ export const Collaboration = Extension.create({
     // Doing this in addPmPlugins ensures sync hooks are active before the first local transaction.
     if (this.editor.options.isHeadless) {
       const cleanup = initHeadlessBinding(this.editor);
-      if (cleanup) {
-        this.editor.once('destroy', cleanup);
-      }
+      registerHeadlessBindingCleanup(this.editor, cleanup);
     }
 
     return [syncPlugin];
@@ -73,9 +82,7 @@ export const Collaboration = Extension.create({
     // Keep this as a fallback for custom lifecycles that may bypass addPmPlugins.
     if (this.editor.options.isHeadless && this.editor.options.ydoc) {
       const cleanup = initHeadlessBinding(this.editor);
-      if (cleanup) {
-        this.editor.once('destroy', cleanup);
-      }
+      registerHeadlessBindingCleanup(this.editor, cleanup);
     }
   },
 
@@ -285,6 +292,7 @@ const initHeadlessBinding = (editor) => {
     if (headlessBindingStateByEditor.get(editor) === state) {
       headlessBindingStateByEditor.delete(editor);
     }
+    headlessCleanupRegisteredEditors.delete(editor);
   };
   return state.cleanup;
 };

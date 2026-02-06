@@ -864,6 +864,21 @@ describe('collaboration extension', () => {
       expect(editor.off).toHaveBeenCalledWith('transaction', transactionHandler);
     });
 
+    it('does not register duplicate headless listeners when onCreate runs after addPmPlugins', () => {
+      const { editor, context } = createHeadlessEditor();
+
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListenerRegistrations = editor.on.mock.calls.filter(([event]) => event === 'transaction');
+      const destroyCleanupRegistrations = editor.once.mock.calls.filter(([event]) => event === 'destroy');
+
+      expect(transactionListenerRegistrations).toHaveLength(1);
+      expect(destroyCleanupRegistrations).toHaveLength(1);
+      expect(mockBinding.initView).toHaveBeenCalledTimes(1);
+    });
+
     it('re-initializes binding when sync plugin binding changes between transactions', () => {
       const { editor, context } = createHeadlessEditor({ state: { doc: { type: 'doc', content: [] } } });
       Collaboration.config.addPmPlugins.call(context);

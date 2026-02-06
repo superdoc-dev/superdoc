@@ -54,14 +54,8 @@
                 "pages": [
                   "getting-started/frameworks/react",
                   "getting-started/frameworks/vue",
-                  "getting-started/frameworks/vanilla-js",
                   "getting-started/frameworks/angular",
-                  "getting-started/frameworks/nextjs",
-                  "getting-started/frameworks/svelte",
-                  "getting-started/frameworks/php",
-                  "getting-started/frameworks/nuxt",
-                  "getting-started/frameworks/ruby-on-rails",
-                  "getting-started/frameworks/blazor"
+                  "getting-started/frameworks/vanilla-js"
                 ]
               },
               "getting-started/import-export",

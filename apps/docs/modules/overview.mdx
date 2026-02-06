@@ -13,14 +13,15 @@ const superdoc = new SuperDoc({
   modules: {
     toolbar: { selector: '#toolbar' },
     comments: { allowResolve: true },
-    collaboration: { ydoc, provider }
+    collaboration: { ydoc, provider },
+    slashMenu: { includeDefaultItems: true }
   }
 });
 ```
 
 ## Available Modules
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
     Real-time multi-user editing with Yjs
   </Card>
@@ -29,6 +30,9 @@ const superdoc = new SuperDoc({
   </Card>
   <Card title="Toolbar" icon="palette" href="/modules/toolbar">
     Customizable formatting controls
+  </Card>
+  <Card title="Context Menu" icon="menu" href="/modules/context-menu">
+    Slash commands and right-click actions
   </Card>
 </CardGroup>
 

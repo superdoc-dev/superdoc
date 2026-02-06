@@ -110,7 +110,8 @@
                 ]
               },
               "modules/comments",
-              "modules/toolbar"
+              "modules/toolbar",
+              "modules/context-menu"
             ]
           },
           {

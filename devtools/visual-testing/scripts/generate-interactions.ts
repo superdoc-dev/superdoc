@@ -54,6 +54,14 @@ const TIMEOUT_SUPERDOC_READY = 120_000;
 const TIMEOUT_FONTS = 60_000;
 const TIMEOUT_LAYOUT_STABLE = 120_000;
 const FIXED_TIME_ISO = '2026-01-12T12:00:00Z';
+const IS_CI_MODE =
+  process.argv.includes('--ci') || process.argv.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
+
+function logCi(message: string): void {
+  if (IS_CI_MODE) {
+    console.log(colors.muted(message));
+  }
+}
 
 interface LoadedStory {
   id: string;
@@ -533,87 +541,111 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
   console.log(colors.muted(`${filtered.length} stories → ${outputLabel}`));
 
   const provider = await createCorpusProvider({ mode, docsDir });
-  const shouldSkipExisting = (isBaseline && !force) || skipExisting;
-  const progress = createProgressReporter(filtered.length, ci);
 
-  const browserType = getBrowserType(browser);
-  const browserInstance = await browserType.launch({ headless: true });
-  const results = {
-    stories: 0,
-    milestones: 0,
-    skipped: 0,
-    errors: [] as Array<{ story: string; error: string }>,
-  };
+  try {
+    const shouldSkipExisting = (isBaseline && !force) || skipExisting;
+    const progress = createProgressReporter(filtered.length, ci);
 
-  for (const story of filtered) {
-    const storyDir = path.join(outputRoot, story.id);
-    if (shouldSkipExisting && hasExistingSnapshots(storyDir)) {
-      if (!ci) {
-        console.log(colors.muted(`⏭ ${story.name} (already exists)`));
+    const browserType = getBrowserType(browser);
+    const browserInstance = await browserType.launch({ headless: true });
+    const results = {
+      stories: 0,
+      milestones: 0,
+      skipped: 0,
+      errors: [] as Array<{ story: string; error: string }>,
+    };
+
+    for (const story of filtered) {
+      const storyDir = path.join(outputRoot, story.id);
+      if (shouldSkipExisting && hasExistingSnapshots(storyDir)) {
+        if (!ci) {
+          console.log(colors.muted(`⏭ ${story.name} (already exists)`));
+        }
+        results.skipped += 1;
+        progress.advance();
+        continue;
       }
-      results.skipped += 1;
-      progress.advance();
-      continue;
+
+      if (!ci) {
+        console.log(colors.info(`▶ ${story.name}`));
+      }
+      results.stories += 1;
+
+      try {
+        const count = await runStory(browserInstance, story, outputRoot, scaleFactor, provider);
+        results.milestones += count;
+        if (!ci) {
+          console.log(colors.success(`   ✓ ${count} milestone(s)`));
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!ci) {
+          console.log(colors.error(`   ✗ Error: ${message}`));
+          results.errors.push({ story: story.name, error: message });
+        } else {
+          results.errors.push({ story: '', error: 'error' });
+        }
+      } finally {
+        progress.advance();
+      }
     }
 
-    if (!ci) {
-      console.log(colors.info(`▶ ${story.name}`));
-    }
-    results.stories += 1;
+    await browserInstance.close();
 
-    try {
-      const count = await runStory(browserInstance, story, outputRoot, scaleFactor, provider);
-      results.milestones += count;
-      if (!ci) {
-        console.log(colors.success(`   ✓ ${count} milestone(s)`));
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!ci) {
-        console.log(colors.error(`   ✗ Error: ${message}`));
-        results.errors.push({ story: story.name, error: message });
+    console.log('\n' + colors.muted('─'.repeat(50)));
+    if (results.milestones > 0) {
+      if (isBaseline) {
+        console.log(colors.success(`✅ Baseline: ${results.milestones} milestone(s) from ${results.stories} stories`));
       } else {
-        results.errors.push({ story: '', error: 'error' });
+        console.log(colors.success(`✅ Captured ${results.milestones} milestone(s) from ${results.stories} stories`));
       }
-    } finally {
-      progress.advance();
+      if (!isBaseline) {
+        console.log(colors.info(`Saved to: ${outputRoot}`));
+      }
+    } else if (results.skipped === 0) {
+      console.log(colors.muted(`No stories matched the filter.`));
     }
-  }
-
-  await browserInstance.close();
-
-  console.log('\n' + colors.muted('─'.repeat(50)));
-  if (results.milestones > 0) {
-    if (isBaseline) {
-      console.log(colors.success(`✅ Baseline: ${results.milestones} milestone(s) from ${results.stories} stories`));
-    } else {
-      console.log(colors.success(`✅ Captured ${results.milestones} milestone(s) from ${results.stories} stories`));
+    if (results.skipped > 0) {
+      console.log(colors.muted(`⏭ Skipped ${results.skipped} stories (already exist)`));
     }
-    if (!isBaseline) {
-      console.log(colors.info(`Saved to: ${outputRoot}`));
-    }
-  } else if (results.skipped === 0) {
-    console.log(colors.muted(`No stories matched the filter.`));
-  }
-  if (results.skipped > 0) {
-    console.log(colors.muted(`⏭ Skipped ${results.skipped} stories (already exist)`));
-  }
 
-  if (results.errors.length > 0) {
+    if (results.errors.length > 0) {
+      if (ci) {
+        console.log(
+          colors.warning(`\n⚠ ${results.errors.length} error(s) occurred. Re-run without --ci for details.`),
+        );
+      } else {
+        console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
+        for (const { story, error } of results.errors) {
+          console.log(colors.error(`  - ${story}: ${error}`));
+        }
+      }
+      if (failOnError) {
+        return 1;
+      }
+    }
+
     if (ci) {
-      console.log(colors.warning(`\n⚠ ${results.errors.length} error(s) occurred. Re-run without --ci for details.`));
-    } else {
-      console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
-      for (const { story, error } of results.errors) {
-        console.log(colors.error(`  - ${story}: ${error}`));
+      console.log(colors.muted('generate-interactions summary complete.'));
+    }
+
+    return 0;
+  } finally {
+    if (provider.close) {
+      if (ci) {
+        console.log(colors.muted('Closing corpus provider...'));
+      }
+      try {
+        await provider.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(colors.warning(`⚠ Failed to close corpus provider: ${message}`));
+      }
+      if (ci) {
+        console.log(colors.muted('Corpus provider closed.'));
       }
     }
-    if (failOnError) {
-      return 1;
-    }
   }
-
-  return 0;
 }
 
 async function main(): Promise<number> {
@@ -639,19 +671,31 @@ async function main(): Promise<number> {
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   const runWithHarness = async (): Promise<number> => {
+    logCi('Ensuring harness is running...');
     const { child, started } = await ensureHarnessRunning();
+    logCi('Harness ready.');
     try {
-      return await main();
+      const exitCode = await main();
+      logCi(`generate-interactions main complete (exit ${exitCode}).`);
+      return exitCode;
     } finally {
       if (started && child) {
+        logCi('Stopping harness...');
         await stopHarness(child);
+        logCi('Harness stopped.');
       }
     }
   };
 
   runWithHarness()
     .then((exitCode) => {
+      logCi(`generate-interactions cleanup complete (exit ${exitCode}).`);
       process.exitCode = exitCode;
+      if (IS_CI_MODE) {
+        logCi('Forcing process exit in CI to avoid hanging handles.');
+        const timer = setTimeout(() => process.exit(exitCode), 500);
+        timer.unref?.();
+      }
     })
     .catch((error) => {
       console.error(colors.error(`Fatal error: ${error instanceof Error ? error.message : String(error)}`));

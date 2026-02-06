@@ -73,6 +73,10 @@ export type CorpusProvider = {
    * @returns Local file path to the downloaded document
    */
   fetchDoc: (doc_id: string, doc_rev: string) => Promise<string>;
+  /**
+   * Optional cleanup hook for provider resources (e.g., network clients).
+   */
+  close?: () => void | Promise<void>;
 };
 
 /**
@@ -391,6 +395,9 @@ async function createR2Provider(options: ProviderOptions): Promise<CorpusProvide
       return applyFilters(docs, filters);
     },
     fetchDoc: downloadDoc,
+    close: () => {
+      client.destroy();
+    },
   };
 }
 
@@ -414,6 +421,9 @@ async function createLocalProvider(options: ProviderOptions): Promise<CorpusProv
         console.warn(colors.warning(`⚠ doc_rev mismatch for ${doc_id}: expected ${entry.rev}, got ${doc_rev}`));
       }
       return entry.path;
+    },
+    close: () => {
+      // No-op for local filesystem provider.
     },
   };
 }

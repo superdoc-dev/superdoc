@@ -28,8 +28,6 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
-    env:
-      SUPERDOC_TEST_BROWSER: chromium
 
     steps:
       - name: Checkout
@@ -109,6 +107,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+          cache-dependency-path: devtools/visual-testing/pnpm-lock.yaml
 
       - name: Cache apt packages
         if: steps.version.outputs.skip != 'true'
@@ -133,6 +132,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.version.outputs.skip != 'true'
+        working-directory: devtools/visual-testing
         run: pnpm install
 
       - name: Get Playwright version
@@ -153,12 +153,12 @@ jobs:
       - name: Install Playwright browsers
         if: steps.version.outputs.skip != 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: devtools/visual-testing
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Install Playwright system deps (cache hit)
         if: steps.version.outputs.skip != 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
         working-directory: devtools/visual-testing
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium firefox webkit
 
       - name: Wait for npm propagation
         if: steps.version.outputs.skip != 'true'
@@ -207,7 +207,9 @@ jobs:
           SD_TESTING_R2_BASELINES_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BASELINES_BUCKET_NAME }}
           SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
           SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}
-        run: pnpm baseline --ci
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          pnpm baseline "$VERSION" --ci
 
       - name: Summary
         if: steps.version.outputs.skip != 'true'
@@ -219,12 +221,12 @@ jobs:
           | Property | Value |
           |----------|-------|
           | **Version** | \`$VERSION\` |
-          | **Browser** | Chromium |
+          | **Browsers** | Chromium, Firefox, WebKit |
           | **Trigger** | ${{ github.event_name == 'workflow_dispatch' && 'Manual' || 'Release workflow' }} |
 
           ### R2 Paths
-          - Visual: \`baselines/v.$VERSION/chromium/\`
-          - Interactions: \`baselines-interactions/v.$VERSION/chromium/\`
+          - Visual: \`baselines/v.$VERSION/<browser>/\`
+          - Interactions: \`baselines-interactions/v.$VERSION/<browser>/\`
           EOF
 
       - name: Summary (skipped)

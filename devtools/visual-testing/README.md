@@ -6,10 +6,17 @@ Visual and interaction snapshot testing for SuperDoc, with HTML reports.
 
 ## Quick start
 
-1. Set the SuperDoc version (or local path). Default is the workspace package.
+Install dependencies from this folder (separate workspace):
+
+```bash
+cd devtools/visual-testing
+pnpm install
+```
+
+1. Set the SuperDoc version (or local path). Default is the version in `packages/harness/package.json`.
    - `pnpm superdoc 1.5.0-next.6`
    - `pnpm superdoc /path/to/superdoc` (must already be built/packed)
-   - `pnpm superdoc local` (use workspace superdoc)
+   - `pnpm superdoc local` (pack local repo superdoc; only works when this folder lives inside the repo)
 2. Create baselines:
    - `pnpm baseline` (uses current installed version)
    - `pnpm baseline 1.4.0` (switches to that version first)
@@ -53,7 +60,8 @@ Examples:
 ## Commands
 
 - `pnpm superdoc <version|path>` set the SuperDoc version used by the harness.
-- `pnpm superdoc local` use the workspace superdoc package.
+- `pnpm superdoc /path/to/superdoc` use a local repo build (monorepo root or packages/superdoc).
+- `pnpm superdoc local` pack and install the local repo superdoc tarball (requires repo checkout).
 - `pnpm superdoc:version` show the current installed SuperDoc version.
 - `pnpm generate` generate visual + interaction snapshots.
 - `pnpm generate:visual` generate visual snapshots only.

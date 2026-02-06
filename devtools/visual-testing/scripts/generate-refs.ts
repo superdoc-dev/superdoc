@@ -60,6 +60,15 @@ const TIMEOUT_SUPERDOC_READY = 120_000; // 2 min for large docs to load
 const TIMEOUT_FONTS = 60_000;
 const TIMEOUT_LAYOUT_STABLE = 120_000; // 2 min for large docs to render
 
+const IS_CI_MODE =
+  process.argv.includes('--ci') || process.argv.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
+
+function logCi(message: string): void {
+  if (IS_CI_MODE) {
+    console.log(colors.muted(message));
+  }
+}
+
 /**
  * Check if SuperDoc is installed from a local file (not npm).
  */
@@ -679,111 +688,142 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
 
   const provider = await createCorpusProvider({ mode, docsDir });
 
-  console.log(colors.info('🔍 Finding documents...'));
-  const documents = await findDocumentsFromCorpus(provider, outputDir, { filters, matches, excludes });
-  if (filters.length > 0) {
-    console.log(colors.info(`🔎 Filter: "${filters.join(', ')}"`));
-  }
-  if (matches.length > 0) {
-    console.log(colors.info(`🔎 Match: "${matches.join(', ')}"`));
-  }
-  if (excludes.length > 0) {
-    console.log(colors.info(`🔎 Exclude: "${excludes.join(', ')}"`));
-  }
-
-  if (documents.length === 0) {
-    console.log(colors.warning('No documents found in corpus.'));
-    return 0;
-  }
-
-  console.log(colors.info(`Found ${documents.length} document(s)`));
-  if (isBaseline) {
-    if (mode === 'local') {
-      console.log(colors.info(`📁 Output (baseline): ${outputDir}`));
-    } else {
-      console.log(colors.info('📁 Output (baseline): uploading to R2'));
+  try {
+    console.log(colors.info('🔍 Finding documents...'));
+    const documents = await findDocumentsFromCorpus(provider, outputDir, { filters, matches, excludes });
+    if (filters.length > 0) {
+      console.log(colors.info(`🔎 Filter: "${filters.join(', ')}"`));
     }
-  } else {
-    console.log(colors.info(`📁 Output (${modeLabel}): ${outputDir}`));
-  }
+    if (matches.length > 0) {
+      console.log(colors.info(`🔎 Match: "${matches.join(', ')}"`));
+    }
+    if (excludes.length > 0) {
+      console.log(colors.info(`🔎 Exclude: "${excludes.join(', ')}"`));
+    }
 
-  // Determine actual parallelism (don't use more workers than documents)
-  const workerCount = Math.min(parallel, documents.length);
-  console.log(colors.info(`🚀 Launching browser with ${workerCount} parallel worker(s)...\n`));
+    if (documents.length === 0) {
+      console.log(colors.warning('No documents found in corpus.'));
+      return 0;
+    }
 
-  // Launch browser
-  const browserType = getBrowserType(browser);
-  const browserInstance: Browser = await browserType.launch({
-    headless: true,
-  });
-
-  // Create shared results object
-  const results = {
-    screenshots: 0,
-    skipped: 0,
-    errors: [] as Array<{ doc: string; error: string }>,
-  };
-
-  const progress = createProgressReporter(documents.length, ci);
-
-  // Create document queue (workers will pull from this)
-  const queue = [...documents];
-
-  // Skip existing documents in baseline mode (unless --force)
-  const shouldSkipExisting = (isBaseline && !force) || skipExisting;
-
-  // Create workers (each with its own browser context and page)
-  const workers: Promise<void>[] = [];
-  for (let i = 0; i < workerCount; i++) {
-    const context = await browserInstance.newContext({
-      viewport: VIEWPORT,
-      deviceScaleFactor: scaleFactor,
-    });
-    const page = await context.newPage();
-    workers.push(processDocumentQueue(i + 1, page, queue, results, shouldSkipExisting, provider, progress, ci));
-  }
-
-  // Wait for all workers to complete
-  await Promise.all(workers);
-
-  await browserInstance.close();
-
-  // Summary
-  console.log('\n' + colors.muted('─'.repeat(50)));
-  const processedDocs = documents.length - results.errors.length - results.skipped;
-  if (results.screenshots > 0) {
+    console.log(colors.info(`Found ${documents.length} document(s)`));
     if (isBaseline) {
-      console.log(
-        colors.success(`✅ Baseline: ${results.screenshots} screenshot(s) from ${processedDocs} document(s)`),
-      );
+      if (mode === 'local') {
+        console.log(colors.info(`📁 Output (baseline): ${outputDir}`));
+      } else {
+        console.log(colors.info('📁 Output (baseline): uploading to R2'));
+      }
     } else {
-      console.log(colors.success(`✅ Captured ${results.screenshots} screenshot(s) from ${processedDocs} document(s)`));
+      console.log(colors.info(`📁 Output (${modeLabel}): ${outputDir}`));
     }
-    if (!isBaseline) {
-      console.log(colors.info(`📁 Saved to: ${outputDir}`));
-    }
-  } else if (results.skipped === 0) {
-    console.log(colors.muted(`No documents matched the filter.`));
-  }
-  if (results.skipped > 0) {
-    console.log(colors.muted(`⏭ Skipped ${results.skipped} document(s) (already exist)`));
-  }
 
-  if (results.errors.length > 0) {
+    // Determine actual parallelism (don't use more workers than documents)
+    const workerCount = Math.min(parallel, documents.length);
+    console.log(colors.info(`🚀 Launching browser with ${workerCount} parallel worker(s)...\n`));
+
+    // Launch browser
+    const browserType = getBrowserType(browser);
+    const browserInstance: Browser = await browserType.launch({
+      headless: true,
+    });
+
+    // Create shared results object
+    const results = {
+      screenshots: 0,
+      skipped: 0,
+      errors: [] as Array<{ doc: string; error: string }>,
+    };
+
+    const progress = createProgressReporter(documents.length, ci);
+
+    // Create document queue (workers will pull from this)
+    const queue = [...documents];
+
+    // Skip existing documents in baseline mode (unless --force)
+    const shouldSkipExisting = (isBaseline && !force) || skipExisting;
+
+    // Create workers (each with its own browser context and page)
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < workerCount; i++) {
+      const context = await browserInstance.newContext({
+        viewport: VIEWPORT,
+        deviceScaleFactor: scaleFactor,
+      });
+      const page = await context.newPage();
+      workers.push(processDocumentQueue(i + 1, page, queue, results, shouldSkipExisting, provider, progress, ci));
+    }
+
+    // Wait for all workers to complete
+    await Promise.all(workers);
+
     if (ci) {
-      console.log(colors.warning(`\n⚠ ${results.errors.length} error(s) occurred. Re-run without --ci for details.`));
-    } else {
-      console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
-      for (const { doc, error } of results.errors) {
-        console.log(colors.error(`  - ${doc}: ${error}`));
+      console.log(colors.muted('All workers complete. Closing browser...'));
+    }
+    await browserInstance.close();
+    if (ci) {
+      console.log(colors.muted('Browser closed.'));
+    }
+
+    // Summary
+    console.log('\n' + colors.muted('─'.repeat(50)));
+    const processedDocs = documents.length - results.errors.length - results.skipped;
+    if (results.screenshots > 0) {
+      if (isBaseline) {
+        console.log(
+          colors.success(`✅ Baseline: ${results.screenshots} screenshot(s) from ${processedDocs} document(s)`),
+        );
+      } else {
+        console.log(
+          colors.success(`✅ Captured ${results.screenshots} screenshot(s) from ${processedDocs} document(s)`),
+        );
+      }
+      if (!isBaseline) {
+        console.log(colors.info(`📁 Saved to: ${outputDir}`));
+      }
+    } else if (results.skipped === 0) {
+      console.log(colors.muted(`No documents matched the filter.`));
+    }
+    if (results.skipped > 0) {
+      console.log(colors.muted(`⏭ Skipped ${results.skipped} document(s) (already exist)`));
+    }
+
+    if (results.errors.length > 0) {
+      if (ci) {
+        console.log(
+          colors.warning(`\n⚠ ${results.errors.length} error(s) occurred. Re-run without --ci for details.`),
+        );
+      } else {
+        console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
+        for (const { doc, error } of results.errors) {
+          console.log(colors.error(`  - ${doc}: ${error}`));
+        }
+      }
+      if (failOnError) {
+        return 1;
       }
     }
-    if (failOnError) {
-      return 1;
+
+    if (ci) {
+      console.log(colors.muted('generate-refs summary complete.'));
+    }
+
+    return 0;
+  } finally {
+    if (provider.close) {
+      if (ci) {
+        console.log(colors.muted('Closing corpus provider...'));
+      }
+      try {
+        await provider.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(colors.warning(`⚠ Failed to close corpus provider: ${message}`));
+      }
+      if (ci) {
+        console.log(colors.muted('Corpus provider closed.'));
+      }
     }
   }
-
-  return 0;
 }
 
 /**
@@ -811,19 +851,31 @@ async function main(): Promise<number> {
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   const runWithHarness = async (): Promise<number> => {
+    logCi('Ensuring harness is running...');
     const { child, started } = await ensureHarnessRunning();
+    logCi('Harness ready.');
     try {
-      return await main();
+      const exitCode = await main();
+      logCi(`generate-refs main complete (exit ${exitCode}).`);
+      return exitCode;
     } finally {
       if (started && child) {
+        logCi('Stopping harness...');
         await stopHarness(child);
+        logCi('Harness stopped.');
       }
     }
   };
 
   runWithHarness()
     .then((exitCode) => {
+      logCi(`generate-refs cleanup complete (exit ${exitCode}).`);
       process.exitCode = exitCode;
+      if (IS_CI_MODE) {
+        logCi('Forcing process exit in CI to avoid hanging handles.');
+        const timer = setTimeout(() => process.exit(exitCode), 500);
+        timer.unref?.();
+      }
     })
     .catch((error) => {
       console.error(colors.error(`Fatal error: ${error instanceof Error ? error.message : String(error)}`));

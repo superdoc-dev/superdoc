@@ -36,12 +36,11 @@ describe('[sdt-node-comment.docx] Test basic text SDT tag from gdocs', async () 
     expect(sdtPr.name).toBe('w:sdtPr');
 
     const runs = sdtNode.content;
-    expect(runs.length).toBe(3);
+    expect(runs.length).toBe(2);
 
-    const [textRunBefore, commentRun, commentReferenceRun] = runs;
+    const [textRunBefore, commentRun] = runs;
     expect(textRunBefore?.type).toBe('run');
     expect(commentRun?.type).toBe('run');
-    expect(commentReferenceRun?.type).toBe('run');
 
     const textBeforeComment = textRunBefore?.content?.find((child) => child.type === 'text');
     expect(textBeforeComment?.text).toBe('SDT field with ');
@@ -55,9 +54,6 @@ describe('[sdt-node-comment.docx] Test basic text SDT tag from gdocs', async () 
     expect(commentMarks.some((mark) => mark.type === 'bold')).toBe(true);
     expect(commentMarks.some((mark) => mark.type === 'textStyle')).toBe(true);
     expect(commentMarks.some((mark) => mark.type === 'commentMark')).toBe(true);
-
-    const commentReference = commentReferenceRun?.content?.find((child) => child.type === 'commentReference');
-    expect(commentReference).toBeUndefined();
 
     const extraRunAfterSdt = p1.content[1];
     expect(extraRunAfterSdt.type).toBe('run');

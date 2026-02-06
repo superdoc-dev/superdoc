@@ -41,33 +41,18 @@ describe('findLocalSuperdocTarball', () => {
     vi.restoreAllMocks();
   });
 
-  it('should return null when not in a workspace', () => {
+  it('should return null when tarball does not exist', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
     const result = findLocalSuperdocTarball('/some/path');
     expect(result).toBe(null);
   });
 
-  it('should return null when tarball does not exist', () => {
+  it('should return tarball info when tarball exists in an ancestor', () => {
     const workspaceRoot = '/home/user/project';
     const tarballPath = path.join(workspaceRoot, 'packages', 'superdoc', 'superdoc.tgz');
 
     vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
-      if (p === path.join(workspaceRoot, 'pnpm-workspace.yaml')) return true;
-      if (p === tarballPath) return false;
-      return false;
-    });
-
-    const result = findLocalSuperdocTarball('/home/user/project/packages/subpackage');
-    expect(result).toBe(null);
-  });
-
-  it('should return tarball info when both workspace and tarball exist', () => {
-    const workspaceRoot = '/home/user/project';
-    const tarballPath = path.join(workspaceRoot, 'packages', 'superdoc', 'superdoc.tgz');
-
-    vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
-      if (p === path.join(workspaceRoot, 'pnpm-workspace.yaml')) return true;
       if (p === tarballPath) return true;
       return false;
     });
@@ -99,7 +84,6 @@ describe('ensureLocalTarballInstalled', () => {
     const tarballPath = path.join(workspaceRoot, 'packages', 'superdoc', 'superdoc.tgz');
 
     vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
-      if (p === path.join(workspaceRoot, 'pnpm-workspace.yaml')) return true;
       if (p === tarballPath) return true;
       return false;
     });
@@ -124,7 +108,6 @@ describe('ensureLocalTarballInstalled', () => {
     );
 
     vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
-      if (p === path.join(workspaceRoot, 'pnpm-workspace.yaml')) return true;
       if (p === tarballPath) return true;
       if (p === harnessPkgPath) return true;
       if (p === installedPkgPath) return true;
@@ -155,7 +138,6 @@ describe('ensureLocalTarballInstalled', () => {
     );
 
     vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
-      if (p === path.join(workspaceRoot, 'pnpm-workspace.yaml')) return true;
       if (p === tarballPath) return true;
       if (p === harnessPkgPath) return true;
       if (p === installedPkgPath) return false;

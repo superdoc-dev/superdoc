@@ -69,6 +69,8 @@ const superdoc = new SuperDoc({
 
 ## Available Buttons
 
+Use button names with `excludeItems`, `groups`, and `icons` configuration.
+
 ### Text Formatting
 
 <ResponseField name="bold" type="button">
@@ -83,8 +85,16 @@ const superdoc = new SuperDoc({
   Toggle underline (`Ctrl+U`)
 </ResponseField>
 
-<ResponseField name="strikethrough" type="button">
+<ResponseField name="strike" type="button">
   Toggle strikethrough
+</ResponseField>
+
+<ResponseField name="clearFormatting" type="button">
+  Clear all formatting
+</ResponseField>
+
+<ResponseField name="copyFormat" type="button">
+  Format painter — copy formatting from selection
 </ResponseField>
 
 ### Font Controls
@@ -94,33 +104,21 @@ const superdoc = new SuperDoc({
 </ResponseField>
 
 <ResponseField name="fontSize" type="dropdown">
-  Font size selector
+  Font size selector (8–96pt)
 </ResponseField>
 
-<ResponseField name="color" type="colorpicker">
+<ResponseField name="color" type="dropdown">
   Text color picker
 </ResponseField>
 
-<ResponseField name="highlight" type="colorpicker">
-  Background highlight color
+<ResponseField name="highlight" type="dropdown">
+  Background highlight color picker
 </ResponseField>
 
 ### Paragraph
 
-<ResponseField name="alignLeft" type="button">
-  Align text left
-</ResponseField>
-
-<ResponseField name="alignCenter" type="button">
-  Center align text
-</ResponseField>
-
-<ResponseField name="alignRight" type="button">
-  Align text right
-</ResponseField>
-
-<ResponseField name="justify" type="button">
-  Justify text
+<ResponseField name="textAlign" type="dropdown">
+  Text alignment (left, center, right, justify)
 </ResponseField>
 
 <ResponseField name="list" type="button">
@@ -139,24 +137,66 @@ const superdoc = new SuperDoc({
   Increase indent
 </ResponseField>
 
-### Feature Buttons
-
-<Note>These buttons appear when their respective modules are enabled</Note>
-
-<ResponseField name="addComment" type="button">
-  Add comment (requires Comments module)
+<ResponseField name="lineHeight" type="dropdown">
+  Line height selector (1, 1.15, 1.5, 2, 2.5, 3)
 </ResponseField>
 
-<ResponseField name="acceptChange" type="button">
-  Accept tracked change
+<ResponseField name="linkedStyles" type="dropdown">
+  Quick paragraph styles (Normal, Heading 1, etc.)
 </ResponseField>
 
-<ResponseField name="rejectChange" type="button">
-  Reject tracked change
+### Insert
+
+<ResponseField name="link" type="dropdown">
+  Insert or edit link
+</ResponseField>
+
+<ResponseField name="image" type="button">
+  Upload and insert image
+</ResponseField>
+
+<ResponseField name="table" type="dropdown">
+  Insert table via grid selector
+</ResponseField>
+
+<ResponseField name="tableActions" type="dropdown">
+  Table editing actions (add/delete rows/columns, merge/split cells, etc.)
+</ResponseField>
+
+### Tools
+
+<ResponseField name="undo" type="button">
+  Undo last action
+</ResponseField>
+
+<ResponseField name="redo" type="button">
+  Redo last action
+</ResponseField>
+
+<ResponseField name="search" type="dropdown">
+  Search in document
+</ResponseField>
+
+<ResponseField name="zoom" type="dropdown">
+  Zoom level (50%–200%)
+</ResponseField>
+
+<ResponseField name="ruler" type="button">
+  Toggle document ruler
 </ResponseField>
 
 <ResponseField name="documentMode" type="dropdown">
   Switch between editing/viewing/suggesting modes
+</ResponseField>
+
+### Track Changes
+
+<ResponseField name="acceptTrackedChangeBySelection" type="button">
+  Accept tracked change at current selection
+</ResponseField>
+
+<ResponseField name="rejectTrackedChangeOnSelection" type="button">
+  Reject tracked change at current selection
 </ResponseField>
 
 ## Custom Buttons
@@ -328,32 +368,72 @@ The toolbar automatically adapts based on the user's role:
 | `suggester` | Track changes enabled, formatting available |
 | `editor` | Full access to all controls |
 
-## Toolbar State
+## API Methods
 
 ```javascript
 const toolbar = superdoc.toolbar;
+```
 
-// Get a button
+### `getToolbarItemByName`
+
+Get a toolbar item by its name.
+
+```javascript
 const boldBtn = toolbar.getToolbarItemByName('bold');
-
-// Read/update state
 boldBtn.active.value;    // boolean
 boldBtn.disabled.value;  // boolean
+```
 
-// Refresh toolbar
+### `getToolbarItemByGroup`
+
+Get all toolbar items in a layout group.
+
+```javascript
+const leftItems = toolbar.getToolbarItemByGroup('left');
+```
+
+### `updateToolbarState`
+
+Refresh all button states based on the current editor state.
+
+```javascript
 toolbar.updateToolbarState();
+```
+
+### `setZoom`
+
+Set the editor zoom level programmatically.
+
+```javascript
+toolbar.setZoom(150); // 150%
+```
+
+### `destroy`
+
+Clean up toolbar resources and event listeners.
+
+```javascript
+toolbar.destroy();
 ```
 
 ## Events
 
+### `superdoc-command`
+
+Fired when a SuperDoc-level command is executed (zoom, document mode).
+
 ```javascript
-// Command executed
 toolbar.on('superdoc-command', ({ item, argument }) => {
   console.log(`Command: ${item.command}, arg: ${argument}`);
 });
+```
 
-// Toolbar state changed
-toolbar.on('state-update', () => {
-  // Button states refreshed
+### `exception`
+
+Fired when an error occurs during a toolbar action.
+
+```javascript
+toolbar.on('exception', ({ error, editor, originalError }) => {
+  console.error('Toolbar error:', error);
 });
 ```

@@ -139,9 +139,18 @@ const superdoc = new SuperDoc({
 
 **When NOT to use CodeGroup:** Snippets that are already complete (have imports + initialization), config-only blocks, bash commands, XML/HTML examples.
 
-Run `pnpm run check:imports` to validate all import paths in code examples.
+## Testing
+
+Code examples are tested automatically via pre-commit hooks and CI. Two checks run when `.mdx` files change:
+
+- `pnpm run check:imports` — validates import paths in all code blocks against an allowlist
+- `pnpm run test:examples` — extracts "Full Example" blocks, executes them headlessly against a real Editor instance, and fails if any documented API doesn't exist
+
+The doctest suite lives in `__tests__/` and uses remark to parse MDX. When adding or modifying a Full Example, run `pnpm run test:examples` to verify it works.
 
 ## Commands
 
 - `npx mintlify dev` — Start local dev server
 - `npx mintlify broken-links` — Check for broken links
+- `pnpm run check:imports` — Validate code block import paths
+- `pnpm run test:examples` — Run doctest suite (277 examples)

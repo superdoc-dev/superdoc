@@ -5,7 +5,7 @@ keywords: "superdoc configuration, editor config options, document settings, wor
 
 Configuration is passed when creating a SuperDoc instance. Only two fields are required.
 
-## Quick Start
+## Quick start
 
 ```javascript
 new SuperDoc({
@@ -14,7 +14,7 @@ new SuperDoc({
 });
 ```
 
-## Core Parameters
+## Core parameters
 
 <ParamField path="selector" type="string | HTMLElement" required>
   DOM selector or element where SuperDoc will mount.
@@ -68,7 +68,7 @@ new SuperDoc({
   <Note>Auto-generated UUID if not provided</Note>
 </ParamField>
 
-## User & Permissions
+## User & permissions
 
 <ParamField path="user" type="Object">
   Current user information
@@ -150,7 +150,7 @@ new SuperDoc({
   Configure optional modules
 </ParamField>
 
-### Collaboration Module
+### Collaboration module
 
 <ParamField path="modules.collaboration" type="Object">
   Real-time collaboration settings
@@ -170,7 +170,7 @@ new SuperDoc({
   </Expandable>
 </ParamField>
 
-### Comments Module
+### Comments module
 
 <ParamField path="modules.comments" type="Object">
   Comments system configuration
@@ -190,7 +190,7 @@ new SuperDoc({
   </Expandable>
 </ParamField>
 
-### Toolbar Module
+### Toolbar module
 
 <ParamField path="modules.toolbar" type="Object">
   Toolbar configuration
@@ -267,7 +267,7 @@ new SuperDoc({
   <Note>Alternative to `modules.toolbar.selector`</Note>
 </ParamField>
 
-## Advanced Options
+## Advanced options
 
 <ParamField path="editorExtensions" type="Extension[]" default="[]">
   Additional SuperDoc extensions
@@ -318,7 +318,7 @@ new SuperDoc({
   Content Security Policy nonce
 </ParamField>
 
-## Event Handlers
+## Event handlers
 
 All handlers are optional functions in the configuration:
 

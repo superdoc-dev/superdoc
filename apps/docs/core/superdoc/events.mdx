@@ -5,7 +5,7 @@ keywords: "superdoc events, document events, editor callbacks, word editor liste
 
 SuperDoc uses an event system for lifecycle hooks and change notifications.
 
-## Subscribing to Events
+## Subscribing to events
 
 ```javascript
 superdoc.on('ready', handler);     // Subscribe
@@ -13,7 +13,7 @@ superdoc.once('ready', handler);   // One-time listener
 superdoc.off('ready', handler);    // Unsubscribe
 ```
 
-## Lifecycle Events
+## Lifecycle events
 
 ### `ready`
 
@@ -55,7 +55,7 @@ superdoc.on('editorDestroy', () => {
 });
 ```
 
-## Content Events
+## Content events
 
 ### `editor-update`
 
@@ -89,7 +89,7 @@ superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
 });
 ```
 
-## Comments Events
+## Comments events
 
 ### `comments-update`
 
@@ -101,7 +101,7 @@ superdoc.on('comments-update', ({ type, data }) => {
 });
 ```
 
-## Collaboration Events
+## Collaboration events
 
 ### `collaboration-ready`
 
@@ -136,7 +136,7 @@ superdoc.on('locked', ({ isLocked, lockedBy }) => {
 });
 ```
 
-## UI Events
+## UI events
 
 ### `sidebar-toggle`
 
@@ -148,7 +148,7 @@ superdoc.on('sidebar-toggle', (isOpened) => {
 });
 ```
 
-## Error Events
+## Error events
 
 ### `exception`
 
@@ -160,7 +160,7 @@ superdoc.on('exception', ({ error, document, editor }) => {
 });
 ```
 
-## Configuration-Based Events
+## Configuration-based events
 
 Events can also be set during initialization:
 
@@ -178,7 +178,7 @@ new SuperDoc({
 });
 ```
 
-## Event Order
+## Event order
 
 1. `editorBeforeCreate` — Before editor mounts
 2. `editorCreate` — Editor ready

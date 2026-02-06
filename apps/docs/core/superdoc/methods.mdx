@@ -5,7 +5,7 @@ keywords: "superdoc methods, document api methods, editor functions, word docume
 
 Methods are functions you call on the SuperDoc instance to perform actions.
 
-## Document Operations
+## Document operations
 
 ### `export`
 
@@ -75,7 +75,7 @@ Get HTML content of all editors.
 const htmlArray = superdoc.getHTML();
 ```
 
-## Mode Control
+## Mode control
 
 ### `setDocumentMode`
 
@@ -123,7 +123,7 @@ Enable/disable high contrast mode.
 superdoc.setHighContrastMode(true);
 ```
 
-## UI Methods
+## UI methods
 
 ### `setActiveEditor`
 
@@ -190,7 +190,7 @@ Focus the active editor or first available.
 superdoc.focus();
 ```
 
-## Search Methods
+## Search methods
 
 ### `search`
 
@@ -219,7 +219,7 @@ Navigate to a search result.
 superdoc.goToSearchResult(results[0]);
 ```
 
-## Comments Methods
+## Comments methods
 
 ### `addCommentsList`
 
@@ -241,7 +241,7 @@ Remove the comments list.
 superdoc.removeCommentsList();
 ```
 
-## User Management
+## User management
 
 ### `addSharedUser`
 
@@ -291,7 +291,7 @@ Completely destroy the SuperDoc instance.
 superdoc.destroy();
 ```
 
-## Event Methods
+## Event methods
 
 ### `on`
 
@@ -321,7 +321,7 @@ Unsubscribe from an event.
 superdoc.off('ready', handler);
 ```
 
-## Schema Introspection
+## Schema introspection
 
 ### `getSchemaIntrospection`
 
@@ -348,7 +348,7 @@ const schema = await getSchemaIntrospection({ mode: 'docx' });
   </Expandable>
 </ParamField>
 
-## TypeScript Types
+## TypeScript types
 
 SuperDoc exports TypeScript interfaces for all node and mark types:
 

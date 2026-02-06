@@ -7,7 +7,7 @@ keywords: "supereditor methods, editor commands, document manipulation, editor a
 **Looking for programmatic document access?** The [Document API](/document-api/overview) is coming soon with a stable, engine-agnostic interface for querying and manipulating documents.
 </Tip>
 
-## Document Lifecycle
+## Document lifecycle
 
 ### `open`
 
@@ -175,7 +175,7 @@ const table = editor.getNodesOfType('table')[0];
 editor.replaceNodeWithHTML(table, '<table>...</table>');
 ```
 
-## Editor Control
+## Editor control
 
 ### `mount` / `unmount`
 
@@ -261,7 +261,7 @@ editor.commands.insertContent('Plain text', { contentType: 'text' });
 
 <Note>HTML and Markdown inline styles are stripped on import to ensure Word compatibility.</Note>
 
-## Document Metadata
+## Document metadata
 
 ### `getMetadata`
 
@@ -295,7 +295,7 @@ Generate a summary of the document schema. Useful for AI agents that need to und
 const summary = await editor.getSchemaSummaryJSON();
 ```
 
-## Position & Coordinates
+## Position & coordinates
 
 ### `getElementAtPos`
 
@@ -336,7 +336,7 @@ const attrs = editor.getAttributes('link');
 console.log(attrs.href);
 ```
 
-## Page & Layout
+## Page & layout
 
 ### `getPageStyles`
 

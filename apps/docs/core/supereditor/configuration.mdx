@@ -5,7 +5,7 @@ keywords: "supereditor config, editor configuration, prosemirror setup, document
 
 SuperEditor configuration gives you low-level control over the DOCX engine.
 
-## Quick Start
+## Quick start
 
 ```javascript
 import "superdoc/style.css";
@@ -19,7 +19,7 @@ const editor = await Editor.open(docxFile, {
 
 `Editor.open()` is the recommended way to create an editor. It handles DOCX parsing, extension setup, and mounting automatically.
 
-## Required Parameters
+## Required parameters
 
 <ParamField path="source" type="string | File | Blob | Buffer">
   The document source. Can be a file path (Node.js), File/Blob (browser), or Buffer.
@@ -65,7 +65,7 @@ const editor = await Editor.open(file, {
 
 </ParamField>
 
-## Modes & Permissions
+## Modes & permissions
 
 <ParamField path="mode" type="string" default="'docx'">
   Editor rendering mode
@@ -97,7 +97,7 @@ const editor = await Editor.open(file, {
   Whether the editor accepts input
 </ParamField>
 
-## User & Collaboration
+## User & collaboration
 
 <ParamField path="user" type="Object">
   Current user information
@@ -127,7 +127,7 @@ const editor = await Editor.open(file, {
   Provider instance for collaboration sync
 </ParamField>
 
-## Content Initialization
+## Content initialization
 
 <ParamField path="html" type="string">
   Initialize with HTML content (for `mode: 'html'`)
@@ -155,7 +155,7 @@ const editor = await Editor.open(file, {
   Enable page-based layout
 </ParamField>
 
-## Advanced Options
+## Advanced options
 
 <ParamField path="isHeadless" type="boolean" default="false">
   Run without mounting an editor view (Node.js/server-side processing).
@@ -182,9 +182,9 @@ handleImageUpload: async (file) => {
 
 </ParamField>
 
-## Configuration Patterns
+## Configuration patterns
 
-### Full DOCX Editor
+### Full DOCX editor
 
 ```javascript
 import "superdoc/style.css";
@@ -197,7 +197,7 @@ const editor = await Editor.open(docxFile, {
 });
 ```
 
-### Headless Converter (Node.js)
+### Headless converter (Node.js)
 
 Convert DOCX files server-side without a browser using JSDOM.
 
@@ -223,7 +223,7 @@ const markdown = await editor.getMarkdown();
 editor.destroy();
 ```
 
-### Headless Y.Doc to HTML (Collaboration)
+### Headless Y.Doc to HTML (collaboration)
 
 Read content from a collaborative Y.Doc in your backend — useful for AI agents or APIs that need to access document content without a browser.
 
@@ -248,7 +248,7 @@ const html = editor.getHTML();
 editor.destroy();
 ```
 
-### Custom Collaboration
+### Custom collaboration
 
 ```javascript
 import { Editor } from "superdoc/super-editor";
@@ -268,7 +268,7 @@ const editor = await Editor.open(docxFile, {
 });
 ```
 
-### Track Changes Mode
+### Track changes mode
 
 ```javascript
 import { Editor } from "superdoc/super-editor";

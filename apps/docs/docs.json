@@ -67,6 +67,7 @@
             "pages": [
               {
                 "group": "SuperDoc",
+                "tag": "UDPATED",
                 "pages": [
                   "core/superdoc/overview",
                   "core/superdoc/configuration",
@@ -76,6 +77,7 @@
               },
               {
                 "group": "SuperEditor",
+                "tag": "UDPATED",
                 "pages": [
                   "core/supereditor/overview",
                   "core/supereditor/configuration",
@@ -185,7 +187,6 @@
               },
               {
                 "group": "Template Builder",
-                "tag": "NEW",
                 "pages": [
                   "solutions/template-builder/introduction",
                   "solutions/template-builder/quickstart",

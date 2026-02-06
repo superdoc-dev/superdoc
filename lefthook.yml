@@ -28,6 +28,14 @@ pre-commit:
       root: "apps/vscode-ext/"
       glob: "apps/vscode-ext/**/*.{ts,js}"
       run: pnpm run lint
+    docs-check-imports:
+      root: "apps/docs/"
+      glob: "apps/docs/**/*.mdx"
+      run: pnpm run check:imports
+    docs-test-examples:
+      root: "apps/docs/"
+      glob: "apps/docs/**/*.mdx"
+      run: pnpm run test:examples
 
 commit-msg:
   commands:

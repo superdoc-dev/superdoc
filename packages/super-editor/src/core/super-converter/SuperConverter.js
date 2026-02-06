@@ -736,10 +736,6 @@ class SuperConverter {
     // BLANK DOC: set fresh timestamp (ensures unique identifier for each new doc from template)
     if (this.isBlankDoc) {
       this.setDocumentCreatedTimestamp(SuperConverter.generateWordTimestamp());
-      console.debug('[super-converter] New file: set fresh timestamp', {
-        documentGuid: this.documentGuid,
-        createdAt: this.getDocumentCreatedTimestamp(),
-      });
     }
   }
 
@@ -826,12 +822,6 @@ class SuperConverter {
     if (hasGuid && hasTimestamp) {
       // Both exist: use identifierHash
       this.documentUniqueIdentifier = this.#generateIdentifierHash();
-      console.debug('[super-converter] Document identifier (metadata hash):', {
-        documentUniqueIdentifier: this.documentUniqueIdentifier,
-        documentGuid: this.documentGuid,
-        createdAt: this.getDocumentCreatedTimestamp(),
-        isBlankDoc: this.isBlankDoc,
-      });
     } else {
       // Missing one or both: use contentHash for stability (same file = same hash)
       // But generate missing metadata so re-exported file will have complete metadata
@@ -843,12 +833,6 @@ class SuperConverter {
       }
       this.documentModified = true; // Ensures metadata is saved on export
       this.documentUniqueIdentifier = await this.#generateContentHash();
-      console.debug('[super-converter] Document identifier (content hash):', {
-        documentUniqueIdentifier: this.documentUniqueIdentifier,
-        documentGuid: this.documentGuid,
-        createdAt: this.getDocumentCreatedTimestamp(),
-        reason: !hasGuid && !hasTimestamp ? 'missing both' : !hasGuid ? 'missing GUID' : 'missing timestamp',
-      });
     }
 
     return this.documentUniqueIdentifier;

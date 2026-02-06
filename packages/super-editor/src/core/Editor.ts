@@ -485,6 +485,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // Skip if telemetry is not enabled
     if (!telemetryConfig?.enabled) {
+      console.debug('[super-editor] Telemetry: disabled');
       return;
     }
 
@@ -495,6 +496,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         licenseKey: licenseKey === undefined ? COMMUNITY_LICENSE_KEY : licenseKey,
         metadata: telemetryConfig.metadata,
       });
+      console.debug('[super-editor] Telemetry: enabled');
     } catch {
       // Fail silently - telemetry should never break the app
     }
@@ -511,11 +513,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       try {
         const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
-        console.debug('[super-editor] Document info:', {
-          documentId,
-          documentCreatedAt,
-          isNewFile: this.options.isNewFile,
-        });
         this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
         this.#documentOpenTracked = true;
       } catch {

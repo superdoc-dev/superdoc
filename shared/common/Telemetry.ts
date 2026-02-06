@@ -38,8 +38,7 @@ export interface TelemetryPayload {
   events: DocumentOpenEvent[];
 }
 
-const DEFAULT_ENDPOINT = 'https://livetest-3---superdoc-telemetry-4yffz5xqqq-uc.a.run.app/v1/collect';
-// const DEFAULT_ENDPOINT = 'http://localhost:3051/v1/collect';
+const DEFAULT_ENDPOINT = 'https://ingest.superdoc.dev/v1/collect';
 
 /**
  * Community license key for AGPLv3 / evaluation usage.
@@ -118,9 +117,8 @@ export class Telemetry {
       events: [event],
     };
 
-    console.log('[Telemetry] Sending payload:', payload);
     try {
-      const response = await fetch(this.endpoint, {
+      await fetch(this.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -129,9 +127,8 @@ export class Telemetry {
         body: JSON.stringify(payload),
         credentials: 'omit',
       });
-      console.log('[Telemetry] Response status:', response.status);
-    } catch (error) {
-      console.error('[Telemetry] Fetch error:', error);
+    } catch {
+      // Fail silently - telemetry should never break the app
     }
   }
 }

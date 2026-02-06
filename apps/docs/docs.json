@@ -203,11 +203,11 @@
               {
                 "group": "Collaboration",
                 "pages": [
-                  "modules/collaboration/cloud/liveblocks",
-                  "modules/collaboration/cloud/tiptap-cloud",
-                  "modules/collaboration/self-hosted/superdoc-yjs",
-                  "modules/collaboration/self-hosted/hocuspocus",
-                  "modules/collaboration/self-hosted/y-sweet"
+                  "guides/collaboration/liveblocks",
+                  "guides/collaboration/tiptap-cloud",
+                  "guides/collaboration/superdoc-yjs",
+                  "guides/collaboration/hocuspocus",
+                  "guides/collaboration/y-sweet"
                 ]
               },
               {
@@ -362,6 +362,30 @@
     {
       "source": "/modules/collaboration/client",
       "destination": "/modules/collaboration/configuration"
+    },
+    {
+      "source": "/modules/collaboration/cloud/liveblocks",
+      "destination": "/guides/collaboration/liveblocks"
+    },
+    {
+      "source": "/modules/collaboration/cloud/tiptap-cloud",
+      "destination": "/guides/collaboration/tiptap-cloud"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/superdoc-yjs",
+      "destination": "/guides/collaboration/superdoc-yjs"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/hocuspocus",
+      "destination": "/guides/collaboration/hocuspocus"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/y-sweet",
+      "destination": "/guides/collaboration/y-sweet"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/overview",
+      "destination": "/guides/collaboration/self-hosted-overview"
     }
   ],
   "integrations": {

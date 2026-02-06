@@ -245,7 +245,7 @@ Get all block-level structured content tags in the document
 
 <CodeGroup>
 ```javascript Usage
-const blocks = editor.helpers.getStructuredContentBlockTags(editor.state);
+const blocks = editor.helpers.structuredContentCommands.getStructuredContentBlockTags(editor.state);
 console.log(`Found ${blocks.length} structured content blocks`);
 ```
 
@@ -258,7 +258,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
   onReady: (superdoc) => {
     const editor = superdoc.activeEditor;
-    const blocks = editor.helpers.getStructuredContentBlockTags(editor.state);
+    const blocks = editor.helpers.structuredContentCommands.getStructuredContentBlockTags(editor.state);
     console.log(`Found ${blocks.length} structured content blocks`);
   },
 });
@@ -277,7 +277,7 @@ Get all inline structured content tags in the document
 
 <CodeGroup>
 ```javascript Usage
-const inlines = editor.helpers.getStructuredContentInlineTags(editor.state);
+const inlines = editor.helpers.structuredContentCommands.getStructuredContentInlineTags(editor.state);
 console.log(`Found ${inlines.length} inline fields`);
 ```
 
@@ -290,7 +290,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
   onReady: (superdoc) => {
     const editor = superdoc.activeEditor;
-    const inlines = editor.helpers.getStructuredContentInlineTags(editor.state);
+    const inlines = editor.helpers.structuredContentCommands.getStructuredContentInlineTags(editor.state);
     console.log(`Found ${inlines.length} inline fields`);
   },
 });
@@ -309,7 +309,7 @@ Find all tables inside a structured content block by ID
 
 <CodeGroup>
 ```javascript Usage
-const tables = editor.helpers.getStructuredContentTablesById(
+const tables = editor.helpers.structuredContentCommands.getStructuredContentTablesById(
   "block-123",
   editor.state
 );
@@ -325,7 +325,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
   onReady: (superdoc) => {
     const editor = superdoc.activeEditor;
-    const tables = editor.helpers.getStructuredContentTablesById(
+    const tables = editor.helpers.structuredContentCommands.getStructuredContentTablesById(
       "block-123",
       editor.state
     );
@@ -350,7 +350,7 @@ Find all structured content nodes that share the same group identifier.
 
 <CodeGroup>
 ```javascript Usage
-const fields = editor.helpers.getStructuredContentByGroup('pricing', editor.state);
+const fields = editor.helpers.structuredContentCommands.getStructuredContentByGroup('pricing', editor.state);
 fields.forEach(({ node, pos }) => {
   console.log(node.attrs.tag, pos);
 });
@@ -365,7 +365,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
   onReady: (superdoc) => {
     const editor = superdoc.activeEditor;
-    const fields = editor.helpers.getStructuredContentByGroup('pricing', editor.state);
+    const fields = editor.helpers.structuredContentCommands.getStructuredContentByGroup('pricing', editor.state);
     fields.forEach(({ node, pos }) => {
       console.log(node.attrs.tag, pos);
     });
@@ -389,7 +389,7 @@ Get all structured content tags (inline and block) in the document
 
 <CodeGroup>
 ```javascript Usage
-const allTags = editor.helpers.getStructuredContentTags(editor.state);
+const allTags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
 console.log(`Found ${allTags.length} structured content elements`);
 ```
 
@@ -402,7 +402,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
   onReady: (superdoc) => {
     const editor = superdoc.activeEditor;
-    const allTags = editor.helpers.getStructuredContentTags(editor.state);
+    const allTags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
     console.log(`Found ${allTags.length} structured content elements`);
   },
 });
@@ -421,7 +421,7 @@ Get structured content tag(s) by ID
 
 <CodeGroup>
 ```javascript Usage
-const field = editor.helpers.getStructuredContentTagsById(
+const field = editor.helpers.structuredContentCommands.getStructuredContentTagsById(
   "field-123",
   editor.state
 );
@@ -437,7 +437,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
   onReady: (superdoc) => {
     const editor = superdoc.activeEditor;
-    const field = editor.helpers.getStructuredContentTagsById(
+    const field = editor.helpers.structuredContentCommands.getStructuredContentTagsById(
       "field-123",
       editor.state
     );

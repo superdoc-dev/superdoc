@@ -21,7 +21,7 @@ You don't typically configure extensions directly. SuperDoc handles it:
 // These commands come from extensions
 editor.commands.toggleBold();        // Bold extension
 editor.commands.insertTable();       // Table extension
-editor.commands.acceptAllChanges();  // TrackChanges extension
+editor.commands.acceptAllTrackedChanges();  // TrackChanges extension
 ```
 
 ```javascript Full Example
@@ -36,7 +36,7 @@ const superdoc = new SuperDoc({
     // These commands come from extensions
     editor.commands.toggleBold();        // Bold extension
     editor.commands.insertTable();       // Table extension
-    editor.commands.acceptAllChanges();  // TrackChanges extension
+    editor.commands.acceptAllTrackedChanges();  // TrackChanges extension
   },
 });
 ```

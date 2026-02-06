@@ -6,7 +6,7 @@ keywords: "ai document editing, llm docx, headless editor, document automation a
 
 SuperDoc can run headless in Node.js for server-side document processing, AI agent workflows, and batch automation.
 
-## Quick Example
+## Quick example
 
 ```javascript
 import { Editor } from 'superdoc/super-editor';
@@ -25,7 +25,7 @@ editor.commands.insertContent(completion.choices[0].message.content, {
 const docx = await editor.exportDocx();
 ```
 
-## Content Formats
+## Content formats
 
 ```javascript
 editor.commands.insertContent(value, { contentType: 'html' });      // Recommended for LLMs
@@ -36,7 +36,7 @@ editor.commands.insertContent(value, { contentType: 'schema' });     // ProseMir
 
 See [Import/Export](/getting-started/import-export) for format details, limitations, and guidance on choosing a format.
 
-## AI Redlining with Track Changes
+## AI redlining with track changes
 
 Use `suggesting` mode so AI edits appear as tracked changes that users can accept or reject:
 
@@ -51,7 +51,7 @@ editor.commands.insertContent(aiRevisions, { contentType: 'html' });
 const redlined = await editor.exportDocx();
 ```
 
-## LLM Quick Reference
+## LLM quick reference
 
 Point your AI assistant at these URLs for SuperDoc context:
 
@@ -60,7 +60,7 @@ https://docs.superdoc.dev/llms.txt        // Quick reference
 https://docs.superdoc.dev/llms-full.txt   // Complete documentation
 ```
 
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
   <Card

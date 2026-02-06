@@ -6,7 +6,7 @@ keywords: "import, export, docx export, html import, markdown import, document f
 
 SuperDoc is a Word editor that accepts multiple content formats as input. All content is normalized into Word's document model internally.
 
-## Supported Formats
+## Supported formats
 
 | Format | Import | Export | Round-Trip | Use Case |
 |---|---|---|---|---|
@@ -20,9 +20,9 @@ SuperDoc is a Word editor that accepts multiple content formats as input. All co
 HTML and Markdown imports preserve structure (headings, lists, links, tables) but strip CSS styles.
 </Note>
 
-## Importing Content
+## Importing content
 
-### At Initialization
+### At initialization
 
 Pass content when creating the SuperDoc instance.
 
@@ -71,7 +71,7 @@ new SuperDoc({
   ProseMirror JSON to override the document content with.
 </ParamField>
 
-### After Initialization
+### After initialization
 
 Insert content into an existing document using editor commands.
 
@@ -89,9 +89,9 @@ superdoc.activeEditor.commands.insertContent(content, {
   Content type: `'html'`, `'markdown'`, `'text'`, or `'schema'`
 </ParamField>
 
-## Exporting Content
+## Exporting content
 
-### DOCX Export
+### DOCX export
 
 ```javascript
 // Download as .docx file
@@ -142,7 +142,7 @@ await superdoc.export({ exportedName: 'Final Contract' });
   Filenames for additional files
 </ParamField>
 
-### HTML Export
+### HTML export
 
 ```javascript
 // Returns array of HTML strings (one per document)
@@ -156,7 +156,7 @@ const html = superdoc.activeEditor.getHTML();
 HTML export is structure-only. Custom CSS styling and Word-specific formatting are not included.
 </Note>
 
-### JSON Export
+### JSON export
 
 ```javascript
 // From the active editor
@@ -165,14 +165,14 @@ const json = superdoc.activeEditor.getJSON();
 
 JSON export preserves the full document structure and can be re-imported with `jsonOverride`.
 
-### Markdown Export
+### Markdown export
 
 ```javascript
 // From the active editor
 const markdown = await superdoc.activeEditor.getMarkdown();
 ```
 
-## HTML Element Mapping
+## HTML element mapping
 
 | HTML Element | Imported As | Notes |
 |---|---|---|
@@ -189,7 +189,7 @@ const markdown = await superdoc.activeEditor.getMarkdown();
 
 CSS classes, IDs, colors, fonts, margins, and other styling are stripped on import.
 
-## Markdown Element Mapping
+## Markdown element mapping
 
 **Supported:**
 - Headings (`#` through `######`)

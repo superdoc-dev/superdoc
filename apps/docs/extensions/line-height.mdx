@@ -1,68 +1,35 @@
 ---
-title: LineHeight extension
+title: Line Height
 sidebarTitle: "Line Height"
-keywords: "LineHeight extension, superdoc LineHeight, word LineHeight, document LineHeight, docx LineHeight"
+keywords: "line height, superdoc line height, word line height, document line spacing, docx line height"
 ---
 
 import Description from '/snippets/extensions/line-height.mdx'
 
 <Description />
 
-## Options
-
-Configure the extension behavior:
-
-<ParamField path="types" type="Array<string>" default="['heading','paragraph']">
-  Block types to add line height support to
-</ParamField>
-
-<ParamField path="defaults" type="Object">
-  Default configuration
-</ParamField>
-
-<ParamField path="defaults.unit" type="string">
-  Default unit for line height values
-</ParamField>
-
-## Attributes
-
-Node attributes that can be set and retrieved:
-
-<ParamField path="lineHeight" type="LineHeightValue">
-  Line height value
-</ParamField>
-
 ## Commands
 
 ### `setLineHeight`
 
-Set line height for blocks
-
-<Note>
-Applies to paragraphs and headings
-</Note>
+Set line height as a multiplier (e.g., 1.5 for 1.5x line spacing).
 
 **Example:**
 
 ```javascript
 editor.commands.setLineHeight(1.5)
-editor.commands.setLineHeight('24px')
 editor.commands.setLineHeight(2)
 ```
 
 **Parameters:**
 
-<ParamField path="lineHeight" type="LineHeightValue" required>
-  Line height to apply
+<ParamField path="lineHeight" type="number" required>
+  Line height multiplier (e.g., 1.0 for single, 1.5, 2.0 for double)
 </ParamField>
 
 ### `unsetLineHeight`
 
-Remove line height
-
-<Note>
-Reverts to default line spacing
-</Note>
+Remove line height and revert to default line spacing.
 
 **Example:**
 
@@ -70,15 +37,9 @@ Reverts to default line spacing
 editor.commands.unsetLineHeight()
 ```
 
-## Types
 
-### `LineHeightValue`
-
-Line height as number (1.5) or string with unit ('1.5em', '24px')
-
-
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 
-<SourceCodeLink path="packages/super-editor/src/extensions/line-height/line-height.js" />
+<SourceCodeLink path="packages/super-editor/src/core/commands/lineHeight.js" />

@@ -26,6 +26,8 @@
  *   pnpm baseline --fail-on-error       # Exit non-zero when any document fails
  *   pnpm baseline --parallel 6          # Use 6 parallel workers
  *   pnpm baseline --scale-factor 1.5    # Set Playwright deviceScaleFactor (default: 1.5)
+ *   pnpm baseline --ci                  # CI mode: hide doc names, show progress only
+ *   pnpm baseline --silent              # Alias for --ci
  */
 
 import fs from 'node:fs';
@@ -57,6 +59,15 @@ const TIMEOUT_EDITOR_READY = 10_000;
 const TIMEOUT_SUPERDOC_READY = 120_000; // 2 min for large docs to load
 const TIMEOUT_FONTS = 60_000;
 const TIMEOUT_LAYOUT_STABLE = 120_000; // 2 min for large docs to render
+
+const IS_CI_MODE =
+  process.argv.includes('--ci') || process.argv.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
+
+function logCi(message: string): void {
+  if (IS_CI_MODE) {
+    console.log(colors.muted(message));
+  }
+}
 
 /**
  * Check if SuperDoc is installed from a local file (not npm).
@@ -427,6 +438,7 @@ function parseArgs(): {
   skipExisting: boolean;
   failOnError: boolean;
   append: boolean;
+  ci: boolean;
   browsers: BrowserName[];
   scaleFactor: number;
   mode: StorageMode;
@@ -438,6 +450,7 @@ function parseArgs(): {
   const skipExisting = args.includes('--skip-existing');
   const failOnError = args.includes('--fail-on-error');
   const append = args.includes('--append');
+  const ci = args.includes('--ci') || args.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
   const storage = parseStorageFlags(args);
   const docsDir = resolveDocsDir(storage.mode, storage.docsDir);
 
@@ -509,10 +522,50 @@ function parseArgs(): {
     skipExisting,
     failOnError,
     append,
+    ci,
     browsers,
     scaleFactor,
     mode: storage.mode,
     docsDir,
+  };
+}
+
+type ProgressReporter = {
+  advance: () => void;
+};
+
+function createProgressReporter(total: number, enabled: boolean): ProgressReporter {
+  let completed = 0;
+  const barWidth = 24;
+  const step = Math.max(1, Math.floor(total / 100));
+  const isTty = Boolean(process.stdout.isTTY);
+
+  const render = () => {
+    const percent = total === 0 ? 100 : Math.round((completed / total) * 100);
+    const filled = Math.min(barWidth, Math.round((percent / 100) * barWidth));
+    const bar = `${'='.repeat(filled)}${'-'.repeat(barWidth - filled)}`;
+    return `Progress [${bar}] ${completed}/${total} (${percent}%)`;
+  };
+
+  const write = (line: string) => {
+    if (isTty) {
+      process.stdout.write(`\r${line}`);
+      if (completed >= total) {
+        process.stdout.write('\n');
+      }
+    } else {
+      console.log(line);
+    }
+  };
+
+  return {
+    advance: () => {
+      completed += 1;
+      if (!enabled || total === 0) return;
+      if (completed % step === 0 || completed === total) {
+        write(render());
+      }
+    },
   };
 }
 
@@ -535,6 +588,8 @@ async function processDocumentQueue(
   results: { screenshots: number; skipped: number; errors: Array<{ doc: string; error: string }> },
   skipExisting: boolean,
   provider: CorpusProvider,
+  progress: ProgressReporter | null,
+  quiet: boolean,
 ): Promise<void> {
   while (true) {
     const doc = queue.shift();
@@ -542,21 +597,34 @@ async function processDocumentQueue(
 
     // Skip if document already has screenshots (for baseline mode)
     if (skipExisting && hasExistingScreenshots(doc)) {
-      console.log(colors.muted(`[${workerId}] ⏭ ${doc.relativePath} (already exists)`));
+      if (!quiet) {
+        console.log(colors.muted(`[${workerId}] ⏭ ${doc.relativePath} (already exists)`));
+      }
       results.skipped++;
+      progress?.advance();
       continue;
     }
 
-    console.log(colors.info(`[${workerId}] 📄 ${doc.relativePath}`));
+    if (!quiet) {
+      console.log(colors.info(`[${workerId}] 📄 ${doc.relativePath}`));
+    }
 
     try {
       const screenshots = await captureDocument(page, doc, provider);
       results.screenshots += screenshots.length;
-      console.log(colors.success(`[${workerId}]    ✓ ${screenshots.length} page(s) captured`));
+      if (!quiet) {
+        console.log(colors.success(`[${workerId}]    ✓ ${screenshots.length} page(s) captured`));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(colors.error(`[${workerId}]    ✗ Error: ${message}`));
-      results.errors.push({ doc: doc.relativePath, error: message });
+      if (!quiet) {
+        console.log(colors.error(`[${workerId}]    ✗ Error: ${message}`));
+        results.errors.push({ doc: doc.relativePath, error: message });
+      } else {
+        results.errors.push({ doc: '', error: 'error' });
+      }
+    } finally {
+      progress?.advance();
     }
   }
 }
@@ -577,6 +645,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     failOnError,
     append,
     scaleFactor,
+    ci,
     mode,
     docsDir,
   } = options;
@@ -619,105 +688,142 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
 
   const provider = await createCorpusProvider({ mode, docsDir });
 
-  console.log(colors.info('🔍 Finding documents...'));
-  const documents = await findDocumentsFromCorpus(provider, outputDir, { filters, matches, excludes });
-  if (filters.length > 0) {
-    console.log(colors.info(`🔎 Filter: "${filters.join(', ')}"`));
-  }
-  if (matches.length > 0) {
-    console.log(colors.info(`🔎 Match: "${matches.join(', ')}"`));
-  }
-  if (excludes.length > 0) {
-    console.log(colors.info(`🔎 Exclude: "${excludes.join(', ')}"`));
-  }
-
-  if (documents.length === 0) {
-    console.log(colors.warning('No documents found in corpus.'));
-    return 0;
-  }
-
-  console.log(colors.info(`Found ${documents.length} document(s)`));
-  if (isBaseline) {
-    if (mode === 'local') {
-      console.log(colors.info(`📁 Output (baseline): ${outputDir}`));
-    } else {
-      console.log(colors.info('📁 Output (baseline): uploading to R2'));
+  try {
+    console.log(colors.info('🔍 Finding documents...'));
+    const documents = await findDocumentsFromCorpus(provider, outputDir, { filters, matches, excludes });
+    if (filters.length > 0) {
+      console.log(colors.info(`🔎 Filter: "${filters.join(', ')}"`));
     }
-  } else {
-    console.log(colors.info(`📁 Output (${modeLabel}): ${outputDir}`));
-  }
+    if (matches.length > 0) {
+      console.log(colors.info(`🔎 Match: "${matches.join(', ')}"`));
+    }
+    if (excludes.length > 0) {
+      console.log(colors.info(`🔎 Exclude: "${excludes.join(', ')}"`));
+    }
 
-  // Determine actual parallelism (don't use more workers than documents)
-  const workerCount = Math.min(parallel, documents.length);
-  console.log(colors.info(`🚀 Launching browser with ${workerCount} parallel worker(s)...\n`));
+    if (documents.length === 0) {
+      console.log(colors.warning('No documents found in corpus.'));
+      return 0;
+    }
 
-  // Launch browser
-  const browserType = getBrowserType(browser);
-  const browserInstance: Browser = await browserType.launch({
-    headless: true,
-  });
-
-  // Create shared results object
-  const results = {
-    screenshots: 0,
-    skipped: 0,
-    errors: [] as Array<{ doc: string; error: string }>,
-  };
-
-  // Create document queue (workers will pull from this)
-  const queue = [...documents];
-
-  // Skip existing documents in baseline mode (unless --force)
-  const shouldSkipExisting = (isBaseline && !force) || skipExisting;
-
-  // Create workers (each with its own browser context and page)
-  const workers: Promise<void>[] = [];
-  for (let i = 0; i < workerCount; i++) {
-    const context = await browserInstance.newContext({
-      viewport: VIEWPORT,
-      deviceScaleFactor: scaleFactor,
-    });
-    const page = await context.newPage();
-    workers.push(processDocumentQueue(i + 1, page, queue, results, shouldSkipExisting, provider));
-  }
-
-  // Wait for all workers to complete
-  await Promise.all(workers);
-
-  await browserInstance.close();
-
-  // Summary
-  console.log('\n' + colors.muted('─'.repeat(50)));
-  const processedDocs = documents.length - results.errors.length - results.skipped;
-  if (results.screenshots > 0) {
+    console.log(colors.info(`Found ${documents.length} document(s)`));
     if (isBaseline) {
-      console.log(
-        colors.success(`✅ Baseline: ${results.screenshots} screenshot(s) from ${processedDocs} document(s)`),
-      );
+      if (mode === 'local') {
+        console.log(colors.info(`📁 Output (baseline): ${outputDir}`));
+      } else {
+        console.log(colors.info('📁 Output (baseline): uploading to R2'));
+      }
     } else {
-      console.log(colors.success(`✅ Captured ${results.screenshots} screenshot(s) from ${processedDocs} document(s)`));
+      console.log(colors.info(`📁 Output (${modeLabel}): ${outputDir}`));
     }
-    if (!isBaseline) {
-      console.log(colors.info(`📁 Saved to: ${outputDir}`));
-    }
-  } else if (results.skipped === 0) {
-    console.log(colors.muted(`No documents matched the filter.`));
-  }
-  if (results.skipped > 0) {
-    console.log(colors.muted(`⏭ Skipped ${results.skipped} document(s) (already exist)`));
-  }
 
-  if (results.errors.length > 0) {
-    console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
-    for (const { doc, error } of results.errors) {
-      console.log(colors.error(`  - ${doc}: ${error}`));
+    // Determine actual parallelism (don't use more workers than documents)
+    const workerCount = Math.min(parallel, documents.length);
+    console.log(colors.info(`🚀 Launching browser with ${workerCount} parallel worker(s)...\n`));
+
+    // Launch browser
+    const browserType = getBrowserType(browser);
+    const browserInstance: Browser = await browserType.launch({
+      headless: true,
+    });
+
+    // Create shared results object
+    const results = {
+      screenshots: 0,
+      skipped: 0,
+      errors: [] as Array<{ doc: string; error: string }>,
+    };
+
+    const progress = createProgressReporter(documents.length, ci);
+
+    // Create document queue (workers will pull from this)
+    const queue = [...documents];
+
+    // Skip existing documents in baseline mode (unless --force)
+    const shouldSkipExisting = (isBaseline && !force) || skipExisting;
+
+    // Create workers (each with its own browser context and page)
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < workerCount; i++) {
+      const context = await browserInstance.newContext({
+        viewport: VIEWPORT,
+        deviceScaleFactor: scaleFactor,
+      });
+      const page = await context.newPage();
+      workers.push(processDocumentQueue(i + 1, page, queue, results, shouldSkipExisting, provider, progress, ci));
     }
-    if (failOnError) {
-      return 1;
+
+    // Wait for all workers to complete
+    await Promise.all(workers);
+
+    if (ci) {
+      console.log(colors.muted('All workers complete. Closing browser...'));
+    }
+    await browserInstance.close();
+    if (ci) {
+      console.log(colors.muted('Browser closed.'));
+    }
+
+    // Summary
+    console.log('\n' + colors.muted('─'.repeat(50)));
+    const processedDocs = documents.length - results.errors.length - results.skipped;
+    if (results.screenshots > 0) {
+      if (isBaseline) {
+        console.log(
+          colors.success(`✅ Baseline: ${results.screenshots} screenshot(s) from ${processedDocs} document(s)`),
+        );
+      } else {
+        console.log(
+          colors.success(`✅ Captured ${results.screenshots} screenshot(s) from ${processedDocs} document(s)`),
+        );
+      }
+      if (!isBaseline) {
+        console.log(colors.info(`📁 Saved to: ${outputDir}`));
+      }
+    } else if (results.skipped === 0) {
+      console.log(colors.muted(`No documents matched the filter.`));
+    }
+    if (results.skipped > 0) {
+      console.log(colors.muted(`⏭ Skipped ${results.skipped} document(s) (already exist)`));
+    }
+
+    if (results.errors.length > 0) {
+      if (ci) {
+        console.log(
+          colors.warning(`\n⚠ ${results.errors.length} error(s) occurred. Re-run without --ci for details.`),
+        );
+      } else {
+        console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
+        for (const { doc, error } of results.errors) {
+          console.log(colors.error(`  - ${doc}: ${error}`));
+        }
+      }
+      if (failOnError) {
+        return 1;
+      }
+    }
+
+    if (ci) {
+      console.log(colors.muted('generate-refs summary complete.'));
+    }
+
+    return 0;
+  } finally {
+    if (provider.close) {
+      if (ci) {
+        console.log(colors.muted('Closing corpus provider...'));
+      }
+      try {
+        await provider.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(colors.warning(`⚠ Failed to close corpus provider: ${message}`));
+      }
+      if (ci) {
+        console.log(colors.muted('Corpus provider closed.'));
+      }
     }
   }
-
-  return 0;
 }
 
 /**
@@ -745,19 +851,31 @@ async function main(): Promise<number> {
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   const runWithHarness = async (): Promise<number> => {
+    logCi('Ensuring harness is running...');
     const { child, started } = await ensureHarnessRunning();
+    logCi('Harness ready.');
     try {
-      return await main();
+      const exitCode = await main();
+      logCi(`generate-refs main complete (exit ${exitCode}).`);
+      return exitCode;
     } finally {
       if (started && child) {
+        logCi('Stopping harness...');
         await stopHarness(child);
+        logCi('Harness stopped.');
       }
     }
   };
 
   runWithHarness()
     .then((exitCode) => {
+      logCi(`generate-refs cleanup complete (exit ${exitCode}).`);
       process.exitCode = exitCode;
+      if (IS_CI_MODE) {
+        logCi('Forcing process exit in CI to avoid hanging handles.');
+        const timer = setTimeout(() => process.exit(exitCode), 500);
+        timer.unref?.();
+      }
     })
     .catch((error) => {
       console.error(colors.error(`Fatal error: ${error instanceof Error ? error.message : String(error)}`));

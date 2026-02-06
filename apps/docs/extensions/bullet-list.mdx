@@ -1,82 +1,43 @@
 ---
-title: BulletList extension
+title: Bullet list
 sidebarTitle: "Bullet List"
-keywords: "BulletList extension, superdoc BulletList, word BulletList, document BulletList, docx BulletList"
+keywords: "bullet list, superdoc bullet list, word bullet list, document bullet list, docx bullet list"
 ---
 
 import Description from '/snippets/extensions/bullet-list.mdx'
 
 <Description />
 
-## Options
-
-Configure the extension behavior:
-
-<ParamField path="itemTypeName" type="string" default="listItem">
-  Name of the list item node type
-</ParamField>
-
-<ParamField path="htmlAttributes" type="Object">
-  HTML attributes for the ul element
-</ParamField>
-
-<ParamField path="keepAttributes" type="boolean" default="false">
-  Whether to preserve attributes when splitting
-</ParamField>
-
-<ParamField path="keepMarks" type="boolean" default="true">
-  Whether to preserve marks when splitting
-</ParamField>
-
-**Example:**
-
-```javascript
-const ConfiguredBulletList = BulletList.configure({
-  itemTypeName: 'customItem',
-  keepMarks: false
-});
-
-new SuperDoc({
-  selector: '#editor',
-  document: 'document.docx',
-  editorExtensions: [ConfiguredBulletList]
-});
-```
-
-## Attributes
-
-Node attributes that can be set and retrieved:
-
-<ParamField path="list-style-type" type="string" default="bullet">
-  List style type for this list
-</ParamField>
+<Info>
+Bullet list functionality is part of the [Paragraph extension](/extensions/paragraph). There is no separate bullet list extension.
+</Info>
 
 ## Commands
 
 ### `toggleBulletList`
 
-Toggle a bullet list at the current selection
-
-<Note>
-Converts selected paragraphs to list items or removes list formatting
-</Note>
+Toggle bullet list formatting on the current selection. Converts selected paragraphs to list items or removes list formatting.
 
 **Example:**
 
 ```javascript
-// Toggle bullet list on selected text
 editor.commands.toggleBulletList()
 ```
 
-## Keyboard Shortcuts
+## Keyboard shortcuts
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
 | toggleBulletList() | `⌘/Ctrl-Shift-8` | Toggle bullet list |
+| (indent) | `Tab` | Increase list indentation |
+| (outdent) | `Shift-Tab` | Decrease list indentation |
 
+## Input rules
 
-## Source Code
+Type `- `, `* `, or `+ ` followed by a space to start a bullet list automatically.
+
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 
-<SourceCodeLink path="packages/super-editor/src/extensions/bullet-list/bullet-list.js" />
+<SourceCodeLink path="packages/super-editor/src/extensions/paragraph/paragraph.js" />

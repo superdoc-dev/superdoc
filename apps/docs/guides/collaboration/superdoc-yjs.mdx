@@ -4,7 +4,7 @@ sidebarTitle: SuperDoc Yjs
 keywords: "superdoc collaboration server, yjs server, self-hosted, websocket"
 ---
 
-Our official collaboration package for self-hosted deployments. Purpose-built for SuperDoc with a simple builder API.
+The official collaboration package for self-hosted deployments. Purpose-built for SuperDoc with a builder API.
 
 ## Installation
 
@@ -12,7 +12,7 @@ Our official collaboration package for self-hosted deployments. Purpose-built fo
 npm install @superdoc-dev/superdoc-yjs-collaboration
 ```
 
-## Quick Start
+## Quick start
 
 ### Server
 
@@ -167,7 +167,7 @@ React to document changes (fires on every edit):
 })
 ```
 
-## Storage Examples
+## Storage examples
 
 <Tabs>
   <Tab title="PostgreSQL">
@@ -253,7 +253,7 @@ React to document changes (fires on every edit):
   </Tab>
 </Tabs>
 
-## Error Handling
+## Error handling
 
 ```typescript
 const errorHandlers = {
@@ -281,7 +281,7 @@ app.get('/doc/:documentId', { websocket: true }, async (socket, request) => {
 });
 ```
 
-## Production Deployment
+## Production deployment
 
 ### Docker
 
@@ -298,7 +298,7 @@ EXPOSE 3050
 CMD ["node", "server.js"]
 ```
 
-### Environment Variables
+### Environment variables
 
 ```bash
 NODE_ENV=production
@@ -307,7 +307,7 @@ JWT_SECRET=your-secret-key
 DATABASE_URL=postgres://user:pass@localhost/db
 ```
 
-### Health Check
+### Health check
 
 ```typescript
 fastify.get('/health', (request, reply) => {
@@ -353,7 +353,7 @@ fastify.get('/health', (request, reply) => {
   <Card
     title="Production Example"
     icon="github"
-    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/production"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/collaboration/production"
   >
     Complete working example
   </Card>
@@ -361,13 +361,13 @@ fastify.get('/health', (request, reply) => {
   <Card
     title="Fastify Example"
     icon="github"
-    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/fastify-server"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/collaboration/fastify-server"
   >
     Fastify server setup
   </Card>
 </CardGroup>
 
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
   <Card
@@ -381,7 +381,7 @@ fastify.get('/health', (request, reply) => {
   <Card
     title="Hocuspocus Alternative"
     icon="server"
-    href="/modules/collaboration/self-hosted/hocuspocus"
+    href="/guides/collaboration/hocuspocus"
   >
     Use TipTap's Yjs server instead
   </Card>

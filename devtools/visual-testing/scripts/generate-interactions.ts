@@ -17,6 +17,8 @@
  *   pnpm generate:interactions --scale-factor 1.5
  *   pnpm baseline:interactions --fail-on-error
  *   pnpm baseline:interactions --scale-factor 1.5
+ *   pnpm baseline:interactions --ci      # CI mode: hide story names, show progress only
+ *   pnpm baseline:interactions --silent  # Alias for --ci
  */
 
 import fs from 'node:fs';
@@ -52,6 +54,14 @@ const TIMEOUT_SUPERDOC_READY = 120_000;
 const TIMEOUT_FONTS = 60_000;
 const TIMEOUT_LAYOUT_STABLE = 120_000;
 const FIXED_TIME_ISO = '2026-01-12T12:00:00Z';
+const IS_CI_MODE =
+  process.argv.includes('--ci') || process.argv.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
+
+function logCi(message: string): void {
+  if (IS_CI_MODE) {
+    console.log(colors.muted(message));
+  }
+}
 
 interface LoadedStory {
   id: string;
@@ -84,6 +94,7 @@ function parseArgs(): {
   output?: string;
   skipExisting: boolean;
   failOnError: boolean;
+  ci: boolean;
   browsers: BrowserName[];
   scaleFactor: number;
   mode: StorageMode;
@@ -94,6 +105,7 @@ function parseArgs(): {
   const force = args.includes('--force');
   const skipExisting = args.includes('--skip-existing');
   const failOnError = args.includes('--fail-on-error');
+  const ci = args.includes('--ci') || args.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
   const storage = parseStorageFlags(args);
   const docsDir = resolveDocsDir(storage.mode, storage.docsDir);
 
@@ -154,6 +166,7 @@ function parseArgs(): {
     output,
     skipExisting,
     failOnError,
+    ci,
     browsers,
     scaleFactor,
     mode: storage.mode,
@@ -203,7 +216,7 @@ function walkStoriesDir(dir: string, rootDir: string): string[] {
   return files;
 }
 
-async function loadStories(): Promise<LoadedStory[]> {
+async function loadStories(quiet: boolean): Promise<LoadedStory[]> {
   const { dir, isLegacy } = resolveStoriesDir();
   if (!fs.existsSync(dir)) {
     return [];
@@ -227,7 +240,11 @@ async function loadStories(): Promise<LoadedStory[]> {
       const module = await import(pathToFileURL(filePath).href);
       const story = module.default as InteractionStory;
       if (!story || typeof story.run !== 'function') {
-        console.warn(colors.warning(`Skipping invalid story: ${relativePath} (missing run())`));
+        if (!quiet) {
+          console.warn(colors.warning(`Skipping invalid story: ${relativePath} (missing run())`));
+        } else {
+          console.warn(colors.warning('Skipping invalid story (missing run())'));
+        }
         continue;
       }
 
@@ -237,9 +254,13 @@ async function loadStories(): Promise<LoadedStory[]> {
         relativeDir === '.' ? sanitizeFilename(name) : `${relativeDir.replace(/\\/g, '/')}/${sanitizeFilename(name)}`;
       stories.push({ id, name, filePath, story: { ...story, name } });
     } catch (error) {
-      console.warn(
-        colors.warning(`Skipping story ${relativePath}: ${error instanceof Error ? error.message : String(error)}`),
-      );
+      if (!quiet) {
+        console.warn(
+          colors.warning(`Skipping story ${relativePath}: ${error instanceof Error ? error.message : String(error)}`),
+        );
+      } else {
+        console.warn(colors.warning('Skipping story due to load error.'));
+      }
     }
   }
 
@@ -405,6 +426,45 @@ async function runStory(
 
 type ParsedArgs = ReturnType<typeof parseArgs>;
 
+type ProgressReporter = {
+  advance: () => void;
+};
+
+function createProgressReporter(total: number, enabled: boolean): ProgressReporter {
+  let completed = 0;
+  const barWidth = 24;
+  const step = Math.max(1, Math.floor(total / 100));
+  const isTty = Boolean(process.stdout.isTTY);
+
+  const render = () => {
+    const percent = total === 0 ? 100 : Math.round((completed / total) * 100);
+    const filled = Math.min(barWidth, Math.round((percent / 100) * barWidth));
+    const bar = `${'='.repeat(filled)}${'-'.repeat(barWidth - filled)}`;
+    return `Progress [${bar}] ${completed}/${total} (${percent}%)`;
+  };
+
+  const write = (line: string) => {
+    if (isTty) {
+      process.stdout.write(`\r${line}`);
+      if (completed >= total) {
+        process.stdout.write('\n');
+      }
+    } else {
+      console.log(line);
+    }
+  };
+
+  return {
+    advance: () => {
+      completed += 1;
+      if (!enabled || total === 0) return;
+      if (completed % step === 0 || completed === total) {
+        write(render());
+      }
+    },
+  };
+}
+
 async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise<number> {
   const {
     isBaseline,
@@ -417,6 +477,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     skipExisting,
     failOnError,
     scaleFactor,
+    ci,
     mode,
     docsDir,
   } = options;
@@ -452,7 +513,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     }
   }
 
-  const stories = await loadStories();
+  const stories = await loadStories(ci);
   const resolvedStoriesDir = resolveStoriesDir().dir;
 
   if (stories.length === 0) {
@@ -480,69 +541,111 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
   console.log(colors.muted(`${filtered.length} stories → ${outputLabel}`));
 
   const provider = await createCorpusProvider({ mode, docsDir });
-  const shouldSkipExisting = (isBaseline && !force) || skipExisting;
 
-  const browserType = getBrowserType(browser);
-  const browserInstance = await browserType.launch({ headless: true });
-  const results = {
-    stories: 0,
-    milestones: 0,
-    skipped: 0,
-    errors: [] as Array<{ story: string; error: string }>,
-  };
+  try {
+    const shouldSkipExisting = (isBaseline && !force) || skipExisting;
+    const progress = createProgressReporter(filtered.length, ci);
 
-  for (const story of filtered) {
-    const storyDir = path.join(outputRoot, story.id);
-    if (shouldSkipExisting && hasExistingSnapshots(storyDir)) {
-      console.log(colors.muted(`⏭ ${story.name} (already exists)`));
-      results.skipped += 1;
-      continue;
+    const browserType = getBrowserType(browser);
+    const browserInstance = await browserType.launch({ headless: true });
+    const results = {
+      stories: 0,
+      milestones: 0,
+      skipped: 0,
+      errors: [] as Array<{ story: string; error: string }>,
+    };
+
+    for (const story of filtered) {
+      const storyDir = path.join(outputRoot, story.id);
+      if (shouldSkipExisting && hasExistingSnapshots(storyDir)) {
+        if (!ci) {
+          console.log(colors.muted(`⏭ ${story.name} (already exists)`));
+        }
+        results.skipped += 1;
+        progress.advance();
+        continue;
+      }
+
+      if (!ci) {
+        console.log(colors.info(`▶ ${story.name}`));
+      }
+      results.stories += 1;
+
+      try {
+        const count = await runStory(browserInstance, story, outputRoot, scaleFactor, provider);
+        results.milestones += count;
+        if (!ci) {
+          console.log(colors.success(`   ✓ ${count} milestone(s)`));
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!ci) {
+          console.log(colors.error(`   ✗ Error: ${message}`));
+          results.errors.push({ story: story.name, error: message });
+        } else {
+          results.errors.push({ story: '', error: 'error' });
+        }
+      } finally {
+        progress.advance();
+      }
     }
 
-    console.log(colors.info(`▶ ${story.name}`));
-    results.stories += 1;
+    await browserInstance.close();
 
-    try {
-      const count = await runStory(browserInstance, story, outputRoot, scaleFactor, provider);
-      results.milestones += count;
-      console.log(colors.success(`   ✓ ${count} milestone(s)`));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.log(colors.error(`   ✗ Error: ${message}`));
-      results.errors.push({ story: story.name, error: message });
+    console.log('\n' + colors.muted('─'.repeat(50)));
+    if (results.milestones > 0) {
+      if (isBaseline) {
+        console.log(colors.success(`✅ Baseline: ${results.milestones} milestone(s) from ${results.stories} stories`));
+      } else {
+        console.log(colors.success(`✅ Captured ${results.milestones} milestone(s) from ${results.stories} stories`));
+      }
+      if (!isBaseline) {
+        console.log(colors.info(`Saved to: ${outputRoot}`));
+      }
+    } else if (results.skipped === 0) {
+      console.log(colors.muted(`No stories matched the filter.`));
+    }
+    if (results.skipped > 0) {
+      console.log(colors.muted(`⏭ Skipped ${results.skipped} stories (already exist)`));
+    }
+
+    if (results.errors.length > 0) {
+      if (ci) {
+        console.log(
+          colors.warning(`\n⚠ ${results.errors.length} error(s) occurred. Re-run without --ci for details.`),
+        );
+      } else {
+        console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
+        for (const { story, error } of results.errors) {
+          console.log(colors.error(`  - ${story}: ${error}`));
+        }
+      }
+      if (failOnError) {
+        return 1;
+      }
+    }
+
+    if (ci) {
+      console.log(colors.muted('generate-interactions summary complete.'));
+    }
+
+    return 0;
+  } finally {
+    if (provider.close) {
+      if (ci) {
+        console.log(colors.muted('Closing corpus provider...'));
+      }
+      try {
+        await provider.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(colors.warning(`⚠ Failed to close corpus provider: ${message}`));
+      }
+      if (ci) {
+        console.log(colors.muted('Corpus provider closed.'));
+      }
     }
   }
-
-  await browserInstance.close();
-
-  console.log('\n' + colors.muted('─'.repeat(50)));
-  if (results.milestones > 0) {
-    if (isBaseline) {
-      console.log(colors.success(`✅ Baseline: ${results.milestones} milestone(s) from ${results.stories} stories`));
-    } else {
-      console.log(colors.success(`✅ Captured ${results.milestones} milestone(s) from ${results.stories} stories`));
-    }
-    if (!isBaseline) {
-      console.log(colors.info(`Saved to: ${outputRoot}`));
-    }
-  } else if (results.skipped === 0) {
-    console.log(colors.muted(`No stories matched the filter.`));
-  }
-  if (results.skipped > 0) {
-    console.log(colors.muted(`⏭ Skipped ${results.skipped} stories (already exist)`));
-  }
-
-  if (results.errors.length > 0) {
-    console.log(colors.warning(`\n⚠ ${results.errors.length} error(s):`));
-    for (const { story, error } of results.errors) {
-      console.log(colors.error(`  - ${story}: ${error}`));
-    }
-    if (failOnError) {
-      return 1;
-    }
-  }
-
-  return 0;
 }
 
 async function main(): Promise<number> {
@@ -568,19 +671,31 @@ async function main(): Promise<number> {
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   const runWithHarness = async (): Promise<number> => {
+    logCi('Ensuring harness is running...');
     const { child, started } = await ensureHarnessRunning();
+    logCi('Harness ready.');
     try {
-      return await main();
+      const exitCode = await main();
+      logCi(`generate-interactions main complete (exit ${exitCode}).`);
+      return exitCode;
     } finally {
       if (started && child) {
+        logCi('Stopping harness...');
         await stopHarness(child);
+        logCi('Harness stopped.');
       }
     }
   };
 
   runWithHarness()
     .then((exitCode) => {
+      logCi(`generate-interactions cleanup complete (exit ${exitCode}).`);
       process.exitCode = exitCode;
+      if (IS_CI_MODE) {
+        logCi('Forcing process exit in CI to avoid hanging handles.');
+        const timer = setTimeout(() => process.exit(exitCode), 500);
+        timer.unref?.();
+      }
     })
     .catch((error) => {
       console.error(colors.error(`Fatal error: ${error instanceof Error ? error.message : String(error)}`));

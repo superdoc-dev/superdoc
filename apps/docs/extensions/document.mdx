@@ -40,8 +40,28 @@ Replaces all content with an empty paragraph
 editor.commands.clearDocument()
 ```
 
+### `setSectionPageMarginsAtSelection`
 
-## Source Code
+Set page margins for the section at the current cursor position.
+
+**Example:**
+
+```javascript
+editor.commands.setSectionPageMarginsAtSelection({
+  topInches: 1,
+  rightInches: 1,
+  bottomInches: 1,
+  leftInches: 1
+})
+```
+
+**Parameters:**
+
+<ParamField path="options" type="Object">
+  Object with optional `topInches`, `rightInches`, `bottomInches`, `leftInches` (numbers in inches)
+</ParamField>
+
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

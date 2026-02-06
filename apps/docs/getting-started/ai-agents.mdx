@@ -1,85 +1,81 @@
 ---
 title: AI Agents & LLMs
 sidebarTitle: AI Agents ✨
-keywords: "ai document editing, llm docx, chatgpt word documents, cursor integration, document automation ai, programmatic word editing"
+keywords: "ai document editing, llm docx, headless editor, document automation ai, programmatic word editing"
 ---
 
-<Tip>
-**Looking for programmatic document access?** The [Document API](/document-api/overview) is coming soon with a stable, engine-agnostic interface for querying and manipulating documents.
-</Tip>
+SuperDoc can run headless in Node.js for server-side document processing, AI agent workflows, and batch automation.
 
-SuperDoc works seamlessly with AI tools. From Cursor to ChatGPT to your own LLMs.
-
-## Programmatic Control
-
-Everything in the UI is available via code:
-
-- **Fine-grained manipulation** via commands
-- **Headless mode** - Run in Node.js  
-- **Document modes** - Track changes automatically
+## Quick example
 
 ```javascript
-// Headless document generation (Node/SSR-safe)
-import { JSDOM } from 'jsdom';
-import { Editor } from '@harbour-enterprises/super-editor';
+import { Editor } from 'superdoc/super-editor';
+import OpenAI from 'openai';
 
-const { window } = new JSDOM('<!DOCTYPE html>');
-const { document } = window;
-
-const editor = new Editor({
-  fileSource: docxBuffer, // or initialize with options.html/markdown/json
-  documentId: 'doc-1',
-  options: {
-    isHeadless: true,
-    mockDocument: document,
-    mockWindow: window,
-    documentMode: 'suggesting',
-  }
+const openai = new OpenAI();
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Write a service agreement in HTML.' }],
 });
 
-editor.commands.insertContent(aiContent, { contentType: 'html' });
-```
-[See complete example →](https://github.com/Harbour-Enterprises/SuperDoc/tree/develop/examples/agentic-slack-redlining-example)
-
-## The AI Document Workflow
-
-Your AI generates content. Your users need Word documents. SuperDoc bridges the gap.
-
-### Simple Integration
-```javascript
-// AI generates content in any format
-const content = await ai.generate("Create a service agreement");
-
-// SuperDoc handles it
-editor.commands.insertContent(content, { 
-  contentType: 'html'  // or 'markdown', 'text', 'schema'
+const editor = await Editor.open(templateDocx);
+editor.commands.insertContent(completion.choices[0].message.content, {
+  contentType: 'html',
 });
-
-// Export as real Word document
 const docx = await editor.exportDocx();
 ```
 
-### Three Ways to Work
-
-**1. Import AI Content** - HTML, Markdown, or plain text from any LLM  
-**2. Structured Documents** - JSON schema for precise control  
-**3. Programmatic Commands** - Full automation with headless mode  
-
-[See detailed import options →](/getting-started/import-export#ai-integration-pattern)
-
-## Quick access for AI assistants
-
-Working with Cursor, Claude, or ChatGPT? Give your assistant our docs:
+## Content formats
 
 ```javascript
-// Quick reference
-'https://docs.superdoc.dev/llms.txt'
-
-// Complete documentation
-'https://docs.superdoc.dev/llms-full.txt'  
-
-// MCP server
-'https://docs.superdoc.dev/mcp'
+editor.commands.insertContent(value, { contentType: 'html' });      // Recommended for LLMs
+editor.commands.insertContent(value, { contentType: 'markdown' });
+editor.commands.insertContent(value, { contentType: 'text' });
+editor.commands.insertContent(value, { contentType: 'schema' });     // ProseMirror JSON
 ```
 
-Drop these URLs into your AI's context. Now it knows SuperDoc.
+See [Import/Export](/getting-started/import-export) for format details, limitations, and guidance on choosing a format.
+
+## AI redlining with track changes
+
+Use `suggesting` mode so AI edits appear as tracked changes that users can accept or reject:
+
+```javascript
+const contract = await readFile('./contract.docx');
+const editor = await Editor.open(contract, {
+  documentMode: 'suggesting',
+});
+
+// AI suggestions are tracked — users review them in Word
+editor.commands.insertContent(aiRevisions, { contentType: 'html' });
+const redlined = await editor.exportDocx();
+```
+
+## LLM quick reference
+
+Point your AI assistant at these URLs for SuperDoc context:
+
+```
+https://docs.superdoc.dev/llms.txt        // Quick reference
+https://docs.superdoc.dev/llms-full.txt   // Complete documentation
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="SuperEditor API"
+    icon="code"
+    href="/core/supereditor/overview"
+  >
+    Headless mode, Editor.open(), and programmatic control
+  </Card>
+
+  <Card
+    title="Import/Export"
+    icon="file"
+    href="/getting-started/import-export"
+  >
+    Content formats, export options, and round-trip behavior
+  </Card>
+</CardGroup>

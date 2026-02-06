@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { createHash } from 'node:crypto';
 import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
 
 /** Content-Type mapping for baseline file uploads. */
@@ -46,6 +47,17 @@ function normalizePath(value: string): string {
  */
 function normalizePrefix(value: string): string {
   return normalizePath(value).replace(/\/+$/, '');
+}
+
+function hashKey(value: string): string {
+  return createHash('sha256').update(value).digest('hex').slice(0, 12);
+}
+
+function formatKeyForLog(key: string): string {
+  if (process.env.SUPERDOC_R2_LOG_KEYS === '1') {
+    return key;
+  }
+  return `hash:${hashKey(key)}`;
 }
 
 /**
@@ -628,10 +640,13 @@ export async function uploadDirectoryToR2(options: { localDir: string; remotePre
   }
 
   const normalizedPrefix = normalizePath(remotePrefix);
+  const shouldVerify = process.env.SUPERDOC_TEST_CI === '1' || process.env.SUPERDOC_R2_VERIFY_UPLOAD === '1';
   let uploaded = 0;
   const files: string[] = [];
 
   walk(localDir, (filePath) => files.push(filePath));
+  const verboseUploads =
+    process.env.SUPERDOC_R2_VERBOSE_UPLOAD === '1' || (process.env.SUPERDOC_TEST_CI === '1' && files.length <= 200);
 
   if (files.length === 0) {
     return 0;
@@ -642,19 +657,40 @@ export async function uploadDirectoryToR2(options: { localDir: string; remotePre
     totalBytes += fs.statSync(filePath).size;
   }
 
+  if (shouldVerify) {
+    const accountId = process.env.SD_TESTING_R2_ACCOUNT_ID ?? '';
+    const accountTag = accountId ? accountId.slice(-6) : 'unknown';
+    console.log(`R2 account: ***${accountTag}`);
+    console.log(`R2 bucket: ${bucketName}`);
+    console.log(`R2 prefix: ${normalizedPrefix || '(root)'}`);
+  }
+
   const showProgress = shouldRenderProgress();
+  console.log(`Uploading ${files.length} baseline file(s) to R2...`);
+  if (totalBytes > 0) {
+    console.log(`Total size: ${formatBytes(totalBytes)}`);
+  }
+  if (!showProgress) {
+    console.log('Starting upload...');
+  }
   let lastUpdate = 0;
   let lastLineLength = 0;
   let uploadedBytes = 0;
 
   for (const filePath of files) {
+    if (!showProgress) {
+      const announceEvery = verboseUploads ? 1 : files.length <= 50 ? 1 : 25;
+      if (uploaded % announceEvery === 0) {
+        console.log(`Uploading file ${uploaded + 1}/${files.length}...`);
+      }
+    }
     const relative = normalizePath(path.relative(localDir, filePath));
     const key = normalizedPrefix ? `${normalizedPrefix}/${relative}` : relative;
     const ext = path.extname(filePath).toLowerCase();
     const contentType = CONTENT_TYPES[ext] ?? 'application/octet-stream';
     const body = fs.readFileSync(filePath);
 
-    await client.send(
+    const response = await client.send(
       new PutObjectCommand({
         Bucket: bucketName,
         Key: key,
@@ -665,6 +701,16 @@ export async function uploadDirectoryToR2(options: { localDir: string; remotePre
 
     uploaded += 1;
     uploadedBytes += body.length;
+
+    if (!showProgress && verboseUploads) {
+      const etag = response.ETag ? response.ETag.replace(/"/g, '') : 'n/a';
+      const requestId = response.$metadata?.requestId ?? 'n/a';
+      const status = response.$metadata?.httpStatusCode ?? 'n/a';
+      const keyLabel = formatKeyForLog(key);
+      console.log(
+        `Uploaded ${uploaded}/${files.length} (${formatBytes(body.length)}) ${keyLabel} status=${status} etag=${etag} req=${requestId}`,
+      );
+    }
 
     if (showProgress) {
       const now = Date.now();
@@ -688,5 +734,16 @@ export async function uploadDirectoryToR2(options: { localDir: string; remotePre
     process.stdout.write('\n');
   }
 
+  if (shouldVerify) {
+    const verifyPrefix = normalizedPrefix ? `${normalizedPrefix}/` : '';
+    console.log(`Verifying upload at prefix: ${verifyPrefix || '(root)'}`);
+    const objects = await listObjects(verifyPrefix, client, bucketName);
+    console.log(`R2 objects found at prefix: ${objects.length}`);
+    if (objects.length === 0) {
+      throw new Error(`Upload verification failed: no objects found at ${verifyPrefix || '(root)'}`);
+    }
+  }
+
+  client.destroy();
   return uploaded;
 }

@@ -368,6 +368,25 @@ editor.commands.setCellBackground('ff0000')
   Color value (hex with or without #)
 </ParamField>
 
+### `appendRowsWithContent`
+
+Append rows with content to an existing table.
+
+**Example:**
+
+```javascript
+editor.commands.appendRowsWithContent({
+  valueRows: [['Cell A', 'Cell B'], ['Cell C', 'Cell D']],
+  copyRowStyle: true
+})
+```
+
+**Parameters:**
+
+<ParamField path="options" type="Object" required>
+  Object with `tablePos`, `tableNode`, `valueRows` (array of row arrays), and optional `copyRowStyle` boolean
+</ParamField>
+
 ### `deleteCellAndTableBorders`
 
 Remove all borders from table and its cells
@@ -384,14 +403,16 @@ editor.commands.deleteCellAndTableBorders()
 
 **Returns:** `Function` Command
 
-## Keyboard Shortcuts
+## Keyboard shortcuts
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
 | goToNextCell/addRowAfter() | `Tab` | Navigate to next cell or add row |
 | goToPreviousCell() | `Shift-Tab` | Navigate to previous cell |
 | deleteTableWhenSelected() | `Backspace` | Delete table when all cells selected |
+| deleteTableWhenSelected() | `Mod-Backspace` | Delete table when all cells selected |
 | deleteTableWhenSelected() | `Delete` | Delete table when all cells selected |
+| deleteTableWhenSelected() | `Mod-Delete` | Delete table when all cells selected |
 
 ## Types
 
@@ -825,7 +846,7 @@ Border creation options
 </Expandable>
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

@@ -1,13 +1,13 @@
 ---
-title: Comments Extension
+title: Comments extension
 sidebarTitle: Comments
 ---
 
-The Comments extension enables Word-style commenting with threads, replies, and resolution.
+The Comments extension adds Word-style commenting with threads, replies, and resolution.
 
 ## Usage
 
-Comments work through the module configuration:
+Configure comments through the modules option:
 
 ```javascript
 modules: {
@@ -20,44 +20,107 @@ modules: {
 
 ## Commands
 
+### `addComment`
+
+Add a comment to the current text selection. Requires text to be selected.
+
 ```javascript
-// Add comment at selection
-editor.commands.insertComment({ 
-  content: 'Please review' 
-});
+// Simple text comment
+editor.commands.addComment('Please review this section')
 
-// Work with comments
-editor.commands.replyToComment(commentId, { content: 'Done' });
-editor.commands.resolveComment(commentId);
-editor.commands.deleteComment(commentId);
+// With options
+editor.commands.addComment({
+  content: 'Please review',
+  author: 'Jane Smith',
+  authorEmail: 'jane@example.com',
+  isInternal: false
+})
+```
 
-// Navigate
-editor.commands.goToNextComment();
-editor.commands.goToPreviousComment();
+**Parameters:**
+
+<ParamField path="contentOrOptions" type="string | Object" required>
+  Comment text, or an options object with `content`, `author`, `authorEmail`, `authorImage`, and `isInternal` fields
+</ParamField>
+
+### `addCommentReply`
+
+Add a reply to an existing comment thread.
+
+```javascript
+editor.commands.addCommentReply({
+  parentId: 'comment-123',
+  content: 'Done, updated the wording.'
+})
+```
+
+**Parameters:**
+
+<ParamField path="options" type="Object" required>
+  Object with `parentId` (required), `content`, `author`, `authorEmail`, `authorImage`
+</ParamField>
+
+### `removeComment`
+
+Remove a comment and its highlight marks from the document.
+
+```javascript
+editor.commands.removeComment({ commentId: 'abc-123' })
+```
+
+**Parameters:**
+
+<ParamField path="options" type="Object" required>
+  Object with `commentId` and/or `importedId`
+</ParamField>
+
+### `resolveComment`
+
+Resolve a comment. Removes the highlight but preserves positional anchors for export.
+
+```javascript
+editor.commands.resolveComment({ commentId: 'abc-123' })
+```
+
+**Parameters:**
+
+<ParamField path="options" type="Object" required>
+  Object with `commentId`
+</ParamField>
+
+### `setActiveComment`
+
+Set the active/selected comment thread by ID.
+
+```javascript
+editor.commands.setActiveComment({ commentId: 'abc-123' })
+```
+
+### `setCommentInternal`
+
+Toggle whether a comment is internal (private) or external.
+
+```javascript
+editor.commands.setCommentInternal({
+  commentId: 'abc-123',
+  isInternal: true
+})
+```
+
+### `setCursorById`
+
+Move the cursor to the start of a comment's range. Also works for tracked change IDs.
+
+```javascript
+editor.commands.setCursorById('abc-123')
 ```
 
 ## Events
 
 ```javascript
 superdoc.on('commentsUpdate', ({ type, comment }) => {
-  switch(type) {
-    case 'add':      // Comment created
-    case 'update':   // Comment edited
-    case 'deleted':  // Comment removed
-    case 'resolved': // Comment resolved
-  }
+  // type: 'ADD' | 'deleted' | 'SELECTED'
 });
-```
-
-## Working with comment data
-
-```javascript
-// Access all comments
-const comments = editor.storage.comments.items;
-
-// Filter comments
-const active = comments.filter(c => !c.resolved);
-const byUser = comments.filter(c => c.user.email === email);
 ```
 
 ## Export behavior
@@ -65,17 +128,14 @@ const byUser = comments.filter(c => c.user.email === email);
 Comments export to DOCX as native Word comments:
 
 ```javascript
-// Include comments
 await superdoc.export({ commentsType: 'external' });
 
-// Clean export
+// Without comments
 await superdoc.export({ commentsType: 'clean' });
 ```
 
-## Styling
+## Source code
 
-```css
-.comment-mark { background: #fff3cd; }
-.comment-mark.resolved { opacity: 0.6; }
-.comment-mark.active { background: #ffd700; }
-```
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/comment/comments-plugin.js" />

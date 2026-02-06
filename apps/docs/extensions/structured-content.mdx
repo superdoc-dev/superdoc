@@ -109,6 +109,44 @@ Removes a structured content by ID.
 
 Removes a structured content at cursor, preserving its content.
 
+### `updateStructuredContentByGroup`
+
+Update all structured content fields that share the same group identifier.
+
+**Example:**
+
+```javascript
+editor.commands.updateStructuredContentByGroup('pricing', {
+  text: '$99.00'
+})
+```
+
+**Parameters:**
+
+<ParamField path="group" type="string" required>
+  Group identifier to match
+</ParamField>
+<ParamField path="options" type="StructuredContentUpdate">
+  Update options (same as `updateStructuredContentById`)
+</ParamField>
+
+### `deleteStructuredContentByGroup`
+
+Remove all structured content fields that share the same group identifier.
+
+**Example:**
+
+```javascript
+editor.commands.deleteStructuredContentByGroup('pricing')
+editor.commands.deleteStructuredContentByGroup(['pricing', 'deprecated'])
+```
+
+**Parameters:**
+
+<ParamField path="groupOrGroups" type="string | Array<string>" required>
+  Group identifier or array of group identifiers
+</ParamField>
+
 ### `appendRowsToStructuredContentTable`
 
 Append multiple rows to the end of a table inside a structured content block.
@@ -188,6 +226,26 @@ console.log(`Block contains ${tables.length} table(s)`);
 
 <ParamField path="id" type="string" required>
   Structured content block ID
+</ParamField>
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentByGroup`
+
+Find all structured content nodes that share the same group identifier.
+
+**Example:**
+
+```javascript
+const fields = editor.helpers.getStructuredContentByGroup('pricing', editor.state);
+fields.forEach(({ node, pos }) => {
+  console.log(node.attrs.tag, pos);
+});
+```
+
+**Parameters:**
+
+<ParamField path="groupOrGroups" type="string | Array<string>" required>
+  Group identifier or array of group identifiers
 </ParamField>
 <ParamField path="state" type="any" required></ParamField>
 
@@ -295,7 +353,7 @@ if (field.length) console.log("Found field:", field[0].node.attrs);
   </ResponseField>
 </Expandable>
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from "/snippets/components/source-code-link.jsx";
 

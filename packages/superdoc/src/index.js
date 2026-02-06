@@ -43,5 +43,6 @@ export {
 
   // Custom extensions
   Extensions,
+  /** @internal */
   registeredHandlers,
 };

@@ -18,10 +18,14 @@ Configure the extension behavior:
 
 ## Attributes
 
-Node attributes that can be set and retrieved:
+Mark attributes that can be set and retrieved:
 
-<ParamField path="styleId" type="string">
-  Style identifier for referencing predefined styles
+<ParamField path="vertAlign" type="string">
+  Vertical alignment for superscript and subscript. Values: `'superscript'`, `'subscript'`, `'baseline'`
+</ParamField>
+
+<ParamField path="position" type="string">
+  Custom vertical position offset in points (e.g., `'2pt'`, `'-1.5pt'`). Takes precedence over `vertAlign` when both are present.
 </ParamField>
 
 ## Commands
@@ -40,27 +44,7 @@ Automatically checks if any style attributes exist before removal
 editor.commands.removeEmptyTextStyle()
 ```
 
-## Types
-
-### `ParentNodeInfo`
-
-<Expandable title="Properties">
-<ResponseField name="pos" type="number" required>
-  The position of the parent node.
-</ResponseField>
-<ResponseField name="start" type="number" required>
-  The start position of the parent node.
-</ResponseField>
-<ResponseField name="depth" type="number" required>
-  The depth of the parent node.
-</ResponseField>
-<ResponseField name="node" type="any" required>
-  The parent node.
-</ResponseField>
-</Expandable>
-
-
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

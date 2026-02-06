@@ -8,12 +8,10 @@ SuperDoc works with Vue 3.0+ using Composition API, Options API, or `<script set
 ## Install
 
 ```bash
-npm install @harbour-enterprises/superdoc
+npm install superdoc
 ```
 
-## Basic Setup
-
-The fastest way to get a DOCX editor running in Vue:
+## Basic setup
 
 <CodeGroup>
 
@@ -24,8 +22,8 @@ The fastest way to get a DOCX editor running in Vue:
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import '@harbour-enterprises/superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
 const container = ref(null);
 let superdoc = null;
@@ -49,8 +47,8 @@ onBeforeUnmount(() => {
 </template>
 
 <script>
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import '@harbour-enterprises/superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
 export default {
   mounted() {
@@ -68,7 +66,7 @@ export default {
 
 </CodeGroup>
 
-## Full Component
+## Full component
 
 Build a reusable DOCX editor component with controls:
 
@@ -87,8 +85,8 @@ Build a reusable DOCX editor component with controls:
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import '@harbour-enterprises/superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
 const props = defineProps({
   document: [String, File, Blob],
@@ -130,7 +128,7 @@ const exportFinal = async () => {
 </style>
 ```
 
-## Handle File Uploads
+## Handle file uploads
 
 ```vue
 <template>
@@ -160,13 +158,13 @@ const handleFile = (event) => {
 </script>
 ```
 
-## TypeScript Support
+## TypeScript support
 
 ```vue
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import type { SuperDocConfig } from '@harbour-enterprises/superdoc';
+import { SuperDoc } from 'superdoc';
+import type { SuperDocConfig } from 'superdoc';
 
 interface Props {
   document: string | File | Blob;
@@ -202,8 +200,8 @@ defineExpose({
 </script>
 ```
 
-## Next Steps
+## Next steps
 
 - [React Integration](/getting-started/frameworks/react) - React setup  
 - [API Reference](/core/superdoc/configuration) - Configuration options
-- [Examples](https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/vue-example) - Working examples
+- [Examples](https://github.com/superdoc-dev/superdoc/tree/main/examples/vue-example) - Working examples

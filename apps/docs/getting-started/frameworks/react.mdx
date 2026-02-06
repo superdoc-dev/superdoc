@@ -8,15 +8,15 @@ SuperDoc works with React 16.8+ (hooks) and React 18+ (concurrent features).
 ## Install
 
 ```bash
-npm install @harbour-enterprises/superdoc
+npm install superdoc
 ```
 
-## Basic Setup
+## Basic setup
 
 ```jsx
 import { useEffect, useRef } from 'react';
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import '@harbour-enterprises/superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
 function DocEditor({ document }) {
   const containerRef = useRef(null);
@@ -39,14 +39,14 @@ function DocEditor({ document }) {
 }
 ```
 
-## Full Component
+## Full component
 
 Build a reusable editor with controls:
 
 ```jsx
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import '@harbour-enterprises/superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
 const DocEditor = forwardRef(({ document, user, onReady }, ref) => {
   const containerRef = useRef(null);
@@ -101,7 +101,7 @@ function App() {
 }
 ```
 
-## File Upload
+## File upload
 
 ```jsx
 function FileEditor() {
@@ -141,8 +141,8 @@ function FileEditor() {
 
 ```tsx
 import { useEffect, useRef, forwardRef } from 'react';
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import type { SuperDocConfig } from '@harbour-enterprises/superdoc';
+import { SuperDoc } from 'superdoc';
+import type { SuperDocConfig } from 'superdoc';
 
 interface EditorProps {
   document: string | File | Blob;
@@ -199,7 +199,7 @@ const DocEditor = forwardRef<EditorRef, EditorProps>(
 );
 ```
 
-## SSR Support
+## SSR support
 
 For Next.js or other SSR frameworks:
 
@@ -228,7 +228,7 @@ function SafeEditor(props) {
 }
 ```
 
-## Custom Hook
+## Custom hook
 
 ```jsx
 function useSuperDoc(config) {
@@ -261,8 +261,8 @@ function useSuperDoc(config) {
 }
 ```
 
-## Next Steps
+## Next steps
 
 - [Vue Integration](/getting-started/frameworks/vue) - Vue setup
 - [API Reference](/core/superdoc/configuration) - Configuration options  
-- [Examples](https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/react-example) - Working examples
+- [Examples](https://github.com/superdoc-dev/superdoc/tree/main/examples/react-example) - Working examples

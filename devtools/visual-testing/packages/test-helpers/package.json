@@ -11,10 +11,19 @@
     "./stability": "./src/stability.ts",
     "./interactions": "./src/interactions.ts"
   },
+  "dependencies": {
+    "@superdoc-testing/harness": "workspace:*"
+  },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"
   },
+  "dependencies": {
+    "@superdoc-testing/harness": "workspace:*"
+  },
   "devDependencies": {
     "eslint_d": "^14.3.0"
+  },
+  "dependencies": {
+    "@superdoc-testing/harness": "workspace:*"
   }
 }

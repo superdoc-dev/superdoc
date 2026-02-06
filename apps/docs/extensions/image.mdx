@@ -84,6 +84,14 @@ Node attributes that can be set and retrieved:
   Custom inline CSS styles
 </ParamField>
 
+<ParamField path="wrap" type="Object" default="{ type: 'Inline' }">
+  Text wrapping configuration. The `type` property controls wrapping mode (e.g., `'Inline'`, `'Square'`, `'Tight'`, `'TopAndBottom'`, `'None'`).
+</ParamField>
+
+<ParamField path="transformData" type="Object" default="{}">
+  Transform data for rotation, flips, and size extension. Supports `rotation` (degrees), `flipH` (horizontal flip), `flipV` (vertical flip), and `sizeExtension` properties.
+</ParamField>
+
 ## Commands
 
 ### `setImage`
@@ -185,7 +193,7 @@ Options for inserting an image
 </Expandable>
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

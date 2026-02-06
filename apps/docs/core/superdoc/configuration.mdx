@@ -5,7 +5,7 @@ keywords: "superdoc configuration, editor config options, document settings, wor
 
 Configuration is passed when creating a SuperDoc instance. Only two fields are required.
 
-## Quick Start
+## Quick start
 
 ```javascript
 new SuperDoc({
@@ -14,11 +14,16 @@ new SuperDoc({
 });
 ```
 
-## Core Parameters
+## Core parameters
 
 <ParamField path="selector" type="string | HTMLElement" required>
-  DOM selector or element where SuperDoc will mount ```javascript selector:
-  '#editor' // or selector: document.querySelector('.my-editor') ```
+  DOM selector or element where SuperDoc will mount.
+
+  ```javascript
+  selector: '#editor'
+  // or
+  selector: document.querySelector('.my-editor')
+  ```
 </ParamField>
 
 <ParamField path="document" type="Document | string | File" required>
@@ -63,7 +68,7 @@ new SuperDoc({
   <Note>Auto-generated UUID if not provided</Note>
 </ParamField>
 
-## User & Permissions
+## User & permissions
 
 <ParamField path="user" type="Object">
   Current user information
@@ -87,8 +92,9 @@ new SuperDoc({
 <ParamField path="role" type="string" default="'editor'">
   User permission level
   <Expandable title="Available roles">
-    - `editor` - Full editing capabilities - `viewer` - Read-only access -
-    `suggester` - Can only suggest changes
+    - `editor` - Full editing capabilities
+    - `viewer` - Read-only access
+    - `suggester` - Can only suggest changes
   </Expandable>
   <Warning>Role overrides documentMode when more restrictive</Warning>
 </ParamField>
@@ -96,8 +102,9 @@ new SuperDoc({
 <ParamField path="documentMode" type="string" default="'editing'">
   Initial document mode
   <Expandable title="Document modes">
-    - `editing` - Normal editing - `viewing` - Read-only display - `suggesting`
-    - Track changes enabled
+    - `editing` - Normal editing
+    - `viewing` - Read-only display
+    - `suggesting` - Track changes enabled
   </Expandable>
 </ParamField>
 
@@ -143,7 +150,7 @@ new SuperDoc({
   Configure optional modules
 </ParamField>
 
-### Collaboration Module
+### Collaboration module
 
 <ParamField path="modules.collaboration" type="Object">
   Real-time collaboration settings
@@ -163,7 +170,7 @@ new SuperDoc({
   </Expandable>
 </ParamField>
 
-### Comments Module
+### Comments module
 
 <ParamField path="modules.comments" type="Object">
   Comments system configuration
@@ -183,7 +190,7 @@ new SuperDoc({
   </Expandable>
 </ParamField>
 
-### Toolbar Module
+### Toolbar module
 
 <ParamField path="modules.toolbar" type="Object">
   Toolbar configuration
@@ -227,11 +234,6 @@ new SuperDoc({
   <Note>Built-in palette provided by default</Note>
 </ParamField>
 
-<ParamField path="pagination" type="boolean" default="false">
-  Enable page-based layout
-  <Note>Consider using `viewOptions` for more control over document layout</Note>
-</ParamField>
-
 <ParamField path="viewOptions" type="Object">
   Document view options for controlling layout
   <Expandable title="properties" defaultOpen>
@@ -249,17 +251,11 @@ new SuperDoc({
 </ParamField>
 
 <ParamField path="layoutMode" type="string" deprecated>
-  <Warning>**Deprecated in v1.0** - Use `viewOptions.layout` instead.</Warning>
-
-  Legacy layout mode option from v0.x. Mapped values:
-  - `'paginated'` → `viewOptions: { layout: 'print' }`
-  - `'responsive'` → `viewOptions: { layout: 'web' }`
+  <Warning>**Removed in v1.0** — Use `viewOptions.layout` instead. `'paginated'` → `'print'`, `'responsive'` → `'web'`.</Warning>
 </ParamField>
 
 <ParamField path="layoutMargins" type="Object" deprecated>
-  <Warning>**Deprecated in v1.0** - No longer supported. Use CSS to control margins in web layout mode.</Warning>
-
-  Legacy margin configuration from v0.x.
+  <Warning>**Removed in v1.0** — Use CSS to control margins in web layout mode.</Warning>
 </ParamField>
 
 <ParamField path="rulers" type="boolean" default="false">
@@ -271,16 +267,11 @@ new SuperDoc({
   <Note>Alternative to `modules.toolbar.selector`</Note>
 </ParamField>
 
-## Advanced Options
+## Advanced options
 
 <ParamField path="editorExtensions" type="Extension[]" default="[]">
   Additional SuperDoc extensions
 </ParamField>
-
-<Note>
-  Learn how to create your own extensions
-  [here](/extensions/creating-extensions).
-</Note>
 
 <ParamField path="handleImageUpload" type="function">
   Custom image upload handler
@@ -299,19 +290,20 @@ new SuperDoc({
   ```
 </ParamField>
 
-<ParamField path="telemetry" type="Object">
-  Telemetry configuration
-  <Expandable title="properties">
-    <ParamField path="enabled" type="boolean">
-      Enable telemetry
-    </ParamField>
-    <ParamField path="licenseKey" type="string">
-      License key
-    </ParamField>
-    <ParamField path="endpoint" type="string">
-      Telemetry endpoint
-    </ParamField>
-  </Expandable>
+<ParamField path="telemetry" type="Object" deprecated>
+  <Warning>**Deprecated since v1.8** — This option is no longer supported and will be ignored.</Warning>
+</ParamField>
+
+<ParamField path="jsonOverride" type="Object">
+  Override document content with a JSON schema. Used to load documents from a previously exported JSON representation instead of a DOCX file.
+
+  ```javascript
+  jsonOverride: { type: 'doc', content: [...] }
+  ```
+</ParamField>
+
+<ParamField path="uiDisplayFallbackFont" type="string" default="'Arial, Helvetica, sans-serif'">
+  Font family used for all SuperDoc UI elements (toolbar, comments, etc.)
 </ParamField>
 
 <ParamField path="suppressDefaultDocxStyles" type="boolean" default="false">
@@ -326,7 +318,7 @@ new SuperDoc({
   Content Security Policy nonce
 </ParamField>
 
-## Event Handlers
+## Event handlers
 
 All handlers are optional functions in the configuration:
 
@@ -340,9 +332,13 @@ All handlers are optional functions in the configuration:
   ```
 </ParamField>
 
+<ParamField path="onEditorBeforeCreate" type="function">
+  Called before an editor is created
+</ParamField>
+
 <ParamField path="onEditorCreate" type="function">
   Called when editor is created
-  
+
   ```javascript
   onEditorCreate: ({ editor }) => {
     editor.focus();
@@ -356,6 +352,20 @@ All handlers are optional functions in the configuration:
   ```javascript
   onEditorUpdate: ({ editor }) => {
     autoSave(editor.getJSON());
+  }
+  ```
+</ParamField>
+
+<ParamField path="onSidebarToggle" type="function">
+  Called when the comments sidebar is toggled
+</ParamField>
+
+<ParamField path="onException" type="function">
+  Called when an error occurs
+
+  ```javascript
+  onException: ({ error }) => {
+    console.error('SuperDoc error:', error);
   }
   ```
 </ParamField>

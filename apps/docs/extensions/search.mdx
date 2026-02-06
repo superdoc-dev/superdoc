@@ -42,7 +42,16 @@ const regexMatches = editor.commands.search(/test/i)
 **Parameters:**
 
 <ParamField path="patternInput" type="String | RegExp" required>
-  Search string or pattern
+  Search string, regex, or regex shorthand (e.g., `'/pattern/flags'`)
+</ParamField>
+<ParamField path="options" type="Object">
+  Optional settings
+</ParamField>
+<ParamField path="options.highlight" type="boolean" default="true">
+  Apply CSS highlight classes to matches
+</ParamField>
+<ParamField path="options.maxMatches" type="number" default="1000">
+  Maximum number of matches to return
 </ParamField>
 
 ### `goToSearchResult`
@@ -88,7 +97,7 @@ Search match object
 </Expandable>
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

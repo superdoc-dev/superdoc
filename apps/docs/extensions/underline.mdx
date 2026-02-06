@@ -18,10 +18,14 @@ Configure the extension behavior:
 
 ## Attributes
 
-Node attributes that can be set and retrieved:
+Mark attributes that can be set and retrieved:
 
 <ParamField path="underlineType" type="UnderlineConfig" default="single">
   Style of underline
+</ParamField>
+
+<ParamField path="underlineColor" type="string">
+  Color of the underline (hex color value)
 </ParamField>
 
 ## Commands
@@ -62,7 +66,7 @@ editor.commands.toggleUnderline()
 
 **Returns:** `Function` Command
 
-## Keyboard Shortcuts
+## Keyboard shortcuts
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
@@ -82,7 +86,7 @@ Underline style configuration
 </Expandable>
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

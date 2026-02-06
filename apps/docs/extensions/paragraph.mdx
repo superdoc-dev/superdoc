@@ -8,60 +8,51 @@ import Description from '/snippets/extensions/paragraph.mdx'
 
 <Description />
 
-## Options
+## Commands
 
-Configure the extension behavior:
+### `toggleBulletList`
 
-<ParamField path="headingLevels" type="Array<number>" default="[1,2,3,4,5,6]">
-  Supported heading levels
-</ParamField>
+Convert selected paragraphs to a bullet list, or remove list formatting if already a bullet list.
 
-<ParamField path="htmlAttributes" type="Object" default="{}">
-  HTML attributes for paragraph elements
-</ParamField>
+```javascript
+editor.commands.toggleBulletList()
+```
 
-## Attributes
+### `toggleOrderedList`
 
-Node attributes that can be set and retrieved:
+Convert selected paragraphs to an ordered list, or remove list formatting if already an ordered list.
 
-<ParamField path="spacing" type="Object">
-  Paragraph spacing configuration
-</ParamField>
+```javascript
+editor.commands.toggleOrderedList()
+```
 
-<ParamField path="extraAttrs" type="Object" default="{}">
-  Additional HTML attributes
-</ParamField>
+### `restartNumbering`
 
-<ParamField path="marksAttrs" type="Array">
-  Text formatting marks
-</ParamField>
+Reset list numbering for the current list item and following items.
 
-<ParamField path="indent" type="Object">
-  Indentation settings
-</ParamField>
+```javascript
+editor.commands.restartNumbering()
+```
 
-<ParamField path="borders" type="Object">
-  Paragraph borders
-</ParamField>
+## Keyboard shortcuts
 
-<ParamField path="class" type="string">
-  CSS class name
-</ParamField>
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleOrderedList() | `Mod-Shift-7` | Toggle ordered list |
+| toggleBulletList() | `Mod-Shift-8` | Toggle bullet list |
+| (split paragraph) | `Enter` | Split paragraph at cursor |
+| (line break) | `Shift-Enter` | Insert line break without list properties |
+| (indent) | `Tab` | Increase list indent level |
+| (outdent) | `Shift-Tab` | Decrease list indent level |
 
-<ParamField path="styleId" type="string">
-  Linked style identifier
-</ParamField>
+## Input rules
 
-<ParamField path="justify" type="Object">
-  Text justification
-</ParamField>
+| Trigger | Result |
+|---------|--------|
+| `- `, `+ `, or `* ` at line start | Create bullet list |
+| `1. ` (or any number) at line start | Create ordered list |
 
-<ParamField path="tabStops" type="Array">
-  Tab stop positions
-</ParamField>
-
-
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

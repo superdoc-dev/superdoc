@@ -85,7 +85,7 @@ provider.on("synced", () => {
 });
 ```
 
-## React Example
+## React example
 
 ```tsx
 import { useEffect, useRef, useState } from "react";
@@ -144,9 +144,9 @@ export default function Editor() {
 }
 ```
 
-## Server Configuration
+## Server configuration
 
-### Basic Options
+### Basic options
 
 ```typescript
 Server.configure({
@@ -169,7 +169,7 @@ Server.configure({
 | `onConnect`       | Handle new connections     |
 | `onDisconnect`    | Handle disconnections      |
 
-### Persistence Example
+### Persistence example
 
 ```typescript
 import { Server } from "@hocuspocus/server";
@@ -190,7 +190,7 @@ const server = Server.configure({
 });
 ```
 
-## Provider Options
+## Provider options
 
 ```typescript
 const provider = new HocuspocusProvider({
@@ -209,7 +209,7 @@ const provider = new HocuspocusProvider({
 
 ## Events
 
-### Provider Events
+### Provider events
 
 ```typescript
 // Sync status
@@ -228,7 +228,7 @@ provider.on("authenticationFailed", ({ reason }) => {
 });
 ```
 
-## Production Deployment
+## Production deployment
 
 ### Docker
 
@@ -245,7 +245,7 @@ EXPOSE 1234
 CMD ["node", "server.js"]
 ```
 
-### With Redis (Scaling)
+### With Redis (scaling)
 
 ```typescript
 import { Server } from "@hocuspocus/server";
@@ -275,21 +275,21 @@ Server.configure({
   <Card
     title="Working Example"
     icon="github"
-    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/hocuspocus"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/collaboration/hocuspocus"
   >
     Complete source code
   </Card>
 </CardGroup>
 
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
   <Card
     title="SuperDoc Yjs"
     icon="rocket"
-    href="/modules/collaboration/self-hosted/superdoc-yjs"
+    href="/guides/collaboration/superdoc-yjs"
   >
-    Try our official collaboration package
+    Try the official collaboration package
   </Card>
 
   <Card

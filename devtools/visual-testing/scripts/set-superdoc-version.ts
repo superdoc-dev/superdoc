@@ -6,7 +6,7 @@
  * Usage:
  *   pnpm version <version>           # npm version (e.g., 1.4.0, 1.4.0-next.3)
  *   pnpm version <path>              # Local path (directory or tarball, already built/packed)
- *   pnpm version local               # Use workspace superdoc (monorepo)
+ *   pnpm version local               # Build + pack local repo superdoc, install tarball
  *   pnpm version ~/dev/superdoc      # Monorepo root (auto-finds packages/superdoc)
  *
  * Examples:
@@ -57,6 +57,49 @@ export interface ResolveOptions {
 
 const WORKSPACE_SPECIFIERS = new Set(['local', 'workspace']);
 
+function findRepoRoot(startDir: string): string | null {
+  let current = path.resolve(startDir);
+  while (true) {
+    const candidate = path.join(current, 'packages', 'superdoc', 'package.json');
+    if (fs.existsSync(candidate)) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
+
+function packLocalSuperdoc(): { tarballPath: string; superdocDir: string } {
+  const repoRoot = findRepoRoot(rootDir);
+  if (!repoRoot) {
+    throw new Error('Could not find repo root with packages/superdoc. Use a path or npm version instead.');
+  }
+  const superdocDir = path.join(repoRoot, 'packages', 'superdoc');
+  console.log(colors.info(`Packing local superdoc from ${superdocDir}...`));
+  const packResult = spawnSync('pnpm', ['--dir', superdocDir, 'run', 'pack:es'], {
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      PNPM_LOG_LEVEL: 'error',
+      NPM_CONFIG_LOGLEVEL: 'error',
+    },
+  });
+  if (packResult.error) {
+    throw new Error(`pnpm pack failed: ${packResult.error.message}`);
+  }
+  if (packResult.status !== 0) {
+    throw new Error(`pnpm pack exited with code ${packResult.status}`);
+  }
+  const tarballPath = path.join(superdocDir, 'superdoc.tgz');
+  if (!fs.existsSync(tarballPath)) {
+    throw new Error(`Expected tarball not found at ${tarballPath}`);
+  }
+  return { tarballPath, superdocDir };
+}
+
 /**
  * Convert a path to POSIX format (forward slashes).
  */
@@ -87,14 +130,6 @@ export function resolveSpecifier(input: string, options: ResolveOptions = {}): R
   const _harnessDir = options.harnessDir || harnessDir;
   const _fs = options.deps?.fs || fs;
   const normalizedInput = input.toLowerCase();
-
-  if (WORKSPACE_SPECIFIERS.has(normalizedInput)) {
-    return {
-      specifier: 'workspace:*',
-      isFile: false,
-      installPath: null,
-    };
-  }
 
   const resolvedPath = path.resolve(_rootDir, input);
   // Handle explicit file: prefix
@@ -188,7 +223,25 @@ function main(): void {
     pkg.dependencies = {};
   }
 
-  const result = resolveSpecifier(input);
+  const normalizedInput = input.toLowerCase();
+  let result: ResolveResult;
+  if (WORKSPACE_SPECIFIERS.has(normalizedInput)) {
+    try {
+      const { tarballPath, superdocDir } = packLocalSuperdoc();
+      const relativeTarballPath = path.relative(harnessDir, tarballPath) || '.';
+      result = {
+        specifier: `file:${toPosixPath(relativeTarballPath)}`,
+        isFile: true,
+        installPath: superdocDir,
+      };
+      console.log(colors.success(`Packed local tarball: ${tarballPath}`));
+    } catch (error) {
+      console.error(colors.error(error instanceof Error ? error.message : String(error)));
+      process.exit(1);
+    }
+  } else {
+    result = resolveSpecifier(input);
+  }
 
   if (result.error) {
     console.error(colors.error(result.error));

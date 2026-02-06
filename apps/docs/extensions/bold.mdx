@@ -8,23 +8,33 @@ import Description from '/snippets/extensions/bold.mdx'
 
 <Description />
 
-## Options
+## Commands
 
-Configure the extension behavior:
+### `setBold`
 
-<ParamField path="htmlAttributes" type="Object">
-  HTML attributes for the strong element
-</ParamField>
+Apply bold formatting to the current selection.
 
-## Attributes
+```javascript
+editor.commands.setBold()
+```
 
-Node attributes that can be set and retrieved:
+### `unsetBold`
 
-<ParamField path="value" type="string">
-  Bold weight value ('0' renders as normal)
-</ParamField>
+Remove bold formatting from the current selection.
 
-## Keyboard Shortcuts
+```javascript
+editor.commands.unsetBold()
+```
+
+### `toggleBold`
+
+Toggle bold formatting on the current selection.
+
+```javascript
+editor.commands.toggleBold()
+```
+
+## Keyboard shortcuts
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
@@ -32,7 +42,7 @@ Node attributes that can be set and retrieved:
 | toggleBold() | `⌘/Ctrl-B` | Toggle bold formatting (uppercase) |
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

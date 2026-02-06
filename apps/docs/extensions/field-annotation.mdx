@@ -5,7 +5,7 @@ description: "Interactive form fields for documents. It can be used when variabl
 
 <Note>Available since v0.10.0</Note>
 
-<Warning>Field Annotation use is not recommended because of its limited support for advanced document content (e.g., tables, advanced styling). We instead recommend using the more versatile [Structured Content Fields](/extensions/structured-content).</Warning>
+<Warning>Field Annotation use is not recommended because of its limited support for advanced document content (e.g., tables, advanced styling). Use the more versatile [Structured Content Fields](/extensions/structured-content).</Warning>
 
 ## Configuration
 
@@ -13,16 +13,12 @@ description: "Interactive form fields for documents. It can be used when variabl
   Handle drops outside editor viewport
 </ParamField>
 
-<ParamField path="annotationClass" type="string" default="'field-annotation'">
+<ParamField path="annotationClass" type="string" default="'annotation'">
   CSS class for field styling
 </ParamField>
 
-<ParamField path="defaultColor" type="string" default="'#980043'">
-  Default field background color
-</ParamField>
-
-<ParamField path="maxAnnotations" type="number" default="1000">
-  Maximum annotations per document
+<ParamField path="borderColor" type="string" default="'#b015b3'">
+  Default field border color
 </ParamField>
 
 
@@ -291,7 +287,8 @@ headerFooterAnnotations.forEach(({ node, pos }) => {
 Get all field annotations in the document
 
 ```javascript
-import { getAllFieldAnnotations } from './fieldAnnotationHelpers';
+import { fieldAnnotationHelpers } from 'superdoc';
+const { getAllFieldAnnotations } = fieldAnnotationHelpers;
 
 const annotations = getAllFieldAnnotations(editor.state);
 console.log(`Document contains ${annotations.length} field annotations`);

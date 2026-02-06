@@ -8,15 +8,33 @@ import Description from '/snippets/extensions/italic.mdx'
 
 <Description />
 
-## Options
+## Commands
 
-Configure the extension behavior:
+### `setItalic`
 
-<ParamField path="htmlAttributes" type="Object" default="{}">
-  HTML attributes for italic elements
-</ParamField>
+Apply italic formatting to the current selection.
 
-## Keyboard Shortcuts
+```javascript
+editor.commands.setItalic()
+```
+
+### `unsetItalic`
+
+Remove italic formatting from the current selection.
+
+```javascript
+editor.commands.unsetItalic()
+```
+
+### `toggleItalic`
+
+Toggle italic formatting on the current selection.
+
+```javascript
+editor.commands.toggleItalic()
+```
+
+## Keyboard shortcuts
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
@@ -24,7 +42,7 @@ Configure the extension behavior:
 | toggleItalic() | `⌘/Ctrl-I` | Toggle italic formatting (uppercase) |
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

@@ -26,7 +26,7 @@ This works, but:
 - Requires understanding ProseMirror internals
 - Tightly coupled to the editor implementation
 
-## What's Coming
+## What's coming
 
 The Document API provides a stable, high-level interface:
 
@@ -53,9 +53,9 @@ doc.replace(paragraphs[0], { text: 'New content' });
   </Card>
 </CardGroup>
 
-## Feature Preview
+## Feature preview
 
-### Querying Content
+### Querying content
 
 Find any content in your document:
 
@@ -76,7 +76,7 @@ const signatures = doc.query({
 });
 ```
 
-### Making Changes
+### Making changes
 
 Modify documents with a clean API:
 
@@ -91,7 +91,7 @@ doc.insert(address, { type: 'paragraph', text: 'New paragraph' });
 doc.delete(address);
 ```
 
-### Working with Tables
+### Working with tables
 
 First-class table operations:
 
@@ -117,9 +117,9 @@ doc.table(tableAddress).cell(1, 2).replace({ text: 'New value' });
   </Step>
 </Steps>
 
-## Stay Updated
+## Stay updated
 
-Join our Discord to get notified when Document API launches:
+Join Discord to get notified when Document API launches:
 
 <Card title="Join Discord" icon="discord" href="https://discord.com/invite/b9UuaZRyaB">
   Get early access and share feedback

@@ -5,7 +5,7 @@ keywords: "superdoc methods, document api methods, editor functions, word docume
 
 Methods are functions you call on the SuperDoc instance to perform actions.
 
-## Document Operations
+## Document operations
 
 ### `export`
 
@@ -13,7 +13,7 @@ Export the document with various options.
 
 <ParamField path="options" type="Object">
   Export configuration
-  
+
   <Expandable title="properties" defaultOpen>
     <ParamField path="exportType" type="string[]" default="['docx']">
       Export formats
@@ -61,7 +61,7 @@ Get HTML content of all editors.
 
 <ParamField path="options" type="Object">
   HTML options
-  
+
   <Expandable title="properties">
     <ParamField path="unflattenLists" type="boolean" default="false">
       Preserve nested list structure
@@ -75,7 +75,7 @@ Get HTML content of all editors.
 const htmlArray = superdoc.getHTML();
 ```
 
-## Mode Control
+## Mode control
 
 ### `setDocumentMode`
 
@@ -83,7 +83,7 @@ Change the document mode.
 
 <ParamField path="mode" type="string" required>
   New document mode
-  
+
   <Expandable title="Available modes">
     - `'viewing'` - Read-only
     - `'suggesting'` - Track changes
@@ -123,7 +123,50 @@ Enable/disable high contrast mode.
 superdoc.setHighContrastMode(true);
 ```
 
-## UI Methods
+## UI methods
+
+### `setActiveEditor`
+
+Set which editor is currently active. Useful when working with multiple documents.
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance to set as active
+</ParamField>
+
+```javascript
+superdoc.setActiveEditor(editor);
+```
+
+### `setDisableContextMenu`
+
+Toggle the custom context menu at runtime.
+
+<ParamField path="disabled" type="boolean" default="true">
+  Whether to disable the context menu
+</ParamField>
+
+```javascript
+superdoc.setDisableContextMenu(true);
+```
+
+### `setTrackedChangesPreferences`
+
+Override how tracked changes are rendered in the layout engine.
+
+<ParamField path="preferences" type="Object">
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="mode" type="string">
+      Rendering mode: `'review'`, `'original'`, `'final'`, or `'off'`
+    </ParamField>
+    <ParamField path="enabled" type="boolean">
+      Whether tracked change metadata is included
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```javascript
+superdoc.setTrackedChangesPreferences({ mode: 'final' });
+```
 
 ### `toggleRuler`
 
@@ -133,13 +176,11 @@ Toggle ruler visibility.
 superdoc.toggleRuler();
 ```
 
-### `togglePagination`
+<ParamField path="togglePagination" type="string" deprecated>
 
-Toggle pagination mode.
+<Warning>**Removed in v1.0** — Pagination is now handled by the layout engine. Use `viewOptions.layout` in [configuration](/core/superdoc/configuration) instead.</Warning>
 
-```javascript
-superdoc.togglePagination();
-```
+</ParamField>
 
 ### `focus`
 
@@ -149,7 +190,7 @@ Focus the active editor or first available.
 superdoc.focus();
 ```
 
-## Search Methods
+## Search methods
 
 ### `search`
 
@@ -178,7 +219,7 @@ Navigate to a search result.
 superdoc.goToSearchResult(results[0]);
 ```
 
-## Comments Methods
+## Comments methods
 
 ### `addCommentsList`
 
@@ -200,7 +241,7 @@ Remove the comments list.
 superdoc.removeCommentsList();
 ```
 
-## User Management
+## User management
 
 ### `addSharedUser`
 
@@ -208,7 +249,7 @@ Add a user to the shared users list.
 
 <ParamField path="user" type="User" required>
   User to add
-  
+
   <Expandable title="User properties">
     <ParamField path="name" type="string" required>
       Display name
@@ -238,7 +279,7 @@ Remove a user from shared users.
 superdoc.removeSharedUser('jane@example.com');
 ```
 
-## Lifecycle Methods
+## Lifecycle
 
 ### `destroy`
 
@@ -250,19 +291,11 @@ Completely destroy the SuperDoc instance.
 superdoc.destroy();
 ```
 
-## Event Methods
+## Event methods
 
 ### `on`
 
 Subscribe to an event.
-
-<ParamField path="event" type="string" required>
-  Event name
-</ParamField>
-
-<ParamField path="handler" type="function" required>
-  Event handler
-</ParamField>
 
 ```javascript
 superdoc.on('ready', ({ superdoc }) => {
@@ -274,14 +307,6 @@ superdoc.on('ready', ({ superdoc }) => {
 
 Subscribe to an event once.
 
-<ParamField path="event" type="string" required>
-  Event name
-</ParamField>
-
-<ParamField path="handler" type="function" required>
-  Event handler
-</ParamField>
-
 ```javascript
 superdoc.once('ready', () => {
   // Only called once
@@ -292,43 +317,74 @@ superdoc.once('ready', () => {
 
 Unsubscribe from an event.
 
-<ParamField path="event" type="string" required>
-  Event name
-</ParamField>
-
-<ParamField path="handler" type="function" required>
-  Handler to remove
-</ParamField>
-
 ```javascript
 superdoc.off('ready', handler);
 ```
 
-## Method Patterns
+## Schema introspection
 
-### Async Operations
+### `getSchemaIntrospection`
+
+Returns a JSON schema summary with all nodes, marks, and their attributes. Useful for AI agents that need schema context.
 
 ```javascript
-async function exportDocument() {
-  try {
-    const blob = await superdoc.export({
-      isFinalDoc: true
-    });
-    saveToFile(blob);
-  } catch (error) {
-    console.error('Export failed:', error);
-  }
+import { getSchemaIntrospection } from 'superdoc';
+
+const schema = await getSchemaIntrospection({ mode: 'docx' });
+// Returns: { version, nodes: [...], marks: [...] }
+```
+
+<ParamField path="options" type="Object">
+  <Expandable title="properties">
+    <ParamField path="editor" type="Editor">
+      Existing Editor instance to introspect. If provided, uses this instead of creating a temporary editor.
+    </ParamField>
+    <ParamField path="extensions" type="Array">
+      Custom extensions to use when building the schema.
+    </ParamField>
+    <ParamField path="mode" type="string" default="'docx'">
+      Editor mode: `'docx'`, `'html'`, or `'text'`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## TypeScript types
+
+SuperDoc exports TypeScript interfaces for all node and mark types:
+
+```typescript
+import type { NodeName, NodeAttrs, ParagraphAttrs } from 'superdoc/types';
+
+// NodeName shows all 39 node types in autocomplete
+type Test = NodeAttrs<'paragraph'>; // Resolves to ParagraphAttrs
+```
+
+Available types: `NodeName`, `NodeAttrs<N>`, `MarkName`, `MarkAttrs<M>`, and specific interfaces like `ParagraphAttrs`, `TableAttrs`, `ImageAttrs`, etc.
+
+## Properties
+
+### `activeEditor`
+
+Currently active editor instance. Returns `null` before the `ready` event.
+
+```javascript
+if (superdoc.activeEditor) {
+  superdoc.activeEditor.commands.toggleBold();
 }
 ```
 
-### Waiting for Ready
+<Warning>Always check for `null` before accessing.</Warning>
 
-<Note>Some methods require SuperDoc to be ready</Note>
-
-```javascript
-superdoc.once('ready', () => {
-  // Now safe to use all methods
-  superdoc.search('term');
-  superdoc.setDocumentMode('suggesting');
-});
-```
+| Property | Type | Description |
+|---|---|---|
+| `superdocId` | `string` | Unique identifier for this instance |
+| `version` | `string` | SuperDoc version number |
+| `activeEditor` | `Editor \| null` | Currently active editor |
+| `element` | `HTMLElement \| null` | Container DOM element |
+| `state` | `{ documents, users }` | Current state snapshot |
+| `isLocked` | `boolean` | Whether the document is locked |
+| `lockedBy` | `User \| null` | User who locked the document |
+| `isCollaborative` | `boolean` | Whether collaboration is enabled |
+| `user` | `User` | Current user information |
+| `users` | `User[]` | All users with document access |
+| `toolbar` | `Toolbar \| null` | Toolbar instance if configured |

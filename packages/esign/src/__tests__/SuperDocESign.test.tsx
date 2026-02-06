@@ -8,7 +8,12 @@ import SuperDocESign from '../index';
 import type { FieldComponentProps, SuperDocESignHandle, SuperDocESignProps, AuditEvent } from '../types';
 
 import { SuperDoc } from 'superdoc';
-import { getAuditEventTypes, resetAuditEvents } from '../test/setup';
+import {
+  getAuditEventTypes,
+  resetAuditEvents,
+  getLastConstructorOptions,
+  resetLastConstructorOptions,
+} from '../test/setup';
 
 const scrollListeners = new WeakMap<HTMLElement, EventListener>();
 const originalAddEventListener = HTMLElement.prototype.addEventListener;
@@ -144,6 +149,7 @@ beforeEach(() => {
   superDocMock.mockGetStructuredContentTablesById.mockReturnValue([]);
   superDocMock.mockDestroy.mockReset();
   resetAuditEvents();
+  resetLastConstructorOptions();
 });
 
 describe('SuperDocESign component', () => {
@@ -722,6 +728,93 @@ describe('SuperDocESign component', () => {
         { id: 'table-3', type: 'table', value: [['Table Value 1'], ['Table Value 2']] },
         { id: 'text-field', value: 'Text Value' },
       ]);
+    });
+  });
+
+  describe('viewOptions configuration', () => {
+    it('passes viewOptions directly to SuperDoc when provided', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Test</p>',
+          viewOptions: { layout: 'web' },
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.viewOptions).toEqual({ layout: 'web' });
+    });
+
+    it('translates layoutMode "responsive" to viewOptions layout "web"', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Test</p>',
+          layoutMode: 'responsive',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.viewOptions).toEqual({ layout: 'web' });
+    });
+
+    it('translates layoutMode "paginated" to viewOptions layout "print"', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Test</p>',
+          layoutMode: 'paginated',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.viewOptions).toEqual({ layout: 'print' });
+    });
+
+    it('defaults to viewOptions layout "print" when neither viewOptions nor layoutMode is specified', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Test</p>',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.viewOptions).toEqual({ layout: 'print' });
+    });
+
+    it('prefers viewOptions over deprecated layoutMode when both are provided', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Test</p>',
+          viewOptions: { layout: 'print' },
+          layoutMode: 'responsive',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.viewOptions).toEqual({ layout: 'print' });
+    });
+
+    it('falls back to layoutMode when viewOptions is empty object', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Test</p>',
+          viewOptions: {},
+          layoutMode: 'responsive',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.viewOptions).toEqual({ layout: 'web' });
     });
   });
 });

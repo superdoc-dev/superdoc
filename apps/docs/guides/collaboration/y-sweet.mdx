@@ -20,7 +20,7 @@ flowchart LR
 
 ## Setup
 
-### 1. Start Y-Sweet Server
+### 1. Start Y-Sweet server
 
 The easiest way to run Y-Sweet locally:
 
@@ -34,7 +34,7 @@ To persist data to disk:
 npx y-sweet@latest serve ./data
 ```
 
-### 2. Create Auth Server
+### 2. Create auth server
 
 Y-Sweet requires a backend to issue authentication tokens.
 
@@ -73,7 +73,7 @@ app.listen(PORT, () => {
 });
 ```
 
-### 3. Client Setup
+### 3. Client setup
 
 ```bash
 npm install @y-sweet/client yjs
@@ -107,7 +107,7 @@ provider.on("sync", (synced) => {
 });
 ```
 
-## React Example
+## React example
 
 ```tsx
 import { useEffect, useRef, useState } from "react";
@@ -169,7 +169,7 @@ export default function Editor() {
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 **Auth Server:**
 
@@ -210,7 +210,7 @@ provider.destroy();
 superdoc.destroy();
 ```
 
-## Production Deployment
+## Production deployment
 
 ### Docker
 
@@ -227,7 +227,7 @@ EXPOSE 3001
 CMD ["node", "server.js"]
 ```
 
-### Running Y-Sweet in Production
+### Running Y-Sweet in production
 
 For production, consider:
 
@@ -248,13 +248,13 @@ For production, consider:
   <Card
     title="Working Example"
     icon="github"
-    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/y-sweet"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/collaboration/y-sweet"
   >
     Complete source code
   </Card>
 </CardGroup>
 
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
   <Card
@@ -268,7 +268,7 @@ For production, consider:
   <Card
     title="Cloud Providers"
     icon="cloud"
-    href="/modules/collaboration/cloud/liveblocks"
+    href="/guides/collaboration/liveblocks"
   >
     Managed collaboration solutions
   </Card>

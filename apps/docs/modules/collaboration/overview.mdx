@@ -13,31 +13,16 @@ Enable multiple users to edit the same document simultaneously with real-time co
   style={{ zoom: 0.7, height: "510px" }}
 />
 
-<CardGroup cols={2}>
-  <Card title="Real-time Sync" icon="refresh-cw">
-    Changes appear instantly for all connected users
-  </Card>
-  <Card title="Conflict Resolution" icon="git-merge">
-    CRDTs automatically merge concurrent edits
-  </Card>
-  <Card title="Offline Support" icon="wifi-off">
-    Continue editing offline, sync when reconnected
-  </Card>
-  <Card title="User Awareness" icon="users">
-    See who's online with cursors and selections
-  </Card>
-</CardGroup>
-
-## Choose Your Approach
+## Choose your approach
 
 <Tabs>
   <Tab title="Cloud Providers">
-    No server to manage - get started in 5 minutes.
+    No server to manage — get started in minutes.
 
     | Provider | Best For | Pricing |
     |----------|----------|---------|
-    | [Liveblocks](/modules/collaboration/cloud/liveblocks) | Quick start, any framework | Free tier available |
-    | [TipTap Cloud](/modules/collaboration/cloud/tiptap-cloud) | TipTap Pro users | Requires subscription |
+    | [Liveblocks](/guides/collaboration/liveblocks) | Quick start, any framework | Free tier available |
+    | [TipTap Cloud](/guides/collaboration/tiptap-cloud) | TipTap Pro users | Requires subscription |
 
   </Tab>
 
@@ -46,14 +31,14 @@ Enable multiple users to edit the same document simultaneously with real-time co
 
     | Option | Best For |
     |--------|----------|
-    | [SuperDoc Yjs](/modules/collaboration/self-hosted/superdoc-yjs) | Recommended - our official package |
-    | [Hocuspocus](/modules/collaboration/self-hosted/hocuspocus) | TipTap ecosystem users |
-    | [Y-Sweet](/modules/collaboration/self-hosted/y-sweet) | High performance, easy deployment |
+    | [SuperDoc Yjs](/guides/collaboration/superdoc-yjs) | Recommended — the official package |
+    | [Hocuspocus](/guides/collaboration/hocuspocus) | TipTap ecosystem users |
+    | [Y-Sweet](/guides/collaboration/y-sweet) | High performance, easy deployment |
 
   </Tab>
 </Tabs>
 
-## Quick Start
+## Quick start
 
 Get collaboration working in 5 minutes with Liveblocks:
 
@@ -67,15 +52,11 @@ import { LiveblocksYjsProvider } from "@liveblocks/yjs";
 import * as Y from "yjs";
 import { SuperDoc } from "superdoc";
 
-// 1. Create Liveblocks client
 const client = createClient({ publicApiKey: "pk_..." });
-
-// 2. Enter a room and create Yjs provider
 const { room } = client.enterRoom("my-document");
 const ydoc = new Y.Doc();
 const provider = new LiveblocksYjsProvider(room, ydoc);
 
-// 3. Wait for sync, then create SuperDoc
 provider.on("sync", (synced) => {
   if (!synced) return;
 
@@ -89,63 +70,4 @@ provider.on("sync", (synced) => {
 });
 ```
 
-<Card
-  title="Full Quickstart Guide"
-  icon="rocket"
-  href="/modules/collaboration/quickstart"
->
-  Step-by-step setup with complete working example
-</Card>
-
-## How It Works
-
-SuperDoc uses [Yjs](https://docs.yjs.dev/), a CRDT (Conflict-free Replicated Data Type) library, to enable real-time collaboration. This means:
-
-1. **No central server required** for conflict resolution
-2. **Changes merge automatically** - no data loss
-3. **Works with any Yjs provider** - cloud or self-hosted
-
-```mermaid
-flowchart LR
-    A[User A<br/>SuperDoc] <--> P[Provider<br/>Yjs sync]
-    P <--> B[User B<br/>SuperDoc]
-    P --> D[(Persistence<br/>optional)]
-```
-
-## Next Steps
-
-<CardGroup cols={2}>
-  <Card
-    title="5-Minute Quickstart"
-    icon="rocket"
-    href="/modules/collaboration/quickstart"
-  >
-    Get collaboration working fast with Liveblocks
-  </Card>
-
-{" "}
-<Card
-  title="Liveblocks Guide"
-  icon="cloud"
-  href="/modules/collaboration/cloud/liveblocks"
->
-  Cloud-hosted collaboration with free tier
-</Card>
-
-{" "}
-<Card
-  title="Self-Hosted"
-  icon="server"
-  href="/modules/collaboration/self-hosted/overview"
->
-  Full control with your own infrastructure
-</Card>
-
-  <Card
-    title="Client Configuration"
-    icon="settings"
-    href="/modules/collaboration/configuration"
-  >
-    All configuration options and events
-  </Card>
-</CardGroup>
+See the [full quickstart guide](/modules/collaboration/quickstart) for framework-specific examples (React, Vue, Vanilla JS).

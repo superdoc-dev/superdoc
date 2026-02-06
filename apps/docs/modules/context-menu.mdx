@@ -1,0 +1,225 @@
+---
+title: Context Menu
+keywords: "context menu, slash menu, right-click menu, custom commands, slash commands"
+---
+
+A contextual command menu triggered by typing `/` or right-clicking. Shows relevant actions based on cursor position and document state.
+
+## Quick start
+
+The context menu is **enabled by default**. Type `/` at the start of a paragraph or right-click anywhere in the document.
+
+To disable it:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  disableContextMenu: true
+});
+```
+
+## Configuration
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  modules: {
+    slashMenu: {
+      includeDefaultItems: true,
+      customItems: [],
+      menuProvider: null
+    }
+  }
+});
+```
+
+<ParamField path="disableContextMenu" type="boolean" default="false">
+  Top-level option to disable the context menu entirely
+</ParamField>
+
+<ParamField path="modules.slashMenu.includeDefaultItems" type="boolean" default="true">
+  Whether to include the built-in menu items
+</ParamField>
+
+<ParamField path="modules.slashMenu.customItems" type="Array" default="[]">
+  Custom menu sections to add or merge. See [Custom Items](#custom-items).
+</ParamField>
+
+<ParamField path="modules.slashMenu.menuProvider" type="function">
+  Advanced: function to fully control menu contents. See [Menu Provider](#menu-provider).
+</ParamField>
+
+## Triggers
+
+The menu opens in two ways:
+
+| Trigger | How | Behavior |
+|---|---|---|
+| **Slash** | Type `/` in an empty paragraph or after a space | Opens at cursor position |
+| **Right-click** | Right-click anywhere in the document | Opens at click position |
+
+<Note>
+After using the slash trigger, there's a 5-second cooldown before `/` triggers the menu again. During cooldown, `/` types normally.
+</Note>
+
+## Default items
+
+Items shown depend on the trigger type and document context.
+
+### Slash Trigger (`/`)
+
+| Item | Section | Condition |
+|---|---|---|
+| Insert table | `general` | Not inside a table |
+| Edit table | `general` | Inside a table |
+| Paste | `clipboard` | Always |
+
+### Right-click trigger
+
+| Item | Section | Condition |
+|---|---|---|
+| Accept change | `track-changes` | On a tracked change |
+| Reject change | `track-changes` | On a tracked change |
+| Insert link | `general` | Always |
+| Insert table | `general` | Not inside a table |
+| Edit table | `general` | Inside a table |
+| Cut | `clipboard` | Text selected |
+| Copy | `clipboard` | Text selected |
+| Paste | `clipboard` | Always |
+
+## Custom items
+
+Add custom items by defining sections in `customItems`. Each section has an `id` and an array of `items`.
+
+```javascript
+modules: {
+  slashMenu: {
+    customItems: [{
+      id: 'my-actions',
+      items: [
+        {
+          id: 'insert-signature',
+          label: 'Insert Signature',
+          icon: '<svg>...</svg>',
+          action: (editor, context) => {
+            editor.commands.insertContent('— Signed');
+          },
+          showWhen: (context) => {
+            return context.trigger === 'click';
+          }
+        }
+      ]
+    }]
+  }
+}
+```
+
+### Item properties
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the item
+</ParamField>
+
+<ParamField path="label" type="string" required>
+  Display text shown in the menu
+</ParamField>
+
+<ParamField path="icon" type="string">
+  SVG string for the item icon
+</ParamField>
+
+<ParamField path="action" type="function">
+  Handler called when the item is clicked. Receives `(editor, context)`.
+</ParamField>
+
+<ParamField path="component" type="Component">
+  Vue component to render as a popover when the item is selected (e.g., a table grid picker)
+</ParamField>
+
+<ParamField path="showWhen" type="function">
+  Function that receives the [context object](#context-object) and returns `boolean`. Items without `showWhen` are always visible.
+</ParamField>
+
+<ParamField path="render" type="function">
+  Custom render function for the menu item. Receives the context and should return an `HTMLElement`.
+</ParamField>
+
+### Merging with default sections
+
+If a custom section has the same `id` as a default section, the items are merged:
+
+```javascript
+modules: {
+  slashMenu: {
+    customItems: [{
+      // Adds items to the existing 'general' section
+      id: 'general',
+      items: [{
+        id: 'insert-divider',
+        label: 'Insert Divider',
+        action: (editor) => {
+          editor.commands.setHorizontalRule();
+        }
+      }]
+    }]
+  }
+}
+```
+
+## Menu provider
+
+For full control over menu contents, use `menuProvider`. It receives the context and the computed sections array, and should return a new sections array.
+
+```javascript
+modules: {
+  slashMenu: {
+    menuProvider: (context, sections) => {
+      // Filter out clipboard section in editing mode
+      if (context.documentMode === 'editing') {
+        return sections.filter(s => s.id !== 'clipboard');
+      }
+      return sections;
+    }
+  }
+}
+```
+
+<Warning>
+`menuProvider` runs after default items and `customItems` are merged. If it returns `null` or `undefined`, the original sections are used.
+</Warning>
+
+## Context object
+
+Both `showWhen` and `menuProvider` receive a context object with the current editor state:
+
+| Property | Type | Description |
+|---|---|---|
+| `trigger` | `'slash' \| 'click'` | How the menu was opened |
+| `editor` | `Object` | The editor instance |
+| `selectedText` | `string` | Currently selected text |
+| `hasSelection` | `boolean` | Whether text is selected |
+| `selectionStart` | `number` | Selection start position |
+| `selectionEnd` | `number` | Selection end position |
+| `isInTable` | `boolean` | Cursor is inside a table |
+| `isInList` | `boolean` | Cursor is inside a list |
+| `isTrackedChange` | `boolean` | Cursor is on a tracked change |
+| `trackedChangeId` | `string \| null` | ID of the tracked change at cursor |
+| `documentMode` | `string` | Current mode (`'editing'`, `'viewing'`, `'suggesting'`) |
+| `currentNodeType` | `string \| null` | Type name of the node at cursor |
+| `activeMarks` | `string[]` | Active mark type names at cursor |
+| `isEditable` | `boolean` | Whether the editor is editable |
+| `clipboardContent` | `Object` | Clipboard state info |
+| `pos` | `number \| null` | Document position |
+| `node` | `Object \| null` | Node at cursor position |
+
+## Keyboard navigation
+
+When the menu is open:
+
+| Key | Action |
+|---|---|
+| `Arrow Down` | Move to next item |
+| `Arrow Up` | Move to previous item |
+| `Enter` | Execute selected item |
+| `Escape` | Close menu |
+| Type any text | Filter items by label |

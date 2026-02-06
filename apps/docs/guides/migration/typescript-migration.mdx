@@ -3,11 +3,11 @@ title: TypeScript Migration Guide
 sidebarTitle: "TypeScript Migration"
 ---
 
-# TypeScript Migration Guide
+# TypeScript migration guide
 
 This guide covers the gradual migration of the SuperDoc monorepo from JavaScript to TypeScript.
 
-## Quick Start
+## Quick start
 
 **Infrastructure is ready.** You can now:
 
@@ -19,7 +19,7 @@ This guide covers the gradual migration of the SuperDoc monorepo from JavaScript
 
 ---
 
-## When to Migrate a File
+## When to migrate a file
 
 Convert to TypeScript when:
 
@@ -32,9 +32,9 @@ Convert to TypeScript when:
 
 ---
 
-## How to Migrate
+## How to migrate
 
-### 1. Basic Function
+### 1. Basic function
 
 **Before** (`helper.js`):
 
@@ -52,7 +52,7 @@ export function formatDate(date: Date): string {
 }
 ```
 
-### 2. Vue Components
+### 2. Vue components
 
 **Before**:
 
@@ -109,7 +109,7 @@ function process(data: unknown) {
 
 ---
 
-## Type Checking
+## Type checking
 
 ### Package-specific (recommended)
 
@@ -127,11 +127,11 @@ npm run type-check
 
 ---
 
-## Common Issues
+## Common issues
 
 ### Type errors in JavaScript files
 
-Ensure `checkJs: false` in your tsconfig. We only type-check `.ts` files during migration.
+Ensure `checkJs: false` in your tsconfig. Only `.ts` files are type-checked during migration.
 
 ### Build fails after migrating a file
 
@@ -143,7 +143,7 @@ npm run clean:packages && npm run build
 
 ---
 
-## Migration Priority
+## Migration priority
 
 Suggested order:
 
@@ -163,9 +163,9 @@ Suggested order:
 
 ---
 
-## Advanced Patterns
+## Advanced patterns
 
-### ProseMirror Types
+### ProseMirror types
 
 ```typescript
 import { Node as PMNode, Mark } from 'prosemirror-model';
@@ -176,7 +176,7 @@ export function updateNodeAttrs(node: PMNode, attrs: Record<string, any>): PMNod
 }
 ```
 
-### Extension Pattern
+### Extension pattern
 
 ```typescript
 import { Extension } from '@core/Extension';
@@ -198,7 +198,7 @@ export class MyExtension extends Extension<MyExtensionOptions> {
 }
 ```
 
-### Discriminated Unions
+### Discriminated unions
 
 ```typescript
 type CommandResult = { success: true; data: any } | { success: false; error: string };

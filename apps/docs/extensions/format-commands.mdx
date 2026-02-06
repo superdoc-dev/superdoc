@@ -66,7 +66,27 @@ Works like format painter - first click copies, second click applies
 editor.commands.copyFormat()
 ```
 
-## Keyboard Shortcuts
+### `toggleMarkCascade`
+
+Toggle a mark type with cascade behavior, handling nested marks and negation attributes. Used internally by formatting extensions (bold, italic, etc.) but can be called directly for custom mark toggling.
+
+**Example:**
+
+```javascript
+editor.commands.toggleMarkCascade('bold')
+editor.commands.toggleMarkCascade('italic', { extendEmptyMarkRange: true })
+```
+
+**Parameters:**
+
+<ParamField path="markName" type="string" required>
+  Name of the mark type to toggle
+</ParamField>
+<ParamField path="options" type="Object">
+  Options with `negationAttrs`, `isNegation`, `styleDetector`, and `extendEmptyMarkRange`
+</ParamField>
+
+## Keyboard shortcuts
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
@@ -88,7 +108,7 @@ Stored format style
 </Expandable>
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

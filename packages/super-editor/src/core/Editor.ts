@@ -138,6 +138,9 @@ export interface SaveOptions {
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
+
+  /** ZIP compression method for docx export. Defaults to 'DEFLATE'. Use 'STORE' for faster exports without compression. */
+  compression?: 'DEFLATE' | 'STORE';
 }
 
 /**
@@ -191,18 +194,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Whether the editor instance has been destroyed.
    */
   #isDestroyed = false;
-
-  /**
-   * Monotonic counter for transaction performance logs.
-   */
-  #perfTxnId = 0;
-
-  /**
-   * Expose current performance transaction id for instrumentation.
-   */
-  getPerfTxnId(): number {
-    return this.#perfTxnId;
-  }
 
   /**
    * Editor lifecycle state.
@@ -2020,16 +2011,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
     if (this.isDestroyed) return;
     const perf = this.view?.dom?.ownerDocument?.defaultView?.performance ?? globalThis.performance;
     const perfNow = () => (perf?.now ? perf.now() : Date.now());
-    const perfId = ++this.#perfTxnId;
     const perfStart = perfNow();
 
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
-    let trackTime = 0;
-    let applyTime = 0;
     try {
-      const trackStart = perfNow();
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
@@ -2042,47 +2029,34 @@ export class Editor extends EventEmitter<EditorEventMap> {
               user: this.options.user!,
             })
           : transactionToApply;
-      trackTime = perfNow() - trackStart;
 
-      const applyStart = perfNow();
       const { state: appliedState } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
-      applyTime = perfNow() - applyStart;
     } catch (error) {
-      const applyStart = perfNow();
       // just in case
       nextState = prevState.apply(transactionToApply);
-      applyTime = perfNow() - applyStart;
       console.log(error);
     }
 
     const selectionHasChanged = !prevState.selection.eq(nextState.selection);
 
     this._state = nextState;
-    let updateStateTime = 0;
     if (this.view) {
-      const updateStateStart = perfNow();
       this.view.updateState(nextState);
-      updateStateTime = perfNow() - updateStateStart;
     }
 
     const end = perfNow();
-    const emitTransactionStart = perfNow();
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
       duration: end - perfStart,
     });
-    const emitTransactionTime = perfNow() - emitTransactionStart;
 
-    let selectionEmitTime = 0;
     if (selectionHasChanged) {
-      const selectionStart = perfNow();
       this.emit('selectionUpdate', {
         editor: this,
         transaction: transactionToApply,
       });
-      selectionEmitTime = perfNow() - selectionStart;
     }
 
     const focus = transactionToApply.getMeta('focus');
@@ -2103,7 +2077,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    let emitUpdateTime = 0;
     if (transactionToApply.docChanged) {
       // Track document modifications and promote to GUID if needed
       if (transaction.docChanged && this.converter) {
@@ -2114,20 +2087,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
         this.converter.documentModified = true;
       }
 
-      const emitUpdateStart = perfNow();
       this.emit('update', {
         editor: this,
         transaction: transactionToApply,
       });
-      emitUpdateTime = perfNow() - emitUpdateStart;
     }
-
-    const totalTime = perfNow() - perfStart;
-    const inputType = transactionToApply.getMeta('inputType');
-    const inputLabel = inputType ? ` input=${String(inputType)}` : '';
-    console.log(
-      `[Perf] dispatchTransaction#${perfId}: total=${totalTime.toFixed(2)}ms track=${trackTime.toFixed(2)}ms apply=${applyTime.toFixed(2)}ms updateState=${updateStateTime.toFixed(2)}ms emitTx=${emitTransactionTime.toFixed(2)}ms selection=${selectionEmitTime.toFixed(2)}ms emitUpdate=${emitUpdateTime.toFixed(2)}ms steps=${transactionToApply.steps.length} docChanged=${transactionToApply.docChanged}${inputLabel}`,
-    );
   }
 
   /**
@@ -2484,6 +2448,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments,
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
+    compression,
   }: {
     isFinalDoc?: boolean;
     commentsType?: string;
@@ -2492,6 +2457,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments?: Comment[];
     getUpdatedDocs?: boolean;
     fieldsHighlightColor?: string | null;
+    compression?: 'DEFLATE' | 'STORE';
   } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
@@ -2623,6 +2589,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media,
         fonts: this.options.fonts,
         isHeadless: this.options.isHeadless,
+        compression,
       });
 
       return result;
@@ -2893,6 +2860,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       commentsType: options?.commentsType,
       comments: options?.comments,
       fieldsHighlightColor: options?.fieldsHighlightColor,
+      compression: options?.compression,
     });
 
     return result as Blob | Buffer;

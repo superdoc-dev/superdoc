@@ -17,34 +17,40 @@ export const recordAuditEvent = (type: string, data?: Record<string, unknown>) =
 export const getAuditEventTypes = () => auditEvents.map((event) => event.type);
 
 if (typeof window !== 'undefined') {
-  (window as any).__SUPERDOC_AUDIT_MOCK__ = (event: {
-    type: string;
-    data?: Record<string, unknown>;
-  }) => {
+  (window as any).__SUPERDOC_AUDIT_MOCK__ = (event: { type: string; data?: Record<string, unknown> }) => {
     recordAuditEvent(event.type, event.data);
   };
 }
 
-vi.stubGlobal(
-  '__SUPERDOC_AUDIT_MOCK__',
-  (event: { type: string; data?: Record<string, unknown> }) => {
-    recordAuditEvent(event.type, event.data);
-  },
-);
+vi.stubGlobal('__SUPERDOC_AUDIT_MOCK__', (event: { type: string; data?: Record<string, unknown> }) => {
+  recordAuditEvent(event.type, event.data);
+});
+
+const mockAppendRowsToStructuredContentTable = vi.fn();
+const mockGetStructuredContentTablesById = vi.fn(() => []);
 
 const mockEditor = {
   commands: {
     updateStructuredContentById: mockUpdateStructuredContentById,
+    appendRowsToStructuredContentTable: mockAppendRowsToStructuredContentTable,
   },
   helpers: {
     structuredContentCommands: {
       getStructuredContentTags: mockGetStructuredContentTags,
+      getStructuredContentTablesById: mockGetStructuredContentTablesById,
     },
   },
   state: {},
+  view: {
+    dispatch: vi.fn(),
+  },
 };
 
+let lastConstructorOptions: any = null;
+
 const SuperDocMock = vi.fn((options: any = {}) => {
+  lastConstructorOptions = options;
+
   if (options?.onReady) {
     if (typeof queueMicrotask === 'function') {
       queueMicrotask(() => options.onReady());
@@ -60,9 +66,16 @@ const SuperDocMock = vi.fn((options: any = {}) => {
   };
 });
 
+export const getLastConstructorOptions = () => lastConstructorOptions;
+export const resetLastConstructorOptions = () => {
+  lastConstructorOptions = null;
+};
+
 (SuperDocMock as any).mockEditor = mockEditor;
 (SuperDocMock as any).mockUpdateStructuredContentById = mockUpdateStructuredContentById;
 (SuperDocMock as any).mockGetStructuredContentTags = mockGetStructuredContentTags;
+(SuperDocMock as any).mockAppendRowsToStructuredContentTable = mockAppendRowsToStructuredContentTable;
+(SuperDocMock as any).mockGetStructuredContentTablesById = mockGetStructuredContentTablesById;
 (SuperDocMock as any).mockDestroy = mockDestroy;
 (SuperDocMock as any).mockAuditEvents = auditEvents;
 (SuperDocMock as any).resetAuditEvents = resetAuditEvents;

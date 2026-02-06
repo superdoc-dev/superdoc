@@ -1,12 +1,6 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import SuperDocESign, { textToImageDataUrl } from '@superdoc-dev/esign';
-import type {
-  SubmitData,
-  SigningState,
-  FieldChange,
-  DownloadData,
-  SuperDocESignHandle,
-} from '@superdoc-dev/esign';
+import type { SubmitData, SigningState, FieldChange, DownloadData, SuperDocESignHandle } from '@superdoc-dev/esign';
 import CustomSignature from './CustomSignature';
 import 'superdoc/style.css';
 import './App.css';
@@ -14,7 +8,16 @@ import './App.css';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const documentSource =
-  'https://storage.googleapis.com/public_static_hosting/public_demo_docs/service_agreement_updated.docx';
+  'https://storage.googleapis.com/public_static_hosting/public_demo_docs/service_agreement_with_table.docx';
+
+// Document field definitions with labels
+interface DocumentFieldConfig {
+  id: string;
+  value: string | string[][];
+  type?: 'text' | 'table';
+  label?: string;
+  readOnly?: boolean;
+}
 
 const signerFieldsConfig = [
   {
@@ -25,13 +28,13 @@ const signerFieldsConfig = [
     component: CustomSignature,
   },
   {
-    id: 'terms',
+    id: '1',
     type: 'checkbox' as const,
     label: 'I accept the terms and conditions',
     validation: { required: true },
   },
   {
-    id: 'email',
+    id: '2',
     type: 'checkbox' as const,
     label: 'Send me a copy of the agreement',
     validation: { required: false },
@@ -76,36 +79,43 @@ const downloadBlob = async (response: Response, fileName: string) => {
 };
 
 // Document field definitions with labels
-const documentFieldsConfig = [
+const documentFieldsConfig: DocumentFieldConfig[] = [
   {
     id: '123456',
     label: 'Date',
-    defaultValue: new Date().toLocaleDateString(),
+    value: new Date().toLocaleDateString(),
     readOnly: true,
-    type: 'text' as const,
+    type: 'text',
   },
   {
     id: '234567',
     label: 'Full Name',
-    defaultValue: 'John Doe',
+    value: 'John Doe',
     readOnly: false,
-    type: 'text' as const,
+    type: 'text',
   },
   {
     id: '345678',
     label: 'Company',
-    defaultValue: 'SuperDoc',
+    value: 'SuperDoc',
     readOnly: false,
-    type: 'text' as const,
+    type: 'text',
   },
-  { id: '456789', label: 'Plan', defaultValue: 'Premium', readOnly: false, type: 'text' as const },
-  { id: '567890', label: 'State', defaultValue: 'CA', readOnly: false, type: 'text' as const },
+  { id: '456789', label: 'Plan', value: 'Premium', readOnly: false, type: 'text' as const },
+  { id: '567890', label: 'State', value: 'CA', readOnly: false, type: 'text' as const },
   {
     id: '678901',
     label: 'Address',
-    defaultValue: '123 Main St, Anytown, USA',
+    value: '123 Main St, Anytown, USA',
     readOnly: false,
-    type: 'text' as const,
+    type: 'text',
+  },
+  {
+    id: '238312460',
+    label: 'User responsibilities',
+    value: [['  - Provide accurate and complete information']],
+    readOnly: false,
+    type: 'table',
   },
 ];
 
@@ -121,13 +131,20 @@ export function App() {
   const esignRef = useRef<SuperDocESignHandle>(null);
 
   // State for document field values
-  const [documentFields, setDocumentFields] = useState<Record<string, string>>(() =>
-    Object.fromEntries(documentFieldsConfig.map((f) => [f.id, f.defaultValue])),
+  const [documentFields, setDocumentFields] = useState<Record<string, string | string[][]>>(() =>
+    Object.fromEntries(documentFieldsConfig.map((f) => [f.id, f.value])),
   );
 
-  const updateDocumentField = (id: string, value: string) => {
+  const updateDocumentField = (id: string, value: string | string[][]) => {
+    const fieldConfig = documentFieldsConfig.find((f) => f.id === id);
     setDocumentFields((prev) => ({ ...prev, [id]: value }));
-    esignRef.current?.updateFieldInDocument({ id, value });
+    esignRef.current?.updateFieldInDocument({ id, value, type: fieldConfig?.type });
+  };
+
+  // Helper to get table rows as 2D array (for table fields)
+  const getTableRows = (fieldId: string): string[][] => {
+    const value = documentFields[fieldId];
+    return Array.isArray(value) ? value : [];
   };
 
   const log = (msg: string) => {
@@ -237,17 +254,13 @@ export function App() {
     <div style={{ maxWidth: '1200px', margin: '40px auto', padding: '20px' }}>
       <header style={{ marginBottom: '40px', textAlign: 'center' }}>
         <h1>
-          <a
-            href="https://www.npmjs.com/package/@superdoc-dev/esign"
-            target="_blank"
-            rel="noopener"
-          >
+          <a href='https://www.npmjs.com/package/@superdoc-dev/esign' target='_blank' rel='noopener'>
             @superdoc-dev/esign
           </a>
         </h1>
         <p style={{ color: '#666' }}>
           React eSign component from{' '}
-          <a href="https://superdoc.dev" target="_blank" rel="noopener">
+          <a href='https://superdoc.dev' target='_blank' rel='noopener'>
             SuperDoc
           </a>
         </p>
@@ -308,17 +321,16 @@ export function App() {
             Use the document toolbar to download the current agreement at any time.
           </p>
 
-          <div className="main-layout-container">
+          <div className='main-layout-container'>
             {/* Main content */}
-            <div className="main-content-area">
+            <div className='main-content-area'>
               <SuperDocESign
                 ref={esignRef}
                 eventId={eventId}
                 document={{
                   source: documentSource,
                   mode: 'full',
-                  layoutMode: 'responsive',
-                  layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
+                  viewOptions: { layout: 'web' },
                   validation: {
                     scroll: { required: true },
                   },
@@ -336,7 +348,7 @@ export function App() {
                 onDownload={handleDownload}
                 onStateChange={handleStateChange}
                 onFieldChange={handleFieldChange}
-                documentHeight="500px"
+                documentHeight='500px'
               />
 
               {/* Event Log */}
@@ -372,9 +384,9 @@ export function App() {
             </div>
 
             {/* Right Sidebar - Document Fields */}
-            <div className="document-fields-sidebar">
+            <div className='document-fields-sidebar'>
               <h3>Document Fields</h3>
-              <div className="document-fields-list">
+              <div className='document-fields-list'>
                 {documentFieldsConfig.map((field) => (
                   <div key={field.id}>
                     <label
@@ -386,25 +398,94 @@ export function App() {
                         marginBottom: '4px',
                       }}
                     >
-                      {field.label}
+                      {field.label} {field.type === 'table' && <span style={{ color: '#9ca3af' }}>(table)</span>}
                     </label>
-                    <input
-                      type="text"
-                      value={documentFields[field.id]}
-                      onChange={(e) => updateDocumentField(field.id, e.target.value)}
-                      readOnly={field.readOnly}
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        fontSize: '14px',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '6px',
-                        background: field.readOnly ? '#f3f4f6' : 'white',
-                        color: field.readOnly ? '#6b7280' : '#111827',
-                        cursor: field.readOnly ? 'not-allowed' : 'text',
-                        boxSizing: 'border-box',
-                      }}
-                    />
+                    {field.type === 'table' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {getTableRows(field.id).map((row, rowIndex) => (
+                          <div key={rowIndex} style={{ display: 'flex', gap: '4px' }}>
+                            {row.map((cellValue, cellIndex) => (
+                              <input
+                                key={cellIndex}
+                                type='text'
+                                value={cellValue}
+                                onChange={(e) => {
+                                  const rows = [...getTableRows(field.id)];
+                                  rows[rowIndex] = [...rows[rowIndex]];
+                                  rows[rowIndex][cellIndex] = e.target.value;
+                                  updateDocumentField(field.id, rows);
+                                }}
+                                style={{
+                                  flex: 1,
+                                  padding: '8px 10px',
+                                  fontSize: '14px',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '6px',
+                                  boxSizing: 'border-box',
+                                }}
+                              />
+                            ))}
+                            <button
+                              onClick={() => {
+                                const rows = [...getTableRows(field.id)];
+                                if (rows.length > 1) {
+                                  rows.splice(rowIndex, 1);
+                                  updateDocumentField(field.id, rows);
+                                }
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '14px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                background: '#f9fafb',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              -
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => {
+                            const rows = [...getTableRows(field.id)];
+                            // Add new row with same column count as first row
+                            const colCount = rows[0]?.length || 1;
+                            rows.push(Array(colCount).fill(''));
+                            updateDocumentField(field.id, rows);
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '13px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            background: '#f9fafb',
+                            cursor: 'pointer',
+                            alignSelf: 'flex-start',
+                          }}
+                        >
+                          + Add row
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        type='text'
+                        value={documentFields[field.id] as string}
+                        onChange={(e) => updateDocumentField(field.id, e.target.value)}
+                        readOnly={field.readOnly}
+                        style={{
+                          width: '100%',
+                          padding: '8px 10px',
+                          fontSize: '14px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          background: field.readOnly ? '#f3f4f6' : 'white',
+                          color: field.readOnly ? '#6b7280' : '#111827',
+                          cursor: field.readOnly ? 'not-allowed' : 'text',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

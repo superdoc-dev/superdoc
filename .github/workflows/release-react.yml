@@ -8,6 +8,7 @@ on:
       - main
     paths:
       - 'packages/react/**'
+      - 'packages/superdoc/**'
       - 'packages/layout-engine/**'
       - 'packages/super-editor/**'
       - 'packages/ai/**'

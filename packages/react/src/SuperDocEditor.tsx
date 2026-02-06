@@ -107,9 +107,6 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const pendingModeRef = useRef<DocumentMode | null>(null);
   const isInitializingRef = useRef(false);
 
-  // Capture the initial documentMode for the effect
-  const initialDocumentModeRef = useRef(documentMode);
-
   // Track documentMode changes and apply imperatively
   const prevDocumentModeRef = useRef(documentMode);
   useEffect(() => {
@@ -144,10 +141,6 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     setHasError(false);
     isInitializingRef.current = true;
 
-    // Capture the current documentMode for this effect run
-    const effectDocumentMode = initialDocumentModeRef.current;
-    initialDocumentModeRef.current = documentMode;
-
     let destroyed = false;
     let instance: SuperDocInstance | null = null;
 
@@ -167,7 +160,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
           selector: `#${CSS.escape(containerId)}`,
           // Use internal toolbar container unless hideToolbar is true
           ...(!hideToolbar && toolbarContainerRef.current ? { toolbar: `#${CSS.escape(toolbarId)}` } : {}),
-          documentMode: effectDocumentMode,
+          documentMode,
           role,
           ...(documentProp != null ? { document: documentProp } : {}),
           ...(user ? { user } : {}),
@@ -180,7 +173,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
               isInitializingRef.current = false;
 
               // Apply any pending mode changes
-              if (pendingModeRef.current && pendingModeRef.current !== effectDocumentMode) {
+              if (pendingModeRef.current && pendingModeRef.current !== documentMode) {
                 event.superdoc.setDocumentMode(pendingModeRef.current);
                 pendingModeRef.current = null;
               }
@@ -232,13 +225,13 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
 
     // Cleanup function
     return () => {
-      destroyed = true;
       isInitializingRef.current = false;
       pendingModeRef.current = null;
       if (instance) {
         instance.destroy();
         instanceRef.current = null;
       }
+      destroyed = true;
     };
     // Only these props trigger a full rebuild. Other props (rulers, etc.) are
     // initial values - use getInstance() methods to change them at runtime.

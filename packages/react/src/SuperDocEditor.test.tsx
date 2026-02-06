@@ -119,6 +119,50 @@ describe('SuperDocEditor', () => {
     });
   });
 
+  describe('onEditorDestroy', () => {
+    it('should call onEditorDestroy when component unmounts', async () => {
+      const onReady = vi.fn();
+      const onEditorDestroy = vi.fn();
+      const { unmount } = render(<SuperDocEditor onReady={onReady} onEditorDestroy={onEditorDestroy} />);
+
+      await waitFor(
+        () => {
+          expect(onReady).toHaveBeenCalled();
+        },
+        { timeout: 5000 },
+      );
+
+      unmount();
+
+      await waitFor(
+        () => {
+          expect(onEditorDestroy).toHaveBeenCalled();
+        },
+        { timeout: 5000 },
+      );
+    });
+  });
+
+  describe('error states', () => {
+    it('should show error container when initialization fails', async () => {
+      // Force an error by providing an invalid document
+      const onException = vi.fn();
+      const { container } = render(
+        <SuperDocEditor document={'not-a-valid-doc' as unknown as File} onException={onException} />,
+      );
+
+      await waitFor(
+        () => {
+          const errorContainer = container.querySelector('.superdoc-error-container');
+          // If SuperDoc throws on invalid input, error UI shows
+          // If SuperDoc handles it gracefully, onException may be called instead
+          expect(errorContainer || onException.mock.calls.length > 0).toBeTruthy();
+        },
+        { timeout: 5000 },
+      );
+    });
+  });
+
   describe('Strict Mode compatibility', () => {
     it('should not throw in Strict Mode', () => {
       expect(() => {

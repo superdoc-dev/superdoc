@@ -1,9 +1,9 @@
 {
   "name": "superdoc-vscode-ext",
-  "displayName": "SuperDoc for VS Code",
+  "displayName": "SuperDoc - Word Document Editor",
   "description": "Open and edit Word documents (.docx) directly in VS Code using SuperDoc",
   "version": "0.0.0",
-  "publisher": "superdoc",
+  "publisher": "superdoc-dev",
   "repository": "https://github.com/superdoc-dev/superdoc",
   "engines": {
     "vscode": "^1.107.0"
@@ -72,7 +72,7 @@
     "build": "pnpm run compile",
     "watch": "pnpm run compile:ext -- --watch",
     "package": "vsce package --no-dependencies",
-    "publish:vsce": "vsce publish",
+    "publish:vsce": "vsce publish --packagePath *.vsix",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "format": "prettier --write .",

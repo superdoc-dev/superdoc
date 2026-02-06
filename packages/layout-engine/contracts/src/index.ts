@@ -1589,6 +1589,7 @@ export type ImageFragment = {
   width: number;
   height: number;
   isAnchored?: boolean;
+  behindDoc?: boolean;
   zIndex?: number;
   pmStart?: number;
   pmEnd?: number;
@@ -1604,6 +1605,7 @@ export type DrawingFragment = {
   width: number;
   height: number;
   isAnchored?: boolean;
+  behindDoc?: boolean;
   zIndex?: number;
   geometry: DrawingGeometry;
   scale: number;

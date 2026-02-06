@@ -1063,7 +1063,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (!state) {
         // Track if we're entering a new section (pendingSectionIndex was just set)
         const isEnteringNewSection = pendingSectionIndex !== null;
-        const newSectionIndex = isEnteringNewSection ? pendingSectionIndex : activeSectionIndex;
 
         const applied = applyPendingToActive({
           activeTopMargin,
@@ -1957,6 +1956,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           width: imgMeasure.width,
           height: imgMeasure.height,
           isAnchored: true,
+          behindDoc: imgBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(imgBlock),
           metadata,
         };

@@ -11,6 +11,9 @@
     "./stability": "./src/stability.ts",
     "./interactions": "./src/interactions.ts"
   },
+  "dependencies": {
+    "@superdoc-testing/harness": "workspace:*"
+  },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"
   },

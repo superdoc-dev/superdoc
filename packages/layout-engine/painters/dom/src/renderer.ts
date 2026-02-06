@@ -69,12 +69,7 @@ import { sanitizeHref, encodeTooltip } from '@superdoc/url-validation';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { assertPmPositions, assertFragmentPmPositions } from './pm-position-validation.js';
 import { applySdtContainerStyling, getSdtContainerKey, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
-import {
-  generateRulerDefinitionFromPx,
-  createRulerElement,
-  ensureRulerStyles,
-  RULER_CLASS_NAMES,
-} from './ruler/index.js';
+import { generateRulerDefinitionFromPx, createRulerElement, ensureRulerStyles } from './ruler/index.js';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import {
   hashParagraphBorders,
@@ -1639,15 +1634,18 @@ export class DomPainter {
       pageNumberText: page.numberText,
     };
 
-    // Separate behindDoc fragments (zIndex === 0) from normal fragments.
-    // behindDoc fragments need to render behind body content, so they must be
-    // placed directly on the page (not in the header container) with negative z-index.
+    // Separate behindDoc fragments from normal fragments.
+    // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
+    // compatibility fallback for older layouts that predate explicit metadata.
     const behindDocFragments: typeof data.fragments = [];
     const normalFragments: typeof data.fragments = [];
 
     for (const fragment of data.fragments) {
-      const isBehindDoc =
-        (fragment.kind === 'image' || fragment.kind === 'drawing') && 'zIndex' in fragment && fragment.zIndex === 0;
+      let isBehindDoc = false;
+      if (fragment.kind === 'image' || fragment.kind === 'drawing') {
+        isBehindDoc =
+          fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0);
+      }
       if (isBehindDoc) {
         behindDocFragments.push(fragment);
       } else {

@@ -10,7 +10,6 @@ import type {
   DrawingBlock,
   DrawingContentSnapshot,
   ImageBlock,
-  ParagraphIndent,
   ShapeGroupChild,
   ShapeGroupDrawing,
   ShapeGroupImageChild,
@@ -1481,6 +1480,25 @@ export function normalizeZIndex(originalAttributes: unknown): number | undefined
 }
 
 /**
+ * Resolves the CSS z-index for a floating object based on its behindDoc flag
+ * and an OOXML-derived raw value.
+ *
+ * - behindDoc objects always return 0.
+ * - Non-behindDoc objects are clamped to at least 1 so they never share the
+ *   behindDoc sentinel value (0).
+ *
+ * @param behindDoc - Whether the object is behind body text
+ * @param raw - OOXML-derived z-index (from normalizeZIndex or block.zIndex)
+ * @param fallback - Value to use when raw is undefined (default: 1)
+ * @returns Resolved z-index
+ */
+export function resolveFloatingZIndex(behindDoc: boolean, raw: number | undefined, fallback = 1): number {
+  if (behindDoc) return 0;
+  if (raw === undefined) return Math.max(1, fallback);
+  return Math.max(1, raw);
+}
+
+/**
  * Returns z-index for an image or drawing block.
  *
  * We cannot rely on `block.zIndex` only: when the flow-block cache hits, the
@@ -1489,11 +1507,17 @@ export function normalizeZIndex(originalAttributes: unknown): number | undefined
  * `block.zIndex` when present, otherwise derives from
  * `block.attrs.originalAttributes.relativeHeight` via normalizeZIndex,
  * otherwise behindDoc ? 0 : 1.
+ *
+ * Rendering policy:
+ * - behindDoc anchored objects always return 0.
+ * - Anchored objects with text wrapping (Square/Tight/Through/TopAndBottom, or
+ *   missing wrap metadata) keep OOXML relativeHeight ordering but are clamped
+ *   to at least 1 (never 0 unless behindDoc=true).
+ * - Front/no-wrap anchored objects (wrap None) also preserve OOXML relativeHeight order.
  */
 export function getFragmentZIndex(block: ImageBlock | DrawingBlock): number {
-  if (typeof block.zIndex === 'number') return block.zIndex;
   const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
-  const z = normalizeZIndex(attrs?.originalAttributes);
-  if (z !== undefined) return z;
-  return block.anchor?.behindDoc ? 0 : 1;
+  const raw = typeof block.zIndex === 'number' ? block.zIndex : normalizeZIndex(attrs?.originalAttributes);
+
+  return resolveFloatingZIndex(block.anchor?.behindDoc === true, raw);
 }

@@ -490,6 +490,36 @@ describe('image converter', () => {
         expect(result.zIndex).toBe(0);
       });
 
+      it('forces zIndex to 0 when behindDoc is true even with relativeHeight', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true, behindDoc: true },
+            originalAttributes: { relativeHeight: OOXML_BASE + 10 },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(0);
+      });
+
+      it('clamps base relativeHeight to 1 when not behindDoc', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true, behindDoc: false },
+            originalAttributes: { relativeHeight: OOXML_BASE },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(1);
+      });
+
       it('sets zIndex to 1 when no originalAttributes and not behindDoc (default stacking)', () => {
         const node: PMNode = {
           type: 'image',

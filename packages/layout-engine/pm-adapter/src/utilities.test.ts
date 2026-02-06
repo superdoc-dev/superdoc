@@ -34,6 +34,7 @@ import {
   coerceRelativeHeight,
   normalizeZIndex,
   getFragmentZIndex,
+  resolveFloatingZIndex,
   OOXML_Z_INDEX_BASE,
 } from './utilities.js';
 
@@ -1551,6 +1552,33 @@ describe('z-index utilities', () => {
     });
   });
 
+  describe('resolveFloatingZIndex', () => {
+    it('returns 0 when behindDoc is true', () => {
+      expect(resolveFloatingZIndex(true, 42)).toBe(0);
+      expect(resolveFloatingZIndex(true, undefined)).toBe(0);
+      expect(resolveFloatingZIndex(true, 0)).toBe(0);
+    });
+
+    it('returns raw value when non-behindDoc and raw >= 1', () => {
+      expect(resolveFloatingZIndex(false, 5)).toBe(5);
+      expect(resolveFloatingZIndex(false, 100)).toBe(100);
+    });
+
+    it('clamps raw 0 to 1 for non-behindDoc', () => {
+      expect(resolveFloatingZIndex(false, 0)).toBe(1);
+    });
+
+    it('returns fallback when raw is undefined', () => {
+      expect(resolveFloatingZIndex(false, undefined)).toBe(1);
+      expect(resolveFloatingZIndex(false, undefined, 5)).toBe(5);
+    });
+
+    it('clamps fallback to at least 1', () => {
+      expect(resolveFloatingZIndex(false, undefined, 0)).toBe(1);
+      expect(resolveFloatingZIndex(false, undefined, -1)).toBe(1);
+    });
+  });
+
   describe('getFragmentZIndex', () => {
     it('uses block.zIndex when set', () => {
       const block = {
@@ -1583,6 +1611,30 @@ describe('z-index utilities', () => {
       expect(getFragmentZIndex(block)).toBe(10);
     });
 
+    it('preserves high z-index for wrapped anchored objects', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: false },
+        wrap: { type: 'Through' as const },
+        zIndex: 7168,
+      };
+      expect(getFragmentZIndex(block)).toBe(7168);
+    });
+
+    it('preserves relativeHeight z-index for wrap None anchored objects', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: false },
+        wrap: { type: 'None' as const },
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE + 10 } },
+      };
+      expect(getFragmentZIndex(block)).toBe(10);
+    });
+
     it('returns 0 when anchor.behindDoc is true and no zIndex/originalAttributes', () => {
       const block = {
         kind: 'image' as const,
@@ -1600,6 +1652,28 @@ describe('z-index utilities', () => {
         src: 'x.png',
       };
       expect(getFragmentZIndex(block)).toBe(1);
+    });
+
+    it('does not treat base relativeHeight as behindDoc when behindDoc is false', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: false },
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE } },
+      };
+      expect(getFragmentZIndex(block)).toBeGreaterThan(0);
+    });
+
+    it('forces behindDoc fragments to zIndex 0 even with relativeHeight', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: true },
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE + 5 } },
+      };
+      expect(getFragmentZIndex(block)).toBe(0);
     });
 
     it('works for drawing blocks', () => {

@@ -28,11 +28,17 @@ description: "Interactive form fields for documents. It can be used when variabl
 **Basic Setup:**
 
 ```javascript
-import { FieldAnnotationPlugin } from '@superdoc/field-annotation';
+import { SuperDoc } from 'superdoc';
 
-const plugin = FieldAnnotationPlugin({
-  editor: myEditor,
-  handleDropOutside: true
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  // Field annotations are included by default via getStarterExtensions().
+  // Configure options here:
+  fieldAnnotation: {
+    handleDropOutside: true,
+    borderColor: '#b015b3',
+  },
 });
 ```
 

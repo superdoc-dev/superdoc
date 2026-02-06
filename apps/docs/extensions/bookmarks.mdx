@@ -1,0 +1,68 @@
+---
+title: Bookmarks extension
+sidebarTitle: "Bookmarks"
+keywords: "Bookmarks extension, superdoc Bookmarks, word Bookmarks, document Bookmarks, docx Bookmarks"
+---
+
+import Description from '/snippets/extensions/bookmarks.mdx'
+
+<Description />
+
+## Commands
+
+### `insertBookmark`
+
+Insert a bookmark at the current cursor position. Bookmarks are invisible navigation anchors used for cross-references and document navigation.
+
+**Example:**
+
+```javascript
+editor.commands.insertBookmark({ name: 'chapter1' })
+editor.commands.insertBookmark({ name: 'introduction', id: 'intro-001' })
+```
+
+**Parameters:**
+
+<ParamField path="config" type="Object" required>
+  Object with `name` (required bookmark name) and optional `id` (unique identifier)
+</ParamField>
+
+### `goToBookmark`
+
+Navigate to a bookmark by name. Scrolls the document to the bookmark position.
+
+**Example:**
+
+```javascript
+editor.commands.goToBookmark('chapter1')
+```
+
+**Parameters:**
+
+<ParamField path="name" type="string" required>
+  Bookmark name to navigate to
+</ParamField>
+
+## Attributes
+
+### BookmarkStart
+
+<ParamField path="name" type="string">
+  Bookmark name for cross-references and navigation
+</ParamField>
+
+<ParamField path="id" type="string">
+  Unique identifier for the bookmark
+</ParamField>
+
+### BookmarkEnd
+
+<ParamField path="id" type="string">
+  Identifier matching the corresponding bookmarkStart
+</ParamField>
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/bookmarks/bookmark-start.js" />

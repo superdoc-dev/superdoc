@@ -12,9 +12,13 @@ vi.mock('y-prosemirror', () => {
   const mockSyncPluginKey = {
     getState: vi.fn(() => ({ binding: mockBinding })),
   };
+  const mockUndoPluginKey = {
+    getState: vi.fn(() => null),
+  };
   return {
     ySyncPlugin: vi.fn(() => 'y-sync-plugin'),
     ySyncPluginKey: mockSyncPluginKey,
+    yUndoPluginKey: mockUndoPluginKey,
     prosemirrorToYDoc: vi.fn(),
   };
 });
@@ -706,6 +710,7 @@ describe('collaboration extension', () => {
       mockBinding.mux.mockClear();
       mockBinding._prosemirrorChanged.mockClear();
       YProsemirror.ySyncPluginKey.getState.mockReturnValue({ binding: mockBinding });
+      YProsemirror.yUndoPluginKey.getState.mockReturnValue(null);
     });
 
     it('initializes Y.js binding with headless view shim when isHeadless is true', () => {
@@ -793,6 +798,58 @@ describe('collaboration extension', () => {
 
       expect(mockBinding.mux).toHaveBeenCalledTimes(1);
       expect(mockBinding._prosemirrorChanged).toHaveBeenCalledWith(editorState.doc);
+    });
+
+    it('propagates addToHistory=false into Y.js transaction meta for headless sync', () => {
+      const ydoc = createYDocStub();
+      const yjsMetaSet = vi.fn();
+      ydoc.transact = vi.fn((fn) => {
+        fn({ meta: { set: yjsMetaSet } });
+      });
+
+      const editorState = { doc: { type: 'doc', content: [] } };
+      const { editor, context } = createHeadlessEditor({ ydoc, state: editorState });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListener = getTransactionListener(editor);
+      transactionListener({
+        transaction: {
+          getMeta: vi.fn((key) => {
+            if (key === 'addToHistory') return false;
+            return null;
+          }),
+        },
+      });
+
+      expect(ydoc.transact).toHaveBeenCalledWith(expect.any(Function), YProsemirror.ySyncPluginKey);
+      expect(yjsMetaSet).toHaveBeenCalledWith('addToHistory', false);
+      expect(mockBinding._prosemirrorChanged).toHaveBeenCalledWith(editorState.doc);
+    });
+
+    it('stops undo capture for headless transactions marked addToHistory=false', () => {
+      const stopCapturing = vi.fn();
+      YProsemirror.yUndoPluginKey.getState.mockReturnValue({
+        undoManager: {
+          stopCapturing,
+        },
+      });
+
+      const { editor, context } = createHeadlessEditor();
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListener = getTransactionListener(editor);
+      transactionListener({
+        transaction: {
+          getMeta: vi.fn((key) => {
+            if (key === 'addToHistory') return false;
+            return null;
+          }),
+        },
+      });
+
+      expect(stopCapturing).toHaveBeenCalledTimes(1);
     });
 
     it('skips sync for transactions originating from Y.js', () => {

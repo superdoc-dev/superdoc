@@ -1,7 +1,7 @@
 import { Extension } from '@core/index.js';
 import { PluginKey } from 'prosemirror-state';
 import { encodeStateAsUpdate } from 'yjs';
-import { ySyncPlugin, ySyncPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
+import { ySyncPlugin, ySyncPluginKey, yUndoPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
 import { updateYdocDocxData, applyRemoteHeaderFooterChanges } from '@extensions/collaboration/collaboration-helpers.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
@@ -272,15 +272,30 @@ const initHeadlessBinding = (editor) => {
 
     // Sync ProseMirror changes to Y.js
     if (typeof binding._prosemirrorChanged !== 'function') return;
+    const addToHistory = transaction.getMeta('addToHistory') !== false;
+
+    // Match y-prosemirror view.update behavior for non-history changes.
+    if (!addToHistory) {
+      const undoPluginState = yUndoPluginKey.getState(editor.state);
+      undoPluginState?.undoManager?.stopCapturing?.();
+    }
+
+    const syncToYjs = () => {
+      const ydoc = editor.options.ydoc;
+      if (!ydoc) return;
+
+      ydoc.transact((tr) => {
+        tr?.meta?.set?.('addToHistory', addToHistory);
+        binding._prosemirrorChanged(editor.state.doc);
+      }, ySyncPluginKey);
+    };
 
     if (typeof binding.mux === 'function') {
-      binding.mux(() => {
-        binding._prosemirrorChanged(editor.state.doc);
-      });
+      binding.mux(syncToYjs);
       return;
     }
 
-    binding._prosemirrorChanged(editor.state.doc);
+    syncToYjs();
   };
 
   editor.on('transaction', transactionHandler);

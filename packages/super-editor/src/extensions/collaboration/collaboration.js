@@ -5,6 +5,7 @@ import { ySyncPlugin, ySyncPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
 import { updateYdocDocxData, applyRemoteHeaderFooterChanges } from '@extensions/collaboration/collaboration-helpers.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
+const headlessBindingStateByEditor = new WeakMap();
 
 export const Collaboration = Extension.create({
   name: 'collaboration',
@@ -56,12 +57,20 @@ export const Collaboration = Extension.create({
       });
     });
 
+    // Headless editors don't create an EditorView, so wire Y.js binding lifecycle here.
+    // Doing this in addPmPlugins ensures sync hooks are active before the first local transaction.
+    if (this.editor.options.isHeadless) {
+      const cleanup = initHeadlessBinding(this.editor);
+      if (cleanup) {
+        this.editor.once('destroy', cleanup);
+      }
+    }
+
     return [syncPlugin];
   },
 
   onCreate() {
-    // In headless mode, manually initialize the Y.js binding since no EditorView is created
-    // This must happen in onCreate (after state is created) because we need access to the plugin state
+    // Keep this as a fallback for custom lifecycles that may bypass addPmPlugins.
     if (this.editor.options.isHeadless && this.editor.options.ydoc) {
       const cleanup = initHeadlessBinding(this.editor);
       if (cleanup) {
@@ -178,13 +187,17 @@ export const generateCollaborationData = async (editor) => {
  * @returns {Function|undefined} Cleanup function to remove event listeners
  */
 const initHeadlessBinding = (editor) => {
-  const syncState = ySyncPluginKey.getState(editor.state);
-  if (!syncState?.binding) {
-    console.warn('[Collaboration] Headless binding init: no sync state or binding found');
-    return;
+  const existing = headlessBindingStateByEditor.get(editor);
+  if (existing?.cleanup) {
+    return existing.cleanup;
   }
 
-  const binding = syncState.binding;
+  const state = {
+    binding: null,
+    cleanup: null,
+    warnedMissingBinding: false,
+  };
+  headlessBindingStateByEditor.set(editor, state);
 
   // Create a minimal EditorView shim that satisfies y-prosemirror's interface
   // See: y-prosemirror/src/plugins/sync-plugin.js initView() and _typeChanged()
@@ -203,26 +216,75 @@ const initHeadlessBinding = (editor) => {
     },
   };
 
-  // Initialize the binding with our shim
-  binding.initView(headlessViewShim);
+  const ensureInitializedBinding = () => {
+    if (!editor.options.ydoc || !editor.state) return null;
+    const syncState = ySyncPluginKey.getState(editor.state);
+    if (!syncState?.binding) {
+      if (!state.warnedMissingBinding) {
+        console.warn('[Collaboration] Headless binding init: no sync state or binding found');
+        state.warnedMissingBinding = true;
+      }
+      return null;
+    }
+
+    state.warnedMissingBinding = false;
+    const binding = syncState.binding;
+    if (state.binding === binding) {
+      return binding;
+    }
+
+    binding.initView(headlessViewShim);
+
+    // ySyncPlugin's view lifecycle forces a rerender on first mount so PM state reflects Yjs.
+    if (typeof binding._forceRerender === 'function') {
+      binding._forceRerender();
+    }
+
+    // Mirror ySyncPlugin's onFirstRender callback behavior for new files in headless mode.
+    if (editor.options.isNewFile) {
+      initializeMetaMap(editor.options.ydoc, editor);
+    }
+
+    state.binding = binding;
+    return binding;
+  };
 
   // Listen for ProseMirror transactions and sync to Y.js
   // This replicates the behavior of ySyncPlugin's view.update callback
   // Note: _prosemirrorChanged is internal to y-prosemirror but is the recommended
   // approach for headless mode (see y-prosemirror issue #75)
   const transactionHandler = ({ transaction }) => {
+    if (!editor.options.ydoc) return;
+
     // Skip if this transaction originated from Y.js (avoid infinite loop)
     const meta = transaction.getMeta(ySyncPluginKey);
     if (meta?.isChangeOrigin) return;
 
+    const binding = ensureInitializedBinding();
+    if (!binding) return;
+
     // Sync ProseMirror changes to Y.js
+    if (typeof binding._prosemirrorChanged !== 'function') return;
+
+    if (typeof binding.mux === 'function') {
+      binding.mux(() => {
+        binding._prosemirrorChanged(editor.state.doc);
+      });
+      return;
+    }
+
     binding._prosemirrorChanged(editor.state.doc);
   };
 
   editor.on('transaction', transactionHandler);
+  ensureInitializedBinding();
 
   // Return cleanup function to remove listener on destroy
-  return () => {
+  state.cleanup = () => {
     editor.off('transaction', transactionHandler);
+    if (headlessBindingStateByEditor.get(editor) === state) {
+      headlessBindingStateByEditor.delete(editor);
+    }
   };
+  return state.cleanup;
 };

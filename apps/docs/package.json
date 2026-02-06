@@ -8,7 +8,7 @@
     "gen:docs": "node scripts/sync-sdk-docs.js",
     "gen:all": "pnpm run gen:api && pnpm run gen:docs",
     "check:links": "mintlify broken-links",
-    "check:imports": "node scripts/validate-code-imports.js",
+    "check:imports": "bun scripts/validate-code-imports.ts",
     "test:examples": "bun test __tests__/doctest.test.ts"
   },
   "devDependencies": {

@@ -49,9 +49,6 @@
               "getting-started/introduction",
               "getting-started/ai-agents",
               "getting-started/installation",
-              "getting-started/configuration",
-              "getting-started/import-export",
-              "getting-started/fonts",
               {
                 "group": "Frameworks",
                 "pages": [
@@ -66,7 +63,9 @@
                   "getting-started/frameworks/ruby-on-rails",
                   "getting-started/frameworks/blazor"
                 ]
-              }
+              },
+              "getting-started/import-export",
+              "getting-started/fonts"
             ]
           },
           {

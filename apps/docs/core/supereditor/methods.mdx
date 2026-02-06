@@ -30,10 +30,26 @@ Open a document from a file, URL, or buffer.
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 await editor.open(docxFile);
 await editor.open(null, { mode: 'html', html: '<p>Hello</p>' });
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+await editor.open(docxFile);
+await editor.open(null, { mode: 'html', html: '<p>Hello</p>' });
+```
+
+</CodeGroup>
 
 <Note>
 This is the instance method. For one-liner creation, use the static `Editor.open()` factory — see [Configuration](/core/supereditor/configuration).
@@ -43,10 +59,26 @@ This is the instance method. For one-liner creation, use the static `Editor.open
 
 Close the current document. The editor instance stays alive for reuse.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.close();
 await editor.open(anotherFile);
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.close();
+await editor.open(anotherFile);
+```
+
+</CodeGroup>
 
 ### `save`
 
@@ -69,10 +101,26 @@ Save back to the original source path (Node.js only).
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 await editor.save();
 await editor.save({ isFinalDoc: true });
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+await editor.save();
+await editor.save({ isFinalDoc: true });
+```
+
+</CodeGroup>
 
 <Warning>Throws if the editor was opened from a Blob/Buffer instead of a file path. Use `saveTo()` or `exportDocument()` instead.</Warning>
 
@@ -84,18 +132,49 @@ Save to a specific path (Node.js only).
   File path
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 await editor.saveTo('/path/to/output.docx');
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+await editor.saveTo('/path/to/output.docx');
+```
+
+</CodeGroup>
 
 ### `exportDocument`
 
 Export as a Blob (browser) or Buffer (Node.js).
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const blob = await editor.exportDocument();
 const blob = await editor.exportDocument({ isFinalDoc: true });
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const blob = await editor.exportDocument();
+const blob = await editor.exportDocument({ isFinalDoc: true });
+```
+
+</CodeGroup>
 
 ### `exportDocx`
 
@@ -118,67 +197,193 @@ Lower-level export with additional control.
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const blob = await editor.exportDocx({
   isFinalDoc: true,
   commentsType: 'clean'
 });
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const blob = await editor.exportDocx({
+  isFinalDoc: true,
+  commentsType: 'clean'
+});
+```
+
+</CodeGroup>
+
 ### `replaceFile`
 
 Replace the current DOCX with a new file.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 await editor.replaceFile(newDocxFile);
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+await editor.replaceFile(newDocxFile);
+```
+
+</CodeGroup>
 
 ## Content
 
 ### `getHTML`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const html = editor.getHTML();
 const html = editor.getHTML({ unflattenLists: true });
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const html = editor.getHTML();
+const html = editor.getHTML({ unflattenLists: true });
+```
+
+</CodeGroup>
+
 ### `getJSON`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const json = editor.getJSON();
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const json = editor.getJSON();
+```
+
+</CodeGroup>
+
 ### `getMarkdown`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const md = await editor.getMarkdown();
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const md = await editor.getMarkdown();
+```
+
+</CodeGroup>
 
 ### `replaceContent`
 
 Replace the entire document content.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.replaceContent(proseMirrorJson);
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.replaceContent(proseMirrorJson);
+```
+
+</CodeGroup>
 
 ### `replaceNodeWithHTML`
 
 Replace a specific node with HTML.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const table = editor.getNodesOfType('table')[0];
 editor.replaceNodeWithHTML(table, '<table>...</table>');
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const table = editor.getNodesOfType('table')[0];
+editor.replaceNodeWithHTML(table, '<table>...</table>');
+```
+
+</CodeGroup>
 
 ## Editor control
 
 ### `mount` / `unmount`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.mount(document.querySelector('#editor'));
 editor.unmount(); // Keeps instance alive
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.mount(document.querySelector('#editor'));
+editor.unmount(); // Keeps instance alive
+```
+
+</CodeGroup>
 
 ### `destroy`
 
@@ -186,37 +391,103 @@ Permanently destroy the editor.
 
 <Warning>Irreversible. The instance cannot be used after this.</Warning>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.destroy();
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.destroy();
+```
+
+</CodeGroup>
+
 ### `focus` / `blur`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.focus();
 editor.blur();
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.focus();
+editor.blur();
+```
+
+</CodeGroup>
+
 ### `setEditable`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.setEditable(false); // Read-only
 editor.setEditable(true);  // Editable
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.setEditable(false); // Read-only
+editor.setEditable(true);  // Editable
+```
+
+</CodeGroup>
+
 ### `setDocumentMode`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.setDocumentMode('editing');    // Full editing
 editor.setDocumentMode('suggesting'); // Track changes
 editor.setDocumentMode('viewing');    // Read-only
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.setDocumentMode('editing');    // Full editing
+editor.setDocumentMode('suggesting'); // Track changes
+editor.setDocumentMode('viewing');    // Read-only
+```
+
+</CodeGroup>
+
 ## Commands
 
 All commands are accessed via `editor.commands`:
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 // Formatting
 editor.commands.toggleBold();
 editor.commands.toggleItalic();
@@ -229,6 +500,29 @@ editor.commands.insertTable({ rows: 3, cols: 3 });
 editor.commands.setTextSelection({ from: 10, to: 20 });
 editor.commands.selectAll();
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+// Formatting
+editor.commands.toggleBold();
+editor.commands.toggleItalic();
+editor.commands.toggleUnderline();
+
+// Tables
+editor.commands.insertTable({ rows: 3, cols: 3 });
+
+// Selection
+editor.commands.setTextSelection({ from: 10, to: 20 });
+editor.commands.selectAll();
+```
+
+</CodeGroup>
 
 ### `insertContent`
 
@@ -249,11 +543,28 @@ Insert content with automatic format detection.
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.commands.insertContent(htmlContent, { contentType: 'html' });
 editor.commands.insertContent(markdownText, { contentType: 'markdown' });
 editor.commands.insertContent('Plain text', { contentType: 'text' });
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.commands.insertContent(htmlContent, { contentType: 'html' });
+editor.commands.insertContent(markdownText, { contentType: 'markdown' });
+editor.commands.insertContent('Plain text', { contentType: 'text' });
+```
+
+</CodeGroup>
 
 <Note>HTML and Markdown inline styles are stripped on import to ensure Word compatibility.</Note>
 
@@ -261,25 +572,72 @@ editor.commands.insertContent('Plain text', { contentType: 'text' });
 
 ### `getMetadata`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const { documentGuid, isModified, version } = editor.getMetadata();
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const { documentGuid, isModified, version } = editor.getMetadata();
+```
+
+</CodeGroup>
 
 ### `getDocumentIdentifier`
 
 Get a stable identifier (GUID or content hash).
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const id = await editor.getDocumentIdentifier();
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const id = await editor.getDocumentIdentifier();
+```
+
+</CodeGroup>
+
 ### `isDocumentModified`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 if (editor.isDocumentModified()) {
   // Prompt user to save
 }
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+if (editor.isDocumentModified()) {
+  // Prompt user to save
+}
+```
+
+</CodeGroup>
 
 ## Schema
 
@@ -287,9 +645,24 @@ if (editor.isDocumentModified()) {
 
 Generate a summary of the document schema. Useful for AI agents that need to understand the document structure.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const summary = await editor.getSchemaSummaryJSON();
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const summary = await editor.getSchemaSummaryJSON();
+```
+
+</CodeGroup>
 
 ## Position & coordinates
 
@@ -301,61 +674,174 @@ Get the DOM element at a document position.
   Document position
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const element = editor.getElementAtPos(42);
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const element = editor.getElementAtPos(42);
+```
+
+</CodeGroup>
 
 ### `getNodesOfType`
 
 Get all nodes of a specific type.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const tables = editor.getNodesOfType('table');
 const paragraphs = editor.getNodesOfType('paragraph');
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const tables = editor.getNodesOfType('table');
+const paragraphs = editor.getNodesOfType('paragraph');
+```
+
+</CodeGroup>
 
 ### `isActive`
 
 Check if a node or mark is active.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.isActive('bold');
 editor.isActive('heading', { level: 2 });
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.isActive('bold');
+editor.isActive('heading', { level: 2 });
+```
+
+</CodeGroup>
 
 ### `getAttributes`
 
 Get attributes of the active node or mark.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const attrs = editor.getAttributes('link');
 console.log(attrs.href);
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const attrs = editor.getAttributes('link');
+console.log(attrs.href);
+```
+
+</CodeGroup>
 
 ## Page & layout
 
 ### `getPageStyles`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const styles = editor.getPageStyles();
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const styles = editor.getPageStyles();
+```
+
+</CodeGroup>
+
 ### `updatePageStyle`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 editor.updatePageStyle({
   pageMargins: { top: '1in', bottom: '1in', left: '1in', right: '1in' }
 });
 ```
 
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+editor.updatePageStyle({
+  pageMargins: { top: '1in', bottom: '1in', left: '1in', right: '1in' }
+});
+```
+
+</CodeGroup>
+
 ## Search
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const results = editor.commands.search('hello');
 const results = editor.commands.search(/\d{3}-\d{4}/gi);
 
 editor.commands.goToSearchResult(results[0]);
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const editor = await Editor.open(yourFile, {
+  element: document.getElementById('editor'),
+});
+
+const results = editor.commands.search('hello');
+const results = editor.commands.search(/\d{3}-\d{4}/gi);
+
+editor.commands.goToSearchResult(results[0]);
+```
+
+</CodeGroup>
 
 ## Properties
 

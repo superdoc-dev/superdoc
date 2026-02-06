@@ -38,12 +38,32 @@ Export the document with various options.
 
 **Returns:** `Promise<Blob>` - Document blob
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const blob = await superdoc.export({
   isFinalDoc: true,
-  commentsType: 'clean'
+  commentsType: 'clean',
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    const blob = await superdoc.export({
+      isFinalDoc: true,
+      commentsType: 'clean',
+    });
+  },
+});
+```
+
+</CodeGroup>
 
 ### `save`
 
@@ -51,9 +71,26 @@ Save document if in collaboration mode.
 
 **Returns:** `Promise<void>`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 await superdoc.save();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    await superdoc.save();
+  },
+});
+```
+
+</CodeGroup>
 
 ### `getHTML`
 
@@ -71,9 +108,27 @@ Get HTML content of all editors.
 
 **Returns:** `string[]` - Array of HTML strings, one per editor
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const htmlArray = superdoc.getHTML();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const htmlArray = superdoc.getHTML();
+    console.log(htmlArray);
+  },
+});
+```
+
+</CodeGroup>
 
 ## Mode control
 
@@ -91,9 +146,26 @@ Change the document mode.
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.setDocumentMode('suggesting');
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setDocumentMode('suggesting');
+  },
+});
+```
+
+</CodeGroup>
 
 ### `lockSuperdoc`
 
@@ -107,9 +179,29 @@ Lock or unlock the document.
   User who locked the document
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.lockSuperdoc(true, currentUser);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.lockSuperdoc(true, {
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+    });
+  },
+});
+```
+
+</CodeGroup>
 
 ### `setHighContrastMode`
 
@@ -119,9 +211,26 @@ Enable/disable high contrast mode.
   High contrast state
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.setHighContrastMode(true);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setHighContrastMode(true);
+  },
+});
+```
+
+</CodeGroup>
 
 ## UI methods
 
@@ -133,9 +242,28 @@ Set which editor is currently active. Useful when working with multiple document
   Editor instance to set as active
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.setActiveEditor(editor);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  documents: [doc1, doc2],
+  onReady: (superdoc) => {
+    // Switch to the second editor
+    const editors = superdoc.state.documents;
+    superdoc.setActiveEditor(editors[1].editor);
+  },
+});
+```
+
+</CodeGroup>
 
 ### `setDisableContextMenu`
 
@@ -145,9 +273,26 @@ Toggle the custom context menu at runtime.
   Whether to disable the context menu
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.setDisableContextMenu(true);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setDisableContextMenu(true);
+  },
+});
+```
+
+</CodeGroup>
 
 ### `setTrackedChangesPreferences`
 
@@ -164,17 +309,51 @@ Override how tracked changes are rendered in the layout engine.
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.setTrackedChangesPreferences({ mode: 'final' });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setTrackedChangesPreferences({ mode: 'final' });
+  },
+});
+```
+
+</CodeGroup>
 
 ### `toggleRuler`
 
 Toggle ruler visibility.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.toggleRuler();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.toggleRuler();
+  },
+});
+```
+
+</CodeGroup>
 
 <ParamField path="togglePagination" type="string" deprecated>
 
@@ -186,9 +365,26 @@ superdoc.toggleRuler();
 
 Focus the active editor or first available.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.focus();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.focus();
+  },
+});
+```
+
+</CodeGroup>
 
 ## Search methods
 
@@ -202,10 +398,30 @@ Search for text or regex in active editor.
 
 **Returns:** `Array<SearchResult>` - Search matches
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const results = superdoc.search('contract');
-const results = superdoc.search(/section \d+/gi);
+const regexResults = superdoc.search(/section \d+/gi);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const results = superdoc.search('contract');
+    console.log(`Found ${results.length} matches`);
+
+    const regexResults = superdoc.search(/section \d+/gi);
+  },
+});
+```
+
+</CodeGroup>
 
 ### `goToSearchResult`
 
@@ -215,9 +431,29 @@ Navigate to a search result.
   Search result to navigate to
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.goToSearchResult(results[0]);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const results = superdoc.search('contract');
+    if (results.length) {
+      superdoc.goToSearchResult(results[0]);
+    }
+  },
+});
+```
+
+</CodeGroup>
 
 ## Comments methods
 
@@ -229,17 +465,51 @@ Add a comments list to the specified element.
   Container for comments list
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.addCommentsList('#comments-sidebar');
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.addCommentsList('#comments-sidebar');
+  },
+});
+```
+
+</CodeGroup>
 
 ### `removeCommentsList`
 
 Remove the comments list.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.removeCommentsList();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.removeCommentsList();
+  },
+});
+```
+
+</CodeGroup>
 
 ## User management
 
@@ -260,12 +530,32 @@ Add a user to the shared users list.
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.addSharedUser({
   name: 'Jane Smith',
-  email: 'jane@example.com'
+  email: 'jane@example.com',
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.addSharedUser({
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+    });
+  },
+});
+```
+
+</CodeGroup>
 
 ### `removeSharedUser`
 
@@ -275,9 +565,26 @@ Remove a user from shared users.
   Email of user to remove
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.removeSharedUser('jane@example.com');
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.removeSharedUser('jane@example.com');
+  },
+});
+```
+
+</CodeGroup>
 
 ## Lifecycle
 
@@ -287,9 +594,26 @@ Completely destroy the SuperDoc instance.
 
 <Warning>This is irreversible. Cleans up all resources, events, and DOM.</Warning>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.destroy();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+// Later, when you're done with the editor:
+superdoc.destroy();
+```
+
+</CodeGroup>
 
 ## Event methods
 
@@ -297,29 +621,88 @@ superdoc.destroy();
 
 Subscribe to an event.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.on('ready', ({ superdoc }) => {
   console.log('SuperDoc ready');
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('ready', ({ superdoc }) => {
+  console.log('SuperDoc ready');
+});
+```
+
+</CodeGroup>
+
 ### `once`
 
 Subscribe to an event once.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.once('ready', () => {
   // Only called once
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.once('ready', () => {
+  console.log('SuperDoc ready (one-time)');
+});
+```
+
+</CodeGroup>
+
 ### `off`
 
 Unsubscribe from an event.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.off('ready', handler);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+const handler = ({ superdoc }) => {
+  console.log('SuperDoc ready');
+};
+
+superdoc.on('ready', handler);
+
+// Later, unsubscribe:
+superdoc.off('ready', handler);
+```
+
+</CodeGroup>
 
 ## Schema introspection
 
@@ -367,11 +750,30 @@ Available types: `NodeName`, `NodeAttrs<N>`, `MarkName`, `MarkAttrs<M>`, and spe
 
 Currently active editor instance. Returns `null` before the `ready` event.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 if (superdoc.activeEditor) {
   superdoc.activeEditor.commands.toggleBold();
 }
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    if (superdoc.activeEditor) {
+      superdoc.activeEditor.commands.toggleBold();
+    }
+  },
+});
+```
+
+</CodeGroup>
 
 <Warning>Always check for `null` before accessing.</Warning>
 

@@ -1,4 +1,4 @@
-name: Documentation Validation
+name: CI Docs
 
 on:
   pull_request:
@@ -8,7 +8,6 @@ on:
 
 jobs:
   validate:
-    name: Validate Documentation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +37,7 @@ jobs:
         run: pnpm --filter @superdoc/docs check:imports
 
       - name: Build Packages
-        run: pnpm --filter superdoc... build
+        run: pnpm --prefix packages/superdoc run build
 
       - name: Test Code Examples
         run: pnpm --filter @superdoc/docs test:examples

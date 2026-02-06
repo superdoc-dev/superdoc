@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Eval outputs and caches
+reports/
+.promptfoo-cache/
+.promptfoo/
+
+# Local temp state (Anthropic Agent SDK home and run artifacts)
+.tmp/
+
+# Logs / OS noise
+*.log
+.DS_Store

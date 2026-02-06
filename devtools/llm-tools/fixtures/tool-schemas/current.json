@@ -1,0 +1,95 @@
+{
+  "generatedAt": "2026-02-06T23:29:12.155Z",
+  "source": "../../packages/llm-tools/dist/tool-definitions.json",
+  "tools": [
+    {
+      "name": "find_content",
+      "description": "Find text content in the document using a selector.",
+      "parameters": {
+        "$ref": "#/definitions/find_contentParams",
+        "definitions": {
+          "find_contentParams": {
+            "type": "object",
+            "properties": {
+              "selector": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "text"
+                  },
+                  "pattern": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "flags": {
+                    "type": "string",
+                    "pattern": "^[gimsuy]*$"
+                  }
+                },
+                "required": ["type", "pattern"],
+                "additionalProperties": false
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["selector"],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "returns": {
+        "$ref": "#/definitions/find_contentResult",
+        "definitions": {
+          "find_contentResult": {
+            "type": "object",
+            "properties": {
+              "matches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "address": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "block"
+                        },
+                        "blockId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["kind", "blockId"],
+                      "additionalProperties": false
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["address"],
+                  "additionalProperties": false
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["matches", "total"],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@superdoc-dev/llm-tools-evals",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "eval": "HOME=/tmp PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c promptfooconfig.yaml",
+    "eval:ci": "HOME=/tmp PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c promptfooconfig.yaml --no-progress-bar --no-table --no-write -o reports/promptfoo-results.json",
+    "eval:vercel": "HOME=/tmp PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c promptfooconfig.vercel.yaml",
+    "eval:ci:vercel": "HOME=/tmp PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c promptfooconfig.vercel.yaml --no-progress-bar --no-table --no-write -o reports/promptfoo-results-vercel.json",
+    "cases:validate": "tsx src/cli/cases-validate.ts",
+    "tools:sync": "tsx src/cli/sync-tools.ts",
+    "sandbox:smoke": "tsx src/cli/sandbox-smoke.ts",
+    "ring0:run": "tsx src/cli/ring0-run.ts",
+    "ring0:verify": "pnpm run cases:validate && pnpm run ring0:run && pnpm run openai:smoke && pnpm run anthropic:smoke && pnpm run eval:ci",
+    "ring0:verify:vercel": "pnpm run cases:validate && pnpm run ring0:run && pnpm run vercel:smoke && pnpm run eval:ci:vercel",
+    "openai:smoke": "tsx src/cli/openai-smoke.ts",
+    "anthropic:smoke": "HOME=/tmp tsx src/cli/anthropic-smoke.ts",
+    "vercel:smoke": "tsx src/cli/vercel-smoke.ts",
+    "case:run": "tsx src/cli/run-case.ts",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.2",
+    "promptfoo": "^0.30.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2",
+    "yaml": "^2.8.1",
+    "zod": "^3.25.76"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.25",
+    "@ai-sdk/openai-compatible": "^2.0.27",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.33",
+    "ai": "^6.0.73",
+    "openai": "^6.18.0"
+  }
+}

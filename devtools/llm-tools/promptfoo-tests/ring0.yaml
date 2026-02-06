@@ -1,0 +1,47 @@
+- description: "ring0/find_service_provider_instances"
+  threshold: 1
+  vars:
+    test_id: "find_service_provider_instances"
+  assert: &ring0_assertions
+    - type: javascript
+      metric: no_error_steps
+      value: file://./src/assertions/assert-no-error-steps.cjs
+    - type: javascript
+      metric: required_subsequence_present
+      value: file://./src/assertions/assert-required-subsequence.cjs
+    - type: javascript
+      metric: no_hallucinated_tools
+      value: file://./src/assertions/assert-no-hallucinated-tools.cjs
+    - type: javascript
+      metric: find_content_total
+      value: file://./src/assertions/assert-find-content-total.cjs
+    - type: javascript
+      metric: expected_block_ids_present
+      value: file://./src/assertions/assert-expected-block-ids.cjs
+    - type: javascript
+      metric: final_answer_quality
+      value: file://./src/assertions/assert-final-answer-quality.cjs
+
+- description: "ring0/find_nonexistent_term"
+  threshold: 1
+  vars:
+    test_id: "find_nonexistent_term"
+  assert: *ring0_assertions
+
+- description: "ring0/find_no_match_here"
+  threshold: 1
+  vars:
+    test_id: "find_no_match_here"
+  assert: *ring0_assertions
+
+- description: "ring0/find_effective_clause"
+  threshold: 1
+  vars:
+    test_id: "find_effective_clause"
+  assert: *ring0_assertions
+
+- description: "ring0/find_reports_keyword"
+  threshold: 1
+  vars:
+    test_id: "find_reports_keyword"
+  assert: *ring0_assertions

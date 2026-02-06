@@ -1,0 +1,29 @@
+testId: find_service_provider_instances
+fixture: simple_doc.json
+user: "Please find all instances of 'service provider'."
+allowedSequences:
+  - ["find_content"]
+  - ["find_content", "find_content"]
+  - ["find_content", "find_content", "find_content"]
+assertions:
+  - type: sandbox_find_content
+    description: "Find all matches of 'service provider' (case-insensitive)."
+    pattern: "service provider"
+    flags: "i"
+    minMatches: 2
+  - type: openai_trace_find_content
+    description: "OpenAI trace should call find_content, return two matches, and mention both blocks in final answer."
+    toolName: "find_content"
+    expectedTotal: 2
+    expectedBlockIds: ["p1", "p2"]
+    assistantMustContain: ["p1", "p2"]
+  - type: anthropic_trace_find_content
+    description: "Anthropic trace should call find_content and return two matches for p1/p2."
+    toolName: "find_content"
+    expectedTotal: 2
+    expectedBlockIds: ["p1", "p2"]
+  - type: vercel_trace_find_content
+    description: "Vercel AI trace should call find_content and return two matches for p1/p2."
+    toolName: "find_content"
+    expectedTotal: 2
+    expectedBlockIds: []

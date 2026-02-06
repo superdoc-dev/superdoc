@@ -1,0 +1,30 @@
+description: SuperDoc llm-tools evals (Phase 5 deterministic trace scoring)
+
+prompts:
+  - "{{test_id}}"
+
+evaluateOptions:
+  maxConcurrency: 1
+
+providers:
+  - id: "./providers/llm-trace-provider.cjs"
+    config:
+      label: "openai-sdk:gpt-5"
+      runner: "openai-sdk"
+      model: "gpt-5"
+      temperature: 0
+      maxSteps: 8
+      timeoutMs: 40000
+      maxToolCallsPerStep: 5
+  - id: "./providers/llm-trace-provider.cjs"
+    config:
+      label: "anthropic-sdk:claude-opus-4-5"
+      runner: "anthropic-sdk"
+      model: "claude-opus-4-5"
+      temperature: 0
+      maxSteps: 8
+      timeoutMs: 60000
+      maxToolCallsPerStep: 5
+
+tests:
+  - "./promptfoo-tests/ring0.yaml"

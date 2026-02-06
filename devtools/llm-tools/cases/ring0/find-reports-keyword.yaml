@@ -1,0 +1,27 @@
+testId: find_reports_keyword
+fixture: simple_doc.json
+user: "Use the find_content tool to find all instances of the literal text 'reports'."
+allowedSequences:
+  - ["find_content"]
+  - ["find_content", "find_content"]
+  - ["find_content", "find_content", "find_content"]
+assertions:
+  - type: sandbox_find_content
+    pattern: "reports"
+    flags: "i"
+    expectedTotal: 1
+  - type: openai_trace_find_content
+    description: "OpenAI trace should match only p2 where reports is mentioned."
+    toolName: "find_content"
+    expectedTotal: 1
+    expectedBlockIds: ["p2"]
+  - type: anthropic_trace_find_content
+    description: "Anthropic trace should match only p2 where reports is mentioned."
+    toolName: "find_content"
+    expectedTotal: 1
+    expectedBlockIds: ["p2"]
+  - type: vercel_trace_find_content
+    description: "Vercel trace should match only p2 where reports is mentioned."
+    toolName: "find_content"
+    expectedTotal: 1
+    expectedBlockIds: []

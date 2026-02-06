@@ -1,0 +1,28 @@
+testId: find_nonexistent_term
+fixture: simple_doc.json
+user: "Use the find_content tool to find all instances of the literal text 'indemnification schedule zxq-19'."
+allowedSequences:
+  - ["find_content"]
+  - ["find_content", "find_content"]
+  - ["find_content", "find_content", "find_content"]
+assertions:
+  - type: sandbox_find_content
+    pattern: "indemnification schedule zxq-19"
+    flags: "i"
+    minMatches: 0
+    expectedTotal: 0
+  - type: openai_trace_find_content
+    description: "OpenAI trace should return zero matches for an absent phrase."
+    toolName: "find_content"
+    expectedTotal: 0
+    expectedBlockIds: []
+  - type: anthropic_trace_find_content
+    description: "Anthropic trace should return zero matches for an absent phrase."
+    toolName: "find_content"
+    expectedTotal: 0
+    expectedBlockIds: []
+  - type: vercel_trace_find_content
+    description: "Vercel trace should return zero matches for an absent phrase."
+    toolName: "find_content"
+    expectedTotal: 0
+    expectedBlockIds: []

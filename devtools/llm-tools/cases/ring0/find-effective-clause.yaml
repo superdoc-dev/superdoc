@@ -1,0 +1,27 @@
+testId: find_effective_clause
+fixture: simple_doc.json
+user: "Use the find_content tool to find all instances of the literal text 'agreement is effective'."
+allowedSequences:
+  - ["find_content"]
+  - ["find_content", "find_content"]
+  - ["find_content", "find_content", "find_content"]
+assertions:
+  - type: sandbox_find_content
+    pattern: "agreement is effective"
+    flags: "i"
+    expectedTotal: 1
+  - type: openai_trace_find_content
+    description: "OpenAI trace should match only the effective-date clause in p1."
+    toolName: "find_content"
+    expectedTotal: 1
+    expectedBlockIds: ["p1"]
+  - type: anthropic_trace_find_content
+    description: "Anthropic trace should match only the effective-date clause in p1."
+    toolName: "find_content"
+    expectedTotal: 1
+    expectedBlockIds: ["p1"]
+  - type: vercel_trace_find_content
+    description: "Vercel trace should match only the effective-date clause in p1."
+    toolName: "find_content"
+    expectedTotal: 1
+    expectedBlockIds: []

@@ -1,0 +1,43 @@
+{
+  "name": "@superdoc/llm-tools",
+  "version": "0.0.1",
+  "description": "LLM-ready tool definitions for SuperDoc Document API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm --out-dir dist",
+    "dev": "tsup src/index.ts --dts --format esm --out-dir dist --watch",
+    "test": "vitest run",
+    "tools:generate": "tsx scripts/generate-tools.ts"
+  },
+  "keywords": [
+    "superdoc",
+    "llm",
+    "tools",
+    "document-api"
+  ],
+  "license": "AGPL-3.0",
+  "dependencies": {
+    "zod": "catalog:",
+    "zod-to-json-schema": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "^8.5.1",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

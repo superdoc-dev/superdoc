@@ -288,6 +288,9 @@ catalogs:
     yjs:
       specifier: 13.6.19
       version: 13.6.19
+    zod:
+      specifier: ^3.25.76
+      version: 3.25.76
 
 overrides:
   canvas: 3.2.0
@@ -893,6 +896,31 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
+
+  packages/llm-tools:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
+      zod-to-json-schema:
+        specifier: ^3.24.1
+        version: 3.25.1(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.2
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@microsoft/api-extractor@7.56.1(@types/node@22.19.2))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.2)
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0))(tsx@4.21.0)(yaml@2.8.2)
 
   packages/preset-geometry: {}
 
@@ -9331,7 +9359,7 @@ packages:
   tar@6.1.15:
     resolution: {integrity: sha512-/zKt9UyngnxIT/EAGYuxaMYgOIJiP81ab9ZfkILq4oNLPFX50qyYmu7jRj9qeXoxmJHjGlbH0+cm2uy1WCs10A==}
     engines: {node: '>=10'}
-    deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exhorbitant rates) by contacting i@izs.me
+    deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   temp-dir@2.0.0:
     resolution: {integrity: sha512-aoBAniQmmwtcKp/7BzsH8Cxzv8OL736p7v1ihGb5e9DJ9kTwGWHrQrVB5+lfVDzfGrdRzXch+ig7LHaY1JTOrg==}
@@ -10309,6 +10337,11 @@ packages:
     resolution: {integrity: sha512-Un9+kInJ2Zt63n6Z7mLqBifzzPcOyX+b+Exuzf7L1+xqck9Q2EPByyTRduV3kmSPaXaRer1JCsucubpgL1fipg==}
     peerDependencies:
       zod: ^3.20.0
+
+  zod-to-json-schema@3.25.1:
+    resolution: {integrity: sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==}
+    peerDependencies:
+      zod: ^3.25 || ^4
 
   zod-validation-error@4.0.2:
     resolution: {integrity: sha512-Q6/nZLe6jxuU80qb/4uJ4t5v2VEZ44lzQjPDhYJNztRQ4wyWc6VF3D3Kb/fAuPetZQnhS3hnajCf9CsWesghLQ==}
@@ -21892,6 +21925,10 @@ snapshots:
   zod-to-json-schema@3.20.4(zod@3.24.0):
     dependencies:
       zod: 3.24.0
+
+  zod-to-json-schema@3.25.1(zod@3.25.76):
+    dependencies:
+      zod: 3.25.76
 
   zod-validation-error@4.0.2(zod@4.3.6):
     dependencies:

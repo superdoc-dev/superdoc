@@ -1,0 +1,20 @@
+description: SuperDoc llm-tools evals (Vercel AI SDK lane, direct/local providers)
+
+prompts:
+  - "{{test_id}}"
+
+evaluateOptions:
+  maxConcurrency: 1
+
+providers:
+  - id: "./providers/llm-trace-provider.cjs"
+    config:
+      label: "vercel-ai"
+      runner: "vercel-ai"
+      temperature: 0
+      maxSteps: 8
+      timeoutMs: 40000
+      maxToolCallsPerStep: 5
+
+tests:
+  - "./promptfoo-tests/ring0.yaml"

@@ -168,11 +168,30 @@ modules: {
 
 After initialization:
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.on("ready", () => {
   superdoc.addCommentsList("#comments-sidebar");
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.addCommentsList("#comments-sidebar");
+  },
+});
+```
+
+</CodeGroup>
 
 ## Permission resolver
 
@@ -208,13 +227,36 @@ modules: {
 
 Word comments are automatically imported with the document and marked with `importedId`. When exporting, use the `commentsType` option:
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 // Include comments in export
 const blob = await superdoc.export({ commentsType: "external" });
 
 // Remove all comments
 const cleanBlob = await superdoc.export({ commentsType: "clean" });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: async (superdoc) => {
+    // Include comments in export
+    const blob = await superdoc.export({ commentsType: "external" });
+
+    // Remove all comments
+    const cleanBlob = await superdoc.export({ commentsType: "clean" });
+  },
+});
+```
+
+</CodeGroup>
 
 ## API methods
 
@@ -224,7 +266,9 @@ These methods are available on the active editor's commands:
 
 Add a comment to the current text selection. Requires a text selection.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 // Simple usage
 superdoc.activeEditor.commands.addComment("Review this section");
 
@@ -236,6 +280,32 @@ superdoc.activeEditor.commands.addComment({
   isInternal: true,
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    // Simple usage
+    superdoc.activeEditor.commands.addComment("Review this section");
+
+    // With options
+    superdoc.activeEditor.commands.addComment({
+      content: "Please clarify this section",
+      author: "John Smith",
+      authorEmail: "john@company.com",
+      isInternal: true,
+    });
+  },
+});
+```
+
+</CodeGroup>
 
 <ParamField path="contentOrOptions" type="string | Object">
   Comment content as a string, or an options object with:
@@ -263,12 +333,34 @@ superdoc.activeEditor.commands.addComment({
 
 Add a reply to an existing comment or tracked change.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.activeEditor.commands.addCommentReply({
   parentId: "comment-123",
   content: "I agree with this suggestion",
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.addCommentReply({
+      parentId: "comment-123",
+      content: "I agree with this suggestion",
+    });
+  },
+});
+```
+
+</CodeGroup>
 
 <ParamField path="options" type="Object" required>
   <Expandable title="Options">
@@ -292,48 +384,152 @@ superdoc.activeEditor.commands.addCommentReply({
 
 ### `removeComment`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.activeEditor.commands.removeComment({
   commentId: "comment-123",
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.removeComment({
+      commentId: "comment-123",
+    });
+  },
+});
+```
+
+</CodeGroup>
+
 ### `setActiveComment`
 
 Highlight and focus a comment.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.activeEditor.commands.setActiveComment({
   commentId: "comment-123",
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.setActiveComment({
+      commentId: "comment-123",
+    });
+  },
+});
+```
+
+</CodeGroup>
+
 ### `resolveComment`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.activeEditor.commands.resolveComment({
   commentId: "comment-123",
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.resolveComment({
+      commentId: "comment-123",
+    });
+  },
+});
+```
+
+</CodeGroup>
+
 ### `setCommentInternal`
 
 Toggle a comment between internal and external visibility.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.activeEditor.commands.setCommentInternal({
   commentId: "comment-123",
   isInternal: true,
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.setCommentInternal({
+      commentId: "comment-123",
+      isInternal: true,
+    });
+  },
+});
+```
+
+</CodeGroup>
+
 ### `setCursorById`
 
 Navigate the cursor to a comment's position in the document.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.activeEditor.commands.setCursorById("comment-123");
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.setCursorById("comment-123");
+  },
+});
+```
+
+</CodeGroup>
 
 ## Events
 

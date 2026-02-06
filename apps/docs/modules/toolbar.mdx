@@ -370,51 +370,166 @@ The toolbar automatically adapts based on the user's role:
 
 ## API methods
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const toolbar = superdoc.toolbar;
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+  },
+});
+```
+
+</CodeGroup>
 
 ### `getToolbarItemByName`
 
 Get a toolbar item by its name.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const boldBtn = toolbar.getToolbarItemByName('bold');
 boldBtn.active.value;    // boolean
 boldBtn.disabled.value;  // boolean
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    const boldBtn = toolbar.getToolbarItemByName('bold');
+    boldBtn.active.value;    // boolean
+    boldBtn.disabled.value;  // boolean
+  },
+});
+```
+
+</CodeGroup>
+
 ### `getToolbarItemByGroup`
 
 Get all toolbar items in a layout group.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const leftItems = toolbar.getToolbarItemByGroup('left');
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    const leftItems = toolbar.getToolbarItemByGroup('left');
+  },
+});
+```
+
+</CodeGroup>
 
 ### `updateToolbarState`
 
 Refresh all button states based on the current editor state.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 toolbar.updateToolbarState();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.updateToolbarState();
+  },
+});
+```
+
+</CodeGroup>
 
 ### `setZoom`
 
 Set the editor zoom level programmatically.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 toolbar.setZoom(150); // 150%
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.setZoom(150); // 150%
+  },
+});
+```
+
+</CodeGroup>
 
 ### `destroy`
 
 Clean up toolbar resources and event listeners.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 toolbar.destroy();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.destroy();
+  },
+});
+```
+
+</CodeGroup>
 
 ## Events
 
@@ -422,18 +537,60 @@ toolbar.destroy();
 
 Fired when a SuperDoc-level command is executed (zoom, document mode).
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 toolbar.on('superdoc-command', ({ item, argument }) => {
   console.log(`Command: ${item.command}, arg: ${argument}`);
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.on('superdoc-command', ({ item, argument }) => {
+      console.log(`Command: ${item.command}, arg: ${argument}`);
+    });
+  },
+});
+```
+
+</CodeGroup>
+
 ### `exception`
 
 Fired when an error occurs during a toolbar action.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 toolbar.on('exception', ({ error, editor, originalError }) => {
   console.error('Toolbar error:', error);
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.on('exception', ({ error, editor, originalError }) => {
+      console.error('Toolbar error:', error);
+    });
+  },
+});
+```
+
+</CodeGroup>

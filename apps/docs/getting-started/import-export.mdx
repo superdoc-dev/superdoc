@@ -75,11 +75,28 @@ new SuperDoc({
 
 Insert content into an existing document using editor commands.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.activeEditor.commands.insertContent(content, {
   contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.insertContent(content, {
+      contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
+    });
+  },
+});
+```
+</CodeGroup>
 
 <ParamField path="value" type="string | Object" required>
   The content to insert. String for `html`, `markdown`, and `text`. ProseMirror JSON object for `schema`.
@@ -93,7 +110,8 @@ superdoc.activeEditor.commands.insertContent(content, {
 
 ### DOCX export
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Download as .docx file
 await superdoc.export();
 
@@ -109,6 +127,33 @@ await superdoc.export({ isFinalDoc: true });
 // Custom filename
 await superdoc.export({ exportedName: 'Final Contract' });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    // Download as .docx file
+    await superdoc.export();
+
+    // Get blob without triggering download
+    const blob = await superdoc.export({ triggerDownload: false });
+
+    // Export without comments
+    await superdoc.export({ commentsType: 'clean' });
+
+    // Export as final document (applies tracked changes)
+    await superdoc.export({ isFinalDoc: true });
+
+    // Custom filename
+    await superdoc.export({ exportedName: 'Final Contract' });
+  },
+});
+```
+</CodeGroup>
 
 <ParamField path="exportType" type="string[]" default="['docx']">
   Formats to export
@@ -144,7 +189,8 @@ await superdoc.export({ exportedName: 'Final Contract' });
 
 ### HTML export
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Returns array of HTML strings (one per document)
 const htmlArray = superdoc.getHTML();
 
@@ -152,25 +198,73 @@ const htmlArray = superdoc.getHTML();
 const html = superdoc.activeEditor.getHTML();
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    // Returns array of HTML strings (one per document)
+    const htmlArray = superdoc.getHTML();
+
+    // From the active editor (single string)
+    const html = superdoc.activeEditor.getHTML();
+  },
+});
+```
+</CodeGroup>
+
 <Note>
 HTML export is structure-only. Custom CSS styling and Word-specific formatting are not included.
 </Note>
 
 ### JSON export
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // From the active editor
 const json = superdoc.activeEditor.getJSON();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const json = superdoc.activeEditor.getJSON();
+  },
+});
+```
+</CodeGroup>
 
 JSON export preserves the full document structure and can be re-imported with `jsonOverride`.
 
 ### Markdown export
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // From the active editor
 const markdown = await superdoc.activeEditor.getMarkdown();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    const markdown = await superdoc.activeEditor.getMarkdown();
+  },
+});
+```
+</CodeGroup>
 
 ## HTML element mapping
 

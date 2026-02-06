@@ -209,8 +209,8 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
         modules: {
           comments: false,
         },
-        viewOptions: document.viewOptions ?? {
-          layout: document.layoutMode === 'responsive' ? 'web' : 'print',
+        viewOptions: {
+          layout: document.viewOptions?.layout ?? (document.layoutMode === 'responsive' ? 'web' : 'print'),
         },
         onReady: () => {
           // Guard callback execution if cleanup already ran
@@ -237,8 +237,8 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
       }
       superdocRef.current = null;
     };
-    // Compare margin primitives to avoid re-init on every render
-  }, [document.source, document.mode, document.layoutMode, document.viewOptions, discoverAndApplyFields]);
+    // Use primitives to avoid re-init on every render when object references change
+  }, [document.source, document.mode, document.layoutMode, document.viewOptions?.layout, discoverAndApplyFields]);
 
   useEffect(() => {
     if (!document.validation?.scroll?.required || !isReady) return;

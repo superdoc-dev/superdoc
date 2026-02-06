@@ -72,7 +72,7 @@ export interface DocumentConfig {
     };
   };
   /**
-   * Document view options (recommended for v1.x):
+   * Document view options (recommended for SuperDoc > v1.6.x):
    * - 'print': Fixed page width, displays document as it prints (default)
    * - 'web': Content reflows to fit container width (mobile/accessibility)
    */

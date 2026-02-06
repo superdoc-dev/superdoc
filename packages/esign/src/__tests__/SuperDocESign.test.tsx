@@ -801,5 +801,20 @@ describe('SuperDocESign component', () => {
       const options = getLastConstructorOptions();
       expect(options.viewOptions).toEqual({ layout: 'print' });
     });
+
+    it('falls back to layoutMode when viewOptions is empty object', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Test</p>',
+          viewOptions: {},
+          layoutMode: 'responsive',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.viewOptions).toEqual({ layout: 'web' });
+    });
   });
 });

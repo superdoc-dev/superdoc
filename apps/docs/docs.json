@@ -212,7 +212,11 @@
               },
               {
                 "group": "Migration",
-                "pages": ["guides/migration/prosemirror", "guides/breaking-changes-v1", "guides/typescript-migration"]
+                "pages": [
+                  "guides/migration/prosemirror",
+                  "guides/migration/breaking-changes-v1",
+                  "guides/migration/typescript-migration"
+                ]
               }
             ]
           },
@@ -386,6 +390,14 @@
     {
       "source": "/modules/collaboration/self-hosted/overview",
       "destination": "/guides/collaboration/self-hosted-overview"
+    },
+    {
+      "source": "/guides/breaking-changes-v1",
+      "destination": "/guides/migration/breaking-changes-v1"
+    },
+    {
+      "source": "/guides/typescript-migration",
+      "destination": "/guides/migration/typescript-migration"
     }
   ],
   "integrations": {

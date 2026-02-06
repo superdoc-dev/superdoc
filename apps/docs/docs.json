@@ -78,9 +78,7 @@
                   "core/superdoc/overview",
                   "core/superdoc/configuration",
                   "core/superdoc/methods",
-                  "core/superdoc/events",
-                  "core/superdoc/properties",
-                  "core/superdoc/types"
+                  "core/superdoc/events"
                 ]
               },
               {
@@ -89,7 +87,7 @@
                   "core/supereditor/overview",
                   "core/supereditor/configuration",
                   "core/supereditor/methods",
-                  "core/supereditor/hooks"
+                  "core/supereditor/events"
                 ]
               }
             ]
@@ -283,6 +281,18 @@
     ]
   },
   "redirects": [
+    {
+      "source": "/core/superdoc/properties",
+      "destination": "/core/superdoc/methods#properties"
+    },
+    {
+      "source": "/core/superdoc/types",
+      "destination": "/core/superdoc/methods#typescript-types"
+    },
+    {
+      "source": "/core/supereditor/hooks",
+      "destination": "/core/supereditor/events"
+    },
     {
       "source": "/guide/quick-start",
       "destination": "/getting-started/installation"

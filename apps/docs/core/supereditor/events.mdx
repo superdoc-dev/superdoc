@@ -1,0 +1,138 @@
+---
+title: Events
+keywords: "supereditor events, editor lifecycle, document events, editor callbacks, editor hooks"
+---
+
+Events let you respond to editor lifecycle and content changes.
+
+## Lifecycle
+
+### `onBeforeCreate`
+
+Called before the editor view is created.
+
+```javascript
+onBeforeCreate: ({ editor }) => {
+  // Set up external services
+}
+```
+
+### `onCreate`
+
+Called when editor is fully initialized and ready.
+
+```javascript
+onCreate: ({ editor }) => {
+  editor.focus();
+}
+```
+
+### `onDestroy`
+
+Called when editor is being destroyed. Clean up resources here.
+
+```javascript
+onDestroy: () => {
+  clearInterval(autoSaveTimer);
+}
+```
+
+### `onFirstRender`
+
+Called after the first render completes.
+
+```javascript
+onFirstRender: () => {
+  hideLoadingSpinner();
+}
+```
+
+## Content
+
+### `onUpdate`
+
+Called when document content changes.
+
+```javascript
+onUpdate: ({ editor, transaction }) => {
+  if (transaction.docChanged) {
+    saveToBackend(editor.getJSON());
+  }
+}
+```
+
+### `onContentError`
+
+Called when content processing fails.
+
+```javascript
+onContentError: ({ error, editor, documentId }) => {
+  console.error('Document error:', error);
+}
+```
+
+## Selection
+
+### `onSelectionUpdate`
+
+Called when selection changes (cursor movement).
+
+```javascript
+onSelectionUpdate: ({ editor }) => {
+  toolbar.bold = editor.isActive('bold');
+}
+```
+
+### `onFocus`
+
+Called when editor gains focus.
+
+```javascript
+onFocus: ({ editor, event }) => {
+  showFormattingToolbar();
+}
+```
+
+### `onBlur`
+
+Called when editor loses focus.
+
+```javascript
+onBlur: ({ editor, event }) => {
+  saveCurrentState();
+}
+```
+
+## Features
+
+### `onCommentsUpdate`
+
+```javascript
+onCommentsUpdate: ({ editor }) => {
+  updateCommentsSidebar();
+}
+```
+
+### `onCommentsLoaded`
+
+```javascript
+onCommentsLoaded: ({ editor, comments }) => {
+  console.log(`Loaded ${comments.length} comments`);
+}
+```
+
+### `onTrackedChangesUpdate`
+
+```javascript
+onTrackedChangesUpdate: ({ editor }) => {
+  updateReviewPanel();
+}
+```
+
+### `onCollaborationReady`
+
+```javascript
+onCollaborationReady: ({ editor, ydoc }) => {
+  showCollaboratorsCursors();
+}
+```

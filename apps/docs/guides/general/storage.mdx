@@ -36,7 +36,7 @@ For scenarios where only one user edits at a time (like SharePoint), implement a
 </Info>
 
 **How it works:**
-- When the active user [makes an edit](/core/supereditor/hooks#onupdate), debounced changes are sent to your server which stores the document
+- When the active user [makes an edit](/core/supereditor/events#onupdate), debounced changes are sent to your server which stores the document
 - Alternatively, when a user saves/checks in the document, it is sent to your server for storage
 - Storage is triggered by user actions on the frontend
 

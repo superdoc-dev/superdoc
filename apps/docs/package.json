@@ -7,7 +7,8 @@
     "gen:api": "node scripts/sync-api-docs.js",
     "gen:docs": "node scripts/sync-sdk-docs.js",
     "gen:all": "pnpm run gen:api && pnpm run gen:docs",
-    "check:links": "mintlify broken-links"
+    "check:links": "mintlify broken-links",
+    "check:imports": "node scripts/validate-code-imports.js"
   },
   "devDependencies": {
     "documentation": "^14.0.3",

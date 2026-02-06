@@ -40,9 +40,25 @@ Automatically checks if any style attributes exist before removal
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.removeEmptyTextStyle()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.removeEmptyTextStyle()
+  },
+});
+```
+</CodeGroup>
 
 ## Source code
 

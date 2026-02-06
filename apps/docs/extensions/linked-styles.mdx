@@ -16,10 +16,27 @@ Apply a linked style to the selected paragraphs.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const style = editor.helpers.linkedStyles.getStyleById('Heading1');
 editor.commands.setLinkedStyle(style);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+    editor.commands.setLinkedStyle(style);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -33,11 +50,29 @@ Toggle a linked style on the current selection. Removes the style if already app
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const style = editor.helpers.linkedStyles.getStyleById('Heading1');
 editor.commands.toggleLinkedStyle(style)
 editor.commands.toggleLinkedStyle(style, 'paragraph')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+    editor.commands.toggleLinkedStyle(style)
+    editor.commands.toggleLinkedStyle(style, 'paragraph')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -54,10 +89,27 @@ Apply a linked style by its ID.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setStyleById('Heading1')
 editor.commands.setStyleById('Normal')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setStyleById('Heading1')
+    editor.commands.setStyleById('Normal')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -73,9 +125,25 @@ Get all available linked styles from the document.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const styles = editor.helpers.linkedStyles.getStyles();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const styles = editor.helpers.linkedStyles.getStyles();
+  },
+});
+```
+</CodeGroup>
 
 **Returns:**
 
@@ -89,9 +157,25 @@ Get a specific style by ID.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

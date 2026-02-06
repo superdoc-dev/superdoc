@@ -14,25 +14,73 @@ import Description from '/snippets/extensions/paragraph.mdx'
 
 Convert selected paragraphs to a bullet list, or remove list formatting if already a bullet list.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleBulletList()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleBulletList()
+  },
+});
+```
+</CodeGroup>
 
 ### `toggleOrderedList`
 
 Convert selected paragraphs to an ordered list, or remove list formatting if already an ordered list.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleOrderedList()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleOrderedList()
+  },
+});
+```
+</CodeGroup>
 
 ### `restartNumbering`
 
 Reset list numbering for the current list item and following items.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.restartNumbering()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.restartNumbering()
+  },
+});
+```
+</CodeGroup>
 
 ## Keyboard shortcuts
 

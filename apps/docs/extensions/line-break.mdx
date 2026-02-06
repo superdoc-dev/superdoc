@@ -20,9 +20,25 @@ Creates a soft break within the same paragraph
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.insertLineBreak()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertLineBreak()
+  },
+});
+```
+</CodeGroup>
 
 ### `insertPageBreak`
 
@@ -34,9 +50,25 @@ Forces content to start on a new page when printed
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.insertPageBreak()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertPageBreak()
+  },
+});
+```
+</CodeGroup>
 
 
 ## Source code

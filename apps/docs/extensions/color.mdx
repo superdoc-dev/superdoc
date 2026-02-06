@@ -36,10 +36,27 @@ Preserves other text styling attributes
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Set to red using hex
 editor.commands.setColor('#ff0000')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Set to red using hex
+    editor.commands.setColor('#ff0000');
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -57,9 +74,25 @@ Removes color while preserving other text styles
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetColor()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetColor();
+  },
+});
+```
+</CodeGroup>
 
 ## Types
 

@@ -24,10 +24,27 @@ Set text alignment on the current paragraph.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setTextAlign('center')
 editor.commands.setTextAlign('justify')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setTextAlign('center')
+    editor.commands.setTextAlign('justify')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -45,9 +62,25 @@ Resets alignment to the default value
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetTextAlign()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetTextAlign()
+  },
+});
+```
+</CodeGroup>
 
 ## Keyboard shortcuts
 

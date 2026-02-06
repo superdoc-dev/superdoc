@@ -20,9 +20,25 @@ Scrolls editor to the first match from previous search
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.goToFirstMatch()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.goToFirstMatch()
+  },
+});
+```
+</CodeGroup>
 
 ### `search`
 
@@ -34,10 +50,27 @@ Returns array of SearchMatch objects with positions and IDs
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const matches = editor.commands.search('test string')
 const regexMatches = editor.commands.search(/test/i)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const matches = editor.commands.search('test string')
+    const regexMatches = editor.commands.search(/test/i)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -64,10 +97,27 @@ Scrolls to match and selects it
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const searchResults = editor.commands.search('test string')
 editor.commands.goToSearchResult(searchResults[3])
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const searchResults = editor.commands.search('test string')
+    editor.commands.goToSearchResult(searchResults[3])
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

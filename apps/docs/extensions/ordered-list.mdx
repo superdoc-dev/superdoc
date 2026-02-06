@@ -20,9 +20,25 @@ Toggle ordered list formatting on the current selection. Converts selected parag
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleOrderedList()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleOrderedList()
+  },
+});
+```
+</CodeGroup>
 
 ### `restartNumbering`
 
@@ -30,9 +46,25 @@ Restart list numbering from the current position.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.restartNumbering()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.restartNumbering()
+  },
+});
+```
+</CodeGroup>
 
 ## Keyboard shortcuts
 

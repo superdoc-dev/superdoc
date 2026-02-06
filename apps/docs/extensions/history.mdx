@@ -32,9 +32,25 @@ Groups changes within the newGroupDelay window
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.undo()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.undo()
+  },
+});
+```
+</CodeGroup>
 
 ### `redo`
 
@@ -46,9 +62,25 @@ Only available after an undo action
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.redo()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.redo()
+  },
+});
+```
+</CodeGroup>
 
 ## Keyboard shortcuts
 

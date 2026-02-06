@@ -20,9 +20,25 @@ Removes all marks and resets nodes to default paragraph
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.clearFormat()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.clearFormat()
+  },
+});
+```
+</CodeGroup>
 
 ### `clearMarksFormat`
 
@@ -34,9 +50,25 @@ Removes bold, italic, underline, colors, etc. but preserves block structure
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.clearMarksFormat()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.clearMarksFormat()
+  },
+});
+```
+</CodeGroup>
 
 ### `clearNodesFormat`
 
@@ -48,9 +80,25 @@ Converts headings, lists, etc. to paragraphs but preserves text marks
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.clearNodesFormat()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.clearNodesFormat()
+  },
+});
+```
+</CodeGroup>
 
 ### `copyFormat`
 
@@ -62,9 +110,25 @@ Works like format painter - first click copies, second click applies
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.copyFormat()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.copyFormat()
+  },
+});
+```
+</CodeGroup>
 
 ### `toggleMarkCascade`
 
@@ -72,10 +136,27 @@ Toggle a mark type with cascade behavior, handling nested marks and negation att
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleMarkCascade('bold')
 editor.commands.toggleMarkCascade('italic', { extendEmptyMarkRange: true })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleMarkCascade('bold')
+    editor.commands.toggleMarkCascade('italic', { extendEmptyMarkRange: true })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

@@ -20,10 +20,27 @@ The replacement node should have the same type as the original
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const newParagraph = editor.schema.nodes.paragraph.create({}, editor.schema.text('New content'))
 editor.commands.replaceBlockNodeById('block-123', newParagraph)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const newParagraph = editor.schema.nodes.paragraph.create({}, editor.schema.text('New content'))
+    editor.commands.replaceBlockNodeById('block-123', newParagraph)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -44,9 +61,25 @@ Completely removes the node from the document
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.deleteBlockNodeById('block-123')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.deleteBlockNodeById('block-123')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -64,9 +97,25 @@ Merges new attributes with existing ones
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.updateBlockNodeAttributes('block-123', { textAlign: 'center' })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.updateBlockNodeAttributes('block-123', { textAlign: 'center' })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -85,10 +134,27 @@ Get all block nodes in the document
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const blocks = editor.helpers.blockNode.getBlockNodes()
 console.log(`Found ${blocks.length} block nodes`)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const blocks = editor.helpers.blockNode.getBlockNodes()
+    console.log(`Found ${blocks.length} block nodes`)
+  },
+});
+```
+</CodeGroup>
 
 **Returns:**
 
@@ -102,10 +168,27 @@ Get a specific block node by its ID
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const block = editor.helpers.blockNode.getBlockNodeById('block-123')
 if (block.length) console.log('Found:', block[0].node.type.name)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const block = editor.helpers.blockNode.getBlockNodeById('block-123')
+    if (block.length) console.log('Found:', block[0].node.type.name)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -125,10 +208,27 @@ Get all block nodes of a specific type
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const paragraphs = editor.helpers.blockNode.getBlockNodesByType('paragraph')
 const headings = editor.helpers.blockNode.getBlockNodesByType('heading')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const paragraphs = editor.helpers.blockNode.getBlockNodesByType('paragraph')
+    const headings = editor.helpers.blockNode.getBlockNodesByType('heading')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -148,13 +248,33 @@ Get all block nodes within a position range
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const selection = editor.state.selection
 const blocksInSelection = editor.helpers.blockNode.getBlockNodesInRange(
   selection.from,
   selection.to
 )
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const selection = editor.state.selection
+    const blocksInSelection = editor.helpers.blockNode.getBlockNodesInRange(
+      selection.from,
+      selection.to
+    )
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

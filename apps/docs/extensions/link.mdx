@@ -88,13 +88,33 @@ Automatically adds underline formatting and trims whitespace from link boundarie
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setLink({ href: 'https://example.com' })
 editor.commands.setLink({
   href: 'https://example.com',
   text: 'Visit Example'
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setLink({ href: 'https://example.com' })
+    editor.commands.setLink({
+      href: 'https://example.com',
+      text: 'Visit Example'
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -112,9 +132,25 @@ Also removes underline and text color
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetLink()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetLink()
+  },
+});
+```
+</CodeGroup>
 
 ### `toggleLink`
 
@@ -122,10 +158,27 @@ Toggle link on selection
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleLink({ href: 'https://example.com' })
 editor.commands.toggleLink()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleLink({ href: 'https://example.com' })
+    editor.commands.toggleLink()
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

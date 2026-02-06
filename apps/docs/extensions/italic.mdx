@@ -14,25 +14,73 @@ import Description from '/snippets/extensions/italic.mdx'
 
 Apply italic formatting to the current selection.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setItalic()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setItalic();
+  },
+});
+```
+</CodeGroup>
 
 ### `unsetItalic`
 
 Remove italic formatting from the current selection.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetItalic()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetItalic();
+  },
+});
+```
+</CodeGroup>
 
 ### `toggleItalic`
 
 Toggle italic formatting on the current selection.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleItalic()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleItalic();
+  },
+});
+```
+</CodeGroup>
 
 ## Keyboard shortcuts
 

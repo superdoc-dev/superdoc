@@ -36,9 +36,25 @@ Converts current block to heading
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setHeading({ level: 2 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setHeading({ level: 2 })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -56,10 +72,27 @@ Switches between heading and paragraph for the same level
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleHeading({ level: 1 })
 editor.commands.toggleHeading({ level: 3 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleHeading({ level: 1 })
+    editor.commands.toggleHeading({ level: 3 })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

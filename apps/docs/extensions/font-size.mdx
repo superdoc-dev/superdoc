@@ -40,11 +40,29 @@ Automatically clamps to min/max values
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setFontSize('14pt')
 editor.commands.setFontSize('18px')
 editor.commands.setFontSize(16)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setFontSize('14pt')
+    editor.commands.setFontSize('18px')
+    editor.commands.setFontSize(16)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -62,9 +80,25 @@ Reverts to default document size
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetFontSize()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetFontSize()
+  },
+});
+```
+</CodeGroup>
 
 ## Types
 

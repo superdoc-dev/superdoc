@@ -36,9 +36,25 @@ Apply underline formatting
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setUnderline()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setUnderline();
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -48,9 +64,25 @@ Remove underline formatting
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetUnderline()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetUnderline();
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -60,9 +92,25 @@ Toggle underline formatting
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleUnderline()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleUnderline();
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 

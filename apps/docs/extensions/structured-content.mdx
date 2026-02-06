@@ -115,11 +115,29 @@ Update all structured content fields that share the same group identifier.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.updateStructuredContentByGroup('pricing', {
   text: '$99.00'
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.updateStructuredContentByGroup('pricing', {
+      text: '$99.00'
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -136,10 +154,27 @@ Remove all structured content fields that share the same group identifier.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.deleteStructuredContentByGroup('pricing')
 editor.commands.deleteStructuredContentByGroup(['pricing', 'deprecated'])
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.deleteStructuredContentByGroup('pricing')
+    editor.commands.deleteStructuredContentByGroup(['pricing', 'deprecated'])
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -154,7 +189,8 @@ Each inner array represents the cell values for one new row.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.appendRowsToStructuredContentTable({
   id: "block-123",
   tableIndex: 0,
@@ -165,6 +201,29 @@ editor.commands.appendRowsToStructuredContentTable({
   copyRowStyle: true,
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.appendRowsToStructuredContentTable({
+      id: "block-123",
+      tableIndex: 0,
+      rows: [
+        ["A", "B"],
+        ["C", "D"],
+      ],
+      copyRowStyle: true,
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -184,10 +243,27 @@ Get all block-level structured content tags in the document
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const blocks = editor.helpers.getStructuredContentBlockTags(editor.state);
 console.log(`Found ${blocks.length} structured content blocks`);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const blocks = editor.helpers.getStructuredContentBlockTags(editor.state);
+    console.log(`Found ${blocks.length} structured content blocks`);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -199,10 +275,27 @@ Get all inline structured content tags in the document
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const inlines = editor.helpers.getStructuredContentInlineTags(editor.state);
 console.log(`Found ${inlines.length} inline fields`);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const inlines = editor.helpers.getStructuredContentInlineTags(editor.state);
+    console.log(`Found ${inlines.length} inline fields`);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -214,13 +307,33 @@ Find all tables inside a structured content block by ID
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const tables = editor.helpers.getStructuredContentTablesById(
   "block-123",
   editor.state
 );
 console.log(`Block contains ${tables.length} table(s)`);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const tables = editor.helpers.getStructuredContentTablesById(
+      "block-123",
+      editor.state
+    );
+    console.log(`Block contains ${tables.length} table(s)`);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -235,12 +348,31 @@ Find all structured content nodes that share the same group identifier.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const fields = editor.helpers.getStructuredContentByGroup('pricing', editor.state);
 fields.forEach(({ node, pos }) => {
   console.log(node.attrs.tag, pos);
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const fields = editor.helpers.getStructuredContentByGroup('pricing', editor.state);
+    fields.forEach(({ node, pos }) => {
+      console.log(node.attrs.tag, pos);
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -255,10 +387,27 @@ Get all structured content tags (inline and block) in the document
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const allTags = editor.helpers.getStructuredContentTags(editor.state);
 console.log(`Found ${allTags.length} structured content elements`);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const allTags = editor.helpers.getStructuredContentTags(editor.state);
+    console.log(`Found ${allTags.length} structured content elements`);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -270,13 +419,33 @@ Get structured content tag(s) by ID
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const field = editor.helpers.getStructuredContentTagsById(
   "field-123",
   editor.state
 );
 if (field.length) console.log("Found field:", field[0].node.attrs);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const field = editor.helpers.getStructuredContentTagsById(
+      "field-123",
+      editor.state
+    );
+    if (field.length) console.log("Found field:", field[0].node.attrs);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

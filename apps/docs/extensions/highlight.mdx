@@ -32,10 +32,27 @@ Apply highlight with specified color
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setHighlight('#FFEB3B')
 editor.commands.setHighlight('rgba(255, 235, 59, 0.5)')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setHighlight('#FFEB3B');
+    editor.commands.setHighlight('rgba(255, 235, 59, 0.5)');
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -49,9 +66,25 @@ Remove highlight formatting
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetHighlight()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetHighlight();
+  },
+});
+```
+</CodeGroup>
 
 ### `toggleHighlight`
 
@@ -59,9 +92,25 @@ Toggle highlight formatting
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleHighlight()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleHighlight();
+  },
+});
+```
+</CodeGroup>
 
 ## Keyboard shortcuts
 

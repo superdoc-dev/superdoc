@@ -20,9 +20,25 @@ Toggle bullet list formatting on the current selection. Converts selected paragr
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleBulletList()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleBulletList()
+  },
+});
+```
+</CodeGroup>
 
 ## Keyboard shortcuts
 

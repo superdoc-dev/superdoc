@@ -14,25 +14,73 @@ import Description from '/snippets/extensions/bold.mdx'
 
 Apply bold formatting to the current selection.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setBold()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setBold();
+  },
+});
+```
+</CodeGroup>
 
 ### `unsetBold`
 
 Remove bold formatting from the current selection.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetBold()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetBold();
+  },
+});
+```
+</CodeGroup>
 
 ### `toggleBold`
 
 Toggle bold formatting on the current selection.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleBold()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleBold();
+  },
+});
+```
+</CodeGroup>
 
 ## Keyboard shortcuts
 

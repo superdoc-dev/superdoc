@@ -36,10 +36,27 @@ Preserves other text styling attributes
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Set to Arial
 editor.commands.setFontFamily('Arial')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Set to Arial
+    editor.commands.setFontFamily('Arial')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -57,9 +74,25 @@ Reverts to default document font
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetFontFamily()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetFontFamily()
+  },
+});
+```
+</CodeGroup>
 
 ## Types
 

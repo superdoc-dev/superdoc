@@ -20,10 +20,27 @@ Used internally to maintain selection when interacting with toolbar
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Restore selection after toolbar interaction
 editor.commands.restorePreservedSelection()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Restore selection after toolbar interaction
+    editor.commands.restorePreservedSelection()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command function
 

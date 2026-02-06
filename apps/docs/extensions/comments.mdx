@@ -24,7 +24,8 @@ modules: {
 
 Add a comment to the current text selection. Requires text to be selected.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Simple text comment
 editor.commands.addComment('Please review this section')
 
@@ -37,6 +38,30 @@ editor.commands.addComment({
 })
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Simple text comment
+    editor.commands.addComment('Please review this section')
+
+    // With options
+    editor.commands.addComment({
+      content: 'Please review',
+      author: 'Jane Smith',
+      authorEmail: 'jane@example.com',
+      isInternal: false
+    })
+  },
+});
+```
+</CodeGroup>
+
 **Parameters:**
 
 <ParamField path="contentOrOptions" type="string | Object" required>
@@ -47,12 +72,31 @@ editor.commands.addComment({
 
 Add a reply to an existing comment thread.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addCommentReply({
   parentId: 'comment-123',
   content: 'Done, updated the wording.'
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addCommentReply({
+      parentId: 'comment-123',
+      content: 'Done, updated the wording.'
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -64,9 +108,25 @@ editor.commands.addCommentReply({
 
 Remove a comment and its highlight marks from the document.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.removeComment({ commentId: 'abc-123' })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.removeComment({ commentId: 'abc-123' })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -78,9 +138,25 @@ editor.commands.removeComment({ commentId: 'abc-123' })
 
 Resolve a comment. Removes the highlight but preserves positional anchors for export.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.resolveComment({ commentId: 'abc-123' })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.resolveComment({ commentId: 'abc-123' })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -92,28 +168,79 @@ editor.commands.resolveComment({ commentId: 'abc-123' })
 
 Set the active/selected comment thread by ID.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setActiveComment({ commentId: 'abc-123' })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setActiveComment({ commentId: 'abc-123' })
+  },
+});
+```
+</CodeGroup>
 
 ### `setCommentInternal`
 
 Toggle whether a comment is internal (private) or external.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setCommentInternal({
   commentId: 'abc-123',
   isInternal: true
 })
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setCommentInternal({
+      commentId: 'abc-123',
+      isInternal: true
+    })
+  },
+});
+```
+</CodeGroup>
+
 ### `setCursorById`
 
 Move the cursor to the start of a comment's range. Also works for tracked change IDs.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setCursorById('abc-123')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setCursorById('abc-123')
+  },
+});
+```
+</CodeGroup>
 
 ## Events
 

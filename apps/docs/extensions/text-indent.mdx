@@ -16,13 +16,33 @@ Set text indentation in points.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Set to 72 points (1 inch)
 editor.commands.setTextIndentation(72)
 
 // Set to 36 points (0.5 inch)
 editor.commands.setTextIndentation(36)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Set to 72 points (1 inch)
+    editor.commands.setTextIndentation(72)
+
+    // Set to 36 points (0.5 inch)
+    editor.commands.setTextIndentation(36)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -36,9 +56,25 @@ Remove text indentation from selected paragraphs.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetTextIndentation()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetTextIndentation()
+  },
+});
+```
+</CodeGroup>
 
 ### `increaseTextIndent`
 
@@ -46,9 +82,25 @@ Increase text indentation by 36 points (0.5 inch).
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.increaseTextIndent()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.increaseTextIndent()
+  },
+});
+```
+</CodeGroup>
 
 ### `decreaseTextIndent`
 
@@ -56,9 +108,25 @@ Decrease text indentation by 36 points. Removes indentation completely if it rea
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.decreaseTextIndent()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.decreaseTextIndent()
+  },
+});
+```
+</CodeGroup>
 
 
 ## Source code

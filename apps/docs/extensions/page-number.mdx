@@ -28,9 +28,25 @@ Only works in header/footer contexts
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addAutoPageNumber()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addAutoPageNumber()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command function
 
@@ -44,9 +60,25 @@ Only works in header/footer contexts
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addTotalPageCount()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addTotalPageCount()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command function
 

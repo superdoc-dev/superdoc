@@ -16,10 +16,27 @@ Insert a bookmark at the current cursor position. Bookmarks are invisible naviga
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.insertBookmark({ name: 'chapter1' })
 editor.commands.insertBookmark({ name: 'introduction', id: 'intro-001' })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertBookmark({ name: 'chapter1' })
+    editor.commands.insertBookmark({ name: 'introduction', id: 'intro-001' })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -33,9 +50,25 @@ Navigate to a bookmark by name. Scrolls the document to the bookmark position.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.goToBookmark('chapter1')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.goToBookmark('chapter1')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

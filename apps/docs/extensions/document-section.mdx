@@ -19,7 +19,8 @@ import { DocumentSection } from 'superdoc/super-editor';
 
 Create a new document section.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.createDocumentSection({
   id: 'legal-1',
   title: 'Terms & Conditions',
@@ -29,35 +30,105 @@ editor.commands.createDocumentSection({
 })
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.createDocumentSection({
+      id: 'legal-1',
+      title: 'Terms & Conditions',
+      description: 'Legal terms',
+      isLocked: true,
+      html: '<p>Content...</p>'
+    })
+  },
+});
+```
+</CodeGroup>
+
 ### `removeSectionAtSelection`
 
 Remove the section at the current cursor position.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.removeSectionAtSelection()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.removeSectionAtSelection()
+  },
+});
+```
+</CodeGroup>
 
 ### `removeSectionById`
 
 Remove a section by its ID.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.removeSectionById('legal-1')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.removeSectionById('legal-1')
+  },
+});
+```
+</CodeGroup>
 
 ### `lockSectionById`
 
 Lock a section to prevent editing.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.lockSectionById('legal-1')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.lockSectionById('legal-1')
+  },
+});
+```
+</CodeGroup>
 
 ### `updateSectionById`
 
 Update a section's content or attributes.
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.updateSectionById({
   id: 'legal-1',
   html: '<p>Updated...</p>',
@@ -65,9 +136,29 @@ editor.commands.updateSectionById({
 })
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.updateSectionById({
+      id: 'legal-1',
+      html: '<p>Updated...</p>',
+      attrs: { title: 'New Title' }
+    })
+  },
+});
+```
+</CodeGroup>
+
 ## Helpers
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Get all sections
 const sections = editor.helpers.documentSection.getAllSections(editor);
 
@@ -82,6 +173,33 @@ const childEditor = editor.helpers.documentSection.getLinkedSectionEditor(
   parentEditor
 );
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Get all sections
+    const sections = editor.helpers.documentSection.getAllSections(editor);
+
+    // Export sections
+    const html = editor.helpers.documentSection.exportSectionsToHTML(editor);
+    const json = editor.helpers.documentSection.exportSectionsToJSON(editor);
+
+    // Create a linked editor for a section
+    const childEditor = editor.helpers.documentSection.getLinkedSectionEditor(
+      'section-id',
+      { element: '#editor' },
+      editor
+    );
+  },
+});
+```
+</CodeGroup>
 
 ## Attributes
 
@@ -114,7 +232,8 @@ Sections export as Word content controls:
 
 ### Contract structure
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const contractSections = [
   { id: 'parties', title: '1. Parties', isLocked: false },
   { id: 'terms', title: '2. Terms', isLocked: true },
@@ -130,9 +249,37 @@ contractSections.forEach(section => {
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const contractSections = [
+      { id: 'parties', title: '1. Parties', isLocked: false },
+      { id: 'terms', title: '2. Terms', isLocked: true },
+      { id: 'pricing', title: '3. Pricing', isLocked: false },
+      { id: 'signatures', title: '4. Signatures', isLocked: true }
+    ];
+
+    contractSections.forEach(section => {
+      editor.commands.createDocumentSection({
+        ...section,
+        html: loadTemplate(section.id)
+      });
+    });
+  },
+});
+```
+</CodeGroup>
+
 ### Role-based locking
 
-```javascript
+<CodeGroup>
+```javascript Usage
 function applyRolePermissions(userRole) {
   const sections = editor.helpers.documentSection.getAllSections(editor);
 
@@ -145,6 +292,31 @@ function applyRolePermissions(userRole) {
   });
 }
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    function applyRolePermissions(userRole) {
+      const sections = editor.helpers.documentSection.getAllSections(editor);
+
+      sections.forEach(({ node }) => {
+        const { id, sectionType } = node.attrs;
+
+        if (sectionType === 'legal' && userRole !== 'legal') {
+          editor.commands.lockSectionById(id);
+        }
+      });
+    }
+  },
+});
+```
+</CodeGroup>
 
 ## Related
 

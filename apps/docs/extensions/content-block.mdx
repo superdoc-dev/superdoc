@@ -44,9 +44,25 @@ Creates a visual separator between content sections
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.insertHorizontalRule()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertHorizontalRule()
+  },
+});
+```
+</CodeGroup>
 
 ### `insertContentBlock`
 
@@ -58,10 +74,27 @@ Used for spacing, dividers, and special inline content
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Insert a spacer block
 editor.commands.insertContentBlock({ size: { height: 20 } })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Insert a spacer block
+    editor.commands.insertContentBlock({ size: { height: 20 } })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

@@ -68,10 +68,27 @@ Insert a new table into the document
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.insertTable()
 editor.commands.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertTable()
+    editor.commands.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -85,9 +102,25 @@ Delete the entire table containing the cursor
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.deleteTable()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.deleteTable()
+  },
+});
+```
+</CodeGroup>
 
 ### `addColumnBefore`
 
@@ -99,9 +132,25 @@ Preserves cell attributes from current column
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addColumnBefore()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addColumnBefore()
+  },
+});
+```
+</CodeGroup>
 
 ### `addColumnAfter`
 
@@ -113,9 +162,25 @@ Preserves cell attributes from current column
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addColumnAfter()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addColumnAfter()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -125,9 +190,25 @@ Delete the column containing the cursor
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.deleteColumn()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.deleteColumn()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -141,9 +222,25 @@ Preserves cell attributes from current row
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addRowBefore()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addRowBefore()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -157,9 +254,25 @@ Preserves cell attributes from current row
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addRowAfter()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addRowAfter()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -169,9 +282,25 @@ Delete the row containing the cursor
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.deleteRow()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.deleteRow()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -185,9 +314,25 @@ Content from all cells is preserved
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.mergeCells()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.mergeCells()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -197,9 +342,25 @@ Split a merged cell back into individual cells
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.splitCell()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.splitCell()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command - true if split, false if position invalid
 
@@ -213,9 +374,25 @@ Different from splitCell which splits merged cells back to original cells
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.splitSingleCell()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.splitSingleCell()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command - true if split, false if position invalid
 
@@ -229,9 +406,25 @@ Merges if multiple cells selected, splits if merged cell selected
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.mergeOrSplit()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.mergeOrSplit()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -241,9 +434,25 @@ Toggle the first column as header column
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleHeaderColumn()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleHeaderColumn()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -253,9 +462,25 @@ Toggle the first row as header row
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleHeaderRow()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleHeaderRow()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -265,9 +490,25 @@ Toggle current cell as header cell
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.toggleHeaderCell()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleHeaderCell()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -277,10 +518,27 @@ Set an attribute on selected cells
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setCellAttr('background', { color: 'ff0000' })
 setCellAttr('verticalAlign', 'middle')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setCellAttr('background', { color: 'ff0000' })
+    editor.commands.setCellAttr('verticalAlign', 'middle')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -299,9 +557,25 @@ Navigate to the next cell (Tab behavior)
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.goToNextCell()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.goToNextCell()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -311,9 +585,25 @@ Navigate to the previous cell (Shift+Tab behavior)
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.goToPreviousCell()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.goToPreviousCell()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -327,9 +617,25 @@ Repairs malformed tables and normalizes structure
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.fixTables()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.fixTables()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 
@@ -339,9 +645,25 @@ Set cell selection programmatically
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setCellSelection({ anchorCell: 10, headCell: 15 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setCellSelection({ anchorCell: 10, headCell: 15 })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -357,10 +679,27 @@ Set background color for selected cells
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setCellBackground('#ff0000')
 editor.commands.setCellBackground('ff0000')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setCellBackground('#ff0000')
+    editor.commands.setCellBackground('ff0000')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -374,12 +713,31 @@ Append rows with content to an existing table.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.appendRowsWithContent({
   valueRows: [['Cell A', 'Cell B'], ['Cell C', 'Cell D']],
   copyRowStyle: true
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.appendRowsWithContent({
+      valueRows: [['Cell A', 'Cell B'], ['Cell C', 'Cell D']],
+      copyRowStyle: true
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -397,9 +755,25 @@ Sets all border sizes to 0
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.deleteCellAndTableBorders()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.deleteCellAndTableBorders()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `Function` Command
 

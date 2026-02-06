@@ -5,34 +5,40 @@ keywords: "supereditor config, editor configuration, prosemirror setup, document
 
 SuperEditor configuration gives you low-level control over the DOCX engine.
 
-## Quick Start
+## Quick start
 
 ```javascript
 import "superdoc/style.css";
-import { Editor, getStarterExtensions } from "superdoc/super-editor";
+import { Editor } from "superdoc/super-editor";
 
-// Parse DOCX file first
-const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(docxFile);
-
-// Create editor
-const editor = new Editor({
-  mode: "docx",
-  documentMode: "editing",
+const editor = await Editor.open(docxFile, {
   element: document.getElementById("editor"),
-  documentId: "doc-123",
-  extensions: getStarterExtensions(),
-  fileSource: docxFile,
-  content,
-  media,
-  mediaFiles,
-  fonts,
+  documentMode: "editing",
 });
 ```
 
-## Required Parameters
+`Editor.open()` is the recommended way to create an editor. It handles DOCX parsing, extension setup, and mounting automatically.
 
-<ParamField path="element" type="HTMLElement" required>
-  DOM element where the editor will mount
+## Required parameters
+
+<ParamField path="source" type="string | File | Blob | Buffer">
+  The document source. Can be a file path (Node.js), File/Blob (browser), or Buffer.
+
+```javascript
+// Browser
+const editor = await Editor.open(file, { element: el });
+
+// Node.js
+const editor = await Editor.open('/path/to/doc.docx');
+
+// Blank document
+const editor = await Editor.open();
+```
+
+</ParamField>
+
+<ParamField path="element" type="HTMLElement">
+  DOM element where the editor will mount. If omitted, the editor runs in headless mode.
 
 ```javascript
 element: document.getElementById("editor");
@@ -40,45 +46,26 @@ element: document.getElementById("editor");
 
 </ParamField>
 
-<ParamField path="documentId" type="string" required>
+<ParamField path="documentId" type="string">
   Unique identifier for this document instance. Used for collaboration and
-  storage.
+  storage. Auto-generated if not provided.
 </ParamField>
 
-<ParamField path="extensions" type="Array<Extension>" required>
-  Extensions that define the editor schema and functionality.
+<ParamField path="extensions" type="Array<Extension>">
+  Extensions that define the editor schema and functionality. If omitted, `Editor.open()` uses sensible defaults (`getStarterExtensions()` for DOCX, `getRichTextExtensions()` for text/HTML).
 
 ```javascript
 import { getStarterExtensions } from "superdoc/super-editor";
 
-extensions: getStarterExtensions();
+const editor = await Editor.open(file, {
+  element: el,
+  extensions: getStarterExtensions(), // explicit, but also the default for DOCX
+});
 ```
 
 </ParamField>
 
-## DOCX Mode Parameters
-
-<ParamField path="fileSource" type="File | Blob" required>
-  The DOCX file to load
-</ParamField>
-
-<ParamField path="content" type="Object" required>
-  Parsed XML content from `Editor.loadXmlData()`
-</ParamField>
-
-<ParamField path="media" type="Object" default="{}">
-  Media file mappings from `Editor.loadXmlData()`
-</ParamField>
-
-<ParamField path="mediaFiles" type="Object" default="{}">
-  Media blob data from `Editor.loadXmlData()`
-</ParamField>
-
-<ParamField path="fonts" type="Object" default="{}">
-  Font configuration from `Editor.loadXmlData()`
-</ParamField>
-
-## Modes & Permissions
+## Modes & permissions
 
 <ParamField path="mode" type="string" default="'docx'">
   Editor rendering mode
@@ -110,7 +97,7 @@ extensions: getStarterExtensions();
   Whether the editor accepts input
 </ParamField>
 
-## User & Collaboration
+## User & collaboration
 
 <ParamField path="user" type="Object">
   Current user information
@@ -140,7 +127,7 @@ extensions: getStarterExtensions();
   Provider instance for collaboration sync
 </ParamField>
 
-## Content Initialization
+## Content initialization
 
 <ParamField path="html" type="string">
   Initialize with HTML content (for `mode: 'html'`)
@@ -150,7 +137,7 @@ extensions: getStarterExtensions();
   Initialize with Markdown (converts to document)
 </ParamField>
 
-<ParamField path="jsonOverride" type="Object">
+<ParamField path="json" type="Object">
   Use ProseMirror JSON content instead of DOCX parsing
 </ParamField>
 
@@ -168,11 +155,11 @@ extensions: getStarterExtensions();
   Enable page-based layout
 </ParamField>
 
-## Advanced Options
+## Advanced options
 
 <ParamField path="isHeadless" type="boolean" default="false">
   Run without mounting an editor view (Node.js/server-side processing).
-  You must provide `document` from JSDOM for serialization methods like `getHTML()`.
+  Automatically set to `true` when no `element` is provided to `Editor.open()`.
 </ParamField>
 
 <ParamField path="document" type="Document">
@@ -181,14 +168,6 @@ extensions: getStarterExtensions();
 
 <ParamField path="fragment" type="YXmlFragment">
   Y.Doc XML fragment for collaborative document content. Use with headless mode to read Y.Doc content.
-</ParamField>
-
-<ParamField path="mockDocument" type="Document" deprecated>
-  **Deprecated.** Use `document` instead.
-</ParamField>
-
-<ParamField path="mockWindow" type="Window" deprecated>
-  **Deprecated.** No longer required — just pass `document`.
 </ParamField>
 
 <ParamField path="handleImageUpload" type="function">
@@ -203,36 +182,22 @@ handleImageUpload: async (file) => {
 
 </ParamField>
 
-## Configuration Patterns
+## Configuration patterns
 
-### Full DOCX Editor
+### Full DOCX editor
 
 ```javascript
 import "superdoc/style.css";
-import { Editor, getStarterExtensions } from "superdoc/super-editor";
+import { Editor } from "superdoc/super-editor";
 
-async function createDocxEditor(docxFile) {
-  const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(
-    docxFile
-  );
-
-  return new Editor({
-    mode: "docx",
-    documentMode: "editing",
-    element: document.getElementById("editor"),
-    documentId: "doc-123",
-    extensions: getStarterExtensions(),
-    fileSource: docxFile,
-    content,
-    media,
-    mediaFiles,
-    fonts,
-    user: { name: "John", email: "john@example.com" },
-  });
-}
+const editor = await Editor.open(docxFile, {
+  element: document.getElementById("editor"),
+  documentMode: "editing",
+  user: { name: "John", email: "john@example.com" },
+});
 ```
 
-### Headless Converter (Node.js)
+### Headless converter (Node.js)
 
 Convert DOCX files server-side without a browser using JSDOM.
 
@@ -244,33 +209,10 @@ Convert DOCX files server-side without a browser using JSDOM.
 
 ```javascript
 import { readFile } from "fs/promises";
-import { JSDOM } from "jsdom";
-import { Editor, getStarterExtensions } from "superdoc/super-editor";
+import { Editor } from "superdoc/super-editor";
 
-const { window } = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-const { document } = window;
-
-// Pass `true` as second arg for Node.js
 const buffer = await readFile("document.docx");
-const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(
-  buffer,
-  true
-);
-
-const editor = new Editor({
-  mode: "docx",
-  documentId: "headless",
-  element: document.createElement("div"),
-  extensions: getStarterExtensions(),
-  fileSource: buffer,
-  content,
-  media,
-  mediaFiles,
-  fonts,
-  isHeadless: true,
-  mockDocument: document,
-  mockWindow: window,
-});
+const editor = await Editor.open(buffer);
 
 // Output formats
 const html = editor.getHTML();
@@ -281,20 +223,16 @@ const markdown = await editor.getMarkdown();
 editor.destroy();
 ```
 
-### Headless Y.Doc to HTML (Collaboration)
+### Headless Y.Doc to HTML (collaboration)
 
 Read content from a collaborative Y.Doc in your backend — useful for AI agents or APIs that need to access document content without a browser.
 
 <Note>
-  Even with `isHeadless: true`, methods like `getHTML()` need a DOM for serialization. Always set up JSDOM first.
+  Even with headless mode, methods like `getHTML()` need a DOM for serialization. JSDOM is set up automatically in Node.js when using `Editor.open()`.
 </Note>
 
 ```javascript
-import { JSDOM } from "jsdom";
 import { Editor, getStarterExtensions } from "superdoc/super-editor";
-
-// Set up JSDOM
-const { window } = new JSDOM("<!DOCTYPE html><html><body></body></html>");
 
 // Get the YXmlFragment from your Y.Doc
 const fragment = ydoc.getXmlFragment("prosemirror");
@@ -302,39 +240,24 @@ const fragment = ydoc.getXmlFragment("prosemirror");
 const editor = new Editor({
   mode: "docx",
   isHeadless: true,
-  document: window.document,
   extensions: getStarterExtensions(),
-  fragment, // YXmlFragment from Y.Doc
+  fragment,
 });
 
 const html = editor.getHTML();
 editor.destroy();
 ```
 
-<Info>
-  The `document` option replaces the deprecated `mockDocument` and `mockWindow` options.
-</Info>
-
-### Custom Collaboration
+### Custom collaboration
 
 ```javascript
-import { Editor, getStarterExtensions } from "superdoc/super-editor";
+import { Editor } from "superdoc/super-editor";
 import * as Y from "yjs";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 
-const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(docxFile);
-
-const editor = new Editor({
-  mode: "docx",
-  documentMode: "editing",
+const editor = await Editor.open(docxFile, {
   element: document.getElementById("editor"),
-  documentId: roomId,
-  extensions: getStarterExtensions(),
-  fileSource: docxFile,
-  content,
-  media,
-  mediaFiles,
-  fonts,
+  documentMode: "editing",
   ydoc: new Y.Doc(),
   collaborationProvider: new HocuspocusProvider({
     url: "wss://collab.example.com",
@@ -345,22 +268,14 @@ const editor = new Editor({
 });
 ```
 
-### Track Changes Mode
+### Track changes mode
 
 ```javascript
-const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(docxFile);
+import { Editor } from "superdoc/super-editor";
 
-const editor = new Editor({
-  mode: "docx",
-  documentMode: "suggesting",
+const editor = await Editor.open(docxFile, {
   element: document.getElementById("editor"),
-  documentId: "review-doc",
-  extensions: getStarterExtensions(),
-  fileSource: docxFile,
-  content,
-  media,
-  mediaFiles,
-  fonts,
+  documentMode: "suggesting",
   user: reviewer,
 });
 ```

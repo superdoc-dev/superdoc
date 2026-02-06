@@ -1,79 +1,290 @@
 ---
-title: Track Changes Extension
+title: Track Changes extension
 sidebarTitle: Track Changes
 ---
 
-Track Changes records all edits with author attribution and timestamps, exactly like Microsoft Word.
+Track Changes records all edits with author attribution and timestamps, matching Microsoft Word's revision tracking.
 
 ## Usage
 
 Enable through document mode:
 
 ```javascript
-// Start tracking
-superdoc.setDocumentMode('suggesting');
+superdoc.setDocumentMode('suggesting'); // Enable tracking
+superdoc.setDocumentMode('editing');    // Disable tracking
 ```
+
+Or toggle programmatically:
+
+<CodeGroup>
+```javascript Usage
+editor.commands.enableTrackChanges()
+editor.commands.disableTrackChanges()
+editor.commands.toggleTrackChanges()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.enableTrackChanges()
+    editor.commands.disableTrackChanges()
+    editor.commands.toggleTrackChanges()
+  },
+});
+```
+</CodeGroup>
 
 ## Commands
 
-```javascript
-// Switch modes (controls tracking)
-superdoc.setDocumentMode('suggesting'); // Enable tracking
-superdoc.setDocumentMode('editing');    // Disable tracking
+### Accept changes
 
-// Review changes
-editor.commands.acceptChange();
-editor.commands.rejectChange();
-editor.commands.acceptAllChanges();
-editor.commands.rejectAllChanges();
+<CodeGroup>
+```javascript Usage
+// Accept at current selection
+editor.commands.acceptTrackedChangeBySelection()
 
-// Navigate
-editor.commands.goToNextChange();
-editor.commands.goToPreviousChange();
+// Accept a specific change by ID
+editor.commands.acceptTrackedChangeById('change-123')
 
-// View modes
-editor.commands.toggleTrackChangesShowOriginal();
-editor.commands.toggleTrackChangesShowFinal();
+// Accept a change object (with start/end positions)
+editor.commands.acceptTrackedChange({ trackedChange: { start: 10, end: 50 } })
+
+// Accept changes in a range
+editor.commands.acceptTrackedChangesBetween(10, 50)
+
+// Accept all changes in the document
+editor.commands.acceptAllTrackedChanges()
+
+// Toolbar-aware accept (uses active thread or selection)
+editor.commands.acceptTrackedChangeFromToolbar()
 ```
 
-## Working with changes
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Accept at current selection
+    editor.commands.acceptTrackedChangeBySelection()
+
+    // Accept a specific change by ID
+    editor.commands.acceptTrackedChangeById('change-123')
+
+    // Accept a change object (with start/end positions)
+    editor.commands.acceptTrackedChange({ trackedChange: { start: 10, end: 50 } })
+
+    // Accept changes in a range
+    editor.commands.acceptTrackedChangesBetween(10, 50)
+
+    // Accept all changes in the document
+    editor.commands.acceptAllTrackedChanges()
+
+    // Toolbar-aware accept (uses active thread or selection)
+    editor.commands.acceptTrackedChangeFromToolbar()
+  },
+});
+```
+</CodeGroup>
+
+### Reject changes
+
+<CodeGroup>
+```javascript Usage
+// Reject at current selection
+editor.commands.rejectTrackedChangeOnSelection()
+
+// Reject a specific change by ID
+editor.commands.rejectTrackedChangeById('change-123')
+
+// Reject a change object
+editor.commands.rejectTrackedChange({ trackedChange: { start: 10, end: 50 } })
+
+// Reject changes in a range
+editor.commands.rejectTrackedChangesBetween(10, 50)
+
+// Reject all changes in the document
+editor.commands.rejectAllTrackedChanges()
+
+// Toolbar-aware reject
+editor.commands.rejectTrackedChangeFromToolbar()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Reject at current selection
+    editor.commands.rejectTrackedChangeOnSelection()
+
+    // Reject a specific change by ID
+    editor.commands.rejectTrackedChangeById('change-123')
+
+    // Reject a change object
+    editor.commands.rejectTrackedChange({ trackedChange: { start: 10, end: 50 } })
+
+    // Reject changes in a range
+    editor.commands.rejectTrackedChangesBetween(10, 50)
+
+    // Reject all changes in the document
+    editor.commands.rejectAllTrackedChanges()
+
+    // Toolbar-aware reject
+    editor.commands.rejectTrackedChangeFromToolbar()
+  },
+});
+```
+</CodeGroup>
+
+### Insert tracked change programmatically
+
+Use `insertTrackedChange` to add tracked edits from external sources (e.g., AI suggestions):
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertTrackedChange({
+  from: 10,
+  to: 25,
+  text: 'replacement text',
+  comment: 'AI suggestion: improved wording'
+})
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertTrackedChange({
+      from: 10,
+      to: 25,
+      text: 'replacement text',
+      comment: 'AI suggestion: improved wording'
+    })
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="options" type="Object">
+  Object with `from`, `to`, `text`, `user`, `comment`, `addToHistory`, `emitCommentEvent`
+</ParamField>
+
+### View modes
+
+<CodeGroup>
+```javascript Usage
+// Show document as it was before changes
+editor.commands.toggleTrackChangesShowOriginal()
+editor.commands.enableTrackChangesShowOriginal()
+editor.commands.disableTrackChangesShowOriginal()
+
+// Show document as if all changes were accepted
+editor.commands.toggleTrackChangesShowFinal()
+editor.commands.enableTrackChangesShowFinal()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Show document as it was before changes
+    editor.commands.toggleTrackChangesShowOriginal()
+    editor.commands.enableTrackChangesShowOriginal()
+    editor.commands.disableTrackChangesShowOriginal()
+
+    // Show document as if all changes were accepted
+    editor.commands.toggleTrackChangesShowFinal()
+    editor.commands.enableTrackChangesShowFinal()
+  },
+});
+```
+</CodeGroup>
+
+## Helpers
 
 ```javascript
-import { trackChangesHelpers } from '@harbour-enterprises/superdoc';
+import { trackChangesHelpers } from 'superdoc';
 
-// Get all changes
-const changes = trackChangesHelpers.getAllChanges(editor.state);
+// Get all tracked changes in the document
+const changes = trackChangesHelpers.getTrackChanges(editor.state);
+// Returns: [{ mark, from, to }, ...]
 
-// Filter by user
-const userChanges = trackChangesHelpers.getChangesByUser(
-  editor.state,
-  'john@company.com'
-);
-
-// Check state
-const isTracking = trackChangesHelpers.isTrackingEnabled(editor.state);
+// Get a specific change by ID
+const change = trackChangesHelpers.getTrackChanges(editor.state, 'change-123');
 ```
 
 ## Change types
 
-- **Insertions** - Green underline
-- **Deletions** - Red strikethrough  
-- **Format changes** - Yellow highlight
+| Type | Mark | Visual |
+|------|------|--------|
+| Insertion | `trackInsert` | Green underline |
+| Deletion | `trackDelete` | Red strikethrough |
+| Format change | `trackFormat` | Records before/after formatting |
 
-Each change includes:
-- User information
-- Timestamp
-- Unique ID
+Each change includes author name, email, timestamp, and a unique ID.
 
 ## Export behavior
 
 Changes export to DOCX as Word revisions:
 
-```javascript
-// With changes
+<CodeGroup>
+```javascript Usage
+// Export with changes preserved
 await superdoc.export();
 
-// Accept all first
-editor.commands.acceptAllChanges();
+// Accept all first, then export clean
+editor.commands.acceptAllTrackedChanges();
 await superdoc.export();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Export with changes preserved
+    await superdoc.export();
+
+    // Accept all first, then export clean
+    editor.commands.acceptAllTrackedChanges();
+    await superdoc.export();
+  },
+});
+```
+</CodeGroup>
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/track-changes/track-changes.js" />

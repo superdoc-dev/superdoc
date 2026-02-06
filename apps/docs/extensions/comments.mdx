@@ -1,13 +1,13 @@
 ---
-title: Comments Extension
+title: Comments extension
 sidebarTitle: Comments
 ---
 
-The Comments extension enables Word-style commenting with threads, replies, and resolution.
+The Comments extension adds Word-style commenting with threads, replies, and resolution.
 
 ## Usage
 
-Comments work through the module configuration:
+Configure comments through the modules option:
 
 ```javascript
 modules: {
@@ -20,44 +20,234 @@ modules: {
 
 ## Commands
 
-```javascript
-// Add comment at selection
-editor.commands.insertComment({ 
-  content: 'Please review' 
-});
+### `addComment`
 
-// Work with comments
-editor.commands.replyToComment(commentId, { content: 'Done' });
-editor.commands.resolveComment(commentId);
-editor.commands.deleteComment(commentId);
+Add a comment to the current text selection. Requires text to be selected.
 
-// Navigate
-editor.commands.goToNextComment();
-editor.commands.goToPreviousComment();
+<CodeGroup>
+```javascript Usage
+// Simple text comment
+editor.commands.addComment('Please review this section')
+
+// With options
+editor.commands.addComment({
+  content: 'Please review',
+  author: 'Jane Smith',
+  authorEmail: 'jane@example.com',
+  isInternal: false
+})
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Simple text comment
+    editor.commands.addComment('Please review this section')
+
+    // With options
+    editor.commands.addComment({
+      content: 'Please review',
+      author: 'Jane Smith',
+      authorEmail: 'jane@example.com',
+      isInternal: false
+    })
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="contentOrOptions" type="string | Object" required>
+  Comment text, or an options object with `content`, `author`, `authorEmail`, `authorImage`, and `isInternal` fields
+</ParamField>
+
+### `addCommentReply`
+
+Add a reply to an existing comment thread.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.addCommentReply({
+  parentId: 'comment-123',
+  content: 'Done, updated the wording.'
+})
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addCommentReply({
+      parentId: 'comment-123',
+      content: 'Done, updated the wording.'
+    })
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="options" type="Object" required>
+  Object with `parentId` (required), `content`, `author`, `authorEmail`, `authorImage`
+</ParamField>
+
+### `removeComment`
+
+Remove a comment and its highlight marks from the document.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.removeComment({ commentId: 'abc-123' })
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.removeComment({ commentId: 'abc-123' })
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="options" type="Object" required>
+  Object with `commentId` and/or `importedId`
+</ParamField>
+
+### `resolveComment`
+
+Resolve a comment. Removes the highlight but preserves positional anchors for export.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.resolveComment({ commentId: 'abc-123' })
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.resolveComment({ commentId: 'abc-123' })
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="options" type="Object" required>
+  Object with `commentId`
+</ParamField>
+
+### `setActiveComment`
+
+Set the active/selected comment thread by ID.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setActiveComment({ commentId: 'abc-123' })
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setActiveComment({ commentId: 'abc-123' })
+  },
+});
+```
+</CodeGroup>
+
+### `setCommentInternal`
+
+Toggle whether a comment is internal (private) or external.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setCommentInternal({
+  commentId: 'abc-123',
+  isInternal: true
+})
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setCommentInternal({
+      commentId: 'abc-123',
+      isInternal: true
+    })
+  },
+});
+```
+</CodeGroup>
+
+### `setCursorById`
+
+Move the cursor to the start of a comment's range. Also works for tracked change IDs.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setCursorById('abc-123')
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setCursorById('abc-123')
+  },
+});
+```
+</CodeGroup>
 
 ## Events
 
 ```javascript
 superdoc.on('commentsUpdate', ({ type, comment }) => {
-  switch(type) {
-    case 'add':      // Comment created
-    case 'update':   // Comment edited
-    case 'deleted':  // Comment removed
-    case 'resolved': // Comment resolved
-  }
+  // type: 'ADD' | 'deleted' | 'SELECTED'
 });
-```
-
-## Working with comment data
-
-```javascript
-// Access all comments
-const comments = editor.storage.comments.items;
-
-// Filter comments
-const active = comments.filter(c => !c.resolved);
-const byUser = comments.filter(c => c.user.email === email);
 ```
 
 ## Export behavior
@@ -65,17 +255,14 @@ const byUser = comments.filter(c => c.user.email === email);
 Comments export to DOCX as native Word comments:
 
 ```javascript
-// Include comments
 await superdoc.export({ commentsType: 'external' });
 
-// Clean export
+// Without comments
 await superdoc.export({ commentsType: 'clean' });
 ```
 
-## Styling
+## Source code
 
-```css
-.comment-mark { background: #fff3cd; }
-.comment-mark.resolved { opacity: 0.6; }
-.comment-mark.active { background: #ffd700; }
-```
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/comment/comments-plugin.js" />

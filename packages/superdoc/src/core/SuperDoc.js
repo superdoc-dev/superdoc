@@ -4,7 +4,7 @@ import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
-import { DOCX, PDF, HTML } from '@superdoc/common';
+import { DOCX, PDF, HTML, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 import { SuperToolbar, createZip } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
 import { createSuperdocVueApp } from './create-app.js';
@@ -71,6 +71,12 @@ export class SuperDoc extends EventEmitter {
 
     modules: {}, // Optional: Modules to load. Use modules.ai.{your_key} to pass in your key
     permissionResolver: null, // Optional: Override for permission checks
+
+    // License key for organization identification (defaults to community key)
+    licenseKey: COMMUNITY_LICENSE_KEY,
+
+    // Telemetry settings
+    telemetry: { enabled: false }, // Enable to track document opens
 
     title: 'SuperDoc',
     conversations: [],
@@ -319,7 +325,6 @@ export class SuperDoc extends EventEmitter {
           type: DOCX,
           url: this.config.document,
           name: 'document.docx',
-          isNewFile: true,
         },
       ];
     } else if (hasDocumentFile) {

@@ -1,69 +1,53 @@
 ---
 title: Import/Export
 sidebarTitle: Import/Export
-keywords: "import, export, import types, export types, docx to pdf, markdown to docx"
+keywords: "import, export, docx export, html import, markdown import, document formats"
 ---
 
-SuperDoc handles multiple content formats with different levels of support. **We are a Word editor that accepts other formats as input**, not a universal document converter.
+SuperDoc is a Word editor that accepts multiple content formats as input. All content is normalized into Word's document model internally.
 
-## Philosophy
+## Supported formats
 
-SuperDoc operates on Microsoft Word's document model. HTML and Markdown are normalized into Word concepts on import. For perfect fidelity, use DOCX or JSON formats.
+| Format | Import | Export | Round-Trip | Use Case |
+|---|---|---|---|---|
+| **DOCX** | Full | Full | Perfect | Word documents |
+| **JSON** | Full | Full | Perfect | Programmatic control |
+| **HTML** | Structure only | Structure only | Visual only | Web content, AI output |
+| **Markdown** | CommonMark | CommonMark | Visual only | Documentation, AI output |
+| **Text** | Plain text | Plain text | Perfect | Simple content |
 
-## Supported Formats
+<Note>
+HTML and Markdown imports preserve structure (headings, lists, links, tables) but strip CSS styles.
+</Note>
 
-| Format   | Import Support    | Export Support    | Round-Trip Fidelity | Primary Use Case                    |
-|----------|------------------|------------------|-------------------|-------------------------------------|
-| **DOCX** | Full compatibility | Full compatibility | ✅ Perfect         | Word documents, complete fidelity   |
-| **JSON** | Full support      | Full support      | ✅ Perfect         | Automation, programmatic control    |
-| **HTML** | Structure only    | Structure only    | ⚠️ Visual only     | AI content, migration from web     |
-| **Markdown** | CommonMark only | CommonMark only | ⚠️ Visual only     | Documentation, AI-generated content |
-| **Text** | Plain text only   | Plain text only   | ✅ Perfect         | Simple content                      |
-| **PDF**  | Not supported     | Via API only      | N/A               | Final output format                 |
+## Importing content
 
-## When to Use Each Format
+### At initialization
 
-### Use DOCX/JSON for:
-- Preserving all formatting
-- Round-trip editing
-- Complex documents
-- Production workflows
+Pass content when creating the SuperDoc instance.
 
-### Use HTML/Markdown for:
-- Basic content import when JSON isn't available
-- Migrating from legacy systems
-- Simple text with minimal structure
-- **NOT** for complex documents or formatting preservation
-
-## Content Import Methods
-
-### Method 1: Initialize with Content
-
-Load content when creating the editor or SuperDoc instance.
-
-#### SuperDoc Component
 ```javascript
-// DOCX file (perfect fidelity)
+// DOCX file — full fidelity
 new SuperDoc({
   selector: '#editor',
-  document: docxFile
+  document: docxFile  // File, Blob, URL string, or config object
 });
 
-// HTML content (structure preserved, styles stripped)
+// HTML content — requires a base DOCX for styles
 new SuperDoc({
   selector: '#editor',
-  document: blankDocx,  // Must have styles defined
+  document: blankDocx,
   html: '<h1>Title</h1><p>Content</p>'
 });
 
-// Markdown content (converted to Word structure)
+// Markdown content
 new SuperDoc({
   selector: '#editor',
   document: blankDocx,
   markdown: '# Title\n\nContent with **formatting**'
 });
 
-// JSON schema (full control)
+// JSON (ProseMirror schema)
 new SuperDoc({
   selector: '#editor',
   document: blankDocx,
@@ -71,193 +55,244 @@ new SuperDoc({
 });
 ```
 
-### Method 2: Insert into Existing Document
+<ParamField path="document" type="string | File | Blob | Object">
+  The document to load. Strings are treated as URLs. Files and Blobs are used directly.
+</ParamField>
 
-Add content to an already-loaded document using commands.
+<ParamField path="html" type="string">
+  HTML content to initialize the editor with. Requires a `document` for styles.
+</ParamField>
 
-```javascript
-// Insert at current cursor position
-editor.commands.insertContent(content, { 
-  contentType: 'html'  // or 'markdown', 'text', 'schema'
-});
+<ParamField path="markdown" type="string">
+  Markdown content to initialize the editor with. Requires a `document` for styles.
+</ParamField>
 
-// AI content integration example
-const aiResponse = await ai.generate("Create a contract");
-editor.commands.insertContent(aiResponse, { 
-  contentType: 'html'  // AI output gets converted to Word structure
-});
-```
+<ParamField path="jsonOverride" type="Object">
+  ProseMirror JSON to override the document content with.
+</ParamField>
 
-## HTML Import/Export Behavior
+### After initialization
 
-### What Gets Preserved
+Insert content into an existing document using editor commands.
 
-| HTML Element | Import Result | Export Result | Notes |
-|-------------|--------------|---------------|-------|
-| `<h1>` to `<h6>` | Word heading styles | Same heading level | Requires styles in document |
-| `<p>`, `<div>` | Normal paragraph | `<p>` | All become paragraphs |
-| `<strong>`, `<b>` | Bold mark | `<strong>` | Character formatting |
-| `<em>`, `<i>` | Italic mark | `<em>` | Character formatting |
-| `<a href="...">` | Word hyperlink | `<a href="...">` | Links preserved |
-| `<ul>`, `<ol>` | Word lists | Same list type | Basic nesting supported |
-| `<blockquote>` | Quote style | `<blockquote>` | If style exists |
-| `<table>` | Word table | Basic `<table>` | Structure only |
-| `<img src="...">` | Word image | `<img src="...">` | URL preserved |
-| `<style="text-aligh: center">` | Alignment styles | `<style="text-aligh: ...">` | Alignment in style tag is preserved |
-
-### What Gets Stripped (Always)
-
-```javascript
-// Input HTML with styles and classes
-<div style="color: blue; margin: 20px;" class="custom-class">
-  <h1 style="font-size: 24px;" id="header">Styled Heading</h1>
-  <p style="font-family: Arial;">Content with <span style="color: red;">inline styles</span></p>
-</div>
-
-// After import (ALL styling removed)
-<div>
-  <h1>Styled Heading</h1>  // Becomes Heading1 style internally
-  <p>Content with inline styles</p>  // Becomes Normal style
-</div>
-```
-
-**Why styles are stripped:**
-- Word uses its own styling system (styles.xml)
-- CSS doesn't translate to DOCX properties
-- Ensures consistent Word document behavior
-
-### Round-Trip Example
-
-```javascript
-// 1. Original HTML input
-const html = '<h1>Title</h1><p>Content</p>';
-
-// 2. Import into SuperDoc
-editor.commands.insertContent(html, { contentType: 'html' });
-// Internal: { type: 'paragraph', attrs: { styleId: 'Heading1' }}
-
-// 3. User edits in Word environment
-// (adds tables, changes formatting, etc.)
-
-// 4. Export back to HTML
-const exported = editor.getHTML();
-// Output: '<h1>Title</h1><p>Content</p><table>...</table>'
-
-// 5. Re-import maintains visual appearance
-editor.commands.insertContent(exported, { contentType: 'html' });
-// Visual appearance preserved, but no custom HTML attributes
-```
-
-## Markdown Import/Export Behavior
-
-### Supported CommonMark Elements
-
-- Headers (`#` through `######`) → Word heading styles
-- Bold/italic (`**bold**`, `*italic*`) → Character marks
-- Lists (ordered/unordered) → Word lists
-- Links `[text](url)` → Word hyperlinks
-- Images `![alt](url)` → Word images
-- Code blocks → Code style (if defined)
-- Blockquotes `>` → Quote style (if defined)
-
-### Not Supported
-
-- Tables (may partially work)
-- Footnotes
-- Task lists
-- Custom syntax extensions
-- HTML within Markdown
-
-## Export Options
-
-### DOCX Export (Full Fidelity)
-```javascript
-// Standard export
-const blob = await editor.exportDocx();
-
-// Without comments
-const blob = await editor.exportDocx({ 
-  commentsType: 'clean' 
-});
-
-// With fields replaced
-const blob = await editor.exportDocx({ 
-  isFinalDoc: true 
+<CodeGroup>
+```javascript Usage
+superdoc.activeEditor.commands.insertContent(content, {
+  contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
 });
 ```
 
-### HTML Export (Structure Only)
-```javascript
-// Get HTML representation
-const html = editor.getHTML();
-// Note: This is for visual representation only
-// Do not expect perfect round-trip with custom styles
-```
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
-### JSON Export (Full Fidelity)
-```javascript
-// Get complete document structure
-const json = editor.getJSON();
-// Can be perfectly re-imported
-```
-
-## AI Integration Pattern
-
-### Current Approach (Basic)
-
-Most AI models today output HTML or Markdown. While this works for simple content, it has limitations:
-
-```javascript
-// AI generates basic HTML/Markdown
-const content = await openai.complete({
-  prompt: "Generate a service agreement",
-  format: "html"  // Limited control over structure
-});
-
-// Import into SuperDoc (structure only, no fine control)
-editor.commands.insertContent(content, { 
-  contentType: 'html'
-});
-
-// Content uses document's Word styles
-// User must manually refine formatting
-
-// Export as DOCX
-const docx = await editor.exportDocx();
-```
-
-### Preferred Approach (JSON Schema)
-
-For better control, AI should generate JSON Schema directly:
-
-```javascript
-// Ideal: AI generates precise document structure
-const schema = await ai.generate({
-  prompt: "Generate a service agreement",
-  format: "prosemirror-schema",  // Full control
-  schema_definition: superDocSchema  // Coming soon via tooling
-});
-
-// Import with perfect control
-editor.commands.insertContent(schema, { 
-  contentType: 'schema'
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.insertContent(content, {
+      contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
+    });
+  },
 });
 ```
+</CodeGroup>
 
-<Note>We're developing tools (MCP servers, prompts) to help AI models generate proper JSON Schema. Until then, HTML/Markdown provides basic compatibility.</Note>
+<ParamField path="value" type="string | Object" required>
+  The content to insert. String for `html`, `markdown`, and `text`. ProseMirror JSON object for `schema`.
+</ParamField>
 
-## Best Practices
+<ParamField path="options.contentType" type="string">
+  Content type: `'html'`, `'markdown'`, `'text'`, or `'schema'`
+</ParamField>
 
-1. **Start with a styled DOCX template** - Define all heading styles, paragraph styles, and table styles you need.
+## Exporting content
 
-2. **Set expectations** - HTML/Markdown import is for content, not formatting.
+### DOCX export
 
-3. **Use the right format** - DOCX/JSON for production, HTML/Markdown for content input.
+<CodeGroup>
+```javascript Usage
+// Download as .docx file
+await superdoc.export();
 
-4. **Test your workflow** - Import → Edit → Export → Re-import to understand behavior.
+// Get blob without triggering download
+const blob = await superdoc.export({ triggerDownload: false });
 
-## API Conversions
+// Export without comments
+await superdoc.export({ commentsType: 'clean' });
 
-Need server-side document conversions? Our REST API handles additional conversions with high fidelity.
+// Export as final document (applies tracked changes)
+await superdoc.export({ isFinalDoc: true });
 
-[View API documentation →](/api-reference/documents/convert)
+// Custom filename
+await superdoc.export({ exportedName: 'Final Contract' });
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    // Download as .docx file
+    await superdoc.export();
+
+    // Get blob without triggering download
+    const blob = await superdoc.export({ triggerDownload: false });
+
+    // Export without comments
+    await superdoc.export({ commentsType: 'clean' });
+
+    // Export as final document (applies tracked changes)
+    await superdoc.export({ isFinalDoc: true });
+
+    // Custom filename
+    await superdoc.export({ exportedName: 'Final Contract' });
+  },
+});
+```
+</CodeGroup>
+
+<ParamField path="exportType" type="string[]" default="['docx']">
+  Formats to export
+</ParamField>
+
+<ParamField path="commentsType" type="string" default="'external'">
+  `'external'` to include comments, `'clean'` to remove all comments
+</ParamField>
+
+<ParamField path="exportedName" type="string">
+  Custom filename without extension
+</ParamField>
+
+<ParamField path="triggerDownload" type="boolean" default="true">
+  Whether to automatically trigger a file download. Set to `false` to get a `Blob` back instead.
+</ParamField>
+
+<ParamField path="isFinalDoc" type="boolean" default="false">
+  Export as final version (applies tracked change mode)
+</ParamField>
+
+<ParamField path="fieldsHighlightColor" type="string">
+  Color for field highlights in the exported document
+</ParamField>
+
+<ParamField path="additionalFiles" type="Blob[]" default="[]">
+  Additional files to bundle. When multiple files are exported, they are zipped together.
+</ParamField>
+
+<ParamField path="additionalFileNames" type="string[]" default="[]">
+  Filenames for additional files
+</ParamField>
+
+### HTML export
+
+<CodeGroup>
+```javascript Usage
+// Returns array of HTML strings (one per document)
+const htmlArray = superdoc.getHTML();
+
+// From the active editor (single string)
+const html = superdoc.activeEditor.getHTML();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    // Returns array of HTML strings (one per document)
+    const htmlArray = superdoc.getHTML();
+
+    // From the active editor (single string)
+    const html = superdoc.activeEditor.getHTML();
+  },
+});
+```
+</CodeGroup>
+
+<Note>
+HTML export is structure-only. Custom CSS styling and Word-specific formatting are not included.
+</Note>
+
+### JSON export
+
+<CodeGroup>
+```javascript Usage
+// From the active editor
+const json = superdoc.activeEditor.getJSON();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const json = superdoc.activeEditor.getJSON();
+  },
+});
+```
+</CodeGroup>
+
+JSON export preserves the full document structure and can be re-imported with `jsonOverride`.
+
+### Markdown export
+
+<CodeGroup>
+```javascript Usage
+// From the active editor
+const markdown = await superdoc.activeEditor.getMarkdown();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    const markdown = await superdoc.activeEditor.getMarkdown();
+  },
+});
+```
+</CodeGroup>
+
+## HTML element mapping
+
+| HTML Element | Imported As | Notes |
+|---|---|---|
+| `<h1>` to `<h6>` | Word heading styles | Requires styles in the base document |
+| `<p>`, `<div>` | Normal paragraph | |
+| `<strong>`, `<b>` | Bold | |
+| `<em>`, `<i>` | Italic | |
+| `<a href="...">` | Hyperlink | |
+| `<ul>`, `<ol>` | Word lists | Nesting supported |
+| `<table>` | Word table | Structure only |
+| `<img src="...">` | Image | URL preserved |
+| `<blockquote>` | Quote style | If style exists in document |
+| `style="text-align: ..."` | Alignment | Inline alignment is preserved |
+
+CSS classes, IDs, colors, fonts, margins, and other styling are stripped on import.
+
+## Markdown element mapping
+
+**Supported:**
+- Headings (`#` through `######`)
+- Bold/italic (`**bold**`, `*italic*`)
+- Ordered and unordered lists
+- Links `[text](url)`
+- Images `![alt](url)`
+- Code blocks
+- Blockquotes `>`
+
+**Not supported:**
+- Tables, footnotes, task lists, custom syntax extensions

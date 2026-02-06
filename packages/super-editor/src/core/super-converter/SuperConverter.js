@@ -241,9 +241,12 @@ class SuperConverter {
     this.documentId = params?.documentId || null;
 
     // Document identification
-    this.documentGuid = null; // Permanent GUID for modified documents
-    this.documentHash = null; // Temporary hash for unmodified documents
+    this.documentGuid = null; // Permanent GUID (from MS docId, custom property, or generated)
+    this.documentUniqueIdentifier = null; // Final identifier (identifierHash or contentHash)
     this.documentModified = false; // Track if document has been edited
+
+    // Track if this is a blank document created from template
+    this.isBlankDoc = params?.isNewFile || false;
 
     // Parse the initial XML, if provided
     if (this.docx.length || this.xml) this.parseFromXml();
@@ -597,6 +600,72 @@ class SuperConverter {
   }
 
   /**
+   * Generate a Word-compatible timestamp (truncated to minute precision like MS Word)
+   * @returns {string} Timestamp in YYYY-MM-DDTHH:MM:00Z format
+   */
+  static generateWordTimestamp() {
+    const date = new Date();
+    date.setSeconds(0, 0);
+    return date.toISOString().split('.')[0] + 'Z';
+  }
+
+  /**
+   * Get the dcterms:created timestamp from the already-parsed core.xml
+   * @returns {string|null} The created timestamp in ISO format, or null if not found
+   */
+  getDocumentCreatedTimestamp() {
+    const coreXml = this.convertedXml['docProps/core.xml'];
+    if (!coreXml) return null;
+
+    const coreProps = coreXml.elements?.find(
+      (el) => el.name === 'cp:coreProperties' || SuperConverter._matchesElementName(el.name, 'coreProperties'),
+    );
+    if (!coreProps?.elements) return null;
+
+    const createdElement = coreProps.elements.find(
+      (el) => el.name === 'dcterms:created' || SuperConverter._matchesElementName(el.name, 'created'),
+    );
+
+    return createdElement?.elements?.[0]?.text || null;
+  }
+
+  /**
+   * Set the dcterms:created timestamp in the already-parsed core.xml
+   * @param {string} timestamp - The timestamp to set (ISO format)
+   */
+  setDocumentCreatedTimestamp(timestamp) {
+    const coreXml = this.convertedXml['docProps/core.xml'];
+    if (!coreXml) return;
+
+    const coreProps = coreXml.elements?.find(
+      (el) => el.name === 'cp:coreProperties' || SuperConverter._matchesElementName(el.name, 'coreProperties'),
+    );
+    if (!coreProps) return;
+
+    // Initialize elements array if missing
+    if (!coreProps.elements) {
+      coreProps.elements = [];
+    }
+
+    let createdElement = coreProps.elements.find(
+      (el) => el.name === 'dcterms:created' || SuperConverter._matchesElementName(el.name, 'created'),
+    );
+
+    if (createdElement?.elements?.[0]) {
+      createdElement.elements[0].text = timestamp;
+    } else {
+      // Create the element if it doesn't exist
+      createdElement = {
+        type: 'element',
+        name: 'dcterms:created',
+        attributes: { 'xsi:type': 'dcterms:W3CDTF' },
+        elements: [{ type: 'text', text: timestamp }],
+      };
+      coreProps.elements.push(createdElement);
+    }
+  }
+
+  /**
    * Get document GUID from docx files (static method)
    * @static
    * @param {Array} docx - Array of docx file objects
@@ -648,21 +717,26 @@ class SuperConverter {
 
   /**
    * Resolve existing document GUID (synchronous)
+   * For new files: reads existing GUID and sets fresh timestamp
+   * For imported files: reads existing GUIDs only
    */
   resolveDocumentGuid() {
     // 1. Check Microsoft's docId (READ ONLY)
     const microsoftGuid = this.getMicrosoftDocId();
     if (microsoftGuid) {
       this.documentGuid = microsoftGuid;
-      return;
+    } else {
+      // 2. Check our custom property
+      const customGuid = SuperConverter.getStoredCustomProperty(this.docx, 'DocumentGuid');
+      if (customGuid) {
+        this.documentGuid = customGuid;
+      }
     }
 
-    // 2. Check our custom property
-    const customGuid = SuperConverter.getStoredCustomProperty(this.docx, 'DocumentGuid');
-    if (customGuid) {
-      this.documentGuid = customGuid;
+    // BLANK DOC: set fresh timestamp (ensures unique identifier for each new doc from template)
+    if (this.isBlankDoc) {
+      this.setDocumentCreatedTimestamp(SuperConverter.generateWordTimestamp());
     }
-    // Don't generate hash here - do it lazily when needed
   }
 
   /**
@@ -677,10 +751,28 @@ class SuperConverter {
   }
 
   /**
-   * Generate document hash (async, lazy)
+   * Generate identifier hash from documentGuid and dcterms:created
+   * Uses CRC32 of the combined string for a compact identifier
+   * Only call when both documentGuid and timestamp exist
+   * @returns {string} Hash identifier in format "HASH-XXXXXXXX"
    */
-  async #generateDocumentHash() {
-    if (!this.fileSource) return `HASH-${Date.now()}`;
+  #generateIdentifierHash() {
+    const combined = `${this.documentGuid}|${this.getDocumentCreatedTimestamp()}`;
+    const buffer = Buffer.from(combined, 'utf8');
+    const hash = crc32(buffer);
+    return `HASH-${hash.toString('hex').toUpperCase()}`;
+  }
+
+  /**
+   * Generate content hash from file bytes
+   * Uses CRC32 of the raw file content for a stable identifier
+   * @returns {Promise<string>} Hash identifier in format "HASH-XXXXXXXX"
+   */
+  async #generateContentHash() {
+    if (!this.fileSource) {
+      // No file source available, generate a random hash (last resort)
+      return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+    }
 
     try {
       let buffer;
@@ -693,41 +785,68 @@ class SuperConverter {
         const arrayBuffer = await this.fileSource.arrayBuffer();
         buffer = Buffer.from(arrayBuffer);
       } else {
-        return `HASH-${Date.now()}`;
+        return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
       }
 
       const hash = crc32(buffer);
       return `HASH-${hash.toString('hex').toUpperCase()}`;
     } catch (e) {
-      console.warn('Could not generate document hash:', e);
-      return `HASH-${Date.now()}`;
+      console.warn('[super-converter] Could not generate content hash:', e);
+      return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
     }
   }
 
   /**
-   * Get document identifier (GUID or hash) - async for lazy hash generation
+   * Get document unique identifier (async)
+   *
+   * For blank documents (isBlankDoc: true):
+   * - GUID and timestamp already set in resolveDocumentGuid()
+   * - Returns identifierHash(guid|timestamp)
+   *
+   * For imported files (isBlankDoc: false):
+   * - If both documentGuid and dcterms:created exist: returns identifierHash
+   * - Otherwise: returns contentHash and generates missing metadata for future exports
+   *
+   * @returns {Promise<string>} Document unique identifier
    */
   async getDocumentIdentifier() {
-    if (this.documentGuid) {
-      return this.documentGuid;
+    // Return cached identifier if already computed
+    if (this.documentUniqueIdentifier) {
+      return this.documentUniqueIdentifier;
     }
 
-    if (!this.documentHash && this.fileSource) {
-      this.documentHash = await this.#generateDocumentHash();
+    // Check what metadata we have (for new files, both are set in resolveDocumentGuid)
+    const hasGuid = Boolean(this.documentGuid);
+    const hasTimestamp = Boolean(this.getDocumentCreatedTimestamp());
+
+    if (hasGuid && hasTimestamp) {
+      // Both exist: use identifierHash
+      this.documentUniqueIdentifier = this.#generateIdentifierHash();
+    } else {
+      // Missing one or both: use contentHash for stability (same file = same hash)
+      // But generate missing metadata so re-exported file will have complete metadata
+      if (!hasGuid) {
+        this.documentGuid = uuidv4();
+      }
+      if (!hasTimestamp) {
+        this.setDocumentCreatedTimestamp(SuperConverter.generateWordTimestamp());
+      }
+      this.documentModified = true; // Ensures metadata is saved on export
+      this.documentUniqueIdentifier = await this.#generateContentHash();
     }
 
-    return this.documentHash;
+    return this.documentUniqueIdentifier;
   }
 
   /**
-   * Promote from hash to GUID on first edit
+   * Promote to GUID on first edit (for documents that didn't have one)
    */
   promoteToGuid() {
     if (this.documentGuid) return this.documentGuid;
 
     this.documentGuid = this.getMicrosoftDocId() || uuidv4();
     this.documentModified = true;
-    this.documentHash = null; // Clear temporary hash
+    this.documentUniqueIdentifier = null; // Clear cached identifier
 
     // Note: GUID is stored to custom properties during export to avoid
     // unnecessary XML modifications if the document is never saved

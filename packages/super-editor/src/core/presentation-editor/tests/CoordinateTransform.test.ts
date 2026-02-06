@@ -1,6 +1,6 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { convertPageLocalToOverlayCoords, getPageOffsetX } from '../dom/CoordinateTransform.js';
+import { convertPageLocalToOverlayCoords, getPageOffsetX, getPageOffsetY } from '../dom/CoordinateTransform.js';
 
 describe('CoordinateTransform', () => {
   let mockDom: {
@@ -87,6 +87,123 @@ describe('CoordinateTransform', () => {
 
       expect(resultZoom1).not.toBe(null);
       expect(resultZoom2).not.toBe(null);
+    });
+  });
+
+  describe('getPageOffsetY', () => {
+    it('returns null when painterHost is null', () => {
+      const result = getPageOffsetY({
+        painterHost: null,
+        viewportHost: mockDom.viewportHost,
+        zoom: 1,
+        pageIndex: 0,
+      });
+
+      expect(result).toBe(null);
+    });
+
+    it('returns null when viewportHost is null', () => {
+      const result = getPageOffsetY({
+        painterHost: mockDom.painterHost,
+        viewportHost: null,
+        zoom: 1,
+        pageIndex: 0,
+      });
+
+      expect(result).toBe(null);
+    });
+
+    it('returns null when page element not found', () => {
+      const result = getPageOffsetY({
+        painterHost: mockDom.painterHost,
+        viewportHost: mockDom.viewportHost,
+        zoom: 1,
+        pageIndex: 99,
+      });
+
+      expect(result).toBe(null);
+    });
+
+    it('calculates page offset Y correctly', () => {
+      const pageEl = mockDom.painterHost.querySelector('.superdoc-page') as HTMLElement;
+
+      vi.spyOn(pageEl, 'getBoundingClientRect').mockReturnValue({
+        top: 140,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      vi.spyOn(mockDom.viewportHost, 'getBoundingClientRect').mockReturnValue({
+        top: 20,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const result = getPageOffsetY({
+        painterHost: mockDom.painterHost,
+        viewportHost: mockDom.viewportHost,
+        zoom: 1,
+        pageIndex: 0,
+      });
+
+      expect(result).toBe(120);
+    });
+
+    it('accounts for zoom in offset calculation', () => {
+      const pageEl = mockDom.painterHost.querySelector('.superdoc-page') as HTMLElement;
+
+      vi.spyOn(pageEl, 'getBoundingClientRect').mockReturnValue({
+        top: 140,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      vi.spyOn(mockDom.viewportHost, 'getBoundingClientRect').mockReturnValue({
+        top: 20,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const resultZoom1 = getPageOffsetY({
+        painterHost: mockDom.painterHost,
+        viewportHost: mockDom.viewportHost,
+        zoom: 1,
+        pageIndex: 0,
+      });
+
+      const resultZoom2 = getPageOffsetY({
+        painterHost: mockDom.painterHost,
+        viewportHost: mockDom.viewportHost,
+        zoom: 2,
+        pageIndex: 0,
+      });
+
+      expect(resultZoom1).toBe(120);
+      expect(resultZoom2).toBe(60);
     });
   });
 

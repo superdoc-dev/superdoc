@@ -12,42 +12,39 @@ import Description from '/snippets/extensions/text-align.mdx'
 
 Configure the extension behavior:
 
-<ParamField path="types" type="Array<string>" default="['heading','paragraph']">
-  Node types to apply alignment to
-</ParamField>
-
 <ParamField path="alignments" type="Array<string>" default="['left','center','right','justify']">
   Available alignment options
-</ParamField>
-
-<ParamField path="defaultAlignment" type="string" default="left">
-  Default text alignment
-</ParamField>
-
-## Attributes
-
-Node attributes that can be set and retrieved:
-
-<ParamField path="textAlign" type="string" default="left">
-  Text alignment value (left, center, right, justify)
 </ParamField>
 
 ## Commands
 
 ### `setTextAlign`
 
-Set text alignment
-
-<Note>
-Applies to all configured node types (heading, paragraph by default)
-</Note>
+Set text alignment on the current paragraph.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setTextAlign('center')
 editor.commands.setTextAlign('justify')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setTextAlign('center')
+    editor.commands.setTextAlign('justify')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -65,11 +62,27 @@ Resets alignment to the default value
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.unsetTextAlign()
 ```
 
-## Keyboard Shortcuts
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetTextAlign()
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
@@ -79,7 +92,7 @@ editor.commands.unsetTextAlign()
 | setTextAlign('justify')() | `⌘/Ctrl-Shift-j` | Justify text |
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

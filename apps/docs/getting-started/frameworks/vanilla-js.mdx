@@ -6,7 +6,7 @@ keywords: "vanilla javascript docx, plain js word editor, superdoc vanilla, no f
 
 SuperDoc works with plain JavaScript. No framework required.
 
-## Basic Setup
+## Basic setup
 
 <CodeGroup>
 
@@ -14,15 +14,15 @@ SuperDoc works with plain JavaScript. No framework required.
 <!DOCTYPE html>
 <html>
 <head>
-  <link href="https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" 
+  <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css"
         rel="stylesheet">
 </head>
 <body>
   <div id="editor" style="height: 700px"></div>
-  
+
   <script type="module">
-    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
-    
+    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
+
     const superdoc = new SuperDoc({
       selector: '#editor',
       document: 'contract.docx'
@@ -33,8 +33,8 @@ SuperDoc works with plain JavaScript. No framework required.
 ```
 
 ```javascript NPM/Bundler
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import '@harbour-enterprises/superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
 const superdoc = new SuperDoc({
   selector: '#editor',
@@ -44,7 +44,7 @@ const superdoc = new SuperDoc({
 
 </CodeGroup>
 
-## Load Documents
+## Load documents
 
 <CodeGroup>
 
@@ -86,7 +86,7 @@ new SuperDoc({
 
 </CodeGroup>
 
-## Complete Example
+## Complete example
 
 <CodeGroup>
 
@@ -94,7 +94,7 @@ new SuperDoc({
 <!DOCTYPE html>
 <html>
 <head>
-  <link href="https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/style.css" 
+  <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css"
         rel="stylesheet">
 </head>
 <body>
@@ -104,11 +104,11 @@ new SuperDoc({
     <button id="mode-review">Review</button>
     <button id="export-btn">Export</button>
   </div>
-  
+
   <div id="editor" style="height: 700px"></div>
-  
+
   <script type="module">
-    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/@harbour-enterprises/superdoc/dist/superdoc.es.js';
+    import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
     
     let superdoc = null;
     
@@ -140,8 +140,8 @@ new SuperDoc({
 ```
 
 ```javascript NPM/Bundler
-import { SuperDoc } from '@harbour-enterprises/superdoc';
-import '@harbour-enterprises/superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
 let superdoc = null;
 
@@ -174,7 +174,7 @@ document.getElementById('export-btn').addEventListener('click', async () => {
 
 </CodeGroup>
 
-## Next Steps
+## Next steps
 
 - [API Reference](/core/superdoc/configuration) - Configuration options
 - [React Integration](/getting-started/frameworks/react) - Using with React

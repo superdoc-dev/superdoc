@@ -713,8 +713,10 @@ describe('SuperDoc core', () => {
           id: expect.any(String),
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           name: 'contract.docx',
-          isNewFile: true,
         });
+        // isNewFile should NOT be set when importing existing files
+        // It should only be true when creating from blank template
+        expect(instance.config.documents[0].isNewFile).toBeUndefined();
         expect(instance.config.documents[0].data).toBe(file);
       });
 
@@ -737,8 +739,9 @@ describe('SuperDoc core', () => {
           id: expect.any(String),
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           name: 'document', // Default name for Blobs
-          isNewFile: true,
         });
+        // isNewFile should NOT be set when importing existing files
+        expect(instance.config.documents[0].isNewFile).toBeUndefined();
         // Blob should be wrapped as File
         expect(instance.config.documents[0].data).toBeInstanceOf(File);
       });

@@ -246,6 +246,7 @@ export function toFlowBlocksMap(documents: PMDocumentMap, options?: BatchAdapter
   const prefixFactory = options?.blockIdPrefixFactory;
 
   Object.entries(documents).forEach(([key, doc]) => {
+    if (doc == null) return;
     const blockIdPrefix = prefixFactory ? prefixFactory(key) : options?.blockIdPrefix;
     const result = toFlowBlocks(doc, { ...options, blockIdPrefix });
     results[key] = result.blocks;

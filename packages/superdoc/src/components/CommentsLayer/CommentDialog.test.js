@@ -73,10 +73,15 @@ const InternalDropdownStub = defineComponent({
   },
 });
 
+let commentInputFocusSpies;
+
 const CommentInputStub = defineComponent({
   name: 'CommentInputStub',
   props: ['users', 'config', 'comment'],
-  setup() {
+  setup(_, { expose }) {
+    const focusSpy = vi.fn();
+    commentInputFocusSpies.push(focusSpy);
+    expose({ focus: focusSpy });
     return () => h('div', { class: 'comment-input-stub' });
   },
 });
@@ -215,6 +220,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
 describe('CommentDialog.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    commentInputFocusSpies = [];
   });
 
   it('focuses the comment on mount and adds replies', async () => {
@@ -309,6 +315,42 @@ describe('CommentDialog.vue', () => {
     const dropdown = wrapper.findComponent(InternalDropdownStub);
     dropdown.vm.$emit('select', 'external');
     expect(baseComment.setIsInternal).toHaveBeenCalledWith({ isInternal: false, superdoc: superdocStub });
+  });
+
+  it('prepopulates edit text from a ref-based commentText value', async () => {
+    const baseCommentWithRef = {
+      commentText: { value: '<p>Ref text</p>' },
+    };
+
+    const { wrapper, superdocStub } = await mountDialog({
+      baseCommentOverrides: baseCommentWithRef,
+    });
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('overflow-select', 'edit');
+
+    expect(commentsStoreStub.currentCommentText.value).toBe('<p>Ref text</p>');
+    expect(typeof commentsStoreStub.currentCommentText.value).toBe('string');
+    expect(commentsStoreStub.currentCommentText.value).not.toBe(baseCommentWithRef.commentText);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, 'comment-1');
+  });
+
+  it('auto-focuses the edit input when entering edit mode', async () => {
+    const { wrapper } = await mountDialog();
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('overflow-select', 'edit');
+    await nextTick();
+
+    expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
+  });
+
+  it('auto-focuses the new comment input when active', async () => {
+    const { wrapper, baseComment } = await mountDialog();
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
+    expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
   });
 
   it('emits dialog-exit when clicking outside active comment and no track changes highlighted', async () => {

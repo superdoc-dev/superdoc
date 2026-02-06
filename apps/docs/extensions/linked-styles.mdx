@@ -1,46 +1,42 @@
 ---
-title: CustomSelection extension
-sidebarTitle: "Custom Selection"
-keywords: "CustomSelection extension, superdoc CustomSelection, word CustomSelection, document CustomSelection, docx CustomSelection"
+title: Linked Styles extension
+sidebarTitle: "Linked Styles"
+keywords: "linked styles, superdoc linked styles, word styles, document styles, docx styles"
 ---
 
-import Description from '/snippets/extensions/custom-selection.mdx'
+import Description from '/snippets/extensions/linked-styles.mdx'
 
 <Description />
 
 ## Commands
 
-### `restorePreservedSelection`
-
-Restore the preserved selection
-
-<Note>
-Used internally to maintain selection when interacting with toolbar
-</Note>
-
-**Example:**
-
-```javascript
-// Restore selection after toolbar interaction
-editor.commands.restorePreservedSelection()
-```
-
-**Returns:** `Function` Command function
-
 ### `setLinkedStyle`
 
-Apply a linked style to the selected paragraphs
-
-<Note>
-Works with custom selection preservation
-</Note>
+Apply a linked style to the selected paragraphs.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const style = editor.helpers.linkedStyles.getStyleById('Heading1');
 editor.commands.setLinkedStyle(style);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+    editor.commands.setLinkedStyle(style);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -50,39 +46,70 @@ editor.commands.setLinkedStyle(style);
 
 ### `toggleLinkedStyle`
 
-Toggle a linked style on the current selection
-
-<Note>
-Removes style if already applied, applies it if not
-</Note>
+Toggle a linked style on the current selection. Removes the style if already applied, applies it if not.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const style = editor.helpers.linkedStyles.getStyleById('Heading1');
 editor.commands.toggleLinkedStyle(style)
+editor.commands.toggleLinkedStyle(style, 'paragraph')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+    editor.commands.toggleLinkedStyle(style)
+    editor.commands.toggleLinkedStyle(style, 'paragraph')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
 <ParamField path="style" type="LinkedStyle" required>
   The linked style to apply (with id property)
 </ParamField>
+<ParamField path="nodeType" type="string">
+  Node type to restrict toggle to (e.g., 'paragraph')
+</ParamField>
 
 ### `setStyleById`
 
-Apply a linked style by its ID
-
-<Note>
-Looks up the style from loaded Word styles
-</Note>
+Apply a linked style by its ID.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setStyleById('Heading1')
 editor.commands.setStyleById('Normal')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setStyleById('Heading1')
+    editor.commands.setStyleById('Normal')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -94,14 +121,29 @@ editor.commands.setStyleById('Normal')
 
 ### `getStyles`
 
-Get all available linked styles
+Get all available linked styles from the document.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const styles = editor.helpers.linkedStyles.getStyles();
-// Returns all styles from the Word document
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const styles = editor.helpers.linkedStyles.getStyles();
+  },
+});
+```
+</CodeGroup>
 
 **Returns:**
 
@@ -111,13 +153,29 @@ const styles = editor.helpers.linkedStyles.getStyles();
 
 ### `getStyleById`
 
-Get a specific style by ID
+Get a specific style by ID.
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -133,45 +191,9 @@ const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
 
 ## Types
 
-### `SelectionState`
-
-Selection state
-
-<Expandable title="Properties">
-<ResponseField name="focused" type="boolean" required>
-  Whether editor is focused
-</ResponseField>
-<ResponseField name="preservedSelection" type="Object | any" required>
-  Stored selection
-</ResponseField>
-<ResponseField name="showVisualSelection" type="boolean" required>
-  Whether to show selection decoration
-</ResponseField>
-<ResponseField name="skipFocusReset" type="boolean" required>
-  Whether to skip clearing selection on next focus
-</ResponseField>
-</Expandable>
-
-### `ParentNodeInfo`
-
-<Expandable title="Properties">
-<ResponseField name="pos" type="number" required>
-  The position of the parent node.
-</ResponseField>
-<ResponseField name="start" type="number" required>
-  The start position of the parent node.
-</ResponseField>
-<ResponseField name="depth" type="number" required>
-  The depth of the parent node.
-</ResponseField>
-<ResponseField name="node" type="any" required>
-  The parent node.
-</ResponseField>
-</Expandable>
-
 ### `LinkedStyle`
 
-Style definition from Word document
+Style definition from a Word document.
 
 <Expandable title="Properties">
 <ResponseField name="id" type="string" required>
@@ -186,8 +208,8 @@ Style definition from Word document
 </Expandable>
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 
-<SourceCodeLink path="packages/super-editor/src/extensions/custom-selection/custom-selection.js" />
+<SourceCodeLink path="packages/super-editor/src/extensions/linked-styles/linked-styles.js" />

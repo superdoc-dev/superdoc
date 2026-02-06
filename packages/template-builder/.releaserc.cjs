@@ -8,6 +8,7 @@ const config = {
   ],
   tagFormat: 'template-builder-v${version}',
   plugins: [
+    'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
     ['@semantic-release/npm', { npmPublish: true }],

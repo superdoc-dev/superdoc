@@ -5,7 +5,7 @@ keywords: "superdoc methods, document api methods, editor functions, word docume
 
 Methods are functions you call on the SuperDoc instance to perform actions.
 
-## Document Operations
+## Document operations
 
 ### `export`
 
@@ -13,7 +13,7 @@ Export the document with various options.
 
 <ParamField path="options" type="Object">
   Export configuration
-  
+
   <Expandable title="properties" defaultOpen>
     <ParamField path="exportType" type="string[]" default="['docx']">
       Export formats
@@ -38,12 +38,32 @@ Export the document with various options.
 
 **Returns:** `Promise<Blob>` - Document blob
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const blob = await superdoc.export({
   isFinalDoc: true,
-  commentsType: 'clean'
+  commentsType: 'clean',
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    const blob = await superdoc.export({
+      isFinalDoc: true,
+      commentsType: 'clean',
+    });
+  },
+});
+```
+
+</CodeGroup>
 
 ### `save`
 
@@ -51,9 +71,26 @@ Save document if in collaboration mode.
 
 **Returns:** `Promise<void>`
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 await superdoc.save();
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    await superdoc.save();
+  },
+});
+```
+
+</CodeGroup>
 
 ### `getHTML`
 
@@ -61,7 +98,7 @@ Get HTML content of all editors.
 
 <ParamField path="options" type="Object">
   HTML options
-  
+
   <Expandable title="properties">
     <ParamField path="unflattenLists" type="boolean" default="false">
       Preserve nested list structure
@@ -71,11 +108,29 @@ Get HTML content of all editors.
 
 **Returns:** `string[]` - Array of HTML strings, one per editor
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const htmlArray = superdoc.getHTML();
 ```
 
-## Mode Control
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const htmlArray = superdoc.getHTML();
+    console.log(htmlArray);
+  },
+});
+```
+
+</CodeGroup>
+
+## Mode control
 
 ### `setDocumentMode`
 
@@ -83,7 +138,7 @@ Change the document mode.
 
 <ParamField path="mode" type="string" required>
   New document mode
-  
+
   <Expandable title="Available modes">
     - `'viewing'` - Read-only
     - `'suggesting'` - Track changes
@@ -91,9 +146,26 @@ Change the document mode.
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.setDocumentMode('suggesting');
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setDocumentMode('suggesting');
+  },
+});
+```
+
+</CodeGroup>
 
 ### `lockSuperdoc`
 
@@ -107,9 +179,29 @@ Lock or unlock the document.
   User who locked the document
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.lockSuperdoc(true, currentUser);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.lockSuperdoc(true, {
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+    });
+  },
+});
+```
+
+</CodeGroup>
 
 ### `setHighContrastMode`
 
@@ -119,37 +211,182 @@ Enable/disable high contrast mode.
   High contrast state
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.setHighContrastMode(true);
 ```
 
-## UI Methods
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setHighContrastMode(true);
+  },
+});
+```
+
+</CodeGroup>
+
+## UI methods
+
+### `setActiveEditor`
+
+Set which editor is currently active. Useful when working with multiple documents.
+
+<ParamField path="editor" type="Editor" required>
+  Editor instance to set as active
+</ParamField>
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.setActiveEditor(editor);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  documents: [doc1, doc2],
+  onReady: (superdoc) => {
+    // Switch to the second editor
+    const editors = superdoc.state.documents;
+    superdoc.setActiveEditor(editors[1].editor);
+  },
+});
+```
+
+</CodeGroup>
+
+### `setDisableContextMenu`
+
+Toggle the custom context menu at runtime.
+
+<ParamField path="disabled" type="boolean" default="true">
+  Whether to disable the context menu
+</ParamField>
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.setDisableContextMenu(true);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setDisableContextMenu(true);
+  },
+});
+```
+
+</CodeGroup>
+
+### `setTrackedChangesPreferences`
+
+Override how tracked changes are rendered in the layout engine.
+
+<ParamField path="preferences" type="Object">
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="mode" type="string">
+      Rendering mode: `'review'`, `'original'`, `'final'`, or `'off'`
+    </ParamField>
+    <ParamField path="enabled" type="boolean">
+      Whether tracked change metadata is included
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.setTrackedChangesPreferences({ mode: 'final' });
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setTrackedChangesPreferences({ mode: 'final' });
+  },
+});
+```
+
+</CodeGroup>
 
 ### `toggleRuler`
 
 Toggle ruler visibility.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.toggleRuler();
 ```
 
-### `togglePagination`
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
-Toggle pagination mode.
-
-```javascript
-superdoc.togglePagination();
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.toggleRuler();
+  },
+});
 ```
+
+</CodeGroup>
+
+<ParamField path="togglePagination" type="string" deprecated>
+
+<Warning>**Removed in v1.0** — Pagination is now handled by the layout engine. Use `viewOptions.layout` in [configuration](/core/superdoc/configuration) instead.</Warning>
+
+</ParamField>
 
 ### `focus`
 
 Focus the active editor or first available.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.focus();
 ```
 
-## Search Methods
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.focus();
+  },
+});
+```
+
+</CodeGroup>
+
+## Search methods
 
 ### `search`
 
@@ -161,10 +398,30 @@ Search for text or regex in active editor.
 
 **Returns:** `Array<SearchResult>` - Search matches
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 const results = superdoc.search('contract');
-const results = superdoc.search(/section \d+/gi);
+const regexResults = superdoc.search(/section \d+/gi);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const results = superdoc.search('contract');
+    console.log(`Found ${results.length} matches`);
+
+    const regexResults = superdoc.search(/section \d+/gi);
+  },
+});
+```
+
+</CodeGroup>
 
 ### `goToSearchResult`
 
@@ -174,11 +431,31 @@ Navigate to a search result.
   Search result to navigate to
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.goToSearchResult(results[0]);
 ```
 
-## Comments Methods
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const results = superdoc.search('contract');
+    if (results.length) {
+      superdoc.goToSearchResult(results[0]);
+    }
+  },
+});
+```
+
+</CodeGroup>
+
+## Comments methods
 
 ### `addCommentsList`
 
@@ -188,19 +465,53 @@ Add a comments list to the specified element.
   Container for comments list
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.addCommentsList('#comments-sidebar');
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.addCommentsList('#comments-sidebar');
+  },
+});
+```
+
+</CodeGroup>
 
 ### `removeCommentsList`
 
 Remove the comments list.
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.removeCommentsList();
 ```
 
-## User Management
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.removeCommentsList();
+  },
+});
+```
+
+</CodeGroup>
+
+## User management
 
 ### `addSharedUser`
 
@@ -208,7 +519,7 @@ Add a user to the shared users list.
 
 <ParamField path="user" type="User" required>
   User to add
-  
+
   <Expandable title="User properties">
     <ParamField path="name" type="string" required>
       Display name
@@ -219,12 +530,32 @@ Add a user to the shared users list.
   </Expandable>
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.addSharedUser({
   name: 'Jane Smith',
-  email: 'jane@example.com'
+  email: 'jane@example.com',
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.addSharedUser({
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+    });
+  },
+});
+```
+
+</CodeGroup>
 
 ### `removeSharedUser`
 
@@ -234,11 +565,28 @@ Remove a user from shared users.
   Email of user to remove
 </ParamField>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.removeSharedUser('jane@example.com');
 ```
 
-## Lifecycle Methods
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.removeSharedUser('jane@example.com');
+  },
+});
+```
+
+</CodeGroup>
+
+## Lifecycle
 
 ### `destroy`
 
@@ -246,89 +594,199 @@ Completely destroy the SuperDoc instance.
 
 <Warning>This is irreversible. Cleans up all resources, events, and DOM.</Warning>
 
-```javascript
+<CodeGroup>
+
+```javascript Usage
 superdoc.destroy();
 ```
 
-## Event Methods
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+// Later, when you're done with the editor:
+superdoc.destroy();
+```
+
+</CodeGroup>
+
+## Event methods
 
 ### `on`
 
 Subscribe to an event.
 
-<ParamField path="event" type="string" required>
-  Event name
-</ParamField>
+<CodeGroup>
 
-<ParamField path="handler" type="function" required>
-  Event handler
-</ParamField>
-
-```javascript
+```javascript Usage
 superdoc.on('ready', ({ superdoc }) => {
   console.log('SuperDoc ready');
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('ready', ({ superdoc }) => {
+  console.log('SuperDoc ready');
+});
+```
+
+</CodeGroup>
+
 ### `once`
 
 Subscribe to an event once.
 
-<ParamField path="event" type="string" required>
-  Event name
-</ParamField>
+<CodeGroup>
 
-<ParamField path="handler" type="function" required>
-  Event handler
-</ParamField>
-
-```javascript
+```javascript Usage
 superdoc.once('ready', () => {
   // Only called once
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.once('ready', () => {
+  console.log('SuperDoc ready (one-time)');
+});
+```
+
+</CodeGroup>
+
 ### `off`
 
 Unsubscribe from an event.
 
-<ParamField path="event" type="string" required>
-  Event name
-</ParamField>
+<CodeGroup>
 
-<ParamField path="handler" type="function" required>
-  Handler to remove
-</ParamField>
-
-```javascript
+```javascript Usage
 superdoc.off('ready', handler);
 ```
 
-## Method Patterns
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
-### Async Operations
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+const handler = ({ superdoc }) => {
+  console.log('SuperDoc ready');
+};
+
+superdoc.on('ready', handler);
+
+// Later, unsubscribe:
+superdoc.off('ready', handler);
+```
+
+</CodeGroup>
+
+## Schema introspection
+
+### `getSchemaIntrospection`
+
+Returns a JSON schema summary with all nodes, marks, and their attributes. Useful for AI agents that need schema context.
 
 ```javascript
-async function exportDocument() {
-  try {
-    const blob = await superdoc.export({
-      isFinalDoc: true
-    });
-    saveToFile(blob);
-  } catch (error) {
-    console.error('Export failed:', error);
-  }
+import { getSchemaIntrospection } from 'superdoc';
+
+const schema = await getSchemaIntrospection({ mode: 'docx' });
+// Returns: { version, nodes: [...], marks: [...] }
+```
+
+<ParamField path="options" type="Object">
+  <Expandable title="properties">
+    <ParamField path="editor" type="Editor">
+      Existing Editor instance to introspect. If provided, uses this instead of creating a temporary editor.
+    </ParamField>
+    <ParamField path="extensions" type="Array">
+      Custom extensions to use when building the schema.
+    </ParamField>
+    <ParamField path="mode" type="string" default="'docx'">
+      Editor mode: `'docx'`, `'html'`, or `'text'`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## TypeScript types
+
+SuperDoc exports TypeScript interfaces for all node and mark types:
+
+```typescript
+import type { NodeName, NodeAttrs, ParagraphAttrs } from 'superdoc/types';
+
+// NodeName shows all 39 node types in autocomplete
+type Test = NodeAttrs<'paragraph'>; // Resolves to ParagraphAttrs
+```
+
+Available types: `NodeName`, `NodeAttrs<N>`, `MarkName`, `MarkAttrs<M>`, and specific interfaces like `ParagraphAttrs`, `TableAttrs`, `ImageAttrs`, etc.
+
+## Properties
+
+### `activeEditor`
+
+Currently active editor instance. Returns `null` before the `ready` event.
+
+<CodeGroup>
+
+```javascript Usage
+if (superdoc.activeEditor) {
+  superdoc.activeEditor.commands.toggleBold();
 }
 ```
 
-### Waiting for Ready
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
-<Note>Some methods require SuperDoc to be ready</Note>
-
-```javascript
-superdoc.once('ready', () => {
-  // Now safe to use all methods
-  superdoc.search('term');
-  superdoc.setDocumentMode('suggesting');
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    if (superdoc.activeEditor) {
+      superdoc.activeEditor.commands.toggleBold();
+    }
+  },
 });
 ```
+
+</CodeGroup>
+
+<Warning>Always check for `null` before accessing.</Warning>
+
+| Property | Type | Description |
+|---|---|---|
+| `superdocId` | `string` | Unique identifier for this instance |
+| `version` | `string` | SuperDoc version number |
+| `activeEditor` | `Editor \| null` | Currently active editor |
+| `element` | `HTMLElement \| null` | Container DOM element |
+| `state` | `{ documents, users }` | Current state snapshot |
+| `isLocked` | `boolean` | Whether the document is locked |
+| `lockedBy` | `User \| null` | User who locked the document |
+| `isCollaborative` | `boolean` | Whether collaboration is enabled |
+| `user` | `User` | Current user information |
+| `users` | `User[]` | All users with document access |
+| `toolbar` | `Toolbar \| null` | Toolbar instance if configured |

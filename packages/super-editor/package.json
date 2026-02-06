@@ -81,6 +81,7 @@
     "eventemitter3": "catalog:",
     "he": "catalog:",
     "jszip": "catalog:",
+    "lodash": "^4.17.21",
     "marked": "catalog:",
     "prosemirror-commands": "catalog:",
     "prosemirror-dropcursor": "catalog:",

@@ -21,6 +21,7 @@ const config = {
   ],
   tagFormat: 'v${version}',
   plugins: [
+    'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
     // NPM plugin MUST come before git plugin - ADD pkgRoot HERE!

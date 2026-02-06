@@ -8,20 +8,20 @@ keywords: "liveblocks collaboration, cloud collaboration, real-time editing, yjs
 
 ## Setup
 
-### 1. Create Account
+### 1. Create account
 
 1. Go to [liveblocks.io](https://liveblocks.io/)
 2. Sign up for free
 3. Create a new project
 4. Copy your **Public API Key** (`pk_...`)
 
-### 2. Install Dependencies
+### 2. Install dependencies
 
 ```bash
 npm install @liveblocks/client @liveblocks/yjs yjs
 ```
 
-### 3. Basic Implementation
+### 3. Basic implementation
 
 ```javascript
 import { createClient } from "@liveblocks/client";
@@ -59,7 +59,7 @@ provider.on("sync", (synced) => {
 });
 ```
 
-## Room Management
+## Room management
 
 Each **room** represents a collaborative session. Use unique room IDs for different documents:
 
@@ -69,7 +69,7 @@ const documentId = route.params.id; // e.g., 'contract-abc-123'
 const { room, leave } = client.enterRoom(documentId);
 ```
 
-### Room Naming Best Practices
+### Room naming best practices
 
 ```javascript
 // Good: Unique, descriptive IDs
@@ -82,9 +82,9 @@ client.enterRoom("document"); // Too generic
 client.enterRoom("test"); // May conflict with other users
 ```
 
-## User Presence
+## User presence
 
-### Showing Active Users
+### Showing active users
 
 ```javascript
 const superdoc = new SuperDoc({
@@ -105,7 +105,7 @@ const superdoc = new SuperDoc({
 });
 ```
 
-### Custom User Colors
+### Custom user colors
 
 ```javascript
 new SuperDoc({
@@ -164,7 +164,7 @@ Liveblocks automatically persists your Yjs document. Data is stored securely and
   with custom retention policies.
 </Note>
 
-## Error Handling
+## Error handling
 
 ```javascript
 const { room } = client.enterRoom("my-document");
@@ -235,7 +235,7 @@ useEffect(() => {
   </Card>
 </CardGroup>
 
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
   <Card

@@ -99,6 +99,48 @@ Always verify API names against the source code before documenting. Key source f
 
 Common components: `ParamField`, `Note`, `Warning`, `Tip`, `CardGroup`, `Card`, `Tabs`, `Tab`, `Info`.
 
+## Code examples pattern
+
+Every code snippet in API/reference pages must be copy-pasteable. Use `<CodeGroup>` with two tabs when a snippet is a fragment (assumes prior setup):
+
+- **Usage** tab — the focused snippet (what the method does)
+- **Full Example** tab — complete, runnable code with imports and initialization
+
+```mdx
+<CodeGroup>
+
+‍```javascript Usage
+const blob = await superdoc.export({ isFinalDoc: true });
+‍```
+
+‍```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    const blob = await superdoc.export({ isFinalDoc: true });
+  },
+});
+‍```
+
+</CodeGroup>
+```
+
+**Boilerplate by context:**
+
+| Context | Initialization |
+|---|---|
+| SuperDoc methods | `new SuperDoc({ selector, document, onReady })` |
+| SuperEditor methods | `const editor = await Editor.open(file, { element })` |
+| Extension commands | `editor.commands.X()` inside SuperDoc onReady or Editor.open |
+
+**When NOT to use CodeGroup:** Snippets that are already complete (have imports + initialization), config-only blocks, bash commands, XML/HTML examples.
+
+Run `pnpm run check:imports` to validate all import paths in code examples.
+
 ## Commands
 
 - `npx mintlify dev` — Start local dev server

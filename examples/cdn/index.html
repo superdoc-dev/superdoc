@@ -8,6 +8,7 @@
       href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css"
       rel="stylesheet"
     />
+    <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.umd.js"></script>
   </head>
   <body>
     <div style="padding: 1rem; background: #f5f5f5">
@@ -15,19 +16,17 @@
     </div>
     <div id="editor" style="height: calc(100vh - 60px)"></div>
 
-    <script type="module">
-      import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
-
-      let superdoc = new SuperDoc({
+    <script>
+      var superdoc = new SuperDocLibrary.SuperDoc({
         selector: '#editor',
       });
 
-      document.getElementById('file-input').addEventListener('change', (e) => {
-        const file = e.target.files[0];
+      document.getElementById('file-input').addEventListener('change', function (e) {
+        var file = e.target.files[0];
         if (!file) return;
 
-        superdoc?.destroy();
-        superdoc = new SuperDoc({
+        if (superdoc) superdoc.destroy();
+        superdoc = new SuperDocLibrary.SuperDoc({
           selector: '#editor',
           document: file,
         });

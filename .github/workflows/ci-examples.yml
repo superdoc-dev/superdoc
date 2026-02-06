@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  smoke-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        example: [react, vue, vanilla]
+        example: [react, vue, vanilla, cdn]
     steps:
       - uses: actions/checkout@v4
 
@@ -20,6 +20,15 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install & Build
+      - name: Install example dependencies
+        if: matrix.example != 'cdn'
         working-directory: examples/${{ matrix.example }}
-        run: npm install && npx vite build
+        run: npm install
+
+      - name: Install smoke test dependencies
+        working-directory: examples/__tests__
+        run: npm install && npx playwright install chromium
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=${{ matrix.example }} npx playwright test

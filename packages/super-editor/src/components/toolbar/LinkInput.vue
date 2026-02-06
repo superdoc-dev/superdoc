@@ -171,11 +171,11 @@ onMounted(() => {
 
 // --- Link logic moved here ---
 const handleSubmit = () => {
-  const editor = props.editor;
-  if (!editor) return;
-
   // Prevent form submission in viewing mode
   if (isViewingMode.value) return;
+
+  const editor = props.editor;
+  if (!editor) return;
 
   // If the URL is cleared, simply remove the link.
   if (!rawUrl.value) {
@@ -235,7 +235,7 @@ const handleRemove = () => {
           :class="{ error: urlError }"
           v-model="rawUrl"
           :readonly="isViewingMode"
-          @keydown.enter.stop.prevent="!isViewingMode && handleSubmit"
+          @keydown.enter.stop.prevent="handleSubmit"
           @keydown="urlError = false"
         />
 

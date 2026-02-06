@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import { generateResultsFolderName, getSuperdocVersion, sanitizeFilename } from './generate-refs.js';
@@ -45,7 +45,6 @@ import {
   resolveBaselineFolderForBrowser,
   type BrowserName,
 } from './browser-utils.js';
-import { sleep, createLogBuffer } from './utils.js';
 import { ensureBaselineDownloaded, getLatestBaselineVersion, refreshBaselineSubset } from './r2-baselines.js';
 import {
   buildStorageArgs,
@@ -55,16 +54,7 @@ import {
   resolveDocsDir,
   type StorageMode,
 } from './storage-flags.js';
-import {
-  HARNESS_PORT,
-  HARNESS_URL,
-  HARNESS_START_TIMEOUT_MS,
-  HARNESS_LOG_BUFFER_LIMIT,
-  isPortOpen,
-  waitForPort,
-  ensureHarnessRunning,
-  stopHarness,
-} from './harness-utils.js';
+import { HARNESS_PORT, HARNESS_URL, isPortOpen, ensureHarnessRunning, stopHarness } from './harness-utils.js';
 import { ensureLocalTarballInstalled } from './workspace-utils.js';
 
 // Configuration
@@ -700,6 +690,31 @@ function extractAssetPath(relativePath: string, resultsFolderName: string, resul
   const normalizedPrefix = normalizePrefix(resultsPrefix);
   assetPath = trimPrefix(assetPath, normalizedPrefix);
   return assetPath;
+}
+
+function deriveMissingBaselineDocFilters(
+  report: ComparisonReport,
+  resultsFolderName: string,
+  resultsPrefix: string | undefined,
+  browser?: BrowserName,
+): string[] {
+  const filters = new Set<string>();
+
+  for (const result of report.results) {
+    if (result.reason !== 'missing_in_baseline') continue;
+    const assetPath = extractAssetPath(result.relativePath, resultsFolderName, resultsPrefix);
+    const normalized = normalizePath(assetPath);
+    let docKey = path.posix.dirname(normalized);
+    if (!docKey || docKey === '.') continue;
+    if (browser && docKey.startsWith(`${browser}/`)) {
+      docKey = docKey.slice(browser.length + 1);
+    }
+    if (docKey && docKey !== '.') {
+      filters.add(docKey);
+    }
+  }
+
+  return Array.from(filters);
 }
 
 function readStoryMetadata(filePath: string): StoryMetadataFile | null {
@@ -2147,6 +2162,52 @@ async function main(): Promise<void> {
           trimPrefix: resolvedTrim,
         },
       });
+
+      if (mode === 'cloud' && !refreshBaselines && report.summary.missingInBaseline > 0) {
+        const refreshFilters = deriveMissingBaselineDocFilters(report, resultsFolderName!, resultsPrefix, browser);
+        if (refreshFilters.length > 0) {
+          console.log(
+            colors.muted(
+              `↻ Missing baseline files detected in cache. Refreshing ${refreshFilters.length} doc(s) from R2...`,
+            ),
+          );
+          const refreshed = await refreshBaselineSubset({
+            prefix: baselinePrefix,
+            version: baselineToUse,
+            localRoot: baselineDir,
+            filters: refreshFilters,
+            excludes,
+            browsers: [browser],
+          });
+          if (refreshed.matched > 0) {
+            report = await runComparison(resultsFolderName!, {
+              threshold,
+              baselineVersion: baselineToUse,
+              baselineRoot: baselineDir,
+              resultsRoot: resolvedResultsRoot,
+              resultsPrefix,
+              browser,
+              outputFolderName,
+              filters,
+              matches,
+              excludes,
+              ignorePrefixes,
+              reportOptions: {
+                showAll: reportAll,
+                reportFileName,
+                mode: resolvedMode,
+                trimPrefix: resolvedTrim,
+              },
+            });
+          } else {
+            console.warn(colors.warning('No baseline files matched for refresh; keeping current comparison results.'));
+          }
+        } else {
+          console.warn(
+            colors.warning('Missing baseline files detected but no doc filters could be derived for refresh.'),
+          );
+        }
+      }
 
       if (resolvedMode === 'visual' && includeWord) {
         const wordResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;

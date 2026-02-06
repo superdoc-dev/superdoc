@@ -128,10 +128,10 @@ describe('resolveSpecifier', () => {
     });
   });
 
-  describe('workspace specifiers', () => {
-    it('should resolve local to workspace', () => {
+  describe('local specifiers', () => {
+    it('should treat "local" like a version string (handled at CLI level)', () => {
       const mockFs = {
-        existsSync: vi.fn(),
+        existsSync: vi.fn().mockReturnValue(false),
         readFileSync: vi.fn(),
         statSync: vi.fn(),
       };
@@ -143,11 +143,11 @@ describe('resolveSpecifier', () => {
       });
 
       expect(result).toEqual({
-        specifier: 'workspace:*',
+        specifier: 'local',
         isFile: false,
         installPath: null,
       });
-      expect(mockFs.existsSync).not.toHaveBeenCalled();
+      expect(mockFs.existsSync).toHaveBeenCalled();
     });
   });
 

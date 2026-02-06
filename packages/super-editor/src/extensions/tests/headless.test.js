@@ -5,12 +5,69 @@
  * while maintaining full document functionality.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsFileBuffer } from '@tests/helpers/helpers.js';
+import { EditorState } from 'prosemirror-state';
+
+const HEADLESS_OPEN_FIXTURE_CANDIDATES = [
+  'doc-with-headings.docx',
+  'contract-acc.docx',
+  'table-width-issue.docx',
+  'advanced-text.docx',
+];
+
+const INVALID_PARAGRAPH_RANGE_ERROR = 'Invalid content for node paragraph';
+
+const loadHeadlessOpenFixtureBuffer = async () => {
+  let lastError = null;
+  for (const filename of HEADLESS_OPEN_FIXTURE_CANDIDATES) {
+    try {
+      const buffer = await getTestDataAsFileBuffer(filename);
+      return { buffer, filename };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error('Failed to load any headless open fixture');
+};
+
+const hasInvalidParagraphRangeError = (calls) =>
+  calls.some((args) =>
+    args.some(
+      (value) =>
+        (value instanceof RangeError &&
+          typeof value.message === 'string' &&
+          value.message.includes(INVALID_PARAGRAPH_RANGE_ERROR)) ||
+        (typeof value === 'string' && value.includes(INVALID_PARAGRAPH_RANGE_ERROR)),
+    ),
+  );
 
 describe('Headless Mode Optimization', () => {
+  it('opens real DOCX fixtures headlessly without paragraph RangeErrors', async () => {
+    const { buffer } = await loadHeadlessOpenFixtureBuffer();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const onException = vi.fn();
+
+    let editor;
+    try {
+      editor = await Editor.open(buffer, {
+        extensions: getStarterExtensions(),
+        suppressDefaultDocxStyles: true,
+        onException,
+      });
+
+      expect(editor.options.isHeadless).toBe(true);
+      expect(editor.lifecycleState).toBe('ready');
+      expect(onException).not.toHaveBeenCalled();
+      expect(hasInvalidParagraphRangeError(logSpy.mock.calls)).toBe(false);
+    } finally {
+      logSpy.mockRestore();
+      editor?.destroy();
+    }
+  });
+
   it('should filter optimized node views in headless mode', async () => {
     const buffer = await getTestDataAsFileBuffer('complex2.docx');
     const [content, , mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
@@ -71,6 +128,54 @@ describe('Headless Mode Optimization', () => {
     expect(exported.length).toBeGreaterThan(0);
 
     editor.destroy();
+  });
+
+  it('updates paragraph runProperties for first runs nested in inline wrappers in headless mode', async () => {
+    const buffer = await getTestDataAsFileBuffer('blank-doc.docx');
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    let editor;
+    try {
+      editor = await Editor.open(buffer, {
+        extensions: getStarterExtensions(),
+        suppressDefaultDocxStyles: true,
+      });
+
+      const { doc, paragraph, pageReference, run } = editor.schema.nodes;
+      expect(pageReference).toBeDefined();
+      expect(run).toBeDefined();
+
+      const testDoc = doc.create(null, [
+        paragraph.create(null, [
+          pageReference.create({ instruction: 'PAGEREF _Toc123456789 h' }, [
+            run.create(null, [editor.schema.text('Ref')]),
+          ]),
+          run.create(null, [editor.schema.text(' tail')]),
+        ]),
+      ]);
+      const baseState = EditorState.create({
+        schema: editor.schema,
+        doc: testDoc,
+        plugins: editor.state.plugins,
+      });
+      editor.setState(baseState);
+
+      const runPositions = [];
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type === run) runPositions.push(pos);
+        return true;
+      });
+      const [nestedRunPos] = runPositions;
+      const tr = editor.state.tr.addMark(nestedRunPos + 1, nestedRunPos + 4, editor.schema.marks.bold.create());
+      editor.dispatch(tr);
+
+      const updatedParagraph = editor.state.doc.firstChild;
+      expect(updatedParagraph?.attrs?.paragraphProperties).toEqual({ runProperties: { bold: true } });
+      expect(hasInvalidParagraphRangeError(logSpy.mock.calls)).toBe(false);
+    } finally {
+      logSpy.mockRestore();
+      editor?.destroy();
+    }
   });
 
   it('preserves list attributes in headless mode even without node views', async () => {

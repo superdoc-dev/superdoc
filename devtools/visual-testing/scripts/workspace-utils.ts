@@ -38,11 +38,18 @@ export interface LocalSuperdocTarball {
  * @returns Tarball info if found, or null if not in a workspace or tarball doesn't exist
  */
 export function findLocalSuperdocTarball(startDir: string): LocalSuperdocTarball | null {
-  const root = findWorkspaceRoot(startDir);
-  if (!root) return null;
-  const tarball = path.join(root, 'packages', 'superdoc', 'superdoc.tgz');
-  if (!fs.existsSync(tarball)) return null;
-  return { root, tarball };
+  let current = path.resolve(startDir);
+  while (true) {
+    const tarball = path.join(current, 'packages', 'superdoc', 'superdoc.tgz');
+    if (fs.existsSync(tarball)) {
+      return { root: current, tarball };
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
 }
 
 /**

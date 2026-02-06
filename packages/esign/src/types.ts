@@ -72,15 +72,22 @@ export interface DocumentConfig {
     };
   };
   /**
+   * Document view options (recommended for SuperDoc > v1.6.x):
+   * - 'print': Fixed page width, displays document as it prints (default)
+   * - 'web': Content reflows to fit container width (mobile/accessibility)
+   */
+  viewOptions?: {
+    layout?: 'web' | 'print';
+  };
+  /**
+   * @deprecated Use `viewOptions: { layout: 'web' }` instead.
    * Document layout mode:
    * - 'paginated' (default): Fixed page width, shows page breaks
-   * - 'responsive': 100% width, text reflows to fit container (useful for mobile/accessibility)
-   * Note: 'responsive' takes precedence over pagination - pagination is ignored when layoutMode is 'responsive'
+   * - 'responsive': 100% width, text reflows to fit container
    */
   layoutMode?: 'responsive' | 'paginated';
   /**
-   * Custom margins in pixels for responsive layout mode.
-   * Only applies when layoutMode is 'responsive'.
+   * @deprecated No longer supported in v1.x. Use CSS for margin control.
    */
   layoutMargins?: LayoutMargins;
 }

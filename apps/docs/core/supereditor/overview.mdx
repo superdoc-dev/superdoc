@@ -4,6 +4,10 @@ sidebarTitle: Overview
 keywords: "supereditor class, prosemirror docx, tiptap alternative, editor commands, document manipulation api"
 ---
 
+<Tip>
+**Looking for programmatic document access?** The [Document API](/document-api/overview) is coming soon with a stable, engine-agnostic interface for querying and manipulating documents.
+</Tip>
+
 SuperEditor is the core DOCX editing engine that powers SuperDoc. Use it directly when you need fine-grained control.
 
 ## When to use SuperEditor vs SuperDoc
@@ -42,23 +46,6 @@ const editor = await Editor.open(file, {
 
 1. **Import styles and the Editor class**
 2. **Call `Editor.open()`** - Pass a file source and options. The editor handles parsing, extensions, and mounting automatically.
-
-## Direct ProseMirror access
-
-SuperEditor gives you full ProseMirror access:
-
-```javascript
-// Access ProseMirror directly
-editor.view; // EditorView
-editor.state; // EditorState
-editor.schema; // Schema
-editor.commands; // All commands
-
-// Do anything ProseMirror can do
-editor.state.doc.forEach((node) => {
-  console.log(node.type.name);
-});
-```
 
 ## Components
 

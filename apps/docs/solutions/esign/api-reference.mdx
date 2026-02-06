@@ -24,14 +24,28 @@ Complete eSign component API
       Display mode: `'full' | 'download'`
     </ParamField>
 
-    <ParamField path="layoutMode" type="string">
-      Layout mode: `'paginated' | 'responsive'`
+    <ParamField path="viewOptions" type="object">
+      View options for controlling document layout (recommended)
+
+      <Expandable title="Properties">
+        <ParamField path="viewOptions.layout" type="string">
+          Document layout: `'print'` (default) or `'web'`
+          - `print` - Fixed page width, displays document as it prints
+          - `web` - Content reflows to fit container (mobile/accessibility)
+        </ParamField>
+      </Expandable>
     </ParamField>
 
-    <ParamField path="layoutMargins" type="object">
-      Custom margins (pixels) for `layoutMode: 'responsive'`
+    <ParamField path="layoutMode" type="string" deprecated>
+      **Deprecated.** Use `viewOptions.layout` instead.
+      - `'paginated'` → `viewOptions: { layout: 'print' }`
+      - `'responsive'` → `viewOptions: { layout: 'web' }`
     </ParamField>
-    
+
+    <ParamField path="layoutMargins" type="object" deprecated>
+      **Deprecated.** No longer supported. Use CSS for margin control.
+    </ParamField>
+
     <ParamField path="validation.scroll.required" type="boolean">
       Require scrolling to bottom before signing
     </ParamField>
@@ -235,9 +249,19 @@ interface AuditEvent {
 }
 ```
 
-### LayoutMargins
+### ViewOptions
 
-Custom margins for responsive layout mode:
+Document view options (recommended):
+
+```typescript
+interface ViewOptions {
+  layout?: 'web' | 'print';  // 'print' is default
+}
+```
+
+### LayoutMargins (Deprecated)
+
+<Warning>Deprecated since v2.0. Use CSS for margin control.</Warning>
 
 ```typescript
 interface LayoutMargins {
@@ -345,6 +369,7 @@ All types are exported:
 import type {
   SuperDocESignProps,
   SuperDocESignHandle,
+  DocumentConfig,
   SubmitData,
   DownloadData,
   SigningState,
@@ -355,7 +380,7 @@ import type {
   FieldChange,
   AuditEvent,
   FieldComponentProps,
-  LayoutMargins
+  LayoutMargins  // deprecated
 } from '@superdoc-dev/esign';
 ```
 

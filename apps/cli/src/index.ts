@@ -6,7 +6,7 @@ import { type ReplaceResult, replace } from './commands/replace';
 import { type SearchResult, search } from './commands/search';
 
 const HELP = `
-superdoc — DOCX editing in your terminal
+superdoc - docx editing in your terminal
 
 Commands:
   search <pattern> <files...>    Find text across documents
@@ -27,6 +27,7 @@ Docs: https://github.com/superdoc-dev/superdoc
 
 /**
  * Expand glob patterns to file paths
+ * @param patterns - Array of file patterns (supports wildcards)
  */
 async function expandGlobs(patterns: string[]): Promise<string[]> {
   const files: string[] = [];
@@ -49,6 +50,7 @@ async function expandGlobs(patterns: string[]): Promise<string[]> {
 
 /**
  * Format search results for human-readable output
+ * @returns Formatted string with match summary
  */
 function formatSearchResult(result: SearchResult): string {
   const lines: string[] = [];
@@ -71,6 +73,8 @@ function formatSearchResult(result: SearchResult): string {
 
 /**
  * Format replace results for human-readable output
+ * @param result - Replace operation result
+ * @returns Formatted string with replacement summary
  */
 function formatReplaceResult(result: ReplaceResult): string {
   const lines: string[] = [];

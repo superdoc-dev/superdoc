@@ -17,6 +17,7 @@ import type {
   BlockIdGenerator,
   PositionMap,
 } from '../types.js';
+import { getStableParagraphId, shiftCachedBlocks } from '../cache.js';
 import type { ConverterContext } from '../converter-context.js';
 import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBreakBlock } from '../sections/index.js';
@@ -253,12 +254,22 @@ export function paragraphToFlowBlocks({
   converters,
   converterContext,
   enableComments = true,
+  stableBlockId,
 }: ParagraphToFlowBlocksParams): FlowBlock[] {
+  // Use stable ID if provided, otherwise fall back to generator
+  const baseBlockId = stableBlockId ?? nextBlockId('paragraph');
+
+  // When stableBlockId is provided, create a deterministic ID generator for inline blocks
+  // (images, shapes, tables, etc.) to ensure consistent IDs across cached/uncached renders.
+  // This prevents ID drift that would cause unnecessary dirty regions.
+  let inlineBlockCounter = 0;
+  const stableNextBlockId: BlockIdGenerator = stableBlockId
+    ? (prefix: string) => `${stableBlockId}-${prefix}-${inlineBlockCounter++}`
+    : nextBlockId;
   const paragraphProps =
     typeof para.attrs?.paragraphProperties === 'object' && para.attrs.paragraphProperties !== null
       ? (para.attrs.paragraphProperties as ParagraphProperties)
       : {};
-  const baseBlockId = nextBlockId('paragraph');
   const { paragraphAttrs, resolvedParagraphProperties } = computeParagraphAttrs(para, converterContext);
 
   const blocks: FlowBlock[] = [];
@@ -274,7 +285,8 @@ export function paragraphToFlowBlocks({
   if (paragraphAttrs.pageBreakBefore) {
     blocks.push({
       kind: 'pageBreak',
-      id: nextBlockId('pageBreak'),
+      // Use deterministic suffix when stable ID is provided, otherwise use generator
+      id: stableBlockId ? `${stableBlockId}-pageBreak` : nextBlockId('pageBreak'),
       attrs: { source: 'pageBreakBefore' },
     });
   }
@@ -379,12 +391,12 @@ export function paragraphToFlowBlocks({
       bookmarks,
       tabOrdinal,
       paragraphAttrs,
-      nextBlockId,
+      nextBlockId: stableNextBlockId,
     };
 
     const blockOptions: BlockConverterOptions = {
       blocks,
-      nextBlockId,
+      nextBlockId: stableNextBlockId,
       nextId,
       positions,
       trackedChangesConfig,
@@ -435,13 +447,15 @@ export function paragraphToFlowBlocks({
             throw error;
           }
         }
-        return;
       }
-    } else if (SHAPE_CONVERTERS_REGISTRY[node.type]) {
+      return;
+    }
+
+    if (SHAPE_CONVERTERS_REGISTRY[node.type]) {
       const anchorParagraphId = nextId();
       flushParagraph();
       const converter = SHAPE_CONVERTERS_REGISTRY[node.type];
-      const drawingBlock = converter(node, nextBlockId, positions);
+      const drawingBlock = converter(node, stableNextBlockId, positions);
       if (drawingBlock) {
         blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
@@ -587,6 +601,12 @@ const SHAPE_CONVERTERS_REGISTRY: Record<
  * Special handling: Emits section breaks BEFORE processing the paragraph
  * if this paragraph starts a new section.
  *
+ * Supports incremental conversion via FlowBlockCache:
+ * - If cache is available and paragraph has stable ID (sdBlockId/paraId)
+ * - Check cache for matching node content
+ * - On cache hit: reuse blocks with position adjustment
+ * - On cache miss: convert normally and store in cache
+ *
  * @param node - Paragraph node to process
  * @param context - Shared handler context
  */
@@ -595,6 +615,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     blocks,
     recordBlockKind,
     nextBlockId,
+    blockIdPrefix = '',
     positions,
     trackedChangesConfig,
     bookmarks,
@@ -603,6 +624,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     converters,
     converterContext,
     themeColors,
+    flowBlockCache,
     enableComments,
   } = context;
   const { ranges: sectionRanges, currentSectionIndex, currentParagraphIndex } = sectionState!;
@@ -623,6 +645,55 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
   }
 
   const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
+  const stableId = getStableParagraphId(node);
+  const prefixedStableId = stableId ? `${blockIdPrefix}${stableId}` : null;
+  const nodePos = positions.get(node);
+  const pmStart = nodePos?.start ?? 0;
+
+  if (prefixedStableId && flowBlockCache) {
+    // get() returns both the entry (if hit) and pre-computed nodeJson to avoid double serialization
+    const { entry: cached, nodeJson, nodeRev } = flowBlockCache.get(prefixedStableId, node);
+    if (cached) {
+      // Cache hit: reuse blocks with position adjustment
+      const delta = pmStart - cached.pmStart;
+      const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
+
+      reusedBlocks.forEach((block) => {
+        blocks.push(block);
+        recordBlockKind?.(block.kind);
+      });
+
+      // Store in next cache generation with current position (reuse nodeJson)
+      flowBlockCache.set(prefixedStableId, nodeJson, nodeRev, reusedBlocks, pmStart);
+      sectionState!.currentParagraphIndex++;
+      return;
+    }
+
+    // Cache miss: convert normally, then store using pre-computed nodeJson
+    const paragraphBlocks = paragraphToFlowBlocks({
+      para: node,
+      nextBlockId,
+      positions,
+      trackedChangesConfig,
+      bookmarks,
+      hyperlinkConfig,
+      themeColors,
+      converters,
+      converterContext,
+      enableComments,
+      stableBlockId: prefixedStableId,
+    });
+
+    paragraphBlocks.forEach((block) => {
+      blocks.push(block);
+      recordBlockKind?.(block.kind);
+    });
+
+    // Store in cache using pre-computed nodeJson (avoids double serialization)
+    flowBlockCache.set(prefixedStableId, nodeJson, nodeRev, paragraphBlocks, pmStart);
+    sectionState!.currentParagraphIndex++;
+    return;
+  }
 
   const paragraphBlocks = paragraphToFlowBlocks({
     para: node,
@@ -632,9 +703,10 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     bookmarks,
     hyperlinkConfig,
     themeColors,
-    converterContext,
     converters,
+    converterContext,
     enableComments,
+    stableBlockId: prefixedStableId ?? undefined,
   });
   paragraphBlocks.forEach((block) => {
     blocks.push(block);

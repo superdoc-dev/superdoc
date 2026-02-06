@@ -269,6 +269,14 @@ class SuperConverter {
         this.convertedXml[file.name] = addDefaultStylesIfMissing(this.convertedXml[file.name]);
       }
     });
+    if (!this.convertedXml['word/styles.xml']) {
+      for (let i = 1; i <= 5; i += 1) {
+        if (this.convertedXml[`word/styles${i}.xml`] != null) {
+          this.convertedXml['word/styles.xml'] = addDefaultStylesIfMissing(this.convertedXml[`word/styles${i}.xml`]);
+          break;
+        }
+      }
+    }
     this.initialJSON = this.convertedXml['word/document.xml'];
 
     if (!this.initialJSON) this.initialJSON = this.parseXmlToJson(this.xml);

@@ -65,7 +65,15 @@ export function splitBlockPatch(state, dispatch, editor) {
       atEnd = $from.end(d) == $from.pos + ($from.depth - d);
       atStart = $from.start(d) == $from.pos - ($from.depth - d);
       deflt = defaultBlockAt($from.node(d - 1).contentMatchAt($from.indexAfter(d - 1)));
-      paragraphAttrs = { ...node.attrs };
+      paragraphAttrs = /** @type {Record<string, unknown>} */ ({
+        ...node.attrs,
+        // Ensure newly created block gets a fresh ID (block-node plugin assigns one)
+        sdBlockId: null,
+        sdBlockRev: null,
+        // Reset DOCX identifiers on split to avoid duplicate paragraph IDs
+        paraId: null,
+        textId: null,
+      });
       types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
       splitDepth = d;
       break;

@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# Generated screenshots, baselines, and comparison results (will move to GCS later)
+screenshots/
+baselines/
+baselines-interactions/
+results/
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Local test documents
+test-docs/
+test-docs/current-issues/
+
+# Avoid committing docx files
+*.docx
+
+# OS files
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+reports/
+
+.env
+.env.Local
+.env.production

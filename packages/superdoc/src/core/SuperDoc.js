@@ -183,6 +183,16 @@ export class SuperDoc extends EventEmitter {
       };
     }
 
+    // Enable virtualization by default for better performance on large documents.
+    // Only renders visible pages (~5) instead of all pages.
+    if (!this.config.layoutEngineOptions.virtualization) {
+      this.config.layoutEngineOptions.virtualization = {
+        enabled: true,
+        window: 5,
+        overscan: 1,
+      };
+    }
+
     this.config.modules = this.config.modules || {};
     if (!Object.prototype.hasOwnProperty.call(this.config.modules, 'comments')) {
       this.config.modules.comments = {};

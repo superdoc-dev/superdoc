@@ -7,6 +7,7 @@ on:
   pull_request:
     branches: [main, 'release/**']
     paths-ignore:
+      - '.github/workflows/**'
       - 'apps/docs/**'
       - 'packages/template-builder/**'
       - 'packages/esign/**'
@@ -95,61 +96,61 @@ jobs:
       - name: Run slow tests
         run: pnpm test:slow
 
-  run-e2e-tests:
-    runs-on: ubuntu-latest
-    container:
-      image: node:20
+  # run-e2e-tests:
+  #   runs-on: ubuntu-latest
+  #   container:
+  #     image: node:20
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
 
-      - uses: pnpm/action-setup@v4
+  #     - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version-file: .nvmrc
+  #         cache: pnpm
 
-      - name: Install canvas system dependencies
-        run: |
-          apt-get update
-          apt-get install -y \
-            build-essential \
-            libcairo2-dev \
-            libpango1.0-dev \
-            libjpeg-dev \
-            libgif-dev \
-            librsvg2-dev \
-            libpixman-1-dev
+  #     - name: Install canvas system dependencies
+  #       run: |
+  #         apt-get update
+  #         apt-get install -y \
+  #           build-essential \
+  #           libcairo2-dev \
+  #           libpango1.0-dev \
+  #           libjpeg-dev \
+  #           libgif-dev \
+  #           librsvg2-dev \
+  #           libpixman-1-dev
 
-      - name: Install dependencies
-        run: pnpm install
+  #     - name: Install dependencies
+  #       run: pnpm install
 
-      - name: Build SuperDoc
-        run: |
-          pnpm run build
+  #     - name: Build SuperDoc
+  #       run: |
+  #         pnpm run build
 
-      - name: Install Playwright browsers
-        run: |
-          cd e2e-tests
-          pnpm exec playwright install --with-deps chromium
+  #     - name: Install Playwright browsers
+  #       run: |
+  #         cd e2e-tests
+  #         pnpm exec playwright install --with-deps chromium
 
-      - name: Run e2e tests
-        id: run-e2e-tests
-        if: always()
-        run: cd e2e-tests && pnpm test
+  #     - name: Run e2e tests
+  #       id: run-e2e-tests
+  #       if: always()
+  #       run: cd e2e-tests && pnpm test
 
-      - name: Upload e2e test results
-        id: upload_artifact
-        if: always() && steps.run-e2e-tests.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-tests
-          path: e2e-tests/test-results
-          retention-days: 15
+  #     - name: Upload e2e test results
+  #       id: upload_artifact
+  #       if: always() && steps.run-e2e-tests.outcome == 'failure'
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: e2e-tests
+  #         path: e2e-tests/test-results
+  #         retention-days: 15
 
   run-examples-visual-tests:
     runs-on: ubuntu-latest

@@ -1,6 +1,7 @@
 logs
 *.log
 .cache
+.vite
 .DS_Store
 .temp
 node_modules
@@ -67,4 +68,4 @@ reports/
 codex.config.json
 perf-baseline-results.json
 .claude
-dev/
+plans/

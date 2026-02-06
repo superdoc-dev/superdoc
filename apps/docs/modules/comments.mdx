@@ -61,15 +61,81 @@ modules: {
 </ParamField>
 
 <ParamField
-  path="modules.comments.suppressInternalExternalComments"
+  path="modules.comments.suppressInternalExternal"
   type="boolean"
   default="false"
 >
   Hide internal comments from view
 </ParamField>
 
+<ParamField path="modules.comments.showResolved" type="boolean" default="false">
+  Show resolved comments in the comments list
+</ParamField>
+
 <ParamField path="modules.comments.permissionResolver" type="function">
   Comments-only override for permission checks. See [Permission Resolver](#permission-resolver).
+</ParamField>
+
+<ParamField path="modules.comments.highlightColors" type="Object">
+  Custom colors for comment highlights.
+
+  <Expandable title="Properties">
+    <ParamField path="external" type="string" default="#B1124B">
+      Highlight color for external comments
+    </ParamField>
+    <ParamField path="internal" type="string" default="#078383">
+      Highlight color for internal comments
+    </ParamField>
+    <ParamField path="activeExternal" type="string">
+      Active highlight color override for external comments
+    </ParamField>
+    <ParamField path="activeInternal" type="string">
+      Active highlight color override for internal comments
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.comments.highlightOpacity" type="Object">
+  Opacity values for comment highlights (0–1).
+
+  <Expandable title="Properties">
+    <ParamField path="active" type="number">
+      Opacity for the active comment highlight
+    </ParamField>
+    <ParamField path="inactive" type="number">
+      Opacity for inactive comment highlights
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.comments.highlightHoverColor" type="string">
+  Hover highlight color for comment marks
+</ParamField>
+
+<ParamField path="modules.comments.trackChangeHighlightColors" type="Object">
+  Colors for tracked change highlights.
+
+  <Expandable title="Properties">
+    <ParamField path="insertBorder" type="string">
+      Border color for inserted text
+    </ParamField>
+    <ParamField path="insertBackground" type="string">
+      Background color for inserted text
+    </ParamField>
+    <ParamField path="deleteBorder" type="string">
+      Border color for deleted text
+    </ParamField>
+    <ParamField path="deleteBackground" type="string">
+      Background color for deleted text
+    </ParamField>
+    <ParamField path="formatBorder" type="string">
+      Border color for format changes
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.comments.trackChangeActiveHighlightColors" type="Object">
+  Colors for the active tracked change highlight. Same properties as `trackChangeHighlightColors`. Defaults to `trackChangeHighlightColors` values when not set.
 </ParamField>
 
 ## Viewing Mode Visibility
@@ -154,17 +220,75 @@ const cleanBlob = await superdoc.export({ commentsType: "clean" });
 
 These methods are available on the active editor's commands:
 
-### `insertComment`
+### `addComment`
 
-Add a comment to the selected text.
+Add a comment to the current text selection. Requires a text selection.
 
 ```javascript
-superdoc.activeEditor.commands.insertComment({
-  commentText: "Review this section",
-  creatorName: "John Smith",
-  creatorEmail: "john@company.com",
+// Simple usage
+superdoc.activeEditor.commands.addComment("Review this section");
+
+// With options
+superdoc.activeEditor.commands.addComment({
+  content: "Please clarify this section",
+  author: "John Smith",
+  authorEmail: "john@company.com",
+  isInternal: true,
 });
 ```
+
+<ParamField path="contentOrOptions" type="string | Object">
+  Comment content as a string, or an options object with:
+
+  <Expandable title="Options">
+    <ParamField path="content" type="string">
+      The comment text (text or HTML)
+    </ParamField>
+    <ParamField path="author" type="string">
+      Author name (defaults to `user.name` from config)
+    </ParamField>
+    <ParamField path="authorEmail" type="string">
+      Author email (defaults to `user.email` from config)
+    </ParamField>
+    <ParamField path="authorImage" type="string">
+      Author image URL
+    </ParamField>
+    <ParamField path="isInternal" type="boolean" default="false">
+      Whether the comment is internal/private
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### `addCommentReply`
+
+Add a reply to an existing comment or tracked change.
+
+```javascript
+superdoc.activeEditor.commands.addCommentReply({
+  parentId: "comment-123",
+  content: "I agree with this suggestion",
+});
+```
+
+<ParamField path="options" type="Object" required>
+  <Expandable title="Options">
+    <ParamField path="parentId" type="string" required>
+      The ID of the parent comment to reply to
+    </ParamField>
+    <ParamField path="content" type="string">
+      Reply content (text or HTML)
+    </ParamField>
+    <ParamField path="author" type="string">
+      Author name (defaults to `user.name` from config)
+    </ParamField>
+    <ParamField path="authorEmail" type="string">
+      Author email (defaults to `user.email` from config)
+    </ParamField>
+    <ParamField path="authorImage" type="string">
+      Author image URL
+    </ParamField>
+  </Expandable>
+</ParamField>
 
 ### `removeComment`
 
@@ -175,6 +299,8 @@ superdoc.activeEditor.commands.removeComment({
 ```
 
 ### `setActiveComment`
+
+Highlight and focus a comment.
 
 ```javascript
 superdoc.activeEditor.commands.setActiveComment({
@@ -190,6 +316,25 @@ superdoc.activeEditor.commands.resolveComment({
 });
 ```
 
+### `setCommentInternal`
+
+Toggle a comment between internal and external visibility.
+
+```javascript
+superdoc.activeEditor.commands.setCommentInternal({
+  commentId: "comment-123",
+  isInternal: true,
+});
+```
+
+### `setCursorById`
+
+Navigate the cursor to a comment's position in the document.
+
+```javascript
+superdoc.activeEditor.commands.setCursorById("comment-123");
+```
+
 ## Events
 
 ### `onCommentsUpdate`
@@ -197,7 +342,7 @@ superdoc.activeEditor.commands.resolveComment({
 Fired for all comment changes.
 
 <ParamField path="type" type="string" required>
-  Event type: `pending`, `add`, `update`, `deleted`, `resolved`, or `selected`
+  Event type: `pending`, `add`, `update`, `deleted`, `resolved`, `selected`, `change-accepted`, or `change-rejected`
 </ParamField>
 
 <ParamField path="comment" type="Comment" required>
@@ -254,8 +399,11 @@ onCommentsUpdate: ({ type, comment, meta }) => {
     <ResponseField name="fileId" type="string">
       Document ID
     </ResponseField>
+    <ResponseField name="fileType" type="string">
+      Document type
+    </ResponseField>
     <ResponseField name="selection" type="Object">
-      Position data including `selectionBounds`, `page`, `source`, and `documentId`
+      Position data including `selectionBounds`, `page`, and `documentId`
     </ResponseField>
 
     ### State
@@ -277,7 +425,13 @@ onCommentsUpdate: ({ type, comment, meta }) => {
       Whether this is a tracked change comment
     </ResponseField>
     <ResponseField name="trackedChangeType" type="string | null">
-      `'trackInsert'`, `'trackDelete'`, or `'trackFormat'`
+      `'trackInsert'`, `'trackDelete'`, `'trackFormat'`, or `'both'`
+    </ResponseField>
+    <ResponseField name="trackedChangeText" type="string | null">
+      The text content of the tracked change
+    </ResponseField>
+    <ResponseField name="deletedText" type="string | null">
+      The deleted text (for delete tracked changes)
     </ResponseField>
 
     ### Import

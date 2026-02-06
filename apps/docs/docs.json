@@ -106,20 +106,7 @@
                 "pages": [
                   "modules/collaboration/overview",
                   "modules/collaboration/quickstart",
-                  "modules/collaboration/configuration",
-                  {
-                    "group": "Cloud Providers",
-                    "pages": ["modules/collaboration/cloud/liveblocks", "modules/collaboration/cloud/tiptap-cloud"]
-                  },
-                  {
-                    "group": "Self-Hosted",
-                    "pages": [
-                      "modules/collaboration/self-hosted/overview",
-                      "modules/collaboration/self-hosted/superdoc-yjs",
-                      "modules/collaboration/self-hosted/hocuspocus",
-                      "modules/collaboration/self-hosted/y-sweet"
-                    ]
-                  }
+                  "modules/collaboration/configuration"
                 ]
               },
               "modules/comments",
@@ -210,21 +197,28 @@
             ]
           },
           {
-            "group": "Resources",
-            "pages": ["resources/guides", "resources/license"]
-          }
-        ]
-      },
-      {
-        "tab": "Guides",
-        "groups": [
-          {
-            "group": "General",
-            "pages": ["guides/general/storage", "guides/general/accessibility", "guides/general/security"]
+            "group": "Guides",
+            "pages": [
+              "guides/general/storage",
+              {
+                "group": "Collaboration",
+                "pages": [
+                  "modules/collaboration/cloud/liveblocks",
+                  "modules/collaboration/cloud/tiptap-cloud",
+                  "modules/collaboration/self-hosted/superdoc-yjs",
+                  "modules/collaboration/self-hosted/hocuspocus",
+                  "modules/collaboration/self-hosted/y-sweet"
+                ]
+              },
+              {
+                "group": "Migration",
+                "pages": ["guides/migration/prosemirror", "guides/breaking-changes-v1", "guides/typescript-migration"]
+              }
+            ]
           },
           {
-            "group": "Migration",
-            "pages": ["guides/migration/prosemirror", "guides/breaking-changes-v1", "guides/typescript-migration"]
+            "group": "Resources",
+            "pages": ["guides/general/accessibility", "guides/general/security", "resources/license"]
           }
         ]
       },
@@ -363,7 +357,7 @@
     },
     {
       "source": "/modules/collaboration/backend",
-      "destination": "/modules/collaboration/self-hosted/overview"
+      "destination": "/modules/collaboration/configuration"
     },
     {
       "source": "/modules/collaboration/client",

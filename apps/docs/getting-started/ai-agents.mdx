@@ -53,7 +53,8 @@ See [Import/Export](/getting-started/import-export) for format details, limitati
 
 Use `suggesting` mode so AI edits appear as tracked changes that users can accept or reject:
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const contract = await readFile('./contract.docx');
 const editor = await Editor.open(contract, {
   documentMode: 'suggesting',
@@ -63,6 +64,21 @@ const editor = await Editor.open(contract, {
 editor.commands.insertContent(aiRevisions, { contentType: 'html' });
 const redlined = await editor.exportDocx();
 ```
+
+```javascript Full Example
+import { readFile } from 'node:fs/promises';
+import { Editor } from 'superdoc/super-editor';
+
+const contract = await readFile('./contract.docx');
+const editor = await Editor.open(contract, {
+  documentMode: 'suggesting',
+});
+
+// AI suggestions are tracked — users review them in Word
+editor.commands.insertContent(aiRevisions, { contentType: 'html' });
+const redlined = await editor.exportDocx();
+```
+</CodeGroup>
 
 ## LLM quick reference
 

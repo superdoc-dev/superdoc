@@ -6,7 +6,7 @@ const https = require('https');
 function fetchOpenAPI() {
   return new Promise((resolve, reject) => {
     https
-      .get('https://raw.githubusercontent.com/Harbour-Enterprises/SuperDoc-API/main/openapi.yaml', (res) => {
+      .get('https://raw.githubusercontent.com/superdoc-dev/superdoc-API/main/openapi.yaml', (res) => {
         let data = '';
         res.on('data', (chunk) => (data += chunk));
         res.on('end', () => resolve(data));

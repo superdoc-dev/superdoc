@@ -27,12 +27,25 @@ const docx = await editor.exportDocx();
 
 ## Content formats
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.insertContent(value, { contentType: 'html' });      // Recommended for LLMs
 editor.commands.insertContent(value, { contentType: 'markdown' });
 editor.commands.insertContent(value, { contentType: 'text' });
 editor.commands.insertContent(value, { contentType: 'schema' });     // ProseMirror JSON
 ```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile);
+
+editor.commands.insertContent(value, { contentType: 'html' });      // Recommended for LLMs
+editor.commands.insertContent(value, { contentType: 'markdown' });
+editor.commands.insertContent(value, { contentType: 'text' });
+editor.commands.insertContent(value, { contentType: 'schema' });     // ProseMirror JSON
+```
+</CodeGroup>
 
 See [Import/Export](/getting-started/import-export) for format details, limitations, and guidance on choosing a format.
 

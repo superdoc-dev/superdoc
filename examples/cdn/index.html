@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc — CDN</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div style="padding: 1rem; background: #f5f5f5">
+      <input type="file" id="file-input" accept=".docx" />
+    </div>
+    <div id="editor" style="height: calc(100vh - 60px)"></div>
+
+    <script type="module">
+      import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
+
+      let superdoc = new SuperDoc({
+        selector: '#editor',
+      });
+
+      document.getElementById('file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        superdoc?.destroy();
+        superdoc = new SuperDoc({
+          selector: '#editor',
+          document: file,
+        });
+      });
+    </script>
+  </body>
+</html>

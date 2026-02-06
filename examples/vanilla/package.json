@@ -1,0 +1,14 @@
+{
+  "name": "superdoc-vanilla-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "superdoc": "latest"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0"
+  }
+}

@@ -1,0 +1,25 @@
+name: CI Examples
+
+on:
+  pull_request:
+    paths:
+      - 'examples/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [react, vue, vanilla]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install & Build
+        working-directory: examples/${{ matrix.example }}
+        run: npm install && npx vite build

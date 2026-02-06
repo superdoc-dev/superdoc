@@ -5,7 +5,7 @@ keywords: "context menu, slash menu, right-click menu, custom commands, slash co
 
 A contextual command menu triggered by typing `/` or right-clicking. Shows relevant actions based on cursor position and document state.
 
-## Quick Start
+## Quick start
 
 The context menu is **enabled by default**. Type `/` at the start of a paragraph or right-click anywhere in the document.
 
@@ -62,7 +62,7 @@ The menu opens in two ways:
 After using the slash trigger, there's a 5-second cooldown before `/` triggers the menu again. During cooldown, `/` types normally.
 </Note>
 
-## Default Items
+## Default items
 
 Items shown depend on the trigger type and document context.
 
@@ -74,7 +74,7 @@ Items shown depend on the trigger type and document context.
 | Edit table | `general` | Inside a table |
 | Paste | `clipboard` | Always |
 
-### Right-Click Trigger
+### Right-click trigger
 
 | Item | Section | Condition |
 |---|---|---|
@@ -87,7 +87,7 @@ Items shown depend on the trigger type and document context.
 | Copy | `clipboard` | Text selected |
 | Paste | `clipboard` | Always |
 
-## Custom Items
+## Custom items
 
 Add custom items by defining sections in `customItems`. Each section has an `id` and an array of `items`.
 
@@ -114,7 +114,7 @@ modules: {
 }
 ```
 
-### Item Properties
+### Item properties
 
 <ParamField path="id" type="string" required>
   Unique identifier for the item
@@ -144,7 +144,7 @@ modules: {
   Custom render function for the menu item. Receives the context and should return an `HTMLElement`.
 </ParamField>
 
-### Merging with Default Sections
+### Merging with default sections
 
 If a custom section has the same `id` as a default section, the items are merged:
 
@@ -166,7 +166,7 @@ modules: {
 }
 ```
 
-## Menu Provider
+## Menu provider
 
 For full control over menu contents, use `menuProvider`. It receives the context and the computed sections array, and should return a new sections array.
 
@@ -188,7 +188,7 @@ modules: {
 `menuProvider` runs after default items and `customItems` are merged. If it returns `null` or `undefined`, the original sections are used.
 </Warning>
 
-## Context Object
+## Context object
 
 Both `showWhen` and `menuProvider` receive a context object with the current editor state:
 
@@ -212,7 +212,7 @@ Both `showWhen` and `menuProvider` receive a context object with the current edi
 | `pos` | `number \| null` | Document position |
 | `node` | `Object \| null` | Node at cursor position |
 
-## Keyboard Navigation
+## Keyboard navigation
 
 When the menu is open:
 

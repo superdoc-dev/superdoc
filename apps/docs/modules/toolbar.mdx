@@ -5,7 +5,7 @@ keywords: "word toolbar, document formatting controls, custom toolbar, editor ui
 
 The toolbar provides a customizable UI for document editing with support for custom buttons, responsive layouts, and role-based controls.
 
-## Quick Start
+## Quick start
 
 ```javascript
 const superdoc = new SuperDoc({
@@ -67,11 +67,11 @@ const superdoc = new SuperDoc({
   Custom button definitions. See [Custom Buttons](#custom-buttons).
 </ParamField>
 
-## Available Buttons
+## Available buttons
 
 Use button names with `excludeItems`, `groups`, and `icons` configuration.
 
-### Text Formatting
+### Text formatting
 
 <ResponseField name="bold" type="button">
   Toggle bold (`Ctrl+B`)
@@ -97,7 +97,7 @@ Use button names with `excludeItems`, `groups`, and `icons` configuration.
   Format painter — copy formatting from selection
 </ResponseField>
 
-### Font Controls
+### Font controls
 
 <ResponseField name="fontFamily" type="dropdown">
   Font family selector
@@ -189,7 +189,7 @@ Use button names with `excludeItems`, `groups`, and `icons` configuration.
   Switch between editing/viewing/suggesting modes
 </ResponseField>
 
-### Track Changes
+### Track changes
 
 <ResponseField name="acceptTrackedChangeBySelection" type="button">
   Accept tracked change at current selection
@@ -199,9 +199,9 @@ Use button names with `excludeItems`, `groups`, and `icons` configuration.
   Reject tracked change at current selection
 </ResponseField>
 
-## Custom Buttons
+## Custom buttons
 
-### Basic Button
+### Basic button
 
 ```javascript
 modules: {
@@ -244,7 +244,7 @@ modules: {
   Command name or handler function receiving `{ item, argument, option }`
 </ParamField>
 
-### Dropdown Button
+### Dropdown button
 
 ```javascript
 customButtons: [{
@@ -271,7 +271,7 @@ customButtons: [{
   Show dropdown arrow
 </ParamField>
 
-### Toggle Button
+### Toggle button
 
 ```javascript
 customButtons: [{
@@ -297,7 +297,7 @@ customButtons: [{
   Icon when active
 </ParamField>
 
-## Icon Customization
+## Icon customization
 
 ```javascript
 modules: {
@@ -316,7 +316,7 @@ modules: {
 Icons should be 24x24 viewBox SVGs with `fill="currentColor"` for proper theming
 </Warning>
 
-## Font Configuration
+## Font configuration
 
 <ParamField path="fonts" type="Array">
   <Expandable title="Font object properties">
@@ -344,7 +344,7 @@ fonts: [
 ]
 ```
 
-## Responsive Behavior
+## Responsive behavior
 
 The toolbar adapts at these widths:
 
@@ -358,7 +358,7 @@ The toolbar adapts at these widths:
 
 Use `responsiveToContainer: true` to size based on the toolbar container instead of the window.
 
-## Role-Based Controls
+## Role-based controls
 
 The toolbar automatically adapts based on the user's role:
 
@@ -368,7 +368,7 @@ The toolbar automatically adapts based on the user's role:
 | `suggester` | Track changes enabled, formatting available |
 | `editor` | Full access to all controls |
 
-## API Methods
+## API methods
 
 ```javascript
 const toolbar = superdoc.toolbar;

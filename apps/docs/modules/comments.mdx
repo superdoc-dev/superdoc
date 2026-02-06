@@ -5,7 +5,7 @@ keywords: "word comments api, document annotations, threaded discussions, commen
 
 Add Word-style commenting to documents with threaded discussions, replies, and resolution workflows.
 
-## Quick Start
+## Quick start
 
 ```javascript
 const superdoc = new SuperDoc({
@@ -138,7 +138,7 @@ modules: {
   Colors for the active tracked change highlight. Same properties as `trackChangeHighlightColors`. Defaults to `trackChangeHighlightColors` values when not set.
 </ParamField>
 
-## Viewing Mode Visibility
+## Viewing mode visibility
 
 Comments are hidden by default when `documentMode` is `viewing`. Use the
 top-level `comments.visible` and `trackChanges.visible` flags to control what
@@ -154,7 +154,7 @@ new SuperDoc({
 });
 ```
 
-## Setting Up the Comments UI
+## Setting up the comments UI
 
 During initialization:
 
@@ -174,7 +174,7 @@ superdoc.on("ready", () => {
 });
 ```
 
-## Permission Resolver
+## Permission resolver
 
 Customize who can resolve comments or accept tracked changes. The resolver receives the permission type, current user, and any tracked-change metadata. Return `false` to block the action.
 
@@ -204,7 +204,7 @@ modules: {
   Module-level resolvers take precedence when both are defined.
 </Note>
 
-## Word Import/Export
+## Word import/export
 
 Word comments are automatically imported with the document and marked with `importedId`. When exporting, use the `commentsType` option:
 
@@ -216,7 +216,7 @@ const blob = await superdoc.export({ commentsType: "external" });
 const cleanBlob = await superdoc.export({ commentsType: "clean" });
 ```
 
-## API Methods
+## API methods
 
 These methods are available on the active editor's commands:
 
@@ -366,7 +366,7 @@ onCommentsUpdate: ({ type, comment, meta }) => {
 }
 ```
 
-## Comment Data Structure
+## Comment data structure
 
 <ResponseField name="comment" type="Object">
   <Expandable title="properties" defaultOpen>

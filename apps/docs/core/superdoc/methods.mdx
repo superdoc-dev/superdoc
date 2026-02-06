@@ -133,14 +133,6 @@ Toggle ruler visibility.
 superdoc.toggleRuler();
 ```
 
-### `togglePagination`
-
-Toggle pagination mode.
-
-```javascript
-superdoc.togglePagination();
-```
-
 ### `focus`
 
 Focus the active editor or first available.
@@ -304,31 +296,3 @@ Unsubscribe from an event.
 superdoc.off('ready', handler);
 ```
 
-## Method Patterns
-
-### Async Operations
-
-```javascript
-async function exportDocument() {
-  try {
-    const blob = await superdoc.export({
-      isFinalDoc: true
-    });
-    saveToFile(blob);
-  } catch (error) {
-    console.error('Export failed:', error);
-  }
-}
-```
-
-### Waiting for Ready
-
-<Note>Some methods require SuperDoc to be ready</Note>
-
-```javascript
-superdoc.once('ready', () => {
-  // Now safe to use all methods
-  superdoc.search('term');
-  superdoc.setDocumentMode('suggesting');
-});
-```

@@ -17,8 +17,13 @@ new SuperDoc({
 ## Core Parameters
 
 <ParamField path="selector" type="string | HTMLElement" required>
-  DOM selector or element where SuperDoc will mount ```javascript selector:
-  '#editor' // or selector: document.querySelector('.my-editor') ```
+  DOM selector or element where SuperDoc will mount.
+
+  ```javascript
+  selector: '#editor'
+  // or
+  selector: document.querySelector('.my-editor')
+  ```
 </ParamField>
 
 <ParamField path="document" type="Document | string | File" required>
@@ -87,8 +92,9 @@ new SuperDoc({
 <ParamField path="role" type="string" default="'editor'">
   User permission level
   <Expandable title="Available roles">
-    - `editor` - Full editing capabilities - `viewer` - Read-only access -
-    `suggester` - Can only suggest changes
+    - `editor` - Full editing capabilities
+    - `viewer` - Read-only access
+    - `suggester` - Can only suggest changes
   </Expandable>
   <Warning>Role overrides documentMode when more restrictive</Warning>
 </ParamField>
@@ -96,8 +102,9 @@ new SuperDoc({
 <ParamField path="documentMode" type="string" default="'editing'">
   Initial document mode
   <Expandable title="Document modes">
-    - `editing` - Normal editing - `viewing` - Read-only display - `suggesting`
-    - Track changes enabled
+    - `editing` - Normal editing
+    - `viewing` - Read-only display
+    - `suggesting` - Track changes enabled
   </Expandable>
 </ParamField>
 
@@ -227,11 +234,6 @@ new SuperDoc({
   <Note>Built-in palette provided by default</Note>
 </ParamField>
 
-<ParamField path="pagination" type="boolean" default="false">
-  Enable page-based layout
-  <Note>Consider using `viewOptions` for more control over document layout</Note>
-</ParamField>
-
 <ParamField path="viewOptions" type="Object">
   Document view options for controlling layout
   <Expandable title="properties" defaultOpen>
@@ -246,20 +248,6 @@ new SuperDoc({
   ```javascript
   viewOptions: { layout: 'web' }
   ```
-</ParamField>
-
-<ParamField path="layoutMode" type="string" deprecated>
-  <Warning>**Deprecated in v1.0** - Use `viewOptions.layout` instead.</Warning>
-
-  Legacy layout mode option from v0.x. Mapped values:
-  - `'paginated'` → `viewOptions: { layout: 'print' }`
-  - `'responsive'` → `viewOptions: { layout: 'web' }`
-</ParamField>
-
-<ParamField path="layoutMargins" type="Object" deprecated>
-  <Warning>**Deprecated in v1.0** - No longer supported. Use CSS to control margins in web layout mode.</Warning>
-
-  Legacy margin configuration from v0.x.
 </ParamField>
 
 <ParamField path="rulers" type="boolean" default="false">
@@ -277,11 +265,6 @@ new SuperDoc({
   Additional SuperDoc extensions
 </ParamField>
 
-<Note>
-  Learn how to create your own extensions
-  [here](/extensions/creating-extensions).
-</Note>
-
 <ParamField path="handleImageUpload" type="function">
   Custom image upload handler
   
@@ -297,21 +280,6 @@ new SuperDoc({
     return url;
   }
   ```
-</ParamField>
-
-<ParamField path="telemetry" type="Object">
-  Telemetry configuration
-  <Expandable title="properties">
-    <ParamField path="enabled" type="boolean">
-      Enable telemetry
-    </ParamField>
-    <ParamField path="licenseKey" type="string">
-      License key
-    </ParamField>
-    <ParamField path="endpoint" type="string">
-      Telemetry endpoint
-    </ParamField>
-  </Expandable>
 </ParamField>
 
 <ParamField path="suppressDefaultDocxStyles" type="boolean" default="false">

@@ -21,6 +21,26 @@ import { findMarkPosition } from './documentHelpers.js';
  * @param {number} options.originalStepIndex Original step index.
  */
 export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalStep, originalStepIndex }) => {
+  // Handle pure deletion of empty block nodes (e.g., Backspace on empty paragraph).
+  // When there's no content being inserted and no inline content in the deletion range,
+  // there's nothing to track as a change — apply the step directly.
+  if (step.from !== step.to && step.slice.content.size === 0) {
+    let hasInlineContent = false;
+    newTr.doc.nodesBetween(step.from, step.to, (node) => {
+      if (node.isInline) {
+        hasInlineContent = true;
+        return false;
+      }
+    });
+
+    if (!hasInlineContent) {
+      if (!newTr.maybeStep(step).failed) {
+        map.appendMap(step.getMap());
+      }
+      return;
+    }
+  }
+
   const trTemp = state.apply(newTr).tr;
 
   // Default: insert replacement after the selected range (Word-like replace behavior).

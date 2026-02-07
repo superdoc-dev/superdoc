@@ -371,6 +371,53 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(text).not.toContain('Flattened Fallback');
   });
 
+  it('deletes empty paragraph on Backspace in suggesting mode', () => {
+    // When the cursor is inside an empty paragraph and the user presses Backspace,
+    // ProseMirror creates a ReplaceStep that removes the empty paragraph node.
+    // The track changes system should allow this deletion to proceed since there's
+    // no inline content to track.
+
+    // Create doc with: <p>Hello</p><p></p>
+    const run = schema.nodes.run.create({}, [schema.text('Hello')]);
+    const para1 = schema.nodes.paragraph.create({}, run);
+    const para2 = schema.nodes.paragraph.create();
+    const doc = schema.nodes.doc.create({}, [para1, para2]);
+    let state = createState(doc);
+
+    // Find empty paragraph position dynamically
+    let emptyParaOffset = null;
+    state.doc.forEach((node, offset) => {
+      if (node.type.name === 'paragraph' && node.content.size === 0) {
+        emptyParaOffset = offset;
+      }
+    });
+    expect(emptyParaOffset).not.toBeNull();
+
+    // Cursor inside empty paragraph (offset + 1 for the opening position)
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, emptyParaOffset + 1)));
+
+    // Simulate Backspace: joinBackward creates a ReplaceStep that removes the empty paragraph
+    const tr = state.tr.delete(emptyParaOffset, emptyParaOffset + para2.nodeSize);
+    tr.setMeta('inputType', 'deleteContentBackward');
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    // The empty paragraph should be deleted — only one paragraph should remain
+    let paragraphCount = 0;
+    finalState.doc.forEach((node) => {
+      if (node.type.name === 'paragraph') paragraphCount++;
+    });
+    expect(paragraphCount).toBe(1);
+
+    // The remaining paragraph should contain "Hello"
+    let textContent = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText) textContent += node.text;
+    });
+    expect(textContent).toBe('Hello');
+  });
+
   it('tracks replace even when selection contains existing deletions and links', () => {
     const linkMark = schema.marks.link.create({ href: 'https://example.com' });
     const existingDeletion = schema.marks[TrackDeleteMarkName].create({

@@ -280,3 +280,25 @@ export function applySdtContainerStyling(
     container.appendChild(labelEl);
   }
 }
+
+/**
+ * Checks whether a fragment element needs rebuilding due to SDT boundary changes.
+ *
+ * Handles two cases:
+ * 1. Element was in an SDT but no longer is (stale attributes need removal)
+ * 2. Element's start/end boundary flags don't match expected values
+ */
+export function shouldRebuildForSdtBoundary(element: HTMLElement, boundary: SdtBoundaryOptions | undefined): boolean {
+  if (!boundary) {
+    // Rebuild if element has stale SDT container attributes that should be removed
+    return element.dataset.sdtContainerStart !== undefined;
+  }
+  const startAttr = element.dataset.sdtContainerStart;
+  const endAttr = element.dataset.sdtContainerEnd;
+  const expectedStart = String(boundary.isStart ?? true);
+  const expectedEnd = String(boundary.isEnd ?? true);
+  if (startAttr === undefined || endAttr === undefined) {
+    return true;
+  }
+  return startAttr !== expectedStart || endAttr !== expectedEnd;
+}

@@ -68,7 +68,13 @@ import { DOM_CLASS_NAMES } from './constants.js';
 import { sanitizeHref, encodeTooltip } from '@superdoc/url-validation';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { assertPmPositions, assertFragmentPmPositions } from './pm-position-validation.js';
-import { applySdtContainerStyling, getSdtContainerKey, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
+import {
+  applySdtContainerStyling,
+  getSdtContainerKey,
+  shouldRebuildForSdtBoundary,
+  type SdtBoundaryOptions,
+} from './utils/sdt-helpers.js';
+import { SdtGroupedHover } from './utils/sdt-hover.js';
 import {
   generateRulerDefinitionFromPx,
   createRulerElement,
@@ -822,6 +828,7 @@ export class DomPainter {
   private onScrollHandler: ((e: Event) => void) | null = null;
   private onWindowScrollHandler: ((e: Event) => void) | null = null;
   private onResizeHandler: ((e: Event) => void) | null = null;
+  private sdtHover = new SdtGroupedHover();
   /** The currently active/selected comment ID for highlighting */
   private activeCommentId: string | null = null;
 
@@ -1181,6 +1188,8 @@ export class DomPainter {
       };
       win.addEventListener('resize', this.onResizeHandler);
     }
+
+    this.sdtHover.bind(mount);
   }
 
   private computeVirtualMetrics(): void {
@@ -1361,6 +1370,8 @@ export class DomPainter {
     // Clear changed blocks now that current visible pages are patched
     this.changedBlocks.clear();
     this.processedLayoutVersion = this.layoutVersion;
+
+    this.sdtHover.reapply();
   }
 
   private updateSpacers(start: number, end: number): void {
@@ -1722,6 +1733,7 @@ export class DomPainter {
     this.onScrollHandler = null;
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;
+    this.sdtHover.destroy();
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
   }
@@ -1796,10 +1808,20 @@ export class DomPainter {
       if (current) {
         existing.delete(key);
         const sdtBoundaryMismatch = shouldRebuildForSdtBoundary(current.element, sdtBoundary);
+        // Verify the position mapping is reliable: if mapping the old pmStart doesn't produce
+        // the expected new pmStart, the mapping is degenerate (e.g. full-document paste) and
+        // we must rebuild to get correct span position attributes.
+        const newPmStart = (fragment as { pmStart?: number }).pmStart;
+        const mappingUnreliable =
+          this.currentMapping != null &&
+          newPmStart != null &&
+          current.element.dataset.pmStart != null &&
+          this.currentMapping.map(Number(current.element.dataset.pmStart)) !== newPmStart;
         const needsRebuild =
           this.changedBlocks.has(fragment.blockId) ||
           current.signature !== fragmentSignature(fragment, this.blockLookup) ||
-          sdtBoundaryMismatch;
+          sdtBoundaryMismatch ||
+          mappingUnreliable;
 
         if (needsRebuild) {
           const replacement = this.renderFragment(fragment, contextBase, sdtBoundary);
@@ -5279,18 +5301,6 @@ const computeSdtBoundaries = (
   }
 
   return boundaries;
-};
-
-const shouldRebuildForSdtBoundary = (element: HTMLElement, boundary: SdtBoundaryOptions | undefined): boolean => {
-  if (!boundary) return false;
-  const startAttr = element.dataset.sdtContainerStart;
-  const endAttr = element.dataset.sdtContainerEnd;
-  const expectedStart = String(boundary.isStart ?? true);
-  const expectedEnd = String(boundary.isEnd ?? true);
-  if (startAttr === undefined || endAttr === undefined) {
-    return true;
-  }
-  return startAttr !== expectedStart || endAttr !== expectedEnd;
 };
 
 const fragmentKey = (fragment: Fragment): string => {

@@ -358,21 +358,21 @@ const SDT_CONTAINER_STYLES = `
 
 /* Structured content drag handle/label - positioned above */
 .superdoc-structured-content__label {
-  font-size: 10px;
+  font-size: 11px;
   align-items: center;
   justify-content: center;
   position: absolute;
   left: 2px;
   top: -19px;
   width: calc(100% - 4px);
-  max-width: 110px;
+  max-width: 130px;
   min-width: 0;
   height: 18px;
   padding: 0 4px;
   border: 1px solid #629be7;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  background-color: #629be7dd;
+  background-color: #629be7ee;
   box-sizing: border-box;
   z-index: 10;
   display: none;
@@ -386,7 +386,7 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-.superdoc-structured-content-block:hover .superdoc-structured-content__label {
+.superdoc-structured-content-block.sdt-hover .superdoc-structured-content__label {
   display: inline-flex;
 }
 
@@ -438,9 +438,9 @@ const SDT_CONTAINER_STYLES = `
   bottom: calc(100% + 2px);
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10px;
-  padding: 2px 6px;
-  background-color: #629be7dd;
+  font-size: 11px;
+  padding: 0 4px;
+  background-color: #629be7ee;
   color: white;
   border-radius: 4px;
   white-space: nowrap;
@@ -456,38 +456,24 @@ const SDT_CONTAINER_STYLES = `
 /* Lock mode styles for structured content - matches Word appearance exactly */
 /* Default: background color only, no border. Border appears on hover/focus */
 
-/* unlocked: light mint green - fully editable and deletable */
-.superdoc-structured-content-block[data-lock-mode="unlocked"],
-.superdoc-structured-content-inline[data-lock-mode="unlocked"] {
-  background-color: #e6f4ea;
-  border: 1px solid transparent;
-}
-
-/* sdtLocked: golden yellow - SDT cannot be deleted but content can be edited */
-.superdoc-structured-content-block[data-lock-mode="sdtLocked"],
-.superdoc-structured-content-inline[data-lock-mode="sdtLocked"] {
-  background-color: #fff3cd;
-  border: 1px solid transparent;
-}
-
-/* contentLocked: light blue/lavender - content is read-only but SDT can be deleted */
-.superdoc-structured-content-block[data-lock-mode="contentLocked"],
-.superdoc-structured-content-inline[data-lock-mode="contentLocked"] {
-  background-color: #e8f0f8;
-  border: 1px solid transparent;
-}
-
-/* sdtContentLocked: light peach/salmon - fully locked */
-.superdoc-structured-content-block[data-lock-mode="sdtContentLocked"],
-.superdoc-structured-content-inline[data-lock-mode="sdtContentLocked"] {
-  background-color: #ffe8e0;
-  border: 1px solid transparent;
+/* Lock mode: hide border by default, show on hover.
+ * Use border-color (not border shorthand) to preserve continuation rules
+ * that remove border-top/border-bottom on multi-fragment SDT containers. */
+.superdoc-structured-content-block[data-lock-mode],
+.superdoc-structured-content-inline[data-lock-mode] {
+  border-color: transparent;
 }
 
 /* Show blue border on hover for all lock modes */
-.superdoc-structured-content-block[data-lock-mode]:hover,
+.superdoc-structured-content-block[data-lock-mode].sdt-hover {
+  border-color: #629be7;
+  background-color: rgba(98, 155, 231, 0.05);
+  z-index: 99;
+}
+
 .superdoc-structured-content-inline[data-lock-mode]:hover {
   border-color: #629be7;
+  z-index: 99;
 }
 
 /* Viewing mode: remove structured content affordances */
@@ -536,7 +522,7 @@ const FIELD_ANNOTATION_STYLES = `
 .superdoc-layout .annotation *::selection {
   background: transparent;
 }
-  
+
 .superdoc-layout .annotation::-moz-selection,
 .superdoc-layout .annotation *::-moz-selection  {
   background: transparent;

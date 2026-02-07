@@ -166,6 +166,7 @@
                   "extensions/text-indent",
                   "extensions/text-style",
                   "extensions/text-transform",
+                  "extensions/track-changes",
                   "extensions/underline"
                 ]
               }

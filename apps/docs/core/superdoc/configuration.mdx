@@ -196,8 +196,8 @@ new SuperDoc({
   Toolbar configuration
   
   <Expandable title="properties" defaultOpen>
-    <ParamField path="selector" type="string | HTMLElement">
-      Toolbar container
+    <ParamField path="selector" type="string">
+      CSS selector for the toolbar container (e.g. `'#toolbar'`)
     </ParamField>
     <ParamField path="groups" type="string[]" default="['left', 'center', 'right']">
       Layout groups
@@ -262,9 +262,8 @@ new SuperDoc({
   Show document rulers
 </ParamField>
 
-<ParamField path="toolbar" type="string | HTMLElement">
-  DOM element for toolbar
-  <Note>Alternative to `modules.toolbar.selector`</Note>
+<ParamField path="toolbar" type="string">
+  CSS selector for the toolbar container (e.g. `'#toolbar'`). Shorthand for `modules.toolbar.selector`.
 </ParamField>
 
 ## Advanced options

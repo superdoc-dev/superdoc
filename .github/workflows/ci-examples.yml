@@ -65,6 +65,31 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=collaboration/${{ matrix.example }} npx playwright test
 
+  features:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [track-changes, ai-redlining, comments, custom-toolbar]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install example dependencies
+        working-directory: examples/features/${{ matrix.example }}
+        run: npm install
+
+      - name: Install smoke test dependencies
+        working-directory: examples/__tests__
+        run: npm install && npx playwright install chromium
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=features/${{ matrix.example }} npx playwright test
+
   headless:
     runs-on: ubuntu-latest
     steps:
@@ -76,9 +101,9 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        working-directory: examples/headless/converter
+        working-directory: examples/headless/ai-redlining
         run: npm install
 
-      - name: Run headless converter
-        working-directory: examples/headless/converter
-        run: npx tsx src/index.ts sample.docx --format text
+      - name: Run headless tests
+        working-directory: examples/headless/ai-redlining
+        run: npx tsx src/index.test.ts

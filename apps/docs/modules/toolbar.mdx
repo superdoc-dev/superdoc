@@ -17,8 +17,8 @@ const superdoc = new SuperDoc({
 
 ## Configuration
 
-<ParamField path="modules.toolbar.selector" type="string | HTMLElement">
-  Container element for toolbar
+<ParamField path="modules.toolbar.selector" type="string">
+  CSS selector for the toolbar container (e.g. `'#toolbar'`). Must be a string selector, not a DOM element reference.
 </ParamField>
 
 <ParamField path="modules.toolbar.toolbarGroups" type="string[]" default="['left', 'center', 'right']">
@@ -594,3 +594,13 @@ const superdoc = new SuperDoc({
 ```
 
 </CodeGroup>
+
+## Full example
+
+<Card
+  title="Custom Toolbar Example"
+  icon="github"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/features/custom-toolbar"
+>
+  Runnable example: custom button groups, excluded items, and a custom clear-formatting button
+</Card>

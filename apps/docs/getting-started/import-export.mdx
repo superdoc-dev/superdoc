@@ -110,6 +110,10 @@ const superdoc = new SuperDoc({
 
 ### DOCX export
 
+<Note>
+  `superdoc.export()` **triggers a browser download by default**. If you need the raw `Blob` (e.g. to upload to a server), pass `triggerDownload: false` — otherwise you'll get a duplicate download.
+</Note>
+
 <CodeGroup>
 ```javascript Usage
 // Download as .docx file

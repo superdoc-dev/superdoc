@@ -14,7 +14,7 @@
     "@fortawesome/free-regular-svg-icons": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/vue-fontawesome": "^3.0.8",
-    "superdoc": "0.20.0-next.13",
+    "superdoc": "latest",
     "docxtemplater": "^3.59.0",
     "pizzip": "^3.1.8",
     "prismjs": "^1.29.0",

@@ -8,15 +8,81 @@ import Description from '/snippets/extensions/italic.mdx'
 
 <Description />
 
-## Options
+## Commands
 
-Configure the extension behavior:
+### `setItalic`
 
-<ParamField path="htmlAttributes" type="Object" default="{}">
-  HTML attributes for italic elements
-</ParamField>
+Apply italic formatting to the current selection.
 
-## Keyboard Shortcuts
+<CodeGroup>
+```javascript Usage
+editor.commands.setItalic()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setItalic();
+  },
+});
+```
+</CodeGroup>
+
+### `unsetItalic`
+
+Remove italic formatting from the current selection.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.unsetItalic()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetItalic();
+  },
+});
+```
+</CodeGroup>
+
+### `toggleItalic`
+
+Toggle italic formatting on the current selection.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleItalic()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleItalic();
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
@@ -24,7 +90,7 @@ Configure the extension behavior:
 | toggleItalic() | `⌘/Ctrl-I` | Toggle italic formatting (uppercase) |
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

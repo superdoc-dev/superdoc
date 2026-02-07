@@ -1,0 +1,50 @@
+---
+title: Document Index extension
+sidebarTitle: "Document Index"
+keywords: "Document Index extension, superdoc Document Index, word Document Index, document index, docx index, index entry"
+---
+
+import Description from '/snippets/extensions/document-index.mdx'
+
+<Description />
+
+<Info>
+Document indexes and index entries are managed automatically during Word document import and export. There are no commands to programmatically create or update indexes.
+</Info>
+
+## How it works
+
+The document index system consists of two node types:
+
+- **Index block** — A block node that contains the rendered index (alphabetical listing of terms with page references)
+- **Index entry** — An invisible inline marker placed throughout the document text to mark terms for inclusion in the index
+
+## Word export
+
+Indexes export as Word field codes:
+
+```xml
+<!-- Index block -->
+<w:p>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:r><w:instrText>INDEX \l "1"</w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+</w:p>
+
+<!-- Index entry marker -->
+<w:r>
+  <w:fldChar w:fldCharType="begin"/>
+</w:r>
+<w:r>
+  <w:instrText> XE "Primary Entry" </w:instrText>
+</w:r>
+<w:r>
+  <w:fldChar w:fldCharType="end"/>
+</w:r>
+```
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/document-index/document-index.js" />

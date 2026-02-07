@@ -16,9 +16,8 @@ document={{
   // Display mode
   mode: 'full',        // 'full' (default) or 'download'
 
-  // Layout mode
-  layoutMode: 'responsive',  // 'paginated' (default) or 'responsive'
-  layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
+  // View options (recommended)
+  viewOptions: { layout: 'web' },  // 'print' (default) or 'web'
 
   // Requirements
   validation: {
@@ -27,14 +26,29 @@ document={{
 }}
 ```
 
-### Layout modes
+### View options
 
-Control how the document is displayed:
+Control how the document is displayed using `viewOptions.layout`:
 
-- **`paginated`** (default) - Fixed page width with page breaks
-- **`responsive`** - 100% width, text reflows to fit container
+- **`print`** (default) - Fixed page width, displays document as it prints
+- **`web`** - Content reflows to fit container width (mobile/accessibility)
 
-Use `responsive` when you want text to reflow to fit the container (useful for mobile/accessibility). Optional `layoutMargins` sets custom margins (in pixels) for responsive mode.
+Use `web` when you want text to reflow to fit the container. This is recommended for mobile devices and WCAG AA reflow compliance (Success Criterion 1.4.10).
+
+```jsx
+// Mobile-friendly responsive layout
+document={{
+  source: contractFile,
+  viewOptions: { layout: 'web' }
+}}
+```
+
+<Warning>
+**Deprecated options**: `layoutMode` and `layoutMargins` are deprecated since v2.0. Use `viewOptions` instead:
+- `layoutMode: 'responsive'` → `viewOptions: { layout: 'web' }`
+- `layoutMode: 'paginated'` → `viewOptions: { layout: 'print' }`
+- `layoutMargins` is no longer supported. Use CSS to control margins.
+</Warning>
 
 When `mode` is set to `download`, the submit button is hidden.
 
@@ -340,8 +354,7 @@ Style the component to match your brand.
   document={{
     source: contractFile,
     mode: "full",
-    layoutMode: "responsive",
-    layoutMargins: { top: 10, bottom: 10, left: 10, right: 10 },
+    viewOptions: { layout: "web" },
     validation: {
       scroll: { required: true },
     },

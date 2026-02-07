@@ -51,7 +51,7 @@ await ai.action.replace(
 
 Formatting results depend on the source DOCX styles; list indentation may vary and may require follow-up instructions.
 
-## What it is
+## What it does
 
 AI Actions is SuperDoc's **high-level AI offering**. It provides pre-built operations for common document automation tasks:
 
@@ -107,11 +107,11 @@ try {
 
 Enable verbose logging by setting `enableLogging: true`. The package will emit parsing and traversal issues to `console.error`.
 
-## Advanced Exports
+## Advanced exports
 
 The package exports additional utilities for advanced use cases:
 
-### Provider Factory
+### Provider factory
 
 ```ts
 import { createAIProvider } from '@superdoc-dev/ai';
@@ -140,14 +140,14 @@ const ai = new AIActions(superdoc, { user, provider });
 const result = await ai.planner.execute('Review the document and add comments to all legal terms');
 ```
 
-### Service Classes
+### Service classes
 
 For custom implementations, you can use the lower-level service classes:
 
 - **`AIActionsService`** - Core service class that provides AI-powered document actions
 - **`EditorAdapter`** - Adapter for SuperDoc editor operations, encapsulating editor-specific API calls
 
-### Tool Utilities
+### Tool utilities
 
 Utilities for working with AI tools:
 
@@ -166,9 +166,9 @@ const myTool = {
 const isValid = isValidTool(myTool);
 ```
 
-### Type Exports
+### Type exports
 
-The package exports comprehensive TypeScript types including:
+The package exports TypeScript types including:
 - `AIPlannerConfig`, `AIPlannerExecutionResult`, `AIPlan` - Planner types
 - `AIToolActions`, `SelectionRange`, `SelectionSnapshot` - Tool and selection types
 - `AIProviderInput`, `OpenAIProviderConfig`, `AnthropicProviderConfig`, `HttpProviderConfig` - Provider configuration types

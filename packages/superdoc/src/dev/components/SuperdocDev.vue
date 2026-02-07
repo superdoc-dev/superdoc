@@ -153,19 +153,22 @@ const init = async () => {
   // eslint-disable-next-line no-unused-vars
   const testDocumentId = 'doc123';
 
-  // Prepare document config with content if available
-  const documentConfig = {
-    data: currentFile.value,
-    id: testId,
-    isNewFile: true,
-  };
+  // Prepare document config only if a file was uploaded
+  // If no file, SuperDoc will automatically create a blank document
+  let documentConfig = null;
+  if (currentFile.value) {
+    documentConfig = {
+      data: currentFile.value,
+      id: testId,
+    };
 
-  // Add markdown/HTML content if present
-  if (currentFile.value.markdownContent) {
-    documentConfig.markdown = currentFile.value.markdownContent;
-  }
-  if (currentFile.value.htmlContent) {
-    documentConfig.html = currentFile.value.htmlContent;
+    // Add markdown/HTML content if present
+    if (currentFile.value.markdownContent) {
+      documentConfig.markdown = currentFile.value.markdownContent;
+    }
+    if (currentFile.value.htmlContent) {
+      documentConfig.html = currentFile.value.htmlContent;
+    }
   }
 
   const config = {
@@ -175,6 +178,10 @@ const init = async () => {
     toolbarGroups: ['center'],
     role: userRole,
     documentMode: 'editing',
+    licenseKey: 'community-and-eval-agplv3',
+    telemetry: {
+      enabled: false,
+    },
     comments: {
       visible: true,
     },
@@ -200,12 +207,12 @@ const init = async () => {
       { name: 'Nick Bernal', email: 'nick@harbourshare.com', access: 'internal' },
       { name: 'Eric Doversberger', email: 'eric@harbourshare.com', access: 'external' },
     ],
-    document: documentConfig,
+    // Only pass document config if a file was uploaded, otherwise SuperDoc creates blank
+    ...(documentConfig ? { document: documentConfig } : {}),
     // documents: [
     //   {
     //     data: currentFile.value,
     //     id: testId,
-    //     isNewFile: true,
     //   },
     // ],
     // cspNonce: 'testnonce123',
@@ -525,8 +532,8 @@ onMounted(async () => {
     console.log('[collab] Provider synced, initializing SuperDoc');
   }
 
-  const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
-  handleNewFile(blankFile);
+  // Initialize SuperDoc - it will automatically create a blank document
+  init();
 });
 
 onBeforeUnmount(() => {
@@ -774,7 +781,7 @@ if (scrollTestMode.value) {
 
       <div class="dev-app__main">
         <div class="dev-app__view">
-          <div class="dev-app__content" v-if="currentFile">
+          <div class="dev-app__content">
             <div class="dev-app__content-container" :class="{ 'dev-app__content-container--web-layout': useWebLayout }">
               <div id="superdoc"></div>
             </div>

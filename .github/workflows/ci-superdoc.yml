@@ -9,26 +9,26 @@ on:
     paths-ignore:
       - '.github/workflows/**'
       - 'apps/docs/**'
+      - 'demos/**'
+      - 'examples/**'
       - 'packages/template-builder/**'
       - 'packages/esign/**'
       - '**/*.md'
+  workflow_dispatch:
 
 concurrency:
-  group: ci-superdoc-${{ github.event.pull_request.number }}
+  group: ci-superdoc-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  validate-commits:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -48,172 +48,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Validate commits
-        run: |
-          BASE=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
-          pnpx commitlint \
-            --from "$BASE" \
-            --to ${{ github.event.pull_request.head.sha }}
+      - name: Lint
+        run: pnpm run lint
 
-  run-unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Format check
+        run: pnpm run format --check
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Install canvas system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libcairo2-dev \
-            libpango1.0-dev \
-            libjpeg-dev \
-            libgif-dev \
-            librsvg2-dev \
-            libpixman-1-dev
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build SuperDoc
+      - name: Build
         run: pnpm run build
 
       - name: Validate command types
         run: node scripts/validate-command-types.mjs
+
+      - name: Typecheck
+        run: pnpm run type-check
 
       - name: Run unit tests
         run: pnpm test
 
       - name: Run slow tests
         run: pnpm test:slow
-
-  # run-e2e-tests:
-  #   runs-on: ubuntu-latest
-  #   container:
-  #     image: node:20
-
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #       with:
-  #         ref: ${{ github.event.pull_request.head.sha }}
-
-  #     - uses: pnpm/action-setup@v4
-
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version-file: .nvmrc
-  #         cache: pnpm
-
-  #     - name: Install canvas system dependencies
-  #       run: |
-  #         apt-get update
-  #         apt-get install -y \
-  #           build-essential \
-  #           libcairo2-dev \
-  #           libpango1.0-dev \
-  #           libjpeg-dev \
-  #           libgif-dev \
-  #           librsvg2-dev \
-  #           libpixman-1-dev
-
-  #     - name: Install dependencies
-  #       run: pnpm install
-
-  #     - name: Build SuperDoc
-  #       run: |
-  #         pnpm run build
-
-  #     - name: Install Playwright browsers
-  #       run: |
-  #         cd e2e-tests
-  #         pnpm exec playwright install --with-deps chromium
-
-  #     - name: Run e2e tests
-  #       id: run-e2e-tests
-  #       if: always()
-  #       run: cd e2e-tests && pnpm test
-
-  #     - name: Upload e2e test results
-  #       id: upload_artifact
-  #       if: always() && steps.run-e2e-tests.outcome == 'failure'
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: e2e-tests
-  #         path: e2e-tests/test-results
-  #         retention-days: 15
-
-  run-examples-visual-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Get Playwright version
-        id: playwright-version
-        run: |
-          cd examples/tests
-          echo "version=$(pnpm ls @playwright/test --json | jq -r '.dependencies["@playwright/test"].version')" >> $GITHUB_OUTPUT
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Pack SuperDoc
-        run: pnpm run --filter superdoc pack
-
-      - name: Setup visual tests
-        run: |
-          cd examples/tests
-          pnpm install
-          pnpm install -g http-server
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: |
-          cd examples/tests
-          pnpm exec playwright install --with-deps chromium
-
-      - name: Install only system deps if cache hit
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: |
-          cd examples/tests
-          pnpm exec playwright install-deps chromium
-
-      - name: Run visual tests
-        id: run-visual-tests
-        run: |
-          cd examples/tests
-          pnpm test
-
-      - name: Upload visual test results
-        id: upload_artifact
-        if: always() && steps.run-visual-tests.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-tests
-          path: examples/tests/test-results
-          retention-days: 15

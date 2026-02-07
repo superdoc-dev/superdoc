@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Extension } from '@core/Extension.js';
 import { helpers } from '@core/index.js';
-import { mergeRanges, clampRange } from '@core/helpers/rangeUtils.js';
+import { mergeRanges, clampRange } from '@utils/rangeUtils.js';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { ReplaceStep, ReplaceAroundStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 import { v4 as uuidv4 } from 'uuid';
@@ -291,18 +291,18 @@ export const BlockNode = Extension.create({
                   stepMap.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
                     if (newEnd <= newStart) {
                       // Deletions often yield zero-length ranges; still update the surrounding block.
-                      stepRanges.push([newStart, newStart + 1]);
+                      stepRanges.push({ from: newStart, to: newStart + 1 });
                       return;
                     }
-                    stepRanges.push([newStart, newEnd]);
+                    stepRanges.push({ from: newStart, to: newEnd });
                   });
                 } else if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
                   if (step.to > step.from) {
-                    stepRanges.push([step.from, step.to]);
+                    stepRanges.push({ from: step.from, to: step.to });
                   }
                 }
 
-                stepRanges.forEach(([rangeStartRaw, rangeEndRaw]) => {
+                stepRanges.forEach(({ from: rangeStartRaw, to: rangeEndRaw }) => {
                   let rangeStart = rangeStartRaw;
                   let rangeEnd = rangeEndRaw;
 
@@ -324,22 +324,22 @@ export const BlockNode = Extension.create({
                     rangeEnd = rangeStart + 1;
                   }
 
-                  rangesToCheck.push([rangeStart, rangeEnd]);
+                  rangesToCheck.push({ from: rangeStart, to: rangeEnd });
                 });
               });
             });
 
-            const mergedRanges = mergeRanges(rangesToCheck);
+            const docSize = newState.doc.content.size;
+            const mergedRanges = mergeRanges(rangesToCheck, docSize);
 
-            for (const [start, end] of mergedRanges) {
-              const docSize = newState.doc.content.size;
-              const clampedRange = clampRange(start, end, docSize);
+            for (const { from, to } of mergedRanges) {
+              const clampedRange = clampRange(from, to, docSize);
 
               if (!clampedRange) {
                 continue;
               }
 
-              const [safeStart, safeEnd] = clampedRange;
+              const { start: safeStart, end: safeEnd } = clampedRange;
 
               try {
                 newState.doc.nodesBetween(safeStart, safeEnd, (node, pos) => {

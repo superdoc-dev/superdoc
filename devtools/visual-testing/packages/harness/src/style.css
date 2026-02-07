@@ -1,0 +1,111 @@
+/**
+ * Global styles for SuperDoc Test Harness.
+ *
+ * Focused on consistency and visual testing reliability.
+ */
+
+:root {
+  /* Base text settings */
+  line-height: 1.5;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.87);
+
+  /* Improve text rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * Harness UI font settings.
+ *
+ * IMPORTANT: These are scoped to harness UI elements only.
+ * Editor content must NOT inherit these settings because:
+ * 1. DOCX documents specify their own fonts (Calibri, Times New Roman, etc.)
+ * 2. Inter lacks italic variants, and font-synthesis: none blocks browser synthesis
+ * 3. SuperDoc's font rendering should not be constrained by harness styles
+ */
+.harness-header,
+.harness-toolbar,
+button,
+input {
+  font-family:
+    'InterVariable',
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    system-ui,
+    sans-serif;
+  font-synthesis: none;
+}
+
+/* Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Link styles */
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+
+a:hover {
+  color: #535bf2;
+}
+
+/* Button styles */
+button {
+  padding: 0.5rem 1rem;
+  background: #1355ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button:hover {
+  background: #0044ff;
+}
+
+button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Input styles */
+input[type='file'] {
+  font-family: inherit;
+}
+
+/* Utility classes */
+.hidden {
+  display: none !important;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

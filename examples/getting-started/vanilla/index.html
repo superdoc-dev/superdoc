@@ -1,27 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperDoc Vanilla Example</title>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>SuperDoc Example</h1>
-            <button id="loadButton">Load Document</button>
-            <input 
-                type="file" 
-                id="fileInput" 
-                accept=".docx,.pdf,.html" 
-                style="display: none"
-            >
-        </header>
-        <main>
-            <div id="superdoc-toolbar"></div>
-            <div id="superdoc"></div>
-        </main>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc — Vanilla JS</title>
+  </head>
+  <body>
+    <div style="padding: 1rem; background: #f5f5f5">
+      <input type="file" id="file-input" accept=".docx" />
     </div>
+    <div id="editor" style="height: calc(100vh - 60px)"></div>
     <script type="module" src="/src/main.js"></script>
-</body>
+  </body>
 </html>

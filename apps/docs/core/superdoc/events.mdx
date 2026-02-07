@@ -5,221 +5,314 @@ keywords: "superdoc events, document events, editor callbacks, word editor liste
 
 SuperDoc uses an event system for lifecycle hooks and change notifications.
 
-## Event Methods
+## Subscribing to events
 
-### Subscribe to Events
-
-<ParamField path="event" type="string" required>
-  Event name to listen for
-</ParamField>
-
-<ParamField path="handler" type="function" required>
-  Callback function
-</ParamField>
-
-```javascript
-// Regular subscription
-superdoc.on('ready', handler);
-
-// One-time listener
-superdoc.once('ready', handler);
-
-// Unsubscribe
-superdoc.off('ready', handler);
+<CodeGroup>
+```javascript Usage
+superdoc.on('ready', handler);     // Subscribe
+superdoc.once('ready', handler);   // One-time listener
+superdoc.off('ready', handler);    // Unsubscribe
 ```
 
-## Event Categories
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
-<CardGroup cols={2}>
-  <Card title="Lifecycle" icon="rocket">
-    Initialization and teardown
-  </Card>
-  <Card title="Content" icon="file-text">
-    Document changes
-  </Card>
-  <Card title="Collaboration" icon="users">
-    Multi-user events
-  </Card>
-  <Card title="UI" icon="palette">
-    Interface changes
-  </Card>
-</CardGroup>
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
 
-## Lifecycle Events
+const handler = ({ superdoc }) => {
+  console.log('Handler called');
+};
+
+superdoc.on('ready', handler);     // Subscribe
+superdoc.once('ready', handler);   // One-time listener
+superdoc.off('ready', handler);    // Unsubscribe
+```
+</CodeGroup>
+
+## Lifecycle events
 
 ### `ready`
 
 Fired when SuperDoc is fully initialized.
 
-<ResponseField name="superdoc" type="SuperDoc" required>
-  SuperDoc instance
-</ResponseField>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('ready', ({ superdoc }) => {
-  console.log('SuperDoc ready');
   // Safe to use all features
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('ready', ({ superdoc }) => {
+  // Safe to use all features
+});
+```
+</CodeGroup>
+
+### `editorBeforeCreate`
+
+Fired before an editor is created. Use this to configure extensions or set up services.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('editorBeforeCreate', ({ editor }) => {
+  // Configure before editor mounts
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('editorBeforeCreate', ({ editor }) => {
+  // Configure before editor mounts
+});
+```
+</CodeGroup>
 
 ### `editorCreate`
 
 When an editor is created.
 
-<ResponseField name="editor" type="Editor" required>
-  Created editor instance
-</ResponseField>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('editorCreate', ({ editor }) => {
-  console.log('Editor created');
   editor.focus();
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('editorCreate', ({ editor }) => {
+  editor.focus();
+});
+```
+</CodeGroup>
 
 ### `editorDestroy`
 
 When an editor is destroyed.
 
-<Note>No parameters passed</Note>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('editorDestroy', () => {
-  console.log('Editor destroyed');
   cleanup();
 });
 ```
 
-## Content Events
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('editorDestroy', () => {
+  cleanup();
+});
+```
+</CodeGroup>
+
+## Content events
 
 ### `editor-update`
 
 When editor content changes.
 
-<ResponseField name="editor" type="Editor" required>
-  Editor with updated content
-</ResponseField>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('editor-update', ({ editor }) => {
-  const content = editor.getJSON();
-  autoSave(content);
+  autoSave(editor.getJSON());
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('editor-update', ({ editor }) => {
+  autoSave(editor.getJSON());
+});
+```
+</CodeGroup>
 
 ### `content-error`
 
 When content processing fails.
 
-<ResponseField name="error" type="Error" required>
-  Error details
-</ResponseField>
-
-<ResponseField name="editor" type="Editor">
-  Related editor instance
-</ResponseField>
-
-<ResponseField name="documentId" type="string">
-  Document identifier
-</ResponseField>
-
-<ResponseField name="file" type="File">
-  Original file
-</ResponseField>
-
-```javascript
-superdoc.on('content-error', ({ error, editor }) => {
+<CodeGroup>
+```javascript Usage
+superdoc.on('content-error', ({ error, editor, documentId }) => {
   console.error('Content error:', error);
-  handleError(error);
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('content-error', ({ error, editor, documentId }) => {
+  console.error('Content error:', error);
+});
+```
+</CodeGroup>
+
 ### `fonts-resolved`
 
-When the document fonts are resolved.
+When document fonts are resolved.
 
-<ResponseField name="resolvedFonts" type="{ documentFonts: string[], unsupportedFonts: string[] }" required>
-  Object with document fonts and unsupported fonts
-</ResponseField>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
   if (unsupportedFonts.length > 0) {
-    console.warn('Some fonts in the document are not supported.', unsupportedFonts.join(', '))
+    console.warn('Unsupported fonts:', unsupportedFonts.join(', '));
   }
-})
+});
 ```
 
-## Comments Events
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
+  if (unsupportedFonts.length > 0) {
+    console.warn('Unsupported fonts:', unsupportedFonts.join(', '));
+  }
+});
+```
+</CodeGroup>
+
+## Comments events
 
 ### `comments-update`
 
 When comments are modified.
 
-<ResponseField name="type" type="string" required>
-  Event type: 'add', 'update', 'deleted', 'resolved'
-</ResponseField>
-
-<ResponseField name="data" type="Object">
-  Comment data
-</ResponseField>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('comments-update', ({ type, data }) => {
-  console.log('Comment event:', type);
-  refreshCommentsList();
+  // type: 'add', 'update', 'deleted', 'resolved'
 });
 ```
 
-## Collaboration Events
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('comments-update', ({ type, data }) => {
+  // type: 'add', 'update', 'deleted', 'resolved'
+});
+```
+</CodeGroup>
+
+## Collaboration events
 
 ### `collaboration-ready`
 
 When collaboration is initialized.
 
-<ResponseField name="editor" type="Editor" required>
-  Editor with collaboration
-</ResponseField>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('collaboration-ready', ({ editor }) => {
-  console.log('Collaboration active');
   showOnlineUsers();
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('collaboration-ready', ({ editor }) => {
+  showOnlineUsers();
+});
+```
+</CodeGroup>
 
 ### `awareness-update`
 
 When user presence changes.
 
-<ResponseField name="context" type="Object" required>
-  Awareness context
-</ResponseField>
-
-<ResponseField name="states" type="Map" required>
-  User states map
-</ResponseField>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('awareness-update', ({ context, states }) => {
   const users = Array.from(states.values());
   updateUserCursors(users);
 });
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('awareness-update', ({ context, states }) => {
+  const users = Array.from(states.values());
+  updateUserCursors(users);
+});
+```
+</CodeGroup>
+
 ### `locked`
 
 When document lock state changes.
 
-<ResponseField name="isLocked" type="boolean" required>
-  Lock state
-</ResponseField>
-
-<ResponseField name="lockedBy" type="User">
-  User who locked the document
-</ResponseField>
-
-```javascript
+<CodeGroup>
+```javascript Usage
 superdoc.on('locked', ({ isLocked, lockedBy }) => {
   if (isLocked) {
     showLockBanner(`Locked by ${lockedBy.name}`);
@@ -227,102 +320,102 @@ superdoc.on('locked', ({ isLocked, lockedBy }) => {
 });
 ```
 
-## Configuration-Based Events
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
-<Note>
-Events can also be configured during initialization
-</Note>
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('locked', ({ isLocked, lockedBy }) => {
+  if (isLocked) {
+    showLockBanner(`Locked by ${lockedBy.name}`);
+  }
+});
+```
+</CodeGroup>
+
+## UI events
+
+### `sidebar-toggle`
+
+When the comments sidebar is toggled.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('sidebar-toggle', (isOpened) => {
+  adjustLayout(isOpened);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('sidebar-toggle', (isOpened) => {
+  adjustLayout(isOpened);
+});
+```
+</CodeGroup>
+
+## Error events
+
+### `exception`
+
+When an error occurs during document processing or runtime.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('exception', ({ error, document, editor }) => {
+  console.error('SuperDoc error:', error);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('exception', ({ error, document, editor }) => {
+  console.error('SuperDoc error:', error);
+});
+```
+</CodeGroup>
+
+## Configuration-based events
+
+Events can also be set during initialization:
 
 ```javascript
 new SuperDoc({
   selector: '#editor',
   document: 'document.docx',
-  
-  // Event handlers in config
-  onReady: ({ superdoc }) => {
-    console.log('Ready from config');
-  },
-  
-  onEditorUpdate: ({ editor }) => {
-    autoSave(editor.getJSON());
-  },
-
-  onFontsResolved: ({ documentFonts, unsupportedFonts }) => {
-    console.log(`Found ${documentFonts.length} in the document`)
-  }
+  onReady: ({ superdoc }) => { },
+  onEditorBeforeCreate: ({ editor }) => { },
+  onEditorCreate: ({ editor }) => { },
+  onEditorUpdate: ({ editor }) => { },
+  onFontsResolved: ({ documentFonts, unsupportedFonts }) => { },
+  onSidebarToggle: (isOpened) => { },
+  onException: ({ error }) => { },
 });
 ```
 
-## Common Patterns
+## Event order
 
-### Auto-save with Debouncing
-
-```javascript
-import { debounce } from 'lodash';
-
-const save = debounce(async (content) => {
-  await api.saveDocument(content);
-}, 1000);
-
-superdoc.on('editor-update', ({ editor }) => {
-  save(editor.getJSON());
-});
-```
-
-### Track Multiple Editors
-
-```javascript
-const editors = new Map();
-
-superdoc.on('editorCreate', ({ editor }) => {
-  const id = editor.options.documentId;
-  editors.set(id, editor);
-});
-
-superdoc.on('editorDestroy', () => {
-  editors.clear();
-});
-```
-
-### Clean Up Pattern
-
-```javascript
-const handlers = {
-  ready: () => console.log('Ready'),
-  update: () => console.log('Updated')
-};
-
-// Subscribe
-Object.entries(handlers).forEach(([event, handler]) => {
-  superdoc.on(event, handler);
-});
-
-// Later: Unsubscribe all
-Object.entries(handlers).forEach(([event, handler]) => {
-  superdoc.off(event, handler);
-});
-```
-
-## Event Order
-
-<Warning>
-Understanding event order helps with initialization:
-
-1. `editorBeforeCreate` - Setup phase
-2. `editorCreate` - Editor ready
-3. `ready` - All editors ready
-4. `collaboration-ready` - If enabled
-5. Runtime events
-6. `editorDestroy` - Cleanup
-</Warning>
-
-## Performance Tips
-
-<Note>
-**Best practices:**
-- Use `once()` for one-time setup
-- Debounce expensive handlers
-- Clean up with `off()` when done
-- Avoid heavy work in `awareness-update`
-- Batch updates in `editor-update`
-</Note>
+1. `editorBeforeCreate` — Before editor mounts
+2. `editorCreate` — Editor ready
+3. `ready` — All editors ready
+4. `collaboration-ready` — If collaboration enabled
+5. Runtime events (`editor-update`, `comments-update`, `sidebar-toggle`, etc.)
+6. `editorDestroy` — Cleanup

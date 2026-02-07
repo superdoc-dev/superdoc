@@ -1,46 +1,17 @@
 import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
-import './style.css';
 
-// Initialize SuperDoc
-let editor = null;
+let superdoc = new SuperDoc({
+  selector: '#editor',
+});
 
-function initializeEditor(file = null) {
-  // Cleanup previous instance if it exists
-  if (editor) {
-    editor = null;
-  }
+document.getElementById('file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-  editor = new SuperDoc({
-    selector: '#superdoc',
-    toolbar: '#superdoc-toolbar',
-    document: file, // URL, File or document config
-    documentMode: 'editing',
-    pagination: true,
-    rulers: true,
-    onReady: (event) => {
-      console.log('SuperDoc is ready', event);
-    },
-    onEditorCreate: (event) => {
-      console.log('Editor is created', event);
-    },
+  superdoc?.destroy();
+  superdoc = new SuperDoc({
+    selector: '#editor',
+    document: file,
   });
-}
-
-// Setup file input handling
-const fileInput = document.getElementById('fileInput');
-const loadButton = document.getElementById('loadButton');
-
-loadButton.addEventListener('click', () => {
-  fileInput.click();
 });
-
-fileInput.addEventListener('change', (event) => {
-  const file = event.target.files?.[0];
-  if (file) {
-    initializeEditor(file);
-  }
-});
-
-// Initialize empty editor on page load
-initializeEditor();

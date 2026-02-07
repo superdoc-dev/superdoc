@@ -76,6 +76,14 @@ export const fragmentStyles: Partial<CSSStyleDeclaration> = {
   boxSizing: 'border-box',
 };
 
+/**
+ * Z-index for paragraph text lines, ensuring they render above floating
+ * OOXML-derived fragments (which typically range 1–10 000). Must stay
+ * below browser-UI layers (tooltips, menus, overlays) that may live in the
+ * same stacking context.
+ */
+const TEXT_LINE_Z_INDEX = '100000';
+
 export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => ({
   lineHeight: `${lineHeight}px`,
   height: `${lineHeight}px`,
@@ -87,7 +95,7 @@ export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => 
   // provides defense-in-depth against any remaining sub-pixel rendering
   // differences between measurement and display.
   overflow: 'visible',
-  zIndex: '10',
+  zIndex: TEXT_LINE_Z_INDEX,
 });
 
 const PRINT_STYLES = `

@@ -136,7 +136,7 @@ watch(activeComment, (newVal, oldVal) => {
     verticalOffset.value = selectionTop - renderedTop;
 
     setTimeout(() => {
-      renderedItem.elementRef.value?.scrollIntoView({
+      renderedItem.elementRef?.value?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });

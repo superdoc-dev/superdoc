@@ -16,12 +16,31 @@ Extensions provide:
 
 You don't typically configure extensions directly. SuperDoc handles it:
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // These commands come from extensions
 editor.commands.toggleBold();        // Bold extension
-editor.commands.insertTable();       // Table extension  
-editor.commands.acceptAllChanges();  // TrackChanges extension
+editor.commands.insertTable();       // Table extension
+editor.commands.acceptAllTrackedChanges();  // TrackChanges extension
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // These commands come from extensions
+    editor.commands.toggleBold();        // Bold extension
+    editor.commands.insertTable();       // Table extension
+    editor.commands.acceptAllTrackedChanges();  // TrackChanges extension
+  },
+});
+```
+</CodeGroup>
 
 ## Extension categories
 

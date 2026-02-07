@@ -24,7 +24,7 @@ export const toggleMarkCascade =
       negationAttrs = { value: '0' },
       isNegation = (attrs) => attrs?.value === '0',
       styleDetector = defaultStyleDetector,
-      extendEmptyMarkRange = true,
+      extendEmptyMarkRange = false,
     } = options;
 
     const selectionMarks = getMarksFromSelection(state) || [];

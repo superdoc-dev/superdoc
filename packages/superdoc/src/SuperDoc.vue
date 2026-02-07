@@ -515,6 +515,14 @@ const editorOptions = (doc) => {
         isInternal: proxy.$superdoc.config.isInternal,
         ...payload,
       }),
+    licenseKey: proxy.$superdoc.config.licenseKey,
+    telemetry: proxy.$superdoc.config.telemetry?.enabled
+      ? {
+          enabled: true,
+          endpoint: proxy.$superdoc.config.telemetry?.endpoint,
+          metadata: proxy.$superdoc.config.telemetry?.metadata,
+        }
+      : null,
   };
 
   return options;

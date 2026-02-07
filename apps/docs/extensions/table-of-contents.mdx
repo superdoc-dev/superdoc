@@ -1,0 +1,38 @@
+---
+title: Table of Contents extension
+sidebarTitle: "Table of Contents"
+keywords: "Table of Contents extension, superdoc Table of Contents, word Table of Contents, document Table of Contents, docx Table of Contents, TOC"
+---
+
+import Description from '/snippets/extensions/table-of-contents.mdx'
+
+<Description />
+
+<Info>
+Table of contents blocks are managed automatically during Word document import and export. There are no commands to programmatically create or update a TOC.
+</Info>
+
+## Word export
+
+Tables of contents export as Word structured document tags with field instructions:
+
+```xml
+<w:sdt>
+  <w:sdtPr>
+    <w:docPartObj/>
+  </w:sdtPr>
+  <w:sdtContent>
+    <w:p>
+      <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+      <w:r><w:instrText>TOC \o "1-3"</w:instrText></w:r>
+      <w:r><w:fldChar w:fldCharType="end"/></w:r>
+    </w:p>
+  </w:sdtContent>
+</w:sdt>
+```
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/table-of-contents/table-of-contents.js" />

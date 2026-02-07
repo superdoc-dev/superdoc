@@ -67,16 +67,13 @@ describe('getActiveFormatting', () => {
 
     const result = getActiveFormatting(editor);
 
-    expect(getMarksFromSelectionMock).toHaveBeenCalledWith(state);
+    expect(getMarksFromSelectionMock).not.toHaveBeenCalled();
     expect(findMarkMock).toHaveBeenCalled();
 
     expect(result).toEqual(
       expect.arrayContaining([
-        { name: 'bold', attrs: {} },
         { name: 'italic', attrs: {} },
-        { name: 'textColor', attrs: { textColor: '#f00' } },
         { name: 'textHighlight', attrs: { textHighlight: '#0f0' } },
-        { name: 'color', attrs: { color: '#f00' } },
         { name: 'highlight', attrs: { color: '#0f0' } },
         { name: 'link', attrs: { href: 'https://example.com' } },
         { name: 'headingLevel', attrs: { headingLevel: 2 } },

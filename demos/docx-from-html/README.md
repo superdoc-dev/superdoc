@@ -1,8 +1,7 @@
-# SuperDoc
-## SuperDoc: Init a docx from HTML content
+# SuperDoc: Init a DOCX from HTML Content
 
 An example of initializing SuperDoc with HTML content.
 
-This example will initialize a docx file in SuperDoc (either a blank file or your own file), replacing the file's main contents with the HTML provided.
+This will load a DOCX file (or a blank document), replacing the main contents with the provided HTML.
 
-Note: In the example we pass in `document: sample-document.docx` in the config, which loads our sample docx containing a header and footer. The inner contents are replaced with the HTML. You can simply **omit** this key and SuperDoc will initialize a blank document for your HTML.
+In the example we pass `document: sample-document.docx` to load a template with a header and footer. You can omit this key to start with a blank document.

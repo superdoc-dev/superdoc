@@ -1,8 +1,6 @@
-# SuperDoc
-## SuperDoc: Basic example of using fields
+# SuperDoc: Fields
 
-An example of using fields
-Note: Requires `SuperDoc 0.11.8` or later
+An example of using fields with SuperDoc.
 
 - Shows basic drag-and-drop of fields
 - Shows field replacement use case

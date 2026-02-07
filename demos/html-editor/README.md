@@ -1,6 +1,5 @@
-# SuperDoc
-## Rich-text editing with SuperEditor and Vue
+# SuperDoc: Rich-Text HTML Editor
 
-An example of initializing the Editor.js class directly and creating a rich-text editor for HTML editing.
+An example of initializing the SuperEditor class directly to create a rich-text editor for HTML editing with Vue.
 
-Note: Using the Editor.js class directly means you must initialize the toolbar manually.
+> Using the Editor class directly means you must initialize the toolbar manually.

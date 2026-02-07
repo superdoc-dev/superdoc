@@ -1,41 +1,30 @@
-# Basic example of using SuperDoc in Node
+# SuperDoc: Node.js Example
 
-## Node version
-Please use `Node >= 20`. In earlier versions, Node is missing the `File` object.
-If you must use `Node < 20`, please create or inject the file polyfill (see example).
+A headless Node.js example using SuperDoc's Editor class with Express.
+
+> Requires Node >= 20. Earlier versions are missing the `File` object. If you must use Node < 20, see the file polyfill in this example.
 
 ## Quick start
-```
+
+```bash
 npm install && npm run dev
 ```
 
-This will run a basic express server at `http://localhost:3000` with a single root endpoint.
+Runs an Express server at `http://localhost:3000` with a single root endpoint that returns a `.docx` file.
 
-Point your browser or Postman GET request to:  `http://localhost:3000`. The server will simply return an unchanged .docx template.
-Now, you can add query params `text` or `html` to insert content into this document.
+## Usage
 
-## Basic example
 ```
+# Returns the unchanged .docx template
+http://localhost:3000
 
-Text only: http://localhost:3000?text=hello world!
+# Insert text
+http://localhost:3000?text=hello world!
 
-HTML only: http://localhost:3000?html=<p>I am a paragraph</p><p></p><p><strong>I AM BOLD!</strong></p>
+# Insert HTML
+http://localhost:3000?html=<p>I am a paragraph</p><p><strong>I AM BOLD!</strong></p>
 ```
 
 ## Additional docs
-Please see [SuperDoc docs](https://docs.superdoc.dev/guide/components#superdoc) for additinoal editor commands and hooks.
 
-You can get a list of all available editor commands from editor.commands as well. For instnace, commands such as the examples below all will work while using the SuperDoc editor in the backend:
-```
-editor.commands.toggleBold()
-
-editor.commands.toggleOrderedList()
-
-editor.commands.setColor()
-
-editor.commands.setFontSize()
-
-...etc
-
-```
-
+See the [SuperDoc docs](https://docs.superdoc.dev/core/supereditor/methods) for all available editor commands and hooks.

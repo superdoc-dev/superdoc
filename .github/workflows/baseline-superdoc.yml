@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.sha }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.version.outputs.skip != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -98,7 +98,7 @@ jobs:
 
       - name: Cache apt packages
         if: steps.version.outputs.skip != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/apt-cache
           key: apt-canvas-${{ runner.os }}-v1
@@ -131,7 +131,7 @@ jobs:
 
       - name: Cache Playwright browsers
         if: steps.version.outputs.skip != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright

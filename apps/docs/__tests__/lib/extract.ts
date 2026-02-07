@@ -31,7 +31,6 @@ const SKIP_IMPORTS = [
   '@liveblocks/',
   '@hocuspocus/',
   '@tiptap/',
-  '@y-sweet/',
   'hocuspocus',
   'fastify',
   'express',

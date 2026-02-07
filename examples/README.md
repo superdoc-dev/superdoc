@@ -6,19 +6,17 @@ Minimal, self-contained examples showing how to use SuperDoc.
 
 | Example | Description |
 |---------|-------------|
-| [react](./react) | React + TypeScript with Vite |
-| [vue](./vue) | Vue 3 + TypeScript with Vite |
-| [vanilla](./vanilla) | Plain JavaScript with Vite |
-| [cdn](./cdn) | Zero build tools — just an HTML file |
+| [react](./getting-started/react) | React + TypeScript with Vite |
+| [vue](./getting-started/vue) | Vue 3 + TypeScript with Vite |
+| [vanilla](./getting-started/vanilla) | Plain JavaScript with Vite |
+| [cdn](./getting-started/cdn) | Zero build tools — just an HTML file |
 
 ## Features
 
-| Example | Description |
-|---------|-------------|
-| [collaboration](./collaboration) | Real-time editing with various Yjs providers |
-| [headless-converter](./headless-converter) | Server-side DOCX conversion with Node.js |
-| [custom-plugin](./custom-plugin) | Building a custom editor plugin |
-| [dynamic-content](./dynamic-content) | Dynamic content rendering |
+| Example | Description | Docs |
+|---------|-------------|------|
+| [collaboration](./collaboration) | Real-time editing with various Yjs providers | [Guides](https://docs.superdoc.dev/guides) |
+| [headless](./headless) | Server-side DOCX conversion with Node.js | [Import/Export](https://docs.superdoc.dev/getting-started/import-export) |
 
 ## Running an example
 

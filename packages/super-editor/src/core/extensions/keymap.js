@@ -1,8 +1,12 @@
+import { closeHistory } from 'prosemirror-history';
 import { Extension } from '../Extension.js';
 import { isIOS } from '../utilities/isIOS.js';
 import { isMacOS } from '../utilities/isMacOS.js';
 
 export const handleEnter = (editor) => {
+  const { view } = editor;
+  view?.dispatch?.(closeHistory(view?.state?.tr));
+
   return editor.commands.first(({ commands }) => [
     () => commands.splitRunToParagraph(),
     () => commands.newlineInCode(),
@@ -13,6 +17,9 @@ export const handleEnter = (editor) => {
 };
 
 export const handleBackspace = (editor) => {
+  const { view } = editor;
+  view?.dispatch?.(closeHistory(view?.state?.tr));
+
   return editor.commands.first(({ commands, tr }) => [
     () => commands.undoInputRule(),
     () => {
@@ -30,6 +37,9 @@ export const handleBackspace = (editor) => {
 };
 
 export const handleDelete = (editor) => {
+  const { view } = editor;
+  editor?.view?.dispatch?.(closeHistory(view?.state?.tr));
+
   return editor.commands.first(({ commands }) => [
     () => commands.deleteSkipEmptyRun(),
     () => commands.deleteNextToRun(),

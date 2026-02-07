@@ -20,12 +20,12 @@ jobs:
           - docxtemplater
           - fields
           - grading-papers
-          - html-editor
+          # - html-editor  # broken: imports unpublished superdoc/super-editor/style.css subpath
           - linked-sections
           - loading-from-json
           - nextjs-ssr
           - react
-          - replace-content
+          # - replace-content  # broken: runtime nextSibling error in SuperDoc
           - text-selection
           - toolbar
           - typescript

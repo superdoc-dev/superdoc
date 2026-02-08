@@ -2062,7 +2062,7 @@ packages:
     resolution: {integrity: sha512-l63NF9y/cLROq/yqKXSLtcMeeyOfnSQlfMSlzFt/K73oIaD8DGaQWd7Z34X9GPiKqP5rbSh84Hl4bOlLcjiSrQ==}
 
   superdoc@file:../../packages/superdoc/superdoc.tgz:
-    resolution: {integrity: sha512-vqmURFD+JspQ8sqL0h2nT5K1hfkQQyqEOlULmX4A+zZUUJXsAIan/GBcNQEJM3m8nqzYS6G0NLilnBcNidlonA==, tarball: file:../../packages/superdoc/superdoc.tgz}
+    resolution: {integrity: sha512-ujI4h2Ru+d9t8xIZmdJazSVhaDA6l2QS3IK2MuThzl0MqSCGjxAKDlfvTeyWA/7WLxQkQzxvY+V8/lCo0+ysqg==, tarball: file:../../packages/superdoc/superdoc.tgz}
     version: 1.10.1-next.4
     peerDependencies:
       '@hocuspocus/provider': ^2.13.6

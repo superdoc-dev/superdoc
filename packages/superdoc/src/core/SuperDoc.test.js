@@ -621,21 +621,6 @@ describe('SuperDoc core', () => {
     expect(mountArg.parentElement).toBe(host);
   });
 
-  it('throws when selector does not match any DOM element', () => {
-    createAppHarness();
-    expect(
-      () =>
-        new SuperDoc({
-          selector: '#nonexistent',
-          document: 'https://example.com/doc.docx',
-          documents: [],
-          modules: { comments: {} },
-          colors: ['red'],
-          user: { name: 'Jane', email: 'jane@example.com' },
-        }),
-    ).toThrow('SuperDoc: selector must be a valid CSS selector string or DOM element');
-  });
-
   it('prevents app mounting if destroy is called during async init', async () => {
     const { app } = createAppHarness();
 

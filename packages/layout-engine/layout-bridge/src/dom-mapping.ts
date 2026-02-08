@@ -210,6 +210,15 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
     return result;
   }
 
+  // For table fragments without a direct line hit, return null to let the geometry
+  // fallback (hitTestTableFragment) handle cell lookup. processFragment searches all
+  // lines across all cells using only Y matching, which picks the wrong column when
+  // multiple cells share the same row height.
+  if (fragmentEl.classList.contains('superdoc-table-fragment')) {
+    log('Table fragment without line in hit chain, deferring to geometry fallback');
+    return null;
+  }
+
   const result = processFragment(fragmentEl, viewX, viewY);
   log('=== clickToPositionDom END ===', { result });
   return result;

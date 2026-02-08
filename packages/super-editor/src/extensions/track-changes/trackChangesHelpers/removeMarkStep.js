@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
+import { hasMatchingMark, markSnapshotMatchesStepMark, upsertMarkSnapshotByType } from './markSnapshotHelpers.js';
 
 /**
  * Remove mark step.
@@ -28,27 +29,28 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
 
     const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle'];
 
-    if (allowedMarks.includes(step.mark.type.name) && node.marks.find((mark) => mark.type === step.mark.type)) {
+    if (allowedMarks.includes(step.mark.type.name) && hasMatchingMark(node.marks, step.mark)) {
       const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
 
       let after = [];
       let before = [];
 
       if (formatChangeMark) {
-        let foundAfter = formatChangeMark.attrs.after.find((mark) => mark.type === step.mark.type.name);
+        let foundAfter = formatChangeMark.attrs.after.find((mark) =>
+          markSnapshotMatchesStepMark(mark, step.mark, true),
+        );
 
         if (foundAfter) {
-          after = [...formatChangeMark.attrs.after.filter((mark) => mark.type !== step.mark.type.name)];
+          after = [
+            ...formatChangeMark.attrs.after.filter((mark) => !markSnapshotMatchesStepMark(mark, step.mark, true)),
+          ];
           before = [...formatChangeMark.attrs.before];
         } else {
           after = [...formatChangeMark.attrs.after];
-          before = [
-            ...formatChangeMark.attrs.before,
-            {
-              type: step.mark.type.name,
-              attrs: { ...step.mark.attrs },
-            },
-          ];
+          before = upsertMarkSnapshotByType(formatChangeMark.attrs.before, {
+            type: step.mark.type.name,
+            attrs: { ...step.mark.attrs },
+          });
         }
       } else {
         after = [];

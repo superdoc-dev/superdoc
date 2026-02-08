@@ -9,4 +9,5 @@ export * from './removeMarkStep.js';
 export * from './getTrackChanges.js';
 export * from './parseFormatList.js';
 export * from './findTrackedMarkBetween.js';
+export * from './markSnapshotHelpers.js';
 export * as documentHelpers from './documentHelpers.js';

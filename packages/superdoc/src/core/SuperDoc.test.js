@@ -210,7 +210,10 @@ describe('SuperDoc core', () => {
     await flushMicrotasks();
 
     expect(createVueAppMock).toHaveBeenCalled();
-    expect(app.mount).toHaveBeenCalledWith('#host');
+    // Vue mounts on a child wrapper element inside the user's container (SD-1832)
+    const mountArg = app.mount.mock.calls[0][0];
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(document.querySelector('#host'));
     expect(superdocStore.init).toHaveBeenCalledWith(instance.config);
     expect(instance.config.documents).toHaveLength(1);
     expect(instance.config.documents[0]).toMatchObject({ type: DOCX, url: 'https://example.com/doc.docx' });
@@ -516,6 +519,121 @@ describe('SuperDoc core', () => {
     expect(app.unmount).toHaveBeenCalled();
     expect(instance.app.config.globalProperties.$config).toBeUndefined();
     expect(instance.listenerCount('ready')).toBe(0);
+  });
+
+  it('mounts Vue on a wrapper element inside the user container', async () => {
+    const { app } = createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    const mountArg = app.mount.mock.calls[0][0];
+
+    // Vue should mount on a child wrapper, not the user's container
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(host);
+  });
+
+  it('removes wrapper element on destroy', async () => {
+    const { app } = createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    expect(host.children.length).toBe(1);
+
+    instance.destroy();
+
+    expect(host.children.length).toBe(0);
+    expect(app.unmount).toHaveBeenCalled();
+  });
+
+  it('allows re-mounting after destroy (React StrictMode pattern)', async () => {
+    const { app } = createAppHarness();
+
+    // First mount
+    const instance1 = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    expect(host.children.length).toBe(1);
+
+    // Destroy (simulates React cleanup)
+    instance1.destroy();
+    expect(host.children.length).toBe(0);
+
+    // Re-mount (simulates React re-render)
+    const { app: app2 } = createAppHarness();
+    const instance2 = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    // Second mount should work without errors
+    expect(app2.mount).toHaveBeenCalled();
+    const mountArg = app2.mount.mock.calls[0][0];
+    expect(mountArg.parentElement).toBe(host);
+    expect(host.children.length).toBe(1);
+  });
+
+  it('mounts Vue on wrapper when selector is a DOM element', async () => {
+    const { app } = createAppHarness();
+    const host = document.querySelector('#host');
+
+    const instance = new SuperDoc({
+      selector: host,
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const mountArg = app.mount.mock.calls[0][0];
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(host);
+  });
+
+  it('throws when selector does not match any DOM element', () => {
+    createAppHarness();
+    expect(
+      () =>
+        new SuperDoc({
+          selector: '#nonexistent',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {} },
+          colors: ['red'],
+          user: { name: 'Jane', email: 'jane@example.com' },
+        }),
+    ).toThrow('SuperDoc: selector must be a valid CSS selector string or DOM element');
   });
 
   it('prevents app mounting if destroy is called during async init', async () => {

@@ -1,4 +1,6 @@
 examples
+demos
+devtools/visual-testing/results
 public
 dist
 node_modules

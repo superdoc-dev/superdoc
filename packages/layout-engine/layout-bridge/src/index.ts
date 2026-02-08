@@ -873,7 +873,38 @@ export function clickToPosition(
 
   // Fallback to geometry-based mapping
   logClickStage('log', 'geometry-attempt', { trying: 'geometry-based mapping' });
-  const pageHit = hitTestPage(layout, containerPoint, geometryHelper);
+
+  // When normalizeClientPoint produces containerPoint, it adjusts Y by the page's DOM
+  // offset, making containerPoint page-relative rather than container-space. On page 1
+  // the offset is ~0 so it doesn't matter, but on page 2+ this causes hitTestPage to
+  // find the wrong page and pageRelativePoint to be doubly subtracted.
+  //
+  // Fix: when DOM info is available, determine the page from elementsFromPoint (same
+  // technique normalizeClientPoint uses) and treat containerPoint as already page-relative.
+  let pageHit: PageHit | null = null;
+  let isContainerPointPageRelative = false;
+
+  if (domContainer != null && clientX != null && clientY != null) {
+    const doc = domContainer.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
+    if (doc && typeof doc.elementsFromPoint === 'function') {
+      const hitChain = doc.elementsFromPoint(clientX, clientY);
+      const pageEl = Array.isArray(hitChain)
+        ? (hitChain.find((el) => (el as HTMLElement)?.classList?.contains('superdoc-page')) as HTMLElement | null)
+        : null;
+      if (pageEl) {
+        const domPageIndex = Number(pageEl.dataset.pageIndex ?? 'NaN');
+        if (Number.isFinite(domPageIndex) && domPageIndex >= 0 && domPageIndex < layout.pages.length) {
+          pageHit = { pageIndex: domPageIndex, page: layout.pages[domPageIndex] };
+          isContainerPointPageRelative = true;
+        }
+      }
+    }
+  }
+
+  if (!pageHit) {
+    pageHit = hitTestPage(layout, containerPoint, geometryHelper);
+  }
+
   if (!pageHit) {
     logClickStage('warn', 'no-page', {
       point: containerPoint,
@@ -881,15 +912,22 @@ export function clickToPosition(
     return null;
   }
 
-  // Account for gaps between pages when calculating page-relative Y
-  // Calculate cumulative Y offset to this page
-  const pageTopY = geometryHelper
-    ? geometryHelper.getPageTop(pageHit.pageIndex)
-    : calculatePageTopFallback(layout, pageHit.pageIndex);
-  const pageRelativePoint: Point = {
-    x: containerPoint.x,
-    y: containerPoint.y - pageTopY,
-  };
+  // Calculate page-relative point
+  let pageRelativePoint: Point;
+  if (isContainerPointPageRelative) {
+    // containerPoint is already page-relative (normalizeClientPoint adjusted Y by page offset)
+    pageRelativePoint = containerPoint;
+  } else {
+    // containerPoint is in container-space, subtract page top to get page-relative
+    const pageTopY = geometryHelper
+      ? geometryHelper.getPageTop(pageHit.pageIndex)
+      : calculatePageTopFallback(layout, pageHit.pageIndex);
+    pageRelativePoint = {
+      x: containerPoint.x,
+      y: containerPoint.y - pageTopY,
+    };
+  }
+
   logClickStage('log', 'page-hit', {
     pageIndex: pageHit.pageIndex,
     pageRelativePoint,
@@ -898,61 +936,76 @@ export function clickToPosition(
   let fragmentHit = hitTestFragment(layout, pageHit, blocks, measures, pageRelativePoint);
 
   // If no fragment was hit (e.g., whitespace), snap to nearest hit-testable fragment on the page.
+  // But skip snap-to-nearest when the click is within a table fragment — otherwise the snap
+  // picks a nearby paragraph and returns its position, preventing clicks in empty table cell
+  // space (below text lines) from reaching hitTestTableFragment below.
   if (!fragmentHit) {
-    const page = pageHit.page;
-    const fragments = page.fragments.filter(
-      (f: Fragment | undefined): f is Fragment => f != null && typeof f === 'object',
-    );
-    let nearestHit: FragmentHit | null = null;
-    let nearestDist = Infinity;
+    const tableFragments = pageHit.page.fragments.filter((f) => f.kind === 'table');
+    const isWithinTableFragment = tableFragments.some((f) => {
+      const tf = f as TableFragment;
+      return (
+        pageRelativePoint.x >= tf.x &&
+        pageRelativePoint.x <= tf.x + tf.width &&
+        pageRelativePoint.y >= tf.y &&
+        pageRelativePoint.y <= tf.y + tf.height
+      );
+    });
+    if (!isWithinTableFragment) {
+      const page = pageHit.page;
+      const fragments = page.fragments.filter(
+        (f: Fragment | undefined): f is Fragment => f != null && typeof f === 'object',
+      );
+      let nearestHit: FragmentHit | null = null;
+      let nearestDist = Infinity;
 
-    for (const frag of fragments) {
-      const isPara = frag.kind === 'para';
-      const isAtomic = isAtomicFragment(frag);
-      if (!isPara && !isAtomic) continue;
+      for (const frag of fragments) {
+        const isPara = frag.kind === 'para';
+        const isAtomic = isAtomicFragment(frag);
+        if (!isPara && !isAtomic) continue;
 
-      const blockIndex = findBlockIndexByFragmentId(blocks, frag.blockId);
-      if (blockIndex === -1) continue;
-      const block = blocks[blockIndex];
-      const measure = measures[blockIndex];
-      if (!block || !measure) continue;
+        const blockIndex = findBlockIndexByFragmentId(blocks, frag.blockId);
+        if (blockIndex === -1) continue;
+        const block = blocks[blockIndex];
+        const measure = measures[blockIndex];
+        if (!block || !measure) continue;
 
-      let fragHeight = 0;
-      if (isAtomic) {
-        fragHeight = frag.height;
-      } else if (isPara && block.kind === 'paragraph' && measure.kind === 'paragraph') {
-        fragHeight = measure.lines
-          .slice(frag.fromLine, frag.toLine)
-          .reduce((sum: number, line: Line) => sum + line.lineHeight, 0);
-      } else {
-        continue;
+        let fragHeight = 0;
+        if (isAtomic) {
+          fragHeight = frag.height;
+        } else if (isPara && block.kind === 'paragraph' && measure.kind === 'paragraph') {
+          fragHeight = measure.lines
+            .slice(frag.fromLine, frag.toLine)
+            .reduce((sum: number, line: Line) => sum + line.lineHeight, 0);
+        } else {
+          continue;
+        }
+
+        const top = frag.y;
+        const bottom = frag.y + fragHeight;
+        let dist: number;
+        if (pageRelativePoint.y < top) {
+          dist = top - pageRelativePoint.y;
+        } else if (pageRelativePoint.y > bottom) {
+          dist = pageRelativePoint.y - bottom;
+        } else {
+          dist = 0;
+        }
+
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          const pageY = Math.max(0, Math.min(pageRelativePoint.y - top, fragHeight));
+          nearestHit = {
+            fragment: frag,
+            block,
+            measure,
+            pageIndex: pageHit.pageIndex,
+            pageY,
+          };
+        }
       }
 
-      const top = frag.y;
-      const bottom = frag.y + fragHeight;
-      let dist: number;
-      if (pageRelativePoint.y < top) {
-        dist = top - pageRelativePoint.y;
-      } else if (pageRelativePoint.y > bottom) {
-        dist = pageRelativePoint.y - bottom;
-      } else {
-        dist = 0;
-      }
-
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        const pageY = Math.max(0, Math.min(pageRelativePoint.y - top, fragHeight));
-        nearestHit = {
-          fragment: frag,
-          block,
-          measure,
-          pageIndex: pageHit.pageIndex,
-          pageY,
-        };
-      }
+      fragmentHit = nearestHit;
     }
-
-    fragmentHit = nearestHit;
   }
 
   if (fragmentHit) {

@@ -418,6 +418,53 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(textContent).toBe('Hello');
   });
 
+  it('tracks Backspace when joining paragraphs', () => {
+    // Create doc with: <p>Hello</p><p>World</p>
+    const para1 = schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Hello')]));
+    const para2 = schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('World')]));
+    const doc = schema.nodes.doc.create({}, [para1, para2]);
+    let state = createState(doc);
+
+    // Backspace at start of second paragraph joins blocks.
+    let joinPos = null;
+    let secondParaOffset = null;
+    state.doc.forEach((node, offset, index) => {
+      if (index === 0) {
+        joinPos = offset + node.nodeSize;
+      } else if (index === 1) {
+        secondParaOffset = offset;
+      }
+    });
+    expect(joinPos).not.toBeNull();
+    expect(secondParaOffset).not.toBeNull();
+
+    // Put cursor at the start of the second paragraph to mirror Backspace semantics.
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, secondParaOffset + 1)));
+
+    const tr = state.tr.join(joinPos);
+    tr.setMeta('inputType', 'deleteContentBackward');
+
+    // Sanity check: this is a pure boundary deletion with no inline descendants in range.
+    const joinStep = tr.steps[0];
+    expect(joinStep?.from).toBeTypeOf('number');
+    expect(joinStep?.to).toBeTypeOf('number');
+    expect(joinStep?.slice?.content?.size).toBe(0);
+    let hasInlineContent = false;
+    state.doc.nodesBetween(joinStep.from, joinStep.to, (node) => {
+      if (node.isInline) {
+        hasInlineContent = true;
+        return false;
+      }
+    });
+    expect(hasInlineContent).toBe(false);
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const meta = tracked.getMeta(TrackChangesBasePluginKey);
+
+    // Regression guard: these deletes must not bypass track-change annotation.
+    expect(meta?.deletionMark).toBeDefined();
+  });
+
   it('tracks replace even when selection contains existing deletions and links', () => {
     const linkMark = schema.marks.link.create({ href: 'https://example.com' });
     const existingDeletion = schema.marks[TrackDeleteMarkName].create({

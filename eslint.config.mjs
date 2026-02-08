@@ -12,6 +12,7 @@ export default [
   {
     ignores: [
       '**/dist/**',
+      '**/dist-types/**',
       '**/node_modules/**',
       // Generated/vendor files that shouldn't be linted
       '**/pdfjs.js',

@@ -1,13 +1,8 @@
-import React from 'react';
+import type { FC } from 'react';
 import type { DownloadButtonProps, DownloadConfig } from '../types';
 
 export const createDownloadButton = (config?: DownloadConfig) => {
-  const Component: React.FC<DownloadButtonProps> = ({
-    onClick,
-    fileName,
-    isDisabled,
-    isDownloading,
-  }) => {
+  const Component: FC<DownloadButtonProps> = ({ onClick, fileName, isDisabled, isDownloading }) => {
     const label = config?.label || 'Download';
     const disabled = isDisabled || isDownloading;
 
@@ -32,7 +27,7 @@ export const createDownloadButton = (config?: DownloadConfig) => {
           transition: 'opacity 0.2s ease',
         }}
       >
-        {isDownloading && <span className="superdoc-esign-spinner" />}
+        {isDownloading && <span className='superdoc-esign-spinner' />}
         {isDownloading ? 'Downloading...' : label}
         {!isDownloading && fileName && ` (${fileName})`}
       </button>

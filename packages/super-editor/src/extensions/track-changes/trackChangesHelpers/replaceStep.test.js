@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { DOMParser as PMDOMParser, Slice } from 'prosemirror-model';
 import { trackedTransaction, documentHelpers } from './index.js';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
@@ -205,6 +206,98 @@ describe('trackChangesHelpers replaceStep', () => {
 
     // Both characters should be tracked
     expect(insertedText).toBe('xy');
+  });
+
+  it('tracks single-paragraph HTML paste insertions', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Base')])),
+    );
+    let state = createState(doc);
+
+    const basePos = findTextPos(state.doc, 'Base');
+    expect(basePos).toBeTypeOf('number');
+    const insertPos = basePos + 'Base'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, insertPos)));
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = '<p>Paste One</p>';
+    const parsedDoc = PMDOMParser.fromSchema(schema).parse(tempDiv);
+    const slice = new Slice(parsedDoc.content, 0, 0);
+
+    let tr = state.tr.replaceSelection(slice);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertedText += node.text;
+      }
+    });
+
+    expect(insertedText).toContain('Paste One');
+  });
+
+  it('tracks multi-paragraph HTML paste insertions', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Base')])),
+    );
+    let state = createState(doc);
+
+    const basePos = findTextPos(state.doc, 'Base');
+    expect(basePos).toBeTypeOf('number');
+    const insertPos = basePos + 'Base'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, insertPos)));
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = '<p>Paste One</p><p>Paste Two</p>';
+    const parsedDoc = PMDOMParser.fromSchema(schema).parse(tempDiv);
+    const slice = new Slice(parsedDoc.content, 0, 0);
+
+    let tr = state.tr.replaceSelection(slice);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertedText += node.text;
+      }
+    });
+
+    expect(insertedText).toContain('Paste One');
+    expect(insertedText).toContain('Paste Two');
+  });
+
+  it('tracks plain-text paste insertions', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Base')])),
+    );
+    let state = createState(doc);
+
+    const basePos = findTextPos(state.doc, 'Base');
+    expect(basePos).toBeTypeOf('number');
+    const insertPos = basePos + 'Base'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, insertPos)));
+
+    let tr = state.tr.insertText('Plain Paste', insertPos);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertedText += node.text;
+      }
+    });
+
+    expect(insertedText).toContain('Plain Paste');
   });
 
   it('tracks replace even when selection contains existing deletions and links', () => {

@@ -7,6 +7,14 @@ import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { findMarkPosition } from './documentHelpers.js';
 
+const buildInsertionResult = (tempTr, insertedFrom, insertedTo, insertedMark) => ({
+  insertedFrom,
+  insertedTo,
+  insertedMark,
+  trackedInsertedSlice: insertedFrom === insertedTo ? Slice.empty : tempTr.doc.slice(insertedFrom, insertedTo),
+  tempTr,
+});
+
 /**
  * Replace step.
  * @param {import('prosemirror-state').EditorState} options.state Editor state.
@@ -40,16 +48,40 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
     }
   }
 
+  const baseParentIsTextblock = trTemp.doc.resolve(positionTo).parent?.isTextblock;
+  const shouldPreferInlineInsertion = step.from === step.to && baseParentIsTextblock;
+
   const tryInsert = (slice) => {
-    const insertionStep = new ReplaceStep(positionTo, positionTo, slice, false);
-    if (trTemp.maybeStep(insertionStep).failed) return null;
-    return {
-      insertedFrom: insertionStep.from,
-      insertedTo: insertionStep.getMap().map(insertionStep.to, 1),
-    };
+    const tempTr = state.apply(newTr).tr;
+    const isEmptySlice = slice?.content?.size === 0;
+    try {
+      tempTr.replaceRange(positionTo, positionTo, slice);
+    } catch {
+      return null;
+    }
+
+    if (!tempTr.docChanged && !isEmptySlice) return null;
+
+    const insertedFrom = tempTr.mapping.map(positionTo, -1);
+    const insertedTo = tempTr.mapping.map(positionTo, 1);
+    if (insertedFrom === insertedTo) return buildInsertionResult(tempTr, insertedFrom, insertedTo, null);
+    if (shouldPreferInlineInsertion && !tempTr.doc.resolve(insertedFrom).parent?.isTextblock) return null;
+
+    const insertedMark = markInsertion({
+      tr: tempTr,
+      from: insertedFrom,
+      to: insertedTo,
+      user,
+      date,
+    });
+
+    return buildInsertionResult(tempTr, insertedFrom, insertedTo, insertedMark);
   };
 
-  const insertion = tryInsert(step.slice) || tryInsert(Slice.maxOpen(step.slice.content, true));
+  const openSlice = Slice.maxOpen(step.slice.content, true);
+  const insertion = shouldPreferInlineInsertion
+    ? tryInsert(openSlice) || tryInsert(step.slice)
+    : tryInsert(step.slice) || tryInsert(openSlice);
 
   // If we can't insert the replacement content into the temp transaction, fall back to applying the original step.
   // This keeps user intent (content change) even if we can't represent it as tracked insert+delete.
@@ -61,16 +93,9 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   }
 
   const meta = {};
-  const insertedMark = markInsertion({
-    tr: trTemp,
-    from: insertion.insertedFrom,
-    to: insertion.insertedTo,
-    user,
-    date,
-  });
+  const { insertedFrom, insertedTo, insertedMark, trackedInsertedSlice, tempTr } = insertion;
 
   // Condense insertion down to a single replace step (so this tracked transaction remains a single-step insertion).
-  const trackedInsertedSlice = trTemp.doc.slice(insertion.insertedFrom, insertion.insertedTo);
   const condensedStep = new ReplaceStep(positionTo, positionTo, trackedInsertedSlice, false);
   if (newTr.maybeStep(condensedStep).failed) {
     // If the condensed step can't be applied, fall back to the original step and skip deletion tracking.
@@ -86,7 +111,7 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   const mirrorIndex = map.maps.length - 1;
   map.appendMap(condensedStep.getMap(), mirrorIndex);
 
-  if (insertion.insertedFrom !== insertion.insertedTo) {
+  if (insertedFrom !== insertedTo) {
     meta.insertedMark = insertedMark;
     meta.step = condensedStep;
     // Store the actual insertion end position for cursor placement (SD-1624).
@@ -94,13 +119,13 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
     // For single-step transactions, positionTo is in newTr.doc coordinates after our condensedStep,
     // so we just add the insertion length to get the cursor position.
     if (positionAdjusted) {
-      const insertionLength = insertion.insertedTo - insertion.insertedFrom;
+      const insertionLength = insertedTo - insertedFrom;
       meta.insertedTo = positionTo + insertionLength;
     }
   }
 
-  if (!newTr.selection.eq(trTemp.selection)) {
-    newTr.setSelection(trTemp.selection);
+  if (!newTr.selection.eq(tempTr.selection)) {
+    newTr.setSelection(tempTr.selection);
   }
 
   if (step.from !== step.to) {

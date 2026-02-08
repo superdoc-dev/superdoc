@@ -71,6 +71,7 @@ export default [
         DOMRect: 'readonly',
 
         // DOM APIs (text editing, clipboard, elements)
+        Element: 'readonly',
         HTMLElement: 'readonly',
         Node: 'readonly',
         DataTransfer: 'readonly',

@@ -31,6 +31,7 @@ function DocEditor({ document }) {
     });
 
     return () => {
+      superdocRef.current?.destroy();
       superdocRef.current = null;
     };
   }, [document]);
@@ -69,6 +70,7 @@ const DocEditor = forwardRef(({ document, user, onReady }, ref) => {
     });
 
     return () => {
+      superdocRef.current?.destroy();
       superdocRef.current = null;
     };
   }, [document, user, onReady]);
@@ -190,6 +192,7 @@ const DocEditor = forwardRef<EditorRef, EditorProps>(
       superdocRef.current = new SuperDoc(config);
       
       return () => {
+        superdocRef.current?.destroy();
         superdocRef.current = null;
       };
     }, [document, userId, onReady]);
@@ -247,6 +250,7 @@ function useSuperDoc(config) {
     });
     
     return () => {
+      superdocRef.current?.destroy();
       superdocRef.current = null;
       setReady(false);
     };

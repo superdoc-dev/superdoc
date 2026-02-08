@@ -137,10 +137,21 @@ export class SuperDoc extends EventEmitter {
    */
   constructor(config) {
     super();
-    this.#init(config);
+
+    if (!config.selector) {
+      throw new Error('SuperDoc: selector is required');
+    }
+
+    const container = typeof config.selector === 'string' ? document.querySelector(config.selector) : config.selector;
+
+    if (!(container instanceof Element)) {
+      throw new Error('SuperDoc: selector must be a valid CSS selector string or DOM element');
+    }
+
+    this.#init(config, container);
   }
 
-  async #init(config) {
+  async #init(config, container) {
     this.config = {
       ...this.config,
       ...config,
@@ -246,20 +257,9 @@ export class SuperDoc extends EventEmitter {
     this.activeEditor = null;
     this.comments = [];
 
-    if (!this.config.selector) {
-      throw new Error('SuperDoc: selector is required');
-    }
-
     // Mount Vue into a child wrapper element instead of directly on the user's
     // container. This prevents conflicts with host frameworks (React, Angular)
     // that manage the container's DOM. See SD-1832.
-    const container =
-      typeof this.config.selector === 'string' ? document.querySelector(this.config.selector) : this.config.selector;
-
-    if (!container) {
-      throw new Error('SuperDoc: selector element not found');
-    }
-
     this.#mountWrapper = document.createElement('div');
     this.#mountWrapper.style.display = 'contents';
     container.appendChild(this.#mountWrapper);

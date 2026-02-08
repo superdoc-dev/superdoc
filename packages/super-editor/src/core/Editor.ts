@@ -54,6 +54,7 @@ import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
+import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -243,6 +244,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   setHighContrastMode?: (enabled: boolean) => void;
 
+  /**
+   * Telemetry instance for tracking document opens
+   */
+  #telemetry: Telemetry | null = null;
+
+  /**
+   * Guard flag to prevent double-tracking document open
+   */
+  #documentOpenTracked = false;
+
   options: EditorOptions = {
     element: null,
     selector: null,
@@ -327,6 +338,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
+
+    // License key (defaults to community license)
+    licenseKey: COMMUNITY_LICENSE_KEY,
+
+    // Telemetry configuration
+    telemetry: null,
   };
 
   /**
@@ -393,6 +410,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#checkHeadless(resolvedOptions);
     this.setOptions(resolvedOptions);
     this.#renderer = resolvedOptions.renderer ?? (domAvailable ? new ProseMirrorRenderer() : null);
+    this.#initTelemetry();
 
     const { setHighContrastMode } = useHighContrastMode();
     this.setHighContrastMode = setHighContrastMode;
@@ -454,6 +472,53 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
+  }
+
+  /**
+   * Initialize telemetry if configured
+   */
+  #initTelemetry(): void {
+    const { telemetry: telemetryConfig, licenseKey } = this.options;
+
+    // Skip if telemetry is not enabled
+    if (!telemetryConfig?.enabled) {
+      console.debug('[super-editor] Telemetry: disabled');
+      return;
+    }
+
+    try {
+      this.#telemetry = new Telemetry({
+        enabled: true,
+        endpoint: telemetryConfig.endpoint,
+        licenseKey: licenseKey === undefined ? COMMUNITY_LICENSE_KEY : licenseKey,
+        metadata: telemetryConfig.metadata,
+      });
+      console.debug('[super-editor] Telemetry: enabled');
+    } catch {
+      // Fail silently - telemetry should never break the app
+    }
+  }
+
+  /**
+   * Ensure document metadata is generated and track telemetry if enabled
+   */
+  #trackDocumentOpen(): void {
+    // Always generate metadata (GUID, timestamp) regardless of telemetry
+    this.getDocumentIdentifier().then((documentId) => {
+      // Only track if telemetry enabled and not already tracked
+      if (!this.#telemetry || this.#documentOpenTracked) return;
+
+      try {
+        const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+        this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
+        this.#documentOpenTracked = true;
+      } catch {
+        // Fail silently - telemetry should never break the app
+      }
+    });
   }
 
   /**
@@ -992,6 +1057,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
   }
 
   unmount(): void {
@@ -1553,6 +1621,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         documentId: this.options.documentId,
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
+        isNewFile: this.options.isNewFile ?? false,
       });
     }
   }
@@ -2118,7 +2187,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get document identifier (async - may generate hash)
+   * Get document unique identifier (async)
+   * Returns a stable identifier for the document (identifierHash or contentHash)
    */
   async getDocumentIdentifier(): Promise<string | null> {
     return (await this.converter?.getDocumentIdentifier()) || null;
@@ -2521,6 +2591,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
       const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+
+      // Export core.xml (contains dcterms:created timestamp)
+      const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
+      const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
+
       const updatedDocs: Record<string, string> = {
         ...this.options.customUpdatedFiles,
         'word/document.xml': String(documentXml),
@@ -2531,6 +2606,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         // Replace & with &amp; in styles.xml as DOCX viewers can't handle it
         'word/styles.xml': String(styles).replace(/&/gi, '&amp;'),
         ...updatedHeadersFooters,
+        ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };
 
       if (hasCustomSettings) {

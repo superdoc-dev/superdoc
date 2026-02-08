@@ -1,3 +1,39 @@
+# [1.11.0](https://github.com/superdoc-dev/superdoc/compare/v1.10.0...v1.11.0) (2026-02-06)
+
+
+### Bug Fixes
+
+* cli package public ([7dad84d](https://github.com/superdoc-dev/superdoc/commit/7dad84da35c78f45072907dfde94ec782b362a8f))
+* cli skill uses latest ([b74d9ba](https://github.com/superdoc-dev/superdoc/commit/b74d9bae4682f64bd11cf17f8cfff7c22965e415))
+* **cli:** document -h flag in help text ([020c4a0](https://github.com/superdoc-dev/superdoc/commit/020c4a0d58e079e1912c0773c095806bbc51eafa))
+* **cli:** document -h flag in help text ([68fa42f](https://github.com/superdoc-dev/superdoc/commit/68fa42fabbbc44b41d644b9010a12fa2573e7e8c))
+* **cli:** move bundled deps to devDependencies ([6a362ed](https://github.com/superdoc-dev/superdoc/commit/6a362ed87baad3d08cec2298980290ea2183c1ac))
+* **cli:** remove bundled deps from package.json ([f90d4af](https://github.com/superdoc-dev/superdoc/commit/f90d4af095a8e4cf5fca34774855a28559dec5de))
+* console log ([4b64109](https://github.com/superdoc-dev/superdoc/commit/4b64109b92623cfb7582774c45f96cac47a8280f))
+* document dropdown resets ([#1883](https://github.com/superdoc-dev/superdoc/issues/1883)) ([b552d2e](https://github.com/superdoc-dev/superdoc/commit/b552d2e272d7f8b19e1bf2400c58fec9fed30f16))
+* lock file ([1edf741](https://github.com/superdoc-dev/superdoc/commit/1edf7419fc5c17dc5ff6a0e7097214aee1e8d2bc))
+* make Ctrl-a select all content, and fix select all when there are tables in doc ([#1886](https://github.com/superdoc-dev/superdoc/issues/1886)) ([c87c1ab](https://github.com/superdoc-dev/superdoc/commit/c87c1ab1d122482a6c65d77decb6374e97f9d45e))
+* package lock ([11f47fa](https://github.com/superdoc-dev/superdoc/commit/11f47fabe45b5341f0873895ff50d9e791781718))
+* paragraph autospacing calculation (SD-1653) ([#1877](https://github.com/superdoc-dev/superdoc/issues/1877)) ([b7dec3c](https://github.com/superdoc-dev/superdoc/commit/b7dec3cda82840c62bfe815a636b76f5f949424c))
+* run color overwrite in applyInlineRunProperties (SD-1585) ([#1885](https://github.com/superdoc-dev/superdoc/issues/1885)) ([6051dd4](https://github.com/superdoc-dev/superdoc/commit/6051dd4de2225217b6cd426cbb2ae657998d72a2))
+* selection across pages with drag ([#1884](https://github.com/superdoc-dev/superdoc/issues/1884)) ([bb44999](https://github.com/superdoc-dev/superdoc/commit/bb449995bf0537d9471c88b7c1ddca948ea0b070))
+* **super-converter:** handle ECMA-376 percentage strings in table widths (SD-1633) ([#1844](https://github.com/superdoc-dev/superdoc/issues/1844)) ([fb9fd52](https://github.com/superdoc-dev/superdoc/commit/fb9fd5235eea1f3913da29195f682416ad60ced4))
+* **super-converter:** return transparent instead of blue for shapes ([#1854](https://github.com/superdoc-dev/superdoc/issues/1854)) ([6ac29d7](https://github.com/superdoc-dev/superdoc/commit/6ac29d79b4cb986dc52f79db16966d413c07111e)), closes [#5b9bd5](https://github.com/superdoc-dev/superdoc/issues/5b9bd5)
+
+
+### Features
+
+* add esign package to monorepo ([#1895](https://github.com/superdoc-dev/superdoc/issues/1895)) ([532e2b5](https://github.com/superdoc-dev/superdoc/commit/532e2b5fbd23406eb17e5a1125eda1aaec4496c0))
+* add template-builder package to monorepo ([#1888](https://github.com/superdoc-dev/superdoc/issues/1888)) ([0aec624](https://github.com/superdoc-dev/superdoc/commit/0aec6243dfbcc6552783f610b6469ae6ee2b6d2a))
+* **cli:** add claude code skill ([#1903](https://github.com/superdoc-dev/superdoc/issues/1903)) ([e55ce56](https://github.com/superdoc-dev/superdoc/commit/e55ce561c07bf6f103fb31657b2b928f44cd718c))
+* new cli app ([#1902](https://github.com/superdoc-dev/superdoc/issues/1902)) ([0c6aeb0](https://github.com/superdoc-dev/superdoc/commit/0c6aeb06f5a32de3b58dfe68dc38ec63b8ff2cf6))
+* **template-builder:** add cspNonce support ([#1911](https://github.com/superdoc-dev/superdoc/issues/1911)) ([5b7b34e](https://github.com/superdoc-dev/superdoc/commit/5b7b34ea3971f98078e5314fc5dd1ef23550afd6))
+* **vscode-ext:** sync from main ([47c50f7](https://github.com/superdoc-dev/superdoc/commit/47c50f74ed3fa0371acd15947d2105142fd312fd))
+* **vscode-ext:** sync from main ([226bcf1](https://github.com/superdoc-dev/superdoc/commit/226bcf12f76b7dea2aa0cd425d6116bb1f7b7ea5))
+* **vscode-ext:** sync from main ([eced1f3](https://github.com/superdoc-dev/superdoc/commit/eced1f369e527064984dc9de107bc1e670bade90))
+* **vscode-ext:** sync from main ([36b48a6](https://github.com/superdoc-dev/superdoc/commit/36b48a6195097dc539436e13218c38f6ac1aa8e4))
+* **vscode-ext:** sync from main ([cdc00df](https://github.com/superdoc-dev/superdoc/commit/cdc00dfab9857613ae5562de8eff61eaa44fceaa))
+
 ## [1.10.1-next.4](https://github.com/superdoc-dev/superdoc/compare/v1.10.1-next.3...v1.10.1-next.4) (2026-01-30)
 
 

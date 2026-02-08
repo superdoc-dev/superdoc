@@ -5,7 +5,7 @@ description: "Interactive form fields for documents. It can be used when variabl
 
 <Note>Available since v0.10.0</Note>
 
-<Warning>Field Annotation use is not recommended because of its limited support for advanced document content (e.g., tables, advanced styling). We instead recommend using the more versatile [Structured Content Fields](/extensions/structured-content).</Warning>
+<Warning>Field Annotation use is not recommended because of its limited support for advanced document content (e.g., tables, advanced styling). Use the more versatile [Structured Content Fields](/extensions/structured-content).</Warning>
 
 ## Configuration
 
@@ -13,16 +13,12 @@ description: "Interactive form fields for documents. It can be used when variabl
   Handle drops outside editor viewport
 </ParamField>
 
-<ParamField path="annotationClass" type="string" default="'field-annotation'">
+<ParamField path="annotationClass" type="string" default="'annotation'">
   CSS class for field styling
 </ParamField>
 
-<ParamField path="defaultColor" type="string" default="'#980043'">
-  Default field background color
-</ParamField>
-
-<ParamField path="maxAnnotations" type="number" default="1000">
-  Maximum annotations per document
+<ParamField path="borderColor" type="string" default="'#b015b3'">
+  Default field border color
 </ParamField>
 
 
@@ -32,17 +28,24 @@ description: "Interactive form fields for documents. It can be used when variabl
 **Basic Setup:**
 
 ```javascript
-import { FieldAnnotationPlugin } from '@superdoc/field-annotation';
+import { SuperDoc } from 'superdoc';
 
-const plugin = FieldAnnotationPlugin({
-  editor: myEditor,
-  handleDropOutside: true
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  // Field annotations are included by default via getStarterExtensions().
+  // Configure options here:
+  fieldAnnotation: {
+    handleDropOutside: true,
+    borderColor: '#b015b3',
+  },
 });
 ```
 
 **Form Template Workflow:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // 1. Create form fields
 const fields = [
   { id: 'name', label: 'Full Name', type: 'text' },
@@ -71,6 +74,46 @@ editor.annotate([
 ]);
 ```
 
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // 1. Create form fields
+    const fields = [
+      { id: 'name', label: 'Full Name', type: 'text' },
+      { id: 'date', label: 'Date', type: 'text' },
+      { id: 'signature', label: 'Sign Here', type: 'signature' }
+    ];
+
+    // 2. Insert fields into document
+    fields.forEach((field, i) => {
+      editor.commands.addFieldAnnotation(i * 100, {
+        fieldId: field.id,
+        displayLabel: field.label,
+        type: field.type
+      });
+    });
+
+    // 3. Handle user interactions
+    editor.on('fieldAnnotationClicked', ({ node }) => {
+      openFieldEditor(node.attrs.fieldId);
+    });
+
+    // 4. Fill and export
+    editor.annotate([
+      { input_id: 'name', input_value: 'John Doe' },
+      { input_id: 'date', input_value: '2024-01-15' }
+    ]);
+  },
+});
+```
+</CodeGroup>
+
 ## Commands
 
 ### Find & Search
@@ -81,7 +124,8 @@ Find field annotations matching a predicate function
 
 <Note>Added in v0.10.3</Note>
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Find all signature fields
 const signatureFields = findFieldAnnotations(
   node => node.attrs.type === 'signature',
@@ -89,13 +133,52 @@ const signatureFields = findFieldAnnotations(
 );
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Find all signature fields
+    const signatureFields = findFieldAnnotations(
+      node => node.attrs.type === 'signature',
+      editor.state
+    );
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Find fields with specific color
 const redFields = findFieldAnnotations(
   node => node.attrs.fieldColor === '#FF0000',
   state
 );
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Find fields with specific color
+    const redFields = findFieldAnnotations(
+      node => node.attrs.fieldColor === '#FF0000',
+      editor.state
+    );
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -127,17 +210,53 @@ const redFields = findFieldAnnotations(
 
 Find all field annotations between two positions
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Find fields in selection
 const { from, to } = state.selection;
 const selectedFields = findFieldAnnotationsBetween(from, to, state.doc);
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Find fields in selection
+    const { from, to } = editor.state.selection;
+    const selectedFields = findFieldAnnotationsBetween(from, to, editor.state.doc);
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Find fields in specific range
 const rangeFields = findFieldAnnotationsBetween(100, 500, state.doc);
 console.log(`Found ${rangeFields.length} fields in range`);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Find fields in specific range
+    const rangeFields = findFieldAnnotationsBetween(100, 500, editor.state.doc);
+    console.log(`Found ${rangeFields.length} fields in range`);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -173,18 +292,55 @@ console.log(`Found ${rangeFields.length} fields in range`);
 
 Find field annotations by field ID(s)
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Find single field
 const fields = findFieldAnnotationsByFieldId('field-123', state);
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Find single field
+    const fields = findFieldAnnotationsByFieldId('field-123', editor.state);
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Find multiple fields
 const fields = findFieldAnnotationsByFieldId(['field-1', 'field-2'], state);
 fields.forEach(({ pos, node }) => {
   console.log(`Found ${node.attrs.fieldId} at position ${pos}`);
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Find multiple fields
+    const fields = findFieldAnnotationsByFieldId(['field-1', 'field-2'], editor.state);
+    fields.forEach(({ pos, node }) => {
+      console.log(`Found ${node.attrs.fieldId} at position ${pos}`);
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -218,12 +374,31 @@ Find the first field annotation matching a field ID
 
 <Note>Added in v0.10.2</Note>
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const firstField = findFirstFieldAnnotationByFieldId('field-123', state);
 if (firstField) {
   console.log(`First occurrence at position ${firstField.pos}`);
 }
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const firstField = findFirstFieldAnnotationByFieldId('field-123', editor.state);
+    if (firstField) {
+      console.log(`First occurrence at position ${firstField.pos}`);
+    }
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -249,12 +424,31 @@ Find field annotations in headers and footers by field ID or array of field IDs.
 
 <Note>Added in v0.11.2</Note>
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const headerFooterAnnotations = findHeaderFooterAnnotationsByFieldId('field-123', editor, activeSectionEditor);
 headerFooterAnnotations.forEach(({ node, pos }) => {
   console.log(`Field ${node.attrs.fieldId} at position ${pos}`);
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const headerFooterAnnotations = findHeaderFooterAnnotationsByFieldId('field-123', editor, activeSectionEditor);
+    headerFooterAnnotations.forEach(({ node, pos }) => {
+      console.log(`Field ${node.attrs.fieldId} at position ${pos}`);
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -291,7 +485,8 @@ headerFooterAnnotations.forEach(({ node, pos }) => {
 Get all field annotations in the document
 
 ```javascript
-import { getAllFieldAnnotations } from './fieldAnnotationHelpers';
+import { fieldAnnotationHelpers } from 'superdoc';
+const { getAllFieldAnnotations } = fieldAnnotationHelpers;
 
 const annotations = getAllFieldAnnotations(editor.state);
 console.log(`Document contains ${annotations.length} field annotations`);
@@ -329,12 +524,31 @@ Get all field annotations with their bounding rectangles
 
 <Note>Added in v0.11.0</Note>
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const annotationsWithRects = getAllFieldAnnotationsWithRect(view, state);
 annotationsWithRects.forEach(({ node, rect }) => {
   console.log(`Field ${node.attrs.fieldId} at ${rect.left}, ${rect.top}`);
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const annotationsWithRects = getAllFieldAnnotationsWithRect(editor.view, editor.state);
+    annotationsWithRects.forEach(({ node, rect }) => {
+      console.log(`Field ${node.attrs.fieldId} at ${rect.left}, ${rect.top}`);
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -373,12 +587,31 @@ Find field annotation nodes that were removed in a transaction
 
 <Note>Added in v0.11.2</Note>
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const removedFields = findRemovedFieldAnnotations(transaction);
 removedFields.forEach(({ node, pos }) => {
   console.log(`Field ${node.attrs.fieldId} at position ${pos}`);
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const removedFields = findRemovedFieldAnnotations(transaction);
+    removedFields.forEach(({ node, pos }) => {
+      console.log(`Field ${node.attrs.fieldId} at position ${pos}`);
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -406,15 +639,49 @@ removedFields.forEach(({ node, pos }) => {
 
 Delete field annotations by field ID
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Delete single field annotation
 editor.commands.deleteFieldAnnotations('field-123')
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Delete single field annotation
+    editor.commands.deleteFieldAnnotations('field-123')
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Delete multiple field annotations
 editor.commands.deleteFieldAnnotations(['field-1', 'field-2'])
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Delete multiple field annotations
+    editor.commands.deleteFieldAnnotations(['field-1', 'field-2'])
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -430,10 +697,27 @@ editor.commands.deleteFieldAnnotations(['field-1', 'field-2'])
 
 Delete field annotations by node references
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const annotations = editor.helpers.fieldAnnotation.getAllFieldAnnotations();
 editor.commands.deleteFieldAnnotationsByNode(annotations.slice(0, 2));
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const annotations = editor.helpers.fieldAnnotation.getAllFieldAnnotations();
+    editor.commands.deleteFieldAnnotationsByNode(annotations.slice(0, 2));
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -449,10 +733,27 @@ editor.commands.deleteFieldAnnotationsByNode(annotations.slice(0, 2));
 
 Delete a single field annotation
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const annotation = editor.helpers.fieldAnnotation.findFieldAnnotationsByFieldId('field-123')[0];
 editor.commands.deleteFieldAnnotation(annotation);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const annotation = editor.helpers.fieldAnnotation.findFieldAnnotationsByFieldId('field-123')[0];
+    editor.commands.deleteFieldAnnotation(annotation);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -468,15 +769,49 @@ editor.commands.deleteFieldAnnotation(annotation);
 
 Delete a portion of annotations associated with a field
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Remove annotations starting from index 6
 editor.commands.sliceFieldAnnotations('field-123', 5)
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Remove annotations starting from index 6
+    editor.commands.sliceFieldAnnotations('field-123', 5)
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Remove from multiple fields
 editor.commands.sliceFieldAnnotations(['field-1', 'field-2'], 5)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Remove from multiple fields
+    editor.commands.sliceFieldAnnotations(['field-1', 'field-2'], 5)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -498,7 +833,8 @@ editor.commands.sliceFieldAnnotations(['field-1', 'field-2'], 5)
 
 Add field annotation at specified position
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addFieldAnnotation(10, {
   fieldId: 'field-123',
   displayLabel: 'Enter your name',
@@ -506,6 +842,26 @@ editor.commands.addFieldAnnotation(10, {
   fieldColor: '#980043'
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addFieldAnnotation(10, {
+      fieldId: 'field-123',
+      displayLabel: 'Enter your name',
+      fieldType: 'TEXTINPUT',
+      fieldColor: '#980043'
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -546,12 +902,31 @@ editor.commands.addFieldAnnotation(10, {
 
 Add field annotation at current selection position
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.addFieldAnnotationAtSelection({
   fieldId: 'field-456',
   displayLabel: 'Signature here'
 }, true)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.addFieldAnnotationAtSelection({
+      fieldId: 'field-456',
+      displayLabel: 'Signature here'
+    }, true)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -573,7 +948,8 @@ editor.commands.addFieldAnnotationAtSelection({
 
 Replace text ranges with field annotations
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.replaceWithFieldAnnotation([{
   from: 20,
   to: 45,
@@ -584,6 +960,29 @@ editor.commands.replaceWithFieldAnnotation([{
   }
 }])
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.replaceWithFieldAnnotation([{
+      from: 20,
+      to: 45,
+      attrs: {
+        fieldId: 'field-789',
+        fieldType: 'TEXTINPUT',
+        fieldColor: '#980043'
+      }
+    }])
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -616,10 +1015,27 @@ Replace field annotations with text labels in current selection
 
 <Note>Added in v0.11.0</Note>
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Replace all annotations in selection with their labels
 editor.commands.replaceFieldAnnotationsWithLabelInSelection()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Replace all annotations in selection with their labels
+    editor.commands.replaceFieldAnnotationsWithLabelInSelection()
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -637,18 +1053,55 @@ Replace field annotations with text labels
 
 <Note>Added in v0.11.0</Note>
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Replace specific fields with labels
 editor.commands.replaceFieldAnnotationsWithLabel(['field-1', 'field-2'])
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Replace specific fields with labels
+    editor.commands.replaceFieldAnnotationsWithLabel(['field-1', 'field-2'])
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Replace only text annotations in selection
 editor.commands.replaceFieldAnnotationsWithLabel(null, {
   isInSelection: true,
   types: ['text']
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Replace only text annotations in selection
+    editor.commands.replaceFieldAnnotationsWithLabel(null, {
+      isInSelection: true,
+      types: ['text']
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -679,10 +1132,27 @@ editor.commands.replaceFieldAnnotationsWithLabel(null, {
 
 Reset all field annotations to their default values
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Reset all annotations in document
 editor.commands.resetFieldAnnotations()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Reset all annotations in document
+    editor.commands.resetFieldAnnotations()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `boolean` Command success status
 
@@ -690,7 +1160,8 @@ editor.commands.resetFieldAnnotations()
 
 Update field annotations by field ID
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Update single field
 editor.commands.updateFieldAnnotations('field-123', {
   displayLabel: 'Updated label',
@@ -698,12 +1169,50 @@ editor.commands.updateFieldAnnotations('field-123', {
 })
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Update single field
+    editor.commands.updateFieldAnnotations('field-123', {
+      displayLabel: 'Updated label',
+      fieldColor: '#FF0000'
+    })
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Update multiple fields
 editor.commands.updateFieldAnnotations(['field-1', 'field-2'], {
   hidden: true
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Update multiple fields
+    editor.commands.updateFieldAnnotations(['field-1', 'field-2'], {
+      hidden: true
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -734,13 +1243,33 @@ editor.commands.updateFieldAnnotations(['field-1', 'field-2'], {
 
 Update a specific field annotation instance
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Update specific annotation instance
 const annotation = editor.helpers.fieldAnnotation.findFirstFieldAnnotationByFieldId('field-123', state);
 editor.commands.updateFieldAnnotation(annotation, {
   displayLabel: 'New label'
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Update specific annotation instance
+    const annotation = editor.helpers.fieldAnnotation.findFirstFieldAnnotationByFieldId('field-123', editor.state);
+    editor.commands.updateFieldAnnotation(annotation, {
+      displayLabel: 'New label'
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -760,13 +1289,33 @@ editor.commands.updateFieldAnnotation(annotation, {
 
 Update the attributes of annotations
 
-```javascript
+<CodeGroup>
+```javascript Usage
 const annotations = editor.helpers.fieldAnnotation.getAllFieldAnnotations();
 editor.commands.updateFieldAnnotationsAttributes(annotations, {
   fieldColor: '#FF0000',
   hidden: false
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const annotations = editor.helpers.fieldAnnotation.getAllFieldAnnotations();
+    editor.commands.updateFieldAnnotationsAttributes(annotations, {
+      fieldColor: '#FF0000',
+      hidden: false
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -786,7 +1335,8 @@ editor.commands.updateFieldAnnotationsAttributes(annotations, {
 
 Hide field annotations based on a condition
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Hide specific field IDs
 editor.commands.setFieldAnnotationsHiddenByCondition(node => {
   const targetIds = ['field-1', 'field-2', 'field-3'];
@@ -794,13 +1344,52 @@ editor.commands.setFieldAnnotationsHiddenByCondition(node => {
 })
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Hide specific field IDs
+    editor.commands.setFieldAnnotationsHiddenByCondition(node => {
+      const targetIds = ['field-1', 'field-2', 'field-3'];
+      return targetIds.includes(node.attrs.fieldId);
+    })
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Hide signature fields and show others
 editor.commands.setFieldAnnotationsHiddenByCondition(
   node => node.attrs.type === 'signature',
   true
 )
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Hide signature fields and show others
+    editor.commands.setFieldAnnotationsHiddenByCondition(
+      node => node.attrs.type === 'signature',
+      true
+    )
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -820,10 +1409,27 @@ editor.commands.setFieldAnnotationsHiddenByCondition(
 
 Show all hidden field annotations
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Make all annotations visible
 editor.commands.unsetFieldAnnotationsHidden()
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Make all annotations visible
+    editor.commands.unsetFieldAnnotationsHidden()
+  },
+});
+```
+</CodeGroup>
 
 **Returns:** `boolean` Command success status
 
@@ -831,15 +1437,49 @@ editor.commands.unsetFieldAnnotationsHidden()
 
 Set visibility for all field annotations
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Make all annotations visible
 editor.commands.setFieldAnnotationsVisibility('visible')
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Make all annotations visible
+    editor.commands.setFieldAnnotationsVisibility('visible')
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Hide all annotations (preserves layout)
 editor.commands.setFieldAnnotationsVisibility('hidden')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Hide all annotations (preserves layout)
+    editor.commands.setFieldAnnotationsVisibility('hidden')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -855,7 +1495,8 @@ editor.commands.setFieldAnnotationsVisibility('hidden')
 
 Set highlighted status for annotations matching predicate
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Highlight specific field IDs
 editor.commands.setFieldAnnotationsHighlighted((node) => {
   const targetIds = ['field-1', 'field-2', 'field-3'];
@@ -863,10 +1504,46 @@ editor.commands.setFieldAnnotationsHighlighted((node) => {
 }, true)
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Highlight specific field IDs
+    editor.commands.setFieldAnnotationsHighlighted((node) => {
+      const targetIds = ['field-1', 'field-2', 'field-3'];
+      return targetIds.includes(node.attrs.fieldId);
+    }, true)
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Remove highlighting from all annotations
 editor.commands.setFieldAnnotationsHighlighted(() => true, false)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Remove highlighting from all annotations
+    editor.commands.setFieldAnnotationsHighlighted(() => true, false)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -886,15 +1563,49 @@ editor.commands.setFieldAnnotationsHighlighted(() => true, false)
 
 Toggle formatting for field annotations in selection
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Toggle bold formatting on selected annotations
 editor.commands.toggleFieldAnnotationsFormat('bold');
 ```
 
-```javascript
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Toggle bold formatting on selected annotations
+    editor.commands.toggleFieldAnnotationsFormat('bold');
+  },
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```javascript Usage
 // Toggle italic and update selection
 editor.commands.toggleFieldAnnotationsFormat('italic', true);
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Toggle italic and update selection
+    editor.commands.toggleFieldAnnotationsFormat('italic', true);
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -914,9 +1625,25 @@ editor.commands.toggleFieldAnnotationsFormat('italic', true);
 
 Set font family for field annotations in current selection
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setFieldAnnotationsFontFamily('Arial', true)
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setFieldAnnotationsFontFamily('Arial', true)
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -936,9 +1663,25 @@ editor.commands.setFieldAnnotationsFontFamily('Arial', true)
 
 Set font size for field annotations in current selection
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setFieldAnnotationsFontSize('14pt')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setFieldAnnotationsFontSize('14pt')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -958,9 +1701,25 @@ editor.commands.setFieldAnnotationsFontSize('14pt')
 
 Set text highlight color for field annotations in current selection
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setFieldAnnotationsTextHighlight('#ffff00')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setFieldAnnotationsTextHighlight('#ffff00')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -980,9 +1739,25 @@ editor.commands.setFieldAnnotationsTextHighlight('#ffff00')
 
 Set text color for field annotations in current selection
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setFieldAnnotationsTextColor('#0066cc')
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setFieldAnnotationsTextColor('#0066cc')
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -1020,7 +1795,8 @@ Track field annotation deletions in a transaction and emit events
 
 <Note>Added in v0.11.2</Note>
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // Listen for field deletions
 editor.on('fieldAnnotationDeleted', ({ removedNodes }) => {
   removedNodes.forEach(({ node }) => {
@@ -1030,6 +1806,28 @@ editor.on('fieldAnnotationDeleted', ({ removedNodes }) => {
   });
 });
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Listen for field deletions
+    editor.on('fieldAnnotationDeleted', ({ removedNodes }) => {
+      removedNodes.forEach(({ node }) => {
+        console.log(`Field ${node.attrs.fieldId} was deleted`);
+        // Clean up external references
+        removeFieldFromDatabase(node.attrs.fieldId);
+      });
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 

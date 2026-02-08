@@ -1,0 +1,109 @@
+name: CI Examples
+
+on:
+  pull_request:
+    paths:
+      - 'examples/**'
+  workflow_dispatch:
+
+jobs:
+  getting-started:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [react, vue, vanilla, cdn]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install example dependencies
+        if: matrix.example != 'cdn'
+        working-directory: examples/getting-started/${{ matrix.example }}
+        run: npm install
+
+      - name: Install smoke test dependencies
+        working-directory: examples/__tests__
+        run: npm install && npx playwright install chromium
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=${{ matrix.example }} npx playwright test
+
+  collaboration:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [superdoc-yjs, hocuspocus, liveblocks]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Create .env for cloud providers
+        working-directory: examples/collaboration/${{ matrix.example }}
+        run: |
+          if [ "${{ matrix.example }}" = "liveblocks" ]; then
+            echo "VITE_LIVEBLOCKS_PUBLIC_KEY=${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}" > .env
+          fi
+
+      - name: Install example dependencies
+        working-directory: examples/collaboration/${{ matrix.example }}
+        run: npm install
+
+      - name: Install smoke test dependencies
+        working-directory: examples/__tests__
+        run: npm install && npx playwright install chromium
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=collaboration/${{ matrix.example }} npx playwright test
+
+  features:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [track-changes, ai-redlining, comments, custom-toolbar]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install example dependencies
+        working-directory: examples/features/${{ matrix.example }}
+        run: npm install
+
+      - name: Install smoke test dependencies
+        working-directory: examples/__tests__
+        run: npm install && npx playwright install chromium
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=features/${{ matrix.example }} npx playwright test
+
+  headless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: examples/headless/ai-redlining
+        run: npm install
+
+      - name: Run headless tests
+        working-directory: examples/headless/ai-redlining
+        run: npx tsx src/index.test.ts

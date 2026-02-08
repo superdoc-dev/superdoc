@@ -4,9 +4,9 @@ title: API Reference
 
 Complete eSign component API
 
-## Component Props
+## Component props
 
-### Required Props
+### Required props
 
 <ParamField path="eventId" type="string" required>
   Unique identifier for this signing session
@@ -60,7 +60,7 @@ Complete eSign component API
   ```
 </ParamField>
 
-### Optional Props
+### Optional props
 
 <ParamField path="fields" type="object">
   Field configuration
@@ -285,7 +285,7 @@ interface SuperDocESignHandle {
 }
 ```
 
-## Ref Methods
+## Ref methods
 
 Access via ref:
 
@@ -317,9 +317,9 @@ return <SuperDocESign ref={ref} ... />
 - `reset()` - Clear all state and start over
 - `updateFieldInDocument()` - Update a document field by id
 
-## Field Components
+## Field components
 
-### Default Components
+### Default components
 
 The component provides default implementations for all field types. You can import and extend them:
 
@@ -335,7 +335,7 @@ import { SignatureInput, CheckboxInput } from '@superdoc-dev/esign';
 />
 ```
 
-### Custom Component Props
+### Custom component props
 
 All custom field components receive:
 
@@ -350,7 +350,7 @@ interface FieldComponentProps {
 }
 ```
 
-## CSS Classes
+## CSS classes
 
 Target these classes for styling:
 
@@ -361,7 +361,7 @@ Target these classes for styling:
 - `.superdoc-esign-actions` - Button container
 - `.superdoc-esign-btn` - Default buttons
 
-## Import Types
+## Import types
 
 All types are exported:
 

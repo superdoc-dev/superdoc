@@ -1,40 +1,16 @@
 # Collaboration Examples
 
-Real-time collaboration examples using Yjs for multi-user document editing.
+Real-time collaboration examples using Yjs. Each example maps to a guide in the [docs](https://docs.superdoc.dev/guides).
 
-## Cloud Providers (No Server Required)
+## Cloud Providers
 
-| Provider                   | Description                              |
-| -------------------------- | ---------------------------------------- |
-| [Liveblocks](./liveblocks) | Managed cloud - just add API key         |
-| [TipTap Cloud](./tiptap)   | Managed Hocuspocus (requires TipTap Pro) |
+| Provider                       | Docs                                                               |
+| ------------------------------ | ------------------------------------------------------------------ |
+| [Liveblocks](./liveblocks)     | [Guide](https://docs.superdoc.dev/guides/liveblocks)               |
 
-## Self-Hosted Examples
+## Self-Hosted
 
-| Example                            | Description                                                |
-| ---------------------------------- | ---------------------------------------------------------- |
-| [Hocuspocus](./hocuspocus)         | Self-hosted Hocuspocus server                              |
-| [basic](./basic)                   | Simple collaboration setup with y-websocket                |
-| [superdoc](./superdoc)             | Full SuperDoc collaboration with awareness features        |
-| [from-scratch](./from-scratch)     | Build collaboration from scratch with client and server    |
-| [production](./production)         | Production-ready setup with persistence and authentication |
-| [fastify-server](./fastify-server) | Fastify-based collaboration server                         |
-| [y-sweet](./y-sweet)               | Y-Sweet collaboration server                               |
-
-## Running an Example
-
-Most collaboration examples require running both a server and client:
-
-```bash
-# Terminal 1 - Server
-cd <example-folder>/server
-npm install
-npm run dev
-
-# Terminal 2 - Client
-cd <example-folder>/client
-npm install
-npm run dev
-```
-
-See individual example READMEs for specific instructions.
+| Example                            | Docs                                                               |
+| ---------------------------------- | ------------------------------------------------------------------ |
+| [SuperDoc Yjs](./superdoc-yjs)     | [Guide](https://docs.superdoc.dev/guides/superdoc-yjs)             |
+| [Hocuspocus](./hocuspocus)         | [Guide](https://docs.superdoc.dev/guides/hocuspocus)               |

@@ -10,8 +10,8 @@
     "@liveblocks/yjs": "^3.11.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "superdoc": "link:../../../../packages/superdoc",
-    "yjs": "13.6.27"
+    "superdoc": "latest",
+    "yjs": "13.6.19"
   },
   "devDependencies": {
     "@types/react": "^19.2.7",

@@ -27,4 +27,3 @@ export const attrConfig = Object.freeze({
   encode,
   decode,
 });
-

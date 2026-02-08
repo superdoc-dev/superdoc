@@ -180,6 +180,8 @@ const blob = await editor.exportDocument({ isFinalDoc: true });
 
 Lower-level export with additional control.
 
+**Returns:** `Promise<Blob>` in the browser, `Promise<Buffer>` in headless/Node.js mode.
+
 <ParamField path="options" type="Object">
   <Expandable title="properties">
     <ParamField path="isFinalDoc" type="boolean" default="false">

@@ -5,4 +5,3 @@ import { translator } from '../../v3/handlers/w/footnoteReference/footnoteRefere
  * @type {import("./docxImporter").NodeHandlerEntry}
  */
 export const footnoteReferenceHandlerEntity = generateV2HandlerEntity('footnoteReferenceHandler', translator);
-

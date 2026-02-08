@@ -100,7 +100,7 @@ type ExplicitCallbackProps =
  * Explicitly typed callback props to ensure proper TypeScript inference.
  * These override any loosely-typed callbacks from SuperDocConfig.
  */
-interface CallbackProps {
+export interface CallbackProps {
   /** Callback when SuperDoc is ready */
   onReady?: (event: SuperDocReadyEvent) => void;
 

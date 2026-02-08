@@ -1,16 +1,27 @@
 /** @module utils */
 
+import * as React from 'react';
+
 /**
- * Generate a unique ID for SuperDoc container elements.
- *
- * Uses a combination of timestamp and random string to ensure uniqueness
- * across multiple instances without relying on a global counter.
- *
- * Note: This function only runs on the client after hydration since
- * IDs are generated in a ref initializer (not during SSR render).
- *
- * @returns A unique identifier string
+ * Polyfill for React.useId() for React versions < 18.
+ * Uses useRef to generate a stable random ID once per component instance.
  */
-export function generateId(): string {
-  return `superdoc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+function useIdPolyfill(): string {
+  const ref = React.useRef<string | null>(null);
+  if (ref.current === null) {
+    ref.current = `-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+  return ref.current;
 }
+
+/**
+ * Hook that returns a stable unique ID for the component instance.
+ * Uses React.useId() when available (React 18+), falls back to
+ * useRef-based polyfill for React 16.8+/17.
+ *
+ * The returned value is used as: `superdoc${useStableId()}`
+ * - React 18+: useId() returns ":r0:" → "superdoc:r0:"
+ * - Polyfill: returns "-1707345123456-abc1d2e" → "superdoc-1707345123456-abc1d2e"
+ */
+export const useStableId: () => string =
+  typeof (React as any).useId === 'function' ? (React as any).useId : useIdPolyfill;

@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
-import { generateId } from './utils';
+import { useStableId } from './utils';
 import type {
+  CallbackProps,
   DocumentMode,
   SuperDocEditorProps,
   SuperDocInstance,
@@ -11,16 +12,6 @@ import type {
   SuperDocContentErrorEvent,
   SuperDocExceptionEvent,
 } from './types';
-
-/** Callback props type for the ref */
-type CallbacksType = {
-  onReady?: (event: SuperDocReadyEvent) => void;
-  onEditorCreate?: (event: SuperDocEditorCreateEvent) => void;
-  onEditorDestroy?: () => void;
-  onEditorUpdate?: (event: SuperDocEditorUpdateEvent) => void;
-  onContentError?: (event: SuperDocContentErrorEvent) => void;
-  onException?: (event: SuperDocExceptionEvent) => void;
-};
 
 /**
  * SuperDocEditor - React wrapper component for SuperDoc
@@ -72,9 +63,10 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const toolbarContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Generate stable IDs once per component instance (use provided id if available)
+  const generatedId = useStableId();
   const idsRef = useRef<{ containerId: string; toolbarId: string } | null>(null);
   if (idsRef.current === null) {
-    const baseId = id ?? generateId();
+    const baseId = id ?? `superdoc${generatedId}`;
     idsRef.current = { containerId: baseId, toolbarId: `${baseId}-toolbar` };
   }
   const { containerId, toolbarId } = idsRef.current;
@@ -82,7 +74,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const [isLoading, setIsLoading] = useState(true);
 
   // Store callbacks in refs to avoid triggering effect on callback changes
-  const callbacksRef = useRef<CallbacksType>({
+  const callbacksRef = useRef<CallbackProps>({
     onReady,
     onEditorCreate,
     onEditorDestroy,

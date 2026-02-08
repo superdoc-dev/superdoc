@@ -135,6 +135,8 @@ export default [
           ignore: [
             '^@.*$',
             '^bun:.*$', // Bun built-in modules
+            '^superdoc$',
+            '^superdoc/style\\.css$',
           ],
         }
       ]

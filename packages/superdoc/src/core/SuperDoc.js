@@ -42,6 +42,9 @@ export class SuperDoc extends EventEmitter {
   /** @type {boolean} */
   #destroyed = false;
 
+  /** @type {HTMLDivElement | null} */
+  #mountWrapper = null;
+
   /** @type {string} */
   version;
 
@@ -247,7 +250,20 @@ export class SuperDoc extends EventEmitter {
       throw new Error('SuperDoc: selector is required');
     }
 
-    this.app.mount(this.config.selector);
+    // Mount Vue into a child wrapper element instead of directly on the user's
+    // container. This prevents conflicts with host frameworks (React, Angular)
+    // that manage the container's DOM. See SD-1832.
+    const container =
+      typeof this.config.selector === 'string' ? document.querySelector(this.config.selector) : this.config.selector;
+
+    if (!container) {
+      throw new Error('SuperDoc: selector element not found');
+    }
+
+    this.#mountWrapper = document.createElement('div');
+    this.#mountWrapper.style.display = 'contents';
+    container.appendChild(this.#mountWrapper);
+    this.app.mount(this.#mountWrapper);
 
     // Required editors
     this.readyEditors = 0;
@@ -1125,6 +1141,12 @@ export class SuperDoc extends EventEmitter {
     this.removeAllListeners();
     delete this.app.config.globalProperties.$config;
     delete this.app.config.globalProperties.$superdoc;
+
+    // Remove the internal wrapper element from the user's container
+    if (this.#mountWrapper) {
+      this.#mountWrapper.remove();
+      this.#mountWrapper = null;
+    }
   }
 
   /**

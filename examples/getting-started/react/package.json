@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@superdoc-dev/react": "latest",
+    "@superdoc-dev/react": "^1.0.0-rc.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

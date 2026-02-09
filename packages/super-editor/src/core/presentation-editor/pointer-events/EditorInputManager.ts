@@ -831,12 +831,12 @@ export class EditorInputManager {
     const { x, y } = normalizedPoint;
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
-    // Disallow cursor placement in footnote lines: check the clicked DOM element (painter sets data-block-id on fragments)
+    // Disallow cursor placement in footnote lines: keep current selection and only focus editor.
     const fragmentEl = target?.closest?.('[data-block-id]') as HTMLElement | null;
     const clickedBlockId = fragmentEl?.getAttribute?.('data-block-id') ?? '';
     if (isFootnoteBlockId(clickedBlockId)) {
       if (!isDraggableAnnotation) event.preventDefault();
-      this.#focusEditorAtFirstPosition();
+      this.#focusEditor();
       return;
     }
 
@@ -895,9 +895,10 @@ export class EditorInputManager {
       return;
     }
 
-    // Disallow cursor placement in footnote lines (footnote content is read-only in the layout)
+    // Disallow cursor placement in footnote lines (footnote content is read-only in the layout).
+    // Keep the current selection unchanged instead of moving caret to document start.
     if (isFootnoteBlockId(rawHit.blockId)) {
-      this.#focusEditorAtFirstPosition();
+      this.#focusEditor();
       return;
     }
 

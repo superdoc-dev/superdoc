@@ -7,14 +7,6 @@ import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { findMarkPosition } from './documentHelpers.js';
 
-const buildInsertionResult = (tempTr, insertedFrom, insertedTo, insertedMark) => ({
-  insertedFrom,
-  insertedTo,
-  insertedMark,
-  trackedInsertedSlice: insertedFrom === insertedTo ? Slice.empty : tempTr.doc.slice(insertedFrom, insertedTo),
-  tempTr,
-});
-
 /**
  * Replace step.
  * @param {import('prosemirror-state').EditorState} options.state Editor state.
@@ -64,18 +56,9 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
 
     const insertedFrom = tempTr.mapping.map(positionTo, -1);
     const insertedTo = tempTr.mapping.map(positionTo, 1);
-    if (insertedFrom === insertedTo) return buildInsertionResult(tempTr, insertedFrom, insertedTo, null);
+    if (insertedFrom === insertedTo) return { tempTr, insertedFrom, insertedTo };
     if (shouldPreferInlineInsertion && !tempTr.doc.resolve(insertedFrom).parent?.isTextblock) return null;
-
-    const insertedMark = markInsertion({
-      tr: tempTr,
-      from: insertedFrom,
-      to: insertedTo,
-      user,
-      date,
-    });
-
-    return buildInsertionResult(tempTr, insertedFrom, insertedTo, insertedMark);
+    return { tempTr, insertedFrom, insertedTo };
   };
 
   const openSlice = Slice.maxOpen(step.slice.content, true);
@@ -93,7 +76,20 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   }
 
   const meta = {};
-  const { insertedFrom, insertedTo, insertedMark, trackedInsertedSlice, tempTr } = insertion;
+  const { insertedFrom, insertedTo, tempTr } = insertion;
+  let insertedMark = null;
+  let trackedInsertedSlice = Slice.empty;
+
+  if (insertedFrom !== insertedTo) {
+    insertedMark = markInsertion({
+      tr: tempTr,
+      from: insertedFrom,
+      to: insertedTo,
+      user,
+      date,
+    });
+    trackedInsertedSlice = tempTr.doc.slice(insertedFrom, insertedTo);
+  }
 
   // Condense insertion down to a single replace step (so this tracked transaction remains a single-step insertion).
   const condensedStep = new ReplaceStep(positionTo, positionTo, trackedInsertedSlice, false);

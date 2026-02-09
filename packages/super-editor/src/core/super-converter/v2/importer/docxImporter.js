@@ -802,6 +802,8 @@ export function filterOutRootInlineNodes(content = []) {
     'commentReference',
     'footnoteReference',
     'structuredContent',
+    'permStart',
+    'permEnd',
   ]);
 
   const PRESERVABLE_INLINE_XML_NAMES = {
@@ -823,6 +825,14 @@ export function filterOutRootInlineNodes(content = []) {
         content: [node],
         attrs: {},
         marks: [],
+      });
+      return;
+    }
+
+    if (type === 'permStart' || type === 'permEnd') {
+      result.push({
+        ...node,
+        type: type === 'permStart' ? 'permStartBlock' : 'permEndBlock',
       });
       return;
     }

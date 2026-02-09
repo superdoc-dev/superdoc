@@ -81,4 +81,5 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+        working-directory: packages/superdoc
         run: pnpx semantic-release

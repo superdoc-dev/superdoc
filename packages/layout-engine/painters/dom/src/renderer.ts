@@ -3951,7 +3951,8 @@ export class DomPainter {
       img.style.marginRight = `${run.distRight}px`;
     }
 
-    // Apply z-index to render above tab leaders
+    // Position and z-index on the image only (not the line) so resize overlay can stack above.
+    img.style.position = 'relative';
     img.style.zIndex = '1';
 
     // Assert PM positions are present for cursor fallback
@@ -4282,6 +4283,9 @@ export class DomPainter {
       throw new Error('DomPainter: document is not available');
     }
 
+    const lineRange = computeLinePmRange(block, line);
+    let runsForLine = sliceRunsForLine(block, line);
+
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.line);
     applyStyles(el, lineStyles(line.lineHeight));
@@ -4301,16 +4305,12 @@ export class DomPainter {
       el.style.textAlign = 'left';
     }
 
-    const lineRange = computeLinePmRange(block, line);
-
     if (lineRange.pmStart != null) {
       el.dataset.pmStart = String(lineRange.pmStart);
     }
     if (lineRange.pmEnd != null) {
       el.dataset.pmEnd = String(lineRange.pmEnd);
     }
-
-    let runsForLine = sliceRunsForLine(block, line);
     const trackedConfig = this.resolveTrackedChangesConfig(block);
 
     // Preserve PM positions for DOM caret mapping on empty lines.
@@ -5014,6 +5014,11 @@ export class DomPainter {
     el.style.width = `${fragment.width}px`;
     el.dataset.blockId = fragment.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+
+    // Footnote content is read-only: prevent cursor placement and typing (blockId prefix from FootnotesBuilder)
+    if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
+      el.setAttribute('contenteditable', 'false');
+    }
 
     if (fragment.kind === 'para') {
       // Assert PM positions are present for paragraph fragments

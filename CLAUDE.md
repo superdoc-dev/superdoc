@@ -25,6 +25,7 @@ State flows from super-editor → Layout Engine via:
 ```
 packages/
   superdoc/          Main entry point (npm: superdoc)
+  react/             React wrapper (@superdoc-dev/react)
   super-editor/      ProseMirror editor (@superdoc/super-editor)
   layout-engine/     Layout & pagination pipeline
     contracts/       - Shared type definitions
@@ -43,11 +44,12 @@ e2e-tests/           Playwright tests
 
 | Task | Location |
 |------|----------|
+| React integration | `packages/react/src/SuperDocEditor.tsx` |
 | Editing features | `super-editor/src/extensions/` |
 | Presentation mode visuals | `layout-engine/painters/dom/src/renderer.ts` |
 | DOCX import/export | `super-editor/src/core/super-converter/` |
 | Style resolution | `layout-engine/style-engine/` |
-| Main entry point | `superdoc/src/SuperDoc.vue` |
+| Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
 
 ## When to Modify Which System
 

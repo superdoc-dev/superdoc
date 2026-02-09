@@ -50,6 +50,11 @@ const SCROLL_DETECTION_TOLERANCE_PX = 1;
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
+/** Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder). */
+function isFootnoteBlockId(blockId: string): boolean {
+  return typeof blockId === 'string' && blockId.startsWith('footnote-');
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -826,6 +831,15 @@ export class EditorInputManager {
     const { x, y } = normalizedPoint;
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
+    // Disallow cursor placement in footnote lines: keep current selection and only focus editor.
+    const fragmentEl = target?.closest?.('[data-block-id]') as HTMLElement | null;
+    const clickedBlockId = fragmentEl?.getAttribute?.('data-block-id') ?? '';
+    if (isFootnoteBlockId(clickedBlockId)) {
+      if (!isDraggableAnnotation) event.preventDefault();
+      this.#focusEditor();
+      return;
+    }
+
     // Check header/footer session state
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
@@ -878,6 +892,13 @@ export class EditorInputManager {
     // Handle click outside text content
     if (!rawHit) {
       this.#focusEditorAtFirstPosition();
+      return;
+    }
+
+    // Disallow cursor placement in footnote lines (footnote content is read-only in the layout).
+    // Keep the current selection unchanged instead of moving caret to document start.
+    if (isFootnoteBlockId(rawHit.blockId)) {
+      this.#focusEditor();
       return;
     }
 
@@ -1428,6 +1449,9 @@ export class EditorInputManager {
     );
 
     if (!rawHit) return;
+
+    // Don't extend selection into footnote lines
+    if (isFootnoteBlockId(rawHit.blockId)) return;
 
     const editor = this.#deps.getEditor();
     const doc = editor.state?.doc;

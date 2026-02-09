@@ -24,15 +24,14 @@ const config = {
     'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
-    // NPM plugin MUST come before git plugin - ADD pkgRoot HERE!
+    // NPM plugin MUST come before git plugin
     [
       'semantic-release-pnpm',
       {
         npmPublish: false,
-        pkgRoot: 'packages/superdoc'
       }
     ],
-    './scripts/publish-superdoc.cjs'
+    '../../scripts/publish-superdoc.cjs'
   ],
 }
 
@@ -46,7 +45,7 @@ if (!isPrerelease) {
   config.plugins.push([
     '@semantic-release/changelog',
     {
-      changelogFile: 'packages/superdoc/CHANGELOG.md'  // Also specify where changelog goes
+      changelogFile: 'CHANGELOG.md'
     }
   ])
 
@@ -55,8 +54,8 @@ if (!isPrerelease) {
     '@semantic-release/git',
     {
       assets: [
-        'packages/superdoc/CHANGELOG.md',
-        'packages/superdoc/package.json'  // Update paths to point to actual package
+        'CHANGELOG.md',
+        'package.json'
       ],
       message:
         'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',

@@ -191,6 +191,229 @@ describe('legacy-handle-table-cell-node', () => {
     expect(out.attrs.background).toEqual({ color: '808080' });
   });
 
+  it('applies firstRow conditional shading from referenced styles', () => {
+    const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
+    const row1 = { name: 'w:tr', elements: [cellNode] };
+    const row2 = { name: 'w:tr', elements: [{ name: 'w:tc', elements: [{ name: 'w:p' }] }] };
+    const table = { name: 'w:tbl', elements: [row1, row2] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row: row1,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90, 100],
+      rowIndex: 0,
+      totalRows: 2,
+      totalColumns: 2,
+      _referencedStyles: {
+        firstRow: {
+          tableCellProperties: {
+            shading: { val: 'clear', color: 'auto', fill: '4472C4' },
+          },
+        },
+      },
+    });
+
+    expect(out.attrs.background).toEqual({ color: '4472C4' });
+  });
+
+  it('prefers inline cell shading over conditional style shading', () => {
+    const cellNode = {
+      name: 'w:tc',
+      elements: [
+        {
+          name: 'w:tcPr',
+          elements: [{ name: 'w:shd', attributes: { 'w:fill': 'FF0000' } }],
+        },
+        { name: 'w:p' },
+      ],
+    };
+    const row = { name: 'w:tr', elements: [cellNode] };
+    const table = { name: 'w:tbl', elements: [row] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90],
+      rowIndex: 0,
+      totalRows: 1,
+      totalColumns: 1,
+      _referencedStyles: {
+        firstRow: {
+          tableCellProperties: {
+            shading: { val: 'clear', color: 'auto', fill: '4472C4' },
+          },
+        },
+      },
+    });
+
+    // Inline shading (FF0000) wins over conditional style shading (4472C4)
+    expect(out.attrs.background).toEqual({ color: 'FF0000' });
+  });
+
+  it('applies wholeTable shading as fallback when no positional style matches', () => {
+    const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
+    const row = { name: 'w:tr', elements: [cellNode] };
+    const table = { name: 'w:tbl', elements: [row] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row,
+      rowBorders: {},
+      baseTableBorders: null,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90],
+      rowIndex: 0,
+      totalRows: 1,
+      totalColumns: 1,
+      _referencedStyles: {
+        wholeTable: {
+          tableCellProperties: {
+            shading: { val: 'clear', color: 'auto', fill: 'CCCCCC' },
+          },
+        },
+      },
+    });
+
+    expect(out.attrs.background).toEqual({ color: 'CCCCCC' });
+  });
+
+  it('applies firstRow shading even when cell cnfStyle sets firstRow=false (column-only flag)', () => {
+    // Reproduces the real DOCX scenario: cell (0,0) has cnfStyle with firstRow=0, firstColumn=1
+    // but the row's cnfStyle has firstRow=1. Row-level flags should determine row shading.
+    const cellNode = {
+      name: 'w:tc',
+      elements: [
+        {
+          name: 'w:tcPr',
+          elements: [
+            {
+              name: 'w:cnfStyle',
+              attributes: {
+                'w:val': '001000000000',
+                'w:firstRow': '0',
+                'w:lastRow': '0',
+                'w:firstColumn': '1',
+                'w:lastColumn': '0',
+              },
+            },
+          ],
+        },
+        { name: 'w:p' },
+      ],
+    };
+    const row1 = { name: 'w:tr', elements: [cellNode] };
+    const row2 = { name: 'w:tr', elements: [{ name: 'w:tc', elements: [{ name: 'w:p' }] }] };
+    const table = { name: 'w:tbl', elements: [row1, row2] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row: row1,
+      rowBorders: {},
+      baseTableBorders: null,
+      rowCnfStyle: { firstRow: true },
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90, 100],
+      rowIndex: 0,
+      totalRows: 2,
+      totalColumns: 2,
+      _referencedStyles: {
+        firstRow: {
+          tableCellProperties: {
+            shading: { val: 'clear', color: 'auto', fill: '156082' },
+          },
+        },
+      },
+    });
+
+    // firstRow shading should apply despite cell cnfStyle having firstRow=0
+    expect(out.attrs.background).toEqual({ color: '156082' });
+  });
+
+  it('skips firstRow conditional shading when tableLook disables it', () => {
+    const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
+    const row = { name: 'w:tr', elements: [cellNode] };
+    const table = { name: 'w:tbl', elements: [row] };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => []) },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row,
+      rowBorders: {},
+      baseTableBorders: null,
+      tableLook: { firstRow: false },
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90],
+      rowIndex: 0,
+      totalRows: 1,
+      totalColumns: 1,
+      _referencedStyles: {
+        firstRow: {
+          tableCellProperties: {
+            shading: { val: 'clear', color: 'auto', fill: '4472C4' },
+          },
+        },
+      },
+    });
+
+    // firstRow shading should be skipped; no other shading source available
+    expect(out.attrs.background).toBeUndefined();
+  });
+
   it('applies firstRow/firstCol conditional borders from referenced styles', () => {
     const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
     const row1 = { name: 'w:tr', elements: [cellNode] };

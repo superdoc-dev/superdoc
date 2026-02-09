@@ -811,7 +811,11 @@ const handleSelectionStart = (e) => {
     selectionLayer.value.style.pointerEvents = 'none';
     const pageNumber = getPdfPageNumberFromEvent(e);
     selectionLayer.value.style.pointerEvents = 'auto';
-    if (!pageNumber) return;
+    if (!pageNumber) {
+      isDragging.value = false;
+      selectionLayer.value.style.pointerEvents = 'none';
+      return;
+    }
     const layerBounds = selectionLayer.value.getBoundingClientRect();
     const zoom = activeZoom.value / 100;
     const x = (e.clientX - layerBounds.left) / zoom;

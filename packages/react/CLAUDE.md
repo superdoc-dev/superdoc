@@ -47,9 +47,10 @@ export interface SuperDocEditorProps
 
 ## SSR Behavior
 
-- Returns `renderLoading()` on server if provided, otherwise `null`
-- Initializes SuperDoc only after client-side hydration
-- Container div must exist before SuperDoc mounts
+- Container divs are always rendered (hidden with `display: none` until initialized)
+- No `isClient` state or extra rerender — containers exist from first render
+- SuperDoc initializes in `useEffect` (client-side only) and mounts into the existing containers
+- `renderLoading()` shown alongside hidden containers until initialization completes
 
 ## Ref API
 

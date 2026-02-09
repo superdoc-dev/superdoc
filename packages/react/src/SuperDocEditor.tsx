@@ -1,4 +1,12 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ForwardedRef,
+} from 'react';
 import { useStableId } from './utils';
 import type {
   CallbackProps,
@@ -17,19 +25,12 @@ import type {
  * SuperDocEditor - React wrapper component for SuperDoc
  *
  * Provides a component-based API with proper lifecycle management
- * and React Strict Mode compatibility.
- *
- * NOTE: This is a client-only component. During SSR, it renders the
- * `renderLoading` placeholder if provided, otherwise returns null.
- * For Next.js, use dynamic import with { ssr: false }.
+ * and React Strict Mode compatibility. Container divs are always
+ * rendered (hidden until initialized) so SuperDoc can mount into
+ * them on the first client-side effect.
  */
 function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<SuperDocRef>) {
-  const [isClient, setIsClient] = useState(false);
   const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   // Destructure React-specific props and key rebuild triggers
   const {
@@ -62,14 +63,11 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const instanceRef = useRef<SuperDocInstance | null>(null);
   const toolbarContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Generate stable IDs once per component instance (use provided id if available)
+  // Generate stable IDs (useStableId returns the same value across re-renders)
   const generatedId = useStableId();
-  const idsRef = useRef<{ containerId: string; toolbarId: string } | null>(null);
-  if (idsRef.current === null) {
-    const baseId = id ?? `superdoc${generatedId}`;
-    idsRef.current = { containerId: baseId, toolbarId: `${baseId}-toolbar` };
-  }
-  const { containerId, toolbarId } = idsRef.current;
+  const baseId = id ?? `superdoc${generatedId}`;
+  const containerId = baseId;
+  const toolbarId = `${baseId}-toolbar`;
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -125,9 +123,6 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
 
   // Main effect: create and destroy SuperDoc instance
   useEffect(() => {
-    // Wait for client-side render so the container div exists in DOM
-    if (!isClient) return;
-
     // Reset states when document changes
     setIsLoading(true);
     setHasError(false);
@@ -229,23 +224,17 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // initial values - use getInstance() methods to change them at runtime.
     // Note: restProps is intentionally excluded to avoid rebuilds on every render.
     // documentMode is handled separately via setDocumentMode() for efficiency.
-  }, [isClient, documentProp, user, users, modules, role, hideToolbar, containerId, toolbarId]);
+  }, [documentProp, user, users, modules, role, hideToolbar, containerId, toolbarId]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
-
-  // Client-only: show renderLoading placeholder on server if provided, otherwise null
-  if (!isClient) {
-    return renderLoading ? (
-      <div className={wrapperClassName} style={style}>
-        {renderLoading()}
-      </div>
-    ) : null;
-  }
+  const hideWhenLoading: CSSProperties | undefined = isLoading ? { display: 'none' } : undefined;
 
   return (
     <div className={wrapperClassName} style={style}>
-      {!hideToolbar && <div ref={toolbarContainerRef} id={toolbarId} className='superdoc-toolbar-container' />}
-      <div id={containerId} className='superdoc-editor-container' />
+      {!hideToolbar && (
+        <div ref={toolbarContainerRef} id={toolbarId} className='superdoc-toolbar-container' style={hideWhenLoading} />
+      )}
+      <div id={containerId} className='superdoc-editor-container' style={hideWhenLoading} />
       {isLoading && !hasError && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
       {hasError && <div className='superdoc-error-container'>Failed to load editor. Check console for details.</div>}
     </div>

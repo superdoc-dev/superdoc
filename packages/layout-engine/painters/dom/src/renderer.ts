@@ -1634,18 +1634,15 @@ export class DomPainter {
       pageNumberText: page.numberText,
     };
 
-    // Separate behindDoc fragments from normal fragments.
-    // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
-    // compatibility fallback for older layouts that predate explicit metadata.
+    // Separate behindDoc fragments (zIndex === 0) from normal fragments.
+    // behindDoc fragments need to render behind body content, so they must be
+    // placed directly on the page (not in the header container) with negative z-index.
     const behindDocFragments: typeof data.fragments = [];
     const normalFragments: typeof data.fragments = [];
 
     for (const fragment of data.fragments) {
-      let isBehindDoc = false;
-      if (fragment.kind === 'image' || fragment.kind === 'drawing') {
-        isBehindDoc =
-          fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0);
-      }
+      const isBehindDoc =
+        (fragment.kind === 'image' || fragment.kind === 'drawing') && 'zIndex' in fragment && fragment.zIndex === 0;
       if (isBehindDoc) {
         behindDocFragments.push(fragment);
       } else {
@@ -3951,7 +3948,8 @@ export class DomPainter {
       img.style.marginRight = `${run.distRight}px`;
     }
 
-    // Apply z-index to render above tab leaders
+    // Position and z-index on the image only (not the line) so resize overlay can stack above.
+    img.style.position = 'relative';
     img.style.zIndex = '1';
 
     // Assert PM positions are present for cursor fallback
@@ -4282,6 +4280,9 @@ export class DomPainter {
       throw new Error('DomPainter: document is not available');
     }
 
+    const lineRange = computeLinePmRange(block, line);
+    let runsForLine = sliceRunsForLine(block, line);
+
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.line);
     applyStyles(el, lineStyles(line.lineHeight));
@@ -4301,16 +4302,12 @@ export class DomPainter {
       el.style.textAlign = 'left';
     }
 
-    const lineRange = computeLinePmRange(block, line);
-
     if (lineRange.pmStart != null) {
       el.dataset.pmStart = String(lineRange.pmStart);
     }
     if (lineRange.pmEnd != null) {
       el.dataset.pmEnd = String(lineRange.pmEnd);
     }
-
-    let runsForLine = sliceRunsForLine(block, line);
     const trackedConfig = this.resolveTrackedChangesConfig(block);
 
     // Preserve PM positions for DOM caret mapping on empty lines.

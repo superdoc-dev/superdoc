@@ -62,9 +62,7 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   };
 
   const openSlice = Slice.maxOpen(step.slice.content, true);
-  const insertion = shouldPreferInlineInsertion
-    ? tryInsert(openSlice) || tryInsert(step.slice)
-    : tryInsert(step.slice) || tryInsert(openSlice);
+  const insertion = tryInsert(step.slice) || tryInsert(openSlice);
 
   // If we can't insert the replacement content into the temp transaction, fall back to applying the original step.
   // This keeps user intent (content change) even if we can't represent it as tracked insert+delete.

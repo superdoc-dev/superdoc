@@ -300,6 +300,38 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(insertedText).toContain('Plain Paste');
   });
 
+  it('prefers original paste slice before maxOpen fallback for collapsed insertions', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Base')])),
+    );
+    let state = createState(doc);
+
+    const basePos = findTextPos(state.doc, 'Base');
+    expect(basePos).toBeTypeOf('number');
+    const insertPos = basePos + 'Base'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, insertPos)));
+
+    const originalDiv = document.createElement('div');
+    originalDiv.innerHTML = '<p>Paste One</p><p>Paste Two</p>';
+    const originalSlice = new Slice(PMDOMParser.fromSchema(schema).parse(originalDiv).content, 0, 0);
+
+    const fallbackDiv = document.createElement('div');
+    fallbackDiv.innerHTML = '<p>Flattened Fallback</p>';
+    const fallbackSlice = new Slice(PMDOMParser.fromSchema(schema).parse(fallbackDiv).content, 0, 0);
+    vi.spyOn(Slice, 'maxOpen').mockReturnValue(fallbackSlice);
+
+    let tr = state.tr.replaceSelection(originalSlice);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    const text = finalState.doc.textBetween(0, finalState.doc.content.size, '\n');
+    expect(text).toContain('Paste One');
+    expect(text).toContain('Paste Two');
+    expect(text).not.toContain('Flattened Fallback');
+  });
+
   it('tracks replace even when selection contains existing deletions and links', () => {
     const linkMark = schema.marks.link.create({ href: 'https://example.com' });
     const existingDeletion = schema.marks[TrackDeleteMarkName].create({

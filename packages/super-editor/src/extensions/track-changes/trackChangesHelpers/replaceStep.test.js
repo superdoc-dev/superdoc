@@ -300,6 +300,45 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(insertedText).toContain('Plain Paste');
   });
 
+  it('tracks paste replacement over selected existing text', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Hello World')])),
+    );
+    let state = createState(doc);
+
+    const worldPos = findTextPos(state.doc, 'Hello World');
+    expect(worldPos).toBeTypeOf('number');
+    const from = worldPos + 'Hello '.length;
+    const to = from + 'World'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, from, to)));
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = '<p>Pasted</p>';
+    const parsedDoc = PMDOMParser.fromSchema(schema).parse(tempDiv);
+    const slice = new Slice(parsedDoc.content, 0, 0);
+
+    let tr = state.tr.replaceSelection(slice);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const meta = tracked.getMeta(TrackChangesBasePluginKey);
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    let deletedText = '';
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      if (node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) insertedText += node.text;
+      if (node.marks.some((mark) => mark.type.name === TrackDeleteMarkName)) deletedText += node.text;
+    });
+
+    expect(insertedText).toContain('Pasted');
+    expect(deletedText).toContain('World');
+    expect(meta?.insertedMark).toBeDefined();
+    expect(meta?.deletionMark).toBeDefined();
+    expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
+  });
+
   it('prefers original paste slice before maxOpen fallback for collapsed insertions', () => {
     const doc = schema.nodes.doc.create(
       {},

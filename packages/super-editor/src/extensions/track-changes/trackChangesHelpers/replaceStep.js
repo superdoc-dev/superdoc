@@ -40,11 +40,15 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
     }
   }
 
+  // When pasting into a textblock, try the open slice first so content merges inline
+  // instead of creating new paragraphs (prevents inserting block nodes into non-textblocks).
   const baseParentIsTextblock = trTemp.doc.resolve(positionTo).parent?.isTextblock;
   const shouldPreferInlineInsertion = step.from === step.to && baseParentIsTextblock;
 
   const tryInsert = (slice) => {
     const tempTr = state.apply(newTr).tr;
+    // Empty slices represent pure deletions (no content to insert).
+    // Detecting them ensures deletion tracking runs even if `tempTr` doesn't change.
     const isEmptySlice = slice?.content?.size === 0;
     try {
       tempTr.replaceRange(positionTo, positionTo, slice);

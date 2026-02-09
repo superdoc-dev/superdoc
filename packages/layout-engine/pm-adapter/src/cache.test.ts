@@ -8,10 +8,7 @@ describe('shiftBlockPositions', () => {
       const block: ParagraphBlock = {
         kind: 'paragraph',
         id: 'p1',
-        runs: [
-          { text: 'hello', pmStart: 10, pmEnd: 15 } as Run,
-          { text: 'world', pmStart: 15, pmEnd: 20 } as Run,
-        ],
+        runs: [{ text: 'hello', pmStart: 10, pmEnd: 15 } as Run, { text: 'world', pmStart: 15, pmEnd: 20 } as Run],
       };
 
       const shifted = shiftBlockPositions(block, 5) as ParagraphBlock;

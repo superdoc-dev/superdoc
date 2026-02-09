@@ -258,14 +258,17 @@ export const BlockNode = Extension.create({
 
           if (!hasInitialized) {
             // Initial pass: assign IDs to all block nodes in document
+            const seenIds = new Set();
             newState.doc.descendants((node, pos) => {
               if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
               const nextAttrs = { ...node.attrs };
               let nodeChanged = false;
-              if (nodeAllowsSdBlockIdAttr(node) && nodeNeedsSdBlockId(node)) {
+              const currentId = node.attrs?.sdBlockId;
+              if (nodeAllowsSdBlockIdAttr(node) && (nodeNeedsSdBlockId(node) || seenIds.has(currentId))) {
                 nextAttrs.sdBlockId = uuidv4();
                 nodeChanged = true;
               }
+              if (currentId) seenIds.add(currentId);
               if (nodeAllowsSdBlockRevAttr(node)) {
                 const rev = ensureBlockRev(node);
                 if (nextAttrs.sdBlockRev !== rev) {
@@ -331,6 +334,9 @@ export const BlockNode = Extension.create({
 
             const docSize = newState.doc.content.size;
             const mergedRanges = mergeRanges(rangesToCheck, docSize);
+            // Track seen sdBlockIds across all ranges to detect duplicates
+            // (e.g., when tr.split() copies the original paragraph's sdBlockId to the new one).
+            const seenBlockIds = new Set();
 
             for (const { from, to } of mergedRanges) {
               const clampedRange = clampRange(from, to, docSize);
@@ -347,10 +353,12 @@ export const BlockNode = Extension.create({
                   if (updatedPositions.has(pos)) return;
                   const nextAttrs = { ...node.attrs };
                   let nodeChanged = false;
-                  if (nodeAllowsSdBlockIdAttr(node) && nodeNeedsSdBlockId(node)) {
+                  const currentId = node.attrs?.sdBlockId;
+                  if (nodeAllowsSdBlockIdAttr(node) && (nodeNeedsSdBlockId(node) || seenBlockIds.has(currentId))) {
                     nextAttrs.sdBlockId = uuidv4();
                     nodeChanged = true;
                   }
+                  if (currentId) seenBlockIds.add(currentId);
                   if (nodeAllowsSdBlockRevAttr(node)) {
                     nextAttrs.sdBlockRev = getNextBlockRev(node);
                     nodeChanged = true;
@@ -369,14 +377,17 @@ export const BlockNode = Extension.create({
             }
 
             if (shouldFallbackToFullTraversal) {
+              const fallbackSeenIds = new Set();
               newState.doc.descendants((node, pos) => {
                 if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
                 const nextAttrs = { ...node.attrs };
                 let nodeChanged = false;
-                if (nodeAllowsSdBlockIdAttr(node) && nodeNeedsSdBlockId(node)) {
+                const currentId = node.attrs?.sdBlockId;
+                if (nodeAllowsSdBlockIdAttr(node) && (nodeNeedsSdBlockId(node) || fallbackSeenIds.has(currentId))) {
                   nextAttrs.sdBlockId = uuidv4();
                   nodeChanged = true;
                 }
+                if (currentId) fallbackSeenIds.add(currentId);
                 if (nodeAllowsSdBlockRevAttr(node)) {
                   nextAttrs.sdBlockRev = getNextBlockRev(node);
                   nodeChanged = true;

@@ -65,6 +65,7 @@ export const useWhiteboard = ({ proxy, layers, documents, modules }) => {
 
   const handleWhiteboardEnabled = (enabled) => {
     whiteboardEnabled.value = enabled;
+    proxy?.$superdoc?.emit('whiteboard:enabled', enabled);
   };
 
   const handleWhiteboardOpacity = (opacity) => {

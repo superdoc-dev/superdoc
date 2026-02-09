@@ -48,7 +48,7 @@
     "eslint": "catalog:",
     "eslint-config-prettier": "^9.1.2",
     "nodemon": "catalog:",
-    "prettier": "^3.5.3",
+    "prettier": "^3.8.1",
     "tsup": "^8.5.0",
     "typescript": "catalog:",
     "vitest": "catalog:"

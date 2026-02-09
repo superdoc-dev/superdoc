@@ -46,7 +46,7 @@ That's it! You now have a fully functional DOCX editor in your React app.
 - **Mounting** - Creates a SuperDoc instance when the component mounts
 - **Updates** - Rebuilds automatically when the `document` prop changes
 - **Cleanup** - Properly destroys the instance on unmount
-- **Client-Only** - Returns null on server, renders only after hydration
+- **SSR-Safe** - Renders container structure on server, initializes SuperDoc after hydration
 
 ### Document Modes
 

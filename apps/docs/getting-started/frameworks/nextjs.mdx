@@ -53,7 +53,7 @@ export default function EditorPage() {
 ```
 
 <Tip>
-The React wrapper is client-only (returns null on server, renders after hydration). For custom loading UI during SSR, use Next.js dynamic imports with a `loading` component.
+The React wrapper is SSR-safe — it renders container divs on the server (hidden until initialized) and starts SuperDoc after hydration. Use `renderLoading` for custom loading UI, or Next.js dynamic imports if you prefer to skip SSR entirely.
 </Tip>
 
 ---

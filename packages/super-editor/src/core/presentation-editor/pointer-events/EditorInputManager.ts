@@ -831,6 +831,15 @@ export class EditorInputManager {
     const { x, y } = normalizedPoint;
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
+    // Disallow cursor placement in footnote lines: check the clicked DOM element (painter sets data-block-id on fragments)
+    const fragmentEl = target?.closest?.('[data-block-id]') as HTMLElement | null;
+    const clickedBlockId = fragmentEl?.getAttribute?.('data-block-id') ?? '';
+    if (isFootnoteBlockId(clickedBlockId)) {
+      if (!isDraggableAnnotation) event.preventDefault();
+      this.#focusEditorAtFirstPosition();
+      return;
+    }
+
     // Check header/footer session state
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {

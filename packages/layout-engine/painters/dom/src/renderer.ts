@@ -5015,6 +5015,11 @@ export class DomPainter {
     el.dataset.blockId = fragment.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
 
+    // Footnote content is read-only: prevent cursor placement and typing (blockId prefix from FootnotesBuilder)
+    if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
+      el.setAttribute('contenteditable', 'false');
+    }
+
     if (fragment.kind === 'para') {
       // Assert PM positions are present for paragraph fragments
       // Only validate for body sections - header/footer fragments have their own PM coordinate space

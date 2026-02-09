@@ -50,6 +50,11 @@ const SCROLL_DETECTION_TOLERANCE_PX = 1;
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
+/** Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder). */
+function isFootnoteBlockId(blockId: string): boolean {
+  return typeof blockId === 'string' && blockId.startsWith('footnote-');
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -881,6 +886,12 @@ export class EditorInputManager {
       return;
     }
 
+    // Disallow cursor placement in footnote lines (footnote content is read-only in the layout)
+    if (isFootnoteBlockId(rawHit.blockId)) {
+      this.#focusEditorAtFirstPosition();
+      return;
+    }
+
     if (!hit || !doc) {
       this.#callbacks.setPendingDocChange?.();
       this.#callbacks.scheduleRerender?.();
@@ -1428,6 +1439,9 @@ export class EditorInputManager {
     );
 
     if (!rawHit) return;
+
+    // Don't extend selection into footnote lines
+    if (isFootnoteBlockId(rawHit.blockId)) return;
 
     const editor = this.#deps.getEditor();
     const doc = editor.state?.doc;

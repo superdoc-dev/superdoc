@@ -1151,6 +1151,8 @@ declare module '../../core/types/NodeAttributesMap.js' {
     // Permissions
     permStart: PermStartAttrs;
     permEnd: PermEndAttrs;
+    permStartBlock: PermStartAttrs;
+    permEndBlock: PermEndAttrs;
 
     // Page elements
     pageReference: PageReferenceAttrs;

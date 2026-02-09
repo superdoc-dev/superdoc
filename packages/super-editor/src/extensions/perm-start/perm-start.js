@@ -11,6 +11,24 @@ import { Node } from '@core/index.js';
  * @sidebarTitle PermStart
  * @snippetPath /snippets/extensions/perm-start.mdx
  */
+const sharedAttributes = () => ({
+  id: {
+    default: null,
+  },
+  edGrp: {
+    default: null,
+  },
+  ed: {
+    default: null,
+  },
+  colFirst: {
+    default: null,
+  },
+  colLast: {
+    default: null,
+  },
+});
+
 export const PermStart = Node.create({
   name: 'permStart',
   group: 'inline',
@@ -21,22 +39,24 @@ export const PermStart = Node.create({
   },
 
   addAttributes() {
-    return {
-      id: {
-        default: null,
-      },
-      edGrp: {
-        default: null,
-      },
-      ed: {
-        default: null,
-      },
-      colFirst: {
-        default: null,
-      },
-      colLast: {
-        default: null,
-      },
-    };
+    return sharedAttributes();
+  },
+});
+
+export const PermStartBlock = Node.create({
+  name: 'permStartBlock',
+  group: 'block',
+  inline: false,
+  atom: true,
+  draggable: false,
+  selectable: false,
+  defining: true,
+
+  renderDOM() {
+    return ['div', { style: 'display: none;' }];
+  },
+
+  addAttributes() {
+    return sharedAttributes();
   },
 });

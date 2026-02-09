@@ -11,6 +11,18 @@ import { Node } from '@core/index.js';
  * @sidebarTitle PermEnd
  * @snippetPath /snippets/extensions/perm-end.mdx
  */
+const sharedAttributes = () => ({
+  id: {
+    default: null,
+  },
+  edGrp: {
+    default: null,
+  },
+  displacedByCustomXml: {
+    default: null,
+  },
+});
+
 export const PermEnd = Node.create({
   name: 'permEnd',
   group: 'inline',
@@ -21,16 +33,24 @@ export const PermEnd = Node.create({
   },
 
   addAttributes() {
-    return {
-      id: {
-        default: null,
-      },
-      edGrp: {
-        default: null,
-      },
-      displacedByCustomXml: {
-        default: null,
-      },
-    };
+    return sharedAttributes();
+  },
+});
+
+export const PermEndBlock = Node.create({
+  name: 'permEndBlock',
+  group: 'block',
+  inline: false,
+  atom: true,
+  draggable: false,
+  selectable: false,
+  defining: true,
+
+  renderDOM() {
+    return ['div', { style: 'display: none;' }];
+  },
+
+  addAttributes() {
+    return sharedAttributes();
   },
 });

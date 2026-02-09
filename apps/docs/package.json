@@ -7,10 +7,16 @@
     "gen:api": "node scripts/sync-api-docs.js",
     "gen:docs": "node scripts/sync-sdk-docs.js",
     "gen:all": "pnpm run gen:api && pnpm run gen:docs",
-    "check:links": "mintlify broken-links"
+    "check:links": "mintlify broken-links",
+    "check:imports": "bun scripts/validate-code-imports.ts",
+    "test:examples": "bun test __tests__/doctest.test.ts"
   },
   "devDependencies": {
     "documentation": "^14.0.3",
-    "mintlify": "^4.2.295"
+    "mintlify": "^4.2.331",
+    "remark-mdx": "^3.1.1",
+    "remark-parse": "^11.0.0",
+    "unified": "catalog:",
+    "unist-util-visit": "^5.1.0"
   }
 }

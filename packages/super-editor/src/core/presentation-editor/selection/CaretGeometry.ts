@@ -19,6 +19,7 @@ import type {
   TableMeasure,
 } from '@superdoc/contracts';
 import { computeTableCaretLayoutRectFromDom } from '../tables/TableCaretDomGeometry.js';
+import { getPageElementByIndex } from '../dom/PageDom.js';
 
 /**
  * Represents the geometric layout information for a caret position.
@@ -207,7 +208,7 @@ export function computeCaretLayoutRectGeometry(
   };
 
   // DOM fallback for accurate caret positioning
-  const pageEl = painterHost?.querySelector(`.superdoc-page[data-page-index="${hit.pageIndex}"]`) as HTMLElement | null;
+  const pageEl = getPageElementByIndex(painterHost ?? null, hit.pageIndex);
   const pageRect = pageEl?.getBoundingClientRect();
 
   // Find span containing this pos and measure actual DOM position

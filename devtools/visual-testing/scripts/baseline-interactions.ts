@@ -94,7 +94,9 @@ async function main(): Promise<void> {
     await runCommand(['exec', 'tsx', 'scripts/set-superdoc-version.ts', version]);
   }
 
+  console.log(colors.info('Generating interaction baselines...'));
   await runCommand(['exec', 'tsx', 'scripts/generate-interactions.ts', '--baseline', ...passThrough]);
+  console.log(colors.info('Interaction baseline generation complete.'));
 
   const baselineLabel = generateBaselineFolderName(version);
   const localDir = getBaselineOutputRoot(storage.mode, 'interactions', baselineLabel);

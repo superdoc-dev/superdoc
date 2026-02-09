@@ -46,7 +46,11 @@ const mockEditor = {
   },
 };
 
+let lastConstructorOptions: any = null;
+
 const SuperDocMock = vi.fn((options: any = {}) => {
+  lastConstructorOptions = options;
+
   if (options?.onReady) {
     if (typeof queueMicrotask === 'function') {
       queueMicrotask(() => options.onReady());
@@ -61,6 +65,11 @@ const SuperDocMock = vi.fn((options: any = {}) => {
     on: vi.fn(),
   };
 });
+
+export const getLastConstructorOptions = () => lastConstructorOptions;
+export const resetLastConstructorOptions = () => {
+  lastConstructorOptions = null;
+};
 
 (SuperDocMock as any).mockEditor = mockEditor;
 (SuperDocMock as any).mockUpdateStructuredContentById = mockUpdateStructuredContentById;

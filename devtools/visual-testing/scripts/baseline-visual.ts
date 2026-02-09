@@ -94,7 +94,9 @@ async function main(): Promise<void> {
     await runCommand(['exec', 'tsx', 'scripts/set-superdoc-version.ts', version]);
   }
 
+  console.log(colors.info('Generating visual baselines...'));
   await runCommand(['exec', 'tsx', 'scripts/generate-refs.ts', '--baseline', ...passThrough]);
+  console.log(colors.info('Visual baseline generation complete.'));
 
   const baselineLabel = generateBaselineFolderName(version);
   const localDir = getBaselineRootDir(version, storage.mode);

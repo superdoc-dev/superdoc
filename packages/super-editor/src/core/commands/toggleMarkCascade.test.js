@@ -43,7 +43,7 @@ describe('toggleMarkCascade', () => {
     toggleMarkCascade('bold')({ state, chain: chainFn, editor });
 
     expect(chainFn).toHaveBeenCalledOnce();
-    expect(chainApi.unsetMark).toHaveBeenCalledWith('bold', { extendEmptyMarkRange: true });
+    expect(chainApi.unsetMark).toHaveBeenCalledWith('bold', { extendEmptyMarkRange: false });
     expect(chainApi.setMark).not.toHaveBeenCalled();
     expect(chainApi.run).toHaveBeenCalledOnce();
   });
@@ -55,8 +55,8 @@ describe('toggleMarkCascade', () => {
 
     toggleMarkCascade('bold', { styleDetector: () => true, negationAttrs })({ state, chain: chainFn, editor });
 
-    expect(chainApi.unsetMark).toHaveBeenCalledWith('bold', { extendEmptyMarkRange: true });
-    expect(chainApi.setMark).toHaveBeenCalledWith('bold', negationAttrs, { extendEmptyMarkRange: true });
+    expect(chainApi.unsetMark).toHaveBeenCalledWith('bold', { extendEmptyMarkRange: false });
+    expect(chainApi.setMark).toHaveBeenCalledWith('bold', negationAttrs, { extendEmptyMarkRange: false });
     expect(chainApi.run).toHaveBeenCalledOnce();
   });
 
@@ -66,7 +66,7 @@ describe('toggleMarkCascade', () => {
 
     toggleMarkCascade('bold', { styleDetector: () => false })({ state, chain: chainFn, editor });
 
-    expect(chainApi.unsetMark).toHaveBeenCalledWith('bold', { extendEmptyMarkRange: true });
+    expect(chainApi.unsetMark).toHaveBeenCalledWith('bold', { extendEmptyMarkRange: false });
     expect(chainApi.setMark).not.toHaveBeenCalled();
   });
 
@@ -77,7 +77,7 @@ describe('toggleMarkCascade', () => {
 
     toggleMarkCascade('bold', { styleDetector: () => true, negationAttrs })({ state, chain: chainFn, editor });
 
-    expect(chainApi.setMark).toHaveBeenCalledWith('bold', negationAttrs, { extendEmptyMarkRange: true });
+    expect(chainApi.setMark).toHaveBeenCalledWith('bold', negationAttrs, { extendEmptyMarkRange: false });
     expect(chainApi.unsetMark).not.toHaveBeenCalled();
   });
 
@@ -87,7 +87,7 @@ describe('toggleMarkCascade', () => {
 
     toggleMarkCascade('bold', { styleDetector: () => false })({ state, chain: chainFn, editor });
 
-    expect(chainApi.setMark).toHaveBeenCalledWith('bold', {}, { extendEmptyMarkRange: true });
+    expect(chainApi.setMark).toHaveBeenCalledWith('bold', {}, { extendEmptyMarkRange: false });
   });
 
   it('respects extendEmptyMarkRange option', () => {

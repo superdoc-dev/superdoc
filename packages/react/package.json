@@ -1,0 +1,78 @@
+{
+  "name": "@superdoc-dev/react",
+  "version": "0.1.0",
+  "description": "Official React wrapper for the SuperDoc document editor",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js"
+    },
+    "./style.css": {
+      "import": "./style.css",
+      "require": "./style.css"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "prepublishOnly": "pnpm run build"
+  },
+  "keywords": [
+    "superdoc",
+    "react",
+    "document",
+    "editor",
+    "docx",
+    "word"
+  ],
+  "license": "AGPL-3.0",
+  "dependencies": {
+    "superdoc": ">=1.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "react-dom": ">=16.8.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "eslint": "catalog:",
+    "happy-dom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "vitest": "catalog:"
+  },
+  "files": [
+    "dist",
+    "style.css",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/superdoc-dev/superdoc/issues"
+  },
+  "homepage": "https://github.com/superdoc-dev/superdoc/tree/main/packages/react#readme"
+}

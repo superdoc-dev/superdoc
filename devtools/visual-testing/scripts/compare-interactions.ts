@@ -15,9 +15,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { generateResultsFolderName, getSuperdocVersion } from './generate-refs.js';
-import { findPngFiles } from './compare.js';
+import { findPngFiles, matchesFilterWithBrowserPrefix } from './compare.js';
 import { colors } from './terminal.js';
-import { resolveBrowserNames } from './browser-utils.js';
+import { normalizePath } from './utils.js';
+import { BROWSER_NAMES, resolveBaselineFolderForBrowser, resolveBrowserNames } from './browser-utils.js';
 import {
   isPathLikeVersion,
   normalizeVersionLabel,
@@ -37,6 +38,35 @@ import {
 import { ensureLocalTarballInstalled } from './workspace-utils.js';
 
 const BASELINES_DIR = 'baselines-interactions';
+
+function listFilteredPngs(dir: string, filters: string[], matches: string[], excludes: string[]): string[] {
+  return findPngFiles(dir)
+    .map((relativePath) => normalizePath(relativePath))
+    .filter((relativePath) => matchesFilterWithBrowserPrefix(relativePath, undefined, filters, matches, excludes));
+}
+
+function findMissingBaselineDocFilters(options: {
+  baselineFolder: string;
+  resultsFolder: string;
+  filters: string[];
+  matches: string[];
+  excludes: string[];
+}): string[] {
+  const baselineFiles = new Set(
+    listFilteredPngs(options.baselineFolder, options.filters, options.matches, options.excludes),
+  );
+  const resultFiles = listFilteredPngs(options.resultsFolder, options.filters, options.matches, options.excludes);
+  const missingDocs = new Set<string>();
+
+  for (const resultPath of resultFiles) {
+    if (baselineFiles.has(resultPath)) continue;
+    const docKey = path.posix.dirname(resultPath);
+    if (!docKey || docKey === '.') continue;
+    missingDocs.add(docKey);
+  }
+
+  return Array.from(missingDocs);
+}
 
 interface CompareInteractionArgs {
   baselineVersion?: string;
@@ -451,8 +481,9 @@ async function main(): Promise<void> {
     await runGenerate(resultsFolderName, filters, matches, excludes, browserArg, scaleFactor, storageArgs);
   }
 
+  let resultsRoot: string | undefined;
   if (resultsFolderName) {
-    const resultsRoot = path.isAbsolute(resultsFolderName)
+    resultsRoot = path.isAbsolute(resultsFolderName)
       ? path.join(resultsFolderName, 'interactions')
       : path.join('screenshots', resultsFolderName, 'interactions');
     const hasBrowserResults = browsers.some((browser) => fs.existsSync(path.join(resultsRoot, browser)));
@@ -463,6 +494,61 @@ async function main(): Promise<void> {
     if (!hasBrowserResults || pngCount === 0) {
       console.log(colors.warning('No interaction snapshots found. Skipping interaction comparison.'));
       return;
+    }
+  }
+
+  if (mode === 'cloud' && !refreshBaselines && resultsFolderName && resultsRoot) {
+    const baselineVersionDir = path.join(baselineDir, baselineToUse);
+    const resultsHasBrowserDirs = BROWSER_NAMES.some((browser) => fs.existsSync(path.join(resultsRoot, browser)));
+
+    for (const browser of browsers) {
+      if (!resultsHasBrowserDirs && browser !== 'chromium') {
+        continue;
+      }
+      const resultsFolder = resultsHasBrowserDirs ? path.join(resultsRoot, browser) : resultsRoot;
+      if (!fs.existsSync(resultsFolder)) {
+        continue;
+      }
+      const baselineFolder = resolveBaselineFolderForBrowser(baselineVersionDir, browser);
+      if (!fs.existsSync(baselineFolder)) {
+        continue;
+      }
+
+      const missingFilters = findMissingBaselineDocFilters({
+        baselineFolder,
+        resultsFolder,
+        filters,
+        matches,
+        excludes,
+      });
+      if (missingFilters.length === 0) {
+        continue;
+      }
+
+      console.log(
+        colors.muted(
+          `↻ Missing interaction baselines detected in cache. Refreshing ${missingFilters.length} story(s) for ${browser}...`,
+        ),
+      );
+      const refreshed = await refreshBaselineSubset({
+        prefix: BASELINES_DIR,
+        version: baselineToUse,
+        localRoot: baselineDir,
+        filters: missingFilters,
+        excludes,
+        browsers: [browser],
+      });
+      if (refreshed.matched === 0) {
+        console.warn(
+          colors.warning(`No interaction baseline files matched for refresh (${browser}). Keeping current cache.`),
+        );
+      } else {
+        console.log(
+          colors.success(
+            `↻ Refreshed ${refreshed.downloaded} interaction baseline file(s) for ${baselineToUse} (${browser}).`,
+          ),
+        );
+      }
     }
   }
 

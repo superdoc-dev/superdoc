@@ -1,79 +1,36 @@
 <template>
-  <div class="app">
-    <header>
-      <h1>SuperDoc Example</h1>
-      <button @click="fileInput?.click()">Load Document</button>
-      <input 
-        type="file" 
-        ref="fileInput" 
-        accept=".docx,.pdf" 
-        class="hidden"
-        @change="handleFileChange"
-      >
-    </header>
-    
-    <main>
-      <DocumentEditor
-        :initial-data="documentFile"
-        @editor-ready="handleEditorReady"
-      />
-    </main>
+  <div>
+    <div style="padding: 1rem; background: #f5f5f5">
+      <input type="file" accept=".docx" @change="handleFile" />
+    </div>
+    <div ref="container" style="height: calc(100vh - 60px)" />
   </div>
 </template>
 
-<script setup>
-import { ref } from 'vue';
-import DocumentEditor from './components/DocumentEditor.vue';
+<script setup lang="ts">
+import { ref, watch, onMounted } from 'vue';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
-const documentFile = ref(null);
-const fileInput = ref(null);
+const container = ref<HTMLDivElement>();
+const file = ref<File | null>(null);
+let superdoc: SuperDoc | null = null;
 
-const handleFileChange = (event) => {
-  const file = event.target.files?.[0];
-  if (file) {
-    documentFile.value = file;
-  }
+const handleFile = (e: Event) => {
+  const input = e.target as HTMLInputElement;
+  if (input.files?.[0]) file.value = input.files[0];
 };
 
-const handleEditorReady = (editor) => {
-  console.log('SuperDoc editor is ready', editor);
+const initEditor = () => {
+  if (!container.value) return;
+
+  superdoc?.destroy();
+  superdoc = new SuperDoc({
+    selector: container.value,
+    document: file.value,
+  });
 };
+
+onMounted(initEditor);
+watch(file, initEditor);
 </script>
-
-<style>
-.app {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-header {
-  padding: 1rem;
-  background: #f5f5f5;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-header button {
-  padding: 0.5rem 1rem;
-  background: #1355ff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-header button:hover {
-  background: #0044ff;
-}
-
-.hidden {
-  display: none;
-}
-
-main {
-  flex: 1;
-  padding: 1rem;
-}
-</style>

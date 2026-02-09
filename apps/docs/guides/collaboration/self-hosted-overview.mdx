@@ -1,0 +1,165 @@
+---
+title: Self-Hosted Collaboration
+sidebarTitle: Overview
+keywords: "self-hosted collaboration, on-premise, websocket server, yjs server"
+---
+
+Run your own collaboration infrastructure for full control over data, persistence, and scaling.
+
+## Why self-host?
+
+<CardGroup cols={2}>
+  <Card title="Data Control" icon="lock">
+    Keep all data on your infrastructure
+  </Card>
+  <Card title="Custom Persistence" icon="database">
+    Use your own database (PostgreSQL, S3, Redis)
+  </Card>
+  <Card title="On-Premise" icon="building">
+    Deploy behind your firewall
+  </Card>
+  <Card title="No Vendor Lock-in" icon="unlock">
+    Standard Yjs protocol, portable data
+  </Card>
+</CardGroup>
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph infra[Your Infrastructure]
+        A[User A<br/>SuperDoc] <--> WS[WebSocket Server<br/>Yjs Provider]
+        WS <--> B[User B<br/>SuperDoc]
+        WS --> DB[(Persistence<br/>DB, S3, etc.)]
+    end
+```
+
+## Choose your approach
+
+| Option | Best For | Setup Time |
+|--------|----------|------------|
+| [SuperDoc Yjs](/guides/collaboration/superdoc-yjs) | New projects, recommended | 30 mins |
+| [Hocuspocus](/guides/collaboration/hocuspocus) | TipTap ecosystem users | 30 mins |
+
+## Quick comparison
+
+<Tabs>
+  <Tab title="SuperDoc Yjs">
+    **The official collaboration package**
+
+    - Purpose-built for SuperDoc
+    - Builder pattern API
+    - Auto-save with debounce
+    - Memory management
+
+    ```bash
+    npm install @superdoc-dev/superdoc-yjs-collaboration
+    ```
+
+    [Get Started](/guides/collaboration/superdoc-yjs)
+  </Tab>
+
+  <Tab title="Hocuspocus">
+    **TipTap's Yjs server**
+
+    - Mature, battle-tested
+    - Rich extension ecosystem
+    - Good if already using TipTap
+
+    ```bash
+    npm install @hocuspocus/server
+    ```
+
+    [Get Started](/guides/collaboration/hocuspocus)
+  </Tab>
+
+  </Tabs>
+
+## Client connection options
+
+When self-hosting, you have two ways to connect SuperDoc:
+
+### Option 1: URL-based (SuperDoc manages provider)
+
+SuperDoc creates and manages the WebSocket connection:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  modules: {
+    collaboration: {
+      url: 'wss://your-server.com/doc',
+      token: 'auth-token'
+    }
+  }
+});
+```
+
+### Option 2: Provider-agnostic (You manage provider)
+
+You create the Yjs provider yourself:
+
+```javascript
+import { HocuspocusProvider } from '@hocuspocus/provider';
+import * as Y from 'yjs';
+
+const ydoc = new Y.Doc();
+const provider = new HocuspocusProvider({
+  url: 'wss://your-server.com',
+  name: 'document-123',
+  document: ydoc
+});
+
+new SuperDoc({
+  selector: '#editor',
+  modules: {
+    collaboration: { ydoc, provider }
+  }
+});
+```
+
+<Note>
+The provider-agnostic approach gives you more control but requires managing the provider lifecycle yourself.
+</Note>
+
+## Requirements
+
+### Server
+
+- Node.js 18+
+- WebSocket support (native or via library)
+- Persistent storage for documents
+
+### Network
+
+- WSS (WebSocket Secure) in production
+- Proper CORS configuration
+- Load balancer with sticky sessions (if scaling)
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="SuperDoc Yjs"
+    icon="rocket"
+    href="/guides/collaboration/superdoc-yjs"
+  >
+    Recommended - the official package
+  </Card>
+
+  <Card
+    title="Hocuspocus"
+    icon="server"
+    href="/guides/collaboration/hocuspocus"
+  >
+    Alternative using TipTap's server
+  </Card>
+
+  <Card
+    title="Configuration"
+    icon="settings"
+    href="/modules/collaboration/configuration"
+  >
+    All client-side options and events
+  </Card>
+</CardGroup>

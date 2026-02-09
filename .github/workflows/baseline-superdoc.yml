@@ -1,11 +1,8 @@
 # Generates visual + interaction baselines for released SuperDoc versions
-# Triggered automatically after successful releases to npm
+# Triggered manually via workflow_dispatch
 name: 📸 Baseline superdoc
 
 on:
-  workflow_run:
-    workflows: ['📦 Release superdoc']
-    types: [completed]
   workflow_dispatch:
     inputs:
       version:
@@ -18,25 +15,20 @@ permissions:
   actions: write
 
 concurrency:
-  group: baseline-superdoc-${{ github.event.workflow_run.id || github.run_id }}
+  group: baseline-superdoc-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
   generate-baselines:
     name: Generate Baselines
     runs-on: ubuntu-24.04
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
-    env:
-      SUPERDOC_TEST_BROWSER: chromium
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Resolve release version
         id: version
@@ -50,7 +42,7 @@ jobs:
           fi
 
           # Find tags pointing at the release commit
-          HEAD_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          HEAD_SHA="${{ github.sha }}"
           echo "Looking for tags at commit: $HEAD_SHA"
 
           # Get all tags pointing at this commit
@@ -81,13 +73,6 @@ jobs:
             exit 0
           fi
 
-          # For workflow_run, only baseline next channel tags
-          if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [[ "$VERSION_TAG" != *"-next."* ]]; then
-            echo "⚠️ Found non-next tag ($VERSION_TAG); skipping baseline for workflow_run."
-            echo "skip=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
           # Strip leading 'v' to get npm version
           VERSION="${VERSION_TAG#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -105,14 +90,15 @@ jobs:
 
       - name: Setup Node.js
         if: steps.version.outputs.skip != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
+          cache-dependency-path: devtools/visual-testing/pnpm-lock.yaml
 
       - name: Cache apt packages
         if: steps.version.outputs.skip != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/apt-cache
           key: apt-canvas-${{ runner.os }}-v1
@@ -133,6 +119,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.version.outputs.skip != 'true'
+        working-directory: devtools/visual-testing
         run: pnpm install
 
       - name: Get Playwright version
@@ -144,7 +131,7 @@ jobs:
 
       - name: Cache Playwright browsers
         if: steps.version.outputs.skip != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -153,12 +140,12 @@ jobs:
       - name: Install Playwright browsers
         if: steps.version.outputs.skip != 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: devtools/visual-testing
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Install Playwright system deps (cache hit)
         if: steps.version.outputs.skip != 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
         working-directory: devtools/visual-testing
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium firefox webkit
 
       - name: Wait for npm propagation
         if: steps.version.outputs.skip != 'true'
@@ -190,7 +177,7 @@ jobs:
           pnpm superdoc "$VERSION"
 
           # Verify installation
-          INSTALLED=$(pnpm superdoc:version)
+          INSTALLED=$(node -p "require('./packages/harness/node_modules/superdoc/package.json').version")
           echo "Installed version: $INSTALLED"
 
           if [ "$INSTALLED" != "$VERSION" ]; then
@@ -207,7 +194,9 @@ jobs:
           SD_TESTING_R2_BASELINES_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BASELINES_BUCKET_NAME }}
           SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
           SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}
-        run: pnpm baseline
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          pnpm baseline "$VERSION" --ci
 
       - name: Summary
         if: steps.version.outputs.skip != 'true'
@@ -219,12 +208,12 @@ jobs:
           | Property | Value |
           |----------|-------|
           | **Version** | \`$VERSION\` |
-          | **Browser** | Chromium |
-          | **Trigger** | ${{ github.event_name == 'workflow_dispatch' && 'Manual' || 'Release workflow' }} |
+          | **Browsers** | Chromium, Firefox, WebKit |
+          | **Trigger** | Manual |
 
           ### R2 Paths
-          - Visual: \`baselines/v.$VERSION/chromium/\`
-          - Interactions: \`baselines-interactions/v.$VERSION/chromium/\`
+          - Visual: \`baselines/v.$VERSION/<browser>/\`
+          - Interactions: \`baselines-interactions/v.$VERSION/<browser>/\`
           EOF
 
       - name: Summary (skipped)
@@ -239,3 +228,8 @@ jobs:
 
           This is expected behavior and not an error.
           EOF
+
+      - name: Cleanup corpus cache
+        if: always()
+        run: |
+          rm -rf ~/.cache/superdoc-corpus || true

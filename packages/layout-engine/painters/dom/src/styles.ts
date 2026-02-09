@@ -76,6 +76,11 @@ export const fragmentStyles: Partial<CSSStyleDeclaration> = {
   boxSizing: 'border-box',
 };
 
+/**
+ * Line container styles. z-index is intentionally not set on the line so that
+ * the resize overlay (and other UI) can stack above content. Only the image
+ * element itself gets z-index for layering within the line (e.g. above tab leaders).
+ */
 export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => ({
   lineHeight: `${lineHeight}px`,
   height: `${lineHeight}px`,
@@ -87,7 +92,6 @@ export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => 
   // provides defense-in-depth against any remaining sub-pixel rendering
   // differences between measurement and display.
   overflow: 'visible',
-  zIndex: '10',
 });
 
 const PRINT_STYLES = `

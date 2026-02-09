@@ -4,6 +4,7 @@ import { ImagePositionPlugin } from './imageHelpers/imagePositionPlugin.js';
 import { getNormalizedImageAttrs } from './imageHelpers/legacyAttributes.js';
 import { getRotationMargins } from './imageHelpers/rotation.js';
 import { inchesToPixels } from '@converter/helpers.js';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 /**
  * Configuration options for Image
@@ -142,7 +143,13 @@ export const Image = Node.create({
 
       anchorData: {
         default: null,
-        rendered: false,
+        renderDOM: ({ anchorData, originalAttributes }) => {
+          const relativeHeight = originalAttributes?.relativeHeight;
+          if (anchorData && relativeHeight) {
+            const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+            return { style: `position:relative; z-index: ${zIndex}` };
+          }
+        },
       },
 
       isAnchor: { rendered: false },

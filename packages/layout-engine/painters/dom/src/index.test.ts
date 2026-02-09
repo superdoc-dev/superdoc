@@ -2527,7 +2527,7 @@ describe('DomPainter', () => {
       height: 30,
     };
 
-    // behindDoc fragment has zIndex: 0 (set by layout engine)
+    // behindDoc routing should use explicit fragment metadata, not zIndex proxy.
     const behindDocFragment = {
       kind: 'image' as const,
       blockId: 'behind-doc-img',
@@ -2535,7 +2535,8 @@ describe('DomPainter', () => {
       y: 0,
       width: 200,
       height: 100,
-      zIndex: 0, // behindDoc images get zIndex: 0
+      behindDoc: true,
+      zIndex: 5, // deliberately non-zero to prove routing is metadata-driven
       isAnchored: true,
     };
 
@@ -2547,6 +2548,7 @@ describe('DomPainter', () => {
       y: 10,
       width: 50,
       height: 30,
+      behindDoc: false,
     };
 
     const painter = createDomPainter({
@@ -2563,8 +2565,6 @@ describe('DomPainter', () => {
     const headerEl = mount.querySelector('.superdoc-page-header');
     expect(headerEl).toBeTruthy();
 
-    // behindDoc image should NOT be inside header container
-    const behindDocInHeader = headerEl?.querySelector('img[src*="base64"]');
     // Normal image should be inside header container
     const normalInHeader = headerEl?.querySelectorAll('.superdoc-fragment');
 
@@ -2615,7 +2615,8 @@ describe('DomPainter', () => {
       y: 0,
       width: 200,
       height: 100,
-      zIndex: 0,
+      behindDoc: true,
+      zIndex: 5,
       isAnchored: true,
     };
 

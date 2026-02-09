@@ -4,11 +4,11 @@ sidebarTitle: Configuration
 keywords: "collaboration configuration, superdoc events, awareness, user presence"
 ---
 
-All configuration options, events, and hooks for real-time collaboration.
+All configuration options and events for real-time collaboration.
 
-## Collaboration Config
+## Configuration
 
-**You manage the Yjs provider** - works with SuperDoc Yjs, Liveblocks, Hocuspocus, etc.
+**You manage the Yjs provider** — works with SuperDoc Yjs, Liveblocks, Hocuspocus, etc.
 
 ```javascript
 import * as Y from "yjs";
@@ -33,7 +33,7 @@ new SuperDoc({
   Any Yjs-compatible provider
 </ParamField>
 
-## User Configuration
+## User configuration
 
 <ParamField path="user" type="Object" required>
   Current user information for presence/awareness
@@ -49,136 +49,20 @@ user: {
 </ParamField>
 
 <ParamField path="colors" type="string[]">
-  Color palette for user cursors and selections
+  Color palette for user cursors and selections. Users are automatically assigned colors from this palette.
 
 ```javascript
 colors: ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
 ```
 
-Users are automatically assigned colors from this palette.
-
 </ParamField>
 
-## Events
-
-### onReady
-
-Fired when SuperDoc and collaboration are fully initialized.
-
-```javascript
-new SuperDoc({
-  // ...config
-  onReady: ({ superdoc }) => {
-    console.log("Ready!");
-
-    // Access Yjs document
-    const ydoc = superdoc.ydoc;
-
-    // Access active editor
-    const editor = superdoc.activeEditor;
-  },
-});
-```
-
-### onAwarenessUpdate
-
-Fired when users join, leave, or update their presence.
-
-```javascript
-new SuperDoc({
-  // ...config
-  onAwarenessUpdate: ({ states, added, removed, superdoc }) => {
-    // All connected users
-    const users = states.filter((s) => s.user);
-
-    // Users who just joined
-    added.forEach((clientId) => {
-      const user = states.find((s) => s.clientId === clientId);
-      console.log("User joined:", user?.name);
-    });
-
-    // Users who just left
-    removed.forEach((clientId) => {
-      console.log("User left:", clientId);
-    });
-  },
-});
-```
-
-**User state properties:**
-
-| Property    | Type     | Description             |
-| ----------- | -------- | ----------------------- |
-| `clientId`  | `number` | Unique session ID       |
-| `name`      | `string` | User's display name     |
-| `email`     | `string` | User's email            |
-| `color`     | `string` | Assigned cursor color   |
-| `cursor`    | `Object` | Current cursor position |
-| `selection` | `Object` | Current text selection  |
-
-### onEditorCreate
-
-Fired when an editor instance is created.
-
-```javascript
-new SuperDoc({
-  // ...config
-  onEditorCreate: ({ editor }) => {
-    // Check if document is empty
-    const isEmpty = !editor.state.doc.textContent.trim();
-
-    if (isEmpty) {
-      // Load default content
-      await editor.replaceFile(defaultDocument);
-    }
-  }
-});
-```
-
-### onContentError
-
-Fired when document content fails to load.
-
-```javascript
-new SuperDoc({
-  // ...config
-  onContentError: ({ error, documentId }) => {
-    console.error("Failed to load:", documentId, error);
-    showErrorMessage("Document could not be loaded");
-  },
-});
-```
-
-## Provider Events
-
-When using the provider-agnostic API, listen to provider events directly:
-
-```javascript
-// Sync status
-provider.on("sync", (synced) => {
-  if (synced) console.log("Document synced");
-});
-
-// For Hocuspocus/URL-based
-provider.on("status", ({ status }) => {
-  // 'connecting' | 'connected' | 'disconnected'
-  updateConnectionIndicator(status);
-});
-
-provider.on("authenticationFailed", ({ reason }) => {
-  if (reason === "token-expired") {
-    refreshToken();
-  }
-});
-```
-
-## Media Upload
+## Media upload
 
 Handle image uploads in collaborative documents:
 
 ```javascript
 new SuperDoc({
-  // ...config
   handleImageUpload: (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -203,72 +87,81 @@ new SuperDoc({
 });
 ```
 
-## SuperEditor Usage
+## Events
 
-For direct SuperEditor usage (without SuperDoc wrapper):
+### `onCollaborationReady`
+
+Fired when collaboration sync is complete.
 
 ```javascript
-import { Editor } from "superdoc/super-editor";
-
-const editor = new Editor({
-  element: document.querySelector("#editor"),
-  ydoc: ydoc,
-  collaborationProvider: provider,
-  user: { name: "John", email: "john@example.com" },
-});
+onCollaborationReady: ({ editor }) => {
+  console.log("Collaboration ready");
+}
 ```
 
-<Note>
-  SuperEditor is the lower-level editor component. Most users should use
-  SuperDoc, which provides document loading, toolbar, and additional features.
-</Note>
+### `onAwarenessUpdate`
 
-## Complete Example
+Fired when users join, leave, or update their presence.
 
 ```javascript
-import { createClient } from "@liveblocks/client";
-import { LiveblocksYjsProvider } from "@liveblocks/yjs";
-import * as Y from "yjs";
-import { SuperDoc } from "superdoc";
+onAwarenessUpdate: ({ states, added, removed, superdoc }) => {
+  console.log("Active users:", states);
 
-const client = createClient({ publicApiKey: "pk_..." });
-const { room, leave } = client.enterRoom("my-document");
-const ydoc = new Y.Doc();
-const provider = new LiveblocksYjsProvider(room, ydoc);
-
-let superdoc = null;
-
-provider.on("sync", (synced) => {
-  if (!synced) return;
-
-  superdoc = new SuperDoc({
-    selector: "#editor",
-    documentMode: "editing",
-    user: {
-      name: "John Smith",
-      email: "john@example.com",
-    },
-    colors: ["#FF6B6B", "#4ECDC4", "#45B7D1"],
-    modules: {
-      collaboration: { ydoc, provider },
-    },
-    onReady: ({ superdoc }) => {
-      console.log("Collaboration ready");
-    },
-    onAwarenessUpdate: ({ states }) => {
-      const users = states.filter((s) => s.user);
-      renderUserList(users);
-    },
-    onContentError: ({ error }) => {
-      console.error("Content error:", error);
-    },
+  added.forEach((clientId) => {
+    const user = states.find((s) => s.clientId === clientId);
+    console.log("User joined:", user?.name);
   });
+
+  removed.forEach((clientId) => {
+    console.log("User left:", clientId);
+  });
+}
+```
+
+**`states` array item properties:**
+
+| Property   | Type     | Description           |
+| ---------- | -------- | --------------------- |
+| `clientId` | `number` | Unique session ID     |
+| `name`     | `string` | User's display name   |
+| `email`    | `string` | User's email          |
+| `color`    | `string` | Assigned cursor color (hex) |
+
+### `onLocked`
+
+Fired when the document is locked or unlocked.
+
+```javascript
+onLocked: ({ isLocked, lockedBy }) => {
+  if (isLocked) {
+    console.log("Document locked by:", lockedBy?.name);
+  }
+}
+```
+
+| Property   | Type      | Description                    |
+| ---------- | --------- | ------------------------------ |
+| `isLocked` | `boolean` | Whether the document is locked |
+| `lockedBy` | `Object`  | User who locked the document   |
+
+## Provider events
+
+Listen to provider events directly for connection status:
+
+```javascript
+provider.on("sync", (synced) => {
+  if (synced) console.log("Document synced");
 });
 
-// Cleanup
-window.addEventListener("beforeunload", () => {
-  superdoc?.destroy();
-  provider.destroy();
-  leave();
+// For Hocuspocus/URL-based providers
+provider.on("status", ({ status }) => {
+  // 'connecting' | 'connected' | 'disconnected'
+  updateConnectionIndicator(status);
+});
+
+provider.on("authenticationFailed", ({ reason }) => {
+  if (reason === "token-expired") {
+    refreshToken();
+  }
 });
 ```

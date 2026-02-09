@@ -3,7 +3,7 @@
   "info": {
     "title": "SuperDoc API",
     "version": "0.9.0",
-    "description": "## Quick Start\n\n1 - **Register**: https://api.superdoc.dev/v1/auth/register?email=you@email.com\n\n2 - **Verify**: Check email, then https://api.superdoc.dev/v1/auth/verify?email=you@email.com&code=123456\n\n3 - **Convert**\n```bash\ncurl -X POST https://api.superdoc.dev/v1/convert?from=docx \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -F \"file=@document.docx\" \\\n  -o converted.pdf\n```\n\n\nOr use our Playground:\nhttps://api.superdoc.dev/docs/#tag/documents/post/v1/convert\n\nThat's it! Your DOCX is now a PDF.\n\n---\n\n[Status](https://status.superdoc.dev) • [GitHub](https://github.com/Harbour-Enterprises/SuperDoc)",
+    "description": "## Quick Start\n\n1 - **Register**: https://api.superdoc.dev/v1/auth/register?email=you@email.com\n\n2 - **Verify**: Check email, then https://api.superdoc.dev/v1/auth/verify?email=you@email.com&code=123456\n\n3 - **Convert**\n```bash\ncurl -X POST https://api.superdoc.dev/v1/convert?from=docx \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -F \"file=@document.docx\" \\\n  -o converted.pdf\n```\n\n\nOr use our Playground:\nhttps://api.superdoc.dev/docs/#tag/documents/post/v1/convert\n\nThat's it! Your DOCX is now a PDF.\n\n---\n\n[Status](https://status.superdoc.dev) • [GitHub](https://github.com/superdoc-dev/superdoc)",
     "contact": {
       "name": "Support",
       "email": "api@superdoc.dev",

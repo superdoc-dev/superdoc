@@ -15,6 +15,9 @@ export type {
   SuperDocConfig,
   SuperDocInstance,
 
+  // Callback props
+  CallbackProps,
+
   // Callback event types
   Editor,
   SuperDocReadyEvent,

@@ -250,7 +250,6 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   presentationEditor.on('commentPositions', ({ positions }) => {
     const commentsConfig = proxy.$superdoc.config.modules?.comments;
     if (!commentsConfig || commentsConfig === false) return;
-    if (!positions || Object.keys(positions).length === 0) return;
     if (!shouldRenderCommentsInViewing.value) {
       commentsStore.clearEditorCommentPositions?.();
       return;
@@ -550,7 +549,6 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
     commentsStore.clearEditorCommentPositions?.();
     return;
   }
-  if (!allCommentPositions || Object.keys(allCommentPositions).length === 0) return;
 
   const presentation = PresentationEditor.getInstance(doc.id);
   if (!presentation) {
@@ -563,7 +561,6 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   // Note: PresentationEditor's 'commentPositions' event provides fresh positions
   // after every layout, so this is mainly for the initial load before layout completes.
   const mappedPositions = presentation.getCommentBounds(allCommentPositions, layers.value);
-  if (!mappedPositions || Object.keys(mappedPositions).length === 0) return;
   handleEditorLocationsUpdate(mappedPositions, activeThreadId);
 };
 

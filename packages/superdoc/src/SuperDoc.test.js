@@ -638,6 +638,21 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.clearEditorCommentPositions).toHaveBeenCalled();
   });
 
+  it('forwards empty comment position payloads to store-level guard', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCommentLocationsUpdate({
+      allCommentPositions: {},
+      allCommentIds: [],
+    });
+    await nextTick();
+
+    expect(commentsStoreStub.handleEditorLocationsUpdate).toHaveBeenCalledWith({}, []);
+  });
+
   it('clears PDF selections when viewing mode is active to keep tools hidden', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.documentMode = 'viewing';

@@ -1,7 +1,7 @@
 {
   "name": "@superdoc-dev/react",
   "version": "0.1.0",
-  "description": "Official React wrapper for SuperDoc document editor",
+  "description": "Official React wrapper for the SuperDoc document editor",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

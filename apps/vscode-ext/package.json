@@ -84,7 +84,7 @@
   "devDependencies": {
     "@semantic-release/exec": "^6.0.3",
     "@types/node": "catalog:",
-    "@types/vscode": "^1.107.0",
+    "@types/vscode": "^1.109.0",
     "@vscode/vsce": "^2.32.0",
     "esbuild": "^0.19.12",
     "typescript": "catalog:"

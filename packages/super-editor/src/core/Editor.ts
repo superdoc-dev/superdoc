@@ -253,6 +253,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Guard flag to prevent double-tracking document open
    */
   #documentOpenTracked = false;
+  #contextMenuForcedByLayout = false;
 
   options: EditorOptions = {
     element: null,
@@ -1486,14 +1487,30 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set editor options and update state.
    */
   setOptions(options: Partial<EditorOptions> = {}): void {
+    const prevLayout = this.options.viewOptions?.layout;
+    const prevDisableContextMenu = this.options.disableContextMenu;
+    const disableContextMenuProvided = Object.prototype.hasOwnProperty.call(options, 'disableContextMenu');
     const nextOptions = {
       ...this.options,
       ...options,
     };
+    const nextLayout = nextOptions.viewOptions?.layout;
+    const nextDisableContextMenu = disableContextMenuProvided ? options.disableContextMenu : prevDisableContextMenu;
 
-    if (nextOptions.viewOptions?.layout === 'web') {
+    if (nextLayout === 'web') {
       // Web layout mode should not surface the context menu (e.g., on mobile long-press).
       nextOptions.disableContextMenu = true;
+      this.#contextMenuForcedByLayout = nextDisableContextMenu !== true;
+    } else if (prevLayout === 'web') {
+      if (this.#contextMenuForcedByLayout && !disableContextMenuProvided) {
+        nextOptions.disableContextMenu = false;
+      } else {
+        nextOptions.disableContextMenu = nextDisableContextMenu;
+      }
+      this.#contextMenuForcedByLayout = false;
+    } else if (disableContextMenuProvided) {
+      nextOptions.disableContextMenu = nextDisableContextMenu;
+      this.#contextMenuForcedByLayout = false;
     }
 
     this.options = nextOptions;

@@ -94,6 +94,29 @@ describe('Editor Web Layout Mode', () => {
 
       expect(editor.options.disableContextMenu).toBe(false);
     });
+
+    it('resets disableContextMenu when switching from "web" to "print" without explicit override', () => {
+      const editor = createTestEditor({
+        viewOptions: { layout: 'web' },
+      });
+
+      expect(editor.options.disableContextMenu).toBe(true);
+
+      editor.setOptions({ viewOptions: { layout: 'print' } });
+
+      expect(editor.options.disableContextMenu).toBe(false);
+    });
+
+    it('keeps explicit disableContextMenu when switching from "web" to "print"', () => {
+      const editor = createTestEditor({
+        viewOptions: { layout: 'web' },
+        disableContextMenu: true,
+      });
+
+      editor.setOptions({ viewOptions: { layout: 'print' } });
+
+      expect(editor.options.disableContextMenu).toBe(true);
+    });
   });
 
   describe('getMaxContentSize()', () => {

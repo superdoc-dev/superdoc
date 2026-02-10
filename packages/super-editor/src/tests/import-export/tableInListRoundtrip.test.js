@@ -5,10 +5,10 @@ import DocxZipper from '@core/DocxZipper.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor } from '../helpers/helpers.js';
 import { loadUnpackedDocx } from '../helpers/loadUnpackedDocx.js';
+import { findFirstChild } from '@tests/helpers/finders.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const findFirst = (elements = [], name) => elements.find((element) => element.name === name);
 const collectRunsWithBreak = (paragraph) => {
   if (!paragraph?.elements) return [];
   return paragraph.elements.filter(
@@ -36,16 +36,16 @@ describe('table_in_list roundtrip', () => {
     expect(documentXmlEntry).toBeDefined();
 
     const documentJson = parseXmlToJson(documentXmlEntry.content);
-    const documentNode = findFirst(documentJson.elements, 'w:document');
-    const body = findFirst(documentNode?.elements, 'w:body');
+    const documentNode = findFirstChild(documentJson, 'w:document');
+    const body = findFirstChild(documentNode, 'w:body');
     expect(body).toBeDefined();
 
-    const firstParagraph = findFirst(body?.elements, 'w:p');
+    const firstParagraph = findFirstChild(body, 'w:p');
     expect(firstParagraph).toBeDefined();
     const runsWithBreak = collectRunsWithBreak(firstParagraph);
     expect(runsWithBreak.length).toBe(1);
 
-    const firstTable = findFirst(body?.elements, 'w:tbl');
+    const firstTable = findFirstChild(body, 'w:tbl');
     expect(firstTable).toBeDefined();
 
     const tableCellParagraph = findFirstTableCellParagraph(firstTable);

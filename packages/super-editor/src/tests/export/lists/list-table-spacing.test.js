@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getExportedResult } from '@tests/export/export-helpers/index.js';
-
-const findFirst = (elements, name) => elements?.find((element) => element.name === name);
+import { findFirstChild } from '@tests/helpers/finders.js';
 
 const collectRunsWithBreak = (paragraph) => {
   if (!paragraph?.elements) return [];
@@ -21,13 +20,13 @@ describe('list item tables', () => {
   it('does not emit a manual line break before a table in a list item', async () => {
     const exportResult = await getExportedResult('list-with-table-break.docx');
 
-    const body = findFirst(exportResult.elements, 'w:body');
+    const body = findFirstChild(exportResult, 'w:body');
     expect(body).toBeDefined();
 
-    const paragraph = findFirst(body.elements, 'w:p');
+    const paragraph = findFirstChild(body, 'w:p');
     expect(paragraph).toBeDefined();
 
-    const table = findFirst(body.elements, 'w:tbl');
+    const table = findFirstChild(body, 'w:tbl');
     expect(table).toBeDefined();
 
     const runsWithBreak = collectRunsWithBreak(paragraph);

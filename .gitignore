@@ -64,7 +64,7 @@ reports/
 
 # Planning and progress tracking documents
 **/plan/progress.md
-
+wrangler/
 codex.config.json
 perf-baseline-results.json
 .claude

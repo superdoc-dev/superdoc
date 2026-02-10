@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
+    "postinstall": "pnpm exec playwright install",
     "dev": "pnpm --filter @superdoc-testing/harness dev",
     "build": "pnpm --filter @superdoc-testing/harness build",
     "preview": "pnpm --filter @superdoc-testing/harness preview",
@@ -24,6 +25,8 @@
     "get-corpus": "tsx scripts/get-corpus.ts",
     "get-docx": "tsx scripts/get-docx.ts",
     "upload": "tsx scripts/upload-corpus-doc.ts",
+    "r2:upload": "wrangler r2 object put",
+    "r2:sync-registry": "bash scripts/r2-sync-registry.sh",
     "filters": "tsx scripts/list-filters.ts",
     "clear:all": "read -p 'This will delete all baselines, screenshots, and results. Are you sure? (y/N) ' confirm && [ \"$confirm\" = 'y' ] && rm -rf baselines baselines-interactions screenshots results && echo 'Cleared!' || echo 'Aborted.'",
     "test": "vitest",

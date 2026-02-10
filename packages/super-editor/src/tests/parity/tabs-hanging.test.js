@@ -1,19 +1,17 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'node:url';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { computeParagraphReferenceSnapshot } from '@tests/helpers/paragraphReference.js';
-import { zipFolderToBuffer } from '@tests/helpers/zipFolderToBuffer.js';
-import { Editor } from '@core/Editor.js';
 import { computeParagraphAttrs } from '@superdoc/pm-adapter/attributes/paragraph.js';
 import { buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
+import { loadUnpackedDocx } from '../helpers/loadUnpackedDocx.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('tabs and hanging indent parity', () => {
   it('compares tab stop alignments (left/center/right/decimal)', async () => {
-    const buffer = await zipFolderToBuffer(join(__dirname, '../data/tab_stops_basic_test'));
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+    const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(join(__dirname, '../data/tab_stops_basic_test'));
     const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
 
     let paraIndex = -1;
@@ -63,8 +61,7 @@ describe('tabs and hanging indent parity', () => {
   });
 
   it('compares default tab interval between reference and adapter', async () => {
-    const buffer = await zipFolderToBuffer(join(__dirname, '../data/tab_stops_basic_test'));
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+    const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(join(__dirname, '../data/tab_stops_basic_test'));
     const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
 
     let match = null;
@@ -91,8 +88,7 @@ describe('tabs and hanging indent parity', () => {
   });
 
   it('compares hanging indent vs firstLine indent', async () => {
-    const buffer = await zipFolderToBuffer(join(__dirname, '../data/tab_stops_basic_test'));
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+    const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(join(__dirname, '../data/tab_stops_basic_test'));
     const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
 
     // Find paragraph with hanging or firstLine indent
@@ -142,8 +138,7 @@ describe('tabs and hanging indent parity', () => {
   });
 
   it('ensures tab stop position units are consistent (twips)', async () => {
-    const buffer = await zipFolderToBuffer(join(__dirname, '../data/tab_stops_basic_test'));
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+    const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(join(__dirname, '../data/tab_stops_basic_test'));
     const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
 
     let paraIndex = -1;
@@ -175,8 +170,7 @@ describe('tabs and hanging indent parity', () => {
   });
 
   it('compares tab leader styles if present', async () => {
-    const buffer = await zipFolderToBuffer(join(__dirname, '../data/tab_stops_basic_test'));
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+    const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(join(__dirname, '../data/tab_stops_basic_test'));
     const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
 
     let paraIndex = -1;

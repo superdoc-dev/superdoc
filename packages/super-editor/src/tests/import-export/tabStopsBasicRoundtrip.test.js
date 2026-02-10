@@ -1,35 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { dirname, join } from 'path';
-import { promises as fs } from 'fs';
 import { fileURLToPath } from 'node:url';
-import JSZip from 'jszip';
-import { Editor } from '@core/Editor.js';
 import DocxZipper from '@core/DocxZipper.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor } from '../helpers/helpers.js';
+import { loadUnpackedDocx } from '../helpers/loadUnpackedDocx.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const zipFolderToBuffer = async (folderPath) => {
-  const zip = new JSZip();
-
-  const addFolder = async (basePath, targetFolder) => {
-    const entries = await fs.readdir(basePath, { withFileTypes: true });
-    for (const entry of entries) {
-      const absolute = join(basePath, entry.name);
-      if (entry.isDirectory()) {
-        const nested = targetFolder.folder(entry.name);
-        await addFolder(absolute, nested);
-      } else {
-        const content = await fs.readFile(absolute);
-        targetFolder.file(entry.name, content);
-      }
-    }
-  };
-
-  await addFolder(folderPath, zip);
-  return zip.generateAsync({ type: 'nodebuffer' });
-};
 
 const findParagraph = (elements, index) => {
   let count = -1;
@@ -42,8 +19,7 @@ const findParagraph = (elements, index) => {
 
 describe('tab_stops_basic_test roundtrip', () => {
   it('exports custom tab stops as left/right aligned tabs', async () => {
-    const buffer = await zipFolderToBuffer(join(__dirname, '../data/tab_stops_basic_test'));
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+    const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(join(__dirname, '../data/tab_stops_basic_test'));
     const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });

@@ -1,35 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'path';
-import { promises as fs } from 'fs';
-import JSZip from 'jszip';
-import { Editor } from '@core/Editor.js';
 import DocxZipper from '@core/DocxZipper.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor } from '../helpers/helpers.js';
+import { loadUnpackedDocx } from '../helpers/loadUnpackedDocx.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const zipFolderToBuffer = async (folderPath) => {
-  const zip = new JSZip();
-
-  const addFolder = async (basePath, targetFolder) => {
-    const entries = await fs.readdir(basePath, { withFileTypes: true });
-    for (const entry of entries) {
-      const absolute = join(basePath, entry.name);
-      if (entry.isDirectory()) {
-        const nestedFolder = targetFolder.folder(entry.name);
-        await addFolder(absolute, nestedFolder);
-      } else {
-        const content = await fs.readFile(absolute);
-        targetFolder.file(entry.name, content);
-      }
-    }
-  };
-
-  await addFolder(folderPath, zip);
-  return zip.generateAsync({ type: 'nodebuffer' });
-};
 
 const findFirst = (elements = [], name) => elements.find((element) => element.name === name);
 const collectRunsWithBreak = (paragraph) => {
@@ -47,9 +24,7 @@ const findFirstTableCellParagraph = (table) => {
 describe('table_in_list roundtrip', () => {
   it('exports list/table structure with expected spacing and cell indent', async () => {
     const folderPath = join(__dirname, '../data/table_in_list');
-    const buffer = await zipFolderToBuffer(folderPath);
-
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+    const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(folderPath);
     const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });

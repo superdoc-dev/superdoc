@@ -262,6 +262,54 @@ describe('TrackChanges extension commands', () => {
     expect(restoredTextStyle.attrs).toEqual(oldTextStyle.attrs);
   });
 
+  it('rejectTrackedChangesBetween restores full before snapshot across tracked mark types', () => {
+    const beforeTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Times New Roman, serif',
+      fontSize: '11pt',
+      color: '#111111',
+    });
+    const afterTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12pt',
+      color: '#FF0000',
+    });
+    const afterItalic = schema.marks.italic.create();
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-snapshot-reject',
+      before: [
+        { type: 'bold', attrs: {} },
+        { type: 'textStyle', attrs: beforeTextStyle.attrs },
+      ],
+      after: [
+        { type: 'italic', attrs: {} },
+        { type: 'textStyle', attrs: afterTextStyle.attrs },
+      ],
+    });
+    const doc = createDoc('Styled', [afterItalic, afterTextStyle, formatMark]);
+    const rejectState = createState(doc);
+
+    let afterReject;
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state: rejectState,
+      dispatch: (tr) => {
+        afterReject = rejectState.apply(tr);
+      },
+    });
+
+    expect(afterReject).toBeDefined();
+    expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
+    expect(markPresent(afterReject.doc, 'bold')).toBe(true);
+    expect(markPresent(afterReject.doc, 'italic')).toBe(false);
+
+    const textStyle = afterReject.doc.nodeAt(1)?.marks.find((mark) => mark.type.name === 'textStyle');
+    expect(textStyle?.attrs).toEqual(beforeTextStyle.attrs);
+  });
+
   it('acceptTrackedChangeById and rejectTrackedChangeById should NOT link two insertions', () => {
     const prevMark = schema.marks[TrackInsertMarkName].create({ id: 'prev' });
     const targetMark = schema.marks[TrackInsertMarkName].create({ id: 'ins-id' });
@@ -335,6 +383,45 @@ describe('TrackChanges extension commands', () => {
 
       const coloredInlineAfterReject = interactionEditor.view.dom.querySelector('span[style*="color"]');
       expect(coloredInlineAfterReject).toBeNull();
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: rejecting multi-format suggestions reverts all tracked formatting', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Plain text</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+
+      interactionEditor.commands.setFontFamily('Times New Roman, serif');
+      interactionEditor.commands.enableTrackChanges();
+
+      interactionEditor.commands.toggleBold();
+      interactionEditor.commands.setColor('#FF00AA');
+      interactionEditor.commands.toggleUnderline();
+      interactionEditor.commands.setFontFamily('Arial, sans-serif');
+
+      interactionEditor.commands.rejectTrackedChangesBetween(0, interactionEditor.state.doc.content.size);
+
+      const marks = interactionEditor.state.doc.nodeAt(1)?.marks || [];
+      const textStyle = marks.find((mark) => mark.type.name === 'textStyle');
+
+      expect(marks.some((mark) => mark.type.name === TrackFormatMarkName)).toBe(false);
+      expect(marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+      expect(marks.some((mark) => mark.type.name === 'underline')).toBe(false);
+      expect(textStyle?.attrs?.color).not.toBe('#FF00AA');
     } finally {
       interactionEditor.destroy();
     }

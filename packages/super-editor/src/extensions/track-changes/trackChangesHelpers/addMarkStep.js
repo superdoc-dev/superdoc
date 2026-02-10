@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { hasMatchingMark, markSnapshotMatchesStepMark, upsertMarkSnapshotByType } from './markSnapshotHelpers.js';
+import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
 
 /**
  * Add mark step.
@@ -27,7 +28,14 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
       return false;
     }
 
-    const existingChangeMark = node.marks.find((mark) =>
+    const rangeFrom = Math.max(step.from, pos);
+    const rangeTo = Math.min(step.to, pos + node.nodeSize);
+    const liveMarks = getLiveInlineMarksInRange({
+      doc: newTr.doc,
+      from: rangeFrom,
+      to: rangeTo,
+    });
+    const existingChangeMark = liveMarks.find((mark) =>
       [TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
     );
     const wid = existingChangeMark ? existingChangeMark.attrs.id : uuidv4();
@@ -36,8 +44,8 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
     const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle'];
 
     // ![TrackDeleteMarkName].includes(step.mark.type.name)
-    if (allowedMarks.includes(step.mark.type.name) && !hasMatchingMark(node.marks, step.mark)) {
-      const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
+    if (allowedMarks.includes(step.mark.type.name) && !hasMatchingMark(liveMarks, step.mark)) {
+      const formatChangeMark = liveMarks.find((mark) => mark.type.name === TrackFormatMarkName);
 
       let after = [];
       let before = [];
@@ -60,11 +68,12 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
           });
         }
       } else {
-        // before = [];
-        before = node.marks.map((mark) => ({
-          type: mark.type.name,
-          attrs: { ...mark.attrs },
-        }));
+        before = liveMarks
+          .filter((mark) => ![TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name))
+          .map((mark) => ({
+            type: mark.type.name,
+            attrs: { ...mark.attrs },
+          }));
 
         after = [
           {

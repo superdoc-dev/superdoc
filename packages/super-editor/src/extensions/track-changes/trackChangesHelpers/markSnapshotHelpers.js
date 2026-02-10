@@ -1,7 +1,13 @@
 import { objectIncludes } from '@core/utilities/objectIncludes.js';
 
+const normalizeAttrs = (attrs = {}) => {
+  return Object.fromEntries(Object.entries(attrs).filter(([, value]) => value !== null && value !== undefined));
+};
+
 export const attrsExactlyMatch = (left = {}, right = {}) => {
-  return objectIncludes(left, right) && objectIncludes(right, left);
+  const normalizedLeft = normalizeAttrs(left);
+  const normalizedRight = normalizeAttrs(right);
+  return objectIncludes(normalizedLeft, normalizedRight) && objectIncludes(normalizedRight, normalizedLeft);
 };
 
 export const markSnapshotMatchesStepMark = (snapshot, stepMark, exact = true) => {

@@ -41,6 +41,8 @@ describe('markSnapshotHelpers', () => {
     expect(attrsExactlyMatch({ color: '#112233', size: '11pt' }, { size: '11pt', color: '#112233' })).toBe(true);
     expect(attrsExactlyMatch({ color: '#112233' }, { color: '#112233', size: '11pt' })).toBe(false);
     expect(attrsExactlyMatch({}, {})).toBe(true);
+    expect(attrsExactlyMatch({ underline: null }, {})).toBe(true);
+    expect(attrsExactlyMatch({ underline: null, color: '#111111' }, { color: '#111111' })).toBe(true);
   });
 
   it('markSnapshotMatchesStepMark supports exact and type-only modes', () => {

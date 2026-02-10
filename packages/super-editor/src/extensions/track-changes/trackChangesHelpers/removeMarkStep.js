@@ -3,6 +3,7 @@ import { TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { hasMatchingMark, markSnapshotMatchesStepMark, upsertMarkSnapshotByType } from './markSnapshotHelpers.js';
+import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
 
 /**
  * Remove mark step.
@@ -25,12 +26,19 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
       return false;
     }
 
+    const rangeFrom = Math.max(step.from, pos);
+    const rangeTo = Math.min(step.to, pos + node.nodeSize);
+    const liveMarksBeforeRemove = getLiveInlineMarksInRange({
+      doc: newTr.doc,
+      from: rangeFrom,
+      to: rangeTo,
+    });
     newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
 
     const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle'];
 
-    if (allowedMarks.includes(step.mark.type.name) && hasMatchingMark(node.marks, step.mark)) {
-      const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
+    if (allowedMarks.includes(step.mark.type.name) && hasMatchingMark(liveMarksBeforeRemove, step.mark)) {
+      const formatChangeMark = liveMarksBeforeRemove.find((mark) => mark.type.name === TrackFormatMarkName);
 
       let after = [];
       let before = [];

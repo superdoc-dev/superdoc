@@ -6,5 +6,5 @@
     "noImplicitAny": false,
     "strict": false
   },
-  "exclude": ["**/*.test.js", "**/*.test.ts", "**/*.spec.js", "**/*.spec.ts"]
+  "exclude": ["**/*.test.js", "**/*.test.ts", "**/*.spec.js", "**/*.spec.ts", "src/tests/**"]
 }

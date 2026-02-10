@@ -34,8 +34,6 @@ lerna-debug.log*
 .vitepress/.cache
 .vitepress/dist
 
-packages/super-editor/src/tests/data/*/
-
 packages/word-layout/tests/**/*.js
 packages/word-layout/tests/**/*.d.ts
 packages/word-layout/tests/**/*.map

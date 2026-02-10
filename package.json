@@ -66,6 +66,7 @@
     "eslint-plugin-jsdoc": "catalog:",
     "happy-dom": "catalog:",
     "jsdom": "catalog:",
+    "konva": "catalog:",
     "lefthook": "catalog:",
     "prettier": "catalog:",
     "semantic-release": "catalog:",

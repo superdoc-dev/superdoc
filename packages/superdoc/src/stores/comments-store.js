@@ -635,6 +635,9 @@ export const useCommentsStore = defineStore('comments', () => {
   const deleteComment = ({ commentId: commentIdToDelete, superdoc }) => {
     const commentIndex = commentsList.value.findIndex((c) => c.commentId === commentIdToDelete);
     const comment = commentsList.value[commentIndex];
+    if (!comment) {
+      return;
+    }
     const { commentId, importedId } = comment;
     const { fileId } = comment;
 
@@ -821,6 +824,9 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const handleEditorLocationsUpdate = (allCommentPositions) => {
+    if ((!allCommentPositions || Object.keys(allCommentPositions).length === 0) && commentsList.value.length > 0) {
+      return;
+    }
     editorCommentPositions.value = allCommentPositions || {};
   };
 

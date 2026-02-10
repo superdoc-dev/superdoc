@@ -365,7 +365,10 @@ const init = async () => {
         pdfViewer: pdfjsViewer,
         setWorker: true,
         workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
-        textLayerMode: 1,
+        textLayerMode: 0,
+      },
+      whiteboard: {
+        enabled: false,
       },
     },
     onEditorCreate,
@@ -386,6 +389,8 @@ const init = async () => {
   superdoc.value?.on('exception', (error) => {
     console.error('SuperDoc exception:', error);
   });
+
+  window.superdoc = superdoc.value;
 
   // const ydoc = superdoc.value.ydoc;
   // const metaMap = ydoc.getMap('meta');

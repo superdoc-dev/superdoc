@@ -165,6 +165,7 @@ export function exportSchemaToJson(params) {
     table: wTblNodeTranslator,
     tableRow: wTrNodeTranslator,
     tableCell: wTcNodeTranslator,
+    tableHeader: wTcNodeTranslator,
     bookmarkStart: wBookmarkStartTranslator,
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,

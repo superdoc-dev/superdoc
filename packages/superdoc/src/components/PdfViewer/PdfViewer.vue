@@ -8,7 +8,7 @@ import { readFileAsArrayBuffer } from './helpers/read-file.js';
 import useSelection from '@superdoc/helpers/use-selection';
 import './pdf/pdf-viewer.css';
 
-const emit = defineEmits(['page-loaded', 'ready', 'selection-change', 'bypass-selection']);
+const emit = defineEmits(['page-loaded', 'page-ready', 'ready', 'selection-change', 'bypass-selection']);
 
 const props = defineProps({
   documentData: {

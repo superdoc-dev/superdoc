@@ -35,6 +35,25 @@ It does NOT do layout logic - that's in `layout-engine/`.
 | Change style resolution | `style-engine/` |
 | Change text measurement | `measuring-dom/` |
 
+## Style Engine (`style-engine/`)
+
+Single source of truth for OOXML style cascade resolution. All property resolution flows through here.
+
+**Existing cascade functions:**
+- `resolveRunProperties()` / `resolveParagraphProperties()` - Full cascade for run/paragraph properties
+- `resolveTableCellProperties()` - Full cascade for table cell properties (shading, borders, margins)
+- `resolveCellStyles()` - Collects conditional table style properties per cell position
+- `determineCellStyleTypes()` - Computes which conditional styles apply (firstRow, band1Horz, etc.) based on cell position and `tblLook` flags
+
+**Extending the cascade:**
+When adding style resolution for a new property type (e.g., `tableCellProperties`), follow the existing pattern:
+1. Use `determineCellStyleTypes()` to get applicable style types
+2. Collect properties from each matching `tableStyleProperties` entry
+3. Cascade using `combineProperties()` (low → high priority)
+4. Inline properties always win last
+
+See root CLAUDE.md "Style Resolution Boundary" for why this must NOT be done in the importer.
+
 ## Important Patterns
 
 ### Virtualization (`painters/dom/src/renderer.ts`)
@@ -61,10 +80,12 @@ See `blockIdToEntry` in `painters/dom/src/renderer.ts`.
 - `layout-bridge/src/layout-pipeline.ts` - Pipeline orchestration
 - `pm-adapter/src/internal.ts` - PM → FlowBlock conversion
 
-## Cross-References
+## Rendering Ownership
 
-Visual changes in **editing mode** → modify super-editor decorations
-Visual changes in **viewing mode** → modify renderer.ts
-Changes to **both modes** → modify both and bridge via PresentationEditor (`super-editor/src/core/presentation-editor/`)
+**DomPainter owns ALL visual rendering.** ProseMirror is hidden — its DOM is never shown to the user.
 
-See root CLAUDE.md for dual rendering system explanation.
+- Style-resolved properties flow through: `style-engine` → `pm-adapter` (sets attrs on FlowBlocks) → `DomPainter` (renders to DOM)
+- Do NOT add ProseMirror decoration plugins for visual styling — that bypasses the rendering pipeline
+- Editing behavior (commands, keybindings) stays in `super-editor/src/extensions/`
+
+See root CLAUDE.md for full architecture.

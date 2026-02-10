@@ -19,9 +19,18 @@
                   </pic:nvPicPr>
                   <pic:blipFill>
                     <a:blip r:embed="rId1"/>
+                    <a:stretch>
+                      <a:fillRect/>
+                    </a:stretch>
                   </pic:blipFill>
                   <pic:spPr>
-                    <a:xfrm rot="1800000" flipV="1"/>
+                    <a:xfrm rot="1800000" flipV="1">
+                      <a:off x="0" y="0"/>
+                      <a:ext cx="3810000" cy="2857500"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect">
+                      <a:avLst/>
+                    </a:prstGeom>
                   </pic:spPr>
                 </pic:pic>
               </a:graphicData>

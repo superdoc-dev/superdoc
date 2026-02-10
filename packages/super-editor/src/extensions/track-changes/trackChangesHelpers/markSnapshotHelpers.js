@@ -69,5 +69,7 @@ export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
     }
   });
 
-  return exactMatch || (shouldFallbackToTypeOnly ? typeOnlyMatch : null);
+  const liveMark = exactMatch || (shouldFallbackToTypeOnly ? typeOnlyMatch : null);
+  if (!liveMark) console.warn('[track-changes] could not find live mark for snapshot', snapshot);
+  return liveMark;
 };

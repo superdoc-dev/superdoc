@@ -1486,10 +1486,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set editor options and update state.
    */
   setOptions(options: Partial<EditorOptions> = {}): void {
-    this.options = {
+    const nextOptions = {
       ...this.options,
       ...options,
     };
+
+    if (nextOptions.viewOptions?.layout === 'web') {
+      // Web layout mode should not surface the context menu (e.g., on mobile long-press).
+      nextOptions.disableContextMenu = true;
+    }
+
+    this.options = nextOptions;
 
     if ((this.options.isNewFile || !this.options.ydoc) && this.options.isCommentsEnabled) {
       this.options.shouldLoadComments = true;

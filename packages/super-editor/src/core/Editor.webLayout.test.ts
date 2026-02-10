@@ -76,6 +76,26 @@ describe('Editor Web Layout Mode', () => {
     });
   });
 
+  describe('context menu behavior', () => {
+    it('forces disableContextMenu when viewOptions.layout is "web"', () => {
+      const editor = createTestEditor({
+        viewOptions: { layout: 'web' },
+        disableContextMenu: false,
+      });
+
+      expect(editor.options.disableContextMenu).toBe(true);
+    });
+
+    it('respects disableContextMenu when viewOptions.layout is "print"', () => {
+      const editor = createTestEditor({
+        viewOptions: { layout: 'print' },
+        disableContextMenu: false,
+      });
+
+      expect(editor.options.disableContextMenu).toBe(false);
+    });
+  });
+
   describe('getMaxContentSize()', () => {
     describe('web layout mode', () => {
       it('returns empty object to skip image constraints', async () => {

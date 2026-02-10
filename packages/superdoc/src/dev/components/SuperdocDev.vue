@@ -53,6 +53,92 @@ const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
 
+// Template (base document) for style inheritance
+const templateFile = shallowRef(null);
+const templateFileName = ref('');
+const templateDisplayName = computed(() => templateFileName.value || 'No template');
+
+const handleTemplateUpload = async (file) => {
+  if (!file) {
+    templateFile.value = null;
+    templateFileName.value = '';
+    return;
+  }
+
+  // Only accept DOCX files for templates
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (ext !== 'docx') {
+    alert('Template must be a DOCX file');
+    return;
+  }
+
+  templateFile.value = file;
+  templateFileName.value = file.name;
+  console.log('[Template] Loaded template:', file.name);
+};
+
+const clearTemplate = () => {
+  templateFile.value = null;
+  templateFileName.value = '';
+  console.log('[Template] Cleared template');
+};
+
+/**
+ * Load a document with template styles.
+ * Uses template DOCX for styles/headers/footers, content DOCX for body content.
+ */
+const loadWithTemplate = async (template, content) => {
+  // 1. Load content DOCX first to extract its data
+  console.log('[Template] Loading content document...');
+  const contentUrl = URL.createObjectURL(content);
+  currentFile.value = await getFileObject(contentUrl, content.name, DOCX);
+  await init();
+
+  // Wait for content to be ready
+  await new Promise((resolve) => {
+    const check = () => (superdoc.value?.activeEditor ? resolve() : setTimeout(check, 100));
+    check();
+  });
+
+  const editor = superdoc.value.activeEditor;
+
+  // 2. Extract content JSON and numbering definitions
+  const contentJson = editor.getJSON();
+  const contentNumberingXml = editor.converter.convertedXml['word/numbering.xml'];
+  const contentNumbering = editor.converter.numbering;
+  const contentTranslatedNumbering = editor.converter.translatedNumbering;
+  console.log('[Template] Content extracted:', contentJson.content?.length, 'nodes');
+
+  // 3. Destroy and reload with template
+  superdoc.value.destroy();
+  superdoc.value = null;
+  activeEditor.value = null;
+
+  console.log('[Template] Loading template for styles...');
+  const templateUrl = URL.createObjectURL(template);
+  currentFile.value = await getFileObject(templateUrl, template.name, DOCX);
+  await init();
+
+  // Wait for template to be ready
+  await new Promise((resolve) => {
+    const check = () => (superdoc.value?.activeEditor ? resolve() : setTimeout(check, 100));
+    check();
+  });
+
+  const newEditor = superdoc.value.activeEditor;
+
+  // 4. Inject content's numbering and replace body
+  if (contentNumbering) {
+    newEditor.converter.convertedXml['word/numbering.xml'] = contentNumberingXml;
+    newEditor.converter.numbering = contentNumbering;
+    newEditor.converter.translatedNumbering = contentTranslatedNumbering;
+  }
+
+  newEditor.commands.selectAll();
+  newEditor.commands.insertContent(contentJson.content);
+  console.log('[Template] Merge complete!');
+};
+
 // URL loading
 const documentUrl = ref('');
 const isLoadingUrl = ref(false);
@@ -121,8 +207,17 @@ const handleNewFile = async (file) => {
     currentFile.value = await getFileObject(url, file.name, file.type);
   }
 
-  nextTick(() => {
-    init();
+  // Check if we have a template to apply
+  const hasTemplate = templateFile.value && fileExtension === 'docx';
+
+  nextTick(async () => {
+    if (hasTemplate) {
+      // Use template workflow
+      await loadWithTemplate(templateFile.value, file);
+    } else {
+      // Normal load
+      await init();
+    }
   });
 
   sidebarInstanceKey.value += 1;
@@ -655,6 +750,16 @@ if (scrollTestMode.value) {
             <div class="dev-app__header-layout-toggle">
               <div class="dev-app__upload-control">
                 <div class="dev-app__upload-button">
+                  <span class="dev-app__upload-btn dev-app__upload-btn--template">Template</span>
+                  <BasicUpload class="dev-app__upload-input" @file-change="handleTemplateUpload" />
+                </div>
+                <span class="dev-app__upload-filename dev-app__upload-filename--template">
+                  {{ templateDisplayName }}
+                  <button v-if="templateFile" class="dev-app__clear-template" @click="clearTemplate">✕</button>
+                </span>
+              </div>
+              <div class="dev-app__upload-control">
+                <div class="dev-app__upload-button">
                   <span class="dev-app__upload-btn">Upload file</span>
                   <BasicUpload class="dev-app__upload-input" @file-change="handleNewFile" />
                 </div>
@@ -1073,6 +1178,49 @@ if (scrollTestMode.value) {
 .dev-app__upload-hint {
   color: #94a3b8;
   font-size: 12px;
+}
+
+.dev-app__upload-filename {
+  color: #94a3b8;
+  font-size: 12px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dev-app__upload-filename--template {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dev-app__upload-btn--template {
+  background: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.dev-app__upload-btn--template:hover {
+  background: rgba(168, 85, 247, 0.3);
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+.dev-app__clear-template {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.dev-app__clear-template:hover {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.5);
 }
 
 .dev-app__url-control {

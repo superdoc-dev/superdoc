@@ -180,7 +180,7 @@ const init = async () => {
     documentMode: 'editing',
     licenseKey: 'community-and-eval-agplv3',
     telemetry: {
-      enabled: false,
+      enabled: true,
     },
     comments: {
       visible: true,

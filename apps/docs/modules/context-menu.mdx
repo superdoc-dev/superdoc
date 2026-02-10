@@ -7,7 +7,8 @@ A contextual command menu triggered by right-clicking. Shows relevant actions ba
 
 ## Quick start
 
-The context menu is **enabled by default**. Right-click anywhere in the document to open it.
+The context menu is **enabled by default** in print layout. In web layout (`viewOptions.layout = 'web'`), the custom
+context menu is disabled to avoid long-press menus on mobile.
 
 To disable it:
 
@@ -35,6 +36,7 @@ new SuperDoc({
 
 <ParamField path="disableContextMenu" type="boolean" default="false">
   Top-level option to disable the context menu entirely
+  <Note>Web layout (`viewOptions.layout = 'web'`) forces this to `true`.</Note>
 </ParamField>
 
 <ParamField path="modules.slashMenu.includeDefaultItems" type="boolean" default="true">

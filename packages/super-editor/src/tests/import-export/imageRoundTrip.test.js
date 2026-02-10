@@ -1,110 +1,45 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
-import { handleDrawingNode, handleImageImport } from '../../core/super-converter/v2/importer/imageImporter.js';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { handleImageImport } from '@converter/v2/importer/imageImporter.js';
+import DocxZipper from '@core/DocxZipper.js';
 import { exportSchemaToJson } from '@converter/exporter';
 import { emuToPixels, rotToDegrees, pixelsToEmu, degreesToRot } from '@converter/helpers';
-import { createDocumentJson } from '@core/super-converter/v2/importer/docxImporter.js';
-import { getTestDataByFileName } from '@tests/helpers/helpers.js';
+import { docxAsXmlFileList2ParsedDocx } from '@converter/v2/docxHelper.js';
+import { createDocumentJson } from '@converter/v2/importer/docxImporter.js';
+import { getTestDataByFileName, initTestEditor } from '@tests/helpers/helpers.js';
+import { loadUnpackedDocx } from '@tests/helpers/loadUnpackedDocx.js';
+import { findFirstDescendant } from '@tests/helpers/finders.js';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('Image Import/Export Round Trip Tests', () => {
   describe('Transform Data Round Trip', () => {
-    it('preserves rotation data through import/export cycle', () => {
+    it('preserves rotation data through import/export cycle', async () => {
       // Mock OOXML input with rotation
-      const mockXmlInput = {
-        name: 'wp:inline',
-        attributes: {
-          distT: '0',
-          distB: '0',
-          distL: '0',
-          distR: '0',
-        },
-        elements: [
-          {
-            name: 'wp:extent',
-            attributes: { cx: '3810000', cy: '2857500' },
-          },
-          {
-            name: 'wp:effectExtent',
-            attributes: { l: '0', t: '0', r: '0', b: '0' },
-          },
-          {
-            name: 'a:graphic',
-            elements: [
-              {
-                name: 'a:graphicData',
-                attributes: { uri: 'http://schemas.openxmlformats.org/drawingml/2006/picture' },
-                elements: [
-                  {
-                    name: 'pic:pic',
-                    elements: [
-                      {
-                        name: 'pic:blipFill',
-                        elements: [
-                          {
-                            name: 'a:blip',
-                            attributes: { 'r:embed': 'rId1' },
-                          },
-                        ],
-                      },
-                      {
-                        name: 'pic:spPr',
-                        elements: [
-                          {
-                            name: 'a:xfrm',
-                            attributes: {
-                              rot: '1800000', // 30 degrees
-                              flipV: '1',
-                            },
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-          {
-            name: 'wp:docPr',
-            attributes: { id: '1', name: 'Test Image' },
-          },
-        ],
-      };
-
-      const mockDocx = {
-        'word/_rels/document.xml.rels': {
-          elements: [
-            {
-              name: 'Relationships',
-              elements: [
-                {
-                  attributes: {
-                    Id: 'rId1',
-                    Target: 'media/test-image.jpg',
-                  },
-                },
-              ],
-            },
-          ],
-        },
-      };
+      const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(
+        join(__dirname, '../data/imageRoundTrip/drawingDoc'),
+      );
 
       // Import
-      const params = { docx: mockDocx };
-      const importedImage = handleImageImport(mockXmlInput, null, params);
+      const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
+      const images = editor.getNodesOfType('image');
+      expect(images).toHaveLength(1);
+      const importedImage = images[0].node.toJSON();
 
       // Verify import
       expect(importedImage.type).toBe('image');
       expect(importedImage.attrs.transformData.rotation).toBe(rotToDegrees('1800000'));
       expect(importedImage.attrs.transformData.verticalFlip).toBe(true);
 
-      // Create mock export params
-      const mockExportParams = {
-        node: importedImage,
-        relationships: [],
-      };
-
       // Export
-      const exportedResult = exportSchemaToJson(mockExportParams);
+      const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
+      expect(exportedBuffer?.byteLength || exportedBuffer?.length || 0).toBeGreaterThan(0);
+      const exportedZipper = new DocxZipper();
+      const exportedFiles = await exportedZipper.getDocxData(exportedBuffer, true);
+      const exportedJson = docxAsXmlFileList2ParsedDocx(exportedFiles);
+      const exportedDocument = exportedJson['word/document.xml'];
+      const exportedResult = findFirstDescendant(exportedDocument, 'w:r');
 
       // Verify export structure
       expect(exportedResult.name).toBe('w:r');
@@ -126,6 +61,7 @@ describe('Image Import/Export Round Trip Tests', () => {
     });
 
     it('preserves horizontal flip through round trip', () => {
+      // TODO: move sample data into an external file, and test full round-trip as done for the rotation test above
       const mockXmlInput = {
         name: 'wp:inline',
         attributes: { distT: '0', distB: '0', distL: '0', distR: '0' },
@@ -219,6 +155,7 @@ describe('Image Import/Export Round Trip Tests', () => {
     });
 
     it('preserves size extensions through round trip', () => {
+      // TODO: move sample data into an external file, and test full round-trip as done for the rotation test above
       const mockXmlInput = {
         name: 'wp:inline',
         attributes: { distT: '0', distB: '0', distL: '0', distR: '0' },
@@ -316,6 +253,7 @@ describe('Image Import/Export Round Trip Tests', () => {
     });
 
     it('handles combined transformations correctly', () => {
+      // TODO: move sample data into an external file, and test full round-trip as done for the rotation test above
       const mockXmlInput = {
         name: 'wp:inline',
         attributes: { distT: '0', distB: '0', distL: '0', distR: '0' },
@@ -430,6 +368,7 @@ describe('Image Import/Export Round Trip Tests', () => {
 
   describe('Basic Image Properties Round Trip', () => {
     it('preserves basic image attributes', () => {
+      // TODO: move sample data into an external file, and test full round-trip as done for the rotation test above
       const mockXmlInput = {
         name: 'wp:inline',
         attributes: {
@@ -586,6 +525,7 @@ describe('Image Import/Export Round Trip Tests', () => {
 
   describe('Error Handling in Round Trip', () => {
     it('handles missing transform attributes gracefully', () => {
+      // TODO: move sample data into an external file, and test full round-trip as done for the rotation test above
       const mockXmlInput = {
         name: 'wp:inline',
         attributes: { distT: '0', distB: '0', distL: '0', distR: '0' },
@@ -664,6 +604,7 @@ describe('Image Import/Export Round Trip Tests', () => {
     });
 
     it('handles malformed size extension data gracefully', () => {
+      // TODO: move sample data into an external file, and test full round-trip as done for the rotation test above
       const mockXmlInput = {
         name: 'wp:inline',
         attributes: { distT: '0', distB: '0', distL: '0', distR: '0' },

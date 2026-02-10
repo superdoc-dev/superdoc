@@ -13,12 +13,28 @@ export const loadCommentsFromYdoc = (superdoc) => {
   if (!superdoc?.ydoc || !superdoc?.commentsStore) return false;
   const commentsArray = superdoc.ydoc.getArray('comments');
   const comments = commentsArray.toJSON();
-  const seen = new Set();
+  const seenCommentIdByKey = new Map();
   const filtered = [];
   comments.forEach((c) => {
     const key = c?.importedId ?? c?.commentId;
-    if (!key || seen.has(key)) return;
-    seen.add(key);
+    if (!key) return;
+    if (seenCommentIdByKey.has(key)) {
+      const existingCommentId = seenCommentIdByKey.get(key);
+      const currentCommentId = c?.commentId;
+
+      if (existingCommentId && currentCommentId && existingCommentId !== currentCommentId) {
+        console.warn(
+          `[SuperDoc] Duplicate collaboration comment key "${key}" detected with conflicting commentId values. Keeping first entry and dropping duplicate.`,
+          {
+            key,
+            keptCommentId: existingCommentId,
+            droppedCommentId: currentCommentId,
+          },
+        );
+      }
+      return;
+    }
+    seenCommentIdByKey.set(key, c?.commentId);
     if (!c?.commentId) {
       filtered.push({ ...c, commentId: key });
       return;

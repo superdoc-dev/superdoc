@@ -1018,9 +1018,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
         flowCursorY += renderedHeight;
 
-        // Apply paragraph spacing.after as margin-bottom for all paragraphs.
-        // Word applies spacing.after even to the last paragraph in a cell, creating space at the bottom.
-        if (renderedEntireBlock) {
+        // Apply paragraph spacing.after as margin-bottom for non-last paragraphs.
+        // In Word, the last paragraph's spacing.after is absorbed by the cell's bottom padding.
+        const isLastBlock = i === Math.min(blockMeasures.length, cellBlocks.length) - 1;
+        if (renderedEntireBlock && !isLastBlock) {
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {
             paraWrapper.style.marginBottom = `${spacingAfter}px`;

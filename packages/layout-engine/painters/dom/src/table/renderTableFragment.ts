@@ -12,6 +12,7 @@ import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import { applyBorder, borderValueToSpec } from './border-utils.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
 
@@ -314,6 +315,108 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         continuesOnNext: false,
       });
       y += rowMeasure.height;
+    }
+  }
+
+  // Render rowspan continuation cells ("ghost cells")
+  // When a table continues from a previous fragment, some grid columns in the
+  // first body rows may be occupied by rowspan cells that started on a previous page.
+  // Create empty cells to maintain table structure and borders (matching Word behavior).
+  if (fragment.continuesFromPrev && fragment.fromRow > 0) {
+    const repeatCount = fragment.repeatHeaderCount ?? 0;
+
+    for (let r = repeatCount; r < fragment.fromRow; r++) {
+      const srcRowMeasure = measure.rows[r];
+      if (!srcRowMeasure) continue;
+
+      for (let ci = 0; ci < srcRowMeasure.cells.length; ci++) {
+        const srcCellMeasure = srcRowMeasure.cells[ci];
+        const rowSpan = srcCellMeasure.rowSpan ?? 1;
+        if (rowSpan <= 1) continue;
+
+        const spanEndRow = r + rowSpan;
+        if (spanEndRow <= fragment.fromRow) continue;
+
+        // This cell's rowspan extends into this fragment's body rows
+        const gridCol = srcCellMeasure.gridColumnStart ?? 0;
+        const colSpan = srcCellMeasure.colSpan ?? 1;
+
+        // Calculate x position (sum of columns before gridCol)
+        let ghostX = 0;
+        for (let i = 0; i < gridCol && i < measure.columnWidths.length; i++) {
+          ghostX += measure.columnWidths[i];
+        }
+
+        // Calculate width (sum of spanned columns)
+        let ghostWidth = 0;
+        for (let i = gridCol; i < gridCol + colSpan && i < measure.columnWidths.length; i++) {
+          ghostWidth += measure.columnWidths[i];
+        }
+
+        // Calculate height: from fromRow to min(spanEndRow, toRow)
+        const effectiveEnd = Math.min(spanEndRow, fragment.toRow);
+        let ghostHeight = 0;
+        for (let ri = fragment.fromRow; ri < effectiveEnd; ri++) {
+          ghostHeight += allRowHeights[ri] ?? 0;
+        }
+
+        if (ghostWidth <= 0 || ghostHeight <= 0) continue;
+
+        // Create ghost cell
+        const ghostDiv = doc.createElement('div');
+        ghostDiv.style.position = 'absolute';
+        ghostDiv.style.left = `${ghostX}px`;
+        ghostDiv.style.top = `${y}px`;
+        ghostDiv.style.width = `${ghostWidth}px`;
+        ghostDiv.style.height = `${ghostHeight}px`;
+        ghostDiv.style.boxSizing = 'border-box';
+        ghostDiv.style.overflow = 'hidden';
+
+        // Resolve borders for the ghost cell
+        const srcCell = block.rows[r]?.cells?.[ci];
+        const cellBordersAttr = srcCell?.attrs?.borders;
+        const hasExplicitBorders =
+          cellBordersAttr &&
+          (cellBordersAttr.top !== undefined ||
+            cellBordersAttr.right !== undefined ||
+            cellBordersAttr.bottom !== undefined ||
+            cellBordersAttr.left !== undefined);
+        const isFirstCol = gridCol === 0;
+        const isLastCol = gridCol + colSpan >= measure.columnWidths.length;
+
+        if (hasExplicitBorders && tableBorders) {
+          // Use cell's borders, with table top border for continuation
+          applyBorder(ghostDiv, 'Top', cellBordersAttr.top ?? borderValueToSpec(tableBorders.top));
+          applyBorder(
+            ghostDiv,
+            'Left',
+            cellBordersAttr.left ?? borderValueToSpec(isFirstCol ? tableBorders.left : tableBorders.insideV),
+          );
+          applyBorder(
+            ghostDiv,
+            'Right',
+            cellBordersAttr.right ?? borderValueToSpec(isLastCol ? tableBorders.right : tableBorders.insideV),
+          );
+          if (effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow) {
+            applyBorder(ghostDiv, 'Bottom', cellBordersAttr.bottom ?? borderValueToSpec(tableBorders.insideH));
+          }
+        } else if (tableBorders) {
+          // Resolve from table borders
+          applyBorder(ghostDiv, 'Top', borderValueToSpec(tableBorders.top));
+          applyBorder(ghostDiv, 'Left', borderValueToSpec(isFirstCol ? tableBorders.left : tableBorders.insideV));
+          applyBorder(ghostDiv, 'Right', borderValueToSpec(isLastCol ? tableBorders.right : tableBorders.insideV));
+          if (effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow) {
+            applyBorder(ghostDiv, 'Bottom', borderValueToSpec(tableBorders.insideH));
+          }
+        }
+
+        // Apply cell background if present
+        if (srcCell?.attrs?.background) {
+          ghostDiv.style.backgroundColor = srcCell.attrs.background;
+        }
+
+        container.appendChild(ghostDiv);
+      }
     }
   }
 

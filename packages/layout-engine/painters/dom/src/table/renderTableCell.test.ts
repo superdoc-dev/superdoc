@@ -591,12 +591,13 @@ describe('renderTableCell', () => {
       const firstParaWrapper = paraWrappers[0] as HTMLElement;
       const secondParaWrapper = paraWrappers[1] as HTMLElement;
 
-      // Both paragraphs should have margin-bottom for spacing.after
+      // First paragraph should have margin-bottom, last paragraph should NOT
+      // (last paragraph's spacing.after is absorbed by cell bottom padding)
       expect(firstParaWrapper.style.marginBottom).toBe('10px');
-      expect(secondParaWrapper.style.marginBottom).toBe('20px');
+      expect(secondParaWrapper.style.marginBottom).toBe('');
     });
 
-    it('should apply spacing.after even to the last paragraph', () => {
+    it('should NOT apply spacing.after to the last paragraph', () => {
       const lastPara: ParagraphBlock = {
         kind: 'paragraph',
         id: 'para-last',
@@ -645,9 +646,9 @@ describe('renderTableCell', () => {
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
 
-      // Last paragraph should still have margin-bottom applied
-      // This matches Word's behavior
-      expect(paraWrapper.style.marginBottom).toBe('15px');
+      // Last paragraph should NOT have margin-bottom applied
+      // In Word, the last paragraph's spacing.after is absorbed by the cell's bottom padding
+      expect(paraWrapper.style.marginBottom).toBe('');
     });
 
     it('should only apply margin-bottom when spacing.after > 0', () => {
@@ -721,8 +722,8 @@ describe('renderTableCell', () => {
       expect(wrapper1.style.marginBottom).toBe('');
       expect(wrapper2.style.marginBottom).toBe('');
 
-      // Positive spacing should have margin-bottom
-      expect(wrapper3.style.marginBottom).toBe('10px');
+      // Last paragraph's spacing.after is skipped (absorbed by cell bottom padding)
+      expect(wrapper3.style.marginBottom).toBe('');
     });
 
     it('should handle paragraphs without spacing.after attribute', () => {
@@ -919,8 +920,9 @@ describe('renderTableCell', () => {
       const fullContent = fullCell.firstElementChild as HTMLElement;
       const fullWrapper = fullContent.firstElementChild as HTMLElement;
 
-      // Full render SHOULD apply spacing.after
-      expect(fullWrapper.style.marginBottom).toBe('15px');
+      // Full render of last paragraph should NOT apply spacing.after
+      // (last paragraph's spacing.after is absorbed by cell bottom padding)
+      expect(fullWrapper.style.marginBottom).toBe('');
     });
   });
 

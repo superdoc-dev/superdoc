@@ -2524,8 +2524,11 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
     return scaled;
   };
-  // Determine actual column count from table structure
-  const maxCellCount = Math.max(1, Math.max(...block.rows.map((r) => r.cells.length)));
+  // Determine actual column count from table structure (accounting for colspan)
+  const maxCellCount = Math.max(
+    1,
+    Math.max(...block.rows.map((r) => r.cells.reduce((sum, cell) => sum + (cell.colSpan ?? 1), 0))),
+  );
 
   // Effective target width: use resolvedTableWidth if set (from percentage or explicit px),
   // but never exceed maxWidth (available column space)
@@ -2701,9 +2704,11 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
         contentHeight += blockHeight;
 
-        // Add paragraph spacing.after to content height for all paragraphs.
-        // Word applies spacing.after even to the last paragraph in a cell, creating space at the bottom.
-        if (block.kind === 'paragraph') {
+        // Add paragraph spacing.after to content height for non-last paragraphs.
+        // In Word, the last paragraph's spacing.after is absorbed by the cell's bottom padding
+        // and doesn't add extra height beyond the cell margin.
+        const isLastBlock = blockIndex === cellBlocks.length - 1;
+        if (block.kind === 'paragraph' && !isLastBlock) {
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {
             contentHeight += spacingAfter;

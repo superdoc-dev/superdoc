@@ -99,28 +99,11 @@ export function handleTableCellNode({
   }
 
   // Background
-  // Priority cascade: inline cell shading > conditional style shading > table-level shading
-  let backgroundColor = resolveShadingFillColor(tableCellProperties.shading);
-
-  if (!backgroundColor) {
-    backgroundColor = resolveConditionalShading({
-      tableLook,
-      rowCnfStyle,
-      tableCellProperties,
-      isFirstRow,
-      isLastRow,
-      isFirstColumn,
-      isLastColumn,
-      referencedStyles,
-    });
-  }
-
-  if (!backgroundColor) {
-    backgroundColor = resolveShadingFillColor(tableProperties?.shading);
-  }
-
+  const backgroundColor =
+    resolveShadingFillColor(tableCellProperties.shading) ?? resolveShadingFillColor(tableProperties?.shading);
   const background = { color: backgroundColor };
 
+  // TODO: Do we need other background attrs?
   if (background.color) attributes['background'] = background;
 
   // Vertical Align
@@ -284,51 +267,6 @@ function normalizeTableCellContent(content, editor) {
 
   return normalized;
 }
-/**
- * Resolve cell background color from conditional table style shading.
- * Uses rowCnfStyle for row flags (firstRow/lastRow) and cellCnfStyle for column flags,
- * since cell cnfStyle only carries column-level annotations.
- */
-const resolveConditionalShading = ({
-  tableLook,
-  rowCnfStyle,
-  tableCellProperties,
-  isFirstRow,
-  isLastRow,
-  isFirstColumn,
-  isLastColumn,
-  referencedStyles,
-}) => {
-  const cellCnfStyle = tableCellProperties?.cnfStyle;
-  const getFlag = (source, flag) =>
-    source && Object.prototype.hasOwnProperty.call(source, flag) ? source[flag] : undefined;
-  const isRowStyleEnabled = (flag) => getFlag(rowCnfStyle, flag) ?? getFlag(tableLook, flag) ?? true;
-  const isColStyleEnabled = (flag) =>
-    getFlag(cellCnfStyle, flag) ?? getFlag(rowCnfStyle, flag) ?? getFlag(tableLook, flag) ?? true;
-
-  const getShading = (styleVariant) => resolveShadingFillColor(styleVariant?.tableCellProperties?.shading);
-
-  if (isFirstRow && isRowStyleEnabled('firstRow')) {
-    const color = getShading(referencedStyles?.firstRow);
-    if (color) return color;
-  }
-  if (isLastRow && isRowStyleEnabled('lastRow')) {
-    const color = getShading(referencedStyles?.lastRow);
-    if (color) return color;
-  }
-  if (isFirstColumn && isColStyleEnabled('firstColumn')) {
-    const color = getShading(referencedStyles?.firstCol);
-    if (color) return color;
-  }
-  if (isLastColumn && isColStyleEnabled('lastColumn')) {
-    const color = getShading(referencedStyles?.lastCol);
-    if (color) return color;
-  }
-
-  // wholeTable fallback
-  return getShading(referencedStyles?.wholeTable) ?? null;
-};
-
 const processInlineCellBorders = (borders, rowBorders) => {
   if (!borders) return null;
 

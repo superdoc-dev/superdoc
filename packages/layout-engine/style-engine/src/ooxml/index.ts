@@ -9,7 +9,13 @@ import { combineIndentProperties, combineProperties, combineRunProperties } from
 import type { PropertyObject } from '../cascade.js';
 import type { ParagraphProperties, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';
-import type { StylesDocumentProperties, TableStyleType, TableProperties, TableLookProperties } from './styles-types.ts';
+import type {
+  StylesDocumentProperties,
+  TableStyleType,
+  TableProperties,
+  TableLookProperties,
+  TableCellProperties,
+} from './styles-types.ts';
 
 export { combineIndentProperties, combineProperties, combineRunProperties };
 export type { PropertyObject };
@@ -259,7 +265,7 @@ export function resolveStyleChain<T extends PropertyObject>(
   return combineProperties(styleChain);
 }
 
-export function getNumberingProperties<T extends PropertyObject>(
+export function getNumberingProperties<T extends ParagraphProperties | RunProperties>(
   propertyType: 'paragraphProperties' | 'runProperties',
   params: OoxmlResolverParams,
   ilvl: number,
@@ -356,7 +362,7 @@ export function resolveDocxFontFamily(
 }
 
 export function resolveCellStyles<T extends PropertyObject>(
-  propertyType: 'paragraphProperties' | 'runProperties',
+  propertyType: 'paragraphProperties' | 'runProperties' | 'tableCellProperties',
   tableInfo: TableInfo | null | undefined,
   translatedLinkedStyles: StylesDocumentProperties,
 ): T[] {
@@ -388,6 +394,41 @@ export function resolveCellStyles<T extends PropertyObject>(
   return cellStyleProps;
 }
 
+/**
+ * Resolve table cell properties (shading, borders, margins) by cascading
+ * conditional table style properties with inline cell properties.
+ *
+ * Cascade order (low → high priority):
+ *   wholeTable → bands → firstRow/lastRow/firstCol/lastCol → corner cells → inline
+ */
+export function resolveTableCellProperties(
+  inlineProps: TableCellProperties | null | undefined,
+  tableInfo: TableInfo | null | undefined,
+  translatedLinkedStyles: StylesDocumentProperties | null | undefined,
+): TableCellProperties {
+  if (!translatedLinkedStyles) {
+    return (inlineProps ?? {}) as TableCellProperties;
+  }
+
+  const cellStyleProps = resolveCellStyles<TableCellProperties>(
+    'tableCellProperties',
+    tableInfo,
+    translatedLinkedStyles,
+  );
+
+  if (cellStyleProps.length === 0) {
+    return (inlineProps ?? {}) as TableCellProperties;
+  }
+
+  // Cascade: style properties (low→high) then inline wins last
+  const chain: TableCellProperties[] = [...cellStyleProps];
+  if (inlineProps && Object.keys(inlineProps).length > 0) {
+    chain.push(inlineProps);
+  }
+
+  return combineProperties(chain, { fullOverrideProps: ['shading'] });
+}
+
 function determineCellStyleTypes(
   tblLook: TableLookProperties | null | undefined,
   rowIndex: number,
@@ -401,8 +442,13 @@ function determineCellStyleTypes(
 
   const normalizedRowBandSize = rowBandSize > 0 ? rowBandSize : 1;
   const normalizedColBandSize = colBandSize > 0 ? colBandSize : 1;
-  const rowGroup = Math.floor(rowIndex / normalizedRowBandSize);
-  const colGroup = Math.floor(cellIndex / normalizedColBandSize);
+
+  // Per ECMA-376, banding excludes header/footer rows and first/last columns.
+  // Offset the index so the first data row/column starts at band1.
+  const bandRowIndex = Math.max(0, rowIndex - (tblLook?.firstRow ? 1 : 0));
+  const bandColIndex = Math.max(0, cellIndex - (tblLook?.firstColumn ? 1 : 0));
+  const rowGroup = Math.floor(bandRowIndex / normalizedRowBandSize);
+  const colGroup = Math.floor(bandColIndex / normalizedColBandSize);
 
   if (!tblLook?.noHBand) {
     if (rowGroup % 2 === 0) {

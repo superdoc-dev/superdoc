@@ -89,7 +89,7 @@
   },
   "peerDependencies": {
     "@hocuspocus/provider": "^2.13.6",
-    "pdfjs-dist": ">=4.3.136 <=4.6.82",
+    "pdfjs-dist": "^5.4.296",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
   },

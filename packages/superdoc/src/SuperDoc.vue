@@ -57,6 +57,17 @@ const {
 } = storeToRefs(superdocStore);
 const { handlePageReady, modules, user, getDocument } = superdocStore;
 
+/*
+NOTE: new PdfViewer does not emit page-loaded. Hrbr fields/annotations
+rely on handlePageReady; revisit when wiring fields for PDF.
+
+From the old code:
+const containerBounds = container.getBoundingClientRect();
+containerBounds.originalWidth = width;
+containerBounds.originalHeight = height;
+emit('page-loaded', documentId, index, containerBounds);
+*/
+
 //prettier-ignore
 const {
   getConfig,
@@ -135,6 +146,7 @@ const superdocStyleVars = computed(() => {
 
 // Refs
 const layers = ref(null);
+const pdfViewerRef = ref(null);
 
 // Comments layer
 const commentsLayer = ref(null);
@@ -687,10 +699,12 @@ const getSelectionPosition = computed(() => {
     return { x: null, y: null };
   }
 
-  const top = selectionPosition.value.top;
-  const left = selectionPosition.value.left;
-  const right = selectionPosition.value.right;
-  const bottom = selectionPosition.value.bottom;
+  const isPdf = selectionPosition.value.source === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = selectionPosition.value.top * zoom;
+  const left = selectionPosition.value.left * zoom;
+  const right = selectionPosition.value.right * zoom;
+  const bottom = selectionPosition.value.bottom * zoom;
   const style = {
     zIndex: 500,
     borderRadius: '4px',
@@ -733,7 +747,9 @@ const handleSelectionChange = (selection) => {
   activeSelection.value = selection;
 
   // Place the tools menu at the level of the selection
-  let top = selection.selectionBounds.top;
+  const isPdf = selection.source === 'pdf' || selection.source?.value === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = selection.selectionBounds.top * zoom;
   toolsMenuPosition.top = top + 'px';
   toolsMenuPosition.right = isMobileView ? '0' : '-25px';
 };
@@ -795,7 +811,7 @@ const getPdfPageNumberFromEvent = (event) => {
   const y = event?.clientY;
   if (typeof x !== 'number' || typeof y !== 'number') return null;
   const elements = document.elementsFromPoint(x, y);
-  const pageEl = elements.find((el) => el?.classList?.contains?.('pdf-page'));
+  const pageEl = elements.find((el) => el?.dataset?.pdfPage != null);
   if (pageEl) {
     const pageNumber = Number(pageEl.dataset?.pageNumber);
     return Number.isFinite(pageNumber) ? pageNumber : null;
@@ -821,7 +837,7 @@ const handleSelectionStart = (e) => {
     const zoom = activeZoom.value / 100;
     const x = (e.clientX - layerBounds.left) / zoom;
     const y = (e.clientY - layerBounds.top) / zoom;
-    updateSelection({ startX: x, startY: y, page: pageNumber });
+    updateSelection({ startX: x, startY: y, page: pageNumber, source: 'pdf' });
     selectionLayer.value.addEventListener('mousemove', handleDragMove);
   });
 };
@@ -850,6 +866,7 @@ const handleDragEnd = (e) => {
     },
     page: pageNumber ?? 1,
     documentId: documents.value[0].id,
+    source: 'pdf',
   });
 
   handleSelectionChange(selection);
@@ -873,12 +890,27 @@ const handlePdfClick = (e) => {
   handleSelectionStart(e);
 };
 
+const handlePdfSelectionRaw = ({ selectionBounds, documentId, page }) => {
+  if (!selectionBounds || !documentId) return;
+  const selection = useSelection({
+    selectionBounds,
+    documentId,
+    page,
+    source: 'pdf',
+  });
+  handleSelectionChange(selection);
+};
+
 watch(
   () => activeZoom.value,
   (zoom) => {
     if (proxy.$superdoc.config.useLayoutEngine !== false) {
       PresentationEditor.setGlobalZoom((zoom ?? 100) / 100);
     }
+
+    const pdfViewer = getPDFViewer();
+    pdfViewer?.updateScale((zoom ?? 100) / 100);
+
     nextTick(() => {
       updateWhiteboardPageSizes();
       updateWhiteboardPageOffsets();
@@ -910,6 +942,10 @@ const {
   documents,
   modules,
 });
+
+const getPDFViewer = () => {
+  return Array.isArray(pdfViewerRef.value) ? pdfViewerRef.value[0] : pdfViewerRef.value;
+};
 </script>
 
 <template>
@@ -998,16 +1034,16 @@ const {
 
           <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
             <!-- PDF renderer -->
-
             <PdfViewer
               v-if="doc.type === PDF"
-              :document-data="doc"
+              :file="doc.data"
+              :file-id="doc.id"
               :config="pdfConfig"
-              @selection-change="handleSelectionChange"
-              @ready="handleDocumentReady"
-              @page-loaded="handlePageReady"
-              @page-ready="handleWhiteboardPageReady"
+              @selection-raw="handlePdfSelectionRaw"
               @bypass-selection="handlePdfClick"
+              @page-rendered="handleWhiteboardPageReady"
+              @document-ready="({ documentId, viewerContainer }) => handleDocumentReady(documentId, viewerContainer)"
+              ref="pdfViewerRef"
             />
 
             <n-message-provider>

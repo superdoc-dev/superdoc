@@ -12,8 +12,6 @@ import { fieldAnnotationHelpers } from '@superdoc/super-editor';
 import { toolbarIcons } from '../../../../super-editor/src/components/toolbar/toolbarIcons';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
-import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
-import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.js';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import SidebarLayout from './sidebar/SidebarLayout.vue';
@@ -22,10 +20,7 @@ import * as Y from 'yjs';
 
 // note:
 // Or set worker globally outside the component.
-// pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-//   'pdfjs-dist/build/pdf.worker.min.mjs',
-//   import.meta.url,
-// ).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 /* For local dev */
 const superdoc = shallowRef(null);
@@ -465,14 +460,14 @@ const init = async () => {
       },
       pdf: {
         pdfLib: pdfjsLib,
-        pdfViewer: pdfjsViewer,
-        setWorker: true,
-        workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
-        textLayerMode: 0,
+        setWorker: false,
+        // workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
+        // textLayer: true,
+        // outputScale: 1.5,
       },
-      whiteboard: {
-        enabled: false,
-      },
+      // whiteboard: {
+      //   enabled: true,
+      // },
     },
     onEditorCreate,
     onContentError,

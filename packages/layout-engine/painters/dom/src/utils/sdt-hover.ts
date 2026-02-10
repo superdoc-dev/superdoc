@@ -61,14 +61,10 @@ export class SdtGroupedHover {
   destroy(): void {
     if (this.mount) {
       if (this.onMouseOver) {
-        try {
-          this.mount.removeEventListener('mouseover', this.onMouseOver);
-        } catch {}
+        this.mount.removeEventListener('mouseover', this.onMouseOver);
       }
       if (this.onMouseLeave) {
-        try {
-          this.mount.removeEventListener('mouseleave', this.onMouseLeave);
-        } catch {}
+        this.mount.removeEventListener('mouseleave', this.onMouseLeave);
       }
     }
     this.mount = null;

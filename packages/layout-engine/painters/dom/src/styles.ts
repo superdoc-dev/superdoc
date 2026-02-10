@@ -394,6 +394,13 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
+/* Hover effect for block structured content (via event delegation class) */
+.superdoc-structured-content-block.sdt-hover {
+  border-color: #629be7 !important;
+  background-color: rgba(98, 155, 231, 0.08);
+  z-index: 9999999;
+}
+
 .superdoc-structured-content-block.sdt-hover .superdoc-structured-content__label {
   display: inline-flex;
 }
@@ -436,8 +443,9 @@ const SDT_CONTAINER_STYLES = `
 
 /* Hover effect for inline structured content */
 .superdoc-structured-content-inline:hover {
-  background-color: rgba(98, 155, 231, 0.15);
-  border-color: #4a8ad9;
+  border-color: #629be7 !important;
+  background-color: rgba(98, 155, 231, 0.08);
+  z-index: 9999999;
 }
 
 /* Inline structured content label - shown on hover */
@@ -472,16 +480,19 @@ const SDT_CONTAINER_STYLES = `
   border-color: transparent;
 }
 
-/* Show blue border on hover for all lock modes */
+/* Show blue border on hover for all lock modes.
+ * Use !important on border-color to override the transparent default above
+ * and any continuation rules that remove border-top/border-bottom. */
 .superdoc-structured-content-block[data-lock-mode].sdt-hover {
-  border-color: #629be7;
-  background-color: rgba(98, 155, 231, 0.05);
-  z-index: 99;
+  border-color: #629be7 !important;
+  background-color: rgba(98, 155, 231, 0.08);
+  z-index: 9999999;
 }
 
 .superdoc-structured-content-inline[data-lock-mode]:hover {
-  border-color: #629be7;
-  z-index: 99;
+  border-color: #629be7 !important;
+  background-color: rgba(98, 155, 231, 0.08);
+  z-index: 9999999;
 }
 
 /* Viewing mode: remove structured content affordances */

@@ -4650,6 +4650,80 @@ export class DomPainter {
         return undefined;
       };
 
+      // Inline SDT wrapping for geometry path (absolute-positioned elements).
+      // Same concept as the run-based path's SDT wrapper, but here elements use
+      // position:absolute so the wrapper itself must be absolutely positioned to
+      // span from the leftmost to rightmost child element.
+      let geoSdtWrapper: HTMLElement | null = null;
+      let geoSdtId: string | null = null;
+      let geoSdtWrapperLeft = 0;
+      let geoSdtMaxRight = 0;
+
+      const closeGeoSdtWrapper = () => {
+        if (geoSdtWrapper) {
+          geoSdtWrapper.style.width = `${geoSdtMaxRight - geoSdtWrapperLeft}px`;
+          el.appendChild(geoSdtWrapper);
+          geoSdtWrapper = null;
+          geoSdtId = null;
+        }
+      };
+
+      /**
+       * Append an element to the line, routing through an inline SDT wrapper
+       * when the run has inline structuredContent metadata.
+       */
+      const appendToLineGeo = (elem: HTMLElement, runForSdt: Run, elemLeftPx: number, elemWidthPx: number) => {
+        const runSdt = (runForSdt as TextRun).sdt;
+        const isInlineSdt = runSdt?.type === 'structuredContent' && runSdt?.scope === 'inline';
+        const thisRunSdtId = isInlineSdt && runSdt?.id ? String(runSdt.id) : null;
+
+        if (thisRunSdtId !== geoSdtId) {
+          closeGeoSdtWrapper();
+        }
+
+        if (isInlineSdt && thisRunSdtId && this.doc) {
+          if (!geoSdtWrapper) {
+            geoSdtWrapper = this.doc.createElement('span');
+            geoSdtWrapper.className = DOM_CLASS_NAMES.INLINE_SDT_WRAPPER;
+            geoSdtWrapper.dataset.layoutEpoch = String(this.layoutEpoch);
+            geoSdtId = thisRunSdtId;
+            this.applySdtDataset(geoSdtWrapper, runSdt!);
+            geoSdtWrapperLeft = elemLeftPx;
+            geoSdtMaxRight = elemLeftPx;
+            geoSdtWrapper.style.position = 'absolute';
+            geoSdtWrapper.style.left = `${elemLeftPx}px`;
+            geoSdtWrapper.style.top = '0px';
+            geoSdtWrapper.style.height = `${line.lineHeight}px`;
+            const alias = (runSdt as { alias?: string })?.alias || 'Inline content';
+            const labelEl = this.doc.createElement('span');
+            labelEl.className = `${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`;
+            labelEl.textContent = alias;
+            geoSdtWrapper.appendChild(labelEl);
+          }
+          // Adjust element left to be relative to wrapper
+          elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
+          geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
+          // Track PM positions on wrapper to span all contained runs
+          const pmStart = (runForSdt as TextRun).pmStart;
+          const pmEnd = (runForSdt as TextRun).pmEnd;
+          if (pmStart != null) {
+            const curStart = geoSdtWrapper.dataset.pmStart;
+            if (!curStart || pmStart < parseInt(curStart, 10)) {
+              geoSdtWrapper.dataset.pmStart = String(pmStart);
+            }
+          }
+          if (pmEnd != null) {
+            const curEnd = geoSdtWrapper.dataset.pmEnd;
+            if (!curEnd || pmEnd > parseInt(curEnd, 10)) {
+              geoSdtWrapper.dataset.pmEnd = String(pmEnd);
+            }
+          }
+          geoSdtWrapper.appendChild(elem);
+        } else {
+          el.appendChild(elem);
+        }
+      };
+
       for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
         const baseRun = block.runs[runIndex];
         if (!baseRun) continue;
@@ -4703,7 +4777,7 @@ export class DomPainter {
           if (baseRun.pmStart != null) tabEl.dataset.pmStart = String(baseRun.pmStart);
           if (baseRun.pmEnd != null) tabEl.dataset.pmEnd = String(baseRun.pmEnd);
           tabEl.dataset.layoutEpoch = String(this.layoutEpoch);
-          el.appendChild(tabEl);
+          appendToLineGeo(tabEl, baseRun, tabStartX + indentOffset, actualTabWidth);
 
           // Update cumulativeX to where the next content begins
           // This ensures proper positioning for subsequent elements
@@ -4727,7 +4801,7 @@ export class DomPainter {
               (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : elem.offsetWidth) ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
-            el.appendChild(elem);
+            appendToLineGeo(elem, baseRun, segX, segWidth);
             cumulativeX = baseSegX + segWidth;
           }
           continue;
@@ -4758,7 +4832,7 @@ export class DomPainter {
             const segWidth = (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : 0) ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
-            el.appendChild(elem);
+            appendToLineGeo(elem, baseRun, segX, segWidth);
             cumulativeX = baseSegX + segWidth;
           }
           continue;
@@ -4805,7 +4879,7 @@ export class DomPainter {
 
             elem.style.position = 'absolute';
             elem.style.left = `${xPos}px`;
-            el.appendChild(elem);
+            appendToLineGeo(elem, segmentRun, xPos, segment.width ?? 0);
 
             // Update cumulative X for next segment by measuring this element's width
             // This applies to ALL segments (both with and without explicit X)
@@ -4822,9 +4896,15 @@ export class DomPainter {
               this.doc.body.removeChild(measureEl);
             }
             cumulativeX = baseX + width;
+            // Update SDT wrapper width if actual measured width differs from initial estimate
+            if (geoSdtWrapper) {
+              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + width);
+            }
           }
         });
       }
+      // Close any remaining SDT wrapper at end of geometry rendering
+      closeGeoSdtWrapper();
     } else {
       // Use run-based rendering for normal text flow
       // Track current inline SDT wrapper to group adjacent runs with the same SDT id
@@ -4851,6 +4931,7 @@ export class DomPainter {
         }
 
         // Special handling for TabRuns (e.g., signature lines with underlines)
+        let elem: HTMLElement | null = null;
         if (run.kind === 'tab') {
           const tabEl = this.doc!.createElement('span');
           tabEl.classList.add('superdoc-tab');
@@ -4889,11 +4970,10 @@ export class DomPainter {
           if (run.pmEnd != null) tabEl.dataset.pmEnd = String(run.pmEnd);
           tabEl.dataset.layoutEpoch = String(this.layoutEpoch);
 
-          el.appendChild(tabEl);
-          return;
+          elem = tabEl;
+        } else {
+          elem = this.renderRun(run, context, trackedConfig);
         }
-
-        const elem = this.renderRun(run, context, trackedConfig);
         if (elem) {
           if (styleId) {
             elem.setAttribute('styleid', styleId);

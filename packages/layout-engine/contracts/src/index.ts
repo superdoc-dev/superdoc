@@ -219,6 +219,8 @@ export type TabRun = RunMarks & {
   indent?: ParagraphIndent;
   pmStart?: number;
   pmEnd?: number;
+  /** SDT metadata if tab is inside a structured document tag. */
+  sdt?: SdtMetadata;
 };
 
 export type LineBreakRun = {

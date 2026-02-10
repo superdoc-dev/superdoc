@@ -17,7 +17,11 @@ export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock'
  */
 
 /**
- * Collect all SDT nodes from the document
+ * Collect all SDT nodes from the document.
+ *
+ * TODO: For large documents, consider caching SDT nodes in plugin state
+ * (rebuild on docChanged only), early-exit on unlocked nodes, or limiting
+ * the search to nodes near the current selection for key/input handlers.
  */
 function collectSDTNodes(doc) {
   const sdtNodes = [];

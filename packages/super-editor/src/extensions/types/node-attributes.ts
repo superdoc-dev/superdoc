@@ -14,6 +14,7 @@ import type {
   InlineNodeAttributes,
   ShapeNodeAttributes,
 } from '../../core/types/NodeCategories.js';
+import type { StructuredContentLockMode } from '@superdoc/contracts';
 
 // ============================================
 // SHARED TYPES
@@ -593,7 +594,7 @@ export interface HardBreakAttrs extends InlineNodeAttributes {
 // STRUCTURED CONTENT
 // ============================================
 
-export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
+export type { StructuredContentLockMode };
 
 /** Structured content node attributes */
 export interface StructuredContentAttrs extends BlockNodeAttributes {

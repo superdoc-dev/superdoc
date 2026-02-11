@@ -25,6 +25,9 @@ function init(file?: File) {
     useLayoutEngine: layout,
     onReady: ({ superdoc }: any) => {
       (window as any).superdoc = superdoc;
+      superdoc.activeEditor.on('create', ({ editor }: any) => {
+        (window as any).editor = editor;
+      });
       (window as any).superdocReady = true;
     },
   };

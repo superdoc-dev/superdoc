@@ -61,12 +61,20 @@ export interface SuperDocFixture {
   bold(): Promise<void>;
   /** Toggle italic */
   italic(): Promise<void>;
+  /** Toggle underline */
+  underline(): Promise<void>;
   /** Undo */
   undo(): Promise<void>;
   /** Redo */
   redo(): Promise<void>;
   /** Select all */
   selectAll(): Promise<void>;
+  /** Triple-click a line by index to select it */
+  tripleClickLine(lineIndex: number): Promise<void>;
+  /** Execute an editor command via window.editor.commands */
+  executeCommand(name: string, args?: Record<string, any>): Promise<void>;
+  /** Wait for the editor to stabilize */
+  waitForStable(ms?: number): Promise<void>;
 
   /** Wait for editor to stabilize, then take a screenshot with both Playwright + Argos */
   screenshot(name: string): Promise<void>;
@@ -141,6 +149,10 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
         await page.keyboard.press(`${modKey}+i`);
       },
 
+      async underline() {
+        await page.keyboard.press(`${modKey}+u`);
+      },
+
       async undo() {
         await page.keyboard.press(`${modKey}+z`);
       },
@@ -151,6 +163,33 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
 
       async selectAll() {
         await page.keyboard.press(`${modKey}+a`);
+      },
+
+      async tripleClickLine(lineIndex: number) {
+        const line = page.locator('.superdoc-line').nth(lineIndex);
+        const box = await line.boundingBox();
+        if (!box) throw new Error(`Line ${lineIndex} not visible`);
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { clickCount: 3 });
+      },
+
+      async executeCommand(name: string, args?: Record<string, any>) {
+        await page.waitForFunction(() => (window as any).editor?.commands, null, { timeout: 10_000 });
+        await page.evaluate(
+          ({ cmd, cmdArgs }) => {
+            const editor = (window as any).editor;
+            if (!editor?.commands?.[cmd]) throw new Error(`Command "${cmd}" not found`);
+            if (cmdArgs && Object.keys(cmdArgs).length > 0) {
+              editor.commands[cmd](cmdArgs);
+            } else {
+              editor.commands[cmd]();
+            }
+          },
+          { cmd: name, cmdArgs: args },
+        );
+      },
+
+      async waitForStable(ms?: number) {
+        await waitForStable(page, ms);
       },
 
       async screenshot(name: string) {

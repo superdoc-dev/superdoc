@@ -415,4 +415,22 @@ export interface EditorOptions {
    * The static Editor.open() factory sets this automatically.
    */
   deferDocumentLoad?: boolean;
+
+  /**
+   * License key for billing and telemetry authentication.
+   */
+  licenseKey?: string | null;
+
+  /**
+   * Telemetry configuration for tracking document opens.
+   * When enabled, sends document open events for usage-based billing.
+   */
+  telemetry?: {
+    /** Whether telemetry is enabled */
+    enabled: boolean;
+    /** Custom telemetry endpoint (optional) */
+    endpoint?: string;
+    /** Custom metadata to include with telemetry events (optional) */
+    metadata?: Record<string, unknown>;
+  } | null;
 }

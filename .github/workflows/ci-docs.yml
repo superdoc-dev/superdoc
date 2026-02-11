@@ -1,0 +1,43 @@
+name: CI Docs
+
+on:
+  pull_request:
+    paths:
+      - 'apps/docs/**'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Docs
+        run: pnpm --filter @superdoc/docs validate
+
+      - name: Check Broken Links
+        run: pnpm --filter @superdoc/docs check:links
+
+      - name: Check Code Imports
+        run: pnpm --filter @superdoc/docs check:imports
+
+      - name: Build Packages
+        run: pnpm --prefix packages/superdoc run build
+
+      - name: Test Code Examples
+        run: pnpm --filter @superdoc/docs test:examples

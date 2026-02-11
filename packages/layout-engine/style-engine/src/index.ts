@@ -247,6 +247,7 @@ function normalizeStructuredContentMetadata(
     id: toNullableString(attrs.id),
     tag: toOptionalString(attrs.tag),
     alias: toOptionalString(attrs.alias),
+    lockMode: attrs.lockMode as StructuredContentMetadata['lockMode'],
     sdtPr: attrs.sdtPr,
   };
 }

@@ -214,6 +214,7 @@ const decode = (params, decodedAttrs) => {
   const { node } = params;
 
   const cells = node.content || [];
+
   let leadingPlaceholders = 0;
   while (leadingPlaceholders < cells.length && isPlaceholderCell(cells[leadingPlaceholders])) {
     leadingPlaceholders += 1;

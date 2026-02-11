@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FC } from 'react';
 import SignaturePad from 'signature_pad';
 import type { FieldComponentProps } from '@superdoc-dev/esign';
 
@@ -17,12 +17,7 @@ const cropSVG = (svgText: string): string => {
     if (bbox.width === 0 || bbox.height === 0) return svgText;
 
     const padding = 5;
-    const viewBox = [
-      bbox.x - padding,
-      bbox.y - padding,
-      bbox.width + padding * 2,
-      bbox.height + padding * 2,
-    ].join(' ');
+    const viewBox = [bbox.x - padding, bbox.y - padding, bbox.width + padding * 2, bbox.height + padding * 2].join(' ');
     svgElement.setAttribute('viewBox', viewBox);
     svgElement.setAttribute('width', String(Math.ceil(bbox.width + padding * 2)));
     svgElement.setAttribute('height', String(Math.ceil(bbox.height + padding * 2)));
@@ -54,7 +49,7 @@ const svgToPngDataUrl = (svgText: string): Promise<string> =>
     img.src = svgDataUrl;
   });
 
-const CustomSignature: React.FC<FieldComponentProps> = ({ value, onChange, isDisabled, label }) => {
+const CustomSignature: FC<FieldComponentProps> = ({ value, onChange, isDisabled, label }) => {
   const [mode, setMode] = useState<'type' | 'draw'>('type');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const signaturePadRef = useRef<SignaturePad | null>(null);
@@ -164,12 +159,10 @@ const CustomSignature: React.FC<FieldComponentProps> = ({ value, onChange, isDis
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {label && (
-        <label style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{label}</label>
-      )}
+      {label && <label style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{label}</label>}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
         <button
-          type="button"
+          type='button'
           onClick={() => switchMode('type')}
           disabled={isDisabled}
           style={{
@@ -185,7 +178,7 @@ const CustomSignature: React.FC<FieldComponentProps> = ({ value, onChange, isDis
           Type
         </button>
         <button
-          type="button"
+          type='button'
           onClick={() => switchMode('draw')}
           disabled={isDisabled}
           style={{
@@ -203,11 +196,11 @@ const CustomSignature: React.FC<FieldComponentProps> = ({ value, onChange, isDis
       </div>
       {mode === 'type' ? (
         <input
-          type="text"
+          type='text'
           value={String(value || '')}
           onChange={(e) => onChange(e.target.value)}
           disabled={isDisabled}
-          placeholder="Type your full name"
+          placeholder='Type your full name'
           style={{
             fontFamily: 'cursive',
             fontSize: '20px',
@@ -234,7 +227,7 @@ const CustomSignature: React.FC<FieldComponentProps> = ({ value, onChange, isDis
             }}
           />
           <button
-            type="button"
+            type='button'
             onClick={clearCanvas}
             disabled={isDisabled}
             style={{

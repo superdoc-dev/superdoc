@@ -15,7 +15,7 @@ import { DOCX, PDF, HTML, getFileObject, compareVersions } from '@superdoc/commo
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
-// Beta channel note: keep this file touched so CI picks up prerelease runs
+// Public exports
 export { SuperDoc } from './core/SuperDoc.js';
 export {
   BlankDOCX,
@@ -43,5 +43,6 @@ export {
 
   // Custom extensions
   Extensions,
+  /** @internal */
   registeredHandlers,
 };

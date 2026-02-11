@@ -40,16 +40,33 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
     }
   }
 
+  // When pasting into a textblock, try the open slice first so content merges inline
+  // instead of creating new paragraphs (prevents inserting block nodes into non-textblocks).
+  const baseParentIsTextblock = trTemp.doc.resolve(positionTo).parent?.isTextblock;
+  const shouldPreferInlineInsertion = step.from === step.to && baseParentIsTextblock;
+
   const tryInsert = (slice) => {
-    const insertionStep = new ReplaceStep(positionTo, positionTo, slice, false);
-    if (trTemp.maybeStep(insertionStep).failed) return null;
-    return {
-      insertedFrom: insertionStep.from,
-      insertedTo: insertionStep.getMap().map(insertionStep.to, 1),
-    };
+    const tempTr = state.apply(newTr).tr;
+    // Empty slices represent pure deletions (no content to insert).
+    // Detecting them ensures deletion tracking runs even if `tempTr` doesn't change.
+    const isEmptySlice = slice?.content?.size === 0;
+    try {
+      tempTr.replaceRange(positionTo, positionTo, slice);
+    } catch {
+      return null;
+    }
+
+    if (!tempTr.docChanged && !isEmptySlice) return null;
+
+    const insertedFrom = tempTr.mapping.map(positionTo, -1);
+    const insertedTo = tempTr.mapping.map(positionTo, 1);
+    if (insertedFrom === insertedTo) return { tempTr, insertedFrom, insertedTo };
+    if (shouldPreferInlineInsertion && !tempTr.doc.resolve(insertedFrom).parent?.isTextblock) return null;
+    return { tempTr, insertedFrom, insertedTo };
   };
 
-  const insertion = tryInsert(step.slice) || tryInsert(Slice.maxOpen(step.slice.content, true));
+  const openSlice = Slice.maxOpen(step.slice.content, true);
+  const insertion = tryInsert(step.slice) || tryInsert(openSlice);
 
   // If we can't insert the replacement content into the temp transaction, fall back to applying the original step.
   // This keeps user intent (content change) even if we can't represent it as tracked insert+delete.
@@ -61,16 +78,22 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   }
 
   const meta = {};
-  const insertedMark = markInsertion({
-    tr: trTemp,
-    from: insertion.insertedFrom,
-    to: insertion.insertedTo,
-    user,
-    date,
-  });
+  const { insertedFrom, insertedTo, tempTr } = insertion;
+  let insertedMark = null;
+  let trackedInsertedSlice = Slice.empty;
+
+  if (insertedFrom !== insertedTo) {
+    insertedMark = markInsertion({
+      tr: tempTr,
+      from: insertedFrom,
+      to: insertedTo,
+      user,
+      date,
+    });
+    trackedInsertedSlice = tempTr.doc.slice(insertedFrom, insertedTo);
+  }
 
   // Condense insertion down to a single replace step (so this tracked transaction remains a single-step insertion).
-  const trackedInsertedSlice = trTemp.doc.slice(insertion.insertedFrom, insertion.insertedTo);
   const condensedStep = new ReplaceStep(positionTo, positionTo, trackedInsertedSlice, false);
   if (newTr.maybeStep(condensedStep).failed) {
     // If the condensed step can't be applied, fall back to the original step and skip deletion tracking.
@@ -86,7 +109,7 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   const mirrorIndex = map.maps.length - 1;
   map.appendMap(condensedStep.getMap(), mirrorIndex);
 
-  if (insertion.insertedFrom !== insertion.insertedTo) {
+  if (insertedFrom !== insertedTo) {
     meta.insertedMark = insertedMark;
     meta.step = condensedStep;
     // Store the actual insertion end position for cursor placement (SD-1624).
@@ -94,13 +117,13 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
     // For single-step transactions, positionTo is in newTr.doc coordinates after our condensedStep,
     // so we just add the insertion length to get the cursor position.
     if (positionAdjusted) {
-      const insertionLength = insertion.insertedTo - insertion.insertedFrom;
+      const insertionLength = insertedTo - insertedFrom;
       meta.insertedTo = positionTo + insertionLength;
     }
   }
 
-  if (!newTr.selection.eq(trTemp.selection)) {
-    newTr.setSelection(trTemp.selection);
+  if (!newTr.selection.eq(tempTr.selection)) {
+    newTr.setSelection(tempTr.selection);
   }
 
   if (step.from !== step.to) {

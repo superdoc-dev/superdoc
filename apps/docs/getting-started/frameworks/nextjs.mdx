@@ -3,124 +3,96 @@ title: Next.js
 keywords: "nextjs docx editor, next word editor, superdoc nextjs, ssr document editor, dynamic import docx"
 ---
 
-SuperDoc works with Next.js using dynamic imports to avoid SSR issues.
+SuperDoc works seamlessly with Next.js. The recommended approach is using `@superdoc-dev/react`, which handles SSR automatically.
 
-## Installation
+## Recommended: Using @superdoc-dev/react
+
+The React wrapper is the simplest way to integrate SuperDoc with Next.js:
 
 ```bash
-npm install @harbour-enterprises/superdoc
+npm install @superdoc-dev/react
 ```
 
-## Basic component
-
-```jsx
-// components/DocumentEditor.jsx
-import { useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
-
-// Prevent SSR issues
-const DocumentEditor = dynamic(
-  () => Promise.resolve(DocumentEditorComponent),
-  { ssr: false }
-);
-
-function DocumentEditorComponent({ document }) {
-  const containerRef = useRef(null);
-  const superdocRef = useRef(null);
-
-  useEffect(() => {
-    const initEditor = async () => {
-      const { SuperDoc } = await import('@harbour-enterprises/superdoc');
-      
-      if (containerRef.current) {
-        superdocRef.current = new SuperDoc({
-          selector: containerRef.current,
-          document
-        });
-      }
-    };
-
-    initEditor();
-
-    return () => {
-      superdocRef.current = null;
-    };
-  }, [document]);
-
-  return <div ref={containerRef} style={{ height: '700px' }} />;
-}
-
-export default DocumentEditor;
-```
-
-## App Router (Next.js 13+)
+### App Router (Next.js 13+)
 
 ```jsx
 // app/editor/page.jsx
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const DocumentEditor = dynamic(
-  () => import('@/components/DocumentEditor'),
-  { 
-    ssr: false,
-    loading: () => <div>Loading editor...</div>
-  }
-);
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
 
 export default function EditorPage() {
   return (
-    <main>
-      <DocumentEditor document="/sample.docx" />
-    </main>
-  );
-}
-```
-
-## API route for document handling
-
-```javascript
-// pages/api/documents/[id].js (Pages Router)
-// app/api/documents/[id]/route.js (App Router)
-
-export async function GET(request, { params }) {
-  const docId = params.id;
-  
-  // Fetch document from storage
-  const document = await fetchDocumentFromStorage(docId);
-  
-  return new Response(document, {
-    headers: {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    }
-  });
-}
-```
-
-## With authentication
-
-```jsx
-// components/SecureEditor.jsx
-import { useSession } from 'next-auth/react';
-import dynamic from 'next/dynamic';
-
-const DocumentEditor = dynamic(() => import('./DocumentEditor'), { ssr: false });
-
-export default function SecureEditor() {
-  const { data: session, status } = useSession();
-
-  if (status === 'loading') return <div>Loading...</div>;
-  if (!session) return <div>Please sign in</div>;
-
-  return (
-    <DocumentEditor 
-      document="/protected-doc.docx"
-      user={{
-        name: session.user.name,
-        email: session.user.email
-      }}
+    <SuperDocEditor
+      document="/sample.docx"
+      documentMode="editing"
+      onReady={() => console.log('Editor ready!')}
+      style={{ height: '100vh' }}
     />
   );
 }
 ```
+
+### Pages Router
+
+```jsx
+// pages/editor.jsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+export default function EditorPage() {
+  return (
+    <SuperDocEditor
+      document="/sample.docx"
+      documentMode="editing"
+      style={{ height: '100vh' }}
+    />
+  );
+}
+```
+
+<Tip>
+The React wrapper is SSR-safe — it renders container divs on the server (hidden until initialized) and starts SuperDoc after hydration. Use `renderLoading` for custom loading UI, or Next.js dynamic imports if you prefer to skip SSR entirely.
+</Tip>
+
+---
+
+## CSS Import
+
+Import styles in your layout or page:
+
+```jsx
+// app/layout.jsx
+import '@superdoc-dev/react/style.css';
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="React Integration" icon="react" href="/getting-started/frameworks/react">
+  Full React wrapper documentation
+</Card>
+<Card title="Configuration" icon="gear" href="/core/superdoc/configuration">
+  Configuration options
+</Card>
+<Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
+  Real-time collaboration
+</Card>
+<Card title="React Example" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/getting-started/react">
+  React + TypeScript example
+</Card>
+<Card title="Next.js Example" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/integrations/nextjs-ssr">
+  Next.js SSR integration
+</Card>
+</CardGroup>

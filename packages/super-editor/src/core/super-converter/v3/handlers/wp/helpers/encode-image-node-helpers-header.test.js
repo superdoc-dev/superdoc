@@ -341,4 +341,46 @@ describe('handleImageNode - Header/Footer Images', () => {
     expect(result?.attrs?.id).toBe('3');
     expect(result?.attrs?.alt).toContain('Picture 3'); // From wp:docPr name attribute
   });
+
+  it('should handle absolute paths in image relationship targets (SD-1786)', () => {
+    // This test covers the SD-1786 bug where documents (e.g., from Google Docs)
+    // use absolute paths like "/word/media/image1.png" instead of relative paths.
+    // The normalizeTargetPath function should handle this correctly.
+
+    const node = makeImageNode();
+
+    const params = {
+      filename: 'header1.xml',
+      docx: {
+        'word/_rels/header1.xml.rels': {
+          elements: [
+            {
+              name: 'Relationships',
+              attributes: {
+                xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships',
+              },
+              elements: [
+                {
+                  name: 'Relationship',
+                  attributes: {
+                    Id: 'rId1',
+                    Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+                    // Absolute path (starts with /) - this is valid per ECMA-376 but less common
+                    Target: '/word/media/image1.png',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleImageNode(node, params, true);
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe('image');
+    // Should normalize to the correct path without leading slash
+    expect(result?.attrs?.src).toBe('word/media/image1.png');
+  });
 });

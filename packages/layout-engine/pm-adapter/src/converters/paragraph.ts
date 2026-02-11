@@ -660,12 +660,12 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
 
       reusedBlocks.forEach((block) => {
         blocks.push(block);
-        recordBlockKind(block.kind);
+        recordBlockKind?.(block.kind);
       });
 
       // Store in next cache generation with current position (reuse nodeJson)
       flowBlockCache.set(prefixedStableId, nodeJson, nodeRev, reusedBlocks, pmStart);
-      sectionState.currentParagraphIndex++;
+      sectionState!.currentParagraphIndex++;
       return;
     }
 
@@ -686,12 +686,12 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
 
     paragraphBlocks.forEach((block) => {
       blocks.push(block);
-      recordBlockKind(block.kind);
+      recordBlockKind?.(block.kind);
     });
 
     // Store in cache using pre-computed nodeJson (avoids double serialization)
     flowBlockCache.set(prefixedStableId, nodeJson, nodeRev, paragraphBlocks, pmStart);
-    sectionState.currentParagraphIndex++;
+    sectionState!.currentParagraphIndex++;
     return;
   }
 

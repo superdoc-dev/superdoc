@@ -4,9 +4,9 @@ title: API Reference
 
 Complete eSign component API
 
-## Component Props
+## Component props
 
-### Required Props
+### Required props
 
 <ParamField path="eventId" type="string" required>
   Unique identifier for this signing session
@@ -24,14 +24,28 @@ Complete eSign component API
       Display mode: `'full' | 'download'`
     </ParamField>
 
-    <ParamField path="layoutMode" type="string">
-      Layout mode: `'paginated' | 'responsive'`
+    <ParamField path="viewOptions" type="object">
+      View options for controlling document layout (recommended)
+
+      <Expandable title="Properties">
+        <ParamField path="viewOptions.layout" type="string">
+          Document layout: `'print'` (default) or `'web'`
+          - `print` - Fixed page width, displays document as it prints
+          - `web` - Content reflows to fit container (mobile/accessibility)
+        </ParamField>
+      </Expandable>
     </ParamField>
 
-    <ParamField path="layoutMargins" type="object">
-      Custom margins (pixels) for `layoutMode: 'responsive'`
+    <ParamField path="layoutMode" type="string" deprecated>
+      **Deprecated.** Use `viewOptions.layout` instead.
+      - `'paginated'` → `viewOptions: { layout: 'print' }`
+      - `'responsive'` → `viewOptions: { layout: 'web' }`
     </ParamField>
-    
+
+    <ParamField path="layoutMargins" type="object" deprecated>
+      **Deprecated.** No longer supported. Use CSS for margin control.
+    </ParamField>
+
     <ParamField path="validation.scroll.required" type="boolean">
       Require scrolling to bottom before signing
     </ParamField>
@@ -46,7 +60,7 @@ Complete eSign component API
   ```
 </ParamField>
 
-### Optional Props
+### Optional props
 
 <ParamField path="fields" type="object">
   Field configuration
@@ -235,9 +249,19 @@ interface AuditEvent {
 }
 ```
 
-### LayoutMargins
+### ViewOptions
 
-Custom margins for responsive layout mode:
+Document view options (recommended):
+
+```typescript
+interface ViewOptions {
+  layout?: 'web' | 'print';  // 'print' is default
+}
+```
+
+### LayoutMargins (Deprecated)
+
+<Warning>Deprecated since v2.0. Use CSS for margin control.</Warning>
 
 ```typescript
 interface LayoutMargins {
@@ -261,7 +285,7 @@ interface SuperDocESignHandle {
 }
 ```
 
-## Ref Methods
+## Ref methods
 
 Access via ref:
 
@@ -293,9 +317,9 @@ return <SuperDocESign ref={ref} ... />
 - `reset()` - Clear all state and start over
 - `updateFieldInDocument()` - Update a document field by id
 
-## Field Components
+## Field components
 
-### Default Components
+### Default components
 
 The component provides default implementations for all field types. You can import and extend them:
 
@@ -311,7 +335,7 @@ import { SignatureInput, CheckboxInput } from '@superdoc-dev/esign';
 />
 ```
 
-### Custom Component Props
+### Custom component props
 
 All custom field components receive:
 
@@ -326,7 +350,7 @@ interface FieldComponentProps {
 }
 ```
 
-## CSS Classes
+## CSS classes
 
 Target these classes for styling:
 
@@ -337,7 +361,7 @@ Target these classes for styling:
 - `.superdoc-esign-actions` - Button container
 - `.superdoc-esign-btn` - Default buttons
 
-## Import Types
+## Import types
 
 All types are exported:
 
@@ -345,6 +369,7 @@ All types are exported:
 import type {
   SuperDocESignProps,
   SuperDocESignHandle,
+  DocumentConfig,
   SubmitData,
   DownloadData,
   SigningState,
@@ -355,7 +380,7 @@ import type {
   FieldChange,
   AuditEvent,
   FieldComponentProps,
-  LayoutMargins
+  LayoutMargins  // deprecated
 } from '@superdoc-dev/esign';
 ```
 

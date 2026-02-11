@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vite
 import * as collaborationModule from './collaboration.js';
 import {
   initCollaborationComments,
+  loadCommentsFromYdoc,
   initSuperdocYdoc,
   makeDocumentsCollaborative,
   syncCommentsToClients,
@@ -290,6 +291,58 @@ describe('collaboration helpers', () => {
     // Event from same user should be ignored
     commentsArray.emit({ transaction: { origin: { user: superdoc.config.user } } });
     expect(useCommentMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('initCollaborationComments loads existing comments from ydoc on init', () => {
+    commentsArray.items = [
+      new MockYMap(Object.entries({ commentId: 'c1', text: 'Hello' })),
+      new MockYMap(Object.entries({ commentId: 'c1', text: 'Duplicate' })),
+      new MockYMap(Object.entries({ commentId: 'c2', text: 'Another' })),
+    ];
+
+    initCollaborationComments(superdoc);
+
+    expect(useCommentMock).toHaveBeenCalledTimes(2);
+    expect(superdoc.commentsStore.commentsList).toEqual([{ normalized: 'c1' }, { normalized: 'c2' }]);
+  });
+
+  it('loadCommentsFromYdoc hydrates comments from importedId and deduplicates by stable key', () => {
+    commentsArray.items = [
+      new MockYMap(Object.entries({ importedId: 'legacy-1', text: 'legacy without commentId' })),
+      new MockYMap(Object.entries({ importedId: 'legacy-1', text: 'duplicate legacy' })),
+      new MockYMap(Object.entries({ commentId: 'c2', text: 'normal comment' })),
+      new MockYMap(Object.entries({ commentId: 'c2', text: 'duplicate normal comment' })),
+    ];
+    superdoc.provider.synced = true;
+
+    const loaded = loadCommentsFromYdoc(superdoc);
+
+    expect(loaded).toBe(true);
+    expect(useCommentMock).toHaveBeenCalledTimes(2);
+    expect(useCommentMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ importedId: 'legacy-1', commentId: 'legacy-1' }),
+    );
+    expect(useCommentMock).toHaveBeenNthCalledWith(2, expect.objectContaining({ commentId: 'c2' }));
+    expect(superdoc.commentsStore.commentsList).toEqual([{ normalized: 'legacy-1' }, { normalized: 'c2' }]);
+    expect(superdoc.commentsStore.hasSyncedCollaborationComments).toBe(true);
+  });
+
+  it('initCollaborationComments re-hydrates store on repeated init without duplicating listeners', () => {
+    commentsArray.items = [new MockYMap(Object.entries({ commentId: 'c1', text: 'first' }))];
+
+    initCollaborationComments(superdoc);
+    expect(commentsArray._observers.size).toBe(1);
+    expect(superdoc.provider.on).toHaveBeenCalledTimes(1);
+    expect(superdoc.commentsStore.commentsList).toEqual([{ normalized: 'c1' }]);
+
+    // Simulate store reset after mount; second init should re-hydrate but not add listeners again.
+    superdoc.commentsStore.commentsList = [];
+    initCollaborationComments(superdoc);
+
+    expect(commentsArray._observers.size).toBe(1);
+    expect(superdoc.provider.on).toHaveBeenCalledTimes(1);
+    expect(superdoc.commentsStore.commentsList).toEqual([{ normalized: 'c1' }]);
   });
 
   it('initCollaborationComments skips when module disabled', () => {

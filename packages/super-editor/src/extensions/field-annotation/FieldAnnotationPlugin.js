@@ -1,5 +1,5 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
-import { mergeRanges, clampRange } from '@core/helpers/rangeUtils.js';
+import { mergeRanges, clampRange } from '@utils/rangeUtils.js';
 import { trackFieldAnnotationsDeletion } from './fieldAnnotationHelpers/trackFieldAnnotationsDeletion.js';
 import { getAllFieldAnnotations } from './fieldAnnotationHelpers/getAllFieldAnnotations.js';
 
@@ -148,7 +148,7 @@ export const FieldAnnotationPlugin = (options = {}) => {
             // For pure insertions (from === to), derive range from slice size
             const from = step.from;
             const to = step.from === step.to && step.slice?.size ? step.from + step.slice.size : step.to;
-            affectedRanges.push([from, to]);
+            affectedRanges.push({ from, to });
           }
         });
       });
@@ -158,15 +158,15 @@ export const FieldAnnotationPlugin = (options = {}) => {
 
       // If we have steps but no field annotations in inserted content, check if affected ranges contain existing annotations
       if (hasSteps && !hasFieldAnnotationsInSlice && affectedRanges.length > 0) {
-        const mergedRanges = mergeRanges(affectedRanges);
+        const mergedRanges = mergeRanges(affectedRanges, newState.doc.content.size);
         let hasExistingAnnotations = false;
 
-        for (const [start, end] of mergedRanges) {
-          const clampedRange = clampRange(start, end, newState.doc.content.size);
+        for (const { from, to } of mergedRanges) {
+          const clampedRange = clampRange(from, to, newState.doc.content.size);
 
           if (!clampedRange) continue;
 
-          const [validStart, validEnd] = clampedRange;
+          const { start: validStart, end: validEnd } = clampedRange;
 
           try {
             newState.doc.nodesBetween(validStart, validEnd, (node) => {
@@ -209,15 +209,15 @@ export const FieldAnnotationPlugin = (options = {}) => {
       };
 
       if (affectedRanges.length > 0) {
-        const mergedRanges = mergeRanges(affectedRanges);
+        const mergedRanges = mergeRanges(affectedRanges, newState.doc.content.size);
         let shouldFallbackToFullScan = false;
 
-        for (const [start, end] of mergedRanges) {
-          const clampedRange = clampRange(start, end, newState.doc.content.size);
+        for (const { from, to } of mergedRanges) {
+          const clampedRange = clampRange(from, to, newState.doc.content.size);
 
           if (!clampedRange) continue;
 
-          const [validStart, validEnd] = clampedRange;
+          const { start: validStart, end: validEnd } = clampedRange;
 
           try {
             newState.doc.nodesBetween(validStart, validEnd, (node, pos) => {

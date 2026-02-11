@@ -1,5 +1,7 @@
 import { Node, Attribute } from '@core/index';
 import { StructuredContentInlineView } from './StructuredContentInlineView';
+import { createStructuredContentLockPlugin } from './structured-content-lock-plugin';
+import { createStructuredContentSelectPlugin } from './structured-content-select-plugin';
 
 export const structuredContentClass = 'sd-structured-content';
 export const structuredContentInnerClass = 'sd-structured-content__content';
@@ -84,6 +86,15 @@ export const StructuredContent = Node.create({
         },
       },
 
+      lockMode: {
+        default: 'unlocked',
+        parseDOM: (elem) => elem.getAttribute('data-lock-mode') || 'unlocked',
+        renderDOM: (attrs) => {
+          if (!attrs.lockMode || attrs.lockMode === 'unlocked') return {};
+          return { 'data-lock-mode': attrs.lockMode };
+        },
+      },
+
       sdtPr: {
         rendered: false,
       },
@@ -102,6 +113,10 @@ export const StructuredContent = Node.create({
       }),
       0,
     ];
+  },
+
+  addPmPlugins() {
+    return [createStructuredContentLockPlugin(), createStructuredContentSelectPlugin()];
   },
 
   addNodeView() {

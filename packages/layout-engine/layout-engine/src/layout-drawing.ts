@@ -2,6 +2,7 @@ import type { DrawingBlock, DrawingMeasure, DrawingFragment } from '@superdoc/co
 import type { NormalizedColumns } from './layout-image.js';
 import type { PageState } from './paginator.js';
 import { extractBlockPmRange } from './layout-utils.js';
+import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
 
 /**
  * Context for laying out a drawing block (vector shape) within the page layout.
@@ -118,7 +119,7 @@ export function layoutDrawingBlock({
     geometry: measure.geometry,
     scale: measure.scale,
     drawingContentId: block.drawingContentId,
-    zIndex: block.zIndex,
+    zIndex: getFragmentZIndex(block),
     pmStart: pmRange.pmStart,
     pmEnd: pmRange.pmEnd,
   };

@@ -14,14 +14,6 @@ export { createAIProvider } from './ai-actions/providers';
 export * from './shared/types';
 export * from './shared/utils';
 export * from './shared/constants';
-export type {
-  AIToolActions,
-  SafeRecord,
-  SelectionRange,
-  SelectionSnapshot,
-  PlannerContextSnapshot,
-  BuilderPlanResult,
-} from './shared/types';
 
 export { createToolRegistry, getToolDescriptions, isValidTool } from './ai-actions/tools';
 

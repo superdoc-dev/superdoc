@@ -1,13 +1,8 @@
-import React from 'react';
+import type { FC } from 'react';
 import type { SubmitButtonProps, SubmitConfig } from '../types';
 
 export const createSubmitButton = (config?: SubmitConfig) => {
-  const Component: React.FC<SubmitButtonProps> = ({
-    onClick,
-    isValid,
-    isDisabled,
-    isSubmitting,
-  }) => {
+  const Component: FC<SubmitButtonProps> = ({ onClick, isValid, isDisabled, isSubmitting }) => {
     const label = config?.label || 'Submit';
     const disabled = !isValid || isDisabled || isSubmitting;
 
@@ -32,7 +27,7 @@ export const createSubmitButton = (config?: SubmitConfig) => {
           transition: 'opacity 0.2s ease',
         }}
       >
-        {isSubmitting && <span className="superdoc-esign-spinner superdoc-esign-spinner--light" />}
+        {isSubmitting && <span className='superdoc-esign-spinner superdoc-esign-spinner--light' />}
         {isSubmitting ? 'Submitting...' : label}
       </button>
     );

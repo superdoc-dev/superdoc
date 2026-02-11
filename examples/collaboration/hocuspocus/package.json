@@ -1,8 +1,27 @@
 {
   "name": "superdoc-hocuspocus-example",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "pnpm -r --parallel dev",
-    "build": "pnpm --filter ./client build"
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "vite",
+    "dev:server": "node server.js",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@hocuspocus/provider": "^2.13.6",
+    "@hocuspocus/server": "^2.13.6",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "superdoc": "latest",
+    "yjs": "13.6.19"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.7"
   }
 }

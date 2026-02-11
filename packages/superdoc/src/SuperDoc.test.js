@@ -77,7 +77,7 @@ const stubComponent = (name) =>
   defineComponent({
     name,
     props: ['comment', 'autoFocus', 'parent', 'documentData', 'config', 'documentId', 'fileSource', 'state', 'options'],
-    emits: ['pageMarginsChange', 'ready', 'selection-change', 'page-loaded', 'bypass-selection'],
+    emits: ['pageMarginsChange', 'ready', 'selection-change', 'page-loaded', 'page-ready', 'bypass-selection'],
     setup(props, { slots }) {
       return () => h('div', { class: `${name}-stub` }, slots.default ? slots.default() : undefined);
     },
@@ -636,6 +636,21 @@ describe('SuperDoc.vue', () => {
 
     expect(commentsStoreStub.handleEditorLocationsUpdate).not.toHaveBeenCalled();
     expect(commentsStoreStub.clearEditorCommentPositions).toHaveBeenCalled();
+  });
+
+  it('forwards empty comment position payloads to store-level guard', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCommentLocationsUpdate({
+      allCommentPositions: {},
+      allCommentIds: [],
+    });
+    await nextTick();
+
+    expect(commentsStoreStub.handleEditorLocationsUpdate).toHaveBeenCalledWith({}, []);
   });
 
   it('clears PDF selections when viewing mode is active to keep tools hidden', async () => {

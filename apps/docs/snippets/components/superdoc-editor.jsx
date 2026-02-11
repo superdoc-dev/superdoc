@@ -13,11 +13,11 @@ export const SuperDocEditor = ({
   useEffect(() => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/@harbour-enterprises/superdoc@latest/dist/style.css';
+    link.href = 'https://unpkg.com/superdoc@latest/dist/style.css';
     document.head.appendChild(link);
 
     const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@harbour-enterprises/superdoc@latest/dist/superdoc.umd.js';
+    script.src = 'https://unpkg.com/superdoc@latest/dist/superdoc.umd.js';
     script.onload = () => {
       setTimeout(() => {
         if (window.SuperDocLibrary) {

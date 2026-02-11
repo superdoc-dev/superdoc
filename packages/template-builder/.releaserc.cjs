@@ -8,6 +8,7 @@ const config = {
   ],
   tagFormat: 'template-builder-v${version}',
   plugins: [
+    'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
     ['@semantic-release/npm', { npmPublish: true }],
@@ -29,6 +30,19 @@ if (!isPrerelease) {
   ]);
 }
 
-config.plugins.push('@semantic-release/github');
+// Linear integration - labels issues with version on release
+config.plugins.push(['semantic-release-linear-app', {
+  teamKeys: ['SD'],
+  addComment: true,
+  packageName: 'template-builder',
+  commentTemplate: 'shipped in {package} {releaseLink} {channel}'
+}]);
+
+config.plugins.push([
+  '@semantic-release/github',
+  {
+    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **template-builder** v${nextRelease.version}\n\nThe release is available on [GitHub release](<github_release_url>)',
+  }
+]);
 
 module.exports = config;

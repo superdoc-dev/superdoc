@@ -15,8 +15,12 @@ import {
 import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
+  getPageOffsetY as getPageOffsetYFromTransform,
 } from './dom/CoordinateTransform.js';
-import { normalizeClientPoint as normalizeClientPointFromPointer } from './dom/PointerNormalization.js';
+import {
+  normalizeClientPoint as normalizeClientPointFromPointer,
+  denormalizeClientPoint as denormalizeClientPointFromPointer,
+} from './dom/PointerNormalization.js';
 import { getPageElementByIndex } from './dom/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
@@ -1701,9 +1705,7 @@ export class PresentationEditor extends EventEmitter {
     const isLeftMargin = marginLeft > 0 && x < marginLeft;
     const isRightMargin = marginRight > 0 && x > pageWidth - marginRight;
 
-    const pageEl = this.#viewportHost.querySelector(
-      `.superdoc-page[data-page-index="${pageIndex}"]`,
-    ) as HTMLElement | null;
+    const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
     if (!pageEl) {
       return null;
     }
@@ -2968,9 +2970,7 @@ export class PresentationEditor extends EventEmitter {
           previousMeasures,
         );
         const incrementalLayoutEnd = perfNow();
-        perfLog(
-          `[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`,
-        );
+        perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
 
         // Type guard: validate incrementalLayout return value
         if (!result || typeof result !== 'object') {
@@ -4447,6 +4447,15 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  #getPageOffsetY(pageIndex: number): number | null {
+    return getPageOffsetYFromTransform({
+      painterHost: this.#painterHost,
+      viewportHost: this.#viewportHost,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageIndex,
+    });
+  }
+
   #convertPageLocalToOverlayCoords(
     pageIndex: number,
     pageLocalX: number,
@@ -4513,9 +4522,31 @@ export class PresentationEditor extends EventEmitter {
         visibleHost: this.#visibleHost,
         zoom: this.#layoutOptions.zoom ?? 1,
         getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
       },
       clientX,
       clientY,
+    );
+  }
+
+  denormalizeClientPoint(
+    layoutX: number,
+    layoutY: number,
+    pageIndex?: number,
+    height?: number,
+  ): { x: number; y: number; height?: number } | null {
+    return denormalizeClientPointFromPointer(
+      {
+        viewportHost: this.#viewportHost,
+        visibleHost: this.#visibleHost,
+        zoom: this.#layoutOptions.zoom ?? 1,
+        getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
+      },
+      layoutX,
+      layoutY,
+      pageIndex,
+      height,
     );
   }
 
@@ -4600,6 +4631,10 @@ export class PresentationEditor extends EventEmitter {
       };
     }
     return geometry;
+  }
+
+  computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null {
+    return this.#computeCaretLayoutRect(pos);
   }
 
   #getCurrentPageIndex(): number {

@@ -30,6 +30,7 @@ import {
   type SdtBoundaryOptions,
 } from '../utils/sdt-helpers.js';
 import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
+import { computeTabWidth } from '../utils/marker-helpers.js';
 
 /**
  * Default gap between list marker and text content in pixels.
@@ -68,6 +69,7 @@ type WordLayoutMarker = {
     /** Letter spacing in pixels */
     letterSpacing?: number;
   };
+  suffix?: 'tab' | 'space' | 'nothing';
 };
 
 /**
@@ -100,6 +102,12 @@ type MarkerRenderParams = {
   markerMeasure: ParagraphMeasure['marker'];
   /** Left indent in pixels */
   indentLeftPx: number;
+  /** Hanging indent in pixels */
+  hangingIndentPx: number;
+  /** First line indent in pixels */
+  firstLineIndentPx: number;
+  /** Array of explicit tab stop positions in pixels. */
+  tabsPx?: number[];
 };
 
 /**
@@ -145,30 +153,39 @@ type TableCellIndentParams = {
  * @returns Container element with marker and line as children
  */
 function renderListMarker(params: MarkerRenderParams): HTMLElement {
-  const { doc, lineEl, markerLayout, markerMeasure, indentLeftPx } = params;
+  const { doc, lineEl, markerLayout, markerMeasure, indentLeftPx, hangingIndentPx, firstLineIndentPx, tabsPx } = params;
+
+  const anchorPoint = indentLeftPx - hangingIndentPx + firstLineIndentPx;
 
   const markerJustification = markerLayout?.justification ?? 'left';
+  const markerTextWidth = markerMeasure?.markerTextWidth ?? 0;
 
-  // Extract marker box width with fallback chain: layout -> measure -> 0
-  const markerBoxWidth =
-    (typeof markerLayout?.markerBoxWidthPx === 'number' ? markerLayout.markerBoxWidthPx : undefined) ??
-    markerMeasure?.markerWidth ??
-    0;
+  let markerStartPos: number, currentPos: number;
+  if (markerJustification === 'left') {
+    markerStartPos = anchorPoint;
+    currentPos = markerStartPos + markerTextWidth;
+  } else if (markerJustification === 'right') {
+    markerStartPos = anchorPoint - markerTextWidth;
+    currentPos = anchorPoint;
+  } else {
+    markerStartPos = anchorPoint - markerTextWidth / 2;
+    currentPos = markerStartPos + markerTextWidth;
+  }
 
-  // Extract gutter width with fallback chain: layout -> measure -> default gap
-  const gutter =
-    (typeof markerLayout?.gutterWidthPx === 'number' ? markerLayout.gutterWidthPx : undefined) ??
-    markerMeasure?.gutterWidth ??
-    LIST_MARKER_GAP;
-
-  // Calculate marker start position based on justification
-  const markerStartPos =
-    markerJustification === 'left'
-      ? indentLeftPx
-      : ((typeof markerLayout?.markerX === 'number' ? markerLayout.markerX : undefined) ?? indentLeftPx);
-
-  // Marker left position is marker start minus the width of the marker box
-  const markerLeftPos = markerStartPos - markerBoxWidth;
+  const suffix = markerLayout?.suffix ?? 'tab';
+  let listTabWidth = 0;
+  if (suffix === 'tab') {
+    listTabWidth = computeTabWidth(
+      currentPos,
+      markerJustification,
+      tabsPx,
+      hangingIndentPx,
+      firstLineIndentPx,
+      indentLeftPx,
+    );
+  } else if (suffix === 'space') {
+    listTabWidth = 4;
+  }
 
   // Create container to hold both marker and line
   const lineContainer = doc.createElement('div');
@@ -193,17 +210,39 @@ function renderListMarker(params: MarkerRenderParams): HTMLElement {
     markerEl.style.letterSpacing = `${markerLayout.run.letterSpacing}px`;
   }
 
-  // Position marker absolutely within the container
-  markerEl.style.position = 'absolute';
-  markerEl.style.left = `${markerLeftPos}px`;
-  markerEl.style.width = `${markerBoxWidth}px`;
-  markerEl.style.textAlign = markerJustification;
-  markerEl.style.paddingRight = `${gutter}px`;
+  // Position marker within the container
+  if (['center', 'right'].includes(markerJustification)) {
+    lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft || '0') + currentPos + listTabWidth + 'px';
+    if (markerJustification === 'right') {
+      markerEl.style.position = 'absolute';
+      markerEl.style.left = `${markerStartPos}px`;
+    } else {
+      markerEl.style.position = 'absolute';
+      markerEl.style.left = `${markerStartPos - markerTextWidth / 2}px`;
+    }
+  }
+  lineEl.style.display = 'inline-block';
 
-  // Align text start to the marker start position (gutter spacing comes from marker padding)
-  lineEl.style.paddingLeft = `${markerStartPos}px`;
+  // Add separator
+  let separatorEl;
+  if (suffix === 'tab') {
+    separatorEl = doc.createElement('span');
+    separatorEl.className = 'superdoc-tab';
+    separatorEl.innerHTML = '&nbsp;';
+    separatorEl.style.display = 'inline-block';
+    separatorEl.style.wordSpacing = '0px';
+    separatorEl.style.width = `${listTabWidth}px`;
+  } else if (suffix === 'space') {
+    separatorEl = doc.createElement('span');
+    separatorEl.className = 'superdoc-marker-suffix-space';
+    separatorEl.style.wordSpacing = '0px';
+    separatorEl.textContent = '\u00A0';
+  }
 
   lineContainer.appendChild(markerEl);
+  if (separatorEl) {
+    lineContainer.appendChild(separatorEl);
+  }
   lineContainer.appendChild(lineEl);
 
   return lineContainer;
@@ -887,6 +926,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           markerMeasure?.indentLeft ??
           wordLayout?.indentLeftPx ??
           (block.attrs?.indent && typeof block.attrs.indent.left === 'number' ? block.attrs.indent.left : 0);
+        const hangingIndentPx =
+          block.attrs?.indent && typeof block.attrs.indent.hanging === 'number' ? block.attrs.indent.hanging : 0;
+        const firstLineIndentPx =
+          block.attrs?.indent && typeof block.attrs.indent.firstLine === 'number' ? block.attrs.indent.firstLine : 0;
         const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
 
         // Calculate the global line indices for this block
@@ -910,6 +953,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         // Create wrapper for this paragraph's SDT metadata
         // Use absolute positioning within the content container to stack blocks vertically
         const paraWrapper = doc.createElement('div');
+        paraWrapper.classList.add('superdoc-table-paragraph');
         paraWrapper.style.position = 'relative';
         paraWrapper.style.left = '0';
         paraWrapper.style.width = '100%';
@@ -978,6 +1022,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
               markerLayout,
               markerMeasure,
               indentLeftPx,
+              hangingIndentPx,
+              firstLineIndentPx,
             });
             renderedLines.push({ el: lineContainer, top: lineTop, height: line.lineHeight });
             paraWrapper.appendChild(lineContainer);

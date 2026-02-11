@@ -425,6 +425,13 @@ const SDT_CONTAINER_STYLES = `
   border-bottom: none;
 }
 
+/* Collapse double borders between adjacent SDT blocks */
+.superdoc-structured-content-block + .superdoc-structured-content-block {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 /* Structured Content Inline - Inline wrapper with blue border */
 .superdoc-structured-content-inline {
   padding: 1px;

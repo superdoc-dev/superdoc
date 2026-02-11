@@ -267,16 +267,14 @@ export const PermissionRanges = Extension.create({
       };
     }
 
+    const permissionTypeInfo = getPermissionTypeInfo(editor?.state?.schema);
+
     return [
       new Plugin({
         key: PERMISSION_PLUGIN_KEY,
         state: {
           init(_, state) {
-            const permissionState = buildPermissionState(
-              state.doc,
-              getAllowedIdentifiers(),
-              getPermissionTypeInfo(state.schema),
-            );
+            const permissionState = buildPermissionState(state.doc, getAllowedIdentifiers(), permissionTypeInfo);
             storage.ranges = permissionState.ranges;
             updateEditableState(permissionState.hasAllowedRanges);
             return permissionState;
@@ -285,11 +283,7 @@ export const PermissionRanges = Extension.create({
           apply(tr, value, _oldState, newState) {
             let permissionState = value;
             if (tr.docChanged) {
-              permissionState = buildPermissionState(
-                newState.doc,
-                getAllowedIdentifiers(),
-                getPermissionTypeInfo(newState.schema),
-              );
+              permissionState = buildPermissionState(newState.doc, getAllowedIdentifiers(), permissionTypeInfo);
               storage.ranges = permissionState.ranges;
               updateEditableState(permissionState.hasAllowedRanges);
             }

@@ -457,22 +457,13 @@ const SDT_CONTAINER_STYLES = `
   display: block;
 }
 
-/* SDT border visibility — matches Word behavior: borders hidden by default, shown on hover.
- * data-lock-mode is set on ALL SDTs (including unlocked) so this applies universally.
- * Use border-color (not border shorthand) to preserve continuation rules
- * that remove border-top/border-bottom on multi-fragment SDT containers. */
-.superdoc-structured-content-block[data-lock-mode],
-.superdoc-structured-content-inline[data-lock-mode] {
-  border-color: transparent;
-}
-
-/* Reveal blue border + highlight on hover.
+/* Hover highlight for SDT containers.
+ * Blue border is always visible (set in base rules above).
+ * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-hover class (event delegation for multi-fragment coordination).
- * Inline SDTs use :hover (single element, no coordination needed).
- * !important overrides transparent default and continuation border rules. */
+ * Inline SDTs use :hover (single element, no coordination needed). */
 .superdoc-structured-content-block[data-lock-mode].sdt-hover,
 .superdoc-structured-content-inline[data-lock-mode]:hover {
-  border-color: #629be7 !important;
   background-color: rgba(98, 155, 231, 0.08);
   z-index: 9999999;
 }

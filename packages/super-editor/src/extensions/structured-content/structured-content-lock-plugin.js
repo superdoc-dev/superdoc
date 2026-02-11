@@ -18,10 +18,6 @@ export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock'
 
 /**
  * Collect all SDT nodes from the document.
- *
- * TODO: For large documents, consider caching SDT nodes in plugin state
- * (rebuild on docChanged only), early-exit on unlocked nodes, or limiting
- * the search to nodes near the current selection for key/input handlers.
  */
 function collectSDTNodes(doc) {
   const sdtNodes = [];
@@ -75,6 +71,16 @@ export function createStructuredContentLockPlugin() {
   return new Plugin({
     key: STRUCTURED_CONTENT_LOCK_KEY,
 
+    state: {
+      init(_, editorState) {
+        return collectSDTNodes(editorState.doc);
+      },
+      apply(tr, cachedSDTNodes, _oldState, newState) {
+        if (!tr.docChanged) return cachedSDTNodes;
+        return collectSDTNodes(newState.doc);
+      },
+    },
+
     props: {
       /**
        * Intercept key events BEFORE any transaction is created.
@@ -94,7 +100,7 @@ export function createStructuredContentLockPlugin() {
           return false; // Let other handlers process
         }
 
-        const sdtNodes = collectSDTNodes(state.doc);
+        const sdtNodes = STRUCTURED_CONTENT_LOCK_KEY.getState(state);
         if (sdtNodes.length === 0) {
           return false;
         }
@@ -126,7 +132,7 @@ export function createStructuredContentLockPlugin() {
        * Handle text input (typing) for content-locked nodes
        */
       handleTextInput(view, from, to, _text) {
-        const sdtNodes = collectSDTNodes(view.state.doc);
+        const sdtNodes = STRUCTURED_CONTENT_LOCK_KEY.getState(view.state);
         if (sdtNodes.length === 0) {
           return false;
         }
@@ -150,7 +156,7 @@ export function createStructuredContentLockPlugin() {
         return true;
       }
 
-      const sdtNodes = collectSDTNodes(state.doc);
+      const sdtNodes = STRUCTURED_CONTENT_LOCK_KEY.getState(state);
       if (sdtNodes.length === 0) {
         return true;
       }

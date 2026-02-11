@@ -1,6 +1,7 @@
 import { Node, Attribute } from '@core/index';
 import { StructuredContentInlineView } from './StructuredContentInlineView';
 import { createStructuredContentLockPlugin } from './structured-content-lock-plugin';
+import { createStructuredContentSelectPlugin } from './structured-content-select-plugin';
 
 export const structuredContentClass = 'sd-structured-content';
 export const structuredContentInnerClass = 'sd-structured-content__content';
@@ -115,7 +116,7 @@ export const StructuredContent = Node.create({
   },
 
   addPmPlugins() {
-    return [createStructuredContentLockPlugin()];
+    return [createStructuredContentLockPlugin(), createStructuredContentSelectPlugin()];
   },
 
   addNodeView() {

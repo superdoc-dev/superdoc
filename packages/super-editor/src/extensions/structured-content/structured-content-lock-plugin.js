@@ -109,7 +109,10 @@ export function createStructuredContentLockPlugin() {
         let affectedFrom = from;
         let affectedTo = to;
 
-        // If selection is collapsed, backspace/delete affects adjacent position
+        // If selection is collapsed, backspace/delete affects adjacent position.
+        // Note: this is a single-character approximation. joinBackward at paragraph
+        // boundaries can span wider ranges, but filterTransaction catches the real
+        // step range as a safety net (with a possible brief cursor jump).
         if (from === to) {
           if (isBackspace && from > 0) {
             affectedFrom = from - 1;
@@ -162,6 +165,8 @@ export function createStructuredContentLockPlugin() {
       }
 
       for (const step of tr.steps) {
+        // Skip steps without from/to (AttrStep, AddNodeMarkStep, RemoveNodeMarkStep) —
+        // these change metadata, not content, so they can't violate lock rules.
         if (step.from === undefined || step.to === undefined) {
           continue;
         }

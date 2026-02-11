@@ -28,7 +28,9 @@ export class SdtGroupedHover {
       const target = (e.target as HTMLElement).closest?.(SDT_BLOCK_SELECTOR) as HTMLElement | null;
       const sdtId = target?.dataset.sdtId ?? null;
 
-      if (this.hoveredSdtId && this.hoveredSdtId !== sdtId) {
+      if (sdtId === this.hoveredSdtId) return;
+
+      if (this.hoveredSdtId) {
         sdtElementsById(mount, this.hoveredSdtId).forEach((el) => el.classList.remove(HOVER_CLASS));
       }
 

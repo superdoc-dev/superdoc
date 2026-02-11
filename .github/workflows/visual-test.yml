@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  setup:
+  visual:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -62,98 +62,12 @@ jobs:
           SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
           SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}
 
-      - name: Package workspace
-        run: tar -cf /tmp/workspace.tar --exclude=.git .
-
-      - name: Upload workspace
-        uses: actions/upload-artifact@v4
-        with:
-          name: workspace
-          path: /tmp/workspace.tar
-          retention-days: 1
-
-  test:
-    needs: setup
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1/4, 2/4, 3/4, 4/4]
-    steps:
-      - name: Download workspace
-        uses: actions/download-artifact@v4
-        with:
-          name: workspace
-
-      - name: Restore workspace
-        run: tar -xf workspace.tar && rm workspace.tar
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Restore node_modules
-        run: pnpm install --ignore-scripts --frozen-lockfile
-
-      - name: Get Playwright version
-        id: pw
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> $GITHUB_OUTPUT
-        working-directory: tests/visual
-
-      - name: Restore Playwright browsers
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
-
-      - name: Install Playwright system deps
-        run: pnpm exec playwright install-deps chromium firefox webkit
-        working-directory: tests/visual
-
       - name: Run visual tests
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}
-        working-directory: tests/visual
-
-      - name: Upload blob report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: blob-report-${{ strategy.job-index }}
-          path: tests/visual/blob-report/
-          retention-days: 1
-
-  report:
-    if: always() && needs.test.result != 'cancelled'
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --ignore-scripts
-
-      - name: Download blob reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: blob-report-*
-          path: tests/visual/all-blob-reports
-          merge-multiple: true
-
-      - name: Merge reports
-        run: pnpm exec playwright merge-reports --reporter=html ./all-blob-reports
+        run: pnpm test
         working-directory: tests/visual
 
       - name: Upload report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: visual-test-report

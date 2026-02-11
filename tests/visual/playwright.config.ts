@@ -2,8 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  workers: 4,
-  reporter: process.env.CI ? [['blob'], ['html', { open: 'never' }]] : [['html', { open: 'never' }]],
+  workers: 8,
+  reporter: [['html', { open: 'never' }]],
 
   expect: {
     toHaveScreenshot: {

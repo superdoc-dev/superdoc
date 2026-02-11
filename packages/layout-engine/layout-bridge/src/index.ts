@@ -15,7 +15,7 @@ import type {
 } from '@superdoc/contracts';
 import { computeLinePmRange as computeLinePmRangeUnified } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX, measureCharacterX } from './text-measurement.js';
-import { clickToPositionDom } from './dom-mapping.js';
+import { clickToPositionDom, findPageElement } from './dom-mapping.js';
 import {
   isListItem,
   getWordLayoutConfig,
@@ -56,7 +56,7 @@ export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './increm
 export { computeDisplayPageNumber, type DisplayPageInfo } from '@superdoc/layout-engine';
 export { remeasureParagraph } from './remeasure';
 export { measureCharacterX } from './text-measurement';
-export { clickToPositionDom } from './dom-mapping';
+export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
 export { LayoutVersionManager } from './layout-version-manager';
@@ -221,6 +221,73 @@ type AtomicFragment = DrawingFragment | ImageFragment;
 const isAtomicFragment = (fragment: Fragment): fragment is AtomicFragment => {
   return fragment.kind === 'drawing' || fragment.kind === 'image';
 };
+
+/**
+ * Finds the nearest paragraph or atomic fragment to a point on a page.
+ *
+ * When a click lands in whitespace (no fragment hit), this snaps to the closest
+ * fragment by vertical distance. Used as a fallback when hitTestFragment misses.
+ */
+function snapToNearestFragment(
+  pageHit: PageHit,
+  blocks: FlowBlock[],
+  measures: Measure[],
+  pageRelativePoint: Point,
+): FragmentHit | null {
+  const fragments = pageHit.page.fragments.filter(
+    (f: Fragment | undefined): f is Fragment => f != null && typeof f === 'object',
+  );
+  let nearestHit: FragmentHit | null = null;
+  let nearestDist = Infinity;
+
+  for (const frag of fragments) {
+    const isPara = frag.kind === 'para';
+    const isAtomic = isAtomicFragment(frag);
+    if (!isPara && !isAtomic) continue;
+
+    const blockIndex = findBlockIndexByFragmentId(blocks, frag.blockId);
+    if (blockIndex === -1) continue;
+    const block = blocks[blockIndex];
+    const measure = measures[blockIndex];
+    if (!block || !measure) continue;
+
+    let fragHeight = 0;
+    if (isAtomic) {
+      fragHeight = frag.height;
+    } else if (isPara && block.kind === 'paragraph' && measure.kind === 'paragraph') {
+      fragHeight = measure.lines
+        .slice(frag.fromLine, frag.toLine)
+        .reduce((sum: number, line: Line) => sum + line.lineHeight, 0);
+    } else {
+      continue;
+    }
+
+    const top = frag.y;
+    const bottom = frag.y + fragHeight;
+    let dist: number;
+    if (pageRelativePoint.y < top) {
+      dist = top - pageRelativePoint.y;
+    } else if (pageRelativePoint.y > bottom) {
+      dist = pageRelativePoint.y - bottom;
+    } else {
+      dist = 0;
+    }
+
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      const pageY = Math.max(0, Math.min(pageRelativePoint.y - top, fragHeight));
+      nearestHit = {
+        fragment: frag,
+        block,
+        measure,
+        pageIndex: pageHit.pageIndex,
+        pageY,
+      };
+    }
+  }
+
+  return nearestHit;
+}
 
 const logClickStage = (_level: 'log' | 'warn' | 'error', _stage: string, _payload: Record<string, unknown>) => {
   // No-op in production. Enable for debugging click-to-position mapping.
@@ -885,18 +952,12 @@ export function clickToPosition(
   let isContainerPointPageRelative = false;
 
   if (domContainer != null && clientX != null && clientY != null) {
-    const doc = domContainer.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
-    if (doc && typeof doc.elementsFromPoint === 'function') {
-      const hitChain = doc.elementsFromPoint(clientX, clientY);
-      const pageEl = Array.isArray(hitChain)
-        ? (hitChain.find((el) => (el as HTMLElement)?.classList?.contains('superdoc-page')) as HTMLElement | null)
-        : null;
-      if (pageEl) {
-        const domPageIndex = Number(pageEl.dataset.pageIndex ?? 'NaN');
-        if (Number.isFinite(domPageIndex) && domPageIndex >= 0 && domPageIndex < layout.pages.length) {
-          pageHit = { pageIndex: domPageIndex, page: layout.pages[domPageIndex] };
-          isContainerPointPageRelative = true;
-        }
+    const pageEl = findPageElement(domContainer, clientX, clientY);
+    if (pageEl) {
+      const domPageIndex = Number(pageEl.dataset.pageIndex ?? 'NaN');
+      if (Number.isFinite(domPageIndex) && domPageIndex >= 0 && domPageIndex < layout.pages.length) {
+        pageHit = { pageIndex: domPageIndex, page: layout.pages[domPageIndex] };
+        isContainerPointPageRelative = true;
       }
     }
   }
@@ -940,71 +1001,19 @@ export function clickToPosition(
   // picks a nearby paragraph and returns its position, preventing clicks in empty table cell
   // space (below text lines) from reaching hitTestTableFragment below.
   if (!fragmentHit) {
-    const tableFragments = pageHit.page.fragments.filter((f) => f.kind === 'table');
-    const isWithinTableFragment = tableFragments.some((f) => {
-      const tf = f as TableFragment;
-      return (
-        pageRelativePoint.x >= tf.x &&
-        pageRelativePoint.x <= tf.x + tf.width &&
-        pageRelativePoint.y >= tf.y &&
-        pageRelativePoint.y <= tf.y + tf.height
-      );
-    });
+    const isWithinTableFragment = pageHit.page.fragments
+      .filter((f) => f.kind === 'table')
+      .some((f) => {
+        const tf = f as TableFragment;
+        return (
+          pageRelativePoint.x >= tf.x &&
+          pageRelativePoint.x <= tf.x + tf.width &&
+          pageRelativePoint.y >= tf.y &&
+          pageRelativePoint.y <= tf.y + tf.height
+        );
+      });
     if (!isWithinTableFragment) {
-      const page = pageHit.page;
-      const fragments = page.fragments.filter(
-        (f: Fragment | undefined): f is Fragment => f != null && typeof f === 'object',
-      );
-      let nearestHit: FragmentHit | null = null;
-      let nearestDist = Infinity;
-
-      for (const frag of fragments) {
-        const isPara = frag.kind === 'para';
-        const isAtomic = isAtomicFragment(frag);
-        if (!isPara && !isAtomic) continue;
-
-        const blockIndex = findBlockIndexByFragmentId(blocks, frag.blockId);
-        if (blockIndex === -1) continue;
-        const block = blocks[blockIndex];
-        const measure = measures[blockIndex];
-        if (!block || !measure) continue;
-
-        let fragHeight = 0;
-        if (isAtomic) {
-          fragHeight = frag.height;
-        } else if (isPara && block.kind === 'paragraph' && measure.kind === 'paragraph') {
-          fragHeight = measure.lines
-            .slice(frag.fromLine, frag.toLine)
-            .reduce((sum: number, line: Line) => sum + line.lineHeight, 0);
-        } else {
-          continue;
-        }
-
-        const top = frag.y;
-        const bottom = frag.y + fragHeight;
-        let dist: number;
-        if (pageRelativePoint.y < top) {
-          dist = top - pageRelativePoint.y;
-        } else if (pageRelativePoint.y > bottom) {
-          dist = pageRelativePoint.y - bottom;
-        } else {
-          dist = 0;
-        }
-
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          const pageY = Math.max(0, Math.min(pageRelativePoint.y - top, fragHeight));
-          nearestHit = {
-            fragment: frag,
-            block,
-            measure,
-            pageIndex: pageHit.pageIndex,
-            pageY,
-          };
-        }
-      }
-
-      fragmentHit = nearestHit;
+      fragmentHit = snapToNearestFragment(pageHit, blocks, measures, pageRelativePoint);
     }
   }
 

@@ -9,6 +9,7 @@ import type {
   TableMeasure,
 } from '@superdoc/contracts';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
+import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
@@ -177,8 +178,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   // Apply SDT container styling (document sections, structured content blocks)
   applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
-  // Add table-specific class for resize overlay targeting
-  container.classList.add('superdoc-table-fragment');
+  // Add table-specific class for resize overlay targeting and click mapping
+  container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {
@@ -196,6 +197,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
     // Build the list of rows actually rendered in this fragment, matching the
     // rendering order: repeated headers first, then body rows.
+    // NOTE: This header-then-body iteration must stay in sync with the rendering
+    // loop below (~line 315) which uses the same order to render row elements.
     const renderedRows: Array<{ rowIndex: number; height: number }> = [];
 
     // Repeated header rows (only on continuation fragments)
@@ -311,7 +314,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   let y = 0;
 
-  // If this is a continuation fragment with repeated headers, render headers first
+  // If this is a continuation fragment with repeated headers, render headers first.
+  // NOTE: This header-then-body iteration must stay in sync with the metadata
+  // segment builder above (~line 199) which uses the same order.
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
     for (let r = 0; r < fragment.repeatHeaderCount; r += 1) {
       const rowMeasure = measure.rows[r];

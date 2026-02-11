@@ -385,15 +385,32 @@ describe('DOM-based click-to-position mapping', () => {
         </div>
       `;
 
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
       const line = container.querySelector('.superdoc-line') as HTMLElement;
-      const lineRect = line.getBoundingClientRect();
+      const span = container.querySelector('span') as HTMLElement;
 
-      // Click directly on the line — elementsFromPoint should include the line
-      const result = clickToPositionDom(container, lineRect.left + 5, lineRect.top + 5);
+      // Polyfill elementsFromPoint to simulate a real browser hit chain that
+      // includes the line element (clicking directly on text inside a table cell).
+      const originalElementsFromPoint = (document as any).elementsFromPoint;
+      (document as any).elementsFromPoint = () => {
+        return [span, line, tableFragment, page, container, document.body, document.documentElement];
+      };
 
-      // Should return a valid position from the line
-      expect(result).toBeGreaterThanOrEqual(5);
-      expect(result).toBeLessThanOrEqual(15);
+      try {
+        const lineRect = line.getBoundingClientRect();
+        const result = clickToPositionDom(container, lineRect.left + 5, lineRect.top + 5);
+
+        // Should return a valid position from the line via the hitChainLine path
+        expect(result).toBeGreaterThanOrEqual(5);
+        expect(result).toBeLessThanOrEqual(15);
+      } finally {
+        if (originalElementsFromPoint) {
+          (document as any).elementsFromPoint = originalElementsFromPoint;
+        } else {
+          delete (document as any).elementsFromPoint;
+        }
+      }
     });
   });
 

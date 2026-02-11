@@ -11,6 +11,7 @@ import {
   drawingLayout,
   drawingBlock,
   drawingMeasure,
+  buildTableFixtures,
 } from './mock-data';
 
 describe('clickToPosition', () => {
@@ -105,65 +106,13 @@ describe('clickToPosition: table cell empty space', () => {
   // Table with tall cells (80px) but small text (18px line height).
   // Clicking in the empty space below the text line should still resolve
   // to a position in the table cell, NOT snap to a nearby paragraph.
-  const tableCellPara = {
-    kind: 'paragraph' as const,
-    id: 'table-cell-para',
-    runs: [{ text: 'Cell text', fontFamily: 'Arial', fontSize: 14, pmStart: 50, pmEnd: 59 }],
-  };
-
-  const tableBlock: FlowBlock = {
-    kind: 'table',
-    id: 'table-block',
-    rows: [
-      {
-        id: 'row-0',
-        cells: [
-          {
-            id: 'cell-0',
-            blocks: [tableCellPara],
-            attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } },
-          },
-        ],
-      },
-    ],
-  };
-
-  const tableMeasure: Measure = {
-    kind: 'table',
-    rows: [
-      {
-        height: 80,
-        cells: [
-          {
-            width: 200,
-            height: 80,
-            gridColumnStart: 0,
-            blocks: [
-              {
-                kind: 'paragraph',
-                lines: [
-                  {
-                    fromRun: 0,
-                    fromChar: 0,
-                    toRun: 0,
-                    toChar: 9,
-                    width: 70,
-                    ascent: 10,
-                    descent: 4,
-                    lineHeight: 18,
-                  },
-                ],
-                totalHeight: 18,
-              },
-            ],
-          },
-        ],
-      },
-    ],
-    columnWidths: [200],
-    totalWidth: 200,
-    totalHeight: 80,
-  };
+  const { block: tableBlock, measure: tableMeasure } = buildTableFixtures({
+    cellWidth: 200,
+    cellHeight: 80,
+    lineHeight: 18,
+    pmStart: 50,
+    pmEnd: 59,
+  });
 
   // Paragraph above the table (snap-to-nearest candidate)
   const paraBlock: FlowBlock = {

@@ -1,18 +1,13 @@
-name: Visual Baselines
+name: Seed Visual Baselines (temp)
 
 permissions:
   contents: read
 
 on:
   workflow_dispatch:
-  workflow_call:
-
-concurrency:
-  group: visual-baseline
-  cancel-in-progress: false
 
 jobs:
-  update:
+  seed:
     runs-on: ubuntu-24.04
     env:
       SD_VISUAL_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_VISUAL_TESTING_R2_ACCOUNT_ID }}
@@ -21,14 +16,6 @@ jobs:
       SD_VISUAL_TESTING_R2_BUCKET: ${{ secrets.SD_VISUAL_TESTING_R2_BUCKET }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          ref: stable
-
-      - name: Get visual test infrastructure from main
-        run: |
-          git fetch origin main --depth=1
-          git checkout FETCH_HEAD -- tests/visual
-          sed -i '/^packages:/a\  - tests/visual' pnpm-workspace.yaml
 
       - uses: pnpm/action-setup@v4
 

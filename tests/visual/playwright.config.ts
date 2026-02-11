@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   workers: 4,
-  reporter: [['html', { open: 'never' }]],
+  reporter: process.env.CI ? [['blob'], ['html', { open: 'never' }]] : [['html', { open: 'never' }]],
 
   expect: {
     toHaveScreenshot: {

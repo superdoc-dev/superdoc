@@ -35,12 +35,7 @@ export function translateImageWatermark(params) {
       elements: [shape],
     };
 
-    const par = {
-      name: 'w:p',
-      elements: [wrapTextInRun(pict)],
-    };
-
-    return par;
+    return pict;
   }
 
   // Fallback: construct VML from image attributes

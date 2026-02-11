@@ -4,15 +4,6 @@ import { prepareTextAnnotation } from '@converter/v3/handlers/w/sdt/helpers/tran
 import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
 
-/**
- * Decodes image into export XML
- * @typedef {Object} ExportParams
- * @property {Object} node JSON node to translate (from PM schema)
- * @property {Object} bodyNode The stored body node to restore, if available
- * @property {Object[]} relationships The relationships to add to the document
- * @returns {Object} The XML representation.
- */
-
 export const translateImageNode = (params) => {
   const {
     node: { attrs = {} },
@@ -305,7 +296,7 @@ function resizeKeepAspectRatio(width, height, maxWidth) {
 /**
  * Create a new image relationship and add it to the relationships array
  *
- * @param {ExportParams} params
+ * @param {import('@converter/exporter').ExportParams} params
  * @param {string} imagePath The path to the image
  * @returns {string} The new relationship ID
  */
@@ -327,7 +318,7 @@ function addNewImageRelationship(params, imagePath) {
 /**
  * Create a new image relationship for export from collaborator's editor
  *
- * @param {ExportParams} params
+ * @param {import('@converter/exporter').ExportParams} params
  * @param {string} id The new relationship ID
  * @param {string} imagePath The path to the image
  */
@@ -346,8 +337,8 @@ function addImageRelationshipForId(params, id, imagePath) {
 
 /**
  * Translates a vectorShape node back to XML.
- * @param {Object} params - Translation parameters
- * @returns {Object} XML node
+ * @param {import('@converter/exporter').ExportParams} params - Translation parameters
+ * @returns {import('@converter/v2/types').OpenXmlNode} XML node
  */
 export function translateVectorShape(params) {
   const { node } = params;
@@ -374,8 +365,8 @@ export function translateVectorShape(params) {
 
 /**
  * Translates a shapeGroup node back to XML.
- * @param {Object} params - Translation parameters
- * @returns {Object} XML node
+ * @param {import('@converter/exporter').ExportParams} params - Translation parameters
+ * @returns {import('@converter/v2/types').OpenXmlNode} XML node
  */
 export function translateShapeGroup(params) {
   const { node } = params;

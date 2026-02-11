@@ -213,6 +213,7 @@ describe('createDocumentJson', () => {
     const horizontalRules = (result.pmDoc.content || [])
       .filter((node) => node?.type === 'paragraph')
       .flatMap((paragraph) => paragraph?.content || [])
+      .flatMap((child) => child?.content || [])
       .filter((child) => child?.type === 'contentBlock' && child.attrs?.horizontalRule);
 
     expect(horizontalRules).toHaveLength(3);

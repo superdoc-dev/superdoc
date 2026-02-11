@@ -58,6 +58,10 @@ function decode(params) {
     return null;
   }
 
+  if (node.attrs.isPict) {
+    return null;
+  }
+
   const childTranslator = node.attrs.isAnchor ? wpAnchorTranslator : wpInlineTranslator;
   const resultNode = childTranslator.decode(params);
 

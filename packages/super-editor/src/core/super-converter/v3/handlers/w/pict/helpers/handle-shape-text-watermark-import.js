@@ -132,6 +132,7 @@ export function handleShapeTextWatermarkImport({ pict }) {
   const imageWatermarkNode = {
     type: 'image',
     attrs: {
+      isPict: true,
       src: svgDataUri,
       alt: watermarkText,
       title: watermarkText,

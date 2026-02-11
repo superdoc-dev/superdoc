@@ -5,7 +5,7 @@ import { translator as wPPrNodeTranslator } from '../../pPr/pPr-translator.js';
  * Generate the w:pPr props for a paragraph node
  *
  * @param {SchemaNode} node
- * @returns {XmlReadyNode} The paragraph properties node
+ * @returns {import('@converter/v2/types').OpenXmlNode} The paragraph properties node
  */
 export function generateParagraphProperties(params) {
   const { node } = params;

@@ -4,7 +4,7 @@
  *
  * @param {String} text Text node's content
  * @param {Object[]} marks The marks to add to the run properties
- * @returns {XmlReadyNode} The translated text node
+ * @returns {import('@converter/v2/types').OpenXmlNode} The translated text node
  */
 import { translator as wRPrNodeTranslator } from '../../rpr/rpr-translator.js';
 import { combineRunProperties, decodeRPrFromMarks } from '@converter/styles.js';

@@ -28,7 +28,8 @@
  * @typedef {{handler: NodeListHandlerFn, handlerEntities: NodeHandlerEntry[]}} NodeListHandler
  * @typedef {(params: NodeHandlerParams) => PmNodeJson[]} NodeListHandlerFn
  *
- * @typedef {(params: NodeHandlerParams) => {nodes: PmNodeJson[], consumed: number}} NodeHandler
+ * @typedef {{nodes: PmNodeJson[], consumed: number}} NodeHandlerResult
+ * @typedef {(params: NodeHandlerParams) => NodeHandlerResult} NodeHandler
  * @typedef {{handlerName: string, handler: NodeHandler}} NodeHandlerEntry
  *
  * @typedef {Object} SuperConverter

@@ -20,3 +20,17 @@ export const findFirstDescendant = (
     }
   }
 };
+
+export const findAllDescendants = (element: Element, name: string, allowSelf: boolean = false): Element[] => {
+  const result: Element[] = [];
+
+  if (allowSelf && element.name === name) {
+    result.push(element);
+  }
+  if (element.elements) {
+    for (const child of element.elements) {
+      result.push(...findAllDescendants(child, name, true));
+    }
+  }
+  return result;
+};

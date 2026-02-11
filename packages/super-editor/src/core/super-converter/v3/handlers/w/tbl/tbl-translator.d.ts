@@ -1,3 +1,5 @@
+import type { NodeTranslator, SCEncoderConfig } from '@translator';
+
 /**
  * Table styles result
  */
@@ -11,9 +13,12 @@ export interface TableStyles {
 /**
  * Table translator function
  */
-export function translator(node: unknown, params: unknown): unknown;
+export const translator: NodeTranslator;
 
 /**
  * Gets referenced table styles from a style reference
  */
-export function _getReferencedTableStyles(tableStyleReference: string | null, params: unknown): TableStyles | null;
+export function _getReferencedTableStyles(
+  tableStyleReference: string | null,
+  params: SCEncoderConfig,
+): TableStyles | null;

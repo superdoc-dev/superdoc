@@ -8,7 +8,7 @@ import { translator as wPNodeTranslator } from '../../v3/handlers/w/p/index.js';
  * in order to combine list item nodes into list nodes.
  *
  * @param {import('../../v3/node-translator').SCEncoderConfig} params
- * @returns {Object} Handler result
+ * @returns {import('@converter/v2/importer/types').NodeHandlerResult} Handler result
  */
 export const handleParagraphNode = (params) => {
   const { nodes } = params;

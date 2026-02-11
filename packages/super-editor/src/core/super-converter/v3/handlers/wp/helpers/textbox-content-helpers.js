@@ -54,11 +54,11 @@ export function collectTextBoxParagraphs(nodes, paragraphs = []) {
  * For header/footer files, uses simplified page field processing.
  * For body content, uses full field character processing.
  *
- * @param {Object} textBoxContent - The w:txbxContent element containing paragraphs
+ * @param {import('@converter/v2/types').OpenXmlNode | undefined} textBoxContent - The w:txbxContent element containing paragraphs
  * @param {Object} [params={}] - Translator params
  * @param {Object} [params.docx] - The parsed docx object
  * @param {string} [params.filename] - The source filename (e.g., 'header1.xml', 'document.xml')
- * @returns {Object} Processed text box content with field codes converted to sd:* nodes
+ * @returns {import('@converter/v2/types').OpenXmlNode | undefined} Processed text box content with field codes converted to sd:* nodes
  */
 export function preProcessTextBoxContent(textBoxContent, params = {}) {
   if (!textBoxContent?.elements) return textBoxContent;

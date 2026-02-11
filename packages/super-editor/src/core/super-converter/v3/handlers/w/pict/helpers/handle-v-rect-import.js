@@ -1,12 +1,11 @@
 import { parseInlineStyles } from './parse-inline-styles';
-import { translator as wPTranslator } from '@converter/v3/handlers/w/p';
 
 /**
  * Handler for v:rect elements
  * @param {Object} options
  * @returns {Object}
  */
-export function handleVRectImport({ pNode, pict, params }) {
+export function handleVRectImport({ pict }) {
   const rect = pict.elements?.find((el) => el.name === 'v:rect');
 
   const schemaAttrs = {};
@@ -67,18 +66,12 @@ export function handleVRectImport({ pNode, pict, params }) {
     schemaAttrs.horizontalRule = true;
   }
 
-  const pElement = wPTranslator.encode({
-    ...params,
-    nodes: [{ ...pNode, elements: pNode.elements.filter((el) => el.name !== 'w:r') }],
-  });
-  pElement.content = [
+  return [
     {
       type: 'contentBlock',
       attrs: schemaAttrs,
     },
   ];
-
-  return pElement;
 }
 
 export function parsePointsToPixels(value) {

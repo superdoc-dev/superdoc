@@ -81,7 +81,7 @@ function mergeConsecutiveTrackedChanges(elements) {
  * Translate a paragraph node
  *
  * @param {ExportParams} node A prose mirror paragraph node
- * @returns {XmlReadyNode} JSON of the XML-ready paragraph node
+ * @returns {import('@converter/v2/types').OpenXmlNode} JSON of the XML-ready paragraph node
  */
 export function translateParagraphNode(params) {
   let elements = translateChildNodes(params);

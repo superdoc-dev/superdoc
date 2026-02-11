@@ -1,21 +1,24 @@
+import { SCEncoderConfig } from '@translator';
 import { parseInlineStyles } from './parse-inline-styles';
-import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter';
 import {
   collectTextBoxParagraphs,
   preProcessTextBoxContent,
 } from '@converter/v3/handlers/wp/helpers/textbox-content-helpers.js';
+import { OpenXmlNode } from '@converter/v2/types';
+import type { ShapeContainerAttrs, ShapeTextboxAttrs } from '@extensions/types/node-attributes';
+import type { NodeHandlerResult, PmNodeJson } from '@converter/v2/importer/types';
 
-/**
- * @param {Object} options
- * @returns {Object}
- */
-export function handleShapeTextboxImport({ params, pict }) {
+export function handleShapeTextboxImport({ params, pict }: { params: SCEncoderConfig; pict: OpenXmlNode }) {
   const shape = pict.elements?.find((el) => el.name === 'v:shape');
+  if (!shape) {
+    console.error('Missing v:shape in v:pict');
+    return null;
+  }
 
-  const schemaAttrs = {};
-  const schemaTextboxAttrs = {};
-  const shapeAttrs = shape.attributes || {};
+  const schemaAttrs: ShapeContainerAttrs = {};
+  const schemaTextboxAttrs: ShapeTextboxAttrs = {};
+  const shapeAttrs: Record<string, string> = shape.attributes || {};
 
   schemaAttrs.attributes = shapeAttrs;
 
@@ -45,14 +48,14 @@ export function handleShapeTextboxImport({ params, pict }) {
   const processedContent = preProcessTextBoxContent(textboxContent, params);
   const textboxParagraphs = collectTextBoxParagraphs(processedContent?.elements || []);
 
-  const content = textboxParagraphs.map((elem) =>
+  const content: Array<NodeHandlerResult> = textboxParagraphs.map((elem) =>
     handleParagraphNode({
+      ...params,
       nodes: [elem],
       docx: params.docx,
-      nodeListHandler: defaultNodeListHandler(),
     }),
   );
-  const contentNodes = content.reduce((acc, current) => [...acc, ...current.nodes], []);
+  const contentNodes = content.reduce<Array<PmNodeJson>>((acc, current) => [...acc, ...current.nodes], []);
 
   const shapeTextbox = {
     type: 'shapeTextbox',

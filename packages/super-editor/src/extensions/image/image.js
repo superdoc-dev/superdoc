@@ -5,6 +5,7 @@ import { getNormalizedImageAttrs } from './imageHelpers/legacyAttributes.js';
 import { getRotationMargins } from './imageHelpers/rotation.js';
 import { inchesToPixels } from '@converter/helpers.js';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
+import { render } from 'vue';
 
 /**
  * Configuration options for Image
@@ -41,6 +42,10 @@ import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
  * @property {Object} [anchorData] @internal Anchor positioning data for Word
  * @property {boolean} [isAnchor] @internal Whether image is anchored
  * @property {boolean} [simplePos] @internal Simple positioning flag
+ * @property {boolean} [isPict] @internal Original tag was a w:pict
+ * @property {boolean} [vmlWatermark] @internal Set for pict images
+ * @property {Object} [vmlAttributes] @internal Set for pict images
+ * @property {Object} [vmlImagedata] @internal Set for pict images
  * @property {string} [wrapText] @internal Text wrapping style
  */
 
@@ -102,6 +107,8 @@ export const Image = Node.create({
 
       id: { rendered: false },
 
+      isPict: { rendered: false },
+
       hidden: {
         default: false,
         rendered: false,
@@ -153,6 +160,9 @@ export const Image = Node.create({
       },
 
       isAnchor: { rendered: false },
+      vmlWatermark: { rendered: false },
+      vmlAttributes: { rendered: false },
+      vmlImagedata: { rendered: false },
 
       /**
        * @category Attribute

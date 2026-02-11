@@ -4,7 +4,7 @@ import { exportSchemaToJson } from '../../../exporter.js';
  * Process child nodes, ignoring any that are not valid
  *
  * @param {import('@converter/exporter').SchemaNode[]} nodes The input nodes
- * @returns {import('@converter/exporter').XmlReadyNode[]} The processed child nodes
+ * @returns {import('@converter/v2/types').OpenXmlNode} The processed child nodes
  */
 export function translateChildNodes(params) {
   const { content: nodes } = params.node;

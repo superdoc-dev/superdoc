@@ -99,18 +99,16 @@ describe('VML Watermark Integration Tests', () => {
           vmlAttributes: expect.any(Object),
           vmlImagedata: expect.any(Object),
         }),
+        content: [],
       });
 
       // Step 2: Export - Convert from SuperDoc node back to DOCX XML
       const exportedXml = translateImageWatermark({ node: importedNode });
 
       // Verify exported structure
-      expect(exportedXml.name).toBe('w:p');
-      expect(exportedXml.elements).toHaveLength(1);
-      expect(exportedXml.elements[0].name).toBe('w:r');
+      expect(exportedXml.name).toBe('w:pict');
 
-      const pict = exportedXml.elements[0].elements.find((el) => el.name === 'w:pict');
-      expect(pict).toBeDefined();
+      const pict = exportedXml;
       expect(pict.attributes['w14:anchorId']).toBeDefined();
 
       const shape = pict.elements.find((el) => el.name === 'v:shape');

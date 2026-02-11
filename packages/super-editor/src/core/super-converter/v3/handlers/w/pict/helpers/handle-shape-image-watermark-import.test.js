@@ -85,6 +85,7 @@ describe('handleShapeImageWatermarkImport', () => {
         gain: '19661f',
         blacklevel: '22938f',
       }),
+      content: [],
     });
   });
 

@@ -8,7 +8,7 @@
  * @typedef {object} OpenXmlNode
  * @property {string} name
  * @property {string} [type]
- * @property {object} [attributes]
+ * @property {Record<string,string>} [attributes]
  * @property {OpenXmlNode[]} [elements]
  * @property {string} [text]
  */

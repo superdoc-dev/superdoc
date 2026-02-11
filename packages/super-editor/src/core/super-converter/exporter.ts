@@ -27,11 +27,14 @@ import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index
 import { translator as sdIndexEntryTranslator } from '@converter/v3/handlers/sd/indexEntry';
 import { translator as sdAutoPageNumberTranslator } from '@converter/v3/handlers/sd/autoPageNumber';
 import { translator as sdTotalPageNumberTranslator } from '@converter/v3/handlers/sd/totalPageNumber';
-import { translator as pictTranslator } from './v3/handlers/w/pict/pict-translator';
+import { translator as wPictNodeTranslator } from './v3/handlers/w/pict/pict-translator';
 import { translateVectorShape, translateShapeGroup } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers';
 import { translator as wTextTranslator } from '@converter/v3/handlers/w/t';
 import { translator as wFootnoteReferenceTranslator } from './v3/handlers/w/footnoteReference/footnoteReference-translator.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import type { NodeTranslator, SCDecoderConfig } from '@translator';
+import type { OpenXmlNode } from '@converter/v2/types';
+import type { Editor } from '@core/Editor';
 
 const DEFAULT_SECTION_PROPS_TWIPS = Object.freeze({
   pageSize: Object.freeze({ width: '12240', height: '15840' }),
@@ -46,7 +49,7 @@ const DEFAULT_SECTION_PROPS_TWIPS = Object.freeze({
   }),
 });
 
-export const ensureSectionLayoutDefaults = (sectPr, converter) => {
+export const ensureSectionLayoutDefaults = (sectPr, converter): OpenXmlNode => {
   if (!sectPr) {
     return {
       type: 'element',
@@ -106,55 +109,49 @@ export const isLineBreakOnlyRun = (node) => {
   return runContent.every((child) => child?.type === 'lineBreak' || child?.type === 'hardBreak');
 };
 
-/**
- * @typedef {Object} ExportParams
- * @property {Object} node JSON node to translate (from PM schema)
- * @property {Object} [bodyNode] The stored body node to restore, if available
- * @property {Object[]} [relationships] The relationships to add to the document
- * @property {Object} [extraParams] The extra params from NodeTranslator
- */
+export type ExportParams = SCDecoderConfig & {
+  bodyNode?: OpenXmlNode;
+  converter?: SuperConverter;
+  editor: Editor;
+};
 
-/**
- * @typedef {Object} SchemaNode
- * @property {string} type The name of this node from the prose mirror schema
- * @property {Array<SchemaNode>} content The child nodes
- * @property {Object} attrs The node attributes
- * /
+/** Key value pairs representing the node attributes from prose mirror */
+type SchemaAttributes = Record<string, any>;
 
-/**
- * @typedef {Object} XmlReadyNode
- * @property {string} name The XML tag name
- * @property {Array<XmlReadyNode>} elements The child nodes
- * @property {Object} [attributes] The node attributes
- */
+/** Key value pairs representing the node attributes to export to XML format */
+type XmlAttributes = Record<string, any>;
 
-/**
- * @typedef {Object.<string, *>} SchemaAttributes
- * Key value pairs representing the node attributes from prose mirror
- */
+type MarkType = {
+  /** The mark type */
+  type: string;
+  /** Any attributes for this mark */
+  attrs: object;
+};
 
-/**
- * @typedef {Object.<string, *>} XmlAttributes
- * Key value pairs representing the node attributes to export to XML format
- */
+type Router = {
+  [k: string]:
+    | NodeTranslator
+    | NodeTranslator[]
+    | ((params: ExportParams) => OpenXmlNode | null | [OpenXmlNode, ExportParams]);
+};
 
-/**
- * @typedef {Object} MarkType
- * @property {string} type The mark type
- * @property {Object} attrs Any attributes for this mark
- */
+export function exportSchemaToJson(params: ExportParams & { node: { type: 'doc' } }): [OpenXmlNode, ExportParams];
+export function exportSchemaToJson(params: ExportParams & { node: { type: 'body' } }): OpenXmlNode;
+// export function exportSchemaToJson(params: ExportParams & { node: { type: Exclude<ExportParams['node']['type'], 'doc' | 'body'> } }): OpenXmlNode | null
 
 /**
  * Main export function. It expects the prose mirror data as JSON (ie: a doc node)
  *
- * @param {ExportParams} params - The parameters object, containing a node and possibly a body node
- * @returns {XmlReadyNode} The complete document node in XML-ready format
+ * @param params - The parameters object, containing a node and possibly a body node
+ * @returns - The complete document node in XML-ready format
  */
-export function exportSchemaToJson(params) {
+export function exportSchemaToJson(
+  params: ExportParams,
+): OpenXmlNode | OpenXmlNode[] | null | [OpenXmlNode, ExportParams] {
   const { type } = params.node || {};
 
   // Node handlers for each node type that we can export
-  const router = {
+  const router: Router = {
     doc: translateDocumentNode,
     body: translateBodyNode,
     heading: translateHeadingNode,
@@ -170,17 +167,17 @@ export function exportSchemaToJson(params) {
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,
     tab: wTabNodeTranslator,
-    image: wDrawingNodeTranslator,
+    image: [wDrawingNodeTranslator, wPictNodeTranslator],
     hardBreak: wBrNodeTranslator,
     commentRangeStart: wCommentRangeStartTranslator,
     commentRangeEnd: wCommentRangeEndTranslator,
     permStart: wPermStartTranslator,
     permEnd: wPermEndTranslator,
-    commentReference: () => null,
+    commentReference: [],
     footnoteReference: wFootnoteReferenceTranslator,
-    shapeContainer: pictTranslator,
-    shapeTextbox: pictTranslator,
-    contentBlock: pictTranslator,
+    shapeContainer: wPictNodeTranslator,
+    shapeTextbox: wPictNodeTranslator,
+    contentBlock: wPictNodeTranslator,
     vectorShape: translateVectorShape,
     shapeGroup: translateShapeGroup,
     structuredContent: wSdtNodeTranslator,
@@ -197,22 +194,31 @@ export function exportSchemaToJson(params) {
     passthroughInline: translatePassthroughNode,
   };
 
-  let handler = router[type];
+  const entry = router[type];
 
-  // For import/export v3 we use the translator directly
-  if (handler && 'decode' in handler && typeof handler.decode === 'function') {
-    return handler.decode(params);
-  }
-
-  if (!handler) {
+  if (!entry) {
     console.error('No translation function found for node type:', type);
     return null;
   }
-  // Call the handler for this node type
-  return handler(params);
+
+  const handlers = Array.isArray(entry) ? entry : [entry];
+  for (const handler of handlers) {
+    let result;
+    if (handler && 'decode' in handler && typeof handler.decode === 'function') {
+      result = handler.decode(params);
+    } else if (typeof handler === 'function') {
+      result = handler(params);
+    }
+
+    if (result) {
+      return result;
+    }
+  }
+
+  return null;
 }
 
-function translatePassthroughNode(params) {
+export function translatePassthroughNode(params: SCDecoderConfig) {
   const original = params?.node?.attrs?.originalXml;
   if (!original) return null;
   return carbonCopy(original);
@@ -222,10 +228,9 @@ function translatePassthroughNode(params) {
  * There is no body node in the prose mirror schema, so it is stored separately
  * and needs to be restored here.
  *
- * @param {ExportParams} params
- * @returns {XmlReadyNode} JSON of the XML-ready body node
+ * @returns - JSON of the XML-ready body node
  */
-function translateBodyNode(params) {
+function translateBodyNode(params: ExportParams): OpenXmlNode {
   let sectPr = params.bodyNode?.elements?.find((n) => n.name === 'w:sectPr');
   if (!sectPr) {
     sectPr = {
@@ -293,10 +298,10 @@ const generateDefaultHeaderFooter = (type, id) => {
 /**
  * Translate a heading node to a paragraph with Word heading style
  *
- * @param {ExportParams} params The parameters object containing the heading node
- * @returns {XmlReadyNode} JSON of the XML-ready paragraph node with heading style
+ * @param params - The parameters object containing the heading node
+ * @returns - JSON of the XML-ready paragraph node with heading style
  */
-function translateHeadingNode(params) {
+function translateHeadingNode(params: ExportParams): OpenXmlNode {
   const { node } = params;
   const { level = 1, ...otherAttrs } = node.attrs;
 
@@ -331,16 +336,16 @@ function mergeMcIgnorable(defaultIgnorable = '', originalIgnorable = '') {
 /**
  * Translate a document node
  *
- * @param {ExportParams} params The parameters object
- * @returns {XmlReadyNode} JSON of the XML-ready document node
+ * @param  params The parameters object
+ * @returns - JSON of the XML-ready document node
  */
-function translateDocumentNode(params) {
+function translateDocumentNode(params: ExportParams): [OpenXmlNode, ExportParams] {
   const bodyNode = {
     type: 'body',
     content: params.node.content,
-  };
+  } as const;
 
-  const translatedBodyNode = exportSchemaToJson({ ...params, node: bodyNode });
+  const translatedBodyNode: OpenXmlNode = exportSchemaToJson({ ...params, node: bodyNode });
 
   // Merge original document attributes with defaults to preserve custom namespaces
   const originalAttrs = params.converter?.documentAttributes || {};
@@ -367,8 +372,8 @@ function translateDocumentNode(params) {
 /**
  * Wrap a text node in a run
  *
- * @param {XmlReadyNode} node
- * @returns {XmlReadyNode} The wrapped run node
+ * @param {OpenXmlNode} node
+ * @returns {OpenXmlNode} The wrapped run node
  */
 export function wrapTextInRun(nodeOrNodes, marks) {
   let elements = [];
@@ -610,12 +615,12 @@ export class DocxExporter {
    */
   #generateXml(node) {
     if (!node) return null;
-    let { name } = node;
+    const { name } = node;
     const { elements, attributes } = node;
 
     let tag = `<${name}`;
 
-    for (let attr in attributes) {
+    for (const attr in attributes) {
       const parsedAttrName =
         typeof attributes[attr] === 'string' ? this.#replaceSpecialCharacters(attributes[attr]) : attributes[attr];
       tag += ` ${attr}="${parsedAttrName}"`;
@@ -624,7 +629,7 @@ export class DocxExporter {
     const selfClosing = name && (!elements || !elements.length);
     if (selfClosing) tag += ' />';
     else tag += '>';
-    let tags = [tag];
+    const tags = [tag];
 
     if (!name && node.type === 'text') {
       return this.#replaceSpecialCharacters(node.text ?? '');
@@ -657,7 +662,7 @@ export class DocxExporter {
         }
       } else {
         if (elements) {
-          for (let child of elements) {
+          for (const child of elements) {
             const newElements = this.#generateXml(child);
             if (!newElements) {
               continue;

@@ -90,7 +90,7 @@ export class NodeTranslator {
   /** @type {NodeTranslatorEncodeFn} */
   encodeFn;
 
-  /** @type {NodeTranslatorDecodeFn} */
+  /** @type {NodeTranslatorDecodeFn | undefined} */
   decodeFn;
 
   /** @type {MatchesEncodeFn} */
@@ -109,7 +109,7 @@ export class NodeTranslator {
    * @param {string} xmlName
    * @param {SuperDocNodeOrKeyName} sdNodeOrKeyName
    * @param {NodeTranslatorEncodeFn} encode
-   * @param {NodeTranslatorDecodeFn} decode
+   * @param {NodeTranslatorDecodeFn | undefined} decode
    * @param {number} [priority]
    * @param {MatchesEncodeFn} [matchesEncode]
    * @param {MatchesDecodeFn} [matchesDecode]
@@ -139,7 +139,7 @@ export class NodeTranslator {
     const node = nodes[0];
     const { attributes = {} } = node || {};
 
-    const encodedAttrs = {};
+    const /** @type Record<string, string> */ encodedAttrs = {};
     this.attributes.forEach(({ sdName, encode }) => {
       if (!encode) return;
 
@@ -161,7 +161,7 @@ export class NodeTranslator {
     const { node } = params || {};
     const { attrs = {} } = node || {};
 
-    const decodedAttrs = {};
+    const /** @type Record<string, string> */ decodedAttrs = {};
     this.attributes.forEach(({ xmlName, decode }) => {
       if (!decode) return;
 
@@ -177,7 +177,7 @@ export class NodeTranslator {
   /**
    * Decode the attributes for the node.
    * @param {SCDecoderConfig} params
-   * @returns {Object} Decoded attributes object.
+   * @returns {import('@converter/v2/types').OpenXmlNode | import('@converter/v2/types').OpenXmlNode[] | undefined} Decoded attributes object.
    */
   decode(params) {
     const decodedAttrs = this.decodeAttributes(params);
@@ -187,7 +187,7 @@ export class NodeTranslator {
   /**
    * Encode the attributes for the node.
    * @param {SCEncoderConfig} params
-   * @returns {Object} Encoded attributes object.
+   * @returns {Object | undefined} Encoded attributes object.
    */
   encode(params) {
     const encodedAttrs = this.encodeAttributes(params);

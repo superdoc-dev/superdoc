@@ -7,9 +7,10 @@ import { docxAsXmlFileList2ParsedDocx } from '@converter/v2/docxHelper.js';
 import { createDocumentJson } from '@converter/v2/importer/docxImporter.js';
 import { getTestDataByFileName, initTestEditor } from '@tests/helpers/helpers.js';
 import { loadUnpackedDocx } from '@tests/helpers/loadUnpackedDocx.js';
-import { findFirstDescendant } from '@tests/helpers/finders.js';
+import { findAllDescendants, findFirstChild, findFirstDescendant } from '@tests/helpers/finders.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeFileSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -18,7 +19,7 @@ describe('Image Import/Export Round Trip Tests', () => {
     it('preserves rotation data through import/export cycle', async () => {
       // Mock OOXML input with rotation
       const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(
-        join(__dirname, '../data/imageRoundTrip/drawingDoc'),
+        join(__dirname, '../data/image-round-trip/drawing-with-rotation'),
       );
 
       // Import
@@ -789,6 +790,56 @@ describe('Image Import/Export Round Trip Tests', () => {
           );
         }
       });
+    });
+  });
+
+  describe('Images as w:pict elements', () => {
+    it('are preserved as w:pict rather than converted to w:drawing', async () => {
+      const [docx, media, mediaFiles, fonts] = await loadUnpackedDocx(
+        join(__dirname, '../data/image-round-trip/pict-example'),
+      );
+
+      // Import
+      const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
+      const images = editor.getNodesOfType('image');
+      // expect(images).toHaveLength(2);
+
+      const [importedPict1, importedPict2] = images.map(({ node }) => node.toJSON());
+
+      // Verify import
+      expect(importedPict1.type).toBe('image');
+      expect(importedPict1.attrs.src).toBe('word/media/image1.png');
+      expect(importedPict1.attrs.title).toBe('Watermark');
+
+      expect(importedPict2.type).toBe('image');
+      expect(importedPict2.attrs.src).toBe('word/media/image2.png');
+      expect(importedPict2.attrs.title).toBe('Watermark');
+
+      // Export
+      const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
+      expect(exportedBuffer?.byteLength || exportedBuffer?.length || 0).toBeGreaterThan(0);
+      const exportedZipper = new DocxZipper();
+      const exportedFiles = await exportedZipper.getDocxData(exportedBuffer, true);
+      const exportedJson = docxAsXmlFileList2ParsedDocx(exportedFiles);
+      const exportedDocument = exportedJson['word/document.xml'];
+      const exportedRuns = findAllDescendants(exportedDocument, 'w:r');
+      expect(exportedRuns).toHaveLength(2);
+
+      const [r1, r2] = exportedRuns;
+
+      // Verify export structure
+      const pict1 = findFirstChild(r1, 'w:pict');
+      expect(pict1).toBeDefined();
+      expect(pict1.elements.map((el) => el.name)).toEqual(['v:shape', 'v:shapetype']);
+      const [shape1, shapetype1] = pict1.elements;
+      expect(shape1.elements.map((el) => el.name)).toEqual(['v:imagedata']);
+      expect(shapetype1.elements.map((el) => el.name)).toEqual(['v:stroke', 'v:formulas', 'v:path', 'o:lock']);
+
+      const pict2 = findFirstChild(r2, 'w:pict');
+      expect(pict2).toBeDefined();
+      expect(pict2.elements.map((el) => el.name)).toEqual(['v:shape']);
+      const shape2 = pict2.elements[0];
+      expect(shape2.elements.map((el) => el.name)).toEqual(['v:imagedata']);
     });
   });
 });

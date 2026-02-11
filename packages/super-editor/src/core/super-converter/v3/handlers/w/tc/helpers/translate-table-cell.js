@@ -11,7 +11,7 @@ import { translator as tcPrTranslator } from '../../tcPr';
 /**
  * Main translation function for a table cell.
  * @param {import('@converter/exporter').ExportParams} params
- * @returns {import('@converter/exporter').XmlReadyNode}
+ * @returns {import('@converter/v2/types').OpenXmlNode}
  */
 export function translateTableCell(params) {
   const elements = translateChildNodes({
@@ -31,7 +31,7 @@ export function translateTableCell(params) {
 /**
  * Generate w:tcPr properties node for a table cell
  * @param {import('@converter/exporter').SchemaNode} node
- * @returns {import('@converter/exporter').XmlReadyNode}
+ * @returns {import('@converter/v2/types').OpenXmlNode}
  */
 export function generateTableCellProperties(node) {
   const tableCellProperties = { ...(node.attrs?.tableCellProperties || {}) };

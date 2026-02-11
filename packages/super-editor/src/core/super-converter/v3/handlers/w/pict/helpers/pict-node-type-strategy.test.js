@@ -3,32 +3,12 @@ import { pictNodeTypeStrategy } from './pict-node-type-strategy';
 import { handleVRectImport } from './handle-v-rect-import';
 import { handleShapeTextboxImport } from './handle-shape-textbox-import';
 import { handleShapeImageWatermarkImport } from './handle-shape-image-watermark-import';
+import { createPict, createRect, createShape, createGroup, createTextbox } from '@tests/helpers/pict-helpers';
 
 describe('pictNodeTypeStrategy', () => {
-  const createNode = (elements = []) => ({
-    elements,
-  });
-
-  const createRect = () => ({
-    name: 'v:rect',
-  });
-
-  const createShape = (elements = []) => ({
-    name: 'v:shape',
-    elements,
-  });
-
-  const createGroup = () => ({
-    name: 'v:group',
-  });
-
-  const createTextbox = () => ({
-    name: 'v:textbox',
-  });
-
   describe('rect handler', () => {
     it('should return contentBlock type when rect element exists', () => {
-      const node = createNode([createRect()]);
+      const node = createPict([createRect()]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -39,7 +19,7 @@ describe('pictNodeTypeStrategy', () => {
     });
 
     it('should prioritize rect over shape', () => {
-      const node = createNode([createRect(), createShape([createTextbox()])]);
+      const node = createPict([createRect(), createShape([createTextbox()])]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -50,7 +30,7 @@ describe('pictNodeTypeStrategy', () => {
     });
 
     it('should prioritize rect over group', () => {
-      const node = createNode([createRect(), createGroup()]);
+      const node = createPict([createRect(), createGroup()]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -63,7 +43,7 @@ describe('pictNodeTypeStrategy', () => {
 
   describe('shapeContainer handler', () => {
     it('should return shapeContainer type when shape contains textbox', () => {
-      const node = createNode([createShape([createTextbox()])]);
+      const node = createPict([createShape([createTextbox()])]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -74,7 +54,7 @@ describe('pictNodeTypeStrategy', () => {
     });
 
     it('should return unknown when shape exists but has no textbox', () => {
-      const node = createNode([createShape([])]);
+      const node = createPict([createShape([])]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -85,7 +65,7 @@ describe('pictNodeTypeStrategy', () => {
     });
 
     it('should return image type when shape contains imagedata (watermarks)', () => {
-      const node = createNode([createShape([{ name: 'v:imagedata' }, { name: 'v:fill' }])]);
+      const node = createPict([createShape([{ name: 'v:imagedata' }, { name: 'v:fill' }])]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -98,7 +78,7 @@ describe('pictNodeTypeStrategy', () => {
 
   describe('image handler', () => {
     it('should return image type when shape contains imagedata', () => {
-      const node = createNode([createShape([{ name: 'v:imagedata', attributes: { 'r:id': 'rId1' } }])]);
+      const node = createPict([createShape([{ name: 'v:imagedata', attributes: { 'r:id': 'rId1' } }])]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -109,7 +89,7 @@ describe('pictNodeTypeStrategy', () => {
     });
 
     it('should prioritize textbox over imagedata when both present', () => {
-      const node = createNode([createShape([createTextbox(), { name: 'v:imagedata' }])]);
+      const node = createPict([createShape([createTextbox(), { name: 'v:imagedata' }])]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -138,7 +118,7 @@ describe('pictNodeTypeStrategy', () => {
           },
         ],
       };
-      const node = createNode([shape]);
+      const node = createPict([shape]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -151,7 +131,7 @@ describe('pictNodeTypeStrategy', () => {
 
   describe('group handler', () => {
     it('should return unknown when only group exists', () => {
-      const node = createNode([createGroup()]);
+      const node = createPict([createGroup()]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -164,7 +144,7 @@ describe('pictNodeTypeStrategy', () => {
 
   describe('unknown handler', () => {
     it('should return unknown when no elements exist', () => {
-      const node = createNode([]);
+      const node = createPict([]);
 
       const result = pictNodeTypeStrategy(node);
 
@@ -186,7 +166,7 @@ describe('pictNodeTypeStrategy', () => {
     });
 
     it('should return unknown when only irrelevant elements exist', () => {
-      const node = createNode([{ name: 'v:imagedata' }, { name: 'v:fill' }]);
+      const node = createPict([{ name: 'v:imagedata' }, { name: 'v:fill' }]);
 
       const result = pictNodeTypeStrategy(node);
 

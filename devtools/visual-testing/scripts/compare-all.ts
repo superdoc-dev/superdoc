@@ -35,6 +35,8 @@ import {
 } from './storage-flags.js';
 
 const BASELINES_DIR = 'baselines-rendering';
+const R2_RENDERING_PREFIX = 'rendering';
+const R2_BEHAVIOR_PREFIX = 'behavior';
 const SCREENSHOTS_DIR = 'screenshots';
 
 interface CompareAllArgs {
@@ -166,7 +168,7 @@ async function resolveBaselineSelection(
   }
 
   const latest =
-    mode === 'local' ? findLatestBaselineLocal(baselineRoot) : await getLatestBaselineVersion(BASELINES_DIR);
+    mode === 'local' ? findLatestBaselineLocal(baselineRoot) : await getLatestBaselineVersion(R2_RENDERING_PREFIX);
   if (!latest) {
     return null;
   }
@@ -596,7 +598,7 @@ async function main(): Promise<void> {
     if (refreshBaselines) {
       if (hasFilters || browserFilters) {
         const refreshed = await refreshBaselineSubset({
-          prefix: BASELINES_DIR,
+          prefix: R2_RENDERING_PREFIX,
           version,
           localRoot: baselineDir,
           filters,
@@ -618,7 +620,7 @@ async function main(): Promise<void> {
       force = true;
     }
     const result = await ensureBaselineDownloaded({
-      prefix: BASELINES_DIR,
+      prefix: R2_RENDERING_PREFIX,
       version,
       localRoot: baselineDir,
       force,
@@ -663,7 +665,7 @@ async function main(): Promise<void> {
     if (refreshBaselines) {
       if (hasFilters || browserFilters) {
         const refreshed = await refreshBaselineSubset({
-          prefix: 'baselines-behavior',
+          prefix: R2_BEHAVIOR_PREFIX,
           version,
           localRoot: behaviorBaselineDir,
           filters,
@@ -685,7 +687,7 @@ async function main(): Promise<void> {
       force = true;
     }
     const result = await ensureBaselineDownloaded({
-      prefix: 'baselines-behavior',
+      prefix: R2_BEHAVIOR_PREFIX,
       version,
       localRoot: behaviorBaselineDir,
       force,

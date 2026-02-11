@@ -38,6 +38,7 @@ import {
 import { ensureLocalTarballInstalled } from './workspace-utils.js';
 
 const BASELINES_DIR = 'baselines-behavior';
+const R2_PREFIX = 'behavior';
 
 function listFilteredPngs(dir: string, filters: string[], matches: string[], excludes: string[]): string[] {
   return findPngFiles(dir)
@@ -192,8 +193,7 @@ async function resolveBaselineSelection(
     return { label: info.label, spec: info.spec };
   }
 
-  const latest =
-    mode === 'local' ? findLatestBaselineLocal(baselineRoot) : await getLatestBaselineVersion(BASELINES_DIR);
+  const latest = mode === 'local' ? findLatestBaselineLocal(baselineRoot) : await getLatestBaselineVersion(R2_PREFIX);
   if (!latest) {
     return null;
   }
@@ -396,7 +396,7 @@ async function main(): Promise<void> {
     if (refreshBaselines) {
       if (hasFilters || browserFilters) {
         const refreshed = await refreshBaselineSubset({
-          prefix: BASELINES_DIR,
+          prefix: R2_PREFIX,
           version,
           localRoot: baselineDir,
           filters,
@@ -419,7 +419,7 @@ async function main(): Promise<void> {
     }
 
     const result = await ensureBaselineDownloaded({
-      prefix: BASELINES_DIR,
+      prefix: R2_PREFIX,
       version,
       localRoot: baselineDir,
       force,
@@ -529,7 +529,7 @@ async function main(): Promise<void> {
         ),
       );
       const refreshed = await refreshBaselineSubset({
-        prefix: BASELINES_DIR,
+        prefix: R2_PREFIX,
         version: baselineToUse,
         localRoot: baselineDir,
         filters: missingFilters,

@@ -60,6 +60,7 @@ import { ensureLocalTarballInstalled } from './workspace-utils.js';
 // Configuration
 const SCREENSHOTS_DIR = 'screenshots';
 const BASELINES_DIR = 'baselines-rendering';
+const R2_PREFIX = 'rendering';
 const RESULTS_DIR = 'results';
 const REPORT_FILE = 'report.json';
 
@@ -930,7 +931,7 @@ export function findLatestBaseline(baselinesDir: string = BASELINES_DIR): string
 }
 
 async function resolveBaselineSelection(
-  baselinePrefix: string,
+  r2Prefix: string,
   mode: StorageMode,
   baselineRoot: string,
   baselineVersion?: string,
@@ -943,8 +944,7 @@ async function resolveBaselineSelection(
     return { label: info.label, spec: info.spec };
   }
 
-  const latest =
-    mode === 'local' ? findLatestBaselineLocal(baselineRoot) : await getLatestBaselineVersion(baselinePrefix);
+  const latest = mode === 'local' ? findLatestBaselineLocal(baselineRoot) : await getLatestBaselineVersion(r2Prefix);
   if (!latest) {
     return null;
   }
@@ -1912,8 +1912,9 @@ async function main(): Promise<void> {
     (normalizedResultsPrefix ? normalizedResultsPrefix.startsWith('behavior/') : false) ||
     (normalizedReportTrim ? normalizedReportTrim.startsWith('behavior/') : false) ||
     filters.some((value) => value.startsWith('behavior/'));
-  const baselinePrefix = isBehaviorMode ? 'baselines-behavior' : BASELINES_DIR;
-  const baselineDir = resolveBaselineRoot(baselinePrefix, mode, baselineRoot);
+  const localBaselineDir = isBehaviorMode ? 'baselines-behavior' : BASELINES_DIR;
+  const r2Prefix = isBehaviorMode ? 'behavior' : R2_PREFIX;
+  const baselineDir = resolveBaselineRoot(localBaselineDir, mode, baselineRoot);
   const resolvedResultsRoot = resultsRoot ? resolvePathInput(resultsRoot) : undefined;
 
   // Find results folder
@@ -1921,7 +1922,7 @@ async function main(): Promise<void> {
   let resolvedTargetVersion: string | undefined;
 
   // Determine which baseline to use
-  let baselineSelection = await resolveBaselineSelection(baselinePrefix, mode, baselineDir, baselineVersion);
+  let baselineSelection = await resolveBaselineSelection(r2Prefix, mode, baselineDir, baselineVersion);
   if (!baselineSelection && mode === 'local') {
     const current = getSuperdocVersion();
     baselineSelection = {
@@ -1950,8 +1951,7 @@ async function main(): Promise<void> {
       const baselinePath = path.join(baselineDir, version);
       if (!fs.existsSync(baselinePath)) {
         console.log(colors.info(`📸 Baseline ${version} not found locally. Generating...`));
-        const script =
-          baselinePrefix === 'baselines-behavior' ? 'scripts/baseline-behavior.ts' : 'scripts/baseline-rendering.ts';
+        const script = r2Prefix === 'behavior' ? 'scripts/baseline-behavior.ts' : 'scripts/baseline-rendering.ts';
         const browserArg = browsers.length > 0 ? browsers.join(',') : undefined;
         const currentSpec = getSuperdocVersion();
         const shouldRestore =
@@ -1986,7 +1986,7 @@ async function main(): Promise<void> {
     if (refreshBaselines) {
       if (hasFilters || browserFilters) {
         const refreshed = await refreshBaselineSubset({
-          prefix: baselinePrefix,
+          prefix: r2Prefix,
           version,
           localRoot: baselineDir,
           filters,
@@ -2009,7 +2009,7 @@ async function main(): Promise<void> {
     }
 
     const result = await ensureBaselineDownloaded({
-      prefix: baselinePrefix,
+      prefix: r2Prefix,
       version,
       localRoot: baselineDir,
       force,
@@ -2169,7 +2169,7 @@ async function main(): Promise<void> {
             ),
           );
           const refreshed = await refreshBaselineSubset({
-            prefix: baselinePrefix,
+            prefix: r2Prefix,
             version: baselineToUse,
             localRoot: baselineDir,
             filters: refreshFilters,

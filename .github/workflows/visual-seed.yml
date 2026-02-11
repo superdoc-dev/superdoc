@@ -1,0 +1,62 @@
+name: Seed Visual Baselines (temporary)
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Build SuperDoc
+        run: pnpm build
+
+      - name: Get Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> $GITHUB_OUTPUT
+        working-directory: tests/visual
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+        working-directory: tests/visual
+
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium firefox webkit
+        working-directory: tests/visual
+
+      - name: Generate baselines
+        run: pnpm test:update
+        working-directory: tests/visual
+
+      - name: Upload baselines to R2
+        run: pnpm baseline:upload
+        working-directory: tests/visual
+        env:
+          SD_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_TESTING_R2_ACCOUNT_ID }}
+          SD_TESTING_R2_BASELINES_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BASELINES_BUCKET_NAME }}
+          SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
+          SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}

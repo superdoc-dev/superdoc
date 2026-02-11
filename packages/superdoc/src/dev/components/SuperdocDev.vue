@@ -178,9 +178,12 @@ const init = async () => {
     toolbarGroups: ['center'],
     role: userRole,
     documentMode: 'editing',
-    licenseKey: 'community-and-eval-agplv3',
+    licenseKey: 'public_license_key_superdocinternal_ad7035140c4b',
     telemetry: {
-      enabled: false,
+      enabled: true,
+      metadata: {
+        source: 'superdoc-dev'
+      }
     },
     comments: {
       visible: true,

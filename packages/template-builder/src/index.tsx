@@ -215,7 +215,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           }
         }
 
-        return success ?? false;
+        return !!success;
       },
       [onFieldInsert, onFieldsChange, templateFields],
     );
@@ -239,7 +239,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           });
         }
 
-        return success ?? false;
+        return !!success;
       },
       [onFieldUpdate, onFieldsChange],
     );
@@ -272,7 +272,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         let commandResult = false;
         try {
-          commandResult = editor.commands.deleteStructuredContentById?.(id) ?? false;
+          commandResult = !!editor.commands.deleteStructuredContentById?.(id);
         } catch (err) {
           console.warn('[TemplateBuilder] Failed to delete structured content:', id, err);
           commandResult = false;

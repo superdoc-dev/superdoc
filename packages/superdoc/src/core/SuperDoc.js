@@ -83,7 +83,7 @@ export class SuperDoc extends EventEmitter {
     licenseKey: COMMUNITY_LICENSE_KEY,
 
     // Telemetry settings
-    telemetry: { enabled: false }, // Enable to track document opens
+    telemetry: { enabled: true },
 
     title: 'SuperDoc',
     conversations: [],

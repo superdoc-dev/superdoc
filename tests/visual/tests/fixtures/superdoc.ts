@@ -1,0 +1,217 @@
+import { test as base, expect, type Page, type Locator } from '@playwright/test';
+
+// ---------------------------------------------------------------------------
+// Helpers — inline versions of what @superdoc-testing/helpers provides,
+// kept here so the prototype has zero workspace deps beyond Playwright.
+// ---------------------------------------------------------------------------
+
+const HARNESS_URL = 'http://localhost:9989';
+
+interface HarnessConfig {
+  layout?: boolean;
+  toolbar?: 'none' | 'minimal' | 'full';
+  comments?: 'off' | 'on' | 'panel' | 'readonly';
+  trackChanges?: boolean;
+  hideCaret?: boolean;
+  hideSelection?: boolean;
+  width?: number;
+  height?: number;
+}
+
+function buildHarnessUrl(config: HarnessConfig = {}): string {
+  const params = new URLSearchParams();
+  if (config.layout !== undefined) params.set('layout', config.layout ? '1' : '0');
+  if (config.toolbar) params.set('toolbar', config.toolbar);
+  if (config.comments) params.set('comments', config.comments);
+  if (config.trackChanges) params.set('trackChanges', '1');
+  if (config.hideCaret !== undefined) params.set('hideCaret', config.hideCaret ? '1' : '0');
+  if (config.hideSelection !== undefined) params.set('hideSelection', config.hideSelection ? '1' : '0');
+  if (config.width) params.set('width', String(config.width));
+  if (config.height) params.set('height', String(config.height));
+  const qs = params.toString();
+  return qs ? `${HARNESS_URL}?${qs}` : HARNESS_URL;
+}
+
+async function waitForReady(page: Page, timeout = 30_000): Promise<void> {
+  await page.waitForFunction(() => (window as any).superdocReady === true, null, { polling: 100, timeout });
+}
+
+async function waitForStable(page: Page, ms = 500): Promise<void> {
+  await page.waitForTimeout(ms);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+// ---------------------------------------------------------------------------
+// SuperDoc fixture
+// ---------------------------------------------------------------------------
+
+export interface SuperDocFixture {
+  /** The raw Playwright Page */
+  page: Page;
+
+  /** Type text into the editor */
+  type(text: string): Promise<void>;
+  /** Press a single key */
+  press(key: string): Promise<void>;
+  /** Press Enter */
+  newLine(): Promise<void>;
+  /** Press Cmd/Ctrl+key */
+  shortcut(key: string): Promise<void>;
+  /** Toggle bold */
+  bold(): Promise<void>;
+  /** Toggle italic */
+  italic(): Promise<void>;
+  /** Undo */
+  undo(): Promise<void>;
+  /** Redo */
+  redo(): Promise<void>;
+  /** Select all */
+  selectAll(): Promise<void>;
+
+  /** Wait for editor to stabilize, then take a screenshot with both Playwright + Argos */
+  screenshot(name: string): Promise<void>;
+
+  /** Load a .docx document into the editor */
+  loadDocument(filePath: string): Promise<void>;
+
+  /** Screenshot every rendered page (for paginated/layout docs) */
+  screenshotPages(baseName: string): Promise<void>;
+}
+
+interface SuperDocOptions {
+  config?: HarnessConfig;
+}
+
+export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>({
+  config: [{}, { option: true }],
+
+  superdoc: async ({ page, config }, use) => {
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    // Navigate to harness
+    const url = buildHarnessUrl({
+      layout: true,
+      hideCaret: true,
+      hideSelection: true,
+      ...config,
+    });
+    await page.goto(url);
+    await waitForReady(page);
+
+    // Focus the editor — use .focus() not .click() because in layout mode
+    // the ProseMirror contenteditable is positioned off-screen (DomPainter renders visuals).
+    const editor = page.locator('[contenteditable="true"]').first();
+    await editor.waitFor({ state: 'visible', timeout: 10_000 });
+    await editor.focus();
+
+    // Lazy-load Argos (may not be installed)
+    let argosScreenshot: ((page: Page, name: string, options?: any) => Promise<void>) | null = null;
+    try {
+      const argos = await import('@argos-ci/playwright');
+      argosScreenshot = argos.argosScreenshot;
+    } catch {
+      // Argos not installed — skip Argos screenshots
+    }
+
+    const fixture: SuperDocFixture = {
+      page,
+
+      async type(text: string) {
+        await editor.focus();
+        await page.keyboard.type(text, { delay: 30 });
+      },
+
+      async press(key: string) {
+        await page.keyboard.press(key);
+      },
+
+      async newLine() {
+        await page.keyboard.press('Enter');
+      },
+
+      async shortcut(key: string) {
+        await page.keyboard.press(`${modKey}+${key}`);
+      },
+
+      async bold() {
+        await page.keyboard.press(`${modKey}+b`);
+      },
+
+      async italic() {
+        await page.keyboard.press(`${modKey}+i`);
+      },
+
+      async undo() {
+        await page.keyboard.press(`${modKey}+z`);
+      },
+
+      async redo() {
+        await page.keyboard.press(`${modKey}+Shift+z`);
+      },
+
+      async selectAll() {
+        await page.keyboard.press(`${modKey}+a`);
+      },
+
+      async screenshot(name: string) {
+        await waitForStable(page);
+
+        // Playwright native snapshot
+        await expect(page).toHaveScreenshot(`${name}.png`, {
+          fullPage: true,
+          timeout: 15_000,
+        });
+
+        // Argos snapshot (local-only unless CI)
+        if (argosScreenshot) {
+          await argosScreenshot(page, name, { fullPage: true });
+        }
+      },
+
+      async loadDocument(filePath: string) {
+        const fileInput = page.locator('input[type="file"]');
+        await fileInput.setInputFiles(filePath);
+        // Wait for document to load and render
+        await page.waitForFunction(
+          () => (window as any).superdoc !== undefined && (window as any).editor !== undefined,
+          null,
+          { polling: 100, timeout: 30_000 },
+        );
+        await waitForStable(page, 1000);
+      },
+
+      async screenshotPages(baseName: string) {
+        await waitForStable(page);
+
+        const pages = page.locator('.superdoc-page[data-page-index]');
+        const count = await pages.count();
+
+        if (count === 0) {
+          // No paginated pages — screenshot the whole editor
+          await fixture.screenshot(baseName);
+          return;
+        }
+
+        for (let i = 0; i < count; i++) {
+          const pageEl = pages.nth(i);
+
+          // Playwright native
+          await expect(pageEl).toHaveScreenshot(`${baseName}-p${i + 1}.png`, {
+            timeout: 15_000,
+          });
+
+          // Argos
+          if (argosScreenshot) {
+            await argosScreenshot(page, `${baseName}/page-${i + 1}`, {
+              element: pageEl,
+            });
+          }
+        }
+      },
+    };
+
+    await use(fixture);
+  },
+});
+
+export { expect };

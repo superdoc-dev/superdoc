@@ -1,0 +1,26 @@
+{
+  "name": "@superdoc-testing/visual",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:update": "playwright test --update-snapshots",
+    "test:baseline": "playwright test --update-snapshots --grep @rendering",
+    "baseline:upload": "tsx scripts/upload-baselines.ts",
+    "baseline:download": "tsx scripts/download-baselines.ts",
+    "report": "playwright show-report",
+    "harness": "vite --config harness/vite.config.ts harness/",
+    "postinstall": "playwright install --with-deps chromium firefox webkit"
+  },
+  "dependencies": {
+    "superdoc": "workspace:*"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.988.0",
+    "@playwright/test": "catalog:",
+    "@argos-ci/playwright": "^6.4.1",
+    "dotenv": "^16.4.7",
+    "tsx": "catalog:",
+    "vite": "catalog:"
+  }
+}

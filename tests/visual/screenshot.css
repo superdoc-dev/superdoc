@@ -1,0 +1,24 @@
+/* Injected during visual screenshots to eliminate dynamic elements */
+
+/* Hide text caret */
+* {
+  caret-color: transparent !important;
+}
+
+/* Disable all animations and transitions */
+*,
+*::before,
+*::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
+/* Hide scrollbars */
+::-webkit-scrollbar {
+  display: none !important;
+}
+* {
+  scrollbar-width: none !important;
+}

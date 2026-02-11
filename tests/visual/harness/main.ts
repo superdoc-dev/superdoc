@@ -1,0 +1,53 @@
+import 'superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+
+const params = new URLSearchParams(location.search);
+const layout = params.get('layout') !== '0';
+const hideCaret = params.get('hideCaret') !== '0';
+const hideSelection = params.get('hideSelection') !== '0';
+
+if (hideCaret) {
+  document.documentElement.style.setProperty('caret-color', 'transparent', 'important');
+}
+
+let instance: any = null;
+
+function init(file?: File) {
+  if (instance) {
+    instance.destroy();
+    instance = null;
+  }
+
+  (window as any).superdocReady = false;
+
+  const config: any = {
+    selector: '#editor',
+    useLayoutEngine: layout,
+    onReady: ({ superdoc }: any) => {
+      (window as any).superdoc = superdoc;
+      (window as any).superdocReady = true;
+    },
+  };
+
+  if (file) {
+    config.document = file;
+  }
+
+  instance = new SuperDoc(config);
+
+  if (hideSelection) {
+    const style = document.createElement('style');
+    style.textContent = `
+      .superdoc-selection-overlay,
+      .superdoc-caret { display: none !important; }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
+document.querySelector('input[type="file"]')!.addEventListener('change', (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) init(file);
+});
+
+init();

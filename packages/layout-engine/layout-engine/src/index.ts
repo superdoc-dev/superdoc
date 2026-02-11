@@ -128,6 +128,21 @@ function getMeasureHeight(block: FlowBlock, measure: Measure): number {
   }
 }
 
+/**
+ * Compute the base Y coordinate for an anchored table based on vRelativeFrom.
+ * Ignores tblpYSpec (alignV) by design.
+ */
+function getTableAnchorBaseY(block: TableBlock, state: PageState): number {
+  const vRelativeFrom = block.anchor?.vRelativeFrom ?? 'paragraph';
+  if (vRelativeFrom === 'page') {
+    return 0;
+  }
+  if (vRelativeFrom === 'margin') {
+    return state.topMargin;
+  }
+  return state.cursorY;
+}
+
 // ConstraintBoundary and PageState now come from paginator
 
 /**
@@ -1718,27 +1733,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
 
       const anchorsForPara = anchoredByParagraph.get(index);
-
-      // Register anchored tables for this paragraph before layout
-      // so the float manager knows about them when laying out text
       const tablesForPara = anchoredTablesByParagraph.get(index);
-      if (tablesForPara) {
-        const state = paginator.ensurePage();
-        for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
-          if (placedAnchoredTableIds.has(tableBlock.id)) continue;
-
-          // Register the table with the float manager for text wrapping
-          floatManager.registerTable(tableBlock, tableMeasure, state.cursorY, state.columnIndex, state.page.number);
-
-          // Create and place the table fragment at its anchored position
-          const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
-          const anchorY = state.cursorY + (tableBlock.anchor?.offsetV ?? 0);
-
-          const tableFragment = createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY);
-          state.page.fragments.push(tableFragment);
-          placedAnchoredTableIds.add(tableBlock.id);
-        }
-      }
 
       /**
        * keepNext Chain-Aware Page Break Logic
@@ -1902,6 +1897,33 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             }
           : undefined,
       );
+
+      // Register and place anchored tables after the paragraph so the paragraph appears above the table.
+      // Full-width floating tables are treated as inline and laid out when we hit the table block.
+      if (tablesForPara) {
+        const state = paginator.ensurePage();
+        const columnWidthForTable = getCurrentColumns().width;
+        let tableBottomY = state.cursorY;
+        for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
+          if (placedAnchoredTableIds.has(tableBlock.id)) continue;
+          const totalWidth = tableMeasure.totalWidth ?? 0;
+          if (columnWidthForTable > 0 && totalWidth >= columnWidthForTable * 0.99) continue;
+
+          const anchorBaseY = getTableAnchorBaseY(tableBlock, state);
+          floatManager.registerTable(tableBlock, tableMeasure, anchorBaseY, state.columnIndex, state.page.number);
+
+          const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+          const anchorY = anchorBaseY + (tableBlock.anchor?.offsetV ?? 0);
+
+          const tableFragment = createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY);
+          state.page.fragments.push(tableFragment);
+          placedAnchoredTableIds.add(tableBlock.id);
+
+          const bottom = anchorY + (tableMeasure.totalHeight ?? 0);
+          if (bottom > tableBottomY) tableBottomY = bottom;
+        }
+        state.cursorY = tableBottomY;
+      }
       continue;
     }
     if (block.kind === 'image') {

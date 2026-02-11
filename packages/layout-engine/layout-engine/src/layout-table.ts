@@ -1017,15 +1017,22 @@ export function layoutTableBlock({
   advanceColumn,
   columnX,
 }: TableLayoutContext): void {
-  // Skip anchored/floating tables handled by the float manager
+  // Anchored/floating tables are normally placed by the float manager when we layout their anchor
+  // paragraph. Treat full-width floating tables as inline so they flow like normal tables and
+  // don't create overlap or extra pages.
+  let treatAsInline = false;
   if (block.anchor?.isAnchored) {
-    return;
+    const totalWidth = measure.totalWidth ?? 0;
+    treatAsInline = columnWidth > 0 && totalWidth >= columnWidth * 0.99;
+    if (!treatAsInline) {
+      return;
+    }
   }
 
-  // 1. Detect floating tables - use monolithic layout
+  // 1. Detect floating tables - use monolithic layout (unless we're treating as inline)
   const tableProps = block.attrs?.tableProperties as Record<string, unknown> | undefined;
   const floatingProps = tableProps?.floatingTableProperties as Record<string, unknown> | undefined;
-  if (floatingProps && Object.keys(floatingProps).length > 0) {
+  if (floatingProps && Object.keys(floatingProps).length > 0 && !treatAsInline) {
     layoutMonolithicTable({ block, measure, columnWidth, ensurePage, advanceColumn, columnX });
     return;
   }

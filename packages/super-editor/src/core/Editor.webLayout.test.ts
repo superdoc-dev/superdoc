@@ -117,6 +117,28 @@ describe('Editor Web Layout Mode', () => {
 
       expect(editor.options.disableContextMenu).toBe(true);
     });
+
+    it('defaults to enabled context menu after leaving web when created in web mode', () => {
+      const editor = createTestEditor({
+        viewOptions: { layout: 'web' },
+      });
+
+      editor.setOptions({ disableContextMenu: true });
+      editor.setOptions({ viewOptions: { layout: 'print' } });
+
+      expect(editor.options.disableContextMenu).toBe(true);
+    });
+
+    it('does not override disableContextMenu when switching layouts if it was explicitly set before', () => {
+      const editor = createTestEditor({
+        viewOptions: { layout: 'web' },
+      });
+
+      editor.setOptions({ disableContextMenu: false });
+      editor.setOptions({ viewOptions: { layout: 'print' } });
+
+      expect(editor.options.disableContextMenu).toBe(false);
+    });
   });
 
   describe('getMaxContentSize()', () => {

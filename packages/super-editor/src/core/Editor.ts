@@ -253,7 +253,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Guard flag to prevent double-tracking document open
    */
   #documentOpenTracked = false;
-  #contextMenuForcedByLayout = false;
+  #disableContextMenuBeforeWebLayout: boolean | undefined = undefined;
 
   options: EditorOptions = {
     element: null,
@@ -1498,19 +1498,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const nextDisableContextMenu = disableContextMenuProvided ? options.disableContextMenu : prevDisableContextMenu;
 
     if (nextLayout === 'web') {
+      if (prevLayout !== 'web') {
+        this.#disableContextMenuBeforeWebLayout = nextDisableContextMenu;
+      } else if (disableContextMenuProvided) {
+        this.#disableContextMenuBeforeWebLayout = nextDisableContextMenu;
+      }
       // Web layout mode should not surface the context menu (e.g., on mobile long-press).
       nextOptions.disableContextMenu = true;
-      this.#contextMenuForcedByLayout = nextDisableContextMenu !== true;
     } else if (prevLayout === 'web') {
-      if (this.#contextMenuForcedByLayout && !disableContextMenuProvided) {
-        nextOptions.disableContextMenu = false;
-      } else {
+      if (disableContextMenuProvided) {
         nextOptions.disableContextMenu = nextDisableContextMenu;
+      } else {
+        nextOptions.disableContextMenu = this.#disableContextMenuBeforeWebLayout ?? false;
       }
-      this.#contextMenuForcedByLayout = false;
+      this.#disableContextMenuBeforeWebLayout = undefined;
     } else if (disableContextMenuProvided) {
       nextOptions.disableContextMenu = nextDisableContextMenu;
-      this.#contextMenuForcedByLayout = false;
     }
 
     this.options = nextOptions;

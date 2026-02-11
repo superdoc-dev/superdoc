@@ -5,6 +5,9 @@ const params = new URLSearchParams(location.search);
 const layout = params.get('layout') !== '0';
 const hideCaret = params.get('hideCaret') !== '0';
 const hideSelection = params.get('hideSelection') !== '0';
+const toolbar = params.get('toolbar');
+const comments = params.get('comments');
+const trackChanges = params.get('trackChanges') === '1';
 
 if (hideCaret) {
   document.documentElement.style.setProperty('caret-color', 'transparent', 'important');
@@ -34,6 +37,23 @@ function init(file?: File) {
 
   if (file) {
     config.document = file;
+  }
+
+  // Toolbar
+  if (toolbar && toolbar !== 'none') {
+    config.toolbar = document.getElementById('toolbar');
+  }
+
+  // Comments
+  if (comments === 'on' || comments === 'panel') {
+    config.comments = { visible: true };
+  } else if (comments === 'readonly') {
+    config.comments = { visible: true, readOnly: true };
+  }
+
+  // Track changes
+  if (trackChanges) {
+    config.trackChanges = { visible: true };
   }
 
   instance = new SuperDoc(config);

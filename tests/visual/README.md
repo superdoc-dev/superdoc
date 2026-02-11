@@ -1,11 +1,14 @@
 # Visual Testing
 
-Playwright-based visual regression tests for SuperDoc. Baselines are stored in R2 and generated from the `stable` branch.
+Playwright-based visual regression tests for SuperDoc. Baselines and test documents are stored in R2 and generated from the `stable` branch.
 
 ## Quick Start
 
 ```bash
 cd tests/visual
+
+# Download test documents from R2 (first time only)
+pnpm docs:download
 
 # Run all tests
 pnpm test
@@ -30,10 +33,15 @@ pnpm report
 
 **Behavior** (`tests/behavior/`) — Simulate user interactions (typing, formatting, commands) and screenshot the result. Organized by category:
 
-- `basic-commands/` — typing, undo/redo, tables, select-all, toolbar
-- `formatting/` — bold/italic, hyperlinks, clear format, style inheritance
-- `comments-tcs/` — comments and track changes
-- `lists/` — list creation, indentation
+- `basic-commands/` — typing, undo/redo, tables, select-all, toolbar, drag selection
+- `formatting/` — bold/italic, hyperlinks, clear format, style inheritance, fonts
+- `comments-tcs/` — comments, track changes, nested comments
+- `lists/` — list creation, indentation, markers
+- `field-annotations/` — field annotation types and formatting
+- `headers/` — header/footer editing
+- `search/` — search and navigation
+- `importing/` — document import edge cases
+- `structured-content/` — SDT lock modes
 
 **Rendering** (`tests/rendering/`) — Load `.docx` documents and screenshot each page. Tagged with `@rendering` for baseline filtering.
 
@@ -60,11 +68,33 @@ import { fileURLToPath } from 'node:url';
 import { test } from '../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../../../e2e-tests/test-data/basic-documents');
+const DOCS_DIR = path.resolve(__dirname, '../../test-data/basic');
 
 test('@rendering loads and renders correctly', async ({ superdoc }) => {
   await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
   await superdoc.screenshotPages('rendering/my-doc');
+});
+```
+
+### Loading test documents
+
+Test documents are stored in R2 and downloaded to `test-data/`. Add new documents to the `DOCUMENTS` list in `scripts/download-test-docs.ts`.
+
+```ts
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from '../../fixtures/superdoc.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
+const DOC_PATH = path.join(DOCS_DIR, 'comments-tcs/tracked-changes.docx');
+
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
+
+test('@behavior my document test', async ({ superdoc }) => {
+  await superdoc.loadDocument(DOC_PATH);
+  // ...
 });
 ```
 
@@ -81,6 +111,11 @@ test('@rendering loads and renders correctly', async ({ superdoc }) => {
 | `selectAll()` | Select all content |
 | `tripleClickLine(index)` | Select a line by index |
 | `executeCommand(name, args?)` | Run an editor command |
+| `setDocumentMode(mode)` | Set editing/suggesting/viewing mode |
+| `setTextSelection(from, to?)` | Set cursor position |
+| `clickOnLine(index, xOffset?)` | Single click on a line |
+| `clickOnCommentedText(text)` | Click on comment highlight |
+| `pressTimes(key, count)` | Press a key multiple times |
 | `waitForStable(ms?)` | Wait for layout to settle |
 | `screenshot(name)` | Full-page screenshot |
 | `loadDocument(path)` | Load a .docx file |
@@ -107,9 +142,9 @@ test.use({
 
 - **PR validation**: `visual-test.yml` downloads baselines from R2, runs tests against `stable`
 - **Baseline update**: `visual-baseline.yml` (manual trigger) builds from `stable`, generates new baselines, uploads to R2
-- **R2 scripts**: `pnpm baseline:upload` / `pnpm baseline:download`
+- **R2 scripts**: `pnpm baseline:upload` / `pnpm baseline:download` / `pnpm docs:download`
 
-Baselines are never committed to git (customer documents in screenshots).
+Baselines and test documents are never committed to git.
 
 ## Local Setup
 
@@ -117,6 +152,11 @@ Baselines are never committed to git (customer documents in screenshots).
 # Install deps (auto-installs Playwright browsers via postinstall)
 pnpm install
 
-# Copy .env for R2 access (optional, only needed for baseline upload/download)
+# Copy .env for R2 access
 cp .env.example .env
+# Fill in: SD_TESTING_R2_ACCOUNT_ID, SD_TESTING_R2_BASELINES_BUCKET_NAME,
+# SD_TESTING_R2_BUCKET_NAME, SD_TESTING_R2_ACCESS_KEY_ID, SD_TESTING_R2_SECRET_ACCESS_KEY
+
+# Download test documents
+pnpm docs:download
 ```

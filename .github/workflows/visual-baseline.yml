@@ -60,6 +60,15 @@ jobs:
         run: pnpm exec playwright install-deps chromium firefox webkit
         working-directory: tests/visual
 
+      - name: Download test documents from R2
+        run: pnpm docs:download
+        working-directory: tests/visual
+        env:
+          SD_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_TESTING_R2_ACCOUNT_ID }}
+          SD_TESTING_R2_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BUCKET_NAME }}
+          SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
+          SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}
+
       - name: Generate baselines
         run: pnpm test:update
         working-directory: tests/visual

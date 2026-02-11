@@ -73,6 +73,16 @@ export interface SuperDocFixture {
   tripleClickLine(lineIndex: number): Promise<void>;
   /** Execute an editor command via window.editor.commands */
   executeCommand(name: string, args?: Record<string, any>): Promise<void>;
+  /** Set document mode (editing, suggesting, viewing) */
+  setDocumentMode(mode: 'editing' | 'suggesting' | 'viewing'): Promise<void>;
+  /** Set cursor/selection position via ProseMirror positions */
+  setTextSelection(from: number, to?: number): Promise<void>;
+  /** Single click on a line by index */
+  clickOnLine(lineIndex: number, xOffset?: number): Promise<void>;
+  /** Click on a comment highlight containing the given text */
+  clickOnCommentedText(textMatch: string): Promise<void>;
+  /** Press a key multiple times */
+  pressTimes(key: string, count: number): Promise<void>;
   /** Wait for the editor to stabilize */
   waitForStable(ms?: number): Promise<void>;
 
@@ -170,6 +180,61 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
         const box = await line.boundingBox();
         if (!box) throw new Error(`Line ${lineIndex} not visible`);
         await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { clickCount: 3 });
+      },
+
+      async setDocumentMode(mode: 'editing' | 'suggesting' | 'viewing') {
+        await page.evaluate((m) => {
+          (window as any).superdoc.setDocumentMode(m);
+        }, mode);
+      },
+
+      async setTextSelection(from: number, to?: number) {
+        await page.waitForFunction(() => (window as any).editor?.commands, null, { timeout: 10_000 });
+        await page.evaluate(
+          ({ f, t }) => {
+            const editor = (window as any).editor;
+            editor.commands.setTextSelection({ from: f, to: t ?? f });
+          },
+          { f: from, t: to },
+        );
+      },
+
+      async clickOnLine(lineIndex: number, xOffset = 10) {
+        const line = page.locator('.superdoc-line').nth(lineIndex);
+        const box = await line.boundingBox();
+        if (!box) throw new Error(`Line ${lineIndex} not visible`);
+        await page.mouse.click(box.x + xOffset, box.y + box.height / 2);
+      },
+
+      async clickOnCommentedText(textMatch: string) {
+        const highlights = page.locator('.superdoc-comment-highlight');
+        const count = await highlights.count();
+        let bestIndex = -1;
+        let bestArea = Infinity;
+
+        for (let i = 0; i < count; i++) {
+          const hl = highlights.nth(i);
+          const text = await hl.textContent();
+          if (text && text.includes(textMatch)) {
+            const box = await hl.boundingBox();
+            if (box) {
+              const area = box.width * box.height;
+              if (area < bestArea) {
+                bestArea = area;
+                bestIndex = i;
+              }
+            }
+          }
+        }
+
+        if (bestIndex === -1) throw new Error(`No comment highlight found for "${textMatch}"`);
+        await highlights.nth(bestIndex).click();
+      },
+
+      async pressTimes(key: string, count: number) {
+        for (let i = 0; i < count; i++) {
+          await page.keyboard.press(key);
+        }
       },
 
       async executeCommand(name: string, args?: Record<string, any>) {

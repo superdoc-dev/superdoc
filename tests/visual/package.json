@@ -8,6 +8,7 @@
     "test:baseline": "playwright test --update-snapshots --grep @rendering",
     "baseline:upload": "tsx scripts/upload-baselines.ts",
     "baseline:download": "tsx scripts/download-baselines.ts",
+    "docs:download": "tsx scripts/download-test-docs.ts",
     "report": "playwright show-report",
     "harness": "vite --config harness/vite.config.ts harness/",
     "postinstall": "playwright install --with-deps chromium firefox webkit"

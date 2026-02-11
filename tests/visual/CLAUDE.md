@@ -1,6 +1,6 @@
 # Visual Testing
 
-Playwright visual regression tests for SuperDoc. Screenshots are compared against baselines stored in R2.
+Playwright visual regression tests for SuperDoc. Screenshots and test documents are stored in R2.
 
 ## When to Add Visual Tests
 
@@ -19,11 +19,20 @@ Add a **rendering test** when you:
 tests/
   behavior/              Simulate user actions, screenshot result
     basic-commands/      Typing, undo/redo, tables, select-all, toolbar
-    formatting/          Bold/italic, hyperlinks, clear format, styles
-    comments-tcs/        Comments and track changes
-    lists/               List creation, indentation
+    formatting/          Bold/italic, hyperlinks, clear format, fonts
+    comments-tcs/        Comments, track changes, nested comments
+    lists/               List creation, indentation, markers
+    field-annotations/   Field annotation types and formatting
+    headers/             Header/footer editing
+    search/              Search and navigation
+    importing/           Document import edge cases
+    structured-content/  SDT lock modes
   rendering/             Load .docx files, screenshot each page
   fixtures/superdoc.ts   Shared fixture with helpers
+test-data/               Downloaded from R2 (gitignored)
+scripts/
+  download-test-docs.ts  Download test documents from R2
+  download-baselines.ts  Download screenshot baselines from R2
 ```
 
 ## Writing a Behavior Test
@@ -43,6 +52,30 @@ test('@behavior description of what it tests', async ({ superdoc }) => {
 
 Place the file in the matching category folder. Use `@behavior` tag in the test name.
 
+## Loading Test Documents
+
+Test documents are stored in R2 (corpus bucket). Download with `pnpm docs:download`.
+
+```ts
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from '../../fixtures/superdoc.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
+const DOC_PATH = path.join(DOCS_DIR, 'comments-tcs/tracked-changes.docx');
+
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
+
+test('@behavior my doc test', async ({ superdoc }) => {
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.screenshot('my-test');
+});
+```
+
+Add new documents to the `DOCUMENTS` list in `scripts/download-test-docs.ts`.
+
 ## Writing a Rendering Test
 
 ```ts
@@ -51,7 +84,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from '../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../../../e2e-tests/test-data/basic-documents');
+const DOCS_DIR = path.resolve(__dirname, '../../test-data/basic');
 
 test('@rendering my-doc renders correctly', async ({ superdoc }) => {
   await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
@@ -59,7 +92,7 @@ test('@rendering my-doc renders correctly', async ({ superdoc }) => {
 });
 ```
 
-Use `@rendering` tag. Place test docs in `e2e-tests/test-data/`.
+Use `@rendering` tag.
 
 ## Fixture Helpers
 
@@ -74,6 +107,11 @@ Use `@rendering` tag. Place test docs in `e2e-tests/test-data/`.
 | `selectAll()` | Cmd/Ctrl+A |
 | `tripleClickLine(index)` | Select line by index (uses `.superdoc-line`) |
 | `executeCommand(name, args?)` | Run editor command via `window.editor.commands` |
+| `setDocumentMode(mode)` | Set editing/suggesting/viewing mode |
+| `setTextSelection(from, to?)` | Set cursor position via ProseMirror position |
+| `clickOnLine(index, xOffset?)` | Single click on a line |
+| `clickOnCommentedText(text)` | Click on comment highlight containing text |
+| `pressTimes(key, count)` | Press a key multiple times |
 | `waitForStable(ms?)` | Wait for layout to settle (default 500ms) |
 | `screenshot(name)` | Full-page screenshot with baseline comparison |
 | `loadDocument(path)` | Load a .docx file into the editor |
@@ -100,6 +138,6 @@ Defaults: `layout: true`, `hideCaret: true`, `hideSelection: true`. Override bef
 
 - **DOM selectors**: SuperDoc uses DomPainter, not ProseMirror DOM. Use `.superdoc-line`, `.superdoc-page`, not `.ProseMirror p`.
 - **Editor commands**: Available via `executeCommand()` — waits for `window.editor.commands` automatically.
-- **Document mode**: Switch to suggesting mode via `superdoc.page.evaluate(() => window.superdoc.setDocumentMode('suggesting'))`.
-- **Baselines**: Never committed to git. Stored in R2, generated from the `stable` branch.
-- **Running locally**: `cd tests/visual && pnpm test` (or `pnpm test:update` to regenerate snapshots).
+- **Document mode**: Use `setDocumentMode('suggesting')` fixture helper or `superdoc.page.evaluate(() => window.superdoc.setDocumentMode('suggesting'))`.
+- **Baselines & documents**: Never committed to git. Stored in R2, generated from the `stable` branch.
+- **Running locally**: `cd tests/visual && pnpm docs:download && pnpm test`.

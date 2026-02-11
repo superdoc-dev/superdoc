@@ -484,9 +484,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const { telemetry: telemetryConfig, licenseKey } = this.options;
 
     // Skip in test environments and when telemetry is not enabled
-    if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
-      return;
-    }
+    // if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
+    //   return;
+    // }
 
     if (!telemetryConfig?.enabled) {
       console.debug('[super-editor] Telemetry: disabled');

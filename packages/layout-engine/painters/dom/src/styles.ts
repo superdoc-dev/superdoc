@@ -394,13 +394,8 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-/* Hover effect for block structured content (via event delegation class) */
-.superdoc-structured-content-block.sdt-hover {
-  border-color: #629be7 !important;
-  background-color: rgba(98, 155, 231, 0.08);
-  z-index: 9999999;
-}
-
+/* Hover effect for block structured content (via event delegation class).
+ * Shows label on hover — border reveal is handled by the lock-mode hover rule below. */
 .superdoc-structured-content-block.sdt-hover .superdoc-structured-content__label {
   display: inline-flex;
 }
@@ -441,13 +436,6 @@ const SDT_CONTAINER_STYLES = `
   z-index: 10;
 }
 
-/* Hover effect for inline structured content */
-.superdoc-structured-content-inline:hover {
-  border-color: #629be7 !important;
-  background-color: rgba(98, 155, 231, 0.08);
-  z-index: 9999999;
-}
-
 /* Inline structured content label - shown on hover */
 .superdoc-structured-content-inline__label {
   position: absolute;
@@ -469,10 +457,8 @@ const SDT_CONTAINER_STYLES = `
   display: block;
 }
 
-/* Lock mode styles for structured content - matches Word appearance exactly */
-/* Default: background color only, no border. Border appears on hover/focus */
-
-/* Lock mode: hide border by default, show on hover.
+/* SDT border visibility — matches Word behavior: borders hidden by default, shown on hover.
+ * data-lock-mode is set on ALL SDTs (including unlocked) so this applies universally.
  * Use border-color (not border shorthand) to preserve continuation rules
  * that remove border-top/border-bottom on multi-fragment SDT containers. */
 .superdoc-structured-content-block[data-lock-mode],
@@ -480,15 +466,11 @@ const SDT_CONTAINER_STYLES = `
   border-color: transparent;
 }
 
-/* Show blue border on hover for all lock modes.
- * Use !important on border-color to override the transparent default above
- * and any continuation rules that remove border-top/border-bottom. */
-.superdoc-structured-content-block[data-lock-mode].sdt-hover {
-  border-color: #629be7 !important;
-  background-color: rgba(98, 155, 231, 0.08);
-  z-index: 9999999;
-}
-
+/* Reveal blue border + highlight on hover.
+ * Block SDTs use .sdt-hover class (event delegation for multi-fragment coordination).
+ * Inline SDTs use :hover (single element, no coordination needed).
+ * !important overrides transparent default and continuation border rules. */
+.superdoc-structured-content-block[data-lock-mode].sdt-hover,
 .superdoc-structured-content-inline[data-lock-mode]:hover {
   border-color: #629be7 !important;
   background-color: rgba(98, 155, 231, 0.08);

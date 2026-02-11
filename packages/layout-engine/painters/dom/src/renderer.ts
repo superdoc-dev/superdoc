@@ -5270,6 +5270,8 @@ export class DomPainter {
       this.setDatasetString(el, 'sdtScope', metadata.scope);
       this.setDatasetString(el, 'sdtTag', metadata.tag);
       this.setDatasetString(el, 'sdtAlias', metadata.alias);
+      // Always set lockMode (defaulting to 'unlocked') so the CSS selector [data-lock-mode]
+      // applies to all SDTs — this hides borders by default, matching Word behavior.
       this.setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
     } else if (metadata.type === 'documentSection') {
       this.setDatasetString(el, 'sdtSectionTitle', metadata.title);

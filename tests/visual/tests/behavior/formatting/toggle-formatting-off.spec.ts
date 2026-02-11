@@ -5,7 +5,7 @@ import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'styles/sd-1727-formatting-lost.docx');
+const DOC_PATH = path.join(DOCS_DIR, 'behavior/formatting/sd-1727-formatting-lost.docx');
 
 test.use({ config: { toolbar: 'full', hideCaret: false, hideSelection: false } });
 

@@ -5,7 +5,7 @@ import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'fldchar/sd-1558-fld-char-issue.docx');
+const DOC_PATH = path.join(DOCS_DIR, 'behavior/importing/sd-1558-fld-char-issue.docx');
 
 test.use({ config: { comments: 'off' } });
 

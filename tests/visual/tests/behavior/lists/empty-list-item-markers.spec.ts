@@ -5,7 +5,7 @@ import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'lists/sd-1543-empty-list-items.docx');
+const DOC_PATH = path.join(DOCS_DIR, 'behavior/lists/sd-1543-empty-list-items.docx');
 
 test.skip(!fs.existsSync(DOC_PATH), 'Test document not available (R2)');
 

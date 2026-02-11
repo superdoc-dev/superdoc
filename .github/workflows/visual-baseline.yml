@@ -14,6 +14,11 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-24.04
+    env:
+      SD_VISUAL_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_VISUAL_TESTING_R2_ACCOUNT_ID }}
+      SD_VISUAL_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID }}
+      SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY }}
+      SD_VISUAL_TESTING_R2_BUCKET: ${{ secrets.SD_VISUAL_TESTING_R2_BUCKET }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -63,11 +68,6 @@ jobs:
       - name: Download test documents from R2
         run: pnpm docs:download
         working-directory: tests/visual
-        env:
-          SD_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_TESTING_R2_ACCOUNT_ID }}
-          SD_TESTING_R2_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BUCKET_NAME }}
-          SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
-          SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}
 
       - name: Generate baselines
         run: pnpm test:update
@@ -76,8 +76,3 @@ jobs:
       - name: Upload baselines to R2
         run: pnpm baseline:upload
         working-directory: tests/visual
-        env:
-          SD_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_TESTING_R2_ACCOUNT_ID }}
-          SD_TESTING_R2_BASELINES_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BASELINES_BUCKET_NAME }}
-          SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
-          SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}

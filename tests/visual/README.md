@@ -1,6 +1,6 @@
 # Visual Testing
 
-Playwright-based visual regression tests for SuperDoc. Baselines and test documents are stored in R2 and generated from the `stable` branch.
+Playwright-based visual regression tests for SuperDoc. Everything lives in a single R2 bucket (`superdoc-visual-testing`) with two prefixes: `documents/` for test files and `baselines/` for screenshots.
 
 ## Quick Start
 
@@ -47,7 +47,7 @@ pnpm report
 
 ## Adding a Test
 
-### Behavior test
+### Behavior test (no document needed)
 
 ```ts
 import { test } from '../../fixtures/superdoc.js';
@@ -60,27 +60,15 @@ test('@behavior description of what it tests', async ({ superdoc }) => {
 });
 ```
 
-### Rendering test
+### Behavior test with a document
 
-```ts
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../test-data/basic');
-
-test('@rendering loads and renders correctly', async ({ superdoc }) => {
-  await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
-  await superdoc.screenshotPages('rendering/my-doc');
-});
+```bash
+# 1. Upload your document to R2 (path mirrors the test folder)
+pnpm docs:upload ~/Downloads/my-bug-repro.docx behavior/comments-tcs
 ```
 
-### Loading test documents
-
-Test documents are stored in R2 and downloaded to `test-data/`. Add new documents to the `DOCUMENTS` list in `scripts/download-test-docs.ts`.
-
 ```ts
+// 2. Reference it in your test — path matches the category
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -88,15 +76,68 @@ import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'comments-tcs/tracked-changes.docx');
+const DOC_PATH = path.join(DOCS_DIR, 'behavior/comments-tcs/my-bug-repro.docx');
 
 test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
 
 test('@behavior my document test', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);
-  // ...
+  await superdoc.screenshot('my-test');
 });
 ```
+
+### Rendering test
+
+```bash
+# 1. Upload your document
+pnpm docs:upload ~/Downloads/my-doc.docx rendering
+```
+
+```ts
+// 2. Write the test
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from '../fixtures/superdoc.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
+
+test('@rendering my-doc renders correctly', async ({ superdoc }) => {
+  await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
+  await superdoc.screenshotPages('rendering/my-doc');
+});
+```
+
+## R2 Storage
+
+Everything lives in one bucket. The folder structure mirrors the test structure:
+
+```
+superdoc-visual-testing/
+  documents/                    Test .docx files
+    behavior/
+      comments-tcs/             Documents for comments-tcs tests
+      formatting/               Documents for formatting tests
+      ...
+    rendering/                  Documents for rendering tests
+  baselines/                    Screenshot baselines (auto-generated)
+    behavior/
+      basic-commands/
+        type-basic-text.spec.ts-snapshots/
+          chromium/
+          firefox/
+          webkit/
+      ...
+    rendering/
+      ...
+```
+
+| Command | What it does |
+|---------|-------------|
+| `pnpm docs:download` | Download all documents from R2 → `test-data/` |
+| `pnpm docs:upload <file> <category>` | Upload a document to R2 |
+| `pnpm baseline:download` | Download baselines from R2 |
+| `pnpm baseline:upload` | Upload baselines to R2 |
 
 ## Fixture Helpers
 
@@ -140,11 +181,9 @@ test.use({
 
 ## Baselines & CI
 
-- **PR validation**: `visual-test.yml` downloads baselines from R2, runs tests against `stable`
+- **PR validation**: `visual-test.yml` downloads baselines + documents from R2, runs tests
 - **Baseline update**: `visual-baseline.yml` (manual trigger) builds from `stable`, generates new baselines, uploads to R2
-- **R2 scripts**: `pnpm baseline:upload` / `pnpm baseline:download` / `pnpm docs:download`
-
-Baselines and test documents are never committed to git.
+- Baselines and test documents are never committed to git
 
 ## Local Setup
 
@@ -154,8 +193,8 @@ pnpm install
 
 # Copy .env for R2 access
 cp .env.example .env
-# Fill in: SD_TESTING_R2_ACCOUNT_ID, SD_TESTING_R2_BASELINES_BUCKET_NAME,
-# SD_TESTING_R2_BUCKET_NAME, SD_TESTING_R2_ACCESS_KEY_ID, SD_TESTING_R2_SECRET_ACCESS_KEY
+# Fill in: SD_VISUAL_TESTING_R2_ACCOUNT_ID, SD_VISUAL_TESTING_R2_ACCESS_KEY_ID,
+# SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY, SD_VISUAL_TESTING_R2_BUCKET
 
 # Download test documents
 pnpm docs:download

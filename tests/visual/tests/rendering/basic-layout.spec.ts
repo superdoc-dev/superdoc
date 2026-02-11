@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from '../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../test-data/basic');
+const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
 
 test('@rendering basic document renders correctly', async ({ superdoc }) => {
   await superdoc.loadDocument(path.join(DOCS_DIR, 'advanced-text.docx'));

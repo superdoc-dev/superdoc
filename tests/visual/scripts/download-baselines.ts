@@ -1,19 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
-import { createR2Client, R2_PREFIX } from './r2.js';
+import { createR2Client, BASELINES_PREFIX } from './r2.js';
 
 const TESTS_DIR = path.resolve(import.meta.dirname, '../tests');
 
-async function listObjects(client: any, bucketName: string) {
+async function listObjects(client: any, bucket: string) {
   const keys: string[] = [];
   let continuationToken: string | undefined;
 
   do {
     const response = await client.send(
       new ListObjectsV2Command({
-        Bucket: bucketName,
-        Prefix: `${R2_PREFIX}/`,
+        Bucket: bucket,
+        Prefix: `${BASELINES_PREFIX}/`,
         ContinuationToken: continuationToken,
       }),
     );
@@ -28,8 +28,8 @@ async function listObjects(client: any, bucketName: string) {
   return keys;
 }
 
-async function downloadFile(client: any, bucketName: string, key: string, dest: string) {
-  const response = await client.send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
+async function downloadFile(client: any, bucket: string, key: string, dest: string) {
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
 
   const bytes = await response.Body!.transformToByteArray();
   fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -37,10 +37,10 @@ async function downloadFile(client: any, bucketName: string, key: string, dest: 
 }
 
 async function main() {
-  const { client, bucketName } = createR2Client();
+  const { client, bucket } = createR2Client();
 
   console.log('Listing baselines in R2...');
-  const keys = await listObjects(client, bucketName);
+  const keys = await listObjects(client, bucket);
 
   if (keys.length === 0) {
     console.log('No baselines found in R2. Run upload-baselines first.');
@@ -50,10 +50,10 @@ async function main() {
   console.log(`Downloading ${keys.length} snapshots...`);
 
   for (const key of keys) {
-    const relative = key.slice(`${R2_PREFIX}/`.length);
+    const relative = key.slice(`${BASELINES_PREFIX}/`.length);
     const dest = path.join(TESTS_DIR, relative);
 
-    await downloadFile(client, bucketName, key, dest);
+    await downloadFile(client, bucket, key, dest);
     console.log(`  ✓ ${relative}`);
   }
 

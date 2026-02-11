@@ -5,7 +5,7 @@ import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'pagination/h_f-normal-odd-even.docx');
+const DOC_PATH = path.join(DOCS_DIR, 'behavior/basic-commands/h_f-normal-odd-even.docx');
 
 test.use({ config: { hideSelection: false, height: 800 } });
 

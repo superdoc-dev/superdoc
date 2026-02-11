@@ -1,84 +1,64 @@
 /**
- * Downloads test documents from R2 corpus bucket for visual tests.
- * Uses SD_TESTING_R2_BUCKET_NAME (corpus bucket, separate from baselines bucket).
+ * Downloads all test documents from R2.
+ * Auto-discovers everything under the documents/ prefix — no hardcoded list.
+ * Downloads to test-data/ preserving the folder structure.
  */
-import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { createR2Client, DOCUMENTS_PREFIX } from './r2.js';
 
 const TEST_DATA_DIR = path.resolve(import.meta.dirname, '../test-data');
 
-/**
- * Documents needed by visual tests.
- * Keys match the R2 object paths in the corpus bucket.
- */
-const DOCUMENTS = [
-  // rendering + basic-commands
-  'basic/advanced-text.docx',
-  'basic/advanced-tables.docx',
-  'pagination/h_f-normal-odd-even.docx',
+async function listDocuments(client: any, bucket: string) {
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
 
-  // formatting
-  'other/sd-1778-apply-font.docx',
-  'styles/sd-1727-formatting-lost.docx',
-
-  // comments-tcs
-  'comments-tcs/tracked-changes.docx',
-  'comments-tcs/gdocs-comment-on-change.docx',
-  'comments-tcs/nested-comments-gdocs.docx',
-  'comments-tcs/nested-comments-word.docx',
-  'comments-tcs/sd-tracked-style-change.docx',
-
-  // lists
-  'lists/sd-1543-empty-list-items.docx',
-  'lists/sd-1658-lists-same-level.docx',
-
-  // headers / search
-  'basic/longer-header.docx',
-
-  // importing
-  'fldchar/sd-1558-fld-char-issue.docx',
-];
-
-function createCorpusClient() {
-  const accountId = process.env.SD_TESTING_R2_ACCOUNT_ID;
-  const bucketName = process.env.SD_TESTING_R2_BUCKET_NAME;
-  const accessKeyId = process.env.SD_TESTING_R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.SD_TESTING_R2_SECRET_ACCESS_KEY;
-
-  if (!accountId || !bucketName || !accessKeyId || !secretAccessKey) {
-    throw new Error(
-      'Missing R2 env vars. Need: SD_TESTING_R2_ACCOUNT_ID, SD_TESTING_R2_BUCKET_NAME, SD_TESTING_R2_ACCESS_KEY_ID, SD_TESTING_R2_SECRET_ACCESS_KEY',
+  do {
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: `${DOCUMENTS_PREFIX}/`,
+        ContinuationToken: continuationToken,
+      }),
     );
-  }
 
-  const client = new S3Client({
-    region: 'auto',
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId, secretAccessKey },
-  });
+    for (const item of response.Contents ?? []) {
+      if (item.Key) keys.push(item.Key);
+    }
 
-  return { client, bucketName };
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return keys;
 }
 
-async function downloadFile(client: S3Client, bucketName: string, key: string, dest: string) {
-  const response = await client.send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
+async function downloadFile(client: any, bucket: string, key: string, dest: string) {
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const bytes = await response.Body!.transformToByteArray();
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, bytes);
 }
 
 async function main() {
-  const { client, bucketName } = createCorpusClient();
+  const { client, bucket } = createR2Client();
 
-  console.log(`Downloading ${DOCUMENTS.length} test documents from R2...`);
+  console.log('Listing documents in R2...');
+  const keys = await listDocuments(client, bucket);
+
+  if (keys.length === 0) {
+    console.log('No documents found in R2.');
+    process.exit(0);
+  }
+
+  console.log(`Found ${keys.length} documents.`);
 
   let downloaded = 0;
   let skipped = 0;
 
-  for (const docPath of DOCUMENTS) {
-    const dest = path.join(TEST_DATA_DIR, docPath);
+  for (const key of keys) {
+    const relative = key.slice(`${DOCUMENTS_PREFIX}/`.length);
+    const dest = path.join(TEST_DATA_DIR, relative);
 
     if (fs.existsSync(dest)) {
       skipped++;
@@ -86,15 +66,15 @@ async function main() {
     }
 
     try {
-      await downloadFile(client, bucketName, docPath, dest);
+      await downloadFile(client, bucket, key, dest);
       downloaded++;
-      console.log(`  ✓ ${docPath}`);
+      console.log(`  ✓ ${relative}`);
     } catch (err: any) {
-      console.error(`  ✗ ${docPath}: ${err.message}`);
+      console.error(`  ✗ ${relative}: ${err.message}`);
     }
   }
 
-  console.log(`\nDone. Downloaded: ${downloaded}, Skipped (cached): ${skipped}`);
+  console.log(`\nDone. Downloaded: ${downloaded}, Cached: ${skipped}`);
   client.destroy();
 }
 

@@ -5,7 +5,7 @@ import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'comments-tcs/sd-tracked-style-change.docx');
+const DOC_PATH = path.join(DOCS_DIR, 'behavior/comments-tcs/sd-tracked-style-change.docx');
 
 test.use({ config: { comments: 'panel', hideSelection: false } });
 

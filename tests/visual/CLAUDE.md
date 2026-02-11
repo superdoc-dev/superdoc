@@ -29,10 +29,26 @@ tests/
     structured-content/  SDT lock modes
   rendering/             Load .docx files, screenshot each page
   fixtures/superdoc.ts   Shared fixture with helpers
-test-data/               Downloaded from R2 (gitignored)
+test-data/               Downloaded from R2 (gitignored), mirrors R2 documents/ prefix
 scripts/
-  download-test-docs.ts  Download test documents from R2
+  download-test-docs.ts  Auto-discover and download all documents from R2
+  upload-test-doc.ts     Upload a document to R2
   download-baselines.ts  Download screenshot baselines from R2
+  upload-baselines.ts    Upload screenshot baselines to R2
+```
+
+## R2 Storage
+
+Single bucket with two prefixes. Local `test-data/` mirrors the `documents/` prefix exactly:
+
+```
+superdoc-visual-testing/
+  documents/                    → downloads to test-data/
+    behavior/
+      comments-tcs/doc.docx     → test-data/behavior/comments-tcs/doc.docx
+      formatting/doc.docx       → test-data/behavior/formatting/doc.docx
+    rendering/doc.docx          → test-data/rendering/doc.docx
+  baselines/                    → downloads to tests/ (snapshot dirs)
 ```
 
 ## Writing a Behavior Test
@@ -54,7 +70,7 @@ Place the file in the matching category folder. Use `@behavior` tag in the test 
 
 ## Loading Test Documents
 
-Test documents are stored in R2 (corpus bucket). Download with `pnpm docs:download`.
+Test documents are stored in R2 (`documents/` prefix). Download with `pnpm docs:download`. Upload new ones with `pnpm docs:upload <file> <category>`.
 
 ```ts
 import fs from 'node:fs';
@@ -64,7 +80,7 @@ import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'comments-tcs/tracked-changes.docx');
+const DOC_PATH = path.join(DOCS_DIR, 'behavior/comments-tcs/tracked-changes.docx');
 
 test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
 
@@ -74,7 +90,7 @@ test('@behavior my doc test', async ({ superdoc }) => {
 });
 ```
 
-Add new documents to the `DOCUMENTS` list in `scripts/download-test-docs.ts`.
+Document paths mirror the test folder structure. A test in `tests/behavior/comments-tcs/` uses documents from `test-data/behavior/comments-tcs/`.
 
 ## Writing a Rendering Test
 
@@ -84,7 +100,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from '../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../test-data/basic');
+const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
 
 test('@rendering my-doc renders correctly', async ({ superdoc }) => {
   await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
@@ -139,5 +155,5 @@ Defaults: `layout: true`, `hideCaret: true`, `hideSelection: true`. Override bef
 - **DOM selectors**: SuperDoc uses DomPainter, not ProseMirror DOM. Use `.superdoc-line`, `.superdoc-page`, not `.ProseMirror p`.
 - **Editor commands**: Available via `executeCommand()` — waits for `window.editor.commands` automatically.
 - **Document mode**: Use `setDocumentMode('suggesting')` fixture helper or `superdoc.page.evaluate(() => window.superdoc.setDocumentMode('suggesting'))`.
-- **Baselines & documents**: Never committed to git. Stored in R2, generated from the `stable` branch.
+- **Baselines & documents**: Never committed to git. Stored in R2 in a single bucket, generated from the `stable` branch.
 - **Running locally**: `cd tests/visual && pnpm docs:download && pnpm test`.

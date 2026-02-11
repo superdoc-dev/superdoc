@@ -5,7 +5,7 @@ import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'basic/longer-header.docx');
+const DOC_PATH = path.join(DOCS_DIR, 'behavior/headers/longer-header.docx');
 
 test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
 

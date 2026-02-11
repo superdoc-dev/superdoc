@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { closeHistory, undoDepth } from 'prosemirror-history';
 import { initTestEditor } from '@tests/helpers/helpers.js';
-import { handleEnter } from './keymap.js';
+import { handleEnter, handleBackspace, handleDelete } from './keymap.js';
 
 describe('keymap history grouping', () => {
   let editor;
@@ -117,5 +117,86 @@ describe('keymap history grouping', () => {
     // Undo should restore the deleted word
     editor.commands.undo();
     expect(editor.state.doc.textContent).toBe('hello world');
+  });
+
+  it('Backspace creates a new undo group boundary', () => {
+    ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
+
+    // Create two paragraphs: type, Enter, type
+    insertText(editor, 'hello');
+    handleEnter(editor);
+    insertText(editor, 'world');
+    const depthBeforeBackspace = undoDepth(editor.state);
+
+    // Move cursor to start of second paragraph so joinBackward succeeds
+    let secondParaStart = null;
+    editor.state.doc.forEach((_node, offset, index) => {
+      if (index === 1) secondParaStart = offset + 1;
+    });
+    editor.view.dispatch(
+      editor.state.tr.setSelection(editor.state.selection.constructor.create(editor.state.doc, secondParaStart)),
+    );
+
+    // Backspace at start of second paragraph → joins paragraphs
+    handleBackspace(editor);
+
+    insertText(editor, ' after');
+    const depthAfterBackspace = undoDepth(editor.state);
+
+    expect(depthAfterBackspace).toBeGreaterThan(depthBeforeBackspace);
+  });
+
+  it('undo after Backspace join restores paragraph break', () => {
+    ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
+
+    insertText(editor, 'hello');
+    handleEnter(editor);
+    insertText(editor, 'world');
+
+    expect(editor.state.doc.childCount).toBe(2);
+
+    // Move cursor to start of second paragraph
+    let secondParaStart = null;
+    editor.state.doc.forEach((_node, offset, index) => {
+      if (index === 1) secondParaStart = offset + 1;
+    });
+    editor.view.dispatch(
+      editor.state.tr.setSelection(editor.state.selection.constructor.create(editor.state.doc, secondParaStart)),
+    );
+
+    // Backspace joins paragraphs
+    handleBackspace(editor);
+    expect(editor.state.doc.childCount).toBe(1);
+
+    // Undo should restore the paragraph break
+    editor.commands.undo();
+    expect(editor.state.doc.childCount).toBe(2);
+  });
+
+  it('Delete creates a new undo group boundary', () => {
+    ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
+
+    // Create two paragraphs
+    insertText(editor, 'hello');
+    handleEnter(editor);
+    insertText(editor, 'world');
+    const depthBeforeDelete = undoDepth(editor.state);
+
+    // Move cursor to end of first paragraph so joinForward succeeds
+    let firstParaEnd = null;
+    editor.state.doc.forEach((node, offset, index) => {
+      if (index === 0) firstParaEnd = offset + node.nodeSize - 1;
+    });
+    editor.view.dispatch(
+      editor.state.tr.setSelection(editor.state.selection.constructor.create(editor.state.doc, firstParaEnd)),
+    );
+
+    // Delete at end of first paragraph → joins paragraphs
+    handleDelete(editor);
+
+    insertText(editor, ' after');
+    const depthAfterDelete = undoDepth(editor.state);
+
+    expect(depthAfterDelete).toBeGreaterThan(depthBeforeDelete);
   });
 });

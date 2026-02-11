@@ -1,4 +1,4 @@
-import { test } from '../fixtures/superdoc.js';
+import { test } from '../../fixtures/superdoc.js';
 
 test('@behavior list indentation and outdentation', async ({ superdoc }) => {
   // Create a numbered list by typing "1. "

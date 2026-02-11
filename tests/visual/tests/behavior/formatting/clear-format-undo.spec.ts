@@ -1,4 +1,4 @@
-import { test } from '../fixtures/superdoc.js';
+import { test } from '../../fixtures/superdoc.js';
 
 test('@behavior clear formatting and undo restores it', async ({ superdoc }) => {
   // Type formatted text

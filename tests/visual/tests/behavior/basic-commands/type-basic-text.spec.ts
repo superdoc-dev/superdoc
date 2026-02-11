@@ -1,4 +1,4 @@
-import { test } from '../fixtures/superdoc.js';
+import { test } from '../../fixtures/superdoc.js';
 
 test('@behavior type basic text into blank document', async ({ superdoc }) => {
   await superdoc.type('Hello, SuperDoc!');

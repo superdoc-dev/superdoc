@@ -1,4 +1,4 @@
-import { test } from '../fixtures/superdoc.js';
+import { test } from '../../fixtures/superdoc.js';
 
 test('@behavior insert hyperlink on selected text', async ({ superdoc }) => {
   await superdoc.type('Visit our website for more information');

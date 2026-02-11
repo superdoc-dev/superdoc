@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test } from '../fixtures/superdoc.js';
+import { test } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../../../e2e-tests/test-data/basic-documents');
+const DOCS_DIR = path.resolve(__dirname, '../../../../../e2e-tests/test-data/basic-documents');
 
 test.use({ config: { hideSelection: false } });
 

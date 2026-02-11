@@ -1,4 +1,4 @@
-import { test } from '../fixtures/superdoc.js';
+import { test } from '../../fixtures/superdoc.js';
 
 test('@behavior bold and italic formatting', async ({ superdoc }) => {
   await superdoc.type('This text will be bold.');

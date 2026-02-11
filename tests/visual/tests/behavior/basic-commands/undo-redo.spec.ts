@@ -1,4 +1,4 @@
-import { test } from '../fixtures/superdoc.js';
+import { test } from '../../fixtures/superdoc.js';
 
 test('@behavior undo and redo text', async ({ superdoc }) => {
   await superdoc.type('First paragraph.');

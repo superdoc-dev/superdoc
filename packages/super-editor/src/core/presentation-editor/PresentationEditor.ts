@@ -3369,7 +3369,7 @@ export class PresentationEditor extends EventEmitter {
     const activeEditor = this.getActiveEditor();
     const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
     // Keep selection visible when context menu (SlashMenu) is open
-    const slashMenuOpen = !!SlashMenuPluginKey.getState(activeEditor?.state)?.open;
+    const slashMenuOpen = activeEditor?.state ? !!SlashMenuPluginKey.getState(activeEditor.state)?.open : false;
 
     if (!hasFocus && !slashMenuOpen) {
       try {

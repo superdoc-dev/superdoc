@@ -1,4 +1,5 @@
 import { Node } from '@core/index.js';
+import { createPermissionBlockMarkerNode } from '../shared/permission-block-marker-factory.js';
 
 /**
  * Configuration options for PermEnd
@@ -37,20 +38,7 @@ export const PermEnd = Node.create({
   },
 });
 
-export const PermEndBlock = Node.create({
+export const PermEndBlock = createPermissionBlockMarkerNode({
   name: 'permEndBlock',
-  group: 'block',
-  inline: false,
-  atom: true,
-  draggable: false,
-  selectable: false,
-  defining: true,
-
-  renderDOM() {
-    return ['div', { style: 'display: none;' }];
-  },
-
-  addAttributes() {
-    return sharedAttributes();
-  },
+  attributes: sharedAttributes,
 });

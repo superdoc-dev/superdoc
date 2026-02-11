@@ -1,4 +1,5 @@
 import { Node } from '@core/index.js';
+import { createPermissionBlockMarkerNode } from '../shared/permission-block-marker-factory.js';
 
 /**
  * Configuration options for PermStart
@@ -43,20 +44,7 @@ export const PermStart = Node.create({
   },
 });
 
-export const PermStartBlock = Node.create({
+export const PermStartBlock = createPermissionBlockMarkerNode({
   name: 'permStartBlock',
-  group: 'block',
-  inline: false,
-  atom: true,
-  draggable: false,
-  selectable: false,
-  defining: true,
-
-  renderDOM() {
-    return ['div', { style: 'display: none;' }];
-  },
-
-  addAttributes() {
-    return sharedAttributes();
-  },
+  attributes: sharedAttributes,
 });

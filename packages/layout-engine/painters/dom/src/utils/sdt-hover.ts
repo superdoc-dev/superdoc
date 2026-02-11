@@ -6,11 +6,13 @@
  * simultaneously via the `.sdt-hover` CSS class.
  */
 
-const SDT_BLOCK_SELECTOR = '.superdoc-structured-content-block[data-sdt-id]';
-const HOVER_CLASS = 'sdt-hover';
+import { DOM_CLASS_NAMES } from '../constants.js';
+
+const SDT_BLOCK_SELECTOR = `.${DOM_CLASS_NAMES.BLOCK_SDT}[data-sdt-id]`;
+const HOVER_CLASS = DOM_CLASS_NAMES.SDT_HOVER;
 
 function sdtElementsById(root: HTMLElement, sdtId: string): NodeListOf<Element> {
-  return root.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${sdtId}"]`);
+  return root.querySelectorAll(`.${DOM_CLASS_NAMES.BLOCK_SDT}[data-sdt-id="${sdtId}"]`);
 }
 
 export class SdtGroupedHover {

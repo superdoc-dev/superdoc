@@ -4,7 +4,9 @@ permissions:
   contents: read
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - caio/sd-1867-redesign-visual-testing-suite-playwright-r2-baselines
 
 jobs:
   seed:

@@ -2602,10 +2602,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
         'word/numbering.xml': String(numbering),
-
-        // Replace bare & with &amp; in styles.xml as DOCX viewers can't handle it,
-        // but avoid double-escaping valid XML entities and numeric references.
-        'word/styles.xml': String(styles).replace(/&(?!#\d+;|#x[0-9a-fA-F]+;|(?:amp|lt|gt|quot|apos);)/g, '&amp;'),
+        'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
         ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };

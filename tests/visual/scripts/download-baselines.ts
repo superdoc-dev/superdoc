@@ -49,7 +49,7 @@ async function main() {
 
   console.log(`Downloading ${keys.length} snapshots...`);
 
-  const CONCURRENCY = 20;
+  const CONCURRENCY = 10;
   let downloaded = 0;
 
   const items = keys.map((key) => ({

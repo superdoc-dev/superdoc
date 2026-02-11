@@ -69,7 +69,7 @@ async function main() {
 
   console.log(`Downloading ${toDownload.length} files (${skipped} cached)...`);
 
-  const CONCURRENCY = 20;
+  const CONCURRENCY = 10;
   let downloaded = 0;
   let failed = 0;
 

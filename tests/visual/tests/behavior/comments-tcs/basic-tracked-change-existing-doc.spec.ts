@@ -17,21 +17,8 @@ test('@behavior tracked change replacement in existing document', async ({ super
   await superdoc.setDocumentMode('suggesting');
   await superdoc.waitForStable();
 
-  // Select text via evaluate for precise positioning
-  await superdoc.page.evaluate((word: string) => {
-    const span = document.querySelector('.superdoc-fragment[data-block-id="1-paragraph"] span');
-    if (!span) throw new Error('First paragraph span not found');
-    const textNode = Array.from(span.childNodes).find((n) => n.nodeType === Node.TEXT_NODE);
-    if (!textNode?.textContent) throw new Error('Text node not found');
-    const startIndex = textNode.textContent.indexOf(word);
-    if (startIndex === -1) throw new Error(`Word "${word}" not found`);
-    const range = document.createRange();
-    range.setStart(textNode, startIndex);
-    range.setEnd(textNode, startIndex + word.length);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  }, 'some');
+  // Select first line and type replacement
+  await superdoc.tripleClickLine(0);
 
   await superdoc.waitForStable();
   await superdoc.type('programmatically inserted');

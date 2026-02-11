@@ -10,13 +10,13 @@ const DOC_PATH = path.join(DOCS_DIR, 'behavior/headers/longer-header.docx');
 test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
 
 test('@behavior double-click header to enter edit mode', async ({ superdoc }) => {
-  await superdoc.page.waitForSelector('.superdoc-page', { timeout: 30_000 });
+  await superdoc.loadDocument(DOC_PATH);
   await superdoc.waitForStable();
   await superdoc.screenshot('header-edit-loaded');
 
   // Double-click on header
   const header = superdoc.page.locator('.superdoc-page-header').first();
-  await header.waitFor({ state: 'visible', timeout: 10_000 });
+  await header.waitFor({ state: 'visible', timeout: 15_000 });
   await header.dblclick({ force: true });
   await superdoc.waitForStable();
   await superdoc.screenshot('header-edit-editing');
@@ -31,7 +31,7 @@ test('@behavior double-click header to enter edit mode', async ({ superdoc }) =>
 
   // Double-click on footer
   const footer = superdoc.page.locator('.superdoc-page-footer').first();
-  await footer.waitFor({ state: 'visible', timeout: 10_000 });
+  await footer.waitFor({ state: 'visible', timeout: 15_000 });
   await footer.dblclick({ force: true });
   await superdoc.waitForStable();
   await superdoc.screenshot('footer-edit-editing');

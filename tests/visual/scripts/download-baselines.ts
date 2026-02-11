@@ -49,15 +49,27 @@ async function main() {
 
   console.log(`Downloading ${keys.length} snapshots...`);
 
-  for (const key of keys) {
-    const relative = key.slice(`${BASELINES_PREFIX}/`.length);
-    const dest = path.join(TESTS_DIR, relative);
+  const CONCURRENCY = 20;
+  let downloaded = 0;
 
-    await downloadFile(client, bucket, key, dest);
-    console.log(`  ✓ ${relative}`);
+  const items = keys.map((key) => ({
+    key,
+    relative: key.slice(`${BASELINES_PREFIX}/`.length),
+    dest: path.join(TESTS_DIR, key.slice(`${BASELINES_PREFIX}/`.length)),
+  }));
+
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    const batch = items.slice(i, i + CONCURRENCY);
+    await Promise.all(
+      batch.map(async ({ key, relative, dest }) => {
+        await downloadFile(client, bucket, key, dest);
+        downloaded++;
+        console.log(`  ✓ ${relative}`);
+      }),
+    );
   }
 
-  console.log('\nDone.');
+  console.log(`\nDone. Downloaded: ${downloaded} snapshots.`);
   client.destroy();
 }
 

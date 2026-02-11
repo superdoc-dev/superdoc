@@ -53,7 +53,7 @@ async function main() {
 
   console.log(`Found ${keys.length} documents.`);
 
-  let downloaded = 0;
+  const toDownload: { key: string; relative: string; dest: string }[] = [];
   let skipped = 0;
 
   for (const key of keys) {
@@ -62,19 +62,36 @@ async function main() {
 
     if (fs.existsSync(dest)) {
       skipped++;
-      continue;
-    }
-
-    try {
-      await downloadFile(client, bucket, key, dest);
-      downloaded++;
-      console.log(`  ✓ ${relative}`);
-    } catch (err: any) {
-      console.error(`  ✗ ${relative}: ${err.message}`);
+    } else {
+      toDownload.push({ key, relative, dest });
     }
   }
 
-  console.log(`\nDone. Downloaded: ${downloaded}, Cached: ${skipped}`);
+  console.log(`Downloading ${toDownload.length} files (${skipped} cached)...`);
+
+  const CONCURRENCY = 20;
+  let downloaded = 0;
+  let failed = 0;
+
+  for (let i = 0; i < toDownload.length; i += CONCURRENCY) {
+    const batch = toDownload.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map(async ({ key, relative, dest }) => {
+        await downloadFile(client, bucket, key, dest);
+        downloaded++;
+        console.log(`  ✓ ${relative}`);
+      }),
+    );
+
+    for (let j = 0; j < results.length; j++) {
+      if (results[j].status === 'rejected') {
+        failed++;
+        console.error(`  ✗ ${batch[j].relative}: ${(results[j] as PromiseRejectedResult).reason?.message}`);
+      }
+    }
+  }
+
+  console.log(`\nDone. Downloaded: ${downloaded}, Cached: ${skipped}, Failed: ${failed}`);
   client.destroy();
 }
 

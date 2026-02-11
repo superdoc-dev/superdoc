@@ -1,4 +1,4 @@
-import { test as base, expect, type Page, type Locator } from '@playwright/test';
+import { test as base, expect, type Page } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // Helpers — inline versions of what @superdoc-testing/helpers provides,
@@ -86,7 +86,7 @@ export interface SuperDocFixture {
   /** Wait for the editor to stabilize */
   waitForStable(ms?: number): Promise<void>;
 
-  /** Wait for editor to stabilize, then take a screenshot with both Playwright + Argos */
+  /** Wait for editor to stabilize, then take a full-page screenshot */
   screenshot(name: string): Promise<void>;
 
   /** Load a .docx document into the editor */
@@ -121,15 +121,6 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
     const editor = page.locator('[contenteditable="true"]').first();
     await editor.waitFor({ state: 'visible', timeout: 10_000 });
     await editor.focus();
-
-    // Lazy-load Argos (may not be installed)
-    let argosScreenshot: ((page: Page, name: string, options?: any) => Promise<void>) | null = null;
-    try {
-      const argos = await import('@argos-ci/playwright');
-      argosScreenshot = argos.argosScreenshot;
-    } catch {
-      // Argos not installed — skip Argos screenshots
-    }
 
     const fixture: SuperDocFixture = {
       page,
@@ -184,7 +175,14 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
 
       async setDocumentMode(mode: 'editing' | 'suggesting' | 'viewing') {
         await page.evaluate((m) => {
-          (window as any).superdoc.setDocumentMode(m);
+          const sd = (window as any).superdoc;
+          // Some modes (e.g., viewing) access toolbar internals — guard against null
+          if (sd.toolbar) {
+            sd.setDocumentMode(m);
+          } else {
+            // Fallback: set mode on activeEditor directly
+            sd.activeEditor?.setDocumentMode(m);
+          }
         }, mode);
       },
 
@@ -260,16 +258,10 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
       async screenshot(name: string) {
         await waitForStable(page);
 
-        // Playwright native snapshot
         await expect(page).toHaveScreenshot(`${name}.png`, {
           fullPage: true,
           timeout: 15_000,
         });
-
-        // Argos snapshot (local-only unless CI)
-        if (argosScreenshot) {
-          await argosScreenshot(page, name, { fullPage: true });
-        }
       },
 
       async loadDocument(filePath: string) {
@@ -299,17 +291,9 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
         for (let i = 0; i < count; i++) {
           const pageEl = pages.nth(i);
 
-          // Playwright native
           await expect(pageEl).toHaveScreenshot(`${baseName}-p${i + 1}.png`, {
             timeout: 15_000,
           });
-
-          // Argos
-          if (argosScreenshot) {
-            await argosScreenshot(page, `${baseName}/page-${i + 1}`, {
-              element: pageEl,
-            });
-          }
         }
       },
     };

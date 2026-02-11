@@ -5,9 +5,9 @@ import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { colors } from './terminal.js';
-import { generateBaselineFolderName, getBaselineRootDir } from './generate-refs.js';
+import { generateBaselineFolderName } from './generate-rendering.js';
 import { uploadDirectoryToR2 } from './r2-baselines.js';
-import { parseStorageFlags, resolveDocsDir } from './storage-flags.js';
+import { getBaselineOutputRoot, parseStorageFlags, resolveDocsDir } from './storage-flags.js';
 
 const HARNESS_PORT = 9989;
 const HARNESS_HOSTS = ['127.0.0.1', '::1'];
@@ -94,16 +94,16 @@ async function main(): Promise<void> {
     await runCommand(['exec', 'tsx', 'scripts/set-superdoc-version.ts', version]);
   }
 
-  console.log(colors.info('Generating visual baselines...'));
-  await runCommand(['exec', 'tsx', 'scripts/generate-refs.ts', '--baseline', ...passThrough]);
-  console.log(colors.info('Visual baseline generation complete.'));
+  console.log(colors.info('Generating behavior baselines...'));
+  await runCommand(['exec', 'tsx', 'scripts/generate-behavior.ts', '--baseline', ...passThrough]);
+  console.log(colors.info('Behavior baseline generation complete.'));
 
   const baselineLabel = generateBaselineFolderName(version);
-  const localDir = getBaselineRootDir(version, storage.mode);
-  const remotePrefix = path.posix.join('baselines', baselineLabel);
+  const localDir = getBaselineOutputRoot(storage.mode, 'behavior', baselineLabel);
+  const remotePrefix = path.posix.join('behavior', baselineLabel);
 
   if (!fs.existsSync(localDir)) {
-    console.log(colors.warning('No visual baselines generated; skipping upload.'));
+    console.log(colors.warning('No behavior baselines generated; skipping upload.'));
     return;
   }
 
@@ -112,9 +112,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(colors.info(`Uploading baselines to R2: ${remotePrefix}`));
+  console.log(colors.info(`Uploading behavior baselines to R2: ${remotePrefix}`));
   const uploaded = await uploadDirectoryToR2({ localDir, remotePrefix });
-  console.log(colors.success(`Uploaded ${uploaded} baseline file(s) to R2.`));
+  console.log(colors.success(`Uploaded ${uploaded} behavior baseline file(s) to R2.`));
 
   console.log(colors.info(`Cleaning up local baselines at ${localDir}`));
   fs.rmSync(localDir, { recursive: true, force: true });

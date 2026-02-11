@@ -1,24 +1,24 @@
 /**
- * Generate interaction screenshots for SuperDoc visual testing.
+ * Generate behavior screenshots for SuperDoc visual testing.
  *
  * This script:
- * 1. Loads interaction stories from tests/interactions/stories
+ * 1. Loads behavior stories from tests/behavior/stories
  * 2. Runs each story against the harness
  * 3. Captures milestone screenshots via story milestone() calls
  *
  * Usage:
- *   pnpm generate:interactions           # screenshots/<run>/interactions/
- *   pnpm baseline:interactions           # baselines-interactions/v.VERSION/interactions/
- *   pnpm generate:interactions --filter typing
- *   pnpm generate:interactions --exclude toolbar
- *   pnpm generate:interactions --match sd-1401
- *   pnpm generate:interactions --output my-run
- *   pnpm generate:interactions --fail-on-error
- *   pnpm generate:interactions --scale-factor 1.5
- *   pnpm baseline:interactions --fail-on-error
- *   pnpm baseline:interactions --scale-factor 1.5
- *   pnpm baseline:interactions --ci      # CI mode: hide story names, show progress only
- *   pnpm baseline:interactions --silent  # Alias for --ci
+ *   pnpm generate:behavior               # screenshots/<run>/behavior/
+ *   pnpm baseline:behavior               # baselines-behavior/v.VERSION/behavior/
+ *   pnpm generate:behavior --filter typing
+ *   pnpm generate:behavior --exclude toolbar
+ *   pnpm generate:behavior --match sd-1401
+ *   pnpm generate:behavior --output my-run
+ *   pnpm generate:behavior --fail-on-error
+ *   pnpm generate:behavior --scale-factor 1.5
+ *   pnpm baseline:behavior --fail-on-error
+ *   pnpm baseline:behavior --scale-factor 1.5
+ *   pnpm baseline:behavior --ci          # CI mode: hide story names, show progress only
+ *   pnpm baseline:behavior --silent      # Alias for --ci
  */
 
 import fs from 'node:fs';
@@ -34,7 +34,7 @@ import {
   waitForSuperdocReady,
   type InteractionStory,
 } from '@superdoc-testing/helpers';
-import { generateBaselineFolderName, generateResultsFolderName, sanitizeFilename } from './generate-refs.js';
+import { generateBaselineFolderName, generateResultsFolderName, sanitizeFilename } from './generate-rendering.js';
 import { createCorpusProvider, resolveDocumentPath, type CorpusProvider } from './corpus-provider.js';
 import { colors } from './terminal.js';
 import { getBrowserType, resolveBrowserNames, type BrowserName } from './browser-utils.js';
@@ -42,8 +42,7 @@ import { sleep } from './utils.js';
 import { ensureHarnessRunning, stopHarness } from './harness-utils.js';
 import { getBaselineOutputRoot, parseStorageFlags, resolveDocsDir, type StorageMode } from './storage-flags.js';
 
-const STORIES_DIR = path.resolve(process.cwd(), 'tests/interactions/stories');
-const LEGACY_SCENARIOS_DIR = path.resolve(process.cwd(), 'tests/interactions/scenarios');
+const STORIES_DIR = path.resolve(process.cwd(), 'tests/behavior/stories');
 const SCREENSHOTS_DIR = 'screenshots';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
@@ -181,12 +180,6 @@ function hasExistingSnapshots(dir: string): boolean {
 }
 
 function resolveStoriesDir(): { dir: string; isLegacy: boolean } {
-  if (fs.existsSync(STORIES_DIR)) {
-    return { dir: STORIES_DIR, isLegacy: false };
-  }
-  if (fs.existsSync(LEGACY_SCENARIOS_DIR)) {
-    return { dir: LEGACY_SCENARIOS_DIR, isLegacy: true };
-  }
   return { dir: STORIES_DIR, isLegacy: false };
 }
 
@@ -220,12 +213,6 @@ async function loadStories(quiet: boolean): Promise<LoadedStory[]> {
   const { dir, isLegacy } = resolveStoriesDir();
   if (!fs.existsSync(dir)) {
     return [];
-  }
-
-  if (isLegacy) {
-    console.warn(
-      colors.warning('Using legacy interactions directory (tests/interactions/scenarios). Rename to stories/'),
-    );
   }
 
   const files = walkStoriesDir(dir, dir).sort();
@@ -487,7 +474,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
 
   if (isBaseline) {
     const baselineFolderName = generateBaselineFolderName(version);
-    const baselineRoot = getBaselineOutputRoot(mode, 'interactions', baselineFolderName);
+    const baselineRoot = getBaselineOutputRoot(mode, 'behavior', baselineFolderName);
     outputRoot = path.join(baselineRoot, browser);
     modeLabel = 'baseline';
 
@@ -501,12 +488,12 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
   } else {
     const resultsFolderName = output || generateResultsFolderName(version);
     const resultsRoot = path.isAbsolute(resultsFolderName)
-      ? path.join(resultsFolderName, 'interactions')
-      : path.join(SCREENSHOTS_DIR, resultsFolderName, 'interactions');
+      ? path.join(resultsFolderName, 'behavior')
+      : path.join(SCREENSHOTS_DIR, resultsFolderName, 'behavior');
     outputRoot = path.join(resultsRoot, browser);
     modeLabel = 'comparison';
 
-    // Clear existing interactions folder to ensure fresh results
+    // Clear existing behavior folder to ensure fresh results
     if (fs.existsSync(outputRoot)) {
       console.log(colors.muted(`Clearing existing: ${path.basename(outputRoot)}`));
       fs.rmSync(outputRoot, { recursive: true });
@@ -626,7 +613,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     }
 
     if (ci) {
-      console.log(colors.muted('generate-interactions summary complete.'));
+      console.log(colors.muted('generate-behavior summary complete.'));
     }
 
     return 0;
@@ -676,7 +663,7 @@ if (isMainModule) {
     logCi('Harness ready.');
     try {
       const exitCode = await main();
-      logCi(`generate-interactions main complete (exit ${exitCode}).`);
+      logCi(`generate-behavior main complete (exit ${exitCode}).`);
       return exitCode;
     } finally {
       if (started && child) {
@@ -689,7 +676,7 @@ if (isMainModule) {
 
   runWithHarness()
     .then((exitCode) => {
-      logCi(`generate-interactions cleanup complete (exit ${exitCode}).`);
+      logCi(`generate-behavior cleanup complete (exit ${exitCode}).`);
       process.exitCode = exitCode;
       if (IS_CI_MODE) {
         logCi('Forcing process exit in CI to avoid hanging handles.');

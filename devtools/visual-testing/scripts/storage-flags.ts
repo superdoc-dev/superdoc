@@ -31,11 +31,11 @@ export function resolveDocsDir(mode: StorageMode, docsDir?: string): string | un
 
 export function getBaselineOutputRoot(
   mode: StorageMode,
-  kind: 'visual' | 'interactions',
+  kind: 'rendering' | 'behavior',
   baselineLabel: string,
 ): string {
   if (mode === 'local') {
-    const prefix = kind === 'visual' ? 'baselines' : 'baselines-interactions';
+    const prefix = kind === 'rendering' ? 'baselines-rendering' : 'baselines-behavior';
     return path.join(prefix, baselineLabel);
   }
   const tmpRoot = process.env.R2_BASELINES_TMP_DIR ?? path.join(os.tmpdir(), 'superdoc-baselines');

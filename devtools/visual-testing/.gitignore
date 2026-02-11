@@ -5,10 +5,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Generated screenshots, baselines, and comparison results (will move to GCS later)
+# Generated screenshots, baselines, and comparison results
 screenshots/
-baselines/
-baselines-interactions/
+baselines-rendering/
+baselines-behavior/
 results/
 
 # Test artifacts

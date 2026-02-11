@@ -53,6 +53,8 @@ export interface InteractionStory {
   description?: string;
   /** Related ticket/issue numbers (e.g., ['SD-1558', 'IT-2001']) */
   tickets?: string[];
+  /** Category for organizing stories (e.g., 'editing', 'comments', 'formatting'). Auto-detected from folder if omitted. */
+  category?: string;
   /** Path to starting document, or null for empty editor */
   startDocument?: string | null;
   /** Viewport dimensions for the test */

@@ -29,7 +29,7 @@ import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
-import { generateResultsFolderName, getSuperdocVersion, sanitizeFilename } from './generate-refs.js';
+import { generateResultsFolderName, getSuperdocVersion, sanitizeFilename } from './generate-rendering.js';
 import { buildDocRelativePath, createCorpusProvider, type CorpusProvider } from './corpus-provider.js';
 import { writeHtmlReport } from './report.js';
 import { colors } from './terminal.js';
@@ -59,7 +59,7 @@ import { ensureLocalTarballInstalled } from './workspace-utils.js';
 
 // Configuration
 const SCREENSHOTS_DIR = 'screenshots';
-const BASELINES_DIR = 'baselines';
+const BASELINES_DIR = 'baselines-rendering';
 const RESULTS_DIR = 'results';
 const REPORT_FILE = 'report.json';
 
@@ -210,13 +210,13 @@ function buildDiffBundlePaths(
 interface ReportOptions {
   reportFileName?: string;
   showAll?: boolean;
-  mode?: 'visual' | 'interactions';
-  reportMode?: 'visual' | 'interactions';
+  mode?: 'rendering' | 'behavior';
+  reportMode?: 'rendering' | 'behavior';
   trimPrefix?: string;
 }
 
 /**
- * Run the generate-refs script to capture screenshots.
+ * Run the generate-rendering script to capture screenshots.
  *
  * @param options - Generation options
  */
@@ -230,7 +230,7 @@ async function runGenerate(options: {
   scaleFactor?: number;
   storageArgs?: string[];
 }): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/generate-refs.ts', '--output', options.outputFolder];
+  const args = ['exec', 'tsx', 'scripts/generate-rendering.ts', '--output', options.outputFolder];
 
   for (const filter of options.filters) {
     args.push('--filter', filter);
@@ -266,14 +266,14 @@ async function runGenerate(options: {
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`generate-refs exited with code ${code ?? 'unknown'} (${signal ?? 'no signal'})`));
+        reject(new Error(`generate-rendering exited with code ${code ?? 'unknown'} (${signal ?? 'no signal'})`));
       }
     });
   });
 }
 
 async function runBaseline(options: {
-  script: 'scripts/baseline-visual.ts' | 'scripts/baseline-interactions.ts';
+  script: 'scripts/baseline-rendering.ts' | 'scripts/baseline-behavior.ts';
   versionSpec?: string;
   filters: string[];
   matches: string[];
@@ -1144,8 +1144,8 @@ export async function runComparison(
   const initialNormalizedResultsPrefix = normalizePrefix(resultsPrefix);
   const reportMode = options.reportOptions?.mode ?? options.reportOptions?.reportMode;
   const reportAll = Boolean(options.reportOptions?.showAll);
-  const isInteractionsRun = reportMode === 'interactions' || initialNormalizedResultsPrefix === 'interactions/';
-  const includeInteractionMeta = isInteractionsRun;
+  const isBehaviorRun = reportMode === 'behavior' || initialNormalizedResultsPrefix === 'behavior/';
+  const includeInteractionMeta = isBehaviorRun;
   let normalizedResultsPrefix = initialNormalizedResultsPrefix;
   const normalizedIgnorePrefixes = ignorePrefixes
     .map((prefix) => normalizePrefix(prefix))
@@ -1308,10 +1308,10 @@ export async function runComparison(
   const resolvedOutputFolderName = outputFolderName ?? resultsFolderName;
   const outputFolder = path.join(RESULTS_DIR, resolvedOutputFolderName);
   if (fs.existsSync(outputFolder)) {
-    if (isInteractionsRun) {
-      const interactionsOutput = path.join(outputFolder, 'interactions');
-      if (fs.existsSync(interactionsOutput)) {
-        fs.rmSync(interactionsOutput, { recursive: true });
+    if (isBehaviorRun) {
+      const behaviorOutput = path.join(outputFolder, 'behavior');
+      if (fs.existsSync(behaviorOutput)) {
+        fs.rmSync(behaviorOutput, { recursive: true });
       }
     } else {
       fs.rmSync(outputFolder, { recursive: true });
@@ -1743,7 +1743,7 @@ function parseArgs(): {
   resultsRoot?: string;
   resultsPrefix?: string;
   reportFileName?: string;
-  reportMode?: 'visual' | 'interactions';
+  reportMode?: 'rendering' | 'behavior';
   reportTrim?: string;
   reportAll: boolean;
   includeWord: boolean;
@@ -1766,7 +1766,7 @@ function parseArgs(): {
   let resultsRoot: string | undefined;
   let resultsPrefix: string | undefined;
   let reportFileName: string | undefined;
-  let reportMode: 'visual' | 'interactions' | undefined;
+  let reportMode: 'rendering' | 'behavior' | undefined;
   let reportTrim: string | undefined;
   let reportAll = false;
   let includeWord = false;
@@ -1818,7 +1818,7 @@ function parseArgs(): {
       i++;
     } else if (args[i] === '--report-mode' && args[i + 1]) {
       const mode = args[i + 1];
-      if (mode === 'visual' || mode === 'interactions') {
+      if (mode === 'rendering' || mode === 'behavior') {
         reportMode = mode;
       }
       i++;
@@ -1907,12 +1907,12 @@ async function main(): Promise<void> {
   const storageArgs = buildStorageArgs(mode, docsDir);
   const normalizedResultsPrefix = normalizePrefix(resultsPrefix);
   const normalizedReportTrim = normalizePrefix(reportTrim);
-  const isInteractionMode =
-    reportMode === 'interactions' ||
-    (normalizedResultsPrefix ? normalizedResultsPrefix.startsWith('interactions/') : false) ||
-    (normalizedReportTrim ? normalizedReportTrim.startsWith('interactions/') : false) ||
-    filters.some((value) => value.startsWith('interactions/'));
-  const baselinePrefix = isInteractionMode ? 'baselines-interactions' : BASELINES_DIR;
+  const isBehaviorMode =
+    reportMode === 'behavior' ||
+    (normalizedResultsPrefix ? normalizedResultsPrefix.startsWith('behavior/') : false) ||
+    (normalizedReportTrim ? normalizedReportTrim.startsWith('behavior/') : false) ||
+    filters.some((value) => value.startsWith('behavior/'));
+  const baselinePrefix = isBehaviorMode ? 'baselines-behavior' : BASELINES_DIR;
   const baselineDir = resolveBaselineRoot(baselinePrefix, mode, baselineRoot);
   const resolvedResultsRoot = resultsRoot ? resolvePathInput(resultsRoot) : undefined;
 
@@ -1940,8 +1940,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (targetVersion && isInteractionMode) {
-    console.error(colors.error('Use "pnpm compare:interactions --target" for interaction baselines.'));
+  if (targetVersion && isBehaviorMode) {
+    console.error(colors.error('Use "pnpm compare:behavior --target" for behavior baselines.'));
     process.exit(1);
   }
 
@@ -1951,9 +1951,7 @@ async function main(): Promise<void> {
       if (!fs.existsSync(baselinePath)) {
         console.log(colors.info(`📸 Baseline ${version} not found locally. Generating...`));
         const script =
-          baselinePrefix === 'baselines-interactions'
-            ? 'scripts/baseline-interactions.ts'
-            : 'scripts/baseline-visual.ts';
+          baselinePrefix === 'baselines-behavior' ? 'scripts/baseline-behavior.ts' : 'scripts/baseline-rendering.ts';
         const browserArg = browsers.length > 0 ? browsers.join(',') : undefined;
         const currentSpec = getSuperdocVersion();
         const shouldRestore =
@@ -2123,10 +2121,9 @@ async function main(): Promise<void> {
   }
 
   const resolvedMode =
-    reportMode ??
-    (reportTrim || filters.some((value) => value.startsWith('interactions/')) ? 'interactions' : 'visual');
-  const resolvedTrim = reportTrim ?? (resolvedMode === 'interactions' ? 'interactions/' : undefined);
-  const ignorePrefixes = resolvedMode === 'visual' ? ['interactions/'] : undefined;
+    reportMode ?? (reportTrim || filters.some((value) => value.startsWith('behavior/')) ? 'behavior' : 'rendering');
+  const resolvedTrim = reportTrim ?? (resolvedMode === 'behavior' ? 'behavior/' : undefined);
+  const ignorePrefixes = resolvedMode === 'rendering' ? ['behavior/'] : undefined;
 
   const outputFolderNameForBrowser = (browser: BrowserName): string =>
     browsers.length > 1 ? path.join(resultsFolderName!, browser) : resultsFolderName!;
@@ -2209,7 +2206,7 @@ async function main(): Promise<void> {
         }
       }
 
-      if (resolvedMode === 'visual' && includeWord) {
+      if (resolvedMode === 'rendering' && includeWord) {
         const wordResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
         report = await augmentReportWithWord(report, {
           resultsFolderName: resultsFolderName!,

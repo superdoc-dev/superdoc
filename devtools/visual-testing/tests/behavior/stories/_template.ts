@@ -1,3 +1,17 @@
+/**
+ * Story template — copy this file into the appropriate category folder:
+ *
+ *   editing/          Typing, undo/redo, selection, clipboard
+ *   tables/           Table insertion, row/column operations
+ *   formatting/       Bold, italic, underline, text styling
+ *   comments/         Comment insertion, editing, nesting
+ *   track-changes/    Track changes mode, accept/reject
+ *   field-annotations/ Field highlighting, carets, annotations
+ *   headers/          Header/footer editing
+ *   lists/            List indentation, markers, nesting
+ *   search/           Find & replace
+ *   importing/        Document import behavior
+ */
 import { defineStory } from '@superdoc-testing/helpers';
 
 const WAIT_SHORT_MS = 200;

@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { ComparisonReport } from './compare.js';
+import type { ComparisonReport } from './compare-rendering.js';
 
 /**
  * Options for HTML report generation.
@@ -14,8 +14,8 @@ import type { ComparisonReport } from './compare.js';
 export interface HtmlReportOptions {
   /** Include passing results in the report (default: false, diffs only) */
   showAll?: boolean;
-  /** Report mode: 'visual' for document screenshots, 'interactions' for interaction stories */
-  mode?: 'visual' | 'interactions';
+  /** Report mode: 'rendering' for document screenshots, 'behavior' for behavior stories */
+  mode?: 'rendering' | 'behavior';
   /** Output filename (default: 'report.html') */
   reportFileName?: string;
   /** Prefix to trim from displayed paths */
@@ -71,11 +71,11 @@ export function writeHtmlReport(
   const reportJson = JSON.stringify(report).replace(/</g, '\\u003c');
   const logoDataUri = getLogoDataUri();
   const logoMarkup = logoDataUri ? `<img src="${logoDataUri}" alt="SuperDoc logo" />` : 'SD';
-  const mode = options.mode ?? 'visual';
+  const mode = options.mode ?? 'rendering';
   const showAll = options.showAll ?? false;
   const reportFileName = options.reportFileName ?? 'report.html';
   const trimPrefix = options.trimPrefix ?? '';
-  const reportTitle = mode === 'interactions' ? 'Interaction Diff Report' : 'Visual Diff Report';
+  const reportTitle = mode === 'behavior' ? 'Behavior Diff Report' : 'Rendering Diff Report';
 
   const html = `<!doctype html>
 <html lang="en">
@@ -697,7 +697,7 @@ export function writeHtmlReport(
       const resultsPrefix = resultsFolderName ? resultsFolderName + '/' : '';
       const trimPrefix = ${JSON.stringify(trimPrefix)};
       const reportMode = ${JSON.stringify(mode)};
-      const isInteractions = reportMode === 'interactions';
+      const isBehavior = reportMode === 'behavior';
 
       function formatMilestoneLabel(baseName) {
         const stripped = baseName.replace(/^\\d+[-_]?/, '');
@@ -742,7 +742,7 @@ export function writeHtmlReport(
         const milestoneDescription = interaction ? (interaction.milestoneDescription || '') : '';
         const fallbackLabel = interaction && interaction.milestoneLabel
           ? interaction.milestoneLabel
-          : (isInteractions ? formatMilestoneLabel(assetBaseName) : '');
+          : (isBehavior ? formatMilestoneLabel(assetBaseName) : '');
         const milestoneLabel = milestoneDescription || fallbackLabel;
 
         groupMap.get(displayDir).push({

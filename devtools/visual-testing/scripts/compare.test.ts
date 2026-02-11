@@ -4,7 +4,7 @@ import {
   findLatestResultsFolder,
   findPngFiles,
   matchesFilterWithBrowserPrefix,
-} from './compare.js';
+} from './compare-rendering.js';
 
 describe('extractVersionFromFolder', () => {
   it('should extract version from standard folder name', () => {

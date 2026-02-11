@@ -161,7 +161,7 @@ export function generateBaselineFolderName(version?: string): string {
  */
 export function getBaselineRootDir(version?: string, mode: StorageMode = 'cloud'): string {
   const baselineFolderName = generateBaselineFolderName(version);
-  return getBaselineOutputRoot(mode, 'visual', baselineFolderName);
+  return getBaselineOutputRoot(mode, 'rendering', baselineFolderName);
 }
 
 interface DocumentInfo {
@@ -804,7 +804,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     }
 
     if (ci) {
-      console.log(colors.muted('generate-refs summary complete.'));
+      console.log(colors.muted('generate-rendering summary complete.'));
     }
 
     return 0;
@@ -856,7 +856,7 @@ if (isMainModule) {
     logCi('Harness ready.');
     try {
       const exitCode = await main();
-      logCi(`generate-refs main complete (exit ${exitCode}).`);
+      logCi(`generate-rendering main complete (exit ${exitCode}).`);
       return exitCode;
     } finally {
       if (started && child) {
@@ -869,7 +869,7 @@ if (isMainModule) {
 
   runWithHarness()
     .then((exitCode) => {
-      logCi(`generate-refs cleanup complete (exit ${exitCode}).`);
+      logCi(`generate-rendering cleanup complete (exit ${exitCode}).`);
       process.exitCode = exitCode;
       if (IS_CI_MODE) {
         logCi('Forcing process exit in CI to avoid hanging handles.');

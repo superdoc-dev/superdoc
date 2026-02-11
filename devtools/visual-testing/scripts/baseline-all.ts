@@ -1,5 +1,5 @@
 /**
- * Run both visual and interaction baselines.
+ * Run both rendering and behavior baselines.
  *
  * Usage:
  *   pnpm baseline
@@ -48,8 +48,8 @@ async function main(): Promise<void> {
     process.env.SUPERDOC_SKIP_VERSION_SWITCH = '1';
   }
 
-  await runCommand(['exec', 'tsx', 'scripts/baseline-visual.ts', ...passThrough]);
-  await runCommand(['exec', 'tsx', 'scripts/baseline-interactions.ts', ...passThrough]);
+  await runCommand(['exec', 'tsx', 'scripts/baseline-rendering.ts', ...passThrough]);
+  await runCommand(['exec', 'tsx', 'scripts/baseline-behavior.ts', ...passThrough]);
 }
 
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;

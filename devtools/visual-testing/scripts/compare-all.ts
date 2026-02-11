@@ -1,5 +1,5 @@
 /**
- * Run both visual and interaction comparisons.
+ * Run both rendering and behavior comparisons.
  *
  * Usage:
  *   pnpm compare
@@ -14,14 +14,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { colors } from './terminal.js';
-import { getSuperdocVersion } from './generate-refs.js';
+import { getSuperdocVersion } from './generate-rendering.js';
 import {
   isPathLikeVersion,
   normalizeVersionLabel,
   normalizeVersionSpecifier,
   parseVersionInput,
 } from './version-utils.js';
-import { findMissingDocuments } from './compare.js';
+import { findMissingDocuments } from './compare-rendering.js';
 import { resolveBrowserNames, resolveBaselineFolderForBrowser, type BrowserName } from './browser-utils.js';
 import { runCommand, isPortOpen, HARNESS_PORT, HARNESS_URL } from './harness-utils.js';
 import { ensureBaselineDownloaded, getLatestBaselineVersion, refreshBaselineSubset } from './r2-baselines.js';
@@ -34,7 +34,7 @@ import {
   type StorageMode,
 } from './storage-flags.js';
 
-const BASELINES_DIR = 'baselines';
+const BASELINES_DIR = 'baselines-rendering';
 const SCREENSHOTS_DIR = 'screenshots';
 
 interface CompareAllArgs {
@@ -177,7 +177,7 @@ async function runVersionSwitch(version: string): Promise<void> {
   await runCommand(['exec', 'tsx', 'scripts/set-superdoc-version.ts', version]);
 }
 
-async function runGenerateVisualResults(
+async function runGenerateRenderingResults(
   outputFolder: string,
   filters: string[],
   matches: string[],
@@ -186,7 +186,7 @@ async function runGenerateVisualResults(
   scaleFactor: number,
   storageArgs: string[],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/generate-refs.ts', '--output', outputFolder];
+  const args = ['exec', 'tsx', 'scripts/generate-rendering.ts', '--output', outputFolder];
   for (const filter of filters) {
     args.push('--filter', filter);
   }
@@ -206,7 +206,7 @@ async function runGenerateVisualResults(
   await runCommand(args);
 }
 
-async function runGenerateVisualResultsForDocs(
+async function runGenerateRenderingResultsForDocs(
   outputFolder: string,
   docs: string[],
   excludes: string[],
@@ -214,7 +214,7 @@ async function runGenerateVisualResultsForDocs(
   scaleFactor: number,
   storageArgs: string[],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/generate-refs.ts', '--output', outputFolder];
+  const args = ['exec', 'tsx', 'scripts/generate-rendering.ts', '--output', outputFolder];
   args.push('--append');
   for (const doc of docs) {
     args.push('--filter', doc);
@@ -232,7 +232,7 @@ async function runGenerateVisualResultsForDocs(
   await runCommand(args);
 }
 
-async function runGenerateInteractionsResults(
+async function runGenerateBehaviorResults(
   outputFolder: string,
   filters: string[],
   matches: string[],
@@ -241,7 +241,7 @@ async function runGenerateInteractionsResults(
   scaleFactor: number,
   storageArgs: string[],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/generate-interactions.ts', '--output', outputFolder];
+  const args = ['exec', 'tsx', 'scripts/generate-behavior.ts', '--output', outputFolder];
   for (const filter of filters) {
     args.push('--filter', filter);
   }
@@ -262,7 +262,7 @@ async function runGenerateInteractionsResults(
 }
 
 async function runBaselineLocal(
-  script: 'scripts/baseline-visual.ts' | 'scripts/baseline-interactions.ts',
+  script: 'scripts/baseline-rendering.ts' | 'scripts/baseline-behavior.ts',
   options: {
     versionSpec?: string;
     filters: string[];
@@ -298,7 +298,7 @@ async function runBaselineLocal(
   await runCommand(args);
 }
 
-async function fillMissingVisualDocs(
+async function fillMissingRenderingDocs(
   resultsFolderName: string,
   baselineFolder: string,
   filters: string[],
@@ -325,11 +325,18 @@ async function fillMissingVisualDocs(
 
   if (missingDocs.length > 0) {
     console.log(colors.muted(`Filling ${missingDocs.length} missing doc(s)...`));
-    await runGenerateVisualResultsForDocs(resultsFolderName, missingDocs, excludes, browser, scaleFactor, storageArgs);
+    await runGenerateRenderingResultsForDocs(
+      resultsFolderName,
+      missingDocs,
+      excludes,
+      browser,
+      scaleFactor,
+      storageArgs,
+    );
   }
 }
 
-async function runCompareVisual(
+async function runCompareRendering(
   resultsFolder: string,
   baselineVersion: string,
   threshold?: number,
@@ -341,7 +348,7 @@ async function runCompareVisual(
   baselineRoot?: string,
   storageArgs: string[] = [],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/compare.ts', baselineVersion, '--folder', resultsFolder];
+  const args = ['exec', 'tsx', 'scripts/compare-rendering.ts', baselineVersion, '--folder', resultsFolder];
   if (baselineRoot) {
     args.push('--baseline-root', baselineRoot);
   }
@@ -369,7 +376,7 @@ async function runCompareVisual(
   await runCommand(args);
 }
 
-async function runCompareInteractions(
+async function runCompareBehavior(
   resultsFolder: string,
   baselineVersion: string,
   threshold?: number,
@@ -380,7 +387,7 @@ async function runCompareInteractions(
   baselineRoot?: string,
   storageArgs: string[] = [],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/compare-interactions.ts', baselineVersion, '--folder', resultsFolder];
+  const args = ['exec', 'tsx', 'scripts/compare-behavior.ts', baselineVersion, '--folder', resultsFolder];
   if (baselineRoot) {
     args.push('--baseline-root', baselineRoot);
   }
@@ -405,7 +412,7 @@ async function runCompareInteractions(
   await runCommand(args);
 }
 
-async function runCompareBaselineToBaselineVisual(
+async function runCompareBaselineToBaselineRendering(
   baselineVersion: string,
   targetVersion: string,
   threshold?: number,
@@ -417,7 +424,7 @@ async function runCompareBaselineToBaselineVisual(
   baselineRoot?: string,
   storageArgs: string[] = [],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/compare.ts', baselineVersion, '--folder', targetVersion];
+  const args = ['exec', 'tsx', 'scripts/compare-rendering.ts', baselineVersion, '--folder', targetVersion];
   if (baselineRoot) {
     args.push('--baseline-root', baselineRoot);
     args.push('--results-root', baselineRoot);
@@ -446,7 +453,7 @@ async function runCompareBaselineToBaselineVisual(
   await runCommand(args);
 }
 
-async function runCompareBaselineToBaselineInteractions(
+async function runCompareBaselineToBaselineBehavior(
   baselineVersion: string,
   targetVersion: string,
   threshold?: number,
@@ -457,13 +464,13 @@ async function runCompareBaselineToBaselineInteractions(
   baselineRoot?: string,
   storageArgs: string[] = [],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/compare.ts', baselineVersion, '--folder', targetVersion];
+  const args = ['exec', 'tsx', 'scripts/compare-rendering.ts', baselineVersion, '--folder', targetVersion];
   if (baselineRoot) {
     args.push('--baseline-root', baselineRoot);
     args.push('--results-root', baselineRoot);
   }
-  args.push('--report', 'interactions-report.html');
-  args.push('--report-mode', 'interactions');
+  args.push('--report', 'behavior-report.html');
+  args.push('--report-mode', 'behavior');
   args.push('--report-all');
   for (const filter of filters) {
     args.push('--filter', filter);
@@ -491,12 +498,12 @@ async function main(): Promise<void> {
   const hasTarget = passThrough.includes('--target');
   if (!hasTarget) {
     console.log('');
-    console.log(colors.header('━━━ 🖼️  VISUAL DIFF ━━━'));
-    await runCommand(['exec', 'tsx', 'scripts/compare.ts', ...passThrough]);
+    console.log(colors.header('━━━ 🖼️  RENDERING ━━━'));
+    await runCommand(['exec', 'tsx', 'scripts/compare-rendering.ts', ...passThrough]);
 
     console.log('');
-    console.log(colors.header('━━━ 🎬 INTERACTIONS ━━━'));
-    await runCommand(['exec', 'tsx', 'scripts/compare-interactions.ts', ...passThrough]);
+    console.log(colors.header('━━━ 🎬 BEHAVIOR ━━━'));
+    await runCommand(['exec', 'tsx', 'scripts/compare-behavior.ts', ...passThrough]);
     return;
   }
 
@@ -536,7 +543,7 @@ async function main(): Promise<void> {
   }
 
   const baselineDir = getBaselineLocalRootForMode(mode, BASELINES_DIR);
-  const interactionsBaselineDir = getBaselineLocalRootForMode(mode, 'baselines-interactions');
+  const behaviorBaselineDir = getBaselineLocalRootForMode(mode, 'baselines-behavior');
   let baselineSelection = await resolveBaselineSelection(mode, baselineDir, baselineVersion);
   if (!baselineSelection && mode === 'local') {
     const current = getSuperdocVersion();
@@ -558,13 +565,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const ensureVisualBaseline = async (version: string, versionSpec?: string, force: boolean = false): Promise<void> => {
+  const ensureRenderingBaseline = async (
+    version: string,
+    versionSpec?: string,
+    force: boolean = false,
+  ): Promise<void> => {
     if (mode === 'local') {
       const baselinePath = path.join(baselineDir, version);
       if (!fs.existsSync(baselinePath)) {
-        console.log(colors.info(`📸 Visual baseline ${version} not found locally. Generating...`));
+        console.log(colors.info(`📸 Rendering baseline ${version} not found locally. Generating...`));
         const browserArg = browsers.length > 0 ? browsers.join(',') : undefined;
-        await runBaselineLocal('scripts/baseline-visual.ts', {
+        await runBaselineLocal('scripts/baseline-rendering.ts', {
           versionSpec,
           filters,
           matches,
@@ -577,7 +588,7 @@ async function main(): Promise<void> {
       if (!fs.existsSync(baselinePath)) {
         throw new Error(`No baseline found for version ${version} in ${baselineDir}.`);
       }
-      console.log(colors.success(`✓ Visual baselines: ${version} ${colors.muted('(local)')}`));
+      console.log(colors.success(`✓ Rendering baselines: ${version} ${colors.muted('(local)')}`));
       return;
     }
     const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
@@ -594,11 +605,11 @@ async function main(): Promise<void> {
           browsers: browserFilters,
         });
         if (refreshed.matched === 0) {
-          console.warn(colors.warning('No visual baseline files matched the filters to refresh.'));
+          console.warn(colors.warning('No rendering baseline files matched the filters to refresh.'));
         } else {
           console.log(
             colors.success(
-              `↻ Refreshed ${refreshed.downloaded} visual baseline file(s) for ${version} ${colors.muted('(R2)')}`,
+              `↻ Refreshed ${refreshed.downloaded} rendering baseline file(s) for ${version} ${colors.muted('(R2)')}`,
             ),
           );
         }
@@ -614,24 +625,24 @@ async function main(): Promise<void> {
     });
     if (!result.fromCache) {
       console.log(
-        colors.success(`✓ Visual baselines: ${version} ${colors.muted(`(downloaded ${result.downloaded} files)`)}`),
+        colors.success(`✓ Rendering baselines: ${version} ${colors.muted(`(downloaded ${result.downloaded} files)`)}`),
       );
     } else {
-      console.log(colors.success(`✓ Visual baselines: ${version} ${colors.muted('(cached)')}`));
+      console.log(colors.success(`✓ Rendering baselines: ${version} ${colors.muted('(cached)')}`));
     }
   };
 
-  const ensureInteractionBaseline = async (
+  const ensureBehaviorBaseline = async (
     version: string,
     versionSpec?: string,
     force: boolean = false,
   ): Promise<void> => {
     if (mode === 'local') {
-      const baselinePath = path.join(interactionsBaselineDir, version);
+      const baselinePath = path.join(behaviorBaselineDir, version);
       if (!fs.existsSync(baselinePath)) {
-        console.log(colors.info(`📸 Interaction baseline ${version} not found locally. Generating...`));
+        console.log(colors.info(`📸 Behavior baseline ${version} not found locally. Generating...`));
         const browserArg = browsers.length > 0 ? browsers.join(',') : undefined;
-        await runBaselineLocal('scripts/baseline-interactions.ts', {
+        await runBaselineLocal('scripts/baseline-behavior.ts', {
           versionSpec,
           filters,
           matches,
@@ -642,9 +653,9 @@ async function main(): Promise<void> {
         });
       }
       if (!fs.existsSync(baselinePath)) {
-        throw new Error(`No baseline found for version ${version} in ${interactionsBaselineDir}.`);
+        throw new Error(`No baseline found for version ${version} in ${behaviorBaselineDir}.`);
       }
-      console.log(colors.success(`✓ Interaction baselines: ${version} ${colors.muted('(local)')}`));
+      console.log(colors.success(`✓ Behavior baselines: ${version} ${colors.muted('(local)')}`));
       return;
     }
     const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
@@ -652,20 +663,20 @@ async function main(): Promise<void> {
     if (refreshBaselines) {
       if (hasFilters || browserFilters) {
         const refreshed = await refreshBaselineSubset({
-          prefix: 'baselines-interactions',
+          prefix: 'baselines-behavior',
           version,
-          localRoot: interactionsBaselineDir,
+          localRoot: behaviorBaselineDir,
           filters,
           matches,
           excludes,
           browsers: browserFilters,
         });
         if (refreshed.matched === 0) {
-          console.warn(colors.warning('No interaction baseline files matched the filters to refresh.'));
+          console.warn(colors.warning('No behavior baseline files matched the filters to refresh.'));
         } else {
           console.log(
             colors.success(
-              `↻ Refreshed ${refreshed.downloaded} interaction baseline file(s) for ${version} ${colors.muted('(R2)')}`,
+              `↻ Refreshed ${refreshed.downloaded} behavior baseline file(s) for ${version} ${colors.muted('(R2)')}`,
             ),
           );
         }
@@ -674,19 +685,17 @@ async function main(): Promise<void> {
       force = true;
     }
     const result = await ensureBaselineDownloaded({
-      prefix: 'baselines-interactions',
+      prefix: 'baselines-behavior',
       version,
-      localRoot: interactionsBaselineDir,
+      localRoot: behaviorBaselineDir,
       force,
     });
     if (!result.fromCache) {
       console.log(
-        colors.success(
-          `✓ Interaction baselines: ${version} ${colors.muted(`(downloaded ${result.downloaded} files)`)}`,
-        ),
+        colors.success(`✓ Behavior baselines: ${version} ${colors.muted(`(downloaded ${result.downloaded} files)`)}`),
       );
     } else {
-      console.log(colors.success(`✓ Interaction baselines: ${version} ${colors.muted('(cached)')}`));
+      console.log(colors.success(`✓ Behavior baselines: ${version} ${colors.muted('(cached)')}`));
     }
   };
 
@@ -694,10 +703,10 @@ async function main(): Promise<void> {
     const targetInfo = parseVersionInput(targetVersion);
     const targetLabel = targetInfo.label;
 
-    await ensureVisualBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
-    await ensureVisualBaseline(targetLabel, normalizeVersionSpecifier(targetLabel));
-    await ensureInteractionBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
-    await ensureInteractionBaseline(targetLabel, normalizeVersionSpecifier(targetLabel));
+    await ensureRenderingBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
+    await ensureRenderingBaseline(targetLabel, normalizeVersionSpecifier(targetLabel));
+    await ensureBehaviorBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
+    await ensureBehaviorBaseline(targetLabel, normalizeVersionSpecifier(targetLabel));
 
     console.log('');
     console.log(colors.header('━━━ 📊 BASELINE COMPARISON ━━━'));
@@ -707,8 +716,8 @@ async function main(): Promise<void> {
     for (const browser of browsers) {
       console.log(colors.muted(`Browser: ${browser}`));
 
-      console.log(colors.header('━━━ 🖼️  VISUAL DIFF ━━━'));
-      await runCompareBaselineToBaselineVisual(
+      console.log(colors.header('━━━ 🖼️  RENDERING ━━━'));
+      await runCompareBaselineToBaselineRendering(
         baselineToUse,
         targetLabel,
         threshold,
@@ -722,8 +731,8 @@ async function main(): Promise<void> {
       );
 
       console.log('');
-      console.log(colors.header('━━━ 🎬 INTERACTIONS ━━━'));
-      await runCompareBaselineToBaselineInteractions(
+      console.log(colors.header('━━━ 🎬 BEHAVIOR ━━━'));
+      await runCompareBaselineToBaselineBehavior(
         baselineToUse,
         targetLabel,
         threshold,
@@ -731,7 +740,7 @@ async function main(): Promise<void> {
         matches,
         excludes,
         browser,
-        interactionsBaselineDir,
+        behaviorBaselineDir,
         storageArgs,
       );
       console.log('');
@@ -750,14 +759,14 @@ async function main(): Promise<void> {
 
   console.log(colors.muted(`Switching to ${targetSpec}...`));
   await runVersionSwitch(targetSpec);
-  console.log(colors.muted(`Generating visual results: ${targetLabel}`));
+  console.log(colors.muted(`Generating rendering results: ${targetLabel}`));
   for (const browser of browsers) {
-    await runGenerateVisualResults(targetLabel, filters, matches, excludes, browser, scaleFactor, storageArgs);
+    await runGenerateRenderingResults(targetLabel, filters, matches, excludes, browser, scaleFactor, storageArgs);
   }
-  await ensureVisualBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
+  await ensureRenderingBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
   for (const browser of browsers) {
     const baselineFolderForBrowser = resolveBaselineFolderForBrowser(path.join(baselineDir, baselineToUse), browser);
-    await fillMissingVisualDocs(
+    await fillMissingRenderingDocs(
       targetLabel,
       baselineFolderForBrowser,
       filters,
@@ -769,17 +778,17 @@ async function main(): Promise<void> {
       storageArgs,
     );
   }
-  console.log(colors.muted(`Generating interactions: ${targetLabel}`));
+  console.log(colors.muted(`Generating behavior: ${targetLabel}`));
   for (const browser of browsers) {
-    await runGenerateInteractionsResults(targetLabel, filters, matches, excludes, browser, scaleFactor, storageArgs);
+    await runGenerateBehaviorResults(targetLabel, filters, matches, excludes, browser, scaleFactor, storageArgs);
   }
-  await ensureInteractionBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
+  await ensureBehaviorBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
 
   console.log('');
-  console.log(colors.header('━━━ 🖼️  VISUAL DIFF ━━━'));
+  console.log(colors.header('━━━ 🖼️  RENDERING ━━━'));
   for (const browser of browsers) {
     if (browsers.length > 1) console.log(colors.muted(`Browser: ${browser}`));
-    await runCompareVisual(
+    await runCompareRendering(
       targetLabel,
       baselineToUse,
       threshold,
@@ -794,10 +803,10 @@ async function main(): Promise<void> {
   }
 
   console.log('');
-  console.log(colors.header('━━━ 🎬 INTERACTIONS ━━━'));
+  console.log(colors.header('━━━ 🎬 BEHAVIOR ━━━'));
   for (const browser of browsers) {
     if (browsers.length > 1) console.log(colors.muted(`Browser: ${browser}`));
-    await runCompareInteractions(
+    await runCompareBehavior(
       targetLabel,
       baselineToUse,
       threshold,
@@ -805,7 +814,7 @@ async function main(): Promise<void> {
       matches,
       excludes,
       browser,
-      interactionsBaselineDir,
+      behaviorBaselineDir,
       storageArgs,
     );
   }

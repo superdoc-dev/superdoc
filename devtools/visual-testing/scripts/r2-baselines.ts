@@ -227,7 +227,7 @@ function resolveBaselineCacheRoot(cacheRoot?: string): string {
 /**
  * Get the local root directory for a baseline prefix.
  *
- * @param prefix - Baseline prefix (e.g., 'baselines' or 'baselines-interactions')
+ * @param prefix - Baseline prefix (e.g., 'rendering' or 'behavior')
  * @param cacheRoot - Optional custom cache root
  * @returns Local directory path for the baseline
  */
@@ -268,7 +268,7 @@ export function createR2Client(): { client: S3Client; bucketName: string } {
 /**
  * List all baseline versions available in R2 for a given prefix.
  *
- * @param prefix - Baseline prefix (e.g., 'baselines')
+ * @param prefix - Baseline prefix (e.g., 'rendering')
  * @returns Array of version strings (e.g., ['v.1.5.0', 'v.1.4.0']), sorted newest first
  */
 export async function listBaselineVersions(prefix: string): Promise<string[]> {
@@ -318,7 +318,7 @@ export async function listBaselineVersions(prefix: string): Promise<string[]> {
 /**
  * Get the latest baseline version available in R2.
  *
- * @param prefix - Baseline prefix (e.g., 'baselines')
+ * @param prefix - Baseline prefix (e.g., 'rendering')
  * @returns Latest version string, or null if no baselines exist
  */
 export async function getLatestBaselineVersion(prefix: string): Promise<string | null> {
@@ -399,7 +399,7 @@ async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T
 /**
  * Ensure a baseline version is downloaded locally, fetching from R2 if needed.
  *
- * @param options.prefix - Baseline prefix (e.g., 'baselines')
+ * @param options.prefix - Baseline prefix (e.g., 'rendering')
  * @param options.version - Version to download (e.g., 'v.1.5.0')
  * @param options.localRoot - Optional custom local root directory
  * @param options.cacheRoot - Optional custom cache root directory
@@ -511,7 +511,7 @@ export async function ensureBaselineDownloaded(options: {
  * Downloads only the files matching the provided filters, overwriting local copies.
  *
  * @param options - Configuration options
- * @param options.prefix - Baseline prefix (e.g., 'baselines')
+ * @param options.prefix - Baseline prefix (e.g., 'rendering')
  * @param options.version - Version to refresh (e.g., 'v.1.5.0')
  * @param options.localRoot - Optional custom local root directory
  * @param options.cacheRoot - Optional custom cache root directory

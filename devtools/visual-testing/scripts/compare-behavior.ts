@@ -1,21 +1,21 @@
 /**
- * Generate interaction snapshots and compare against baselines (R2 by default, or local with --local --docs).
+ * Generate behavior snapshots and compare against baselines (R2 by default, or local with --local --docs).
  *
  * Usage:
- *   pnpm compare:interactions                 # Generate + compare interactions against latest baseline in R2
- *   pnpm compare:interactions 1.4.0          # Compare against baseline v.1.4.0 in R2
- *   pnpm compare:interactions 1.4.0 --target 1.5.0-next.5
- *   pnpm compare:interactions --filter typing
- *   pnpm compare:interactions --exclude toolbar
- *   pnpm compare:interactions --match sd-1401
- *   pnpm compare:interactions --folder <run> # Compare an existing interactions run
+ *   pnpm compare:behavior                     # Generate + compare behavior against latest baseline in R2
+ *   pnpm compare:behavior 1.4.0              # Compare against baseline v.1.4.0 in R2
+ *   pnpm compare:behavior 1.4.0 --target 1.5.0-next.5
+ *   pnpm compare:behavior --filter typing
+ *   pnpm compare:behavior --exclude toolbar
+ *   pnpm compare:behavior --match sd-1401
+ *   pnpm compare:behavior --folder <run>     # Compare an existing behavior run
  *   (HTML report includes all snapshots by default.)
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { generateResultsFolderName, getSuperdocVersion } from './generate-refs.js';
-import { findPngFiles, matchesFilterWithBrowserPrefix } from './compare.js';
+import { generateResultsFolderName, getSuperdocVersion } from './generate-rendering.js';
+import { findPngFiles, matchesFilterWithBrowserPrefix } from './compare-rendering.js';
 import { colors } from './terminal.js';
 import { normalizePath } from './utils.js';
 import { BROWSER_NAMES, resolveBaselineFolderForBrowser, resolveBrowserNames } from './browser-utils.js';
@@ -37,7 +37,7 @@ import {
 } from './storage-flags.js';
 import { ensureLocalTarballInstalled } from './workspace-utils.js';
 
-const BASELINES_DIR = 'baselines-interactions';
+const BASELINES_DIR = 'baselines-behavior';
 
 function listFilteredPngs(dir: string, filters: string[], matches: string[], excludes: string[]): string[] {
   return findPngFiles(dir)
@@ -68,7 +68,7 @@ function findMissingBaselineDocFilters(options: {
   return Array.from(missingDocs);
 }
 
-interface CompareInteractionArgs {
+interface CompareBehaviorArgs {
   baselineVersion?: string;
   targetVersion?: string;
   folder?: string;
@@ -85,7 +85,7 @@ interface CompareInteractionArgs {
   docsDir?: string;
 }
 
-function parseArgs(): CompareInteractionArgs {
+function parseArgs(): CompareBehaviorArgs {
   const args = process.argv.slice(2);
   let baselineVersion: string | undefined;
   let targetVersion: string | undefined;
@@ -217,7 +217,7 @@ async function runGenerate(
   scaleFactor: number = 1,
   storageArgs?: string[],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/generate-interactions.ts', '--output', outputFolder];
+  const args = ['exec', 'tsx', 'scripts/generate-behavior.ts', '--output', outputFolder];
   for (const filter of filters) {
     args.push('--filter', filter);
   }
@@ -248,7 +248,7 @@ async function runBaselineLocal(options: {
   scaleFactor: number;
   storageArgs: string[];
 }): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/baseline-interactions.ts'];
+  const args = ['exec', 'tsx', 'scripts/baseline-behavior.ts'];
   if (options.versionSpec) {
     args.push(options.versionSpec);
   }
@@ -284,19 +284,19 @@ async function runCompare(
   browserArg?: string,
   storageArgs?: string[],
 ): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/compare.ts'];
+  const args = ['exec', 'tsx', 'scripts/compare-rendering.ts'];
   if (baselineVersion) {
     args.push(baselineVersion);
   }
   args.push('--baseline-root', baselineRoot);
-  args.push('--results-prefix', 'interactions/');
+  args.push('--results-prefix', 'behavior/');
   args.push('--folder', resultsFolderName);
   for (const filter of filters) {
     args.push('--filter', filter);
   }
-  args.push('--report', 'interactions-report.html');
-  args.push('--report-mode', 'interactions');
-  args.push('--report-trim', 'interactions/');
+  args.push('--report', 'behavior-report.html');
+  args.push('--report-mode', 'behavior');
+  args.push('--report-trim', 'behavior/');
   args.push('--report-all');
   for (const match of matches) {
     args.push('--match', match);
@@ -387,7 +387,7 @@ async function main(): Promise<void> {
       if (!fs.existsSync(baselinePath)) {
         throw new Error(`No baseline found for version ${version} in ${baselineDir}.`);
       }
-      console.log(colors.success(`✓ Interaction baselines: ${version} ${colors.muted('(local)')}`));
+      console.log(colors.success(`✓ Behavior baselines: ${version} ${colors.muted('(local)')}`));
       return;
     }
 
@@ -405,11 +405,11 @@ async function main(): Promise<void> {
           browsers: browserFilters,
         });
         if (refreshed.matched === 0) {
-          console.warn(colors.warning('No interaction baseline files matched the filters to refresh.'));
+          console.warn(colors.warning('No behavior baseline files matched the filters to refresh.'));
         } else {
           console.log(
             colors.success(
-              `↻ Refreshed ${refreshed.downloaded} interaction baseline file(s) for ${version} ${colors.muted('(R2)')}`,
+              `↻ Refreshed ${refreshed.downloaded} behavior baseline file(s) for ${version} ${colors.muted('(R2)')}`,
             ),
           );
         }
@@ -426,12 +426,10 @@ async function main(): Promise<void> {
     });
     if (!result.fromCache) {
       console.log(
-        colors.success(
-          `✓ Interaction baselines: ${version} ${colors.muted(`(downloaded ${result.downloaded} files)`)}`,
-        ),
+        colors.success(`✓ Behavior baselines: ${version} ${colors.muted(`(downloaded ${result.downloaded} files)`)}`),
       );
     } else {
-      console.log(colors.success(`✓ Interaction baselines: ${version} ${colors.muted('(cached)')}`));
+      console.log(colors.success(`✓ Behavior baselines: ${version} ${colors.muted('(cached)')}`));
     }
   };
 
@@ -484,15 +482,15 @@ async function main(): Promise<void> {
   let resultsRoot: string | undefined;
   if (resultsFolderName) {
     resultsRoot = path.isAbsolute(resultsFolderName)
-      ? path.join(resultsFolderName, 'interactions')
-      : path.join('screenshots', resultsFolderName, 'interactions');
+      ? path.join(resultsFolderName, 'behavior')
+      : path.join('screenshots', resultsFolderName, 'behavior');
     const hasBrowserResults = browsers.some((browser) => fs.existsSync(path.join(resultsRoot, browser)));
     const pngCount = browsers.reduce((count, browser) => {
       const dir = path.join(resultsRoot, browser);
       return count + (fs.existsSync(dir) ? findPngFiles(dir).length : 0);
     }, 0);
     if (!hasBrowserResults || pngCount === 0) {
-      console.log(colors.warning('No interaction snapshots found. Skipping interaction comparison.'));
+      console.log(colors.warning('No behavior snapshots found. Skipping behavior comparison.'));
       return;
     }
   }
@@ -527,7 +525,7 @@ async function main(): Promise<void> {
 
       console.log(
         colors.muted(
-          `↻ Missing interaction baselines detected in cache. Refreshing ${missingFilters.length} story(s) for ${browser}...`,
+          `↻ Missing behavior baselines detected in cache. Refreshing ${missingFilters.length} story(s) for ${browser}...`,
         ),
       );
       const refreshed = await refreshBaselineSubset({
@@ -540,12 +538,12 @@ async function main(): Promise<void> {
       });
       if (refreshed.matched === 0) {
         console.warn(
-          colors.warning(`No interaction baseline files matched for refresh (${browser}). Keeping current cache.`),
+          colors.warning(`No behavior baseline files matched for refresh (${browser}). Keeping current cache.`),
         );
       } else {
         console.log(
           colors.success(
-            `↻ Refreshed ${refreshed.downloaded} interaction baseline file(s) for ${baselineToUse} (${browser}).`,
+            `↻ Refreshed ${refreshed.downloaded} behavior baseline file(s) for ${baselineToUse} (${browser}).`,
           ),
         );
       }

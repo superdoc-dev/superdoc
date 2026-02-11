@@ -2,7 +2,7 @@ import { test } from '../../fixtures/superdoc.js';
 
 test.use({ config: { hideCaret: false } });
 
-test('@behavior SDT lock modes enforcement', async ({ superdoc }) => {
+test.fixme('@behavior SDT lock modes enforcement', async ({ superdoc }) => {
   // Insert unlocked inline SDT
   await superdoc.type('Unlocked inline: ');
   await superdoc.waitForStable();

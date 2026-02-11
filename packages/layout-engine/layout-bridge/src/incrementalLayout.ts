@@ -1668,32 +1668,32 @@ export async function incrementalLayout(
       let plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, [], pageColumns);
       let reserves = plan.reserves;
 
-      // If any reserves, relayout once, then re-assign and inject.
+      const MAX_FOOTNOTE_LAYOUT_PASSES = 4;
+
+      // Relayout with footnote reserves and iterate until reserves and page count stabilize,
+      // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
       if (reserves.some((h) => h > 0)) {
-        layout = layoutDocument(currentBlocks, currentMeasures, {
-          ...options,
-          footnoteReservedByPageIndex: reserves,
-          headerContentHeights,
-          footerContentHeights,
-          remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
-            remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
-        });
+        for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
+          layout = layoutDocument(currentBlocks, currentMeasures, {
+            ...options,
+            footnoteReservedByPageIndex: reserves,
+            headerContentHeights,
+            footerContentHeights,
+            remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
+              remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
+          });
+          ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
+          ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
+          plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
+          const nextReserves = plan.reserves;
+          const reservesStable =
+            nextReserves.length === reserves.length &&
+            nextReserves.every((h, i) => (reserves[i] ?? 0) === h) &&
+            reserves.every((h, i) => (nextReserves[i] ?? 0) === h);
+          reserves = nextReserves;
+          if (reservesStable) break;
+        }
 
-        // Pass 2: recompute assignment and reserves for the updated pagination.
-        ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
-        ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
-        plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
-        reserves = plan.reserves;
-
-        // Apply final reserves (best-effort second relayout) then inject fragments.
-        layout = layoutDocument(currentBlocks, currentMeasures, {
-          ...options,
-          footnoteReservedByPageIndex: reserves,
-          headerContentHeights,
-          footerContentHeights,
-          remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
-            remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
-        });
         let { columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout);
         let { blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
           collectFootnoteIdsByColumn(finalIdsByColumn),

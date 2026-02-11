@@ -28,6 +28,7 @@ export const PermEnd = Node.create({
   name: 'permEnd',
   group: 'inline',
   inline: true,
+  atom: true,
 
   renderDOM() {
     return ['span', { style: 'display: none;' }];

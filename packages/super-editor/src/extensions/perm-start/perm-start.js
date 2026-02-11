@@ -34,6 +34,7 @@ export const PermStart = Node.create({
   name: 'permStart',
   group: 'inline',
   inline: true,
+  atom: true,
 
   renderDOM() {
     return ['span', { style: 'display: none;' }];

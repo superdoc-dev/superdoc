@@ -1,6 +1,6 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
-import { isInlineContext } from '../../../../v2/importer/inlineContext.js';
+import { isInlineContext } from '@core/super-converter/utils/inlineContext.js';
 import validXmlAttributes from './attributes/index.js';
 
 /** @type {import('@translator').XmlNodeName} */

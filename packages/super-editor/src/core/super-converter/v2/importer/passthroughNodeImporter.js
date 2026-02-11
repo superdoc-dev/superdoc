@@ -1,6 +1,6 @@
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { registeredHandlers } from '../../v3/handlers/index.js';
-import { isInlineContext } from './inlineContext.js';
+import { isInlineContext } from '@core/super-converter/utils/inlineContext.js';
 
 export { isInlineContext };
 

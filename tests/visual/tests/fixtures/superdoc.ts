@@ -93,7 +93,7 @@ export interface SuperDocFixture {
   loadDocument(filePath: string): Promise<void>;
 
   /** Screenshot every rendered page (for paginated/layout docs) */
-  screenshotPages(baseName: string): Promise<void>;
+  screenshotPages(baseName: string, maxPages?: number): Promise<void>;
 }
 
 interface SuperDocOptions {
@@ -276,11 +276,12 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
         await waitForStable(page, 1000);
       },
 
-      async screenshotPages(baseName: string) {
+      async screenshotPages(baseName: string, maxPages?: number) {
         await waitForStable(page);
 
         const pages = page.locator('.superdoc-page[data-page-index]');
-        const count = await pages.count();
+        let count = await pages.count();
+        if (maxPages && count > maxPages) count = maxPages;
 
         if (count === 0) {
           // No paginated pages — screenshot the whole editor

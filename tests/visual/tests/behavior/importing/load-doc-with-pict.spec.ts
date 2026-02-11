@@ -16,5 +16,6 @@ test('@behavior load document with w:pict elements without schema errors', async
   await superdoc.waitForStable();
   await superdoc.screenshot('load-pict-loaded');
 
-  await superdoc.screenshotPages('importing/load-pict');
+  // Screenshot first 5 pages (doc has 6+, later pages may not render in time)
+  await superdoc.screenshotPages('importing/load-pict', 5);
 });

@@ -1,4 +1,7 @@
 {
-  "tags": ["editing", "viewing"],
-  "title": "CDN"
+    "tags": [
+        "editing",
+        "viewing"
+    ],
+    "title": "CDN"
 }

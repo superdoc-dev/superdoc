@@ -1584,6 +1584,9 @@ export type TableFragment = {
   metadata?: TableFragmentMetadata;
   pmStart?: number;
   pmEnd?: number;
+  /** Per-fragment column widths, rescaled when table is clamped to section width.
+   *  When set, the renderer uses these instead of measure.columnWidths. */
+  columnWidths?: number[];
 };
 
 export type ImageFragment = {

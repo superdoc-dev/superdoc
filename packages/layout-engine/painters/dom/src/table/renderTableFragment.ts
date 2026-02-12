@@ -162,6 +162,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   const block = lookup.block as TableBlock;
   const measure = lookup.measure as TableMeasure;
+  // Use per-fragment rescaled column widths when available (SD-1859: mixed-orientation docs
+  // where measurement width differs from section width). Falls back to measured widths.
+  const effectiveColumnWidths = fragment.columnWidths ?? measure.columnWidths;
   const tableBorders = block.attrs?.borders;
   const tableIndentValue = (block.attrs?.tableIndent as { width?: unknown } | null | undefined)?.width;
   const tableIndent = typeof tableIndentValue === 'number' && Number.isFinite(tableIndentValue) ? tableIndentValue : 0;
@@ -188,7 +191,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     // When a table splits across pages, each fragment only renders a subset of rows
     // (repeated headers + body rows from fromRow to toRow). Segments must match
     // exactly the rendered rows so resize handles don't overflow the fragment.
-    const columnCount = measure.columnWidths.length;
+    const columnCount = effectiveColumnWidths.length;
 
     // boundarySegments[colIndex] = array of {fromRow, toRow, y, height} segments where this boundary exists
     const boundarySegments: Array<Array<{ fromRow: number; toRow: number; y: number; height: number }>> = [];
@@ -331,7 +334,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         row: block.rows[r],
         totalRows: block.rows.length,
         tableBorders,
-        columnWidths: measure.columnWidths,
+        columnWidths: effectiveColumnWidths,
         allRowHeights,
         tableIndent,
         context,
@@ -372,14 +375,14 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
         // Calculate x position (sum of columns before gridCol)
         let ghostX = 0;
-        for (let i = 0; i < gridCol && i < measure.columnWidths.length; i++) {
-          ghostX += measure.columnWidths[i];
+        for (let i = 0; i < gridCol && i < effectiveColumnWidths.length; i++) {
+          ghostX += effectiveColumnWidths[i];
         }
 
         // Calculate width (sum of spanned columns)
         let ghostWidth = 0;
-        for (let i = gridCol; i < gridCol + colSpan && i < measure.columnWidths.length; i++) {
-          ghostWidth += measure.columnWidths[i];
+        for (let i = gridCol; i < gridCol + colSpan && i < effectiveColumnWidths.length; i++) {
+          ghostWidth += effectiveColumnWidths[i];
         }
 
         // Calculate height: from fromRow to min(spanEndRow, toRow)
@@ -411,7 +414,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
             cellBordersAttr.bottom !== undefined ||
             cellBordersAttr.left !== undefined);
         const isFirstCol = gridCol === 0;
-        const isLastCol = gridCol + colSpan >= measure.columnWidths.length;
+        const isLastCol = gridCol + colSpan >= effectiveColumnWidths.length;
 
         if (hasExplicitBorders && tableBorders) {
           // Use cell's borders, with table top border for continuation
@@ -471,7 +474,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       row: block.rows[r],
       totalRows: block.rows.length,
       tableBorders,
-      columnWidths: measure.columnWidths,
+      columnWidths: effectiveColumnWidths,
       allRowHeights,
       tableIndent,
       context,

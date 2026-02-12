@@ -509,6 +509,8 @@ type TableCellRenderDependencies = {
   tableSdt?: SdtMetadata | null;
   /** Table indent in pixels (applied to table fragment positioning) */
   tableIndent?: number;
+  /** Computed cell width from rescaled columnWidths (overrides cellMeasure.width when present) */
+  cellWidth?: number;
   /** Starting line index for partial row rendering (inclusive) */
   fromLine?: number;
   /** Ending line index for partial row rendering (exclusive), -1 means render to end */
@@ -594,6 +596,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     applySdtDataset,
     tableSdt,
     tableIndent,
+    cellWidth,
     fromLine,
     toLine,
   } = deps;
@@ -609,7 +612,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   cellEl.style.position = 'absolute';
   cellEl.style.left = `${x}px`;
   cellEl.style.top = `${y}px`;
-  cellEl.style.width = `${cellMeasure.width}px`;
+  cellEl.style.width = `${cellWidth ?? cellMeasure.width}px`;
   cellEl.style.height = `${rowHeight}px`;
   cellEl.style.boxSizing = 'border-box';
   // Cell clips all overflow - no scrollbars, content just gets clipped at boundaries
@@ -728,7 +731,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const globalFromLine = fromLine ?? 0;
     const globalToLine = toLine === -1 || toLine === undefined ? totalLines : toLine;
 
-    const contentWidthPx = Math.max(0, cellMeasure.width - paddingLeft - paddingRight);
+    const effectiveCellWidth = cellWidth ?? cellMeasure.width;
+    const contentWidthPx = Math.max(0, effectiveCellWidth - paddingLeft - paddingRight);
     const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
     const paragraphTopById = new Map<string, number>();
     let flowCursorY = 0;

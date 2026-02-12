@@ -2580,10 +2580,20 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         columnWidths = columnWidths.slice(0, maxCellCount);
       }
 
-      // Scale proportionally if total width exceeds effective target width
+      // Scale proportionally to fit effective target width.
+      // Auto-layout tables in Word fill the available page width, so we scale
+      // both up (when grid widths are smaller) and down (when they exceed it).
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
       if (totalWidth > effectiveTargetWidth) {
         columnWidths = scaleColumnWidths(columnWidths, effectiveTargetWidth);
+      } else if (totalWidth < effectiveTargetWidth && effectiveTargetWidth > 0 && totalWidth > 0) {
+        const scale = effectiveTargetWidth / totalWidth;
+        columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
+        const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
+        if (scaledSum !== effectiveTargetWidth && columnWidths.length > 0) {
+          const diff = effectiveTargetWidth - scaledSum;
+          columnWidths[columnWidths.length - 1] = Math.max(1, columnWidths[columnWidths.length - 1] + diff);
+        }
       }
     }
   } else {

@@ -69,6 +69,11 @@ export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
   const shouldFallbackToTypeOnly = !hasSnapshotAttrs;
 
   doc.nodesBetween(from, to, (node) => {
+    // nodesBetween cannot be fully broken; skip extra scans once exact match is found.
+    if (exactMatch) {
+      return false;
+    }
+
     if (!node.isInline) {
       return;
     }

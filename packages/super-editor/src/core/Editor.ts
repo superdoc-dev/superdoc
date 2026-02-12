@@ -343,7 +343,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     licenseKey: COMMUNITY_LICENSE_KEY,
 
     // Telemetry configuration
-    telemetry: { enabled: true, metadata: { source: 'test-super-editor' } },
+    telemetry: { enabled: true },
   };
 
   /**

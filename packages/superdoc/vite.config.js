@@ -62,9 +62,10 @@ export const getAliases = (_isDev) => {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode, command}) => {
+  const skipDts = process.env.SUPERDOC_SKIP_DTS === '1';
   const plugins = [
     vue(),
-    dts({
+    !skipDts && dts({
       include: ['src/**/*', '../super-editor/src/**/*'],
       outDir: 'dist',
     }),
@@ -78,7 +79,7 @@ export default defineConfig(({ mode, command}) => {
       hook: 'writeBundle'
     }),
     // visualizer(visualizerConfig)
-  ];
+  ].filter(Boolean);
   if (mode !== 'test') plugins.push(nodePolyfills());
   const isDev = command === 'serve';
 

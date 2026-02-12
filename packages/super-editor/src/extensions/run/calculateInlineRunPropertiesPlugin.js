@@ -148,20 +148,8 @@ function getRunContext($pos) {
       paragraphNode = node;
       paragraphDepth = depth;
     } else if (node.type.name === 'tableCell') {
-      const cellIndex = $pos.index(depth - 1);
-      const rowNode = $pos.node(depth - 1);
-      const rowIndex = $pos.index(depth - 2);
-      const tableNode = $pos.node(depth - 2);
-      if (rowNode.type.name === 'tableRow' && tableNode.type.name === 'table') {
-        tableInfo = {
-          tableProperties: tableNode.attrs.tableProperties || null,
-          rowIndex,
-          cellIndex,
-          numCells: rowNode.childCount,
-          numRows: tableNode.childCount,
-        };
-        break;
-      }
+      tableInfo = extractTableInfo($pos, depth);
+      break;
     }
   }
   if (!paragraphNode || paragraphDepth < 0) return {};
@@ -169,6 +157,35 @@ function getRunContext($pos) {
   return { paragraphNode, paragraphPos, tableInfo };
 }
 
+/**
+ * Extract table context information from a resolved position, if available.
+ *
+ * @param {import('prosemirror-model').ResolvedPos} $pos
+ * @param {number} depth Depth at which to look for table cell context (e.g., run node depth + 1)
+ * @returns {{
+ *   tableProperties: Record<string, any>|null,
+ *   rowIndex: number,
+ *   cellIndex: number,
+ *   numCells: number,
+ *   numRows: number,
+ * }|null}
+ */
+export function extractTableInfo($pos, depth) {
+  const cellIndex = $pos.index(depth - 1);
+  const rowNode = $pos.node(depth - 1);
+  const rowIndex = $pos.index(depth - 2);
+  const tableNode = $pos.node(depth - 2);
+  if (rowNode.type.name === 'tableRow' && tableNode.type.name === 'table') {
+    return {
+      tableProperties: tableNode.attrs.tableProperties || null,
+      rowIndex,
+      cellIndex,
+      numCells: rowNode.childCount,
+      numRows: tableNode.childCount,
+    };
+  }
+  return null;
+}
 /**
  * Find the absolute document position of the first run node inside a paragraph.
  *

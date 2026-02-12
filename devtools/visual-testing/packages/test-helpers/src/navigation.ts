@@ -29,6 +29,9 @@ export interface GoToHarnessOptions extends Partial<HarnessConfig> {
 export async function goToHarness(page: Page, options: GoToHarnessOptions = {}): Promise<Locator> {
   const { baseUrl = DEFAULT_BASE_URL, timeout = 5_000, ...config } = options;
 
+  // Block telemetry requests during tests
+  await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
+
   const url = buildUrl(baseUrl, config);
   await page.goto(url);
 

@@ -702,9 +702,9 @@ export const hitTestTableFragment = (
       const blockEndY = blockStartY + blockHeight;
 
       // Calculate position within the cell (accounting for cell padding)
-      const padding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
+      const padding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
       const cellLocalX = localX - colX - (padding.left ?? 4);
-      const cellLocalY = localY - rowY - (padding.top ?? 2);
+      const cellLocalY = localY - rowY - (padding.top ?? 0);
       const paragraphBlock = cellBlock as ParagraphBlock;
       const paragraphMeasure = cellBlockMeasure as ParagraphMeasure;
 
@@ -1339,7 +1339,7 @@ type TableRowBlock = TableBlock['rows'][number];
 type TableCellBlock = TableRowBlock['cells'][number];
 type TableCellMeasure = TableMeasure['rows'][number]['cells'][number];
 
-const DEFAULT_CELL_PADDING = { top: 2, bottom: 2, left: 4, right: 4 };
+const DEFAULT_CELL_PADDING = { top: 0, bottom: 0, left: 4, right: 4 };
 
 const getCellPaddingFromRow = (cellIdx: number, row?: TableRowBlock) => {
   const padding = row?.cells?.[cellIdx]?.attrs?.padding ?? {};

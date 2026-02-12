@@ -2454,7 +2454,6 @@ function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number
 
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
-
   // Resolve percentage or explicit pixel table width
   const resolvedTableWidth = resolveTableWidth(block.attrs, maxWidth);
 
@@ -2645,9 +2644,9 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
       }
 
       // Get cell padding for height calculation
-      const cellPadding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
-      const paddingTop = cellPadding.top ?? 2;
-      const paddingBottom = cellPadding.bottom ?? 2;
+      const cellPadding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
+      const paddingTop = cellPadding.top ?? 0;
+      const paddingBottom = cellPadding.bottom ?? 0;
       const paddingLeft = cellPadding.left ?? 4;
       const paddingRight = cellPadding.right ?? 4;
 

@@ -750,6 +750,8 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
         deviceScaleFactor: scaleFactor,
       });
       const page = await context.newPage();
+      // Block telemetry requests during tests
+      await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
       workers.push(processDocumentQueue(i + 1, page, queue, results, shouldSkipExisting, provider, progress, ci));
     }
 

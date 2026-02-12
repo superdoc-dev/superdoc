@@ -5,9 +5,6 @@
   "scripts": {
     "test": "playwright test",
     "test:update": "playwright test --update-snapshots",
-    "test:baseline": "playwright test --update-snapshots --grep @rendering",
-    "baseline:upload": "tsx scripts/upload-baselines.ts",
-    "baseline:download": "tsx scripts/download-baselines.ts",
     "docs:download": "tsx scripts/download-test-docs.ts",
     "docs:upload": "tsx scripts/upload-test-doc.ts",
     "report": "playwright show-report",
@@ -19,6 +16,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.988.0",
+    "@clack/prompts": "^1.0.0",
     "@playwright/test": "catalog:",
     "dotenv": "^16.4.7",
     "tsx": "catalog:",

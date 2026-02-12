@@ -916,6 +916,44 @@ describe('internal helper functions', () => {
     expect(combinedResult.deletionText).toBe('Removed');
   });
 
+  it('does not duplicate replacement text when creating tracked change comments', () => {
+    const schema = createCommentSchema();
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'replace-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'replace-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+
+    const docInsertNode = schema.text('replacement', [insertMark]);
+    const docDeleteNode = schema.text('original', [deleteMark]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [docInsertNode, docDeleteNode])]);
+    const state = EditorState.create({ schema, doc });
+
+    // Simulate step slice and deletion nodes from a replacement transaction
+    const stepInsertNodes = [schema.text('replacement', [insertMark])];
+    const deletionNodes = [schema.text('original', [deleteMark])];
+
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: insertMark, deletionMark: deleteMark, formatMark: null },
+      deletionNodes,
+      nodes: stepInsertNodes,
+      newEditorState: state,
+      documentId: 'doc-1',
+    });
+
+    expect(payload?.trackedChangeText).toBe('replacement');
+    expect(payload?.trackedChangeText).not.toBe('replacementt');
+    expect(payload?.deletedText).toBe('original');
+  });
+
   it('createOrUpdateTrackedChangeComment builds add and update payloads', () => {
     const schema = createCommentSchema();
     const insertMark = schema.marks[TrackInsertMarkName].create({

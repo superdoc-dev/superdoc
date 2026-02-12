@@ -2,6 +2,7 @@ name: Visual Tests
 
 permissions:
   contents: read
+  pull-requests: write
 
 on:
   pull_request:
@@ -68,25 +69,61 @@ jobs:
         run: pnpm exec playwright install-deps chromium firefox webkit
         working-directory: tests/visual
 
-      - name: Download baselines from R2
-        run: pnpm baseline:download
-        working-directory: tests/visual
-
       - name: Download test documents from R2
         run: pnpm docs:download
         working-directory: tests/visual
 
+      - name: Download baselines from R2
+        run: pnpm exec tsx scripts/download-baselines.ts
+        working-directory: tests/visual
+
+      # Visual tests use continue-on-error because screenshot diffs are
+      # expected when rendering improves. The PR comment signals diffs
+      # were detected so the team can investigate locally.
+      # NOTE: Reports are NOT uploaded as artifacts because this is a
+      # public repo — screenshots could expose test document content.
       - name: Run visual tests
+        id: visual-tests
+        continue-on-error: true
         run: pnpm test
         working-directory: tests/visual
 
-      - name: Upload report
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Comment on PR with visual diff results
+        if: github.event_name == 'pull_request' && steps.visual-tests.outcome == 'failure'
+        uses: actions/github-script@v7
         with:
-          name: visual-test-report
-          path: tests/visual/playwright-report/
-          retention-days: 14
+          script: |
+            const marker = '<!-- visual-test-report -->';
+            const body = [
+              marker,
+              '### Visual diffs detected',
+              '',
+              'Pixel differences were found in visual tests. This is **not blocking** — reproduce locally with `cd tests/visual && pnpm docs:download && pnpm test` to review diffs.',
+            ].join('\n');
+
+            // Update existing comment or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
 
   validate:
     if: always()

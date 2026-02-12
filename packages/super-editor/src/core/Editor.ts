@@ -343,7 +343,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     licenseKey: COMMUNITY_LICENSE_KEY,
 
     // Telemetry configuration
-    telemetry: null,
+    telemetry: { enabled: true },
   };
 
   /**
@@ -483,7 +483,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #initTelemetry(): void {
     const { telemetry: telemetryConfig, licenseKey } = this.options;
 
-    // Skip if telemetry is not enabled
+    // Skip in test environments and when telemetry is not enabled
+    if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
+      return;
+    }
+
     if (!telemetryConfig?.enabled) {
       console.debug('[super-editor] Telemetry: disabled');
       return;

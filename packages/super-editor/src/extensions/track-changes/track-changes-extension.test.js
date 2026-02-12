@@ -262,6 +262,37 @@ describe('TrackChanges extension commands', () => {
     expect(restoredTextStyle.attrs).toEqual(oldTextStyle.attrs);
   });
 
+  it('rejectTrackedChangesBetween removes sparse after textStyle snapshots against richer live marks', () => {
+    const suggestedTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#FF0000',
+    });
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-sparse-after',
+      before: [],
+      after: [{ type: 'textStyle', attrs: { color: '#FF0000' } }],
+    });
+    const doc = createDoc('Styled', [suggestedTextStyle, formatMark]);
+    const rejectState = createState(doc);
+
+    let afterReject;
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state: rejectState,
+      dispatch: (tr) => {
+        afterReject = rejectState.apply(tr);
+      },
+    });
+
+    expect(afterReject).toBeDefined();
+    expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
+    expect(markPresent(afterReject.doc, 'textStyle')).toBe(false);
+  });
+
   it('rejectTrackedChangesBetween restores full before snapshot across tracked mark types', () => {
     const beforeTextStyle = schema.marks.textStyle.create({
       styleId: 'Emphasis',

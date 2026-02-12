@@ -139,4 +139,26 @@ describe('markSnapshotHelpers', () => {
 
     expect(match).toBeNull();
   });
+
+  it('findMarkInRangeBySnapshot falls back to subset attr match for sparse snapshots', () => {
+    const richTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#FF0000',
+    });
+    const doc = createDocWithRuns([{ text: 'A', marks: [richTextStyle] }]);
+    const state = createState(doc);
+
+    const match = findMarkInRangeBySnapshot({
+      doc: state.doc,
+      from: 2,
+      to: 3,
+      snapshot: { type: 'textStyle', attrs: { color: '#FF0000' } },
+    });
+
+    expect(match).toBeTruthy();
+    expect(match.type.name).toBe('textStyle');
+    expect(match.attrs).toEqual(richTextStyle.attrs);
+  });
 });

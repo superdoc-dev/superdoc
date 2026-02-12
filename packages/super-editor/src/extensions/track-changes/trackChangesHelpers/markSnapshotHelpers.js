@@ -45,10 +45,28 @@ const markMatchesSnapshot = (mark, snapshot, exact = true) => {
   return attrsExactlyMatch(mark.attrs || {}, snapshot.attrs || {});
 };
 
+const markAttrsIncludeSnapshotAttrs = (mark, snapshot) => {
+  if (!mark || !snapshot || mark.type.name !== snapshot.type) {
+    return false;
+  }
+
+  const normalizedMarkAttrs = normalizeAttrs(mark.attrs || {});
+  const normalizedSnapshotAttrs = normalizeAttrs(snapshot.attrs || {});
+
+  if (Object.keys(normalizedSnapshotAttrs).length === 0) {
+    return false;
+  }
+
+  return objectIncludes(normalizedMarkAttrs, normalizedSnapshotAttrs);
+};
+
 export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
   let exactMatch = null;
+  let subsetMatch = null;
   let typeOnlyMatch = null;
-  const shouldFallbackToTypeOnly = !snapshot?.attrs || Object.keys(snapshot.attrs).length === 0;
+  const normalizedSnapshotAttrs = normalizeAttrs(snapshot?.attrs || {});
+  const hasSnapshotAttrs = Object.keys(normalizedSnapshotAttrs).length > 0;
+  const shouldFallbackToTypeOnly = !hasSnapshotAttrs;
 
   doc.nodesBetween(from, to, (node) => {
     if (!node.isInline) {
@@ -61,6 +79,13 @@ export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
       return false;
     }
 
+    if (!subsetMatch) {
+      const subset = node.marks.find((mark) => markAttrsIncludeSnapshotAttrs(mark, snapshot));
+      if (subset) {
+        subsetMatch = subset;
+      }
+    }
+
     if (!typeOnlyMatch) {
       const fallback = node.marks.find((mark) => markMatchesSnapshot(mark, snapshot, false));
       if (fallback) {
@@ -69,7 +94,7 @@ export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
     }
   });
 
-  const liveMark = exactMatch || (shouldFallbackToTypeOnly ? typeOnlyMatch : null);
+  const liveMark = exactMatch || subsetMatch || (shouldFallbackToTypeOnly ? typeOnlyMatch : null);
   if (!liveMark) console.warn('[track-changes] could not find live mark for snapshot', snapshot);
   return liveMark;
 };

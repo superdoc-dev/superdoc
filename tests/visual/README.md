@@ -157,9 +157,10 @@ superdoc-visual-testing/
 | `clickOnLine(index, xOffset?)` | Single click on a line |
 | `clickOnCommentedText(text)` | Click on comment highlight |
 | `pressTimes(key, count)` | Press a key multiple times |
-| `waitForStable(ms?)` | Wait for layout to settle |
+| `waitForStable(ms?)` | Wait for layout to settle (default 1500ms) |
 | `screenshot(name)` | Full-page screenshot |
 | `loadDocument(path)` | Load a .docx file |
+| `assertPageCount(n)` | Assert number of rendered pages |
 | `screenshotPages(baseName)` | Screenshot each rendered page |
 
 ## Fixture Config
@@ -181,7 +182,8 @@ test.use({
 
 ## Baselines & CI
 
-- **PR validation**: `visual-test.yml` downloads baselines + documents from R2, runs tests
+- **Structural tests** (`pnpm test:structural`) — assert page counts, no pixel comparison. Hard gate in CI.
+- **Visual tests** (`pnpm test`) — pixel-diff screenshots. Soft gate in CI — failures emit a warning and upload the HTML report for review.
 - **Baseline update**: `visual-baseline.yml` (manual trigger) builds from `stable`, generates new baselines, uploads to R2
 - Baselines and test documents are never committed to git
 

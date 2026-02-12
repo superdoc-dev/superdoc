@@ -36,7 +36,7 @@ async function waitForReady(page: Page, timeout = 30_000): Promise<void> {
   await page.waitForFunction(() => (window as any).superdocReady === true, null, { polling: 100, timeout });
 }
 
-async function waitForStable(page: Page, ms = 500): Promise<void> {
+async function waitForStable(page: Page, ms = 1500): Promise<void> {
   await page.waitForTimeout(ms);
   await page.evaluate(() => document.fonts.ready);
 }
@@ -91,6 +91,9 @@ export interface SuperDocFixture {
 
   /** Load a .docx document into the editor */
   loadDocument(filePath: string): Promise<void>;
+
+  /** Assert the number of rendered pages matches expected count */
+  assertPageCount(expected: number): Promise<void>;
 
   /** Screenshot every rendered page (for paginated/layout docs) */
   screenshotPages(baseName: string, maxPages?: number): Promise<void>;
@@ -274,6 +277,12 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
           { polling: 100, timeout: 30_000 },
         );
         await waitForStable(page, 1000);
+      },
+
+      async assertPageCount(expected: number) {
+        await waitForStable(page);
+        const pages = page.locator('.superdoc-page[data-page-index]');
+        await expect(pages).toHaveCount(expected, { timeout: 15_000 });
       },
 
       async screenshotPages(baseName: string, maxPages?: number) {

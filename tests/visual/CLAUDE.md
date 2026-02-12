@@ -108,7 +108,19 @@ test('@rendering my-doc renders correctly', async ({ superdoc }) => {
 });
 ```
 
-Use `@rendering` tag.
+Use `@rendering` tag. Always include `assertPageCount()` — this runs as a hard gate in CI even when pixel diffs are non-blocking.
+
+## Structural Tests
+
+Lightweight tests tagged `@structural` that only assert page counts (no screenshots). These run as a **hard CI gate** — if a document renders the wrong number of pages, the PR is blocked. Add one for every rendering test document in `tests/rendering/structural.spec.ts`.
+
+## CI Behavior
+
+In CI, the workflow runs two test passes in sequence:
+1. **Structural tests** (`pnpm test:structural`) — hard gate, blocks PR on failure
+2. **Visual tests** (`pnpm test`) — soft gate, pixel diff failures emit a warning and upload the HTML report as an artifact for review
+
+This means rendering improvements that change pixels won't block PRs, but structural regressions (wrong page count, missing content) will.
 
 ## Fixture Helpers
 
@@ -128,9 +140,10 @@ Use `@rendering` tag.
 | `clickOnLine(index, xOffset?)` | Single click on a line |
 | `clickOnCommentedText(text)` | Click on comment highlight containing text |
 | `pressTimes(key, count)` | Press a key multiple times |
-| `waitForStable(ms?)` | Wait for layout to settle (default 500ms) |
+| `waitForStable(ms?)` | Wait for layout to settle (default 1500ms) |
 | `screenshot(name)` | Full-page screenshot with baseline comparison |
 | `loadDocument(path)` | Load a .docx file into the editor |
+| `assertPageCount(n)` | Assert number of rendered pages (structural check) |
 | `screenshotPages(baseName)` | Screenshot each rendered page |
 
 ## Config Overrides

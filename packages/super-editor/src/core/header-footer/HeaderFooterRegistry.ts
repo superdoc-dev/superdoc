@@ -6,33 +6,19 @@ import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
+import { SuperConverter } from '@converter/SuperConverter';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
 const DEFAULT_HEADER_FOOTER_HEIGHT = 100;
 const EDITOR_READY_TIMEOUT_MS = 5000;
 const MAX_CACHED_EDITORS_LIMIT = 100;
 
-type MinimalConverterContext = {
-  docx?: Record<string, unknown>;
-  numbering?: {
-    definitions?: Record<string, unknown>;
-    abstracts?: Record<string, unknown>;
-  };
-  linkedStyles?: Array<{
-    id: string;
-    definition?: {
-      styles?: Record<string, unknown>;
-      attrs?: Record<string, unknown>;
-    };
-  }>;
-};
-
 /**
  * Extended Editor interface that includes the converter property.
  * Used for type-safe access to header/footer data stored in the converter.
  */
 interface EditorWithConverter extends Editor {
-  converter: HeaderFooterCollections;
+  converter: Required<Editor>['converter']; // TODO: Should `converter` property of Editor be marked as optional (`?`) rather than definite-assignment (`!`)?
 }
 
 export type HeaderFooterKind = 'header' | 'footer';
@@ -782,7 +768,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     if (!this.#hasConverter(this.#editor)) {
       return;
     }
-    const converter = this.#editor.converter as Record<string, unknown>;
+    const converter = this.#editor.converter;
     if (!converter) return;
 
     const targetKey = descriptor.kind === 'header' ? 'headerEditors' : 'footerEditors';
@@ -817,7 +803,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     if (!this.#hasConverter(this.#editor)) {
       return;
     }
-    const converter = this.#editor.converter as Record<string, unknown>;
+    const converter = this.#editor.converter;
     if (!converter) return;
 
     const targetKey = descriptor.kind === 'header' ? 'headerEditors' : 'footerEditors';
@@ -1176,7 +1162,7 @@ export class HeaderFooterLayoutAdapter {
     if (!('converter' in rootEditor)) {
       return undefined;
     }
-    const converter = (rootEditor as EditorWithConverter).converter as Record<string, unknown> | undefined;
+    const converter = rootEditor.converter as SuperConverter | undefined;
     if (!converter) return undefined;
 
     const context: ConverterContext = {
@@ -1184,7 +1170,7 @@ export class HeaderFooterLayoutAdapter {
       numbering: converter.numbering,
       translatedLinkedStyles: converter.translatedLinkedStyles,
       translatedNumbering: converter.translatedNumbering,
-    } as ConverterContext;
+    };
 
     return context;
   }

@@ -86,6 +86,7 @@ const decode = (params) => {
     const minimumWidth = shouldEnforceMinimum ? cellMinWidth : 1;
     const safeWidth = Math.max(roundedWidth, minimumWidth);
 
+    // @ts-expect-error FIXME: missing required props for decode()
     const decoded = gridColTranslator.decode({
       node: { type: /** @type {string} */ (gridColTranslator.sdNodeOrKeyName), attrs: { col: safeWidth } },
     });

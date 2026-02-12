@@ -71,6 +71,7 @@ export const config = {
   sdNodeOrKeyName: SD_ATTR_KEY,
   type: NodeTranslator.translatorTypes.ATTRIBUTE,
   encode,
+  // @ts-expect-error FIXME: type of decode is incorrect
   decode,
   attributes: validXmlAttributes,
 };

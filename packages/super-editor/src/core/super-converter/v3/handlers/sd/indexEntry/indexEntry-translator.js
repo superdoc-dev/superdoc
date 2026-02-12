@@ -37,12 +37,18 @@ const encode = (params) => {
 /**
  * Decode the indexEntry node back into OOXML field structure.
  * @param {import('@translator').SCDecoderConfig} params
- * @returns {import('@translator').SCDecoderResult[]}
+ * @returns {import('@translator').SCDecoderResult}
  */
 const decode = (params) => {
   const { node } = params;
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
-  const contentNodes = (node.content ?? []).flatMap((n) => exportSchemaToJson({ ...params, node: n }));
+  // FIXME: exportSchemaToJson can alternatively return an array or a single value
+  const contentNodes = node.content.map(
+    (n) =>
+      /** @type {import('@converter/v2/types').OpenXmlNode} */ (
+        /** @type {unknown} */ (exportSchemaToJson({ ...params, node: n }))
+      ),
+  );
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
 
   return [

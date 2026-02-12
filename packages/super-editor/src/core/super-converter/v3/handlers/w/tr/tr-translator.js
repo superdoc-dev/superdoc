@@ -288,6 +288,7 @@ const decode = (params, decodedAttrs) => {
       ...params,
       node: { ...node, attrs: { ...node.attrs, tableRowProperties } },
     });
+    // @ts-expect-error FIXME: type of trPr is incorrect
     if (trPr) elements.unshift(trPr);
   }
 

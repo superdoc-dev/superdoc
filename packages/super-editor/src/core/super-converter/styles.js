@@ -25,7 +25,6 @@ export { resolveRunProperties, resolveParagraphProperties, combineRunProperties 
  * @returns {(fontName: string, docx?: Record<string, unknown>) => string}
  */
 const getToCssFontFamily = () => {
-  // @ts-expect-error - SuperConverter.toCssFontFamily exists but isn't typed
   return SuperConverter.toCssFontFamily;
 };
 
@@ -633,7 +632,6 @@ function getFontFamilyValue(attributes, docx) {
 
   if (!resolved) return null;
 
-  // @ts-expect-error - toCssFontFamily is a static method on SuperConverter
   return SuperConverter.toCssFontFamily(resolved, docx);
 }
 

@@ -14,7 +14,7 @@
  *
  * @param {string | null | undefined} instruction - The instruction text string
  * @param {InstructionToken[] | null | undefined} instructionTokens - Raw instruction tokens preserving tabs
- * @returns {Array<Object>} Array of OOXML instruction elements
+ * @returns {Array<import("@converter/v2/types").OpenXmlNode>} Array of OOXML instruction elements
  *
  * @example
  * // With tokens (preserves tabs)
@@ -32,6 +32,7 @@ export const buildInstructionElements = (instruction, instructionTokens) => {
   const tokens = Array.isArray(instructionTokens) ? instructionTokens : [];
 
   if (tokens.length > 0) {
+    // @ts-expect-error FIXME: missing "name"
     return tokens.map((token) => {
       if (token?.type === 'tab') {
         return { name: 'w:tab', elements: [] };
@@ -49,6 +50,7 @@ export const buildInstructionElements = (instruction, instructionTokens) => {
     {
       name: 'w:instrText',
       attributes: { 'xml:space': 'preserve' },
+      // @ts-expect-error FIXME: missing "name"
       elements: [{ type: 'text', text: instruction ?? '' }],
     },
   ];

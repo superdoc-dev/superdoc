@@ -121,6 +121,7 @@ const decode = (params) => {
   }
 
   const { text, marks = [] } = node;
+  // @ts-expect-error FIXME: missing "name"
   return getTextNodeForExport(text, marks, params);
 };
 

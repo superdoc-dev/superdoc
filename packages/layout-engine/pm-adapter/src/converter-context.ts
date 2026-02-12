@@ -10,6 +10,7 @@
 
 import type { ParagraphSpacing } from '@superdoc/contracts';
 import type { NumberingProperties, StylesDocumentProperties, TableInfo } from '@superdoc/style-engine/ooxml';
+import { SuperConverter } from '@superdoc/super-editor';
 
 /**
  * Paragraph properties from a table style that should be applied to
@@ -44,6 +45,8 @@ export type ConverterContext = {
    * contrast with the cell background per WCAG guidelines.
    */
   backgroundColor?: string;
+
+  numbering?: SuperConverter['numbering'];
 };
 
 /**

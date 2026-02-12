@@ -33,7 +33,7 @@ const encode = (params) => {
 /**
  * Decode the total-page-number node back into OOXML <w:fldChar> structure.
  * @param {import('@translator').SCDecoderConfig} params
- * @returns {import('@translator').SCDecoderResult[]}
+ * @returns {import('@translator').SCDecoderResult}
  */
 const decode = (params) => {
   const { node } = params;
@@ -106,6 +106,7 @@ const decode = (params) => {
     },
   ];
 
+  // @ts-expect-error FIXME: missing "name"
   return translated;
 };
 

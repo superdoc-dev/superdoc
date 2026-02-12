@@ -30,7 +30,7 @@ const encode = (params, encodedAttrs = {}) => {
  * Decode a SuperDoc paragraph node back into OOXML <w:p>.
  * @param {import('@translator').SCDecoderConfig} params
  * @param {import('@translator').DecodedAttributes} [decodedAttrs]
- * @returns {import('@translator').SCDecoderResult}
+ * @returns {import('@converter/v2/types').OpenXmlNode | undefined}
  */
 const decode = (params, decodedAttrs = {}) => {
   const translated = translateParagraphNode(params);
@@ -42,7 +42,6 @@ const decode = (params, decodedAttrs = {}) => {
   return translated;
 };
 
-/** @type {import('@translator').NodeTranslatorConfig} */
 export const config = {
   xmlName: XML_NODE_NAME,
   sdNodeOrKeyName: SD_NODE_NAME,
@@ -54,6 +53,5 @@ export const config = {
 
 /**
  * The NodeTranslator instance for the <w:p> element.
- * @type {import('@translator').NodeTranslator}
  */
 export const translator = NodeTranslator.from(config);

@@ -295,6 +295,7 @@ const decode = (params, decodedAttrs) => {
       firstRow,
     },
   });
+  // @ts-expect-error FIXME: type of element is incorrect
   if (element) elements.unshift(element);
 
   // Table properties
@@ -304,6 +305,7 @@ const decode = (params, decodedAttrs) => {
       ...params,
       node: { ...node, attrs: { ...node.attrs, tableProperties: properties } },
     });
+    // @ts-expect-error FIXME: type of element is incorrect
     if (element) elements.unshift(element);
   }
 

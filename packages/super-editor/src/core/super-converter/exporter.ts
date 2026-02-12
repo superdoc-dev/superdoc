@@ -113,6 +113,7 @@ export type ExportParams = SCDecoderConfig & {
   bodyNode?: OpenXmlNode;
   converter?: SuperConverter;
   editor: Editor;
+  isHeaderFooter?: boolean;
 };
 
 /** Key value pairs representing the node attributes from prose mirror */
@@ -125,7 +126,7 @@ type MarkType = {
   /** The mark type */
   type: string;
   /** Any attributes for this mark */
-  attrs: object;
+  attrs: Record<string, any>;
 };
 
 type Router = {
@@ -137,7 +138,9 @@ type Router = {
 
 export function exportSchemaToJson(params: ExportParams & { node: { type: 'doc' } }): [OpenXmlNode, ExportParams];
 export function exportSchemaToJson(params: ExportParams & { node: { type: 'body' } }): OpenXmlNode;
-// export function exportSchemaToJson(params: ExportParams & { node: { type: Exclude<ExportParams['node']['type'], 'doc' | 'body'> } }): OpenXmlNode | null
+export function exportSchemaToJson(
+  params: ExportParams & { node: { type: Exclude<ExportParams['node']['type'], 'doc' | 'body'> } },
+): OpenXmlNode | null;
 
 /**
  * Main export function. It expects the prose mirror data as JSON (ie: a doc node)
@@ -301,7 +304,7 @@ const generateDefaultHeaderFooter = (type, id) => {
  * @param params - The parameters object containing the heading node
  * @returns - JSON of the XML-ready paragraph node with heading style
  */
-function translateHeadingNode(params: ExportParams): OpenXmlNode {
+function translateHeadingNode(params: ExportParams): OpenXmlNode | undefined {
   const { node } = params;
   const { level = 1, ...otherAttrs } = node.attrs;
 
@@ -326,7 +329,7 @@ function translateHeadingNode(params: ExportParams): OpenXmlNode {
  * @param {string} originalIgnorable - The original mc:Ignorable string from import
  * @returns {string} Merged and deduplicated mc:Ignorable string
  */
-function mergeMcIgnorable(defaultIgnorable = '', originalIgnorable = '') {
+function mergeMcIgnorable(defaultIgnorable: string = '', originalIgnorable: string = ''): string {
   const merged = [
     ...new Set([...defaultIgnorable.split(/\s+/).filter(Boolean), ...originalIgnorable.split(/\s+/).filter(Boolean)]),
   ];
@@ -355,6 +358,7 @@ function translateDocumentNode(params: ExportParams): [OpenXmlNode, ExportParams
   };
 
   // Merge mc:Ignorable lists - combine both default and original ignorable namespaces
+  // @ts-expect-error FIXME: originalAttrs['mc:Ignorable'] could be a number
   const mergedIgnorable = mergeMcIgnorable(DEFAULT_DOCX_DEFS['mc:Ignorable'], originalAttrs['mc:Ignorable']);
   if (mergedIgnorable) {
     attributes['mc:Ignorable'] = mergedIgnorable;
@@ -375,7 +379,7 @@ function translateDocumentNode(params: ExportParams): [OpenXmlNode, ExportParams
  * @param {OpenXmlNode} node
  * @returns {OpenXmlNode} The wrapped run node
  */
-export function wrapTextInRun(nodeOrNodes, marks) {
+export function wrapTextInRun(nodeOrNodes, marks): OpenXmlNode {
   let elements = [];
   if (Array.isArray(nodeOrNodes)) elements = nodeOrNodes;
   else elements = [nodeOrNodes];
@@ -393,7 +397,7 @@ export function wrapTextInRun(nodeOrNodes, marks) {
  * @param {Object[]} marks The marks to add to the run properties
  * @returns
  */
-export function generateRunProps(marks = []) {
+export function generateRunProps(marks: object[] = []) {
   return {
     name: 'w:rPr',
     elements: marks.filter((mark) => !!Object.keys(mark).length),
@@ -402,11 +406,8 @@ export function generateRunProps(marks = []) {
 
 /**
  * Get all marks as a list of MarkType objects
- *
- * @param {MarkType[]} marks
- * @returns
  */
-export function processOutputMarks(marks = []) {
+export function processOutputMarks(marks: MarkType[] = []) {
   return marks.flatMap((mark) => {
     if (mark.type === 'textStyle') {
       return Object.entries(mark.attrs)
@@ -425,15 +426,15 @@ export function processOutputMarks(marks = []) {
  * Translate a mark to an XML ready attribute
  *
  * @param {MarkType} mark
- * @returns {Object} The XML ready mark attribute
  */
-function translateMark(mark) {
+function translateMark(mark: MarkType) {
   const xmlMark = SuperConverter.markTypes.find((m) => m.type === mark.type);
   if (!xmlMark) {
     return {};
   }
 
-  const markElement = { name: xmlMark.name, attributes: {} };
+  // FIXME: properly type markElement
+  const markElement: Record<string, any> = { name: xmlMark.name, attributes: {} };
 
   const { attrs } = mark;
   let value;
@@ -459,6 +460,7 @@ function translateMark(mark) {
 
     case 'underline': {
       const translated = wUnderlineTranslator.decode({
+        // @ts-expect-error FIXME: missing "type"
         node: {
           attrs: {
             underlineType: attrs.underlineType ?? attrs.underline ?? null,
@@ -532,6 +534,7 @@ function translateMark(mark) {
       break;
     case 'highlight': {
       const highlightValue = attrs.color ?? attrs.highlight ?? null;
+      // @ts-expect-error FIXME: missing "type"
       const translated = wHighlightTranslator.decode({ node: { attrs: { highlight: highlightValue } } });
       return translated || {};
     }
@@ -547,7 +550,9 @@ function translateMark(mark) {
 }
 
 export class DocxExporter {
-  constructor(converter) {
+  converter: SuperConverter;
+
+  constructor(converter: SuperConverter) {
     this.converter = converter;
   }
 
@@ -562,6 +567,7 @@ export class DocxExporter {
     const xmlTag = `<?xml${Object.entries(declaration)
       .map(([key, value]) => ` ${key}="${value}"`)
       .join('')}?>`;
+    // @ts-expect-error FIXME: "debug" isn't used by #generateXml
     const result = this.#generateXml(json, debug);
     const final = [xmlTag, ...result];
     return final;
@@ -613,7 +619,13 @@ export class DocxExporter {
    * };
    * // Returns: ['<w:t>', 'Textcontent', '</w:t>']
    */
-  #generateXml(node) {
+  #generateXml(node: {
+    name: string;
+    attributes?: object;
+    elements?: Array<any>;
+    type?: string;
+    text?: string;
+  }): string[] | string | null {
     if (!node) return null;
     const { name } = node;
     const { elements, attributes } = node;

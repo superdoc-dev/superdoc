@@ -38,7 +38,7 @@ const encode = (params) => {
 /**
  * Decode the lineBreak / hardBreak node back into OOXML <w:br>.
  * @param {import('@translator').SCDecoderConfig} params
- * @returns {import('@translator').SCDecoderResult[]}
+ * @returns {import('@translator').SCDecoderResult}
  */
 const decode = (params) => {
   const { node } = params;
@@ -113,6 +113,7 @@ const decode = (params) => {
     },
   ];
 
+  // @ts-expect-error FIXME: missing "name"
   return translated;
 };
 

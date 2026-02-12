@@ -55,6 +55,7 @@ import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
 import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
+import { OpenXmlNode } from '@converter/v2/types';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -150,6 +151,25 @@ export interface SaveOptions {
  * with format-specific options (e.g., format?: 'docx' | 'json' | 'xml').
  */
 export type ExportOptions = SaveOptions;
+
+type ExportDocxProps = {
+  isFinalDoc?: boolean;
+  commentsType?: string;
+  exportJsonOnly?: boolean;
+  exportXmlOnly?: boolean;
+  comments?: Comment[];
+  getUpdatedDocs?: boolean;
+  fieldsHighlightColor?: string | null;
+  compression?: 'DEFLATE' | 'STORE';
+};
+
+type ExportDocxResult<TProps extends ExportDocxProps> = TProps extends { exportJsonOnly: true }
+  ? OpenXmlNode
+  : TProps extends { exportXmlOnly: true }
+    ? string
+    : TProps extends { getUpdatedDocs: true }
+      ? Record<string, string>
+      : Blob | Buffer;
 
 /**
  * Main editor class that manages document state, extensions, and user interactions
@@ -2510,7 +2530,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Export the editor document to DOCX.
    */
-  async exportDocx({
+  async exportDocx<TProps extends ExportDocxProps>({
     isFinalDoc = false,
     commentsType = 'external',
     exportJsonOnly = false,
@@ -2519,16 +2539,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
     compression,
-  }: {
-    isFinalDoc?: boolean;
-    commentsType?: string;
-    exportJsonOnly?: boolean;
-    exportXmlOnly?: boolean;
-    comments?: Comment[];
-    getUpdatedDocs?: boolean;
-    fieldsHighlightColor?: string | null;
-    compression?: 'DEFLATE' | 'STORE';
-  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
+  }: ExportDocxProps): Promise<ExportDocxResult<TProps> | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
@@ -2561,16 +2572,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       this.#validateDocumentExport();
 
-      if (exportXmlOnly || exportJsonOnly) return documentXml;
+      if (exportXmlOnly || exportJsonOnly) {
+        // Ideally this cast wouldn't be required; this would likely be solved by
+        // https://github.com/microsoft/TypeScript/pull/61359
+        return documentXml as ExportDocxResult<TProps>;
+      }
 
-      const customXml = this.converter.schemaToXml(this.converter.convertedXml['docProps/custom.xml'].elements[0]);
-      const styles = this.converter.schemaToXml(this.converter.convertedXml['word/styles.xml'].elements[0]);
+      const customXml = this.converter.schemaToXml(this.converter.convertedXml['docProps/custom.xml']?.elements?.[0]);
+      const styles = this.converter.schemaToXml(this.converter.convertedXml['word/styles.xml']?.elements?.[0]);
       const hasCustomSettings = !!this.converter.convertedXml['word/settings.xml']?.elements?.length;
       const customSettings = hasCustomSettings
         ? this.converter.schemaToXml(this.converter.convertedXml['word/settings.xml']?.elements?.[0])
         : null;
 
-      const rels = this.converter.schemaToXml(this.converter.convertedXml['word/_rels/document.xml.rels'].elements[0]);
+      const rels = this.converter.schemaToXml(
+        this.converter.convertedXml['word/_rels/document.xml.rels']?.elements?.[0],
+      );
       const footnotesData = this.converter.convertedXml['word/footnotes.xml'];
       const footnotesXml = footnotesData?.elements?.[0] ? this.converter.schemaToXml(footnotesData.elements[0]) : null;
       const footnotesRelsData = this.converter.convertedXml['word/_rels/footnotes.xml.rels'];
@@ -2590,7 +2607,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
-      const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+      const numbering = this.converter.schemaToXml(numberingData?.elements?.[0]);
 
       // Export core.xml (contains dcterms:created timestamp)
       const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
@@ -2620,7 +2637,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       }
 
       if (preparedComments.length) {
-        const commentsXml = this.converter.schemaToXml(this.converter.convertedXml['word/comments.xml'].elements[0]);
+        const commentsXml = this.converter.schemaToXml(this.converter.convertedXml['word/comments.xml']?.elements?.[0]);
         updatedDocs['word/comments.xml'] = String(commentsXml);
 
         const commentsExtended = this.converter.convertedXml['word/commentsExtended.xml'];
@@ -2653,7 +2670,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
           true,
           updatedDocs,
         );
-        return updatedDocs;
+        // Ideally this cast wouldn't be required; this would likely be solved by
+        // https://github.com/microsoft/TypeScript/pull/61359
+        return updatedDocs as ExportDocxResult<TProps>;
       }
 
       const result = await zipper.updateZip({
@@ -3137,9 +3156,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     if (type === 'json') {
-      return this.converter.convertedXml[name].elements[0] || null;
+      return this.converter.convertedXml[name]?.elements?.[0] || null;
     }
-    return this.converter.schemaToXml(this.converter.convertedXml[name].elements[0]);
+    return this.converter.schemaToXml(this.converter.convertedXml[name]?.elements?.[0]);
   }
 
   /**

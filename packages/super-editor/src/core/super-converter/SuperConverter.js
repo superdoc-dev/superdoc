@@ -70,6 +70,18 @@ const collectRunDefaultProperties = (
 };
 
 class SuperConverter {
+  /** @type {StylesDocumentProperties} */
+  translatedLinkedStyles;
+
+  /** @type {import('./types').Numbering} */
+  numbering;
+
+  /** @type {import('./types').Numbering} */
+  translatedNumbering;
+
+  /** @type {Record<string, import('xml-js').Element>} */
+  convertedXml;
+
   static allowedElements = Object.freeze({
     'w:document': 'doc',
     'w:body': 'body',
@@ -853,6 +865,9 @@ class SuperConverter {
     return this.documentGuid;
   }
 
+  /**
+   * @return {Record<string,any>}
+   */
   getDocumentDefaultStyles() {
     const styles = this.convertedXml['word/styles.xml'];
     const styleRoot = styles?.elements?.[0];

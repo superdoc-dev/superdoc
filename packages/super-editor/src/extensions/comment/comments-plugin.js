@@ -782,7 +782,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
   return newTrackedChanges;
 };
 
-const normalizeFormatAttrsForCommentText = (attrs = {}) => {
+const normalizeFormatAttrsForCommentText = (attrs = {}, nodes) => {
   const before = Array.isArray(attrs.before) ? attrs.before : [];
   const after = Array.isArray(attrs.after) ? attrs.after : [];
   const beforeTextStyle = before.find((mark) => mark?.type === 'textStyle');
@@ -796,19 +796,33 @@ const normalizeFormatAttrsForCommentText = (attrs = {}) => {
   }
 
   const afterTextStyleIndex = after.findIndex((mark) => mark?.type === 'textStyle');
+  const wasTextStyleRemoved = nodes.some((node) => {
+    const hasTextStyleMark = node.marks.find((mark) => mark.type.name === 'textStyle');
+    return !hasTextStyleMark;
+  });
 
   if (afterTextStyleIndex === -1) {
-    return {
-      ...attrs,
-      before,
-      after: [
-        ...after,
-        {
-          type: 'textStyle',
-          attrs: { ...(beforeTextStyle.attrs || {}) },
-        },
-      ],
-    };
+    if (wasTextStyleRemoved) {
+      return {
+        ...attrs,
+        before,
+        after,
+      };
+    } else {
+      return {
+        ...attrs,
+        before,
+        after: [
+          ...after,
+          {
+            type: 'textStyle',
+            attrs: {
+              ...beforeTextStyle.attrs,
+            },
+          },
+        ],
+      };
+    }
   }
 
   const mergedAfter = [...after];
@@ -854,7 +868,7 @@ const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsert
 
   // If this is a format change, let's get the string of what changes were made
   if (trackedChangeType === TrackFormatMarkName) {
-    trackedChangeText = translateFormatChangesToEnglish(normalizeFormatAttrsForCommentText(mark.attrs));
+    trackedChangeText = translateFormatChangesToEnglish(normalizeFormatAttrsForCommentText(mark.attrs, nodes));
   }
 
   return {

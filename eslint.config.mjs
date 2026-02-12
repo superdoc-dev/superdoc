@@ -56,6 +56,7 @@ export default [
         clearInterval: 'readonly',
 
         // Browser APIs (client-side code)
+        crypto: 'readonly',
         window: 'readonly',
         document: 'readonly',
         navigator: 'readonly',
@@ -68,6 +69,7 @@ export default [
         requestAnimationFrame: 'readonly',
         URLSearchParams: 'readonly',
         TextDecoder: 'readonly',
+        TextEncoder: 'readonly',
         FileReader: 'readonly',
         DOMRect: 'readonly',
 

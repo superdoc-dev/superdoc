@@ -1,6 +1,5 @@
 import * as xmljs from 'xml-js';
 import { v4 as uuidv4 } from 'uuid';
-import crc32 from 'buffer-crc32';
 import { DocxExporter, exportSchemaToJson } from './exporter';
 import { createDocumentJson, addDefaultStylesIfMissing } from './v2/importer/docxImporter.js';
 import { deobfuscateFont, getArrayBufferFromUrl } from './helpers.js';
@@ -68,6 +67,33 @@ const collectRunDefaultProperties = (
     if (allowOverrideSize || state.kern === undefined) state.kern = kernNode.attributes['w:val'];
   }
 };
+
+/**
+ * SHA-256 hash helpers using the Web Crypto API.
+ * Works in all modern browsers and Node.js 20+.
+ */
+async function sha256Hex(bytes) {
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+}
+
+async function hashString(str) {
+  return sha256Hex(new TextEncoder().encode(str));
+}
+
+async function hashFile(fileSource) {
+  if (fileSource instanceof ArrayBuffer) {
+    return sha256Hex(fileSource);
+  } else if (fileSource instanceof Blob || fileSource instanceof File) {
+    return sha256Hex(await fileSource.arrayBuffer());
+  } else if (fileSource instanceof Uint8Array) {
+    return sha256Hex(fileSource);
+  }
+  return null;
+}
 
 class SuperConverter {
   static allowedElements = Object.freeze({
@@ -756,11 +782,10 @@ class SuperConverter {
    * Only call when both documentGuid and timestamp exist
    * @returns {string} Hash identifier in format "HASH-XXXXXXXX"
    */
-  #generateIdentifierHash() {
+  async #generateIdentifierHash() {
     const combined = `${this.documentGuid}|${this.getDocumentCreatedTimestamp()}`;
-    const buffer = Buffer.from(combined, 'utf8');
-    const hash = crc32(buffer);
-    return `HASH-${hash.toString('hex').toUpperCase()}`;
+    const hash = await hashString(combined);
+    return `HASH-${hash.substring(0, 8)}`;
   }
 
   /**
@@ -770,26 +795,15 @@ class SuperConverter {
    */
   async #generateContentHash() {
     if (!this.fileSource) {
-      // No file source available, generate a random hash (last resort)
       return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
     }
 
     try {
-      let buffer;
-
-      if (Buffer.isBuffer(this.fileSource)) {
-        buffer = this.fileSource;
-      } else if (this.fileSource instanceof ArrayBuffer) {
-        buffer = Buffer.from(this.fileSource);
-      } else if (this.fileSource instanceof Blob || this.fileSource instanceof File) {
-        const arrayBuffer = await this.fileSource.arrayBuffer();
-        buffer = Buffer.from(arrayBuffer);
-      } else {
+      const hash = await hashFile(this.fileSource);
+      if (!hash) {
         return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
       }
-
-      const hash = crc32(buffer);
-      return `HASH-${hash.toString('hex').toUpperCase()}`;
+      return `HASH-${hash.substring(0, 8)}`;
     } catch (e) {
       console.warn('[super-converter] Could not generate content hash:', e);
       return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
@@ -821,7 +835,7 @@ class SuperConverter {
 
     if (hasGuid && hasTimestamp) {
       // Both exist: use identifierHash
-      this.documentUniqueIdentifier = this.#generateIdentifierHash();
+      this.documentUniqueIdentifier = await this.#generateIdentifierHash();
     } else {
       // Missing one or both: use contentHash for stability (same file = same hash)
       // But generate missing metadata so re-exported file will have complete metadata

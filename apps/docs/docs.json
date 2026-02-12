@@ -221,7 +221,12 @@
           },
           {
             "group": "Resources",
-            "pages": ["guides/general/accessibility", "guides/general/security", "resources/license"]
+            "pages": [
+              "guides/general/accessibility",
+              "resources/telemetry",
+              "guides/general/security",
+              "resources/license"
+            ]
           }
         ]
       },

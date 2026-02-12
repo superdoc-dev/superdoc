@@ -339,8 +339,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
 
-    // License key (defaults to community license)
-    licenseKey: COMMUNITY_LICENSE_KEY,
+    // License key (resolved in #initTelemetry; undefined means "not explicitly set")
+    licenseKey: undefined,
 
     // Telemetry configuration
     telemetry: { enabled: true },
@@ -493,11 +493,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
       return;
     }
 
+    // Root-level licenseKey has a priority; fall back to deprecated telemetry.licenseKey
+    const resolvedLicenseKey =
+      licenseKey !== undefined ? licenseKey : (telemetryConfig.licenseKey ?? COMMUNITY_LICENSE_KEY);
+
     try {
       this.#telemetry = new Telemetry({
         enabled: true,
         endpoint: telemetryConfig.endpoint,
-        licenseKey: licenseKey === undefined ? COMMUNITY_LICENSE_KEY : licenseKey,
+        licenseKey: resolvedLicenseKey,
         metadata: telemetryConfig.metadata,
       });
       console.debug('[super-editor] Telemetry: enabled');

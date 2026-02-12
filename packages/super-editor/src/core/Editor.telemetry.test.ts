@@ -12,7 +12,12 @@ vi.mock('@superdoc/common', () => ({
 // Test the telemetry initialization logic in isolation
 // This mirrors the #initTelemetry method in Editor.ts
 function initTelemetry(options: {
-  telemetry?: { enabled: boolean; endpoint?: string; metadata?: Record<string, unknown> } | null;
+  telemetry?: {
+    enabled: boolean;
+    endpoint?: string;
+    metadata?: Record<string, unknown>;
+    licenseKey?: string | null;
+  } | null;
   licenseKey?: string;
 }): Telemetry | null {
   const { telemetry: telemetryConfig, licenseKey } = options;
@@ -22,11 +27,15 @@ function initTelemetry(options: {
     return null;
   }
 
+  // Root-level licenseKey has a priority; fall back to deprecated telemetry.licenseKey
+  const resolvedLicenseKey =
+    licenseKey !== undefined ? licenseKey : (telemetryConfig.licenseKey ?? COMMUNITY_LICENSE_KEY);
+
   try {
     return new Telemetry({
       enabled: true,
       endpoint: telemetryConfig.endpoint,
-      licenseKey: licenseKey === undefined ? COMMUNITY_LICENSE_KEY : licenseKey,
+      licenseKey: resolvedLicenseKey,
       metadata: telemetryConfig.metadata,
     });
   } catch {
@@ -117,6 +126,51 @@ describe('Editor Telemetry Integration', () => {
         enabled: true,
         endpoint: undefined,
         licenseKey: customKey,
+        metadata: undefined,
+      });
+    });
+  });
+
+  describe('deprecated telemetry.licenseKey', () => {
+    it('uses telemetry.licenseKey when root licenseKey is not provided', () => {
+      const result = initTelemetry({
+        telemetry: { enabled: true, licenseKey: 'deprecated-key' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(Telemetry).toHaveBeenCalledWith({
+        enabled: true,
+        endpoint: undefined,
+        licenseKey: 'deprecated-key',
+        metadata: undefined,
+      });
+    });
+
+    it('root licenseKey wins over telemetry.licenseKey', () => {
+      const result = initTelemetry({
+        telemetry: { enabled: true, licenseKey: 'deprecated-key' },
+        licenseKey: 'root-key',
+      });
+
+      expect(result).not.toBeNull();
+      expect(Telemetry).toHaveBeenCalledWith({
+        enabled: true,
+        endpoint: undefined,
+        licenseKey: 'root-key',
+        metadata: undefined,
+      });
+    });
+
+    it('falls back to COMMUNITY_LICENSE_KEY when both are absent', () => {
+      const result = initTelemetry({
+        telemetry: { enabled: true },
+      });
+
+      expect(result).not.toBeNull();
+      expect(Telemetry).toHaveBeenCalledWith({
+        enabled: true,
+        endpoint: undefined,
+        licenseKey: 'community-and-eval-agplv3',
         metadata: undefined,
       });
     });

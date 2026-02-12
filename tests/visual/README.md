@@ -43,7 +43,7 @@ pnpm report
 - `importing/` — document import edge cases
 - `structured-content/` — SDT lock modes
 
-**Rendering** (`tests/rendering/`) — Load `.docx` documents and screenshot each page. Tagged with `@rendering` for baseline filtering.
+**Rendering** (`tests/rendering/`) — Auto-discovers all `.docx` files in `test-data/rendering/` and screenshots each page. Tagged with `@rendering` for baseline filtering. Drop a file in the folder = new test.
 
 ## Adding a Test
 
@@ -60,53 +60,20 @@ test('@behavior description of what it tests', async ({ superdoc }) => {
 });
 ```
 
-### Behavior test with a document
+### Rendering test (no code needed)
+
+Rendering tests are auto-discovered from `test-data/rendering/`. Just upload a document:
 
 ```bash
-# 1. Upload your document to R2 (path mirrors the test folder)
-pnpm docs:upload ~/Downloads/my-bug-repro.docx behavior/comments-tcs
+pnpm docs:upload ~/Downloads/my-doc.docx
+# Prompts for: Linear issue ID, short description
+# → uploads as documents/rendering/sd-1679-anchor-table-overlap.docx
+
+pnpm docs:download        # pull the new file locally
+pnpm test                 # verify it loads and renders
 ```
 
-```ts
-// 2. Reference it in your test — path matches the category
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'behavior/comments-tcs/my-bug-repro.docx');
-
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
-
-test('@behavior my document test', async ({ superdoc }) => {
-  await superdoc.loadDocument(DOC_PATH);
-  await superdoc.screenshot('my-test');
-});
-```
-
-### Rendering test
-
-```bash
-# 1. Upload your document
-pnpm docs:upload ~/Downloads/my-doc.docx rendering
-```
-
-```ts
-// 2. Write the test
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
-
-test('@rendering my-doc renders correctly', async ({ superdoc }) => {
-  await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
-  await superdoc.screenshotPages('rendering/my-doc');
-});
-```
+No spec file needed — `rendering.spec.ts` auto-discovers all `.docx` files. Baselines are generated in CI from the `stable` branch (not locally — macOS font rendering differs from Linux).
 
 ## R2 Storage
 
@@ -135,9 +102,7 @@ superdoc-visual-testing/
 | Command | What it does |
 |---------|-------------|
 | `pnpm docs:download` | Download all documents from R2 → `test-data/` |
-| `pnpm docs:upload <file> <category>` | Upload a document to R2 |
-| `pnpm baseline:download` | Download baselines from R2 |
-| `pnpm baseline:upload` | Upload baselines to R2 |
+| `pnpm docs:upload <file>` | Upload a rendering test document to R2 (prompts for issue ID and description) |
 
 ## Fixture Helpers
 
@@ -182,9 +147,8 @@ test.use({
 
 ## Baselines & CI
 
-- **Structural tests** (`pnpm test:structural`) — assert page counts, no pixel comparison. Hard gate in CI.
-- **Visual tests** (`pnpm test`) — pixel-diff screenshots. Soft gate in CI — failures emit a warning and upload the HTML report for review.
-- **Baseline update**: `visual-baseline.yml` (manual trigger) builds from `stable`, generates new baselines, uploads to R2
+- **Visual tests** (`pnpm test`) — pixel-diff screenshots. Soft gate in CI — failures post a PR comment with a link to the HTML report for review.
+- **Baseline update**: `visual-baseline.yml` (manual trigger) builds from `stable` on Linux, generates new baselines, uploads to R2. Never generate baselines locally — macOS font rendering differs from CI (Linux).
 - Baselines and test documents are never committed to git
 
 ## Local Setup

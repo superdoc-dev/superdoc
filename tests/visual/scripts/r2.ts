@@ -17,13 +17,15 @@ export interface R2Client {
   listObjects(prefix: string): Promise<string[]>;
   getObject(key: string, dest: string): Promise<void>;
   putObject(key: string, filePath: string, contentType: string): Promise<void>;
+  copyObject(sourceKey: string, destKey: string): Promise<void>;
+  deleteObject(key: string): Promise<void>;
   destroy(): void;
 }
 
 // --- S3 backend (CI / explicit credentials) ---
 
 async function createS3Client(): Promise<R2Client> {
-  const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } = await import('@aws-sdk/client-s3');
+  const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, CopyObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
 
   const accessKeyId = process.env.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID!;
   const secretAccessKey = process.env.SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY!;
@@ -68,6 +70,14 @@ async function createS3Client(): Promise<R2Client> {
     async putObject(key: string, filePath: string, contentType: string) {
       const body = fs.readFileSync(filePath);
       await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: contentType }));
+    },
+
+    async copyObject(sourceKey: string, destKey: string) {
+      await s3.send(new CopyObjectCommand({ Bucket: BUCKET, CopySource: `${BUCKET}/${sourceKey}`, Key: destKey }));
+    },
+
+    async deleteObject(key: string) {
+      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
     },
 
     destroy() {
@@ -161,18 +171,42 @@ async function createWranglerClient(): Promise<R2Client> {
       ]);
     },
 
+    async copyObject(sourceKey: string, destKey: string) {
+      // Wrangler doesn't have a copy command — download then re-upload
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r2-copy-'));
+      const tmpFile = path.join(tmpDir, 'tmp');
+      try {
+        await wranglerExec(['r2', 'object', 'get', `${BUCKET}/${sourceKey}`, '--file', tmpFile, '--remote']);
+        await wranglerExec(['r2', 'object', 'put', `${BUCKET}/${destKey}`, '--file', tmpFile, '--remote']);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    },
+
+    async deleteObject(key: string) {
+      await wranglerExec(['r2', 'object', 'delete', `${BUCKET}/${key}`, '--remote']);
+    },
+
     destroy() {},
   };
 }
 
 // --- Factory ---
 
+/**
+ * Check R2 auth before running interactive prompts.
+ * Throws with a helpful message if neither S3 creds nor wrangler login are available.
+ */
+export function ensureR2Auth(): void {
+  if (process.env.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID) return;
+  // Will throw if no wrangler token is found
+  getWranglerOAuthToken();
+}
+
 export async function createR2Client(): Promise<R2Client> {
   if (process.env.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID) {
-    console.log('Using R2 S3 credentials.');
     return createS3Client();
   }
 
-  console.log('Using wrangler login for R2 access.');
   return createWranglerClient();
 }

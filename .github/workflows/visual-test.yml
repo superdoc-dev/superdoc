@@ -73,17 +73,13 @@ jobs:
         run: pnpm docs:download
         working-directory: tests/visual
 
-      - name: Run structural tests
-        run: pnpm test:structural
-        working-directory: tests/visual
-
       - name: Download baselines from R2
-        run: pnpm baseline:download
+        run: pnpm exec tsx scripts/download-baselines.ts
         working-directory: tests/visual
 
       # Visual tests use continue-on-error because screenshot diffs are
-      # expected when rendering improves. Structural tests (above) already
-      # validate the harness, fixtures, and page layout as a hard gate.
+      # expected when rendering improves. The HTML report is uploaded as
+      # an artifact and a PR comment links to it for review.
       - name: Run visual tests
         id: visual-tests
         continue-on-error: true

@@ -5,11 +5,13 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { createR2Client, DOCUMENTS_PREFIX } from './r2.js';
+import { createR2Client, ensureR2Auth, DOCUMENTS_PREFIX } from './r2.js';
 
 const TEST_DATA_DIR = path.resolve(import.meta.dirname, '../test-data');
 
 async function main() {
+  ensureR2Auth();
+
   const client = await createR2Client();
 
   console.log('Listing documents in R2...');

@@ -27,12 +27,12 @@ tests/
     search/              Search and navigation
     importing/           Document import edge cases
     structured-content/  SDT lock modes
-  rendering/             Load .docx files, screenshot each page
+  rendering/             Auto-discovers all .docx in test-data/rendering/
   fixtures/superdoc.ts   Shared fixture with helpers
 test-data/               Downloaded from R2 (gitignored), mirrors R2 documents/ prefix
 scripts/
   download-test-docs.ts  Auto-discover and download all documents from R2
-  upload-test-doc.ts     Upload a document to R2
+  upload-test-doc.ts     Upload rendering doc — prompts for issue ID and description
   download-baselines.ts  Download screenshot baselines from R2
   upload-baselines.ts    Upload screenshot baselines to R2
 ```
@@ -50,6 +50,23 @@ superdoc-visual-testing/
     rendering/doc.docx          → test-data/rendering/doc.docx
   baselines/                    → downloads to tests/ (snapshot dirs)
 ```
+
+## Adding a Rendering Test
+
+Rendering tests are auto-discovered. Just upload a document:
+
+```bash
+pnpm docs:upload ~/Downloads/my-file.docx
+# Prompts: Linear issue ID, short description
+# → uploads to documents/rendering/sd-1679-anchor-table-overlap.docx
+
+pnpm docs:download        # pull the new file locally
+pnpm test                 # verify it loads and renders
+```
+
+Baselines are generated in CI from the `stable` branch — never locally (macOS font rendering differs from Linux).
+
+**Naming convention**: `<issue-id>-<description>.docx` for regressions (e.g. `sd-1679-anchor-table-overlap.docx`). General coverage docs can skip the issue ID.
 
 ## Writing a Behavior Test
 
@@ -70,7 +87,7 @@ Place the file in the matching category folder. Use `@behavior` tag in the test 
 
 ## Loading Test Documents
 
-Test documents are stored in R2 (`documents/` prefix). Download with `pnpm docs:download`. Upload new ones with `pnpm docs:upload <file> <category>`.
+Test documents are stored in R2 (`documents/` prefix). Download with `pnpm docs:download`. Upload rendering docs with `pnpm docs:upload <file>`.
 
 ```ts
 import fs from 'node:fs';
@@ -92,35 +109,9 @@ test('@behavior my doc test', async ({ superdoc }) => {
 
 Document paths mirror the test folder structure. A test in `tests/behavior/comments-tcs/` uses documents from `test-data/behavior/comments-tcs/`.
 
-## Writing a Rendering Test
-
-```ts
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
-
-test('@rendering my-doc renders correctly', async ({ superdoc }) => {
-  await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
-  await superdoc.screenshotPages('rendering/my-doc');
-});
-```
-
-Use `@rendering` tag. Always include `assertPageCount()` — this runs as a hard gate in CI even when pixel diffs are non-blocking.
-
-## Structural Tests
-
-Lightweight tests tagged `@structural` that only assert page counts (no screenshots). These run as a **hard CI gate** — if a document renders the wrong number of pages, the PR is blocked. Add one for every rendering test document in `tests/rendering/structural.spec.ts`.
-
 ## CI Behavior
 
-In CI, the workflow runs two test passes in sequence:
-1. **Structural tests** (`pnpm test:structural`) — hard gate, blocks PR on failure
-2. **Visual tests** (`pnpm test`) — soft gate, pixel diff failures emit a warning and upload the HTML report as an artifact for review
-
-This means rendering improvements that change pixels won't block PRs, but structural regressions (wrong page count, missing content) will.
+Visual tests run as a **soft gate** in CI — pixel diff failures post a PR comment with a link to the HTML report artifact but don't block the PR. This allows rendering improvements to land without being blocked by expected pixel changes.
 
 ## Fixture Helpers
 
@@ -143,7 +134,7 @@ This means rendering improvements that change pixels won't block PRs, but struct
 | `waitForStable(ms?)` | Wait for layout to settle (default 1500ms) |
 | `screenshot(name)` | Full-page screenshot with baseline comparison |
 | `loadDocument(path)` | Load a .docx file into the editor |
-| `assertPageCount(n)` | Assert number of rendered pages (structural check) |
+| `assertPageCount(n)` | Assert number of rendered pages |
 | `screenshotPages(baseName)` | Screenshot each rendered page |
 
 ## Config Overrides

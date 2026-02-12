@@ -3,6 +3,7 @@ import copy from 'rollup-plugin-copy'
 import dts from 'vite-plugin-dts'
 import { defineConfig } from 'vite'
 import { configDefaults } from 'vitest/config'
+import { createRequire } from 'node:module';
 import { fileURLToPath, URL } from 'node:url';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { visualizer } from 'rollup-plugin-visualizer';
@@ -10,6 +11,17 @@ import vue from '@vitejs/plugin-vue'
 
 import { version } from './package.json';
 import sourceResolve from '../../vite.sourceResolve';
+
+// WORKAROUND: rolldown doesn't support trailing-slash imports (e.g. 'punycode/')
+// which Node.js treats as "resolve the package entry point". node-stdlib-browser's
+// url polyfill uses `import from 'punycode/'` and rolldown tries to open the
+// directory as a file. We resolve the actual entry point here and redirect via a
+// small plugin in optimizeDeps.rollupOptions below.
+// Track: https://github.com/nicolo-ribaudo/tc39-proposal-import-deferral/issues/3
+// TODO: Remove once rolldown supports trailing-slash imports or node-stdlib-browser drops them.
+const require = createRequire(import.meta.url);
+const stdlibRequire = createRequire(require.resolve('node-stdlib-browser/package.json'));
+const punycodeEntry = stdlibRequire.resolve('punycode/punycode.js');
 
 const visualizerConfig = {
   filename: './dist/bundle-analysis.html',
@@ -23,7 +35,7 @@ const visualizerConfig = {
 // Rolldown doesn't support regex capture groups ($1) in alias replacements,
 // so we list these explicitly instead of using /^@superdoc\/(.*)$/.
 // Update this list when adding new src/ subdirectories imported via @superdoc/.
-const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'stores', 'dev', 'icons.js'];
+const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'stores', 'dev', 'icons.js', 'index.js'];
 
 export const getAliases = (_isDev) => {
   const aliases = [
@@ -59,7 +71,7 @@ export const getAliases = (_isDev) => {
 
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode, command}) => {
+export default defineConfig(({ mode, command }) => {
   const skipDts = process.env.SUPERDOC_SKIP_DTS === '1';
   const plugins = [
     vue(),
@@ -69,7 +81,7 @@ export default defineConfig(({ mode, command}) => {
     }),
     copy({
       targets: [
-        { 
+        {
           src: 'node_modules/pdfjs-dist/web/images/*',
           dest: 'dist/images',
         },
@@ -157,13 +169,25 @@ export default defineConfig(({ mode, command}) => {
               if (id.includes('blank.docx')) return 'blank-docx';
             }
           }
-        ],        
+        ],
       }
     },
     optimizeDeps: {
       include: ['yjs', '@hocuspocus/provider'],
-      esbuildOptions: {
-        target: 'es2020',
+      // Rolldown treats trailing-slash imports as directory paths.
+      // node-stdlib-browser's url polyfill imports 'punycode/' — resolve it to the
+      // actual file since punycode is also a Node.js builtin and pnpm isolates it.
+      rollupOptions: {
+        plugins: [
+          {
+            name: 'fix-punycode-trailing-slash',
+            resolveId(source) {
+              if (source === 'punycode/' || source === 'punycode') {
+                return { id: punycodeEntry };
+              }
+            },
+          },
+        ],
       },
     },
     resolve: {

@@ -2539,7 +2539,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
     compression,
-  }: ExportDocxProps): Promise<ExportDocxResult<TProps> | undefined> {
+  }: ExportDocxProps = {}): Promise<ExportDocxResult<TProps> | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];

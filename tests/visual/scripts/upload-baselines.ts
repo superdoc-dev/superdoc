@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { createR2Client, BASELINES_PREFIX } from './r2.js';
 
 const TESTS_DIR = path.resolve(import.meta.dirname, '../tests');
@@ -26,7 +25,7 @@ function findSnapshots(dir: string): string[] {
 }
 
 async function main() {
-  const { client, bucket } = createR2Client();
+  const client = await createR2Client();
   const snapshots = findSnapshots(TESTS_DIR);
 
   if (snapshots.length === 0) {
@@ -41,21 +40,12 @@ async function main() {
   for (const file of snapshots) {
     const relative = path.relative(TESTS_DIR, file);
     const key = `${BASELINES_PREFIX}/${relative}`;
-    const body = fs.readFileSync(file);
 
     hash.update(relative);
-    hash.update(body);
+    hash.update(fs.readFileSync(file));
 
-    await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: body,
-        ContentType: 'image/png',
-      }),
-    );
-
-    console.log(`  ✓ ${relative}`);
+    await client.putObject(key, file, 'image/png');
+    console.log(`  \u2713 ${relative}`);
   }
 
   const version = hash.digest('hex').slice(0, 16);

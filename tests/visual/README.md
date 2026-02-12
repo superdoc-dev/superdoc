@@ -191,11 +191,11 @@ test.use({
 # Install deps (auto-installs Playwright browsers via postinstall)
 pnpm install
 
-# Copy .env for R2 access
-cp .env.example .env
-# Fill in: SD_VISUAL_TESTING_R2_ACCOUNT_ID, SD_VISUAL_TESTING_R2_ACCESS_KEY_ID,
-# SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY, SD_VISUAL_TESTING_R2_BUCKET
+# Authenticate with Cloudflare R2 (one-time)
+npx wrangler login
 
 # Download test documents
 pnpm docs:download
 ```
+
+R2 auth is automatic via your Cloudflare account — no `.env` needed for local dev. CI uses S3 API credentials instead (see `.env.example`).

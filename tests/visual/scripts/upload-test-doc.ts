@@ -12,7 +12,6 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { createR2Client, DOCUMENTS_PREFIX } from './r2.js';
 
 async function main() {
@@ -44,18 +43,9 @@ async function main() {
   const fileName = path.basename(resolved);
   const key = `${DOCUMENTS_PREFIX}/${category}/${fileName}`;
 
-  const { client, bucket } = createR2Client();
+  const client = await createR2Client();
 
-  const body = fs.readFileSync(resolved);
-
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    }),
-  );
+  await client.putObject(key, resolved, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 
   console.log(`Uploaded: ${key}`);
   console.log(`\nUse in your test:`);

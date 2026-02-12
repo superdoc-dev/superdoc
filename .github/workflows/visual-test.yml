@@ -87,3 +87,14 @@ jobs:
           name: visual-test-report
           path: tests/visual/playwright-report/
           retention-days: 14
+
+  validate:
+    if: always()
+    needs: [visual]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            exit 1
+          fi

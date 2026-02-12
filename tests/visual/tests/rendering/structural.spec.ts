@@ -14,14 +14,14 @@ const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
 
 test('@structural advanced-text renders 3 pages', async ({ superdoc }) => {
   const docPath = path.join(DOCS_DIR, 'advanced-text.docx');
-  test.skip(!fs.existsSync(docPath), 'Test document not available (R2)');
+  expect(fs.existsSync(docPath), `Required test document missing: ${docPath}`).toBe(true);
   await superdoc.loadDocument(docPath);
   await superdoc.assertPageCount(3);
 });
 
 test('@structural advanced-tables renders 2 pages', async ({ superdoc }) => {
   const docPath = path.join(DOCS_DIR, 'advanced-tables.docx');
-  test.skip(!fs.existsSync(docPath), 'Test document not available (R2)');
+  expect(fs.existsSync(docPath), `Required test document missing: ${docPath}`).toBe(true);
   await superdoc.loadDocument(docPath);
   await superdoc.assertPageCount(2);
 });

@@ -81,6 +81,9 @@ jobs:
         run: pnpm baseline:download
         working-directory: tests/visual
 
+      # Visual tests use continue-on-error because screenshot diffs are
+      # expected when rendering improves. Structural tests (above) already
+      # validate the harness, fixtures, and page layout as a hard gate.
       - name: Run visual tests
         id: visual-tests
         continue-on-error: true

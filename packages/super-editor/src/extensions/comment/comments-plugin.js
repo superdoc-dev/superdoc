@@ -877,11 +877,12 @@ const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes
       node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName),
     );
 
-    const fallbackNodes = [];
-    if (!hasInsertNode && nodes?.length) fallbackNodes.push(...nodes);
-    if (!hasDeleteNode && deletionNodes?.length) fallbackNodes.push(...deletionNodes);
-
-    // Remove duplicates by comparing node identity
+    const fallbackNodes = [
+      ...(!hasInsertNode && nodes?.length ? nodes : []),
+      ...(!hasDeleteNode && deletionNodes?.length ? deletionNodes : []),
+    ];
+    // safety net for identity dedupe
+    // work is done above
     nodesToUse = Array.from(new Set([...nodesWithMark, ...fallbackNodes]));
   } else {
     // For non-replacements, use nodes found in document or fall back to step nodes

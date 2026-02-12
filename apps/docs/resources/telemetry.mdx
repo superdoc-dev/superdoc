@@ -27,7 +27,7 @@ SuperDoc does **not** collect:
 ## How it works
 
 1. You open or import a document
-2. SuperDoc generates a **document identifier** — a CRC32 hash derived from the file's metadata (not its content)
+2. SuperDoc generates a **document identifier** — a hash derived from the file's metadata (not its content)
 3. A single `POST` request fires to the telemetry endpoint
 4. If the request fails (network error, blocked by firewall), it fails silently
 
@@ -130,10 +130,10 @@ SuperDoc uses two strategies depending on what metadata the file contains:
 
 **1. Metadata hash — file already has a GUID and timestamp**
 
-DOCX files created by Microsoft Word (and other tools) typically contain a unique GUID and a creation timestamp in their internal metadata (`docProps/` and `word/settings.xml`). When both are present, SuperDoc hashes them together using CRC32:
+DOCX files created by Microsoft Word (and other tools) typically contain a unique GUID and a creation timestamp in their internal metadata (`docProps/` and `word/settings.xml`). When both are present, SuperDoc hashes them together:
 
 ```
-documentId = CRC32(GUID | creationTimestamp)   →   "HASH-A1B2C3D4"
+documentId = hash(GUID | creationTimestamp)   →   "HASH-A1B2C3D4"
 ```
 
 This is the most stable strategy. The same file always produces the same identifier regardless of content edits, because the hash is derived from metadata, not content.
@@ -142,7 +142,7 @@ This is the most stable strategy. The same file always produces the same identif
 
 Some tools produce DOCX files without a GUID or timestamp. When either is missing, SuperDoc does two things:
 
-1. **For the current open**: generates a content hash (CRC32 of the raw file bytes) so the same file still produces a consistent identifier
+1. **For the current open**: generates a content hash of the raw file bytes so the same file still produces a consistent identifier
 2. **For future opens**: generates the missing GUID and/or timestamp and embeds them into the document's metadata
 
 The generated metadata is saved when you export. On the next import, the file now has both a GUID and timestamp, so SuperDoc switches to the stable metadata hash automatically.

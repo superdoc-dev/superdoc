@@ -778,7 +778,7 @@ class SuperConverter {
 
   /**
    * Generate identifier hash from documentGuid and dcterms:created
-   * Uses CRC32 of the combined string for a compact identifier
+   * Uses SHA-256 of the combined string for a compact identifier
    * Only call when both documentGuid and timestamp exist
    * @returns {string} Hash identifier in format "HASH-XXXXXXXX"
    */
@@ -790,7 +790,7 @@ class SuperConverter {
 
   /**
    * Generate content hash from file bytes
-   * Uses CRC32 of the raw file content for a stable identifier
+   * Uses SHA-256 of the raw file content for a stable identifier
    * @returns {Promise<string>} Hash identifier in format "HASH-XXXXXXXX"
    */
   async #generateContentHash() {

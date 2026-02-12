@@ -13,11 +13,11 @@ export const DocCounter = ({ height = '350px' }) => {
   useEffect(() => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/superdoc/style.css';
+    link.href = 'https://unpkg.com/superdoc@latest/dist/style.css';
     document.head.appendChild(link);
 
     const script = document.createElement('script');
-    script.src = '/superdoc/superdoc.umd.js';
+    script.src = 'https://unpkg.com/superdoc@latest/dist/superdoc.umd.js';
     script.onload = () => setTimeout(() => initializeSuperdoc(), 100);
     document.body.appendChild(script);
 

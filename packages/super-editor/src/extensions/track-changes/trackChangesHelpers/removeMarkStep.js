@@ -42,22 +42,32 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
           before = [...formatChangeMark.attrs.before];
         } else {
           after = [...formatChangeMark.attrs.after];
-          before = [
-            ...formatChangeMark.attrs.before,
-            {
-              type: step.mark.type.name,
-              attrs: { ...step.mark.attrs },
-            },
-          ];
+          let foundBefore = formatChangeMark.attrs.before.find((mark) => mark.type === step.mark.type.name);
+          if (foundBefore) {
+            before = [...formatChangeMark.attrs.before];
+          } else {
+            before = [
+              ...formatChangeMark.attrs.before,
+              {
+                type: step.mark.type.name,
+                attrs: { ...step.mark.attrs },
+              },
+            ];
+          }
         }
       } else {
         after = [];
-        before = [
-          {
-            type: step.mark.type.name,
-            attrs: { ...step.mark.attrs },
-          },
-        ];
+        let existingMark = node.marks.find((mark) => mark.type === step.mark.type);
+        if (existingMark) {
+          before = [
+            {
+              type: step.mark.type.name,
+              attrs: { ...existingMark.attrs },
+            },
+          ];
+        } else {
+          before = [];
+        }
       }
 
       if (after.length || before.length) {

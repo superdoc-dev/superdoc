@@ -10,8 +10,12 @@ export const attrsExactlyMatch = (left = {}, right = {}) => {
   return objectIncludes(normalizedLeft, normalizedRight) && objectIncludes(normalizedRight, normalizedLeft);
 };
 
-export const markSnapshotMatchesStepMark = (snapshot, stepMark, exact = true) => {
-  if (!snapshot || !stepMark || snapshot.type !== stepMark.type.name) {
+const getTypeName = (markLike) => {
+  return markLike?.type?.name ?? markLike?.type;
+};
+
+const marksMatch = (left, right, exact = true) => {
+  if (!left || !right || getTypeName(left) !== getTypeName(right)) {
     return false;
   }
 
@@ -19,12 +23,16 @@ export const markSnapshotMatchesStepMark = (snapshot, stepMark, exact = true) =>
     return true;
   }
 
-  return attrsExactlyMatch(snapshot.attrs || {}, stepMark.attrs || {});
+  return attrsExactlyMatch(left.attrs || {}, right.attrs || {});
+};
+
+export const markSnapshotMatchesStepMark = (snapshot, stepMark, exact = true) => {
+  return marksMatch(snapshot, stepMark, exact);
 };
 
 export const hasMatchingMark = (marks, stepMark) => {
   return marks.some((mark) => {
-    return mark.type === stepMark.type && attrsExactlyMatch(mark.attrs || {}, stepMark.attrs || {});
+    return marksMatch(mark, stepMark, true);
   });
 };
 
@@ -34,15 +42,7 @@ export const upsertMarkSnapshotByType = (snapshots, incoming) => {
 };
 
 const markMatchesSnapshot = (mark, snapshot, exact = true) => {
-  if (!mark || !snapshot || mark.type.name !== snapshot.type) {
-    return false;
-  }
-
-  if (!exact) {
-    return true;
-  }
-
-  return attrsExactlyMatch(mark.attrs || {}, snapshot.attrs || {});
+  return marksMatch(mark, snapshot, exact);
 };
 
 const markAttrsIncludeSnapshotAttrs = (mark, snapshot) => {

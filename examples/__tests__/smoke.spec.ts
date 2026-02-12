@@ -9,7 +9,7 @@ test('example loads without errors', async ({ page }) => {
   });
 
   // Block telemetry requests during tests
-  await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
+  // await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
 
   await page.goto('/');
   await expect(page.locator('body')).toBeVisible();

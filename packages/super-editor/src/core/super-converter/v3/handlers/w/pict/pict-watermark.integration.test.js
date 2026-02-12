@@ -169,9 +169,8 @@ describe('VML Watermark Integration Tests', () => {
       const exportedXml = translateImageWatermark({ node: programmaticNode });
 
       // Verify the structure is created correctly
-      expect(exportedXml.name).toBe('w:p');
-      const pict = exportedXml.elements[0].elements.find((el) => el.name === 'w:pict');
-      expect(pict).toBeDefined();
+      expect(exportedXml.name).toBe('w:pict');
+      const pict = exportedXml;
 
       const shape = pict.elements.find((el) => el.name === 'v:shape');
       expect(shape).toBeDefined();
@@ -369,12 +368,8 @@ describe('VML Watermark Integration Tests', () => {
       const exportedXml = translateTextWatermark({ node: importedNode });
 
       // Verify exported structure
-      expect(exportedXml.name).toBe('w:p');
-      expect(exportedXml.elements).toHaveLength(1);
-      expect(exportedXml.elements[0].name).toBe('w:r');
-
-      const pict = exportedXml.elements[0].elements[0];
-      expect(pict.name).toBe('w:pict');
+      expect(exportedXml.name).toBe('w:pict');
+      const pict = exportedXml;
 
       const shape = pict.elements.find((el) => el.name === 'v:shape');
       expect(shape).toBeDefined();
@@ -450,9 +445,8 @@ describe('VML Watermark Integration Tests', () => {
       const exportedXml = translateTextWatermark({ node: programmaticNode });
 
       // Verify the structure is created correctly
-      expect(exportedXml.name).toBe('w:p');
-      const pict = exportedXml.elements[0].elements[0];
-      expect(pict).toBeDefined();
+      expect(exportedXml.name).toBe('w:pict');
+      const pict = exportedXml;
 
       const shape = pict.elements.find((el) => el.name === 'v:shape');
       expect(shape).toBeDefined();

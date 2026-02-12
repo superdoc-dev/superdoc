@@ -35,30 +35,20 @@ describe('translateShapeContainer', () => {
     const result = translateShapeContainer(params);
 
     expect(result).toEqual({
-      name: 'w:p',
+      name: 'w:pict',
+      attributes: {
+        'w14:anchorId': '12345678',
+      },
       elements: [
         {
-          name: 'w:r',
-          elements: [
-            {
-              name: 'w:pict',
-              attributes: {
-                'w14:anchorId': '12345678',
-              },
-              elements: [
-                {
-                  name: 'v:shape',
-                  attributes: {
-                    id: '_x0000_s1026',
-                    type: '#_x0000_t202',
-                    style: 'position:absolute',
-                    fillcolor: '#4472C4',
-                  },
-                  elements: mockElements,
-                },
-              ],
-            },
-          ],
+          name: 'v:shape',
+          attributes: {
+            id: '_x0000_s1026',
+            type: '#_x0000_t202',
+            style: 'position:absolute',
+            fillcolor: '#4472C4',
+          },
+          elements: mockElements,
         },
       ],
     });
@@ -81,7 +71,9 @@ describe('translateShapeContainer', () => {
     };
 
     const result = translateShapeContainer(params);
-    const shape = result.elements[0].elements[0].elements[0];
+    expect(result.name).toBe('w:pict');
+    const shape = result.elements[0];
+    expect(shape.name).toBe('v:shape');
 
     expect(shape.elements).toContainEqual({
       name: 'w10:wrap',
@@ -105,7 +97,9 @@ describe('translateShapeContainer', () => {
     };
 
     const result = translateShapeContainer(params);
-    const shape = result.elements[0].elements[0].elements[0];
+    expect(result.name).toBe('w:pict');
+    const shape = result.elements[0];
+    expect(shape.name).toBe('v:shape');
 
     expect(shape.elements).not.toContainEqual(expect.objectContaining({ name: 'w10:wrap' }));
   });

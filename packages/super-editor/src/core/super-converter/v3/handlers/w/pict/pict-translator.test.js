@@ -1,7 +1,7 @@
 import { beforeEach, it, expect } from 'vitest';
 import { translator } from './pict-translator.js';
 
-import { createPict, createRect, createShape, createGroup, createTextbox } from '@tests/helpers/pict-helpers';
+import { createPict, createRect, createShape } from '@tests/helpers/pict-helpers';
 import { createRels } from '@tests/helpers/rels-helpers';
 
 describe('w:pict translator', () => {

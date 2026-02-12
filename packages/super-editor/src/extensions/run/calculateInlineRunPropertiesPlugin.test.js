@@ -34,6 +34,19 @@ const makeSchema = () =>
           paragraphProperties: { default: null },
         },
       },
+      table: {
+        group: 'block',
+        content: 'tableRow+',
+        attrs: {
+          tableProperties: { default: null },
+        },
+      },
+      tableRow: {
+        content: 'tableCell+',
+      },
+      tableCell: {
+        content: 'block+',
+      },
       run: {
         inline: true,
         group: 'inline',
@@ -200,6 +213,59 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(runNode?.attrs.runProperties).toEqual({ italic: true });
     expect(getResolvedParagraphPropertiesMock).toHaveBeenCalled();
     expect(calculateResolvedParagraphPropertiesMock).not.toHaveBeenCalled();
+  });
+
+  it('passes null tableInfo to resolveRunProperties for runs outside tables', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, null, [], 'Hello');
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    state.applyTransaction(tr);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalled();
+    expect(resolveRunPropertiesMock.mock.calls[0][3]).toBeNull();
+  });
+
+  it('passes tableInfo to resolveRunProperties for runs inside table cells', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.node('table', { tableProperties: { tableStyleId: 'TableGrid' } }, [
+        schema.node('tableRow', null, [
+          schema.node('tableCell', null, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('A1'))]),
+          ]),
+          schema.node('tableCell', null, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('A2'))]),
+          ]),
+        ]),
+        schema.node('tableRow', null, [
+          schema.node('tableCell', null, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('B1'))]),
+          ]),
+          schema.node('tableCell', null, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('B2'))]),
+          ]),
+        ]),
+      ]),
+    ]);
+    const state = createState(schema, doc);
+    const runs = runPositions(state.doc);
+    const targetRunPos = runs[runs.length - 1];
+    const { from, to } = runTextRangeAtPos(targetRunPos, 0, 2);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    state.applyTransaction(tr);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalled();
+    expect(resolveRunPropertiesMock.mock.calls[0][3]).toEqual({
+      tableProperties: { tableStyleId: 'TableGrid' },
+      rowIndex: 1,
+      cellIndex: 1,
+      numCells: 2,
+      numRows: 2,
+    });
   });
 
   it('keeps paragraph runProperties in sync with the first run', () => {

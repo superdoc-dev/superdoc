@@ -26,6 +26,7 @@ function init(file?: File) {
   const config: any = {
     selector: '#editor',
     useLayoutEngine: layout,
+    telemetry: { enabled: false },
     onReady: ({ superdoc }: any) => {
       (window as any).superdoc = superdoc;
       superdoc.activeEditor.on('create', ({ editor }: any) => {

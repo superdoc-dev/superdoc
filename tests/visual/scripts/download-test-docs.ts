@@ -20,6 +20,7 @@ async function main() {
     process.exit(0);
   }
 
+  const quiet = !!process.env.CI;
   console.log(`Found ${keys.length} documents.`);
 
   const toDownload: { key: string; relative: string; dest: string }[] = [];
@@ -48,14 +49,14 @@ async function main() {
       batch.map(async ({ key, relative, dest }) => {
         await client.getObject(key, dest);
         downloaded++;
-        console.log(`  \u2713 ${relative}`);
+        if (!quiet) console.log(`  ✓ ${relative}`);
       }),
     );
 
     for (let j = 0; j < results.length; j++) {
       if (results[j].status === 'rejected') {
         failed++;
-        console.error(`  \u2717 ${batch[j].relative}: ${(results[j] as PromiseRejectedResult).reason?.message}`);
+        if (!quiet) console.error(`  ✗ ${batch[j].relative}: ${(results[j] as PromiseRejectedResult).reason?.message}`);
       }
     }
   }

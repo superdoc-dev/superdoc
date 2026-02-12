@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
-    "test:structural": "playwright test --grep @structural",
+    "test:structural": "playwright test --grep @structural --project=chromium",
     "test:update": "playwright test --update-snapshots",
     "test:baseline": "playwright test --update-snapshots --grep @rendering",
     "baseline:upload": "tsx scripts/upload-baselines.ts",

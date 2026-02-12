@@ -77,7 +77,8 @@ const App = () => {
       selector: '#superdoc',
       document: { data: docFileRef.current },
       toolbar: 'superdoc-toolbar',
-      licenseKey: 'community-and-eval-agplv3',
+      licenseKey: 'public_license_key_superdocinternal_ad7035140c4b',
+      telemetry: { enabled: false },
       modules: {
         comments: {},
         toolbar: {

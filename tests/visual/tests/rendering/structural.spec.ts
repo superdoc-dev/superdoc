@@ -10,7 +10,10 @@ const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
 // Structural tests — lightweight assertions (page counts, text presence)
 // that catch real regressions without pixel comparison flakiness.
 // These run as a hard gate in CI; pixel-diff tests run separately as review.
+// Page counts vary across browsers due to font metrics — run on chromium only.
 // ---------------------------------------------------------------------------
+
+test.skip(({ browserName }) => browserName !== 'chromium', 'Structural tests run on chromium only');
 
 test('@structural advanced-text renders 3 pages', async ({ superdoc }) => {
   const docPath = path.join(DOCS_DIR, 'advanced-text.docx');

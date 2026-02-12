@@ -7,12 +7,10 @@ const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
 
 test('@rendering basic document renders correctly', async ({ superdoc }) => {
   await superdoc.loadDocument(path.join(DOCS_DIR, 'advanced-text.docx'));
-  await superdoc.assertPageCount(3);
   await superdoc.screenshotPages('rendering/advanced-text');
 });
 
 test('@rendering table document renders correctly', async ({ superdoc }) => {
   await superdoc.loadDocument(path.join(DOCS_DIR, 'advanced-tables.docx'));
-  await superdoc.assertPageCount(2);
   await superdoc.screenshotPages('rendering/advanced-tables');
 });

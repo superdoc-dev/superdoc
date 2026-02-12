@@ -322,6 +322,98 @@ describe('DOM-based click-to-position mapping', () => {
     expect(result === 5 || result === 15).toBe(true);
   });
 
+  describe('table fragment fallback', () => {
+    it('returns null for table fragments without a line in the hit chain', () => {
+      // When clicking on a table fragment (e.g., cell padding or border) and
+      // elementsFromPoint doesn't include a line element, clickToPositionDom
+      // should return null to defer to the geometry fallback (hitTestTableFragment)
+      // which correctly handles column resolution.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table1">
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+                <span data-pm-start="5" data-pm-end="15">Cell 1 text</span>
+              </div>
+            </div>
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="20" data-pm-end="30">
+                <span data-pm-start="20" data-pm-end="30">Cell 2 text</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // In a real browser, clicking on cell padding/borders returns the table fragment
+      // in elementsFromPoint but NOT the line (due to overflow:hidden clipping).
+      // JSDOM doesn't have elementsFromPoint, so we polyfill it to simulate
+      // the real browser behavior where the hit chain includes the table fragment
+      // but not the line elements.
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+
+      const originalElementsFromPoint = (document as any).elementsFromPoint;
+      (document as any).elementsFromPoint = () => {
+        // Simulate hit chain: table fragment → page → container (no line element)
+        return [tableFragment, page, container, document.body, document.documentElement];
+      };
+
+      try {
+        const rect = tableFragment.getBoundingClientRect();
+        const result = clickToPositionDom(container, rect.left + 1, rect.top + 1);
+        expect(result).toBeNull();
+      } finally {
+        if (originalElementsFromPoint) {
+          (document as any).elementsFromPoint = originalElementsFromPoint;
+        } else {
+          delete (document as any).elementsFromPoint;
+        }
+      }
+    });
+
+    it('returns position when table fragment line IS in the hit chain', () => {
+      // When a line element IS directly hit (e.g., clicking directly on text),
+      // the function should use the hitChainLine path and return a valid position.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table1">
+            <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+              <span data-pm-start="5" data-pm-end="15">Cell text</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const span = container.querySelector('span') as HTMLElement;
+
+      // Polyfill elementsFromPoint to simulate a real browser hit chain that
+      // includes the line element (clicking directly on text inside a table cell).
+      const originalElementsFromPoint = (document as any).elementsFromPoint;
+      (document as any).elementsFromPoint = () => {
+        return [span, line, tableFragment, page, container, document.body, document.documentElement];
+      };
+
+      try {
+        const lineRect = line.getBoundingClientRect();
+        const result = clickToPositionDom(container, lineRect.left + 5, lineRect.top + 5);
+
+        // Should return a valid position from the line via the hitChainLine path
+        expect(result).toBeGreaterThanOrEqual(5);
+        expect(result).toBeLessThanOrEqual(15);
+      } finally {
+        if (originalElementsFromPoint) {
+          (document as any).elementsFromPoint = originalElementsFromPoint;
+        } else {
+          delete (document as any).elementsFromPoint;
+        }
+      }
+    });
+  });
+
   describe('inline SDT wrapper exclusion', () => {
     it('excludes inline SDT wrapper elements from click-to-position mapping', () => {
       // Inline SDT wrappers have PM positions for selection highlighting but should not

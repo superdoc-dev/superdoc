@@ -41,7 +41,7 @@ import {
   applySdtMetadataToParagraphBlocks,
   applySdtMetadataToTableBlock,
 } from '../sdt/index.js';
-import { TableProperties } from '@superdoc/style-engine/ooxml';
+import { TableProperties, resolveTableCellProperties } from '@superdoc/style-engine/ooxml';
 
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
@@ -185,7 +185,17 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Table cells can contain paragraphs, images/drawings, structured content blocks, and nested tables.
   const blocks: (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[] = [];
 
+  // Resolve table cell properties from the style cascade (wholeTable → bands → conditional → inline)
+  const inlineTcProps = cellNode.attrs?.tableCellProperties as Record<string, unknown> | undefined;
+  const tableInfo = tableProperties ? { tableProperties, rowIndex, cellIndex, numCells, numRows } : undefined;
+  const resolvedTcProps = resolveTableCellProperties(
+    inlineTcProps as Parameters<typeof resolveTableCellProperties>[0],
+    tableInfo,
+    context.converterContext?.translatedLinkedStyles,
+  );
+
   // Extract cell background color for auto text color resolution
+  // Priority: inline background attr > resolved style shading
   const cellBackground = cellNode.attrs?.background as { color?: string } | undefined;
   let cellBackgroundColor: string | undefined;
   if (cellBackground && typeof cellBackground.color === 'string') {
@@ -196,6 +206,13 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       if (/^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(normalized)) {
         cellBackgroundColor = normalized;
       }
+    }
+  }
+  // Fall back to resolved style shading if no inline background
+  if (!cellBackgroundColor && resolvedTcProps?.shading?.fill) {
+    const fill = resolvedTcProps.shading.fill;
+    if (fill !== 'auto') {
+      cellBackgroundColor = fill.startsWith('#') ? fill : `#${fill}`;
     }
   }
 
@@ -416,6 +433,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (background && typeof background.color === 'string') {
     const bgColor = background.color;
     cellAttrs.background = bgColor.startsWith('#') ? bgColor : `#${bgColor}`;
+  } else if (cellBackgroundColor) {
+    // Use resolved style background when no inline background is set
+    cellAttrs.background = cellBackgroundColor;
   }
 
   const tableCellProperties = cellNode.attrs?.tableCellProperties;

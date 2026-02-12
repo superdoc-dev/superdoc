@@ -68,7 +68,13 @@ import { DOM_CLASS_NAMES } from './constants.js';
 import { sanitizeHref, encodeTooltip } from '@superdoc/url-validation';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { assertPmPositions, assertFragmentPmPositions } from './pm-position-validation.js';
-import { applySdtContainerStyling, getSdtContainerKey, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
+import {
+  applySdtContainerStyling,
+  getSdtContainerKey,
+  shouldRebuildForSdtBoundary,
+  type SdtBoundaryOptions,
+} from './utils/sdt-helpers.js';
+import { SdtGroupedHover } from './utils/sdt-hover.js';
 import { generateRulerDefinitionFromPx, createRulerElement, ensureRulerStyles } from './ruler/index.js';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import {
@@ -817,6 +823,7 @@ export class DomPainter {
   private onScrollHandler: ((e: Event) => void) | null = null;
   private onWindowScrollHandler: ((e: Event) => void) | null = null;
   private onResizeHandler: ((e: Event) => void) | null = null;
+  private sdtHover = new SdtGroupedHover();
   /** The currently active/selected comment ID for highlighting */
   private activeCommentId: string | null = null;
 
@@ -1176,6 +1183,8 @@ export class DomPainter {
       };
       win.addEventListener('resize', this.onResizeHandler);
     }
+
+    this.sdtHover.bind(mount);
   }
 
   private computeVirtualMetrics(): void {
@@ -1356,6 +1365,8 @@ export class DomPainter {
     // Clear changed blocks now that current visible pages are patched
     this.changedBlocks.clear();
     this.processedLayoutVersion = this.layoutVersion;
+
+    this.sdtHover.reapply();
   }
 
   private updateSpacers(start: number, end: number): void {
@@ -1720,6 +1731,7 @@ export class DomPainter {
     this.onScrollHandler = null;
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;
+    this.sdtHover.destroy();
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
   }
@@ -1794,10 +1806,20 @@ export class DomPainter {
       if (current) {
         existing.delete(key);
         const sdtBoundaryMismatch = shouldRebuildForSdtBoundary(current.element, sdtBoundary);
+        // Verify the position mapping is reliable: if mapping the old pmStart doesn't produce
+        // the expected new pmStart, the mapping is degenerate (e.g. full-document paste) and
+        // we must rebuild to get correct span position attributes.
+        const newPmStart = (fragment as { pmStart?: number }).pmStart;
+        const mappingUnreliable =
+          this.currentMapping != null &&
+          newPmStart != null &&
+          current.element.dataset.pmStart != null &&
+          this.currentMapping.map(Number(current.element.dataset.pmStart)) !== newPmStart;
         const needsRebuild =
           this.changedBlocks.has(fragment.blockId) ||
           current.signature !== fragmentSignature(fragment, this.blockLookup) ||
-          sdtBoundaryMismatch;
+          sdtBoundaryMismatch ||
+          mappingUnreliable;
 
         if (needsRebuild) {
           const replacement = this.renderFragment(fragment, contextBase, sdtBoundary);
@@ -4628,6 +4650,57 @@ export class DomPainter {
         return undefined;
       };
 
+      // Inline SDT wrapping for geometry path (absolute-positioned elements).
+      // Same concept as the run-based path's SDT wrapper, but here elements use
+      // position:absolute so the wrapper itself must be absolutely positioned to
+      // span from the leftmost to rightmost child element.
+      let geoSdtWrapper: HTMLElement | null = null;
+      let geoSdtId: string | null = null;
+      let geoSdtWrapperLeft = 0;
+      let geoSdtMaxRight = 0;
+
+      const closeGeoSdtWrapper = () => {
+        if (geoSdtWrapper) {
+          geoSdtWrapper.style.width = `${geoSdtMaxRight - geoSdtWrapperLeft}px`;
+          el.appendChild(geoSdtWrapper);
+          geoSdtWrapper = null;
+          geoSdtId = null;
+        }
+      };
+
+      /**
+       * Append an element to the line, routing through an inline SDT wrapper
+       * when the run has inline structuredContent metadata.
+       */
+      const appendToLineGeo = (elem: HTMLElement, runForSdt: Run, elemLeftPx: number, elemWidthPx: number) => {
+        const resolved = this.resolveRunSdtId(runForSdt);
+        const thisRunSdtId = resolved?.sdtId ?? null;
+
+        if (thisRunSdtId !== geoSdtId) {
+          closeGeoSdtWrapper();
+        }
+
+        if (resolved && this.doc) {
+          if (!geoSdtWrapper) {
+            geoSdtWrapper = this.createInlineSdtWrapper(resolved.sdt);
+            geoSdtId = thisRunSdtId;
+            geoSdtWrapperLeft = elemLeftPx;
+            geoSdtMaxRight = elemLeftPx;
+            geoSdtWrapper.style.position = 'absolute';
+            geoSdtWrapper.style.left = `${elemLeftPx}px`;
+            geoSdtWrapper.style.top = '0px';
+            geoSdtWrapper.style.height = `${line.lineHeight}px`;
+          }
+          // Adjust element left to be relative to wrapper
+          elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
+          geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
+          this.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
+          geoSdtWrapper.appendChild(elem);
+        } else {
+          el.appendChild(elem);
+        }
+      };
+
       for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
         const baseRun = block.runs[runIndex];
         if (!baseRun) continue;
@@ -4681,7 +4754,7 @@ export class DomPainter {
           if (baseRun.pmStart != null) tabEl.dataset.pmStart = String(baseRun.pmStart);
           if (baseRun.pmEnd != null) tabEl.dataset.pmEnd = String(baseRun.pmEnd);
           tabEl.dataset.layoutEpoch = String(this.layoutEpoch);
-          el.appendChild(tabEl);
+          appendToLineGeo(tabEl, baseRun, tabStartX + indentOffset, actualTabWidth);
 
           // Update cumulativeX to where the next content begins
           // This ensures proper positioning for subsequent elements
@@ -4705,7 +4778,7 @@ export class DomPainter {
               (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : elem.offsetWidth) ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
-            el.appendChild(elem);
+            appendToLineGeo(elem, baseRun, segX, segWidth);
             cumulativeX = baseSegX + segWidth;
           }
           continue;
@@ -4736,7 +4809,7 @@ export class DomPainter {
             const segWidth = (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : 0) ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
-            el.appendChild(elem);
+            appendToLineGeo(elem, baseRun, segX, segWidth);
             cumulativeX = baseSegX + segWidth;
           }
           continue;
@@ -4783,7 +4856,7 @@ export class DomPainter {
 
             elem.style.position = 'absolute';
             elem.style.left = `${xPos}px`;
-            el.appendChild(elem);
+            appendToLineGeo(elem, segmentRun, xPos, segment.width ?? 0);
 
             // Update cumulative X for next segment by measuring this element's width
             // This applies to ALL segments (both with and without explicit X)
@@ -4800,9 +4873,15 @@ export class DomPainter {
               this.doc.body.removeChild(measureEl);
             }
             cumulativeX = baseX + width;
+            // Update SDT wrapper width if actual measured width differs from initial estimate
+            if (geoSdtWrapper) {
+              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + width);
+            }
           }
         });
       }
+      // Close any remaining SDT wrapper at end of geometry rendering
+      closeGeoSdtWrapper();
     } else {
       // Use run-based rendering for normal text flow
       // Track current inline SDT wrapper to group adjacent runs with the same SDT id
@@ -4819,9 +4898,8 @@ export class DomPainter {
 
       runsForLine.forEach((run) => {
         // Check if this run has inline structuredContent SDT
-        const runSdt = (run as TextRun).sdt;
-        const isInlineSdt = runSdt?.type === 'structuredContent' && runSdt?.scope === 'inline';
-        const runSdtId = isInlineSdt && runSdt?.id ? String(runSdt.id) : null;
+        const resolved = this.resolveRunSdtId(run);
+        const runSdtId = resolved?.sdtId ?? null;
 
         // If SDT context changed, close the current wrapper
         if (runSdtId !== currentInlineSdtId) {
@@ -4829,6 +4907,7 @@ export class DomPainter {
         }
 
         // Special handling for TabRuns (e.g., signature lines with underlines)
+        let elem: HTMLElement | null = null;
         if (run.kind === 'tab') {
           const tabEl = this.doc!.createElement('span');
           tabEl.classList.add('superdoc-tab');
@@ -4867,46 +4946,22 @@ export class DomPainter {
           if (run.pmEnd != null) tabEl.dataset.pmEnd = String(run.pmEnd);
           tabEl.dataset.layoutEpoch = String(this.layoutEpoch);
 
-          el.appendChild(tabEl);
-          return;
+          elem = tabEl;
+        } else {
+          elem = this.renderRun(run, context, trackedConfig);
         }
-
-        const elem = this.renderRun(run, context, trackedConfig);
         if (elem) {
           if (styleId) {
             elem.setAttribute('styleid', styleId);
           }
 
           // If this run has inline SDT, add to or create wrapper
-          if (isInlineSdt && runSdtId && this.doc) {
+          if (resolved && this.doc) {
             if (!currentInlineSdtWrapper) {
-              // Create new wrapper for this SDT group
-              currentInlineSdtWrapper = this.doc.createElement('span');
-              currentInlineSdtWrapper.className = DOM_CLASS_NAMES.INLINE_SDT_WRAPPER;
-              currentInlineSdtWrapper.dataset.layoutEpoch = String(this.layoutEpoch);
+              currentInlineSdtWrapper = this.createInlineSdtWrapper(resolved.sdt);
               currentInlineSdtId = runSdtId;
-              // Apply SDT metadata to wrapper
-              this.applySdtDataset(currentInlineSdtWrapper, runSdt);
-              // Add label element for hover display
-              const alias = (runSdt as { alias?: string })?.alias || 'Inline content';
-              const labelEl = this.doc.createElement('span');
-              labelEl.className = `${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`;
-              labelEl.textContent = alias;
-              currentInlineSdtWrapper.appendChild(labelEl);
             }
-            // Update PM positions on wrapper to span all contained runs
-            const wrapperPmStart = currentInlineSdtWrapper.dataset.pmStart;
-            const wrapperPmEnd = currentInlineSdtWrapper.dataset.pmEnd;
-            if (run.pmStart != null) {
-              if (!wrapperPmStart || run.pmStart < parseInt(wrapperPmStart, 10)) {
-                currentInlineSdtWrapper.dataset.pmStart = String(run.pmStart);
-              }
-            }
-            if (run.pmEnd != null) {
-              if (!wrapperPmEnd || run.pmEnd > parseInt(wrapperPmEnd, 10)) {
-                currentInlineSdtWrapper.dataset.pmEnd = String(run.pmEnd);
-              }
-            }
+            this.expandSdtWrapperPmRange(currentInlineSdtWrapper, run.pmStart, run.pmEnd);
             currentInlineSdtWrapper.appendChild(elem);
           } else {
             el.appendChild(elem);
@@ -5116,6 +5171,7 @@ export class DomPainter {
     'sdtScope',
     'sdtTag',
     'sdtAlias',
+    'lockMode',
     'sdtSectionTitle',
     'sdtSectionType',
     'sdtSectionLocked',
@@ -5139,6 +5195,52 @@ export class DomPainter {
   private setDatasetBoolean(el: HTMLElement, key: string, value: boolean | null | undefined): void {
     if (value != null) {
       el.dataset[key] = String(value);
+    }
+  }
+
+  /**
+   * Resolve the inline SDT id from a run, or null if the run is not inside an inline SDT.
+   */
+  private resolveRunSdtId(run: Run): { sdtId: string; sdt: SdtMetadata } | null {
+    const sdt = (run as TextRun).sdt;
+    if (sdt?.type === 'structuredContent' && sdt?.scope === 'inline' && sdt?.id) {
+      return { sdtId: String(sdt.id), sdt };
+    }
+    return null;
+  }
+
+  /**
+   * Create an inline SDT wrapper `<span>` with className, layoutEpoch, dataset, and label.
+   * Shared by both the geometry and run-based rendering paths.
+   */
+  private createInlineSdtWrapper(sdt: SdtMetadata): HTMLElement {
+    const wrapper = this.doc!.createElement('span');
+    wrapper.className = DOM_CLASS_NAMES.INLINE_SDT_WRAPPER;
+    wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
+    this.applySdtDataset(wrapper, sdt);
+    const alias = (sdt as { alias?: string })?.alias || 'Inline content';
+    const labelEl = this.doc!.createElement('span');
+    labelEl.className = `${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`;
+    labelEl.textContent = alias;
+    wrapper.appendChild(labelEl);
+    return wrapper;
+  }
+
+  /**
+   * Expand the PM position range tracked on an SDT wrapper to include a new run's range.
+   */
+  private expandSdtWrapperPmRange(wrapper: HTMLElement, pmStart?: number | null, pmEnd?: number | null): void {
+    if (pmStart != null) {
+      const cur = wrapper.dataset.pmStart;
+      if (!cur || pmStart < parseInt(cur, 10)) {
+        wrapper.dataset.pmStart = String(pmStart);
+      }
+    }
+    if (pmEnd != null) {
+      const cur = wrapper.dataset.pmEnd;
+      if (!cur || pmEnd > parseInt(cur, 10)) {
+        wrapper.dataset.pmEnd = String(pmEnd);
+      }
     }
   }
 
@@ -5172,6 +5274,8 @@ export class DomPainter {
       this.setDatasetString(el, 'sdtScope', metadata.scope);
       this.setDatasetString(el, 'sdtTag', metadata.tag);
       this.setDatasetString(el, 'sdtAlias', metadata.alias);
+      // Always set lockMode (defaulting to 'unlocked') so CSS can target all SDTs uniformly.
+      this.setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
     } else if (metadata.type === 'documentSection') {
       this.setDatasetString(el, 'sdtSectionTitle', metadata.title);
       this.setDatasetString(el, 'sdtSectionType', metadata.sectionType);
@@ -5280,18 +5384,6 @@ const computeSdtBoundaries = (
   }
 
   return boundaries;
-};
-
-const shouldRebuildForSdtBoundary = (element: HTMLElement, boundary: SdtBoundaryOptions | undefined): boolean => {
-  if (!boundary) return false;
-  const startAttr = element.dataset.sdtContainerStart;
-  const endAttr = element.dataset.sdtContainerEnd;
-  const expectedStart = String(boundary.isStart ?? true);
-  const expectedEnd = String(boundary.isEnd ?? true);
-  if (startAttr === undefined || endAttr === undefined) {
-    return true;
-  }
-  return startAttr !== expectedStart || endAttr !== expectedEnd;
 };
 
 const fragmentKey = (fragment: Fragment): string => {

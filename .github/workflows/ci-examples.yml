@@ -90,6 +90,17 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=features/${{ matrix.example }} npx playwright test
 
+  validate:
+    if: always()
+    needs: [getting-started, collaboration, features, headless]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            exit 1
+          fi
+
   headless:
     runs-on: ubuntu-latest
     steps:

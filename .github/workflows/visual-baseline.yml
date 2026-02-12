@@ -1,0 +1,78 @@
+name: Visual Baselines
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: visual-baseline
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    env:
+      SD_VISUAL_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_VISUAL_TESTING_R2_ACCOUNT_ID }}
+      SD_VISUAL_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID }}
+      SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY }}
+      SD_VISUAL_TESTING_R2_BUCKET: ${{ secrets.SD_VISUAL_TESTING_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: stable
+
+      - name: Get visual test infrastructure from main
+        run: |
+          git fetch origin main --depth=1
+          git checkout FETCH_HEAD -- tests/visual
+          sed -i '/^packages:/a\  - tests/visual' pnpm-workspace.yaml
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts --no-frozen-lockfile
+
+      - name: Build SuperDoc
+        run: pnpm build
+
+      - name: Get Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> $GITHUB_OUTPUT
+        working-directory: tests/visual
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+        working-directory: tests/visual
+
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium firefox webkit
+        working-directory: tests/visual
+
+      - name: Download test documents from R2
+        run: pnpm docs:download
+        working-directory: tests/visual
+
+      - name: Generate baselines
+        run: pnpm test:update
+        working-directory: tests/visual
+
+      - name: Upload baselines to R2
+        run: pnpm baseline:upload
+        working-directory: tests/visual

@@ -272,3 +272,91 @@ export const tableLayout: Layout = {
     },
   ],
 };
+
+/**
+ * Builds table test fixtures with customizable dimensions.
+ * Reduces duplication between clickToPosition and dom-mapping table tests.
+ */
+export function buildTableFixtures(
+  opts: {
+    cellWidth?: number;
+    cellHeight?: number;
+    lineHeight?: number;
+    pmStart?: number;
+    pmEnd?: number;
+    text?: string;
+    blockId?: string;
+  } = {},
+): { block: FlowBlock; measure: Measure } {
+  const {
+    cellWidth = 200,
+    cellHeight = 80,
+    lineHeight = 18,
+    pmStart = 50,
+    pmEnd = 59,
+    text = 'Cell text',
+    blockId = 'table-block',
+  } = opts;
+
+  const block: FlowBlock = {
+    kind: 'table',
+    id: blockId,
+    rows: [
+      {
+        id: 'row-0',
+        cells: [
+          {
+            id: 'cell-0',
+            blocks: [
+              {
+                kind: 'paragraph' as const,
+                id: `${blockId}-para`,
+                runs: [{ text, fontFamily: 'Arial', fontSize: 14, pmStart, pmEnd }],
+              },
+            ],
+            attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  const measure: Measure = {
+    kind: 'table',
+    rows: [
+      {
+        height: cellHeight,
+        cells: [
+          {
+            width: cellWidth,
+            height: cellHeight,
+            gridColumnStart: 0,
+            blocks: [
+              {
+                kind: 'paragraph',
+                lines: [
+                  {
+                    fromRun: 0,
+                    fromChar: 0,
+                    toRun: 0,
+                    toChar: text.length,
+                    width: 70,
+                    ascent: 10,
+                    descent: 4,
+                    lineHeight,
+                  },
+                ],
+                totalHeight: lineHeight,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    columnWidths: [cellWidth],
+    totalWidth: cellWidth,
+    totalHeight: cellHeight,
+  };
+
+  return { block, measure };
+}

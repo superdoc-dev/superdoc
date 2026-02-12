@@ -11,8 +11,9 @@
  */
 
 import { ParagraphProperties, RunFontFamilyProperties, RunProperties } from './ooxml/types';
+import type { TableCellProperties } from './ooxml/styles-types';
 
-export type PropertyObject = ParagraphProperties | RunProperties;
+export type PropertyObject = ParagraphProperties | RunProperties | TableCellProperties;
 
 /**
  * Performs a deep merge on an ordered list of property objects.

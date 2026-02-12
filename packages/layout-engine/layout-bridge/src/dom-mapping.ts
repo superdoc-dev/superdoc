@@ -28,6 +28,7 @@ const CLASS_NAMES = {
   page: DOM_CLASS_NAMES.PAGE,
   fragment: DOM_CLASS_NAMES.FRAGMENT,
   line: DOM_CLASS_NAMES.LINE,
+  tableFragment: DOM_CLASS_NAMES.TABLE_FRAGMENT,
 } as const;
 
 /**
@@ -210,6 +211,16 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
     return result;
   }
 
+  // For table fragments without a direct line hit, return null so the caller
+  // (clickToPosition in index.ts) falls back to geometry-based hit testing via
+  // hitTestTableFragment, which correctly resolves the cell by column. processFragment
+  // would search all lines across all cells using only Y matching, picking the wrong
+  // column when multiple cells share the same row height.
+  if (fragmentEl.classList.contains(CLASS_NAMES.tableFragment)) {
+    log('Table fragment without line in hit chain, deferring to geometry fallback');
+    return null;
+  }
+
   const result = processFragment(fragmentEl, viewX, viewY);
   log('=== clickToPositionDom END ===', { result });
   return result;
@@ -223,7 +234,7 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
  * @param clientY - Y coordinate in viewport space
  * @returns The page element, or null if not found
  */
-function findPageElement(domContainer: HTMLElement, clientX: number, clientY: number): HTMLElement | null {
+export function findPageElement(domContainer: HTMLElement, clientX: number, clientY: number): HTMLElement | null {
   // Check if the container itself is a page element
   if (domContainer.classList?.contains?.(CLASS_NAMES.page)) {
     return domContainer;

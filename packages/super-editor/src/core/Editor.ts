@@ -2602,9 +2602,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
         'word/numbering.xml': String(numbering),
-
-        // Replace & with &amp; in styles.xml as DOCX viewers can't handle it
-        'word/styles.xml': String(styles).replace(/&/gi, '&amp;'),
+        'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
         ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };

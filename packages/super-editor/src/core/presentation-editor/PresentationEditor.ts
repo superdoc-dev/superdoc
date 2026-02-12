@@ -1,4 +1,5 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
+import { SlashMenuPluginKey } from '@extensions/slash-menu/slash-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
@@ -3367,8 +3368,10 @@ export class PresentationEditor extends EventEmitter {
 
     const activeEditor = this.getActiveEditor();
     const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
+    // Keep selection visible when context menu (SlashMenu) is open
+    const slashMenuOpen = activeEditor?.state ? !!SlashMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    if (!hasFocus) {
+    if (!hasFocus && !slashMenuOpen) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';

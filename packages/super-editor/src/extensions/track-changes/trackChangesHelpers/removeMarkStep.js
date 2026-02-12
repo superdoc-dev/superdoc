@@ -16,7 +16,7 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
   const meta = {};
 
   doc.nodesBetween(step.from, step.to, (node, pos) => {
-    if (!node.isInline) {
+    if (!node.isInline || node.type.name === 'run') {
       return true;
     }
 

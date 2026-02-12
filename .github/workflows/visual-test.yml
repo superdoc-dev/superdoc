@@ -78,21 +78,15 @@ jobs:
         working-directory: tests/visual
 
       # Visual tests use continue-on-error because screenshot diffs are
-      # expected when rendering improves. The HTML report is uploaded as
-      # an artifact and a PR comment links to it for review.
+      # expected when rendering improves. The PR comment signals diffs
+      # were detected so the team can investigate locally.
+      # NOTE: Reports are NOT uploaded as artifacts because this is a
+      # public repo — screenshots could expose test document content.
       - name: Run visual tests
         id: visual-tests
         continue-on-error: true
         run: pnpm test
         working-directory: tests/visual
-
-      - name: Upload report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-test-report
-          path: tests/visual/playwright-report/
-          retention-days: 14
 
       - name: Comment on PR with visual diff results
         if: github.event_name == 'pull_request' && steps.visual-tests.outcome == 'failure'
@@ -104,9 +98,7 @@ jobs:
               marker,
               '### Visual diffs detected',
               '',
-              'Pixel differences were found in visual tests. This is **not blocking** — review the report to confirm changes are intentional.',
-              '',
-              `[Download HTML Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)`,
+              'Pixel differences were found in visual tests. This is **not blocking** — reproduce locally with `cd tests/visual && pnpm docs:download && pnpm test` to review diffs.',
             ].join('\n');
 
             // Update existing comment or create new one

@@ -53,7 +53,11 @@ export const handleParagraphNode = (params) => {
     const childParams = {
       ...params,
       nodes: updatedElements,
-      extraParams: { ...params.extraParams, paragraphProperties: resolvedParagraphProperties },
+      extraParams: {
+        ...params.extraParams,
+        paragraphProperties: resolvedParagraphProperties,
+        numberingDefinedInline: Boolean(inlineParagraphProperties.numberingProperties),
+      },
       path: [...(params.path || []), node],
     };
     const translatedChildren = nodeListHandler.handler(childParams);

@@ -9,6 +9,7 @@ import type {
   TableMeasure,
 } from '@superdoc/contracts';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
+import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
@@ -177,15 +178,16 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   // Apply SDT container styling (document sections, structured content blocks)
   applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
-  // Add table-specific class for resize overlay targeting
-  container.classList.add('superdoc-table-fragment');
+  // Add table-specific class for resize overlay targeting and click mapping
+  container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {
-    // Build row-aware boundary segments
-    // For each grid column boundary, track which row ranges have actual cell edges there
+    // Build row-aware boundary segments scoped to THIS fragment's rows.
+    // When a table splits across pages, each fragment only renders a subset of rows
+    // (repeated headers + body rows from fromRow to toRow). Segments must match
+    // exactly the rendered rows so resize handles don't overflow the fragment.
     const columnCount = measure.columnWidths.length;
-    const rowCount = block.rows.length;
 
     // boundarySegments[colIndex] = array of {fromRow, toRow, y, height} segments where this boundary exists
     const boundarySegments: Array<Array<{ fromRow: number; toRow: number; y: number; height: number }>> = [];
@@ -193,10 +195,35 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       boundarySegments.push([]);
     }
 
-    // For each row, determine which grid columns have cell boundaries
+    // Build the list of rows actually rendered in this fragment, matching the
+    // rendering order: repeated headers first, then body rows.
+    // NOTE: This header-then-body iteration must stay in sync with the rendering
+    // loop below (~line 315) which uses the same order to render row elements.
+    const renderedRows: Array<{ rowIndex: number; height: number }> = [];
+
+    // Repeated header rows (only on continuation fragments)
+    if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
+      for (let r = 0; r < fragment.repeatHeaderCount; r++) {
+        const rowMeasure = measure.rows[r];
+        if (!rowMeasure) break;
+        renderedRows.push({ rowIndex: r, height: rowMeasure.height });
+      }
+    }
+
+    // Body rows (fromRow to toRow), with partial row height for mid-row splits
+    for (let r = fragment.fromRow; r < fragment.toRow; r++) {
+      const rowMeasure = measure.rows[r];
+      if (!rowMeasure) break;
+      const isPartialRow = fragment.partialRow && fragment.partialRow.rowIndex === r;
+      const actualHeight = isPartialRow ? fragment.partialRow!.partialHeight : rowMeasure.height;
+      renderedRows.push({ rowIndex: r, height: actualHeight });
+    }
+
+    // For each rendered row, determine which grid columns have cell boundaries
     // A boundary exists at column X if there's a cell that ENDS at column X (gridColumnStart + colSpan = X)
     let rowY = 0;
-    for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+    for (let i = 0; i < renderedRows.length; i++) {
+      const { rowIndex, height } = renderedRows[i];
       const rowMeasure = measure.rows[rowIndex];
       if (!rowMeasure) continue;
 
@@ -224,22 +251,22 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         const segments = boundarySegments[boundaryCol];
         const lastSegment = segments[segments.length - 1];
 
-        // If the last segment ends at this row, extend it
-        if (lastSegment && lastSegment.toRow === rowIndex) {
-          lastSegment.toRow = rowIndex + 1;
-          lastSegment.height += rowMeasure.height;
+        // If the last segment ends at the previous rendered row, extend it
+        if (lastSegment && i > 0 && lastSegment.toRow === i) {
+          lastSegment.toRow = i + 1;
+          lastSegment.height += height;
         } else {
           // Start a new segment
           segments.push({
-            fromRow: rowIndex,
-            toRow: rowIndex + 1,
+            fromRow: i,
+            toRow: i + 1,
             y: rowY,
-            height: rowMeasure.height,
+            height,
           });
         }
       }
 
-      rowY += rowMeasure.height;
+      rowY += height;
     }
 
     const metadata = {
@@ -287,7 +314,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   let y = 0;
 
-  // If this is a continuation fragment with repeated headers, render headers first
+  // If this is a continuation fragment with repeated headers, render headers first.
+  // NOTE: This header-then-body iteration must stay in sync with the metadata
+  // segment builder above (~line 199) which uses the same order.
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
     for (let r = 0; r < fragment.repeatHeaderCount; r += 1) {
       const rowMeasure = measure.rows[r];

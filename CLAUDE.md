@@ -50,6 +50,7 @@ packages/
   collaboration-yjs/ Collaboration server
 shared/              Internal utilities
 e2e-tests/           Playwright tests
+tests/visual/        Visual regression tests (Playwright + R2 baselines)
 ```
 
 ## Where to Look
@@ -62,6 +63,7 @@ e2e-tests/           Playwright tests
 | DOCX import/export | `super-editor/src/core/super-converter/` |
 | Style resolution | `layout-engine/style-engine/` |
 | Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
+| Visual regression tests | `tests/visual/` (see its CLAUDE.md) |
 
 ## Style Resolution Boundary
 

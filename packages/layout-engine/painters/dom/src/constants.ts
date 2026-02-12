@@ -52,6 +52,12 @@ export const DOM_CLASS_NAMES = {
   BLOCK_SDT: 'superdoc-structured-content-block',
 
   /**
+   * Class name for table fragment containers.
+   * Applied to table fragments for resize overlay targeting and click mapping.
+   */
+  TABLE_FRAGMENT: 'superdoc-table-fragment',
+
+  /**
    * Class name for document section containers.
    */
   DOCUMENT_SECTION: 'superdoc-document-section',

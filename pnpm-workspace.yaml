@@ -99,7 +99,7 @@ catalog:
   verdaccio: ^6.1.6
   vite: ^7.2.7
   vite-plugin-dts: ~4.5.4
-  vite-plugin-node-polyfills: ^0.24.0
+  vite-plugin-node-polyfills: ^0.25.0
   vitest: ^3.2.4
   vue: 3.5.25
   xml-js: 1.6.11
@@ -120,4 +120,4 @@ onlyBuiltDependencies:
   - vue-demi
 
 patchedDependencies:
-  vite-plugin-node-polyfills: patches/vite-plugin-node-polyfills.patch
+  readable-stream@3.6.2: patches/readable-stream@3.6.2.patch

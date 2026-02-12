@@ -97,7 +97,8 @@
       "@vue/runtime-core": "3.5.25",
       "@vue/runtime-dom": "3.5.25",
       "@vue/server-renderer": "3.5.25",
-      "@vue/shared": "3.5.25"
+      "@vue/shared": "3.5.25",
+      "vite": "npm:rolldown-vite@7.3.1"
     }
   }
 }

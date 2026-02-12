@@ -74,4 +74,44 @@ test.describe('viewing mode comments visibility', () => {
       timeout: 30_000,
     });
   });
+
+  test('should show inserted and removed text in tracked change replacement bubble', async ({ page }) => {
+    await goToPageAndWaitForEditor(page, { includeComments: true });
+    await page.locator('input[type="file"]').setInputFiles(`${config.commentsDocumentsFolder}/basic-comments.docx`);
+
+    await page.waitForFunction(() => window.superdoc !== undefined && window.editor !== undefined, null, {
+      polling: 100,
+      timeout: 10_000,
+    });
+
+    const superEditor = page.locator('div.super-editor').first();
+    const targetText = 'replaced_token';
+    const insertedText = 'inserted_token';
+
+    await superEditor.click();
+    await page.keyboard.type(` ${targetText}`);
+    for (let i = 0; i < targetText.length; i += 1) {
+      await page.keyboard.press('Shift+ArrowLeft');
+    }
+
+    const trackChangesToggled = await page.evaluate(() => window.editor.commands.toggleTrackChanges());
+    expect(trackChangesToggled).toBe(true);
+    await page.keyboard.type(insertedText);
+    await sleep(600);
+
+    const replacementBubble = page
+      .getByRole('dialog')
+      .filter({ hasText: 'Added:' })
+      .filter({ hasText: 'inserted_token' })
+      .filter({ hasText: 'Deleted:' })
+      .filter({ hasText: 'replaced_token' })
+      .first();
+
+    await expect(replacementBubble).toBeVisible();
+    await expect(replacementBubble).toContainText('Added:');
+    await expect(replacementBubble).toContainText('inserted_token');
+    await expect(replacementBubble).toContainText('Deleted:');
+    await expect(replacementBubble).toContainText('replaced_token');
+    await expect(replacementBubble).toHaveScreenshot('tracked-change-replacement-bubble.png');
+  });
 });

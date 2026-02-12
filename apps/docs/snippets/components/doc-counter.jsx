@@ -16,10 +16,18 @@ export const DocCounter = ({ height = '350px' }) => {
     link.href = 'https://unpkg.com/superdoc@latest/dist/style.css';
     document.head.appendChild(link);
 
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/superdoc@latest/dist/superdoc.umd.js';
-    script.onload = () => setTimeout(() => initializeSuperdoc(), 100);
-    document.body.appendChild(script);
+    // Buffer polyfill — required by the UMD build for document hashing
+    const bufferScript = document.createElement('script');
+    bufferScript.src = 'https://cdn.jsdelivr.net/npm/buffer@6/index.min.js';
+    bufferScript.onload = () => {
+      window.Buffer = window.buffer.Buffer;
+
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/superdoc@latest/dist/superdoc.umd.js';
+      script.onload = () => setTimeout(() => initializeSuperdoc(), 100);
+      document.body.appendChild(script);
+    };
+    document.body.appendChild(bufferScript);
 
     return () => superdocRef.current?.destroy?.();
   }, []);

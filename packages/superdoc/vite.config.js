@@ -22,6 +22,7 @@ const visualizerConfig = {
 // Internal @superdoc/ paths that map to ./src/ (not workspace packages).
 // Rolldown doesn't support regex capture groups ($1) in alias replacements,
 // so we list these explicitly instead of using /^@superdoc\/(.*)$/.
+// Update this list when adding new src/ subdirectories imported via @superdoc/.
 const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'stores', 'dev', 'icons.js'];
 
 export const getAliases = (_isDev) => {

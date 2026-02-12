@@ -120,4 +120,5 @@ onlyBuiltDependencies:
   - vue-demi
 
 patchedDependencies:
+  # readable-stream requires 'string_decoder/' with trailing slash; Rolldown treats it as a directory path
   readable-stream@3.6.2: patches/readable-stream@3.6.2.patch

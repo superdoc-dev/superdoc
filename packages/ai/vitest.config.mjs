@@ -16,10 +16,12 @@ export default defineConfig({
       // step to build superdoc before running packages/ai tests.
 
       { find: '@stores', replacement: path.resolve(__dirname, '../superdoc/src/stores') },
-      {
-        find: /^@superdoc\/(?!common|contracts|geometry-utils|pm-adapter|layout-engine|layout-bridge|painter-dom|style-engine|measuring-dom|word-layout|url-validation|preset-geometry|super-editor|locale-utils|font-utils)(.*)/,
-        replacement: path.resolve(__dirname, '../superdoc/src/$1'),
-      },
+      // Rolldown doesn't support regex capture groups ($1) in alias replacements.
+      // Keep in sync with packages/superdoc/vite.config.js superdocSrcAliases.
+      ...['components', 'composables', 'core', 'helpers', 'stores', 'dev', 'icons.js'].map(name => ({
+        find: `@superdoc/${name}`,
+        replacement: path.resolve(__dirname, `../superdoc/src/${name}`),
+      })),
     ],
   },
   plugins: [vue()],

@@ -13,6 +13,12 @@ import type {
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
 
+/**
+ * Ratio of column width (0..1). An anchored table with totalWidth >= columnWidth * this value
+ * is treated as full-width and laid out inline instead of as a floating fragment.
+ */
+export const ANCHORED_TABLE_FULL_WIDTH_RATIO = 0.99;
+
 export type TableLayoutContext = {
   block: TableBlock;
   measure: TableMeasure;
@@ -1023,16 +1029,17 @@ export function layoutTableBlock({
   let treatAsInline = false;
   if (block.anchor?.isAnchored) {
     const totalWidth = measure.totalWidth ?? 0;
-    treatAsInline = columnWidth > 0 && totalWidth >= columnWidth * 0.99;
+    treatAsInline = columnWidth > 0 && totalWidth >= columnWidth * ANCHORED_TABLE_FULL_WIDTH_RATIO;
     if (!treatAsInline) {
       return;
     }
   }
 
-  // 1. Detect floating tables - use monolithic layout (unless we're treating as inline)
+  // 1. Detect floating tables - use monolithic layout so the table stays one unit (no split across pages).
+  // This applies even when treatAsInline (full-width anchored): we still flow the table here but render it as one fragment.
   const tableProps = block.attrs?.tableProperties as Record<string, unknown> | undefined;
   const floatingProps = tableProps?.floatingTableProperties as Record<string, unknown> | undefined;
-  if (floatingProps && Object.keys(floatingProps).length > 0 && !treatAsInline) {
+  if (floatingProps && Object.keys(floatingProps).length > 0) {
     layoutMonolithicTable({ block, measure, columnWidth, ensurePage, advanceColumn, columnX });
     return;
   }

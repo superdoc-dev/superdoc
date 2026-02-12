@@ -7,6 +7,11 @@ export type PageState = {
   contentBottom: number;
 };
 
+/**
+ * Ratio of column width (0..1). An anchored table with totalWidth >= columnWidth * this value
+ * is treated as full-width and laid out inline instead of as a floating fragment.
+ */
+export declare const ANCHORED_TABLE_FULL_WIDTH_RATIO: number;
 export type TableLayoutContext = {
   block: TableBlock;
   measure: TableMeasure;

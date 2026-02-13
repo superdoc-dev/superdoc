@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - main
+      - tadeu/sd-1908-superdoc-devreact-latest-has-invalid-dependency-spec
     paths:
       - 'packages/react/**'
       - '!**/*.md'

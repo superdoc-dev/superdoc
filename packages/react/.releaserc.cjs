@@ -5,6 +5,7 @@ const config = {
   branches: [
     { name: 'stable', channel: 'latest' },
     { name: 'main', prerelease: 'next', channel: 'next' },
+    { name: 'tadeu/sd-1908-superdoc-devreact-latest-has-invalid-dependency-spec', prerelease: 'test', channel: 'test' },
   ],
   tagFormat: 'react-v${version}',
   plugins: [

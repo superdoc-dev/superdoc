@@ -9,7 +9,7 @@
  */
 import 'superdoc/style.css';
 import BlankDOCX from '../../../../../shared/common/data/blank.docx?url';
-import { onMounted, shallowRef, computed } from 'vue';
+import { onMounted, shallowRef, computed, watchEffect } from 'vue';
 import { SuperDoc } from 'superdoc';
 import { parseConfig, logAvailableParams, type HarnessConfig } from './config-parser';
 
@@ -97,8 +97,13 @@ window.harnessConfig = config;
 /** Reactive reference to the SuperDoc instance */
 const superdoc = shallowRef<SuperDocInstance | null>(null);
 
+const fileData = shallowRef<File | null>(null);
+
 // Initialize window globals
-window.fileData = null;
+watchEffect(() => {
+  window.fileData = fileData.value;
+});
+
 window.superdocReady = false;
 
 // ============================================================================
@@ -136,8 +141,8 @@ async function init(): Promise<void> {
   const superdocConfig = buildSuperdocConfig();
 
   // Load document if one is set
-  if (window.fileData) {
-    await attachDocument(superdocConfig, window.fileData);
+  if (fileData.value) {
+    await attachDocument(superdocConfig, fileData.value);
   }
 
   superdoc.value = new SuperDoc(superdocConfig);
@@ -273,9 +278,16 @@ async function handleFileChange(event: Event): Promise<void> {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
   if (file) {
-    window.fileData = file;
+    fileData.value = file;
     await init();
   }
+}
+
+/**
+ * Reload the currently-loaded document.
+ */
+async function handleReload(_event): Promise<void> {
+  await init();
 }
 
 // ============================================================================
@@ -331,6 +343,7 @@ onMounted(() => {
         @change="handleFileChange"
         data-testid="file-input"
       />
+      <button @click="handleReload" :disabled="!fileData" data-testid="reload-button">Reload</button>
     </header>
 
     <div v-if="showToolbar" id="toolbar" class="harness-toolbar" data-testid="toolbar"></div>

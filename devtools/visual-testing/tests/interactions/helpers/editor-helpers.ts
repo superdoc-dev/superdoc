@@ -72,3 +72,12 @@ export async function getDocumentText(page: Page): Promise<string> {
     return editor?.state?.doc?.textContent ?? '';
   });
 }
+
+/**
+ * Reload the currently loaded document, reverting any changes made in the
+ * editor.
+ */
+export async function reloadDocument(page: Page): Promise<void> {
+  // Call click() directly on the HTML element because it's not a visible element
+  await page.getByTestId('reload-button').evaluate((node) => (node as HTMLButtonElement).click());
+}

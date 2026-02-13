@@ -96,6 +96,7 @@ function parseArgs(): {
   failOnError: boolean;
   ci: boolean;
   browsers: BrowserName[];
+  headful: boolean;
   scaleFactor: number;
   mode: StorageMode;
   docsDir?: string;
@@ -103,6 +104,7 @@ function parseArgs(): {
   const args = process.argv.slice(2);
   const isBaseline = args.includes('--baseline');
   const force = args.includes('--force');
+  const headful = args.includes('--headful');
   const skipExisting = args.includes('--skip-existing');
   const failOnError = args.includes('--fail-on-error');
   const ci = args.includes('--ci') || args.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
@@ -147,7 +149,7 @@ function parseArgs(): {
       i++;
     } else if (arg === '--docs' && args[i + 1]) {
       i++;
-    } else if (arg === '--baseline' || arg === '--force' || arg === '--skip-existing') {
+    } else if (arg === '--baseline' || arg === '--force' || arg === '--headful' || arg === '--skip-existing') {
       // flags handled above
     } else if (!arg.startsWith('--')) {
       version = arg;
@@ -168,6 +170,7 @@ function parseArgs(): {
     failOnError,
     ci,
     browsers,
+    headful,
     scaleFactor,
     mode: storage.mode,
     docsDir,
@@ -515,6 +518,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     output,
     skipExisting,
     failOnError,
+    headful,
     scaleFactor,
     ci,
     mode,
@@ -586,7 +590,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     const progress = createProgressReporter(filtered.length, ci);
 
     const browserType = getBrowserType(browser);
-    const browserInstance = await browserType.launch({ headless: true });
+    const browserInstance = await browserType.launch({ headless: !headful });
     const results = {
       stories: 0,
       milestones: 0,

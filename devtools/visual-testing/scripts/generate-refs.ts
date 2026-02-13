@@ -440,6 +440,7 @@ function parseArgs(): {
   append: boolean;
   ci: boolean;
   browsers: BrowserName[];
+  headful: boolean;
   scaleFactor: number;
   mode: StorageMode;
   docsDir?: string;
@@ -447,6 +448,7 @@ function parseArgs(): {
   const args = process.argv.slice(2);
   const isBaseline = args.includes('--baseline');
   const force = args.includes('--force');
+  const headful = args.includes('--headful');
   const skipExisting = args.includes('--skip-existing');
   const failOnError = args.includes('--fail-on-error');
   const append = args.includes('--append');
@@ -524,6 +526,7 @@ function parseArgs(): {
     append,
     ci,
     browsers,
+    headful,
     scaleFactor,
     mode: storage.mode,
     docsDir,
@@ -644,6 +647,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     skipExisting,
     failOnError,
     append,
+    headful,
     scaleFactor,
     ci,
     mode,
@@ -724,7 +728,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     // Launch browser
     const browserType = getBrowserType(browser);
     const browserInstance: Browser = await browserType.launch({
-      headless: true,
+      headless: !headful,
     });
 
     // Create shared results object

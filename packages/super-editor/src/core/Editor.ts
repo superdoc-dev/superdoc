@@ -488,6 +488,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
       return;
     }
 
+    // Skip for sub-editors that are not primary document editors
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+      return;
+    }
+
     if (!telemetryConfig?.enabled) {
       console.debug('[super-editor] Telemetry: disabled');
       return;

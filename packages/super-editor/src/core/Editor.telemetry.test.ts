@@ -19,8 +19,15 @@ function initTelemetry(options: {
     licenseKey?: string | null;
   } | null;
   licenseKey?: string;
+  mode?: string;
+  isHeaderOrFooter?: boolean;
 }): Telemetry | null {
   const { telemetry: telemetryConfig, licenseKey } = options;
+
+  // Skip for sub-editors that are not primary document editors
+  if (options.mode === 'text' || options.isHeaderOrFooter) {
+    return null;
+  }
 
   // Skip if telemetry is not enabled
   if (!telemetryConfig?.enabled) {
@@ -77,6 +84,41 @@ describe('Editor Telemetry Integration', () => {
 
       expect(result).toBeNull();
       expect(Telemetry).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sub-editor skipping', () => {
+    it('skips telemetry for text mode editors', () => {
+      const result = initTelemetry({
+        telemetry: { enabled: true },
+        licenseKey: 'test-key',
+        mode: 'text',
+      });
+
+      expect(result).toBeNull();
+      expect(Telemetry).not.toHaveBeenCalled();
+    });
+
+    it('skips telemetry for header/footer editors', () => {
+      const result = initTelemetry({
+        telemetry: { enabled: true },
+        licenseKey: 'test-key',
+        isHeaderOrFooter: true,
+      });
+
+      expect(result).toBeNull();
+      expect(Telemetry).not.toHaveBeenCalled();
+    });
+
+    it('allows telemetry for docx mode editors', () => {
+      const result = initTelemetry({
+        telemetry: { enabled: true },
+        licenseKey: 'test-key',
+        mode: 'docx',
+      });
+
+      expect(result).not.toBeNull();
+      expect(Telemetry).toHaveBeenCalledTimes(1);
     });
   });
 

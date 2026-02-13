@@ -34,6 +34,7 @@ const { proxy } = getCurrentInstance();
 const role = proxy.$superdoc.config.role;
 const isInternal = proxy.$superdoc.config.isInternal;
 const isOwnComment = props.comment.creatorEmail === proxy.$superdoc.config.user.email;
+const isTrackedChange = props.comment.trackedChange;
 
 const { uiFontFamily } = useUiFontFamily();
 
@@ -149,6 +150,8 @@ const getCurrentUser = computed(() => {
       <div
         v-if="allowResolve"
         class="overflow-menu__icon"
+        role="button"
+        :aria-label="isTrackedChange ? 'Accept' : 'Resolve'"
         v-html="superdocIcons.markDone"
         @click.stop.prevent="handleResolve"
       ></div>
@@ -156,6 +159,8 @@ const getCurrentUser = computed(() => {
       <div
         v-if="allowReject"
         class="overflow-menu__icon"
+        role="button"
+        aria-label="Reject"
         v-html="superdocIcons.rejectChange"
         @click.stop.prevent="handleReject"
       ></div>

@@ -411,6 +411,7 @@ async function runStory(
   await freezeHarnessTime(page);
   const harnessConfig = buildHarnessConfig(story.story);
   const milestoneNameForStory = createMilestoneNamer();
+  const errorSnapshotNameForStory = createMilestoneNamer();
   const storyDir = path.join(outputRoot, story.id);
   fs.mkdirSync(storyDir, { recursive: true });
   const storyMeta = {
@@ -443,6 +444,7 @@ async function runStory(
 
   const helpers = createInteractionHelpers(page);
   const milestones: string[] = [];
+  const capturedErrors: Error[] = [];
 
   const captureScreenshot = async (fileName: string) => {
     const milestonePath = path.join(storyDir, fileName);
@@ -464,14 +466,31 @@ async function runStory(
     };
   };
 
+  const captureError = async (error: Error) => {
+    const fileName = errorSnapshotNameForStory('error-snapshot');
+    const errorSnapshotPath = await captureScreenshot(fileName);
+    console.warn(`   ${colors.error(`Captured:`)} ${errorSnapshotPath}`);
+    console.warn(`  ${colors.error(`For error:`)} ${error}`);
+    capturedErrors.push(error);
+  };
+
   const snapshot = milestone;
 
   try {
-    await story.story.run(page, { ...helpers, milestone, snapshot });
+    await story.story.run(page, { ...helpers, milestone, snapshot, captureError });
   } catch (e) {
-    const path = await captureScreenshot('error-snapshot.png');
-    console.warn(colors.error(`Captured screenshot: ${path}`));
+    if (capturedErrors.length === 0) {
+      await captureError(e as Error);
+    }
     throw e;
+  }
+
+  if (capturedErrors.length > 0) {
+    if (capturedErrors.length === 1) {
+      throw capturedErrors[0];
+    }
+
+    throw new Error('Multiple errors were captured in this test');
   }
 
   if (milestones.length === 0) {

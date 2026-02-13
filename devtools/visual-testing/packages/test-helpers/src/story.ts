@@ -40,6 +40,15 @@ export interface StoryHelpers extends InteractionHelpers {
    * @param description - Optional description of the snapshot
    */
   snapshot: (suffix?: string, description?: string) => Promise<void>;
+  /**
+   * Capture an error that occurred, taking a snapshot of the current state.
+   * The error will be logged to the console, and at the end of the run, the
+   * error will be rethrown (or, if multiple errors were captured, an aggregate
+   * error will be thrown at the end).
+   *
+   * @param error - The error that was caught
+   */
+  captureError: (error: Error) => Promise<void>;
 }
 
 /**

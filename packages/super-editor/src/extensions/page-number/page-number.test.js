@@ -46,7 +46,7 @@ describe('PageNumber commands', () => {
       nodes: { 'total-page-number': {} },
       nodeFromJSON: vi.fn().mockImplementation((json) => json),
     };
-    const editor = { options: { isHeaderOrFooter: true, parentEditor: { currentTotalPages: 7 } } };
+    const editor = { options: { isHeaderOrFooter: true, totalPageCount: 7, parentEditor: { currentTotalPages: 7 } } };
     const dispatch = vi.fn();
 
     const result = commands.addTotalPageCount()({
@@ -184,7 +184,7 @@ describe('AutoPageNumberNodeView', () => {
     const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
     const state = { doc, tr };
     const editor = {
-      options: { parentEditor: { currentTotalPages: 12 } },
+      options: { totalPageCount: 12, parentEditor: { currentTotalPages: 12 } },
       state,
       view: { state, dispatch: vi.fn() },
     };

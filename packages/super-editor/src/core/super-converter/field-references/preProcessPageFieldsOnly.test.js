@@ -158,6 +158,41 @@ describe('preProcessPageFieldsOnly', () => {
     });
   });
 
+  describe('legacy w:pgNum element', () => {
+    it('should convert w:pgNum to sd:autoPageNumber', () => {
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:pgNum', type: 'element' }],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0].name).toBe('sd:autoPageNumber');
+    });
+
+    it('should preserve rPr from w:pgNum run', () => {
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [
+            { name: 'w:rPr', elements: [{ name: 'w:sz', attributes: { 'w:val': '20' } }] },
+            { name: 'w:pgNum', type: 'element' },
+          ],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0].name).toBe('sd:autoPageNumber');
+      expect(result.processedNodes[0].elements).toBeDefined();
+      expect(result.processedNodes[0].elements[0].name).toBe('w:rPr');
+    });
+  });
+
   describe('nested content', () => {
     it('should recursively process fldSimple inside table cells', () => {
       const nodes = [

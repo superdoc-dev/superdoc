@@ -2440,7 +2440,8 @@ export class PresentationEditor extends EventEmitter {
       goToAnchor: (href: string) => this.goToAnchor(href),
       emit: (event: string, payload: unknown) => this.emit(event, payload),
       normalizeClientPoint: (clientX: number, clientY: number) => this.#normalizeClientPoint(clientX, clientY),
-      hitTestHeaderFooterRegion: (x: number, y: number) => this.#hitTestHeaderFooterRegion(x, y),
+      hitTestHeaderFooterRegion: (x: number, y: number, pageIndex?: number, pageLocalY?: number) =>
+        this.#hitTestHeaderFooterRegion(x, y, pageIndex, pageLocalY),
       exitHeaderFooterMode: () => this.#exitHeaderFooterMode(),
       activateHeaderFooterRegion: (region) => this.#activateHeaderFooterRegion(region),
       createDefaultHeaderFooter: (region) => this.#createDefaultHeaderFooter(region),
@@ -2629,6 +2630,7 @@ export class PresentationEditor extends EventEmitter {
       setPendingDocChange: () => {
         this.#pendingDocChange = true;
       },
+      getBodyPageCount: () => this.#layoutState?.layout?.pages?.length ?? 1,
     });
 
     // Set up callbacks
@@ -3758,8 +3760,8 @@ export class PresentationEditor extends EventEmitter {
    * Hit test for header/footer regions at a given point.
    * Delegates to HeaderFooterSessionManager which manages region tracking.
    */
-  #hitTestHeaderFooterRegion(x: number, y: number): HeaderFooterRegion | null {
-    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout) ?? null;
+  #hitTestHeaderFooterRegion(x: number, y: number, pageIndex?: number, pageLocalY?: number): HeaderFooterRegion | null {
+    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout, pageIndex, pageLocalY) ?? null;
   }
 
   #activateHeaderFooterRegion(region: HeaderFooterRegion) {
@@ -4518,7 +4520,7 @@ export class PresentationEditor extends EventEmitter {
     );
   }
 
-  #normalizeClientPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+  #normalizeClientPoint(clientX: number, clientY: number): { x: number; y: number; pageIndex?: number } | null {
     return normalizeClientPointFromPointer(
       {
         viewportHost: this.#viewportHost,

@@ -133,6 +133,8 @@ export type SessionManagerDependencies = {
   scheduleRerender: () => void;
   /** Set pending doc change flag */
   setPendingDocChange: () => void;
+  /** Get total page count from body layout */
+  getBodyPageCount: () => number;
 };
 
 /**
@@ -469,6 +471,8 @@ export class HeaderFooterSessionManager {
       // Header region
       const headerPayload = this.#headerDecorationProvider?.(page.number, margins, page);
       const headerBox = this.#computeDecorationBox('header', margins, actualPageHeight);
+      const displayPageNumber = page.numberText ?? String(page.number);
+
       this.#headerRegions.set(pageIndex, {
         kind: 'header',
         headerId: headerPayload?.headerId,
@@ -476,6 +480,7 @@ export class HeaderFooterSessionManager {
           headerPayload?.sectionType ?? this.#computeExpectedSectionType('header', page, sectionFirstPageNumbers),
         pageIndex,
         pageNumber: page.number,
+        displayPageNumber,
         localX: headerPayload?.hitRegion?.x ?? headerBox.x,
         localY: headerPayload?.hitRegion?.y ?? headerBox.offset,
         width: headerPayload?.hitRegion?.width ?? headerBox.width,
@@ -493,6 +498,7 @@ export class HeaderFooterSessionManager {
           footerPayload?.sectionType ?? this.#computeExpectedSectionType('footer', page, sectionFirstPageNumbers),
         pageIndex,
         pageNumber: page.number,
+        displayPageNumber,
         localX: footerPayload?.hitRegion?.x ?? footerBox.x,
         localY: footerPayload?.hitRegion?.y ?? footerBox.offset,
         width: footerPayload?.hitRegion?.width ?? footerBox.width,
@@ -505,17 +511,43 @@ export class HeaderFooterSessionManager {
 
   /**
    * Hit test for header/footer regions.
+   * When knownPageIndex is provided (from normalizeClientPoint), use it directly
+   * since y is already page-local. Otherwise derive pageIndex from global y.
    */
-  hitTestRegion(x: number, y: number, layout: Layout | null): HeaderFooterRegion | null {
+  hitTestRegion(
+    x: number,
+    y: number,
+    layout: Layout | null,
+    knownPageIndex?: number,
+    knownPageLocalY?: number,
+  ): HeaderFooterRegion | null {
     if (!layout) return null;
 
     const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
-    const pageHeight = layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? this.#options.defaultPageSize.h;
+    const defaultPageHeight = layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? this.#options.defaultPageSize.h;
     const pageGap = layout.pageGap ?? 0;
-    if (pageHeight <= 0) return null;
+    if (defaultPageHeight <= 0) return null;
 
-    const pageIndex = Math.max(0, Math.floor(y / (pageHeight + pageGap)));
-    const pageLocalY = y - pageIndex * (pageHeight + pageGap);
+    let pageIndex: number;
+    let pageLocalY: number;
+
+    if (knownPageIndex != null && knownPageLocalY != null) {
+      // Best path: both page index and page-local Y are known from the DOM
+      pageIndex = knownPageIndex;
+      pageLocalY = knownPageLocalY;
+    } else if (knownPageIndex != null) {
+      // Page index known but no page-local Y — derive from global Y using cumulative heights
+      pageIndex = knownPageIndex;
+      let pageTopY = 0;
+      for (let i = 0; i < pageIndex && i < layout.pages.length; i++) {
+        pageTopY += (layout.pages[i].size?.h ?? defaultPageHeight) + pageGap;
+      }
+      pageLocalY = y - pageTopY;
+    } else {
+      // Fallback: derive both from global Y using uniform page height
+      pageIndex = Math.max(0, Math.floor(y / (defaultPageHeight + pageGap)));
+      pageLocalY = y - pageIndex * (defaultPageHeight + pageGap);
+    }
 
     const headerRegion = this.#headerRegions.get(pageIndex);
     if (headerRegion && this.#pointInRegion(headerRegion, x, pageLocalY)) {
@@ -648,6 +680,17 @@ export class HeaderFooterSessionManager {
         return;
       }
 
+      // Clean up previous session if switching between pages while in editing mode
+      if (this.#session.mode !== 'body') {
+        if (this.#activeEditor) {
+          this.#activeEditor.setEditable(false);
+          this.#activeEditor.setOptions({ documentMode: 'viewing' });
+        }
+        this.#overlayManager.hideEditingOverlay();
+        this.#activeEditor = null;
+        this.#session = { mode: 'body' };
+      }
+
       const descriptor = this.#resolveDescriptorForRegion(region);
       if (!descriptor) {
         console.warn('[HeaderFooterSessionManager] No descriptor found for region:', region);
@@ -713,15 +756,15 @@ export class HeaderFooterSessionManager {
         return;
       }
 
-      const layout = this.#headerLayoutResults?.[0]?.layout;
+      const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
       let editor;
       try {
         editor = await this.#headerFooterManager.ensureEditor(descriptor, {
           editorHost,
           availableWidth: region.width,
           availableHeight: region.height,
-          currentPageNumber: region.pageNumber,
-          totalPageCount: layout?.pages?.length ?? 1,
+          currentPageNumber: parseInt(region.displayPageNumber ?? '', 10) || region.pageNumber,
+          totalPageCount: bodyPageCount,
         });
       } catch (editorError) {
         console.error('[HeaderFooterSessionManager] Error creating editor:', editorError);
@@ -795,7 +838,7 @@ export class HeaderFooterSessionManager {
         headerId: descriptor.id,
         sectionType: descriptor.variant ?? region.sectionType ?? null,
         pageIndex: region.pageIndex,
-        pageNumber: region.pageNumber,
+        pageNumber: parseInt(region.displayPageNumber ?? '', 10) || region.pageNumber,
       };
 
       this.clearHover();

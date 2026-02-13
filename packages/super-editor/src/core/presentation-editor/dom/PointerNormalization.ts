@@ -20,7 +20,7 @@ export function normalizeClientPoint(
   },
   clientX: number,
   clientY: number,
-): { x: number; y: number } | null {
+): { x: number; y: number; pageIndex?: number; pageLocalY?: number } | null {
   if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
     return null;
   }
@@ -35,8 +35,11 @@ export function normalizeClientPoint(
 
   // Adjust X by the actual page offset if the pointer is over a page. This keeps
   // geometry-based hit testing aligned with the centered page content.
+  // Y stays as global layout Y for clickToPosition and other downstream consumers.
+  // pageLocalY is computed separately for header/footer hit testing.
   let adjustedX = baseX;
-  let adjustedY = baseY;
+  let detectedPageIndex: number | undefined;
+  let pageLocalY: number | undefined;
   const doc = options.visibleHost.ownerDocument ?? document;
   const hitChain = typeof doc.elementsFromPoint === 'function' ? doc.elementsFromPoint(clientX, clientY) : [];
   const pageEl = Array.isArray(hitChain)
@@ -45,20 +48,23 @@ export function normalizeClientPoint(
   if (pageEl) {
     const pageIndex = Number(pageEl.dataset.pageIndex ?? 'NaN');
     if (Number.isFinite(pageIndex)) {
+      detectedPageIndex = pageIndex;
       const pageOffsetX = options.getPageOffsetX(pageIndex);
       if (pageOffsetX != null) {
         adjustedX = baseX - pageOffsetX;
       }
-      const pageOffsetY = options.getPageOffsetY(pageIndex);
-      if (pageOffsetY != null) {
-        adjustedY = baseY - pageOffsetY;
-      }
+      // Compute page-local Y directly from the page element's DOM position.
+      // This is always correct regardless of scroll, virtualization, or mount padding.
+      const pageRect = pageEl.getBoundingClientRect();
+      pageLocalY = (clientY - pageRect.top) / options.zoom;
     }
   }
 
   return {
     x: adjustedX,
-    y: adjustedY,
+    y: baseY,
+    pageIndex: detectedPageIndex,
+    pageLocalY,
   };
 }
 

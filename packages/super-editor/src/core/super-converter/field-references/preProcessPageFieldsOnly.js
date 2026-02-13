@@ -118,6 +118,17 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
       }
     }
 
+    // Handle w:pgNum — legacy OOXML element for current page number.
+    // Appears as <w:r><w:rPr>…</w:rPr><w:pgNum/></w:r>. Treat identically
+    // to a PAGE field by emitting sd:autoPageNumber.
+    if (node.name === 'w:r' && node.elements?.some((el) => el.name === 'w:pgNum')) {
+      const rPr = node.elements.find((el) => el.name === 'w:rPr') || null;
+      const processedField = preProcessPageInstruction([], '', rPr);
+      processedNodes.push(...processedField);
+      i++;
+      continue;
+    }
+
     // Not a field or incomplete field - recursively process children and add
     if (Array.isArray(node.elements)) {
       const childResult = preProcessPageFieldsOnly(node.elements, depth + 1);

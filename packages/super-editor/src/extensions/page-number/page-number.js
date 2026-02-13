@@ -192,7 +192,7 @@ export const TotalPageCount = Node.create({
           const pageNumberType = schema.nodes?.['total-page-number'];
           if (!pageNumberType) return false;
 
-          const currentPages = editor?.options?.parentEditor?.currentTotalPages || 1;
+          const currentPages = editor?.options?.totalPageCount || editor?.options?.parentEditor?.currentTotalPages || 1;
           const pageNumberNode = {
             type: 'total-page-number',
             content: [{ type: 'text', text: String(currentPages) }],
@@ -224,7 +224,7 @@ const getNodeAttributes = (nodeName, editor) => {
       };
     case 'total-page-number':
       return {
-        text: editor.options.parentEditor?.currentTotalPages || '1',
+        text: editor.options.totalPageCount || editor.options.parentEditor?.currentTotalPages || '1',
         className: 'sd-editor-auto-total-pages',
         dataId: 'auto-total-pages',
         ariaLabel: 'Total page count node',
@@ -298,6 +298,14 @@ export class AutoPageNumberNodeView {
     const currentType = this.node?.type?.name;
     if (!incomingType || incomingType !== currentType) return false;
     this.node = node;
+
+    // Refresh displayed text when editor options change (e.g. currentPageNumber)
+    const attrs = getNodeAttributes(this.node.type.name, this.editor);
+    const newText = String(attrs.text);
+    if (this.dom.textContent !== newText) {
+      this.dom.textContent = newText;
+    }
+
     return true;
   }
 }

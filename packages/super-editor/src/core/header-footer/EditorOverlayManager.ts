@@ -390,7 +390,7 @@ export class EditorOverlayManager {
         position: 'absolute',
         pointerEvents: 'auto', // Critical: enables click interaction
         visibility: 'hidden', // Hidden by default, shown during editing
-        overflow: 'hidden',
+        overflow: 'visible', // Allow table overflow (page's overflow:hidden still clips at page edge)
         boxSizing: 'border-box',
       });
 

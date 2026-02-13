@@ -347,6 +347,8 @@ export type HeaderFooterRegion = {
   sectionType?: string;
   pageIndex: number;
   pageNumber: number;
+  /** Section-aware display page number (e.g. "7" when physical page is 10 due to section numbering) */
+  displayPageNumber?: string;
   localX: number;
   localY: number;
   width: number;

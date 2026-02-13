@@ -873,7 +873,7 @@ function normalizeTableBookmarksInNode(node, editor) {
   }
 
   if (Array.isArray(node.content)) {
-    node.content = normalizeTableBookmarksInContent(node.content, editor);
+    node = { ...node, content: normalizeTableBookmarksInContent(node.content, editor) };
   }
 
   return node;
@@ -904,6 +904,21 @@ function addBookmarkToRowCellInlines(rowCellInlines, rowIndex, position, bookmar
   bucket[cellIndex].push(bookmarkNode);
 }
 
+/** Apply collected start/end bookmark inlines to a single row; returns new row. */
+function applyBookmarksToRow(rowNode, { start: startByCell, end: endByCell }, editor) {
+  const cellIndices = [
+    ...new Set([...Object.keys(startByCell).map(Number), ...Object.keys(endByCell).map(Number)]),
+  ].sort((a, b) => a - b);
+  let row = rowNode;
+  for (const cellIndex of cellIndices) {
+    const startNodes = startByCell[cellIndex];
+    const endNodes = endByCell[cellIndex];
+    if (startNodes?.length) row = insertInlineIntoRow(row, startNodes, editor, 'start', cellIndex);
+    if (endNodes?.length) row = insertInlineIntoRow(row, endNodes, editor, 'end', cellIndex);
+  }
+  return row;
+}
+
 function normalizeTableBookmarksInTable(tableNode, editor) {
   if (!tableNode || tableNode.type !== 'table' || !Array.isArray(tableNode.content)) return tableNode;
 
@@ -915,22 +930,19 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
     start: /** @type {Record<number, unknown[]>} */ ({}),
     end: /** @type {Record<number, unknown[]>} */ ({}),
   }));
-  const updatedRows = rows.slice();
   let rowCursor = 0;
 
-  const normalizedContent = tableNode.content.reduce((acc, child) => {
+  // Collect bookmark positions per row/cell (no content array yet).
+  for (const child of tableNode.content) {
     if (child?.type === 'tableRow') {
-      acc.push(updatedRows[rowCursor] ?? child);
       rowCursor += 1;
-      return acc;
+      continue;
     }
-
     if (isBookmarkNode(child)) {
       const prevRowIndex = rowCursor > 0 ? rowCursor - 1 : null;
       const nextRowIndex = rowCursor < rows.length ? rowCursor : null;
       const row = (nextRowIndex ?? prevRowIndex) != null ? rows[nextRowIndex ?? prevRowIndex] : null;
       const rowCellCount = row?.content?.length ?? 0;
-
       if (child.type === 'bookmarkStart') {
         if (nextRowIndex != null)
           addBookmarkToRowCellInlines(rowCellInlines, nextRowIndex, 'start', child, rowCellCount);
@@ -941,42 +953,25 @@ function normalizeTableBookmarksInTable(tableNode, editor) {
         else if (nextRowIndex != null)
           addBookmarkToRowCellInlines(rowCellInlines, nextRowIndex, 'start', child, rowCellCount);
       }
-      return acc;
     }
+  }
 
-    acc.push(child);
-    return acc;
-  }, []);
+  const updatedRows = rows.map((row, index) => applyBookmarksToRow(row, rowCellInlines[index], editor));
 
-  updatedRows.forEach((row, index) => {
-    const { start: startByCell, end: endByCell } = rowCellInlines[index];
-    const cellIndices = [
-      ...new Set([...Object.keys(startByCell).map(Number), ...Object.keys(endByCell).map(Number)]),
-    ].sort((a, b) => a - b);
-    for (const cellIndex of cellIndices) {
-      const startNodes = startByCell[cellIndex];
-      const endNodes = endByCell[cellIndex];
-      if (startNodes?.length)
-        updatedRows[index] = insertInlineIntoRow(updatedRows[index], startNodes, editor, 'start', cellIndex);
-      if (endNodes?.length)
-        updatedRows[index] = insertInlineIntoRow(updatedRows[index], endNodes, editor, 'end', cellIndex);
-    }
-  });
-
-  // Rebuild content with updated rows (preserve any non-row nodes in place).
-  let updatedRowIndex = 0;
-  const rebuiltContent = normalizedContent.map((child) => {
+  rowCursor = 0;
+  const content = [];
+  for (const child of tableNode.content) {
     if (child?.type === 'tableRow') {
-      const replacement = updatedRows[updatedRowIndex] ?? child;
-      updatedRowIndex += 1;
-      return replacement;
+      content.push(updatedRows[rowCursor] ?? child);
+      rowCursor += 1;
+    } else if (!isBookmarkNode(child)) {
+      content.push(child);
     }
-    return child;
-  });
+  }
 
   return {
     ...tableNode,
-    content: rebuiltContent,
+    content,
   };
 }
 

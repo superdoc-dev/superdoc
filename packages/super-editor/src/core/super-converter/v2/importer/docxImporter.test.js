@@ -292,4 +292,27 @@ describe('normalizeTableBookmarksInContent', () => {
     expect(secondCellContent[1]).toMatchObject({ type: 'text', text: 'B', marks: [] });
     expect(secondCellContent[2]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'b1' } });
   });
+
+  it('normalizes bookmarks in a nested table (table inside a cell with bookmarks as direct children of inner table)', () => {
+    const innerTableWithBookmarks = table([
+      bookmarkStart('n1'),
+      row([cell([paragraph([text('Nested')])])]),
+      bookmarkEnd('n1'),
+    ]);
+    const outerTable = table([row([cell([innerTableWithBookmarks])])]);
+    const input = [outerTable];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const outer = result[0];
+    const inner = outer.content[0].content[0].content[0];
+
+    expect(inner.type).toBe('table');
+    expect(inner.content.some((node) => node.type === 'bookmarkStart')).toBe(false);
+    expect(inner.content.some((node) => node.type === 'bookmarkEnd')).toBe(false);
+
+    const innerCellParagraphContent = inner.content[0].content[0].content[0].content;
+    expect(innerCellParagraphContent[0]).toMatchObject({ type: 'bookmarkStart', attrs: { id: 'n1' } });
+    expect(innerCellParagraphContent[1]).toMatchObject({ type: 'text', text: 'Nested', marks: [] });
+    expect(innerCellParagraphContent[2]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'n1' } });
+  });
 });

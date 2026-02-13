@@ -105,6 +105,7 @@ Notes:
 - `SUPERDOC_TEST_BROWSER=<list>` env var can be used instead of `--browser`.
 - Running all browsers requires Playwright browsers installed: `pnpm exec playwright install`
 - `--headful` run browsers in headful (not headless) mode
+- `--allow-existing-harness` if an existing harness server is running, connect to it rather than failing with an error
 - `--refresh-baselines` re-download baseline files from R2 for the current filters (or full baseline if no filters).
 - `--local` use local docs and local baselines/results (no R2).
 - `--docs <path>` local docs root (required when using `--local`).

@@ -43,7 +43,7 @@ import {
 } from './corpus-provider.js';
 import { isPathLikeVersion, normalizeVersionLabel, versionLabelFromPath } from './version-utils.js';
 import { getBrowserType, resolveBrowserNames, type BrowserName } from './browser-utils.js';
-import { ensureHarnessRunning, stopHarness, HARNESS_URL } from './harness-utils.js';
+import { ensureHarnessRunning, stopHarness, HARNESS_URL, HARNESS_PORT } from './harness-utils.js';
 import { getBaselineOutputRoot, parseStorageFlags, resolveDocsDir, type StorageMode } from './storage-flags.js';
 
 // Configuration
@@ -441,6 +441,7 @@ function parseArgs(): {
   ci: boolean;
   browsers: BrowserName[];
   headful: boolean;
+  allowExistingHarness: boolean;
   scaleFactor: number;
   mode: StorageMode;
   docsDir?: string;
@@ -449,6 +450,7 @@ function parseArgs(): {
   const isBaseline = args.includes('--baseline');
   const force = args.includes('--force');
   const headful = args.includes('--headful');
+  const allowExistingHarness = args.includes('--allow-existing-harness');
   const skipExisting = args.includes('--skip-existing');
   const failOnError = args.includes('--fail-on-error');
   const append = args.includes('--append');
@@ -527,6 +529,7 @@ function parseArgs(): {
     ci,
     browsers,
     headful,
+    allowExistingHarness,
     scaleFactor,
     mode: storage.mode,
     docsDir,
@@ -835,8 +838,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
 /**
  * Main entry point.
  */
-async function main(): Promise<number> {
-  const options = parseArgs();
+async function main(options: ParsedArgs): Promise<number> {
   let exitCode = 0;
 
   for (const browser of options.browsers) {
@@ -857,11 +859,24 @@ async function main(): Promise<number> {
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   const runWithHarness = async (): Promise<number> => {
+    const options = parseArgs();
     logCi('Ensuring harness is running...');
     const { child, started } = await ensureHarnessRunning();
+    if (!started) {
+      if (options.allowExistingHarness) {
+        console.info(colors.info('⚠ Harness server is already running'));
+      } else {
+        console.error(
+          colors.error(
+            `⚠ Harness server is already running. Kill the existing process (e.g. \`lsof -t -i:${HARNESS_PORT} | xargs -r kill\`) and try again, or run with --allow-existing-harness to connect to the running server.`,
+          ),
+        );
+        process.exit(2);
+      }
+    }
     logCi('Harness ready.');
     try {
-      const exitCode = await main();
+      const exitCode = await main(options);
       logCi(`generate-refs main complete (exit ${exitCode}).`);
       return exitCode;
     } finally {

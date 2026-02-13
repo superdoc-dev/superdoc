@@ -39,7 +39,7 @@ import { createCorpusProvider, resolveDocumentPath, type CorpusProvider } from '
 import { colors } from './terminal.js';
 import { getBrowserType, resolveBrowserNames, type BrowserName } from './browser-utils.js';
 import { sleep } from './utils.js';
-import { ensureHarnessRunning, stopHarness } from './harness-utils.js';
+import { ensureHarnessRunning, HARNESS_PORT, stopHarness } from './harness-utils.js';
 import { getBaselineOutputRoot, parseStorageFlags, resolveDocsDir, type StorageMode } from './storage-flags.js';
 
 const STORIES_DIR = path.resolve(process.cwd(), 'tests/interactions/stories');
@@ -97,6 +97,7 @@ function parseArgs(): {
   ci: boolean;
   browsers: BrowserName[];
   headful: boolean;
+  allowExistingHarness: boolean;
   scaleFactor: number;
   mode: StorageMode;
   docsDir?: string;
@@ -105,6 +106,7 @@ function parseArgs(): {
   const isBaseline = args.includes('--baseline');
   const force = args.includes('--force');
   const headful = args.includes('--headful');
+  const allowExistingHarness = args.includes('--allow-existing-harness');
   const skipExisting = args.includes('--skip-existing');
   const failOnError = args.includes('--fail-on-error');
   const ci = args.includes('--ci') || args.includes('--silent') || process.env.SUPERDOC_TEST_CI === '1';
@@ -149,7 +151,13 @@ function parseArgs(): {
       i++;
     } else if (arg === '--docs' && args[i + 1]) {
       i++;
-    } else if (arg === '--baseline' || arg === '--force' || arg === '--headful' || arg === '--skip-existing') {
+    } else if (
+      arg === '--baseline' ||
+      arg === '--force' ||
+      arg === '--headful' ||
+      arg === '--skip-existing' ||
+      arg === 'allow-existing-harness'
+    ) {
       // flags handled above
     } else if (!arg.startsWith('--')) {
       version = arg;
@@ -171,6 +179,7 @@ function parseArgs(): {
     ci,
     browsers,
     headful,
+    allowExistingHarness,
     scaleFactor,
     mode: storage.mode,
     docsDir,
@@ -691,8 +700,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
   }
 }
 
-async function main(): Promise<number> {
-  const options = parseArgs();
+async function main(options: ParsedArgs): Promise<number> {
   let exitCode = 0;
 
   for (const browser of options.browsers) {
@@ -714,11 +722,24 @@ async function main(): Promise<number> {
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   const runWithHarness = async (): Promise<number> => {
+    const options = parseArgs();
     logCi('Ensuring harness is running...');
     const { child, started } = await ensureHarnessRunning();
+    if (!started) {
+      if (options.allowExistingHarness) {
+        console.info(colors.info('⚠ Harness server is already running'));
+      } else {
+        console.error(
+          colors.error(
+            `⚠ Harness server is already running. Kill the existing process (e.g. \`lsof -t -i:${HARNESS_PORT} | xargs -r kill\`) and try again, or run with --allow-existing-harness to connect to the running server.`,
+          ),
+        );
+        process.exit(2);
+      }
+    }
     logCi('Harness ready.');
     try {
-      const exitCode = await main();
+      const exitCode = await main(options);
       logCi(`generate-interactions main complete (exit ${exitCode}).`);
       return exitCode;
     } finally {

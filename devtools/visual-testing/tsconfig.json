@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "dom"],
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["node", "vitest/globals"]

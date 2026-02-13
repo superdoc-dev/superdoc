@@ -216,6 +216,50 @@ function walkStoriesDir(dir: string, rootDir: string): string[] {
   return files;
 }
 
+/**
+ * Test if the object conforms to InteractionStory
+ */
+function isInteractionStory(story: any): story is InteractionStory {
+  return typeof story?.run === 'function';
+}
+
+/**
+ * Take the export of a story file, which can be either a single
+ * InteractionStory or an array of them, and return an array of stories.
+ */
+function getStoryArray(imported: unknown, relativePath: string, quiet: boolean): InteractionStory[] {
+  if (!Array.isArray(imported)) {
+    if (isInteractionStory(imported)) {
+      return [imported];
+    }
+
+    if (!quiet) {
+      console.warn(colors.warning(`Skipping invalid story: ${relativePath} (missing run())`));
+    } else {
+      console.warn(colors.warning('Skipping invalid story (missing run())'));
+    }
+    return [];
+  }
+
+  if (imported.length === 0) {
+    if (!quiet) {
+      console.warn(colors.warning(`No stories in file: ${relativePath}`));
+    }
+  }
+
+  return imported.filter((story, index) => {
+    const isValid = isInteractionStory(story);
+    if (!isValid) {
+      if (!quiet) {
+        console.warn(colors.warning(`Skipping invalid story: ${relativePath}[${index}] (missing run())`));
+      } else {
+        console.warn(colors.warning('Skipping invalid story (missing run())'));
+      }
+    }
+    return isValid;
+  });
+}
+
 async function loadStories(quiet: boolean): Promise<LoadedStory[]> {
   const { dir, isLegacy } = resolveStoriesDir();
   if (!fs.existsSync(dir)) {
@@ -238,21 +282,16 @@ async function loadStories(quiet: boolean): Promise<LoadedStory[]> {
 
     try {
       const module = await import(pathToFileURL(filePath).href);
-      const story = module.default as InteractionStory;
-      if (!story || typeof story.run !== 'function') {
-        if (!quiet) {
-          console.warn(colors.warning(`Skipping invalid story: ${relativePath} (missing run())`));
-        } else {
-          console.warn(colors.warning('Skipping invalid story (missing run())'));
-        }
-        continue;
-      }
+      const multipleStories = Array.isArray(module.default);
 
-      const name = story.name || fileName;
-      // Create hierarchical ID: folder/filename (or just filename if at root)
-      const id =
-        relativeDir === '.' ? sanitizeFilename(name) : `${relativeDir.replace(/\\/g, '/')}/${sanitizeFilename(name)}`;
-      stories.push({ id, name, filePath, story: { ...story, name } });
+      for (const [index, story] of getStoryArray(module.default, relativePath, quiet).entries()) {
+        const suffix = multipleStories ? `/${index}` : '';
+        const name = story.name || `${fileName}${suffix}`;
+        // Create hierarchical ID: folder/filename (or just filename if at root)
+        const id =
+          relativeDir === '.' ? sanitizeFilename(name) : `${relativeDir.replace(/\\/g, '/')}/${sanitizeFilename(name)}`;
+        stories.push({ id, name, filePath, story: { ...story, name } });
+      }
     } catch (error) {
       if (!quiet) {
         console.warn(

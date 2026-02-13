@@ -3,6 +3,7 @@ import { defineStory } from '@superdoc-testing/helpers';
 const WAIT_SHORT_MS = 200;
 const WAIT_LONG_MS = 600;
 
+// Default export must be an InteractionStory instance or an Array<InteractionStory>.
 export default defineStory({
   name: 'story-name',
   description: 'One sentence describing the purpose of the story.',

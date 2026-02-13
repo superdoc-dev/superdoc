@@ -1112,23 +1112,6 @@ describe('renderTableCell', () => {
   });
 
   describe('spacing.before margin-top rendering', () => {
-    const baseMeasure: ParagraphMeasure = {
-      kind: 'paragraph',
-      lines: [
-        {
-          fromRun: 0,
-          fromChar: 0,
-          toRun: 0,
-          toChar: 10,
-          width: 100,
-          ascent: 12,
-          descent: 4,
-          lineHeight: 20,
-        },
-      ],
-      totalHeight: 20,
-    };
-
     it('applies margin-top only for positive spacing.before', () => {
       const para1: ParagraphBlock = {
         kind: 'paragraph',
@@ -1152,7 +1135,7 @@ describe('renderTableCell', () => {
       };
 
       const cellMeasure: TableCellMeasure = {
-        blocks: [baseMeasure, baseMeasure, baseMeasure],
+        blocks: [paragraphMeasure, paragraphMeasure, paragraphMeasure],
         width: 120,
         height: 80,
         gridColumnStart: 0,
@@ -1249,6 +1232,40 @@ describe('renderTableCell', () => {
 
       const fullWrapper = (fullCell.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
       expect(fullWrapper.style.marginTop).toBe('11px');
+    });
+
+    it('applies both margin-top and margin-bottom when paragraph has spacing.before and spacing.after', () => {
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-before-and-after',
+        runs: [{ text: 'Both spacing', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { spacing: { before: 12, after: 18 } },
+      };
+
+      const cellMeasure: TableCellMeasure = {
+        blocks: [paragraphMeasure],
+        width: 120,
+        height: 60,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+
+      const cell: TableCell = {
+        id: 'cell-before-and-after',
+        blocks: [para],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      const paraWrapper = (cellElement.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
+      expect(paraWrapper.style.marginTop).toBe('12px');
+      expect(paraWrapper.style.marginBottom).toBe('18px');
     });
   });
 

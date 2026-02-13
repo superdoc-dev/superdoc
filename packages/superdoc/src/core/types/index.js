@@ -195,10 +195,6 @@
  * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
  * @property {string} [licenseKey] License key for organization identification
  * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration
- * @property {boolean} telemetry.enabled Whether telemetry is enabled
- * @property {string} [telemetry.endpoint] Custom telemetry endpoint
- * @property {Record<string, unknown>} [telemetry.metadata] Custom metadata to include with telemetry events
- * @property {string} [telemetry.licenseKey] @deprecated Use root-level `licenseKey` instead
  */
 
 export {};

@@ -251,10 +251,8 @@ describe('layoutTableBlock', () => {
       const boundaries = fragments[0].metadata?.columnBoundaries;
       expect(boundaries).toBeDefined();
 
-      // Keep a fixed floor so resize constraints always allow shrinking.
-      boundaries?.forEach((boundary) => {
-        expect(boundary.minWidth).toBe(10);
-      });
+      // minWidth is clamped to [COLUMN_MIN_WIDTH_PX, COLUMN_MAX_WIDTH_PX] (25–200)
+      expect(boundaries?.map((b) => b.minWidth)).toEqual([100, 150, 200]);
     });
 
     it('should mark all columns as resizable', () => {
@@ -786,7 +784,8 @@ describe('layoutTableBlock', () => {
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
       expect(boundaries).toHaveLength(1);
-      expect(boundaries![0].minWidth).toBe(10);
+      // Column width 300 is clamped to COLUMN_MAX_WIDTH_PX (200)
+      expect(boundaries![0].minWidth).toBe(200);
     });
 
     it('should handle very wide column (> 200px)', () => {
@@ -811,7 +810,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      expect(boundaries![0].minWidth).toBe(10);
+      expect(boundaries![0].minWidth).toBe(200);
     });
 
     it('should handle very narrow column (< 25px)', () => {
@@ -836,7 +835,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      expect(boundaries![0].minWidth).toBe(10);
+      expect(boundaries![0].minWidth).toBe(25);
     });
 
     it('should handle empty columnWidths array', () => {
@@ -888,7 +887,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      expect(boundaries![0].minWidth).toBe(10);
+      expect(boundaries![0].minWidth).toBe(25);
     });
 
     it('should handle zero measured width', () => {
@@ -913,7 +912,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      expect(boundaries![0].minWidth).toBe(10);
+      expect(boundaries![0].minWidth).toBe(25);
     });
 
     it('should handle multiple columns with varying widths', () => {
@@ -939,9 +938,8 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      boundaries?.forEach((boundary) => {
-        expect(boundary.minWidth).toBe(10);
-      });
+      // [10, 100, 500] → clamped to [25, 100, 200]
+      expect(boundaries?.map((b) => b.minWidth)).toEqual([25, 100, 200]);
     });
   });
 
@@ -1244,6 +1242,43 @@ describe('layoutTableBlock', () => {
       });
 
       expect(fragments.length).toBeGreaterThan(1);
+    });
+
+    it('should use correct remainingHeight when first row exceeds availableHeight (cellSpacing)', () => {
+      // When the first row does not fit, remainingHeight must subtract vertical space before
+      // the first row (cellSpacing + top border), not use full availableHeight.
+      const block = createMockTableBlock(1, undefined, { cellSpacing: { value: 4, type: 'px' } });
+      const measure = createMockTableMeasure(
+        [100],
+        [60],
+        [[15, 15, 15, 15]], // 4 lines × 15px = 60px row height
+        4,
+      );
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 40, // Less than first row (60) + top spacing (4) = 64
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      // With the fix, remainingHeight = 40 - 4 = 36 (not 40), so we get a partial first row
+      // and a continuation fragment on the next page.
+      expect(fragments.length).toBeGreaterThanOrEqual(1);
+      expect(fragments[0].partialRow).not.toBeNull();
+      expect(fragments[0].toRow).toBe(1);
+      if (fragments.length > 1) {
+        expect(fragments[1].continuesFromPrev).toBe(true);
+      }
     });
 
     it('should handle cantSplit row that does not fit (move to next page)', () => {

@@ -6465,7 +6465,14 @@ const deriveBlockVersion = (block: FlowBlock): string => {
       }
       if (tblAttrs.cellSpacing !== undefined) {
         const cs = tblAttrs.cellSpacing;
-        hash = typeof cs === 'number' ? hashNumber(hash, cs) : hashString(hash, JSON.stringify(cs));
+        if (typeof cs === 'number') {
+          hash = hashNumber(hash, cs);
+        } else {
+          // Stable key: value and type only (avoid JSON.stringify key-order variance)
+          const v = (cs as { value?: number; type?: string }).value ?? 0;
+          const t = (cs as { value?: number; type?: string }).type ?? 'px';
+          hash = hashString(hash, `cs:${v}:${t}`);
+        }
       }
       // Include SDT metadata so lock-mode changes invalidate the cache.
       if (tblAttrs.sdt) {

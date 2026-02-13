@@ -2791,12 +2791,17 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
   const horizontalGaps = gridColumnCount > 0 ? (gridColumnCount + 1) * cellSpacingPx : 0;
   const verticalGaps = numRows > 0 ? (numRows + 1) * cellSpacingPx : 0;
 
-  // Outer table border widths: include in total dimensions so there is enough space for last row/column spacing
+  // Outer table border widths: only add to total dimensions when borderCollapse === 'separate',
+  // since the DOM renderer only paints container-level outer borders in that path. For collapsed
+  // (default), borders are on cells and don't grow the table container, so including them would
+  // overstate size and cause premature wrapping/page breaks or alignment drift.
   const tableBorderWidths = getTableBorderWidths(block.attrs?.borders);
   const borderWidthH = tableBorderWidths.left + tableBorderWidths.right;
   const borderWidthV = tableBorderWidths.top + tableBorderWidths.bottom;
-  const totalWidth = contentWidth + horizontalGaps + borderWidthH;
-  const totalHeight = contentHeight + verticalGaps + borderWidthV;
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+  const includeOuterBordersInTotal = borderCollapse === 'separate';
+  const totalWidth = contentWidth + horizontalGaps + (includeOuterBordersInTotal ? borderWidthH : 0);
+  const totalHeight = contentHeight + verticalGaps + (includeOuterBordersInTotal ? borderWidthV : 0);
 
   return {
     kind: 'table',

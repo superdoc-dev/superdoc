@@ -444,14 +444,19 @@ async function runStory(
   const helpers = createInteractionHelpers(page);
   const milestones: string[] = [];
 
+  const captureScreenshot = async (fileName: string) => {
+    const milestonePath = path.join(storyDir, fileName);
+    await page.screenshot({ path: milestonePath, fullPage: true, animations: 'disabled' });
+    return milestonePath;
+  };
+
   const milestone = async (suffix?: string, description?: string): Promise<void> => {
     await sleep(MILESTONE_EXTRA_WAIT_MS);
     if (layoutEnabled) {
       await waitForLayoutStable(page, { selector: '.superdoc-layout', stableMs: 300, timeout: TIMEOUT_LAYOUT_STABLE });
     }
     const fileName = milestoneNameForStory(suffix);
-    const milestonePath = path.join(storyDir, fileName);
-    await page.screenshot({ path: milestonePath, fullPage: true, animations: 'disabled' });
+    const milestonePath = await captureScreenshot(fileName);
     milestones.push(milestonePath);
     storyMeta.milestones[fileName] = {
       label: suffix,
@@ -461,7 +466,13 @@ async function runStory(
 
   const snapshot = milestone;
 
-  await story.story.run(page, { ...helpers, milestone, snapshot });
+  try {
+    await story.story.run(page, { ...helpers, milestone, snapshot });
+  } catch (e) {
+    const path = await captureScreenshot('error-snapshot.png');
+    console.warn(colors.error(`Captured screenshot: ${path}`));
+    throw e;
+  }
 
   if (milestones.length === 0) {
     await milestone();

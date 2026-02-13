@@ -849,6 +849,17 @@ export type SectionMetadata = {
   titlePg?: boolean;
   /** Vertical alignment of content within this section's pages */
   vAlign?: SectionVerticalAlign;
+  /** Section page margins in CSS px */
+  margins?: {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+    header?: number;
+    footer?: number;
+  } | null;
+  /** Section page size in CSS px */
+  pageSize?: { w: number; h: number } | null;
 };
 
 export type PageBreakBlock = {
@@ -1581,6 +1592,8 @@ export type TableFragment = {
   continuesOnNext?: boolean;
   repeatHeaderCount?: number;
   partialRow?: PartialRowInfo;
+  /** Rescaled column widths when table is clamped to a narrower section (SD-1859). */
+  columnWidths?: number[];
   metadata?: TableFragmentMetadata;
   pmStart?: number;
   pmEnd?: number;

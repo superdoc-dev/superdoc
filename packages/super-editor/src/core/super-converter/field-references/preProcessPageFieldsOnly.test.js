@@ -150,9 +150,11 @@ describe('preProcessPageFieldsOnly', () => {
 
       const result = preProcessPageFieldsOnly(nodes);
 
-      // Should pass through unchanged (processed recursively)
+      // Unhandled fldSimple should unwrap to its child content (w:r elements)
+      // so the cached display text is rendered instead of being lost in a passthrough node
       expect(result.processedNodes).toHaveLength(1);
-      expect(result.processedNodes[0].name).toBe('w:fldSimple');
+      expect(result.processedNodes[0].name).toBe('w:r');
+      expect(result.processedNodes[0].elements[0].elements[0].text).toBe('John Doe');
     });
   });
 

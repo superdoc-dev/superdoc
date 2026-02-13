@@ -1360,9 +1360,14 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      // PRIORITY 1: Try per-rId layout
-      if (sectionRId && layoutsByRId.has(sectionRId)) {
-        const rIdLayout = layoutsByRId.get(sectionRId);
+      // PRIORITY 1: Try per-rId layout (composite key first for per-section margins, then plain rId)
+      const compositeKey = sectionRId ? `${sectionRId}::s${sectionIndex}` : undefined;
+      const rIdLayoutKey =
+        (compositeKey && layoutsByRId.has(compositeKey) && compositeKey) ||
+        (sectionRId && layoutsByRId.has(sectionRId) && sectionRId) ||
+        undefined;
+      if (rIdLayoutKey) {
+        const rIdLayout = layoutsByRId.get(rIdLayoutKey);
         if (!rIdLayout) {
           console.warn(
             `[HeaderFooterSessionManager] Inconsistent state: layoutsByRId.has('${sectionRId}') returned true but get() returned undefined`,
@@ -1377,6 +1382,10 @@ export class HeaderFooterSessionManager {
               kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
             const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
 
+            // When a table grid width exceeds the section content width, the layout
+            // was computed at the wider effectiveWidth. Use it for the container (SD-1837).
+            const effectiveWidth = rIdLayout.effectiveWidth ?? box.width;
+
             const rawLayoutHeight = rIdLayout.layout.height ?? 0;
             const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
@@ -1390,12 +1399,12 @@ export class HeaderFooterSessionManager {
               contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
               offset: metrics.offset,
               marginLeft: box.x,
-              contentWidth: box.width,
+              contentWidth: effectiveWidth,
               headerId: sectionRId,
               sectionType: headerFooterType,
               minY: layoutMinY,
-              box: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
-              hitRegion: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
+              box: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
+              hitRegion: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
             };
           }
         }

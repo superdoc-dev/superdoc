@@ -846,6 +846,8 @@ describe('analysis', () => {
         footerRefs: { default: 'footer1' },
         numbering: { format: 'decimal' },
         titlePg: false,
+        margins: null,
+        pageSize: null,
       });
     });
 

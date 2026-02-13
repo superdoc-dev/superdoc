@@ -175,6 +175,41 @@ function resolveTableFrame(
 }
 
 /**
+ * Rescales column widths when a table is clamped to fit a narrower section.
+ *
+ * In mixed-orientation documents, tables are measured at the widest section's
+ * content width but may render in narrower sections. When the measured total
+ * width exceeds the fragment width, column widths must be proportionally
+ * rescaled so cells don't overflow the fragment container (SD-1859).
+ *
+ * @returns Rescaled column widths if clamping occurred, undefined otherwise.
+ */
+function rescaleColumnWidths(
+  measureColumnWidths: number[] | undefined,
+  measureTotalWidth: number,
+  fragmentWidth: number,
+): number[] | undefined {
+  if (!measureColumnWidths || measureColumnWidths.length === 0) {
+    return undefined;
+  }
+  // When the table fits within the fragment, return original widths unchanged.
+  // This ensures every table fragment is self-contained with its own column widths,
+  // which is critical for header/footer tables where multiple sections share the same
+  // blockId but have different content widths (SD-1837).
+  if (measureTotalWidth <= fragmentWidth || measureTotalWidth <= 0) {
+    return measureColumnWidths;
+  }
+  const scale = fragmentWidth / measureTotalWidth;
+  const scaled = measureColumnWidths.map((w) => Math.max(1, Math.round(w * scale)));
+  const scaledSum = scaled.reduce((a, b) => a + b, 0);
+  const target = Math.round(fragmentWidth);
+  if (scaledSum !== target && scaled.length > 0) {
+    scaled[scaled.length - 1] = Math.max(1, scaled[scaled.length - 1] + (target - scaledSum));
+  }
+  return scaled;
+}
+
+/**
  * Calculate minimum width for a table column.
  *
  * Uses a conservative minimum of 10px per column to match PM's
@@ -986,6 +1021,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
     y: state.cursorY,
     width,
     height,
+    columnWidths: rescaleColumnWidths(context.measure.columnWidths, context.measure.totalWidth, width),
     metadata,
   };
   applyTableFragmentPmRange(fragment, context.block, context.measure);
@@ -1133,6 +1169,7 @@ export function layoutTableBlock({
       y: state.cursorY,
       width,
       height,
+      columnWidths: rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width),
       metadata,
     };
     applyTableFragmentPmRange(fragment, block, measure);
@@ -1219,6 +1256,7 @@ export function layoutTableBlock({
           continuesOnNext: hasRemainingLinesAfterContinuation || rowIndex + 1 < block.rows.length,
           repeatHeaderCount,
           partialRow: continuationPartialRow,
+          columnWidths: rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width),
           metadata: generateFragmentMetadata(measure, rowIndex, rowIndex + 1, repeatHeaderCount),
         };
 
@@ -1282,6 +1320,7 @@ export function layoutTableBlock({
         continuesOnNext: !forcedPartialRow.isLastPart || forcedEndRow < block.rows.length,
         repeatHeaderCount,
         partialRow: forcedPartialRow,
+        columnWidths: rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width),
         metadata: generateFragmentMetadata(measure, bodyStartRow, forcedEndRow, repeatHeaderCount),
       };
 
@@ -1323,6 +1362,7 @@ export function layoutTableBlock({
       continuesOnNext: endRow < block.rows.length || (partialRow ? !partialRow.isLastPart : false),
       repeatHeaderCount,
       partialRow: partialRow || undefined,
+      columnWidths: rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width),
       metadata: generateFragmentMetadata(measure, bodyStartRow, endRow, repeatHeaderCount),
     };
 

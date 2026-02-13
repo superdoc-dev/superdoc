@@ -63,6 +63,23 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
         i++;
         continue;
       }
+
+      // For unhandled fldSimple fields (FILENAME, DOCPROPERTY, etc.),
+      // unwrap the field and emit child content directly.
+      // The child elements (w:r > w:t) contain the cached display value
+      // that Word rendered when the document was last saved.
+      const childElements = node.elements || [];
+      if (childElements.length > 0) {
+        for (const child of childElements) {
+          if (Array.isArray(child.elements)) {
+            const childResult = preProcessPageFieldsOnly(child.elements, depth + 1);
+            child.elements = childResult.processedNodes;
+          }
+          processedNodes.push(child);
+        }
+        i++;
+        continue;
+      }
     }
 
     if (fldType === 'begin') {

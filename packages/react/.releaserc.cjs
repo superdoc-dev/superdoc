@@ -11,7 +11,7 @@ const config = {
     'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
-    ['@semantic-release/npm', { npmPublish: true }],
+    ['semantic-release-pnpm', { npmPublish: true }],
   ],
 };
 

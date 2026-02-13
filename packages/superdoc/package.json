@@ -70,8 +70,8 @@
     "build:umd": "vite build --config vite.config.umd.js",
     "clean": "rm -rf dist",
     "pack:local": "pnpm run pack",
-    "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
-    "pack:es": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
+    "pack": "pnpm run build:es && pnpm pack && ln -sf superdoc-${npm_package_version}.tgz ./superdoc.tgz",
+    "pack:es": "${npm_execpath} run pack",
     "test": "vitest"
   },
   "dependencies": {

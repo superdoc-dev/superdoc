@@ -10,6 +10,21 @@ import sourceResolve from '../../vite.sourceResolve'
 const testPool = process.env.VITEST_POOL ?? 'threads';
 const minWorkers = process.env.VITEST_MIN_WORKERS ?? '50%';
 const maxWorkers = process.env.VITEST_MAX_WORKERS ?? '75%';
+const manualChunkRules = [
+  ['converter', ['/src/core/super-converter/SuperConverter', '@core/super-converter/SuperConverter']],
+  ['editor', ['/src/core/Editor', '@core/Editor']],
+  ['docx-zipper', ['/src/core/DocxZipper', '@core/DocxZipper']],
+  ['toolbar', ['/src/components/toolbar/Toolbar.vue', '@components/toolbar/Toolbar.vue']],
+  ['super-input', ['/src/components/SuperInput.vue', '@components/SuperInput.vue']],
+  ['file-zipper', ['/src/core/super-converter/zipper', '@core/super-converter/zipper']],
+  ['ai-writer', ['/src/components/toolbar/AIWriter.vue', '@components/toolbar/AIWriter.vue']],
+];
+
+function resolveManualChunk(id) {
+  const normalizedId = id.replace(/\\/g, '/');
+  const match = manualChunkRules.find(([, patterns]) => patterns.some((pattern) => normalizedId.includes(pattern)));
+  return match?.[0];
+}
 
 export default defineConfig(({ mode }) => {
   const plugins = [vue()];
@@ -88,14 +103,9 @@ export default defineConfig(({ mode }) => {
             'vue': 'Vue',
             'tippy.js': 'tippy',
           },
-          manualChunks: {
-            'converter': ['@core/super-converter/SuperConverter'],
-            'editor': ['@core/Editor'],
-            'docx-zipper': ['@core/DocxZipper'],
-            'toolbar': ['@components/toolbar/Toolbar.vue'],
-            'super-input': ['@components/SuperInput.vue'],
-            'file-zipper': ['@core/super-converter/zipper.js'],
-            'ai-writer': ['@components/toolbar/AIWriter.vue'],
+          // Rolldown requires function-form manualChunks.
+          manualChunks(id) {
+            return resolveManualChunk(id);
           },
           entryFileNames: '[name].es.js',
           chunkFileNames: 'chunks/[name]-[hash].js'

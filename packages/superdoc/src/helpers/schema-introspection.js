@@ -50,6 +50,7 @@ export const getSchemaIntrospection = async (options = {}) => {
     mode,
     isHeadless: true,
     deferDocumentLoad: true,
+    telemetry: { enabled: false },
   });
 
   try {

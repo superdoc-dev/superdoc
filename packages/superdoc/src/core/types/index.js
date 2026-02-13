@@ -193,6 +193,8 @@
  * @property {boolean} [isDebug=false] Whether to enable debug mode
  * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
  * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
+ * @property {string} [licenseKey] License key for organization identification
+ * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration
  */
 
 export {};

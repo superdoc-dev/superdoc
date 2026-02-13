@@ -66,5 +66,9 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Run memory profiling tests (non-blocking)
+        continue-on-error: true
+        run: pnpm --filter @superdoc/layout-tests run test:memory
+
       - name: Run slow tests
         run: pnpm test:slow

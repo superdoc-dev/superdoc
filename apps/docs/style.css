@@ -1,3 +1,50 @@
+/* Page title - match homepage H1 sizing */
 #page-title {
   font-size: 2.8rem !important;
+  color: #1e74dd;
+}
+
+.dark body,
+[data-theme='dark'] body {
+  background: rgb(var(--background-dark)) !important;
+}
+
+/* Search bar - match homepage pill style */
+#search-bar-entry {
+  border-radius: 9999px !important;
+}
+
+/* Navbar CTA button - match homepage (indigo-600 pill) */
+a[href*='meetings'],
+a[href*='meetings'] * {
+  border-radius: 9999px !important;
+}
+
+a[href*='meetings'] {
+  background-color: #4f46e5 !important;
+  color: #fff !important;
+  padding: 0.5rem 1.25rem !important;
+  font-family: Inter, sans-serif !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  border: none !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+  transition:
+    background-color 0.15s,
+    box-shadow 0.15s !important;
+}
+
+a[href*='meetings']:hover {
+  background-color: #4338ca !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25) !important;
+}
+
+a[href*='meetings'] svg {
+  display: none !important;
+}
+
+/* GitHub navbar link - compact display (icon + count only) */
+a[href*='github.com/superdoc-dev'] .truncate,
+a[href*='github.com/superdoc-dev'] svg[style*='mask-image'] {
+  display: none !important;
 }

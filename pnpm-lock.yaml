@@ -241,8 +241,8 @@ catalogs:
       specifier: ^1.0.2
       version: 1.0.2
     semantic-release-linear-app:
-      specifier: ^0.7.0
-      version: 0.7.0
+      specifier: ^0.7.1
+      version: 0.7.1
     tippy.js:
       specifier: ^6.3.7
       version: 6.3.7
@@ -377,7 +377,7 @@ importers:
         version: 1.0.2
       semantic-release-linear-app:
         specifier: 'catalog:'
-        version: 0.7.0(semantic-release@24.2.9(typescript@5.9.3))
+        version: 0.7.1(semantic-release@24.2.9(typescript@5.9.3))
       semantic-release-pnpm:
         specifier: ^1.0.2
         version: 1.0.2(semantic-release@24.2.9(typescript@5.9.3))
@@ -9764,8 +9764,8 @@ packages:
   semantic-release-commit-filter@1.0.2:
     resolution: {integrity: sha512-LpIB1UN78oRmJnqgPdvA/qRgVitih5V1Ybyszv8GcOBAJWJBHGWI1PmSrOfdEmbf1ZvGkdK/NNDdBHbuSQqSyQ==}
 
-  semantic-release-linear-app@0.7.0:
-    resolution: {integrity: sha512-ti1xKAUYdf8m2y3N+wDonYczMglMbt/xgutluH8cjOgEru9XJ0VcbeXCe5/dYySdyfyZYKb1CRvPHra1yshSyA==}
+  semantic-release-linear-app@0.7.1:
+    resolution: {integrity: sha512-UmFCNIFySR/6ZZ2t0RYUwBTLQrLwp9c5eEgePwN7PAU9wLC0Oc3KgZ+bElpyhl9rPOhvhBJhSGsoPNt8Sa2tBw==}
     engines: {node: '>=18'}
     peerDependencies:
       semantic-release: '>=20.0.0'
@@ -14610,7 +14610,7 @@ snapshots:
 
   '@stoplight/json-ref-readers@1.2.2':
     dependencies:
-      node-fetch: 2.7.0
+      node-fetch: 2.6.7
       tslib: 1.14.1
     transitivePeerDependencies:
       - encoding
@@ -22126,7 +22126,7 @@ snapshots:
 
   semantic-release-commit-filter@1.0.2: {}
 
-  semantic-release-linear-app@0.7.0(semantic-release@24.2.9(typescript@5.9.3)):
+  semantic-release-linear-app@0.7.1(semantic-release@24.2.9(typescript@5.9.3)):
     dependencies:
       '@semantic-release/error': 4.0.0
       execa: 9.6.1

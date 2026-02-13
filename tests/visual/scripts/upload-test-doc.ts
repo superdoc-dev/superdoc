@@ -10,9 +10,10 @@
  * Examples:
  *   pnpm docs:upload ~/Downloads/bug-repro.docx
  */
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { intro, outro, text, confirm, cancel, isCancel } from '@clack/prompts';
+import { intro, outro, text, confirm, cancel, isCancel, log } from '@clack/prompts';
 import { createR2Client, ensureR2Auth, DOCUMENTS_PREFIX } from './r2.js';
 
 function toKebab(str: string): string {
@@ -85,11 +86,26 @@ async function main() {
   await client.putObject(key, resolved, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   client.destroy();
 
+  // Trigger baseline generation if gh CLI is available
+  let triggered = false;
+  try {
+    execSync('gh auth status', { stdio: 'ignore' });
+    const trigger = exitIfCancelled(await confirm({ message: 'Trigger baseline generation in CI?' }));
+    if (trigger) {
+      execSync('gh workflow run visual-baseline.yml --repo superdoc-dev/superdoc', { stdio: 'inherit' });
+      triggered = true;
+    }
+  } catch {
+    log.info('Tip: run `gh auth login` to auto-trigger baseline generation after upload.');
+  }
+
   outro(
     `Uploaded! Next:\n` +
       `  1. pnpm docs:download          # pull the new file locally\n` +
       `  2. pnpm test                    # verify it loads and renders\n` +
-      `  Baselines are generated in CI from the stable branch.`,
+      (triggered
+        ? `  Baselines are being generated in CI from the stable branch.`
+        : `  Baselines: trigger manually via gh workflow run visual-baseline.yml`),
   );
 }
 

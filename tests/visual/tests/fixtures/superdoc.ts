@@ -171,10 +171,7 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
 
       async tripleClickLine(lineIndex: number) {
         const line = page.locator('.superdoc-line').nth(lineIndex);
-        await line.waitFor({ state: 'visible', timeout: 10_000 });
-        const box = await line.boundingBox();
-        if (!box) throw new Error(`Line ${lineIndex} not visible`);
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { clickCount: 3 });
+        await line.click({ clickCount: 3, timeout: 10_000 });
       },
 
       async setDocumentMode(mode: 'editing' | 'suggesting' | 'viewing') {

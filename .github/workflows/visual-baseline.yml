@@ -6,6 +6,10 @@ permissions:
 on:
   workflow_dispatch:
   workflow_call:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/visual/tests/**/*.spec.ts'
 
 concurrency:
   group: visual-baseline

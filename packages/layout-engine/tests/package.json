@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
+    "test:memory": "NODE_OPTIONS=--expose-gc vitest run src/memory-profile.test.ts --pool forks --poolOptions.forks.singleFork",
     "test:parity": "vitest run --grep 'Parity'",
     "test:integration": "vitest run --grep 'Integration'"
   },

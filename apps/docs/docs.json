@@ -1,16 +1,23 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "willow",
+  "theme": "mint",
   "name": "SuperDoc",
   "description": "Web-based DOCX editor with full Microsoft Word compatibility. Handle tracked changes, complex tables, and document automation. Works with any framework and AI agents.",
   "colors": {
-    "primary": "#0055FF",
-    "light": "#0085FF",
-    "dark": "#003ACC"
+    "primary": "#6366F1",
+    "light": "#8968F6",
+    "dark": "#4F46E5"
+  },
+  "background": {
+    "color": {
+      "light": "#f8f8fc",
+      "dark": "#0a0a0f"
+    }
   },
   "logo": {
     "light": "/public/images/logo-light.png",
-    "dark": "/public/images/logo-dark.png"
+    "dark": "/public/images/logo-dark.png",
+    "href": "https://superdoc.dev"
   },
   "favicon": "/public/images/favicon.png",
   "icons": {
@@ -20,9 +27,6 @@
     "family": "Plus Jakarta Sans",
     "body": {
       "family": "Inter"
-    },
-    "heading": {
-      "font-size": "2.5rem !important"
     }
   },
   "contextual": {
@@ -41,7 +45,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Editor",
+        "tab": "SuperDoc",
         "groups": [
           {
             "group": "Getting Started",
@@ -269,10 +273,8 @@
     },
     "links": [
       {
-        "type": "button",
-        "href": "https://github.com/superdoc-dev/superdoc",
-        "label": "",
-        "icon": "github"
+        "type": "github",
+        "href": "https://github.com/superdoc-dev/superdoc"
       },
       {
         "type": "button",

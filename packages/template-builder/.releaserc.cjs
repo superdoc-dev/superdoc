@@ -41,7 +41,7 @@ config.plugins.push(['semantic-release-linear-app', {
 config.plugins.push([
   '@semantic-release/github',
   {
-    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **template-builder** v${nextRelease.version}\n\nThe release is available on [GitHub release](<github_release_url>)',
+    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **template-builder** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
   }
 ]);
 

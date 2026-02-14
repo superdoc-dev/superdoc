@@ -50,7 +50,16 @@ export const Highlight = Mark.create({
   },
 
   parseDOM() {
-    return [{ tag: 'mark' }];
+    return [
+      { tag: 'mark' },
+      {
+        style: 'background-color',
+        getAttrs: (value) => {
+          if (!value || value === 'transparent' || value === 'inherit') return false;
+          return { color: cssColorToHex(value) };
+        },
+      },
+    ];
   },
 
   renderDOM({ htmlAttributes }) {

@@ -15,7 +15,7 @@ import { Editor, getRichTextExtensions, getStarterExtensions } from '@superdoc/s
  * Useful for AI agents, documentation generation, or schema validation.
  *
  * @param {SchemaIntrospectionOptions} [options] - Configuration options.
- * @returns {Promise<import('@superdoc/super-editor').SchemaSummaryJSON>} Schema summary with nodes and marks.
+ * @returns {Promise<import('@core/types/EditorSchema').SchemaSummaryJSON>} Schema summary with nodes and marks.
  * @throws {Error} If the editor schema is not initialized.
  *
  * @example

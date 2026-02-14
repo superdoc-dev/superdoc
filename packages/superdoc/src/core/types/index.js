@@ -119,6 +119,9 @@
  * @property {ExportType[]} [exportType=['docx']] - File formats to export
  * @property {CommentsType} [commentsType='external'] - How to handle comments
  * @property {string} [exportedName] - Custom filename (without extension)
+ * @property {Blob[]} [additionalFiles] - Extra files to include in the export zip
+ * @property {string[]} [additionalFileNames] - Filenames for the additional files
+ * @property {boolean} [isFinalDoc=false] - Whether this is a final document export
  * @property {boolean} [triggerDownload=true] - Auto-download or return blob
  * @property {string} [fieldsHighlightColor] - Color for field highlights
  */

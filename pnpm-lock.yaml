@@ -1233,6 +1233,15 @@ importers:
         specifier: 'catalog:'
         version: 1.6.11
 
+  packages/superdoc/tests/umd-smoke:
+    devDependencies:
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.58.1
+      serve:
+        specifier: ^14.2.0
+        version: 14.2.5
+
   packages/template-builder:
     devDependencies:
       '@testing-library/jest-dom':
@@ -14610,7 +14619,7 @@ snapshots:
 
   '@stoplight/json-ref-readers@1.2.2':
     dependencies:
-      node-fetch: 2.6.7
+      node-fetch: 2.7.0
       tslib: 1.14.1
     transitivePeerDependencies:
       - encoding

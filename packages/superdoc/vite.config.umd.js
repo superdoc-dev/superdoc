@@ -10,7 +10,7 @@ export default defineConfig(({ command }) => {
   return {
     define: {
       __APP_VERSION__: JSON.stringify(version),
-      process: JSON.stringify({ env: { NODE_ENV: 'production' } }),
+      'process.env.NODE_ENV': JSON.stringify('production'),
     },
     plugins,
     resolve: {

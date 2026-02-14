@@ -15,7 +15,7 @@ npm install superdoc
 ## Basic setup
 
 ```typescript
-import { Component, ElementRef, ViewChild, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, OnInit, OnDestroy } from '@angular/core';
 import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
 
@@ -23,7 +23,7 @@ import 'superdoc/style.css';
   selector: 'app-editor',
   template: `<div #editor style="height: 700px"></div>`,
 })
-export class EditorComponent implements OnDestroy {
+export class EditorComponent implements OnInit, OnDestroy {
   @ViewChild('editor', { static: true }) editorRef!: ElementRef;
   private superdoc: SuperDoc | null = null;
 
@@ -46,7 +46,7 @@ export class EditorComponent implements OnDestroy {
 A reusable editor component with mode switching and export:
 
 ```typescript
-import { Component, ElementRef, ViewChild, Input, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, Input, OnInit, OnDestroy } from '@angular/core';
 import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
 
@@ -62,7 +62,7 @@ import 'superdoc/style.css';
     <div #editor style="height: 700px"></div>
   `,
 })
-export class DocEditorComponent implements OnDestroy {
+export class DocEditorComponent implements OnInit, OnDestroy {
   @ViewChild('editor', { static: true }) editorRef!: ElementRef;
   @Input() document!: File | string;
   @Input() user?: { name: string; email: string };

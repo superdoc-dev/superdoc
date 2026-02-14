@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild } from '@angular/core';
+import { Component, ElementRef, ViewChild, OnDestroy } from '@angular/core';
 import { SuperDoc } from 'superdoc';
 
 @Component({
@@ -10,7 +10,7 @@ import { SuperDoc } from 'superdoc';
     <div #editor style="height: calc(100vh - 60px)"></div>
   `,
 })
-export class AppComponent {
+export class AppComponent implements OnDestroy {
   @ViewChild('editor', { static: true }) editorRef!: ElementRef;
 
   private superdoc: SuperDoc | null = null;
@@ -25,5 +25,9 @@ export class AppComponent {
       documentMode: 'editing',
       document: file,
     });
+  }
+
+  ngOnDestroy() {
+    this.superdoc?.destroy();
   }
 }

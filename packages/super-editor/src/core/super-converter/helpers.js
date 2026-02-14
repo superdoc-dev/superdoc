@@ -1,6 +1,38 @@
 import { parseSizeUnit } from '../utilities/index.js';
 import { xml2js } from 'xml-js';
 
+// --- Browser-compatible CRC32 (replaces buffer-crc32 to avoid Node.js Buffer dependency) ---
+const CRC32_TABLE = new Uint32Array(256);
+for (let i = 0; i < 256; i++) {
+  let c = i;
+  for (let j = 0; j < 8; j++) {
+    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  }
+  CRC32_TABLE[i] = c;
+}
+
+/**
+ * Compute CRC32 of a Uint8Array and return as 8-char lowercase hex string.
+ * Drop-in replacement for `buffer-crc32(buf).toString('hex')`.
+ */
+function computeCrc32Hex(data) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc = CRC32_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0');
+}
+
+/** Decode a base64 string to Uint8Array (works in both Node 16+ and browsers). */
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 // CSS pixels per inch; used to convert between Word's inch-based measurements and DOM pixels.
 const PIXELS_PER_INCH = 96;
 
@@ -276,21 +308,7 @@ const getArrayBufferFromUrl = async (input) => {
   // If this is a data URI we need only the payload portion
   const base64Payload = isDataUri ? trimmed.split(',', 2)[1] : trimmed.replace(/\s/g, '');
 
-  try {
-    if (typeof globalThis.atob === 'function') {
-      const binary = globalThis.atob(base64Payload);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      return bytes.buffer;
-    }
-  } catch (err) {
-    console.warn('atob failed, falling back to Buffer:', err);
-  }
-
-  const buf = Buffer.from(base64Payload, 'base64');
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  return base64ToUint8Array(base64Payload).buffer;
 };
 
 const getContentTypesFromXml = (contentTypesXml) => {
@@ -620,4 +638,6 @@ export {
   convertSizeToCSS,
   resolveShadingFillColor,
   resolveOpcTargetPath,
+  computeCrc32Hex,
+  base64ToUint8Array,
 };

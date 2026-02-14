@@ -1,6 +1,6 @@
 import * as xmljs from 'xml-js';
 import JSZip from 'jszip';
-import { getContentTypesFromXml } from './super-converter/helpers.js';
+import { getContentTypesFromXml, base64ToUint8Array } from './super-converter/helpers.js';
 import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
 
 /**
@@ -303,7 +303,7 @@ class DocxZipper {
     });
 
     Object.keys(media).forEach((path) => {
-      const binaryData = Buffer.from(media[path], 'base64');
+      const binaryData = base64ToUint8Array(media[path]);
       zip.file(path, binaryData);
     });
 

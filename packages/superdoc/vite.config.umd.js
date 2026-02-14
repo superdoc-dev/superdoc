@@ -1,11 +1,10 @@
 import vue from '@vitejs/plugin-vue';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { defineConfig } from 'vite';
 import { version } from './package.json';
 import { getAliases } from './vite.config.js';
 
 export default defineConfig(({ command }) => {
-  const plugins = [vue(), nodePolyfills()];
+  const plugins = [vue()];
   const isDev = command === 'serve';
 
   return {
@@ -36,6 +35,7 @@ export default defineConfig(({ command }) => {
         external: [
           'yjs',
           '@hocuspocus/provider',
+          'vite-plugin-node-polyfills',
           'pdfjs-dist',
           'pdfjs-dist/build/pdf.mjs',
           'pdfjs-dist/legacy/build/pdf.mjs',
@@ -46,6 +46,7 @@ export default defineConfig(({ command }) => {
             yjs: 'Yjs',
             '@hocuspocus/provider': 'HocuspocusProvider',
             'pdfjs-dist': 'PDFJS',
+            'vite-plugin-node-polyfills': 'NodePolyfills',
           },
         },
       },

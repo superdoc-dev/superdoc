@@ -15,6 +15,7 @@
 /* global btoa, XMLSerializer */
 
 import { EMFJS, WMFJS } from './rtfjs';
+import { base64ToUint8Array } from '../../../../helpers.js';
 
 // Disable verbose logging from the renderers
 EMFJS.loggingEnabled(false);
@@ -104,16 +105,7 @@ function base64ToArrayBuffer(data) {
     base64 = data.substring(commaIndex + 1);
   }
 
-  // Decode base64 to binary string
-  const binaryString = atob(base64);
-
-  // Convert binary string to ArrayBuffer
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  return bytes.buffer;
+  return base64ToUint8Array(base64).buffer;
 }
 
 /**

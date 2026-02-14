@@ -35,7 +35,6 @@ export default defineConfig(({ command }) => {
         external: [
           'yjs',
           '@hocuspocus/provider',
-          'vite-plugin-node-polyfills',
           'pdfjs-dist',
           'pdfjs-dist/build/pdf.mjs',
           'pdfjs-dist/legacy/build/pdf.mjs',
@@ -46,7 +45,6 @@ export default defineConfig(({ command }) => {
             yjs: 'Yjs',
             '@hocuspocus/provider': 'HocuspocusProvider',
             'pdfjs-dist': 'PDFJS',
-            'vite-plugin-node-polyfills': 'NodePolyfills',
           },
         },
       },

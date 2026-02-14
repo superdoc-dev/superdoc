@@ -6,6 +6,7 @@ import {
   pixelsToPolygonUnits,
   getArrayBufferFromUrl,
   computeCrc32Hex,
+  base64ToUint8Array,
 } from './helpers.js';
 
 describe('polygonToObj', () => {
@@ -360,5 +361,25 @@ describe('computeCrc32Hex', () => {
     const data = new Uint8Array([0, 1, 2, 3, 255, 254, 253, 128, 127, 64, 32, 16]);
     // Reference: buffer-crc32(Buffer.from([0,1,2,3,255,254,253,128,127,64,32,16])).toString('hex')
     expect(computeCrc32Hex(data)).toBe('463601ac');
+  });
+});
+
+describe('base64ToUint8Array', () => {
+  it('decodes a base64 string to Uint8Array', () => {
+    // "hello" in base64
+    const result = base64ToUint8Array('aGVsbG8=');
+    expect(Array.from(result)).toEqual([104, 101, 108, 108, 111]);
+  });
+
+  it('handles empty string', () => {
+    const result = base64ToUint8Array('');
+    expect(result).toBeInstanceOf(Uint8Array);
+    expect(result.length).toBe(0);
+  });
+
+  it('decodes binary data correctly', () => {
+    // Bytes [0, 1, 255] → base64 "AAH/"
+    const result = base64ToUint8Array('AAH/');
+    expect(Array.from(result)).toEqual([0, 1, 255]);
   });
 });

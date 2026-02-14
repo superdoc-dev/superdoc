@@ -2,6 +2,7 @@ import { defineStory } from '@superdoc-testing/helpers';
 import { reloadDocument, waitForCommentPanelStable } from '../../helpers/index.js';
 import { expect, Locator } from '@playwright/test';
 import { basename } from 'node:path';
+import { withGoogleDocs } from '../../helpers/google-docs-helpers.js';
 
 interface BaseHighlight {
   text: string;
@@ -348,7 +349,11 @@ function buildTest(test: RegressionTest) {
         }
       });
 
-      await tryStep('preserve replies in Google Docs', async () => {});
+      await tryStep('preserve replies in Google Docs', async () => {
+        await withGoogleDocs(page.context().browser()!, async ({ page }) => {
+          // Assert that replies show up in Google Docs
+        });
+      });
 
       await tryStep('preserve replies in Word', async () => {});
     },

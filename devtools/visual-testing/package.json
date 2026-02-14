@@ -29,6 +29,7 @@
     "r2:sync-registry": "bash scripts/r2-sync-registry.sh",
     "filters": "tsx scripts/list-filters.ts",
     "clear:all": "read -p 'This will delete all baselines, screenshots, and results. Are you sure? (y/N) ' confirm && [ \"$confirm\" = 'y' ] && rm -rf baselines baselines-interactions screenshots results && echo 'Cleared!' || echo 'Aborted.'",
+    "google-login": "tsx scripts/google-login.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage"

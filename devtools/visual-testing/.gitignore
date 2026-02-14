@@ -39,3 +39,5 @@ reports/
 .env
 .env.Local
 .env.production
+
+google-cookies.json

@@ -82,7 +82,7 @@ describe('SuperConverter Document GUID', () => {
 
       // getDocumentIdentifier assigns GUID and returns content hash (since no timestamp)
       const identifier = await converter.getDocumentIdentifier();
-      expect(identifier).toMatch(/^HASH-/);
+      expect(identifier).toBe('HASH-61D1432F');
 
       // GUID is now assigned (for persistence on export)
       expect(converter.getDocumentGuid()).toBe('test-uuid-1234');
@@ -164,7 +164,7 @@ describe('SuperConverter Document GUID', () => {
       });
 
       const identifier = await converter.getDocumentIdentifier();
-      expect(identifier).toMatch(/^HASH-[A-F0-9]+$/);
+      expect(identifier).toBe('HASH-A5FD6589');
       expect(converter.getDocumentGuid()).toBe('EXISTING-GUID-123');
       expect(converter.getDocumentCreatedTimestamp()).toBe('2024-01-15T10:30:00Z');
       expect(converter.documentModified).toBeFalsy();

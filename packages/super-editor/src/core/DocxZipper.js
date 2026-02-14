@@ -303,7 +303,8 @@ class DocxZipper {
     });
 
     Object.keys(media).forEach((path) => {
-      const binaryData = base64ToUint8Array(media[path]);
+      const value = media[path];
+      const binaryData = typeof value === 'string' ? base64ToUint8Array(value) : value;
       zip.file(path, binaryData);
     });
 

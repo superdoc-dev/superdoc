@@ -13,10 +13,12 @@ import {
   assertEventListenersCleanup,
 } from './testHelpers.js';
 
-vi.mock('@extensions/slash-menu', () => ({
+vi.mock('@extensions/slash-menu/slash-menu', () => ({
   SlashMenuPluginKey: {
     getState: vi.fn(() => ({ anchorPos: 100 })),
   },
+  SlashMenu: {},
+  findContainingBlockAncestor: vi.fn(),
 }));
 
 vi.mock('../utils.js', () => ({
@@ -54,6 +56,11 @@ describe('SlashMenu.vue', () => {
 
   beforeEach(async () => {
     commonMocks = setupCommonMocks();
+
+    // Reset the SlashMenuPluginKey mock to prevent state leaking between tests
+    const { SlashMenuPluginKey } = await import('@extensions/slash-menu/slash-menu');
+    SlashMenuPluginKey.getState.mockReset();
+    SlashMenuPluginKey.getState.mockReturnValue({ anchorPos: 100 });
 
     mockEditor = createMockEditor({
       isEditable: true,
@@ -447,6 +454,8 @@ describe('SlashMenu.vue', () => {
     });
 
     it('should filter items based on search query', async () => {
+      const { SlashMenuPluginKey } = await import('@extensions/slash-menu/slash-menu');
+
       const wrapper = mount(SlashMenu, { props: mockProps });
 
       const onSlashMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:open')[1];
@@ -455,8 +464,17 @@ describe('SlashMenu.vue', () => {
 
       expect(wrapper.findAll('.slash-menu-item')).toHaveLength(3);
 
-      const searchInput = wrapper.find('.slash-menu-hidden-input');
-      await searchInput.setValue('table');
+      // Simulate typing "table" after "/" — the transaction handler reads doc state
+      // textBetween returns full text from anchorPos to cursor, including the "/"
+      SlashMenuPluginKey.getState.mockReturnValue({ open: true, anchorPos: 1, trigger: 'slash' });
+      mockEditor.state = {
+        ...mockEditor.state,
+        selection: { from: 7 },
+        doc: { textBetween: () => '/table' },
+      };
+
+      const onTransaction = mockEditor.on.mock.calls.find((call) => call[0] === 'transaction')[1];
+      onTransaction();
       await nextTick();
 
       expect(wrapper.findAll('.slash-menu-item')).toHaveLength(1);
@@ -464,14 +482,23 @@ describe('SlashMenu.vue', () => {
     });
 
     it('should be case insensitive', async () => {
+      const { SlashMenuPluginKey } = await import('@extensions/slash-menu/slash-menu');
+
       const wrapper = mount(SlashMenu, { props: mockProps });
 
       const onSlashMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:open')[1];
       await onSlashMenuOpen({ menuPosition: { left: '100px', top: '200px' } });
       await nextTick();
 
-      const searchInput = wrapper.find('.slash-menu-hidden-input');
-      await searchInput.setValue('TABLE');
+      SlashMenuPluginKey.getState.mockReturnValue({ open: true, anchorPos: 1, trigger: 'slash' });
+      mockEditor.state = {
+        ...mockEditor.state,
+        selection: { from: 7 },
+        doc: { textBetween: () => '/TABLE' },
+      };
+
+      const onTransaction = mockEditor.on.mock.calls.find((call) => call[0] === 'transaction')[1];
+      onTransaction();
       await nextTick();
 
       expect(wrapper.findAll('.slash-menu-item')).toHaveLength(1);
@@ -507,15 +534,15 @@ describe('SlashMenu.vue', () => {
       await onSlashMenuOpen({ menuPosition: { left: '100px', top: '200px' } });
       await nextTick();
 
-      const searchInput = wrapper.find('.slash-menu-hidden-input');
-
-      await searchInput.trigger('keydown', { key: 'ArrowDown' });
+      // PM plugin emits slashMenu:navigate events for arrow keys
+      const onNavigate = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:navigate')[1];
+      onNavigate({ key: 'ArrowDown' });
       await nextTick();
 
       const selectedItems = wrapper.findAll('.slash-menu-item.is-selected');
       expect(selectedItems).toHaveLength(1);
 
-      await searchInput.trigger('keydown', { key: 'ArrowUp' });
+      onNavigate({ key: 'ArrowUp' });
       await nextTick();
 
       expect(wrapper.findAll('.slash-menu-item.is-selected')).toHaveLength(1);
@@ -543,10 +570,11 @@ describe('SlashMenu.vue', () => {
       await onSlashMenuOpen({ menuPosition: { left: '100px', top: '200px' } });
       await nextTick();
 
-      const searchInput = wrapper.find('.slash-menu-hidden-input');
-      await searchInput.trigger('keydown', { key: 'Enter' });
+      // PM plugin emits slashMenu:navigate for Enter
+      const onNavigate = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:navigate')[1];
+      onNavigate({ key: 'Enter' });
+      await nextTick();
 
-      // editor and context
       expect(mockAction).toHaveBeenCalledWith(
         mockEditor,
         expect.objectContaining({
@@ -557,7 +585,7 @@ describe('SlashMenu.vue', () => {
       );
     });
 
-    it('should close menu on Escape', async () => {
+    it('should close menu on Escape via PM plugin (not hidden input)', async () => {
       const wrapper = mount(SlashMenu, { props: mockProps });
 
       const onSlashMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:open')[1];
@@ -566,11 +594,12 @@ describe('SlashMenu.vue', () => {
 
       expect(wrapper.find('.slash-menu').exists()).toBe(true);
 
-      const searchInput = wrapper.find('.slash-menu-hidden-input');
-      await searchInput.trigger('keydown', { key: 'Escape' });
+      // Escape is handled by the PM plugin, which dispatches close meta and emits slashMenu:close
+      const onSlashMenuClose = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:close')[1];
+      onSlashMenuClose();
       await nextTick();
 
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
+      expect(wrapper.find('.slash-menu').exists()).toBe(false);
     });
   });
 
@@ -986,33 +1015,25 @@ describe('SlashMenu.vue', () => {
     });
   });
 
-  describe('focus behavior with preventScroll', () => {
-    it('should focus search input with preventScroll option when menu opens', async () => {
+  describe('menu open/close lifecycle', () => {
+    it('should render menu when opened', async () => {
       const wrapper = mount(SlashMenu, { props: mockProps });
 
       const onSlashMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:open')[1];
       await onSlashMenuOpen({ menuPosition: { left: '100px', top: '200px' } });
-
-      // Need to wait for both the open state to update and the watcher to execute
       await nextTick();
       await nextTick();
 
-      // Find the actual search input element in the DOM
-      const searchInputElement = wrapper.find('.slash-menu-hidden-input');
-      expect(searchInputElement.exists()).toBe(true);
-
-      // We can't easily mock focus() on a real DOM element in jsdom,
-      // but we can verify the input exists and is in the DOM when the menu is open
-      // The preventScroll option is verified through the code review and manual testing
       expect(wrapper.find('.slash-menu').exists()).toBe(true);
+      // Footer with close hint should be visible
+      expect(wrapper.find('.slash-menu-footer').exists()).toBe(true);
     });
 
-    it('should not throw error if searchInput ref is null', async () => {
-      const wrapper = mount(SlashMenu, { props: mockProps });
+    it('should not throw error on open', async () => {
+      mount(SlashMenu, { props: mockProps });
 
       const onSlashMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:open')[1];
 
-      // Should not throw an error - the watcher has a guard
       await expect(
         onSlashMenuOpen({ menuPosition: { left: '100px', top: '200px' } }).then(async () => {
           await nextTick();
@@ -1021,34 +1042,31 @@ describe('SlashMenu.vue', () => {
       ).resolves.not.toThrow();
     });
 
-    it('should attempt to focus search input each time menu opens', async () => {
+    it('should reopen menu after close', async () => {
       const wrapper = mount(SlashMenu, { props: mockProps });
 
       const onSlashMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:open')[1];
       const onSlashMenuClose = mockEditor.on.mock.calls.find((call) => call[0] === 'slashMenu:close')[1];
 
-      // Open menu first time
+      // Open first time
       await onSlashMenuOpen({ menuPosition: { left: '100px', top: '200px' } });
       await nextTick();
       await nextTick();
 
       expect(wrapper.find('.slash-menu').exists()).toBe(true);
-      expect(wrapper.find('.slash-menu-hidden-input').exists()).toBe(true);
 
-      // Close menu
+      // Close
       onSlashMenuClose();
       await nextTick();
 
       expect(wrapper.find('.slash-menu').exists()).toBe(false);
 
-      // Open menu second time
+      // Open second time
       await onSlashMenuOpen({ menuPosition: { left: '150px', top: '250px' } });
       await nextTick();
       await nextTick();
 
-      // Menu and input should exist again
       expect(wrapper.find('.slash-menu').exists()).toBe(true);
-      expect(wrapper.find('.slash-menu-hidden-input').exists()).toBe(true);
     });
   });
 });

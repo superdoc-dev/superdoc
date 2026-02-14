@@ -81,11 +81,16 @@ describe('SlashMenu extension', () => {
     const pluginState = SlashMenuPluginKey.getState(view.state);
     expect(pluginState.open).toBe(true);
     expect(pluginState.anchorPos).toBe(1);
+    expect(pluginState.trigger).toBe('slash');
     expect(pluginState.menuPosition).toEqual({ left: '20px', top: '58px' });
     expect(editor.emit).toHaveBeenCalledWith('slashMenu:open', {
       menuPosition: { left: '20px', top: '58px' },
     });
 
+    // '/' was inserted into the document
+    expect(view.state.doc.textContent).toBe('/');
+
+    // Escape deletes the /query text and closes
     const closeEvent = { key: 'Escape', preventDefault: vi.fn() };
     const closed = plugin.props.handleKeyDown.call(plugin, view, closeEvent);
     expect(closed).toBe(true);
@@ -93,6 +98,9 @@ describe('SlashMenu extension', () => {
     expect(updatedState.open).toBe(false);
     expect(editor.emit).toHaveBeenCalledWith('slashMenu:close');
     expect(view.focus).toHaveBeenCalled();
+
+    // '/' text was deleted
+    expect(view.state.doc.textContent).toBe('');
 
     viewLifecycle?.destroy?.();
   });
@@ -179,8 +187,8 @@ describe('SlashMenu extension', () => {
     expect(editor.emit).toHaveBeenCalledWith('slashMenu:close');
   });
 
-  describe('cooldown mechanism', () => {
-    it('prevents reopening menu during cooldown period', () => {
+  describe('immediate reopen', () => {
+    it('allows reopening menu immediately after closing', () => {
       const baseDoc = doc(p());
       const initialSelection = TextSelection.create(baseDoc, 1);
       let state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection });
@@ -209,117 +217,26 @@ describe('SlashMenu extension', () => {
 
       editor.view = view;
 
-      // Open menu first time
+      // Open menu first time (inserts '/' into doc)
       const openEvent1 = { key: '/', preventDefault: vi.fn() };
       const opened1 = plugin.props.handleKeyDown.call(plugin, view, openEvent1);
       expect(opened1).toBe(true);
       expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+      expect(view.state.doc.textContent).toBe('/');
 
-      // Close menu
+      // Close menu (Escape deletes the '/')
       const closeEvent = { key: 'Escape', preventDefault: vi.fn() };
       plugin.props.handleKeyDown.call(plugin, view, closeEvent);
       expect(SlashMenuPluginKey.getState(view.state).open).toBe(false);
+      expect(view.state.doc.textContent).toBe('');
 
-      // Try to open menu again immediately (should be blocked by cooldown)
+      // Reopen immediately — no cooldown blocking (inserts '/' again)
       const openEvent2 = { key: '/', preventDefault: vi.fn() };
       const opened2 = plugin.props.handleKeyDown.call(plugin, view, openEvent2);
-      expect(opened2).toBe(false); // Should return false during cooldown
-      expect(openEvent2.preventDefault).not.toHaveBeenCalled();
-      expect(SlashMenuPluginKey.getState(view.state).open).toBe(false); // Should remain closed
-    });
-
-    it('allows reopening menu after cooldown expires', async () => {
-      vi.useFakeTimers();
-
-      const baseDoc = doc(p());
-      const initialSelection = TextSelection.create(baseDoc, 1);
-      let state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection });
-
-      const editor = {
-        options: {},
-        emit: vi.fn(),
-        view: null,
-      };
-
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
-      state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
-
-      const view = {
-        state,
-        dispatch: vi.fn((tr) => {
-          state = state.apply(tr);
-          view.state = state;
-        }),
-        focus: vi.fn(),
-        dom: {
-          getBoundingClientRect: () => ({ left: 0, top: 0 }),
-        },
-        coordsAtPos: () => ({ left: 20, top: 30 }),
-      };
-
-      editor.view = view;
-
-      // Open and close menu
-      plugin.props.handleKeyDown.call(plugin, view, { key: '/', preventDefault: vi.fn() });
-      plugin.props.handleKeyDown.call(plugin, view, { key: 'Escape', preventDefault: vi.fn() });
-
-      // Fast forward past cooldown period (5000ms)
-      vi.advanceTimersByTime(5000);
-
-      // Should be able to open again after cooldown
-      const openEvent = { key: '/', preventDefault: vi.fn() };
-      const opened = plugin.props.handleKeyDown.call(plugin, view, openEvent);
-      expect(opened).toBe(true);
-      expect(openEvent.preventDefault).toHaveBeenCalled();
+      expect(opened2).toBe(true);
+      expect(openEvent2.preventDefault).toHaveBeenCalled();
       expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
-
-      vi.useRealTimers();
-    });
-
-    it('clears cooldown timeout on plugin destroy', () => {
-      vi.useFakeTimers();
-
-      const baseDoc = doc(p());
-      const initialSelection = TextSelection.create(baseDoc, 1);
-      let state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection });
-
-      const editor = {
-        options: {},
-        emit: vi.fn(),
-        view: null,
-      };
-
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
-      state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
-
-      const view = {
-        state,
-        dispatch: vi.fn((tr) => {
-          state = state.apply(tr);
-          view.state = state;
-        }),
-        focus: vi.fn(),
-        dom: {
-          getBoundingClientRect: () => ({ left: 0, top: 0 }),
-        },
-        coordsAtPos: () => ({ left: 20, top: 30 }),
-      };
-
-      editor.view = view;
-      const viewLifecycle = plugin.spec.view?.(view);
-
-      // Open and close to trigger cooldown
-      plugin.props.handleKeyDown.call(plugin, view, { key: '/', preventDefault: vi.fn() });
-      plugin.props.handleKeyDown.call(plugin, view, { key: 'Escape', preventDefault: vi.fn() });
-
-      // Destroy should clear the timeout
-      viewLifecycle?.destroy?.();
-
-      // This test mainly ensures no memory leaks - we can't easily verify the timeout is cleared
-      // but the destroy() call should not throw
-      expect(true).toBe(true);
-
-      vi.useRealTimers();
+      expect(view.state.doc.textContent).toBe('/');
     });
   });
 
@@ -778,7 +695,7 @@ describe('SlashMenu extension', () => {
   });
 
   describe('keyboard shortcuts', () => {
-    it('closes menu with ArrowLeft', () => {
+    it('passes ArrowLeft through for slash-triggered menu (auto-close handles it)', () => {
       const baseDoc = doc(p());
       const initialSelection = TextSelection.create(baseDoc, 1);
       let state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection });
@@ -807,18 +724,64 @@ describe('SlashMenu extension', () => {
 
       editor.view = view;
 
-      // Open menu
+      // Open menu via slash (inserts '/' into doc)
       plugin.props.handleKeyDown.call(plugin, view, { key: '/', preventDefault: vi.fn() });
       expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+      expect(SlashMenuPluginKey.getState(view.state).trigger).toBe('slash');
 
-      // Close with ArrowLeft
+      // ArrowLeft is NOT consumed for slash trigger — passes through to PM
+      const arrowEvent = { key: 'ArrowLeft', preventDefault: vi.fn() };
+      const handled = plugin.props.handleKeyDown.call(plugin, view, arrowEvent);
+      expect(handled).toBe(false);
+      // Menu stays open (auto-close in apply() handles it when cursor moves before anchor)
+    });
+
+    it('closes context-menu trigger with ArrowLeft', () => {
+      const baseDoc = doc(p());
+      const initialSelection = TextSelection.create(baseDoc, 1);
+      let state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection });
+
+      const editor = {
+        options: {},
+        emit: vi.fn(),
+        view: null,
+      };
+
+      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
+
+      const view = {
+        state,
+        dispatch: vi.fn((tr) => {
+          state = state.apply(tr);
+          view.state = state;
+        }),
+        focus: vi.fn(),
+        dom: {
+          getBoundingClientRect: () => ({ left: 0, top: 0 }),
+        },
+      };
+
+      editor.view = view;
+
+      // Open via context menu (no '/' inserted)
+      view.dispatch(
+        view.state.tr.setMeta(SlashMenuPluginKey, {
+          type: 'open',
+          clientX: 100,
+          clientY: 100,
+          pos: 1,
+          trigger: 'click',
+        }),
+      );
+      expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+      expect(SlashMenuPluginKey.getState(view.state).trigger).toBe('click');
+
+      // ArrowLeft closes context-menu trigger
       const closeEvent = { key: 'ArrowLeft', preventDefault: vi.fn() };
       const closed = plugin.props.handleKeyDown.call(plugin, view, closeEvent);
       expect(closed).toBe(true);
-
-      const pluginState = SlashMenuPluginKey.getState(view.state);
-      expect(pluginState.open).toBe(false);
-      expect(editor.emit).toHaveBeenCalledWith('slashMenu:close');
+      expect(SlashMenuPluginKey.getState(view.state).open).toBe(false);
       expect(view.focus).toHaveBeenCalled();
     });
   });

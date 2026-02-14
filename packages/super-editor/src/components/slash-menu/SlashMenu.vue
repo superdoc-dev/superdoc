@@ -25,94 +25,52 @@ const props = defineProps({
   },
 });
 
-const searchInput = ref(null);
-const searchQuery = ref('');
 const isOpen = ref(false);
 const menuPosition = ref({ left: '0px', top: '0px' });
 const menuRef = ref(null);
 const sections = ref([]);
 const selectedId = ref(null);
-const currentContext = ref(null); // Store context for action execution
+const searchQuery = ref('');
+const currentContext = ref(null);
 
-// Helper to close menu if editor becomes read-only
-const handleEditorUpdate = () => {
-  if (!props.editor?.isEditable && isOpen.value) {
-    closeMenu({ restoreCursor: false });
-  }
-};
+// --- Filtering ---
 
-// Flatten sections into items for navigation and filtering
 const flattenedItems = computed(() => {
-  const items = [];
-  sections.value.forEach((section) => {
-    section.items.forEach((item) => {
-      items.push(item);
-    });
-  });
-  return items;
+  return sections.value.flatMap((section) => section.items);
 });
 
-// Filter items based on search query
-const filteredItems = computed(() => {
-  if (!searchQuery.value) {
-    return flattenedItems.value;
-  }
-
-  return flattenedItems.value.filter((item) => item.label?.toLowerCase().includes(searchQuery.value.toLowerCase()));
-});
-
-// Get sections with filtered items for rendering
 const filteredSections = computed(() => {
-  if (!searchQuery.value) {
-    return sections.value;
-  }
+  const q = searchQuery.value.toLowerCase().trim();
+  if (!q) return sections.value;
 
-  // If searching, return a single section with filtered items
-  return [
-    {
-      id: 'search-results',
-      items: filteredItems.value,
-    },
-  ];
+  return sections.value
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.label.toLowerCase().includes(q)),
+    }))
+    .filter((section) => section.items.length > 0);
 });
 
-/**
- * Watch for menu open/close state changes and manage search input focus.
- *
- * When the menu opens, automatically focuses the hidden search input to enable
- * immediate keyboard interaction (search filtering and navigation). Uses the
- * preventScroll option to avoid unwanted scrolling behavior.
- *
- * The preventScroll option is critical because:
- * - The search input is positioned off-screen (opacity: 0, height: 0)
- * - Without preventScroll, browsers may scroll parent containers to bring the
- *   focused element into view, causing jarring page jumps
- * - This ensures the menu appears at the cursor position without disrupting
- *   the user's viewport
- *
- * @param {boolean} open - The new value of isOpen (true when menu opens, false when closed)
- * @returns {void}
- */
-watch(isOpen, (open) => {
-  if (open) {
-    nextTick(() => {
-      if (searchInput.value) {
-        // Use preventScroll to avoid scrolling the page when focusing the search input.
-        // Without this, the browser may scroll parent containers to bring the input into view,
-        // which causes unwanted page jumps when opening the context menu.
-        searchInput.value.focus({ preventScroll: true });
-      }
-    });
+const filteredItems = computed(() => {
+  return filteredSections.value.flatMap((section) => section.items);
+});
+
+// Keep selectedId in sync with filtered results
+watch(filteredItems, (items) => {
+  if (items.length > 0 && !items.find((i) => i.id === selectedId.value)) {
+    selectedId.value = items[0].id;
   }
 });
 
-watch(flattenedItems, (newItems) => {
-  if (newItems.length > 0) {
-    selectedId.value = newItems[0].id;
+// Auto-close when search yields no results (only after sections have loaded)
+watch(filteredItems, (items) => {
+  if (isOpen.value && searchQuery.value && items.length === 0 && sections.value.length > 0) {
+    closeMenu();
   }
 });
 
-// Handle custom item rendering
+// --- Custom item rendering ---
+
 const customItemRefs = new Map();
 
 const setCustomItemRef = (el, item) => {
@@ -125,7 +83,6 @@ const setCustomItemRef = (el, item) => {
 };
 
 const defaultRender = (context) => {
-  // Access item from the refData or context
   const item = context.item || context.currentItem;
   const container = document.createElement('div');
   container.className = 'slash-menu-default-content';
@@ -155,10 +112,7 @@ const renderCustomItem = async (itemId) => {
       currentContext.value = await getEditorContext(props.editor);
     }
 
-    // Create context with item info for render functions
     const contextWithItem = { ...currentContext.value, currentItem: item };
-
-    // Use custom render function or fall back to default
     const renderFunction = item.render || defaultRender;
     const customElement = renderFunction(contextWithItem);
 
@@ -169,7 +123,6 @@ const renderCustomItem = async (itemId) => {
     }
   } catch (error) {
     console.warn(`[SlashMenu] Error rendering custom item ${itemId}:`, error);
-    // Fallback to default rendering
     const fallbackElement = defaultRender({ ...(currentContext.value || {}), currentItem: item });
     element.innerHTML = '';
     element.appendChild(fallbackElement);
@@ -177,7 +130,6 @@ const renderCustomItem = async (itemId) => {
   }
 };
 
-// Clean up custom item refs when menu closes
 const cleanupCustomItems = () => {
   customItemRefs.forEach((refData) => {
     if (refData.element) {
@@ -187,117 +139,77 @@ const cleanupCustomItems = () => {
   customItemRefs.clear();
 };
 
-const handleGlobalKeyDown = (event) => {
-  // ESCAPE: always close popover or menu
-  if (event.key === 'Escape' && isOpen.value) {
-    event.preventDefault();
-    event.stopPropagation();
-    closeMenu();
-    props.editor?.focus?.();
-    return;
-  }
+// --- Keyboard navigation ---
+// The PM plugin emits 'slashMenu:navigate' events for ArrowDown/Up/Enter.
+// This avoids relying on DOM event bubbling which is fragile in presentation mode.
 
-  // Only handle navigation/selection if menu is open and input is focused
-  if (isOpen.value && (event.target === searchInput.value || (menuRef.value && menuRef.value.contains(event.target)))) {
-    const currentItems = filteredItems.value;
-    const currentIndex = currentItems.findIndex((item) => item.id === selectedId.value);
-    switch (event.key) {
-      case 'ArrowDown': {
-        event.preventDefault();
-        if (currentIndex < currentItems.length - 1) {
-          selectedId.value = currentItems[currentIndex + 1].id;
-        }
-        break;
+const handleNavigate = ({ key }) => {
+  if (!isOpen.value) return;
+
+  const currentItems = filteredItems.value;
+  const currentIndex = currentItems.findIndex((item) => item.id === selectedId.value);
+
+  switch (key) {
+    case 'ArrowDown': {
+      if (currentItems.length === 0) break;
+      const nextIndex = currentIndex < currentItems.length - 1 ? currentIndex + 1 : 0;
+      selectedId.value = currentItems[nextIndex].id;
+      break;
+    }
+    case 'ArrowUp': {
+      if (currentItems.length === 0) break;
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : currentItems.length - 1;
+      selectedId.value = currentItems[prevIndex].id;
+      break;
+    }
+    case 'Enter': {
+      const selectedItem = currentItems.find((item) => item.id === selectedId.value);
+      if (selectedItem) {
+        executeCommand(selectedItem);
       }
-      case 'ArrowUp': {
-        event.preventDefault();
-        if (currentIndex > 0) {
-          selectedId.value = currentItems[currentIndex - 1].id;
-        }
-        break;
-      }
-      case 'Enter': {
-        event.preventDefault();
-        const selectedItem = currentItems.find((item) => item.id === selectedId.value);
-        if (selectedItem) {
-          executeCommand(selectedItem);
-        }
-        break;
-      }
+      break;
     }
   }
 };
 
-/**
- * Handle clicks outside the menu to close it.
- * Uses pointerdown instead of mousedown because PresentationEditor's pointer handlers
- * call event.preventDefault() which suppresses mousedown events.
- * @param {PointerEvent|MouseEvent} event - The pointer or mouse event
- * @returns {void}
- */
+// --- Click outside ---
+
 const handleGlobalOutsideClick = (event) => {
   if (isOpen.value && menuRef.value && !menuRef.value.contains(event.target)) {
-    // Only move cursor for left-clicks (button === 0).
-    // For right-clicks (button === 2), preserve the current selection/cursor
-    // because the contextmenu handler will open a new menu at the click position.
-    // Also skip Ctrl+Click on Mac, which triggers contextmenu but reports button=0.
     const isCtrlClickOnMac = event.ctrlKey && isMacOS();
     const isLeftClick = event.button === 0 && !isCtrlClickOnMac;
 
     if (isLeftClick) {
       moveCursorToMouseEvent(event, props.editor);
     }
-    closeMenu({ restoreCursor: false });
+    closeMenu();
   }
 };
 
-/**
- * Determines whether the SlashMenu should handle a context menu event.
- * Checks if the editor is editable, context menu is enabled, and the event
- * should not be bypassed (e.g., modifier keys are not pressed).
- *
- * @param {MouseEvent} event - The context menu event to validate
- * @returns {boolean} true if the SlashMenu should handle the event, false otherwise
- */
+// --- Context menu (right-click) ---
+
 const shouldHandleContextMenu = (event) => {
   const readOnly = !props.editor?.isEditable;
   const contextMenuDisabled = props.editor?.options?.disableContextMenu;
   const bypass = shouldBypassContextMenu(event);
-
   return !readOnly && !contextMenuDisabled && !bypass;
 };
 
-/**
- * Capture phase handler for context menu events that marks the event as handled by SlashMenu.
- * This flag is used by PresentationInputBridge to skip forwarding the event to the hidden editor,
- * preventing duplicate context menu handling.
- *
- * The capture phase ensures this runs before PresentationInputBridge's bubble phase handler,
- * allowing us to set the flag before the event reaches other handlers.
- *
- * @param {MouseEvent} event - The context menu event in capture phase
- */
 const handleRightClickCapture = (event) => {
   try {
     if (shouldHandleContextMenu(event)) {
       event[SLASH_MENU_HANDLED_FLAG] = true;
     }
   } catch (error) {
-    // Prevent handler crashes from breaking the event flow
-    // Log warning but don't throw to allow other handlers to run
     console.warn('[SlashMenu] Error in capture phase context menu handler:', error);
   }
 };
 
 const handleRightClick = async (event) => {
-  if (!shouldHandleContextMenu(event)) {
-    return;
-  }
+  if (!shouldHandleContextMenu(event)) return;
 
   event.preventDefault();
 
-  // Update cursor position to the right-click location before opening context menu,
-  // unless the click lands inside an active selection (keep selection intact).
   const editorState = props.editor?.state;
   const hasRangeSelection = editorState?.selection?.from !== editorState?.selection?.to;
   let isClickInsideSelection = false;
@@ -319,7 +231,6 @@ const handleRightClick = async (event) => {
     currentContext.value = context;
     sections.value = getItems({ ...context, trigger: 'click' });
     selectedId.value = flattenedItems.value[0]?.id || null;
-    searchQuery.value = '';
 
     const currentState = props.editor.state;
     if (!currentState) return;
@@ -330,6 +241,7 @@ const handleRightClick = async (event) => {
         pos: context?.pos ?? currentState.selection.from,
         clientX: event.clientX,
         clientY: event.clientY,
+        trigger: 'click',
       }),
     );
   } catch (error) {
@@ -337,143 +249,193 @@ const handleRightClick = async (event) => {
   }
 };
 
+// --- Commands ---
+
 const executeCommand = async (item) => {
-  if (props.editor) {
-    // First call the action if needed on the item
-    item.action ? await item.action(props.editor, currentContext.value) : null;
+  if (!props.editor) return;
 
-    if (item.component) {
-      const menuElement = menuRef.value;
-      const componentProps = getPropsByItemId(item.id, props);
+  // Capture references before closing
+  const context = currentContext.value;
+  const menuElement = menuRef.value;
+  const state = props.editor.state;
+  const pluginState = SlashMenuPluginKey.getState(state);
 
-      // Convert viewport-relative coordinates (used by fixed-position SlashMenu)
-      // to container-relative coordinates (used by absolute-position GenericPopover)
-      let popoverPosition = { left: menuPosition.value.left, top: menuPosition.value.top };
-      if (menuElement) {
-        const menuRect = menuElement.getBoundingClientRect();
-        const container = menuElement.closest('.super-editor');
-        if (container) {
-          const containerRect = container.getBoundingClientRect();
-          popoverPosition = {
-            left: `${menuRect.left - containerRect.left}px`,
-            top: `${menuRect.top - containerRect.top}px`,
-          };
-        }
+  // For slash-triggered menu, delete the /query text from the document
+  if (pluginState?.trigger === 'slash' && pluginState.anchorPos !== null) {
+    const cursorPos = state.selection.from;
+    const tr = state.tr;
+    if (cursorPos > pluginState.anchorPos) {
+      tr.delete(pluginState.anchorPos, cursorPos);
+    }
+    tr.setMeta(SlashMenuPluginKey, { type: 'close' });
+    props.editor.dispatch(tr);
+  } else {
+    props.editor.dispatch(state.tr.setMeta(SlashMenuPluginKey, { type: 'close' }));
+  }
+
+  // Execute the action
+  if (item.action) await item.action(props.editor, context);
+
+  // Open sub-component popover if needed
+  if (item.component) {
+    let popoverPosition = { left: menuPosition.value.left, top: menuPosition.value.top };
+    if (menuElement) {
+      const menuRect = menuElement.getBoundingClientRect();
+      const container = menuElement.closest('.super-editor');
+      if (container) {
+        const containerRect = container.getBoundingClientRect();
+        popoverPosition = {
+          left: `${menuRect.left - containerRect.left}px`,
+          top: `${menuRect.top - containerRect.top}px`,
+        };
       }
+    }
+    props.openPopover(markRaw(item.component), getPropsByItemId(item.id, props), popoverPosition);
+  }
 
-      props.openPopover(markRaw(item.component), componentProps, popoverPosition);
-      closeMenu({ restoreCursor: false });
+  // Reset local state
+  resetMenuState();
+};
+
+const closeMenu = () => {
+  if (!props.editor) return;
+  const state = props.editor.state;
+  if (!state) return;
+
+  const pluginState = SlashMenuPluginKey.getState(state);
+  if (pluginState?.open) {
+    props.editor.dispatch(state.tr.setMeta(SlashMenuPluginKey, { type: 'close' }));
+  }
+
+  resetMenuState();
+};
+
+const resetMenuState = () => {
+  isOpen.value = false;
+  searchQuery.value = '';
+  sections.value = [];
+  cleanupCustomItems();
+  currentContext.value = null;
+};
+
+// --- Transaction listener: sync search query from document state ---
+
+const handleTransaction = () => {
+  if (!isOpen.value) return;
+
+  const state = props.editor?.state;
+  if (!state) return;
+
+  const pluginState = SlashMenuPluginKey.getState(state);
+
+  // Plugin closed the menu (auto-close when cursor left /query range)
+  if (!pluginState?.open) {
+    resetMenuState();
+    return;
+  }
+
+  // Compute search query from document content after the '/'
+  // Use robust extraction: get full text from anchor to cursor, strip leading '/'
+  // This handles position shifts from appendTransactions (e.g. wrapTextInRunsPlugin)
+  if (pluginState.trigger === 'slash' && pluginState.anchorPos !== null) {
+    const cursorPos = state.selection.from;
+    if (cursorPos > pluginState.anchorPos) {
+      const fullText = state.doc.textBetween(pluginState.anchorPos, cursorPos);
+      searchQuery.value = fullText.startsWith('/') ? fullText.slice(1) : '';
     } else {
-      // For paste operations, don't restore cursor
-      const shouldRestoreCursor = item.id !== 'paste';
-      closeMenu({ restoreCursor: shouldRestoreCursor });
+      searchQuery.value = '';
     }
   }
 };
 
-const closeMenu = (options = { restoreCursor: true }) => {
-  if (!props.editor) return;
-  const state = props.editor.state;
-  if (!state) return;
-  // Get plugin state to access anchorPos
-  const pluginState = SlashMenuPluginKey.getState(state);
-  const anchorPos = pluginState?.anchorPos;
+// --- Lifecycle ---
 
-  // Update prosemirror state to close menu
-  props.editor.dispatch(state.tr.setMeta(SlashMenuPluginKey, { type: 'close' }));
-
-  // Restore cursor position and focus only if requested
-  if (options.restoreCursor && anchorPos !== null && anchorPos !== undefined) {
-    const tr = props.editor.state.tr.setSelection(
-      props.editor.state.selection.constructor.near(props.editor.state.doc.resolve(anchorPos)),
-    );
-    props.editor.dispatch(tr);
-    props.editor.focus?.();
-  }
-
-  cleanupCustomItems();
-  currentContext.value = null;
-
-  // Update local state
-  isOpen.value = false;
-  searchQuery.value = '';
-  sections.value = [];
-};
-
-/**
- * Lifecycle hooks on mount and onBeforeUnmount
- */
 let contextMenuTarget = null;
 let slashMenuOpenHandler = null;
 let slashMenuCloseHandler = null;
+let slashMenuNavigateHandler = null;
+let updateHandler = null;
 
 onMounted(() => {
   if (!props.editor) return;
 
-  // Add global event listeners
-  // Use pointerdown instead of mousedown because PresentationEditor's pointer handlers
-  // call event.preventDefault() which suppresses mousedown events
-  document.addEventListener('keydown', handleGlobalKeyDown);
   document.addEventListener('pointerdown', handleGlobalOutsideClick);
 
-  // Close menu if the editor becomes read-only while it's open
-  props.editor.on('update', handleEditorUpdate);
+  // Close menu if editor becomes read-only
+  updateHandler = () => {
+    if (!props.editor?.isEditable && isOpen.value) {
+      closeMenu();
+    }
+  };
+  props.editor.on('update', updateHandler);
 
-  // Listen for the slash menu to open
+  // Sync search query on every transaction
+  props.editor.on('transaction', handleTransaction);
+
+  // Handle menu open events (carries menuPosition from plugin)
   slashMenuOpenHandler = async (event) => {
-    // Prevent opening the menu in read-only mode
     const readOnly = !props.editor?.isEditable;
     if (readOnly) return;
+
     isOpen.value = true;
     menuPosition.value = event.menuPosition;
     searchQuery.value = '';
-    // Set sections and selectedId when menu opens
+
+    // Load context and menu items if not already set (right-click sets them before dispatch)
     if (!currentContext.value) {
       const context = await getEditorContext(props.editor);
-      currentContext.value = context; // Store context for later use
-      sections.value = getItems({ ...context, trigger: 'slash' });
+      currentContext.value = context;
+      const pluginState = SlashMenuPluginKey.getState(props.editor.state);
+      const trigger = pluginState?.trigger === 'click' ? 'click' : 'slash';
+      sections.value = getItems({ ...context, trigger });
       selectedId.value = flattenedItems.value[0]?.id || null;
     } else if (sections.value.length === 0) {
-      const trigger = currentContext.value.event?.type === 'contextmenu' ? 'click' : 'slash';
+      const pluginState = SlashMenuPluginKey.getState(props.editor.state);
+      const trigger = pluginState?.trigger === 'click' ? 'click' : 'slash';
       sections.value = getItems({ ...currentContext.value, trigger });
       selectedId.value = flattenedItems.value[0]?.id || null;
     }
   };
   props.editor.on('slashMenu:open', slashMenuOpenHandler);
 
-  // Attach context menu to the active surface (flow view.dom or presentation host)
+  // Handle menu close events
+  slashMenuCloseHandler = () => {
+    resetMenuState();
+  };
+  props.editor.on('slashMenu:close', slashMenuCloseHandler);
+
+  // Handle navigation events from PM plugin (ArrowDown/Up/Enter)
+  slashMenuNavigateHandler = handleNavigate;
+  props.editor.on('slashMenu:navigate', slashMenuNavigateHandler);
+
+  // Attach context menu to the active surface
   contextMenuTarget = getEditorSurfaceElement(props.editor);
   if (contextMenuTarget) {
     contextMenuTarget.addEventListener('contextmenu', handleRightClickCapture, true);
     contextMenuTarget.addEventListener('contextmenu', handleRightClick);
   }
-
-  slashMenuCloseHandler = () => {
-    cleanupCustomItems();
-    isOpen.value = false;
-    searchQuery.value = '';
-    currentContext.value = null;
-  };
-  props.editor.on('slashMenu:close', slashMenuCloseHandler);
 });
 
-// Cleanup function for event listeners
 onBeforeUnmount(() => {
-  document.removeEventListener('keydown', handleGlobalKeyDown);
   document.removeEventListener('pointerdown', handleGlobalOutsideClick);
 
   cleanupCustomItems();
 
   if (props.editor) {
     try {
-      // Remove specific handlers to avoid removing other components' listeners
       if (slashMenuOpenHandler) {
         props.editor.off('slashMenu:open', slashMenuOpenHandler);
       }
       if (slashMenuCloseHandler) {
         props.editor.off('slashMenu:close', slashMenuCloseHandler);
       }
-      props.editor.off('update', handleEditorUpdate);
+      if (slashMenuNavigateHandler) {
+        props.editor.off('slashMenu:navigate', slashMenuNavigateHandler);
+      }
+      if (updateHandler) {
+        props.editor.off('update', updateHandler);
+      }
+      props.editor.off('transaction', handleTransaction);
       contextMenuTarget?.removeEventListener('contextmenu', handleRightClickCapture, true);
       contextMenuTarget?.removeEventListener('contextmenu', handleRightClick);
     } catch (error) {
@@ -485,35 +447,36 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="isOpen" ref="menuRef" class="slash-menu" :style="menuPosition" @pointerdown.stop>
-    <!-- Hide the input visually but keep it focused for typing -->
-    <input
-      ref="searchInput"
-      v-model="searchQuery"
-      type="text"
-      class="slash-menu-hidden-input"
-      @keydown="handleGlobalKeyDown"
-      @keydown.stop
-    />
+    <!-- Filter header -->
+    <div v-if="searchQuery" class="slash-menu-header">Filtered results</div>
 
     <div class="slash-menu-items">
-      <template v-for="(section, sectionIndex) in filteredSections" :key="section.id">
-        <!-- Render divider before section (except for first section) -->
-        <div v-if="sectionIndex > 0 && section.items.length > 0" class="slash-menu-divider" tabindex="0"></div>
-
-        <!-- Render section items -->
-        <template v-for="item in section.items" :key="item.id">
-          <div class="slash-menu-item" :class="{ 'is-selected': item.id === selectedId }" @click="executeCommand(item)">
-            <!-- Custom rendered content or default rendering -->
-            <div :ref="(el) => setCustomItemRef(el, item)" class="slash-menu-custom-item">
-              <!-- Fallback content for items without custom render (will be replaced by defaultRender) -->
-              <template v-if="!item.render">
-                <span v-if="item.icon" class="slash-menu-item-icon" v-html="item.icon"></span>
-                <span>{{ item.label }}</span>
-              </template>
+      <template v-if="filteredItems.length > 0">
+        <template v-for="(section, sectionIndex) in filteredSections" :key="section.id">
+          <div v-if="sectionIndex > 0 && section.items.length > 0" class="slash-menu-divider"></div>
+          <template v-for="item in section.items" :key="item.id">
+            <div
+              class="slash-menu-item"
+              :class="{ 'is-selected': item.id === selectedId }"
+              @click="executeCommand(item)"
+            >
+              <div :ref="(el) => setCustomItemRef(el, item)" class="slash-menu-custom-item">
+                <template v-if="!item.render">
+                  <span v-if="item.icon" class="slash-menu-item-icon" v-html="item.icon"></span>
+                  <span class="slash-menu-item-label">{{ item.label }}</span>
+                </template>
+              </div>
             </div>
-          </div>
+          </template>
         </template>
       </template>
+      <div v-else class="slash-menu-no-results">No results</div>
+    </div>
+
+    <!-- Footer -->
+    <div class="slash-menu-footer">
+      <span>Close menu</span>
+      <kbd>esc</kbd>
     </div>
   </div>
 </template>
@@ -522,82 +485,104 @@ onBeforeUnmount(() => {
 .slash-menu {
   position: fixed;
   z-index: 50;
-  width: 180px;
-  color: #47484a;
+  width: 220px;
+  color: #37352f;
   background: white;
+  border-radius: 6px;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.05),
-    0px 10px 20px rgba(0, 0, 0, 0.1);
-  margin-top: 0.5rem;
-  font-size: 12px;
+    0 0 0 1px rgba(15, 15, 15, 0.05),
+    0 3px 6px rgba(15, 15, 15, 0.1),
+    0 9px 24px rgba(15, 15, 15, 0.2);
+  margin-top: 0.25rem;
+  font-size: 14px;
+  overflow: hidden;
 }
 
-/* Hide the input but keep it functional */
-.slash-menu-hidden-input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  height: 0;
-  width: 0;
-  padding: 0;
-  margin: 0;
-  border: none;
+.slash-menu-header {
+  padding: 6px 14px 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(55, 53, 47, 0.65);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .slash-menu-items {
   max-height: 300px;
   overflow-y: auto;
-}
-
-.slash-menu-search {
-  padding: 0.5rem;
-  border-bottom: 1px solid #eee;
-}
-
-.slash-menu-search input {
-  width: 100%;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid #ddd;
-  outline: none;
-}
-
-.slash-menu-search input:focus {
-  border-color: #0096fd;
-}
-
-/* Remove unused group styles */
-.slash-menu-group-label {
-  display: none;
+  padding: 4px 0;
 }
 
 .slash-menu-item {
-  padding: 0.25rem 0.5rem;
+  padding: 4px 14px;
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.15s ease;
   display: flex;
   align-items: center;
+  min-height: 28px;
+  transition: background 80ms ease-in;
 }
 
 .slash-menu-item:hover {
-  background: #f5f5f5;
+  background: rgba(55, 53, 47, 0.08);
 }
 
 .slash-menu-item.is-selected {
-  background: #edf6ff;
-  color: #0096fd;
-  fill: #0096fd;
+  background: rgba(35, 131, 226, 0.14);
 }
 
 .slash-menu-item-icon {
   display: flex;
   align-items: center;
-  margin-right: 10px;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  color: rgba(55, 53, 47, 0.85);
 }
 
 .slash-menu .slash-menu-item-icon svg {
-  height: 12px;
-  width: 12px;
+  height: 14px;
+  width: 14px;
+}
+
+.slash-menu-item-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slash-menu-no-results {
+  padding: 8px 14px;
+  color: rgba(55, 53, 47, 0.5);
+  font-size: 12px;
+}
+
+.slash-menu-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 14px;
+  border-top: 1px solid rgba(55, 53, 47, 0.09);
+  font-size: 12px;
+  color: rgba(55, 53, 47, 0.5);
+}
+
+.slash-menu-footer kbd {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 3px;
+  background: rgba(55, 53, 47, 0.04);
+  color: rgba(55, 53, 47, 0.5);
+}
+
+.slash-menu-divider {
+  height: 1px;
+  background: rgba(55, 53, 47, 0.09);
+  margin: 4px 0;
 }
 
 .slash-menu-custom-item {
@@ -619,11 +604,5 @@ onBeforeUnmount(() => {
     0 0 0 1px rgba(0, 0, 0, 0.05),
     0px 10px 20px rgba(0, 0, 0, 0.1);
   z-index: 100;
-}
-
-.slash-menu-divider {
-  height: 1px;
-  background: #eee;
-  margin: 4px 0;
 }
 </style>

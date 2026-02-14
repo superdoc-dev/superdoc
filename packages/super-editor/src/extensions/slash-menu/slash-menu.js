@@ -83,7 +83,6 @@ export function findContainingBlockAncestor(element) {
  * Configuration options for SlashMenu
  * @typedef {Object} SlashMenuOptions
  * @property {boolean} [disabled] - Disable the slash menu entirely (inherited from editor.options.disableContextMenu)
- * @property {number} [cooldownMs=5000] - Cooldown duration in milliseconds to prevent rapid re-opening
  * @category Options
  */
 
@@ -116,7 +115,6 @@ const MENU_OFFSET_X = 0; // Horizontal offset for slash menu (aligned with curso
 const MENU_OFFSET_Y = 28; // Vertical offset for slash menu
 const CONTEXT_MENU_OFFSET_X = 10; // Small offset for right-click
 const CONTEXT_MENU_OFFSET_Y = 10; // Small offset for right-click
-const SLASH_COOLDOWN_MS = 5000; // Cooldown period to prevent rapid re-opening
 
 /**
  * @module SlashMenu
@@ -143,10 +141,6 @@ export const SlashMenu = Extension.create({
       return [];
     }
 
-    // Cooldown flag and timeout for slash menu
-    let slashCooldown = false;
-    let slashCooldownTimeout = null;
-
     /**
      * Check if the context menu is disabled via editor options
      * @returns {boolean} True if menu is disabled
@@ -163,6 +157,7 @@ export const SlashMenu = Extension.create({
       selected: null,
       anchorPos: null,
       menuPosition: null,
+      trigger: null, // 'slash' (types into doc, filters) or 'click' (context menu)
       disabled: isMenuDisabled(),
       ...value,
     });
@@ -197,6 +192,50 @@ export const SlashMenu = Extension.create({
           }
 
           if (!meta) {
+            // Auto-close slash menu when cursor leaves the /query range
+            if (value.open && value.trigger === 'slash' && value.anchorPos !== null) {
+              const mappedAnchor = tr.mapping.map(value.anchorPos);
+              const $cursor = tr.selection?.$cursor ?? null;
+
+              // Close if no cursor or cursor at/before the / character
+              if (!$cursor || $cursor.pos <= mappedAnchor) {
+                editor.emit('slashMenu:close');
+                return ensureStateShape({ open: false, anchorPos: null, trigger: null });
+              }
+
+              // Close if cursor moved to a different block (paragraph/heading)
+              try {
+                const $anchor = tr.doc.resolve(mappedAnchor);
+                // Find the nearest block ancestor for each position (handles run wrappers)
+                let anchorBlock = null;
+                for (let d = $anchor.depth; d > 0; d--) {
+                  if ($anchor.node(d).isBlock) {
+                    anchorBlock = $anchor.node(d);
+                    break;
+                  }
+                }
+                let cursorBlock = null;
+                for (let d = $cursor.depth; d > 0; d--) {
+                  if ($cursor.node(d).isBlock) {
+                    cursorBlock = $cursor.node(d);
+                    break;
+                  }
+                }
+                if (anchorBlock !== cursorBlock) {
+                  editor.emit('slashMenu:close');
+                  return ensureStateShape({ open: false, anchorPos: null, trigger: null });
+                }
+              } catch {
+                editor.emit('slashMenu:close');
+                return ensureStateShape({ open: false, anchorPos: null, trigger: null });
+              }
+
+              // Update mapped anchor if it changed
+              if (mappedAnchor !== value.anchorPos) {
+                return ensureStateShape({ ...value, anchorPos: mappedAnchor, disabled });
+              }
+            }
+
             if (value.disabled !== disabled) {
               return ensureStateShape({ ...value, disabled });
             }
@@ -309,6 +348,7 @@ export const SlashMenu = Extension.create({
                 ...value,
                 open: true,
                 anchorPos: meta.pos,
+                trigger: meta.trigger ?? 'slash',
                 menuPosition,
               };
 
@@ -324,7 +364,7 @@ export const SlashMenu = Extension.create({
 
             case 'close': {
               editor.emit('slashMenu:close');
-              return ensureStateShape({ ...value, open: false, anchorPos: null });
+              return ensureStateShape({ ...value, open: false, anchorPos: null, trigger: null });
             }
 
             default:
@@ -362,11 +402,6 @@ export const SlashMenu = Extension.create({
           destroy() {
             window.removeEventListener('scroll', updatePosition, true);
             window.removeEventListener('resize', updatePosition);
-            // Clear cooldown timeout if exists
-            if (slashCooldownTimeout) {
-              clearTimeout(slashCooldownTimeout);
-              slashCooldownTimeout = null;
-            }
           },
         };
       },
@@ -387,12 +422,8 @@ export const SlashMenu = Extension.create({
           }
           const pluginState = this.getState(view.state);
 
-          // If cooldown is active and slash is pressed, allow default behavior
-          if (event.key === '/' && slashCooldown) {
-            return false; // Let browser handle it
-          }
-
-          if (event.key === '/' && !pluginState.open) {
+          // --- Open slash menu: insert '/' into document + open ---
+          if (event.key === '/' && !pluginState.open && !event.ctrlKey && !event.metaKey && !event.altKey) {
             const { $cursor } = view.state.selection;
             if (!$cursor) return false;
 
@@ -405,44 +436,53 @@ export const SlashMenu = Extension.create({
 
             event.preventDefault();
 
-            // Set cooldown
-            slashCooldown = true;
-            if (slashCooldownTimeout) clearTimeout(slashCooldownTimeout);
-            slashCooldownTimeout = setTimeout(() => {
-              slashCooldown = false;
-              slashCooldownTimeout = null;
-            }, SLASH_COOLDOWN_MS);
-
-            // Only dispatch state update - event will be emitted in apply()
-            view.dispatch(
-              view.state.tr.setMeta(SlashMenuPluginKey, {
-                type: 'open',
-                pos: $cursor.pos,
-              }),
-            );
+            // Insert '/' into the document and open the menu in one transaction.
+            // The '/' stays visible — subsequent typing filters the menu.
+            const { from, to } = view.state.selection;
+            const tr = view.state.tr.insertText('/', from, to);
+            tr.setMeta(SlashMenuPluginKey, { type: 'open', pos: from, trigger: 'slash' });
+            view.dispatch(tr);
             return true;
           }
 
-          if (pluginState.open && (event.key === 'Escape' || event.key === 'ArrowLeft')) {
-            // Store current state before closing
-            const { anchorPos } = pluginState;
-
-            // Close menu
-            view.dispatch(
-              view.state.tr.setMeta(SlashMenuPluginKey, {
-                type: 'close',
-              }),
-            );
-
-            // Restore cursor position and focus
-            if (anchorPos !== null) {
-              const tr = view.state.tr.setSelection(
-                view.state.selection.constructor.near(view.state.doc.resolve(anchorPos)),
-              );
-              view.dispatch(tr);
-              view.focus();
+          // --- Menu is open ---
+          if (pluginState.open) {
+            // Navigation keys: consumed by PM so cursor doesn't move.
+            // Emit editor event for SlashMenu.vue to handle navigation.
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter') {
+              event.preventDefault();
+              editor.emit('slashMenu:navigate', { key: event.key });
+              return true;
             }
-            return true;
+
+            if (pluginState.trigger === 'slash') {
+              // Escape: delete /query text and close
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                const { anchorPos } = pluginState;
+                const cursorPos = view.state.selection.from;
+                const tr = view.state.tr;
+                if (anchorPos !== null && cursorPos > anchorPos) {
+                  tr.delete(anchorPos, cursorPos);
+                }
+                tr.setMeta(SlashMenuPluginKey, { type: 'close' });
+                view.dispatch(tr);
+                view.focus();
+                return true;
+              }
+              // All other keys pass through to PM (chars go into the document).
+              // apply() auto-closes if cursor leaves the /query range.
+              return false;
+            }
+
+            // Context-menu trigger: close on any non-navigation key
+            if (event.key === 'Escape' || event.key === 'ArrowLeft') {
+              view.dispatch(view.state.tr.setMeta(SlashMenuPluginKey, { type: 'close' }));
+              view.focus();
+              return true;
+            }
+            view.dispatch(view.state.tr.setMeta(SlashMenuPluginKey, { type: 'close' }));
+            return false;
           }
 
           return false;

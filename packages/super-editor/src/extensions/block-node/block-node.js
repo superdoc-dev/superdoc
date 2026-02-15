@@ -402,9 +402,11 @@ export const BlockNode = Extension.create({
             }
           }
 
-          if (changed && !hasInitialized) {
+          if (!hasInitialized) {
             hasInitialized = true;
-            tr.setMeta('blockNodeInitialUpdate', true);
+            if (changed) {
+              tr.setMeta('blockNodeInitialUpdate', true);
+            }
           }
 
           // Restore marks since setNodeMarkup resets them

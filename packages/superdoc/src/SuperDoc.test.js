@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { h, defineComponent, ref, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
@@ -366,6 +366,13 @@ describe('SuperDoc.vue', () => {
     useSelectedTextMock.mockClear();
     mockState.instances.clear();
 
+    // Make RAF synchronous in tests — jsdom has no rendering loop, and
+    // SuperDoc.vue defers selection updates via requestAnimationFrame.
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(Date.now());
+      return 0;
+    });
+
     // Set up default mock presentation editor instances for common document IDs
     const mockPresentationEditor = {
       getSelectionBounds: vi.fn(() => null),
@@ -387,6 +394,10 @@ describe('SuperDoc.vue', () => {
         dispatchEvent: vi.fn(),
       });
     }
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('wires editor lifecycle events and propagates updates', async () => {

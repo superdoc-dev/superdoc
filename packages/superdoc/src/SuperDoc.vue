@@ -279,6 +279,7 @@ const onEditorUpdate = ({ editor }) => {
   proxy.$superdoc.emit('editor-update', { editor });
 };
 
+let selectionUpdateRafId = null;
 const onEditorSelectionChange = ({ editor, transaction }) => {
   if (skipSelectionUpdate.value) {
     // When comment is added selection will be equal to comment text
@@ -295,6 +296,21 @@ const onEditorSelectionChange = ({ editor, transaction }) => {
     return;
   }
 
+  // Defer selection-related Vue reactive updates to the next animation frame.
+  // Without this, each PM transaction synchronously mutates reactive refs (selectionPosition,
+  // activeSelection, toolsMenuPosition), which triggers Vue's flushJobs microtask to re-evaluate
+  // hundreds of components — blocking the main thread for ~300ms per keystroke.
+  // RAF batches this work with the layout pipeline rerender, keeping typing responsive.
+  if (selectionUpdateRafId != null) {
+    cancelAnimationFrame(selectionUpdateRafId);
+  }
+  selectionUpdateRafId = requestAnimationFrame(() => {
+    selectionUpdateRafId = null;
+    processSelectionChange(editor, transaction);
+  });
+};
+
+const processSelectionChange = (editor, transaction) => {
   const { documentId } = editor.options;
   const txnSelection = transaction?.selection;
   const stateSelection = editor.state?.selection ?? editor.view?.state?.selection;
@@ -677,6 +693,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown);
+  if (selectionUpdateRafId != null) {
+    cancelAnimationFrame(selectionUpdateRafId);
+    selectionUpdateRafId = null;
+  }
 });
 
 const selectionLayer = ref(null);

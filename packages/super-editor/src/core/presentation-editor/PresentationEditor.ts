@@ -193,7 +193,7 @@ const layoutDebugEnabled =
 /** Log performance metrics when debug is enabled */
 const perfLog = (...args: unknown[]): void => {
   if (!layoutDebugEnabled) return;
-  console.log(...args);
+  console.warn(...args);
 };
 /** Budget for header/footer initialization before warning (milliseconds) */
 const HEADER_FOOTER_INIT_BUDGET_MS = 200;
@@ -316,6 +316,8 @@ export class PresentationEditor extends EventEmitter {
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
   #remoteCursorManager: RemoteCursorManager | null = null;
+  /** Debounce timer for local cursor awareness updates (avoids ~190ms Liveblocks overhead per keystroke) */
+  #cursorUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   /** DOM element for rendering remote cursor overlays */
   #remoteCursorOverlay: HTMLElement | null = null;
   /** DOM element for rendering local selection/caret (dual-layer overlay architecture) */
@@ -2134,6 +2136,12 @@ export class PresentationEditor extends EventEmitter {
       }, 'Layout RAF');
     }
 
+    // Cancel pending cursor awareness update
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+      this.#cursorUpdateTimer = null;
+    }
+
     // Clean up remote cursor manager
     if (this.#remoteCursorManager) {
       safeCleanup(() => {
@@ -2350,16 +2358,18 @@ export class PresentationEditor extends EventEmitter {
    * @private
    */
   #updateLocalAwarenessCursor(): void {
-    this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
-  }
-
-  /**
-   * Schedule a remote cursor re-render without re-normalizing awareness states.
-   * Delegates to RemoteCursorManager.
-   * @private
-   */
-  #scheduleRemoteCursorReRender() {
-    this.#remoteCursorManager?.scheduleReRender();
+    // Debounce awareness cursor updates to avoid per-keystroke overhead.
+    // Collaboration providers (e.g. Liveblocks) can spend ~190ms encoding and
+    // syncing awareness state per setLocalStateField call. Batching rapid
+    // cursor movements into a single update every 100ms keeps typing responsive
+    // while maintaining real-time cursor sharing for other participants.
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+    }
+    this.#cursorUpdateTimer = setTimeout(() => {
+      this.#cursorUpdateTimer = null;
+      this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
+    }, 100);
   }
 
   /**
@@ -3150,11 +3160,13 @@ export class PresentationEditor extends EventEmitter {
 
       this.#selectionSync.requestRender({ immediate: true });
 
-      // Trigger cursor re-rendering on layout changes without re-normalizing awareness
-      // Layout reflow requires repositioning cursors in the DOM, but awareness states haven't changed
-      // This optimization avoids expensive Yjs position conversions on every layout update
+      // Re-normalize remote cursor positions after layout completes.
+      // Local document changes shift absolute positions, so Yjs relative positions
+      // must be re-resolved against the updated editor state. Without this,
+      // remote cursors appear offset by the number of characters the local user typed.
       if (this.#remoteCursorManager?.hasRemoteCursors()) {
-        this.#scheduleRemoteCursorReRender();
+        this.#remoteCursorManager.markDirty();
+        this.#remoteCursorManager.scheduleUpdate();
       }
     } finally {
       if (!layoutCompleted) {

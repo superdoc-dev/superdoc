@@ -2,6 +2,7 @@ import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
+import { markRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
@@ -459,8 +460,19 @@ export class SuperDoc extends EventEmitter {
 
     if (externalYdoc && externalProvider) {
       // Use external provider - wire up awareness for SuperDoc events
-      this.ydoc = externalYdoc;
-      this.provider = externalProvider;
+      // Mark Y.js objects as raw to prevent Vue's deep reactive traversal
+      // from hitting circular references inside Y.js internals (causes stack overflow).
+      this.ydoc = markRaw(externalYdoc);
+      this.provider = markRaw(externalProvider);
+
+      // Assign a stable color to the local user so awareness broadcasts it.
+      // Without this, y-prosemirror's cursor plugin mutates user.color to '#ffa500'
+      // (orange) as a default, causing color flickering between that default and
+      // the fallback colors used by RemoteCursorAwareness.
+      if (!this.config.user.color) {
+        this.config.user.color = this.colors[0] || '#4ECDC4';
+      }
+
       setupAwarenessHandler(externalProvider, this, this.config.user);
 
       // If no documents provided, create a default blank document
@@ -501,11 +513,11 @@ export class SuperDoc extends EventEmitter {
     // Optionally, initialize separate superdoc sync - for comments, view, etc.
     if (commentsConfig.useInternalExternalComments && !commentsConfig.suppressInternalExternalComments) {
       const { ydoc: sdYdoc, provider: sdProvider } = initSuperdocYdoc(this);
-      this.ydoc = sdYdoc;
-      this.provider = sdProvider;
+      this.ydoc = markRaw(sdYdoc);
+      this.provider = markRaw(sdProvider);
     } else {
-      this.ydoc = processedDocuments[0].ydoc;
-      this.provider = processedDocuments[0].provider;
+      this.ydoc = markRaw(processedDocuments[0].ydoc);
+      this.provider = markRaw(processedDocuments[0].provider);
     }
 
     // Initialize comments sync, if enabled

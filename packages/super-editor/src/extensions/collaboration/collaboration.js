@@ -8,6 +8,10 @@ export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
 const headlessCleanupRegisteredEditors = new WeakSet();
 
+// Store Y.js observer references outside of reactive `this.options` to avoid
+// Vue's deep traverse hitting circular references inside Y.js Map internals.
+const collaborationCleanupByEditor = new WeakMap();
+
 const registerHeadlessBindingCleanup = (editor, cleanup) => {
   if (!cleanup || headlessCleanupRegisteredEditors.has(editor)) return;
 
@@ -37,24 +41,25 @@ export const Collaboration = Extension.create({
     this.options.ydoc = this.editor.options.ydoc;
 
     initSyncListener(this.options.ydoc, this.editor, this);
-    initDocumentListener({ ydoc: this.options.ydoc, editor: this.editor });
+    const documentListenerCleanup = initDocumentListener({ ydoc: this.options.ydoc, editor: this.editor });
 
     const [syncPlugin, fragment] = createSyncPlugin(this.options.ydoc, this.editor);
     this.options.fragment = fragment;
 
     const metaMap = this.options.ydoc.getMap('media');
-    metaMap.observe((event) => {
+    const metaMapObserver = (event) => {
       event.changes.keys.forEach((_, key) => {
         if (!(key in this.editor.storage.image.media)) {
           const fileData = metaMap.get(key);
           this.editor.storage.image.media[key] = fileData;
         }
       });
-    });
+    };
+    metaMap.observe(metaMapObserver);
 
     // Observer for remote header/footer JSON changes
     const headerFooterMap = this.options.ydoc.getMap('headerFooterJson');
-    headerFooterMap.observe((event) => {
+    const headerFooterMapObserver = (event) => {
       // Only process remote changes (not our own)
       if (event.transaction.local) return;
 
@@ -66,6 +71,17 @@ export const Collaboration = Extension.create({
           }
         }
       });
+    };
+    headerFooterMap.observe(headerFooterMapObserver);
+
+    // Store cleanup references in a non-reactive WeakMap (NOT this.options)
+    // to avoid Vue's deep traverse hitting circular references in Y.js Maps.
+    collaborationCleanupByEditor.set(this.editor, {
+      metaMap,
+      metaMapObserver,
+      headerFooterMap,
+      headerFooterMapObserver,
+      documentListenerCleanup,
     });
 
     // Headless editors don't create an EditorView, so wire Y.js binding lifecycle here.
@@ -84,6 +100,20 @@ export const Collaboration = Extension.create({
       const cleanup = initHeadlessBinding(this.editor);
       registerHeadlessBindingCleanup(this.editor, cleanup);
     }
+  },
+
+  onDestroy() {
+    const cleanup = collaborationCleanupByEditor.get(this.editor);
+    if (!cleanup) return;
+
+    // Clean up Y.js map observers to prevent memory leaks
+    cleanup.metaMap.unobserve(cleanup.metaMapObserver);
+    cleanup.headerFooterMap.unobserve(cleanup.headerFooterMapObserver);
+
+    // Clean up ydoc afterTransaction listener and debounce timer
+    cleanup.documentListenerCleanup();
+
+    collaborationCleanupByEditor.delete(this.editor);
   },
 
   addCommands() {
@@ -138,22 +168,35 @@ const initDocumentListener = ({ ydoc, editor }) => {
     updateYdocDocxData(editor);
   }, 1000);
 
-  ydoc.on('afterTransaction', (transaction) => {
+  const afterTransactionHandler = (transaction) => {
     const { local } = transaction;
 
     const hasChangedDocx = checkDocxChanged(transaction);
     if (!hasChangedDocx && transaction.changed?.size && local) {
       debouncedUpdate(editor);
     }
-  });
+  };
+
+  ydoc.on('afterTransaction', afterTransactionHandler);
+
+  // Return cleanup function
+  return () => {
+    ydoc.off('afterTransaction', afterTransactionHandler);
+    debouncedUpdate.cancel();
+  };
 };
 
 const debounce = (fn, wait) => {
   let timeout = null;
-  return (...args) => {
+  const debounced = (...args) => {
     clearTimeout(timeout);
-    timeout = setTimeout(() => fn.apply(this, args), wait);
+    timeout = setTimeout(() => fn(...args), wait);
   };
+  debounced.cancel = () => {
+    clearTimeout(timeout);
+    timeout = null;
+  };
+  return debounced;
 };
 
 const initSyncListener = (ydoc, editor, extension) => {

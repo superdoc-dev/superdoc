@@ -253,6 +253,23 @@ describe('core utilities', () => {
       expect(cssColorToHex('rgba(0, 128, 255, 1)')).toBe('#0080ff');
     });
 
+    it('returns null for fully transparent rgba (alpha 0)', () => {
+      expect(cssColorToHex('rgba(255, 0, 0, 0)')).toBeNull();
+      expect(cssColorToHex('rgba(0, 0, 0, 0.0)')).toBeNull();
+    });
+
+    it('returns null for out-of-range rgb channel values', () => {
+      expect(cssColorToHex('rgb(256, 0, 0)')).toBeNull();
+      expect(cssColorToHex('rgb(0, 300, 0)')).toBeNull();
+      expect(cssColorToHex('rgb(0, 0, 999)')).toBeNull();
+      expect(cssColorToHex('rgba(256, 0, 0, 1)')).toBeNull();
+    });
+
+    it('accepts rgb boundary values', () => {
+      expect(cssColorToHex('rgb(0, 0, 0)')).toBe('#000000');
+      expect(cssColorToHex('rgb(255, 255, 255)')).toBe('#ffffff');
+    });
+
     it('handles rgb with no spaces', () => {
       expect(cssColorToHex('rgb(255,0,0)')).toBe('#ff0000');
     });

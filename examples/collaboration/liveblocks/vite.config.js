@@ -11,6 +11,12 @@ export default defineConfig({
       'superdoc/style.css': path.join(superdocPkg, 'dist/style.css'),
       superdoc: path.join(superdocPkg, 'dist/superdoc.es.js'),
     },
+    // Force a single copy of yjs. Without this, Vite resolves `import "yjs"`
+    // from superdoc's dist chunks to the monorepo's copy, while the example
+    // app resolves to its own node_modules copy — two physical files of the
+    // same version. Y.js detects this and prints "Yjs was already imported",
+    // breaking instanceof checks and corrupting Liveblocks rooms (code 1011).
+    dedupe: ['yjs'],
   },
   server: {
     port: 3000,

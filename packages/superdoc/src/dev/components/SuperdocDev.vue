@@ -17,6 +17,8 @@ import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import { createClient } from '@liveblocks/client';
+import { LiveblocksYjsProvider } from '@liveblocks/yjs';
 import * as Y from 'yjs';
 
 // note:
@@ -44,6 +46,7 @@ const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
 const useWebLayout = ref(urlParams.get('view') === 'web');
 const useCollaboration = urlParams.get('collab') === '1';
+const collabProvider = urlParams.get('provider') || 'hocuspocus'; // 'hocuspocus' or 'liveblocks'
 
 // Collaboration state
 const ydocRef = shallowRef(null);
@@ -97,6 +100,42 @@ const commentPermissionResolver = ({ permission, comment, defaultDecision, curre
 
 const handleNewFile = async (file) => {
   uploadedFileName.value = file?.name || '';
+
+  // In collaboration mode, use replaceFile to broadcast changes via Yjs
+  if (useCollaboration && superdoc.value) {
+    const doc = superdoc.value.superdocStore?.documents?.[0];
+    const editor = doc?.getEditor?.();
+    if (editor) {
+      if (collabProvider === 'liveblocks' && providerRef.value) {
+        // Server-side init for Liveblocks: pause WS → replace locally → push via REST → unpause.
+        // The WS "too large" warning on unpause is harmless — data is already on the server.
+        providerRef.value.pause();
+        await editor.replaceFile(file);
+
+        const update = Y.encodeStateAsUpdate(ydocRef.value);
+        const roomId = import.meta.env.VITE_LIVEBLOCKS_ROOM_ID || 'superdoc-dev-room';
+        try {
+          const resp = await fetch('http://localhost:3051/api/init-ydoc', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/octet-stream', 'X-Room-Id': roomId },
+            body: update,
+          });
+          if (!resp.ok) {
+            console.error('[superdoc-dev] Server-side init failed:', resp.status, await resp.text());
+          }
+        } catch (err) {
+          console.error('[superdoc-dev] Server-side init error:', err);
+        }
+
+        providerRef.value.unpause();
+        return;
+      }
+
+      await editor.replaceFile(file);
+      return;
+    }
+  }
+
   // Generate a file url
   const url = URL.createObjectURL(file);
 
@@ -354,6 +393,7 @@ const init = async () => {
             collaboration: {
               ydoc: ydocRef.value,
               provider: providerRef.value,
+              excludeSyncedContent: collabProvider === 'liveblocks',
             },
           }
         : {}),
@@ -511,33 +551,73 @@ const toggleCommentsPanel = () => {
   }
 };
 
+// Liveblocks cleanup ref (for leave function)
+let liveblocksLeave = null;
+
 onMounted(async () => {
   // Initialize collaboration if enabled via ?collab=1
   if (useCollaboration) {
     const ydoc = new Y.Doc();
-    const provider = new HocuspocusProvider({
-      url: 'ws://localhost:3050',
-      name: 'superdoc-dev-room',
-      document: ydoc,
-    });
 
-    ydocRef.value = ydoc;
-    providerRef.value = provider;
+    if (collabProvider === 'liveblocks') {
+      // Liveblocks provider — requires VITE_LIVEBLOCKS_PUBLIC_KEY in .env
+      const publicKey = import.meta.env.VITE_LIVEBLOCKS_PUBLIC_KEY;
+      const roomId = import.meta.env.VITE_LIVEBLOCKS_ROOM_ID || 'superdoc-dev-room';
 
-    // Wait for sync before loading document
-    await new Promise((resolve) => {
-      provider.on('synced', () => {
-        collabReady.value = true;
-        resolve();
+      if (!publicKey) {
+        console.error('[collab] Missing VITE_LIVEBLOCKS_PUBLIC_KEY in .env');
+        return;
+      }
+
+      const client = createClient({
+        publicApiKey: publicKey,
       });
-      // Fallback timeout in case sync doesn't fire
-      setTimeout(() => {
-        collabReady.value = true;
-        resolve();
-      }, 3000);
-    });
+      const { room, leave } = client.enterRoom(roomId);
+      liveblocksLeave = leave;
+      const provider = new LiveblocksYjsProvider(room, ydoc, {
+        useV2Encoding_experimental: true,
+      });
 
-    console.log('[collab] Provider synced, initializing SuperDoc');
+      ydocRef.value = ydoc;
+      providerRef.value = provider;
+
+      await new Promise((resolve) => {
+        provider.on('sync', (synced) => {
+          if (!synced) return;
+          collabReady.value = true;
+          resolve();
+        });
+        setTimeout(() => {
+          collabReady.value = true;
+          resolve();
+        }, 5000);
+      });
+
+      console.log('[collab] Liveblocks provider synced');
+    } else {
+      // Hocuspocus provider (default)
+      const provider = new HocuspocusProvider({
+        url: 'ws://localhost:3050',
+        name: 'superdoc-dev-room',
+        document: ydoc,
+      });
+
+      ydocRef.value = ydoc;
+      providerRef.value = provider;
+
+      await new Promise((resolve) => {
+        provider.on('synced', () => {
+          collabReady.value = true;
+          resolve();
+        });
+        setTimeout(() => {
+          collabReady.value = true;
+          resolve();
+        }, 3000);
+      });
+
+      console.log('[collab] Hocuspocus provider synced');
+    }
   }
 
   // Initialize SuperDoc - it will automatically create a blank document
@@ -555,6 +635,10 @@ onBeforeUnmount(() => {
     providerRef.value.destroy();
     providerRef.value = null;
   }
+  if (liveblocksLeave) {
+    liveblocksLeave();
+    liveblocksLeave = null;
+  }
   ydocRef.value = null;
 });
 
@@ -569,6 +653,24 @@ const toggleViewLayout = () => {
   const nextValue = !useWebLayout.value;
   const url = new URL(window.location.href);
   url.searchParams.set('view', nextValue ? 'web' : 'print');
+  window.location.href = url.toString();
+};
+
+const toggleCollaboration = () => {
+  const url = new URL(window.location.href);
+  if (useCollaboration) {
+    url.searchParams.delete('collab');
+    url.searchParams.delete('provider');
+  } else {
+    url.searchParams.set('collab', '1');
+    url.searchParams.set('provider', collabProvider);
+  }
+  window.location.href = url.toString();
+};
+
+const switchProvider = (value) => {
+  const url = new URL(window.location.href);
+  url.searchParams.set('provider', value);
   window.location.href = url.toString();
 };
 
@@ -652,7 +754,7 @@ if (scrollTestMode.value) {
               <span class="badge">Layout Engine: {{ useLayoutEngine && !useWebLayout ? 'ON' : 'OFF' }}</span>
               <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
               <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
-              <span v-if="useCollaboration" class="badge badge--collab">Collab: ON</span>
+              <span v-if="useCollaboration" class="badge badge--collab">Collab: {{ collabProvider }}</span>
             </div>
             <h2 class="dev-app__title">SuperDoc Dev</h2>
             <div class="dev-app__header-layout-toggle">
@@ -767,6 +869,18 @@ if (scrollTestMode.value) {
             <button class="dev-app__header-export-btn" @click="toggleViewLayout">
               Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)
             </button>
+            <button class="dev-app__header-export-btn dev-app__header-export-btn--sm" :class="{ 'is-active': useCollaboration }" @click="toggleCollaboration">
+              Collab {{ useCollaboration ? 'off' : 'on' }}
+            </button>
+            <select
+              v-if="useCollaboration"
+              class="dev-app__provider-select"
+              :value="collabProvider"
+              @change="switchProvider($event.target.value)"
+            >
+              <option value="hocuspocus">Hocuspocus</option>
+              <option value="liveblocks">Liveblocks</option>
+            </select>
           </div>
         </div>
       </div>
@@ -1180,6 +1294,28 @@ if (scrollTestMode.value) {
 .dev-app__header-export-btn:active {
   transform: translateY(1px);
   background: rgba(148, 163, 184, 0.28);
+}
+
+.dev-app__header-export-btn.is-active {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.dev-app__header-export-btn--sm {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.dev-app__provider-select {
+  background: rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .dev-app__dropdown {

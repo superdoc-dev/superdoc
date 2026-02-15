@@ -2,7 +2,11 @@ import { Extension } from '@core/index.js';
 import { PluginKey } from 'prosemirror-state';
 import { encodeStateAsUpdate } from 'yjs';
 import { ySyncPlugin, ySyncPluginKey, yUndoPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
-import { updateYdocDocxData, applyRemoteHeaderFooterChanges } from '@extensions/collaboration/collaboration-helpers.js';
+import {
+  updateYdocDocxData,
+  applyRemoteHeaderFooterChanges,
+  shouldSyncFile,
+} from '@extensions/collaboration/collaboration-helpers.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
@@ -112,8 +116,20 @@ export const createSyncPlugin = (ydoc, editor) => {
 
 export const initializeMetaMap = (ydoc, editor) => {
   const metaMap = ydoc.getMap('meta');
-  metaMap.set('docx', editor.options.content);
   metaMap.set('fonts', editor.options.fonts);
+
+  // Store each docx file as a separate Y.Map entry (smaller Yjs messages).
+  const excludeSynced = !!editor.options.excludeSyncedContent;
+  const docxFilesMap = ydoc.getMap('docxFiles');
+  const content = editor.options.content;
+  if (Array.isArray(content)) {
+    content.forEach((file) => {
+      if (file?.name && file?.content && shouldSyncFile(file.name, excludeSynced)) {
+        docxFilesMap.set(file.name, file.content);
+      }
+    });
+  }
+  metaMap.set('docxReady', true);
 
   const mediaMap = ydoc.getMap('media');
   Object.entries(editor.options.mediaFiles).forEach(([key, value]) => {
@@ -121,9 +137,15 @@ export const initializeMetaMap = (ydoc, editor) => {
   });
 };
 
-const checkDocxChanged = (transaction) => {
+const checkDocxChanged = (transaction, docxFilesMap) => {
   if (!transaction.changed) return false;
 
+  // New format: per-file Y.Map
+  if (docxFilesMap && transaction.changed.has(docxFilesMap)) {
+    return true;
+  }
+
+  // Legacy format: monolithic array in metaMap
   for (const [, value] of transaction.changed.entries()) {
     if (value instanceof Set && value.has('docx')) {
       return true;
@@ -138,10 +160,12 @@ const initDocumentListener = ({ ydoc, editor }) => {
     updateYdocDocxData(editor);
   }, 1000);
 
+  const docxFilesMap = ydoc.getMap('docxFiles');
+
   ydoc.on('afterTransaction', (transaction) => {
     const { local } = transaction;
 
-    const hasChangedDocx = checkDocxChanged(transaction);
+    const hasChangedDocx = checkDocxChanged(transaction, docxFilesMap);
     if (!hasChangedDocx && transaction.changed?.size && local) {
       debouncedUpdate(editor);
     }

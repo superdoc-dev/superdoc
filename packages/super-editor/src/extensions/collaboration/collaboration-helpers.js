@@ -1,5 +1,80 @@
 /**
+ * Files whose content is already synced via y-prosemirror XmlFragment.
+ * When `excludeSyncedContent` is enabled, these are skipped in Y.Map storage
+ * to avoid exceeding WebSocket message size limits.
+ */
+const CRDT_SYNCED_FILES = new Set(['word/document.xml']);
+
+/**
+ * Minimal placeholder for word/document.xml used when the file is excluded
+ * from Y.Map storage (synced via XmlFragment instead). The converter needs
+ * this file present to initialize its schema on joining clients.
+ */
+export const PLACEHOLDER_DOCUMENT_XML =
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+  ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+  '<w:body><w:p><w:r><w:t></w:t></w:r></w:p></w:body></w:document>';
+
+/**
+ * Returns true if a DOCX file should be synced to the Y.Map.
+ * When `excludeSyncedContent` is enabled, files already synced via
+ * y-prosemirror XmlFragment (e.g. word/document.xml) are excluded.
+ *
+ * @param {string} fileName
+ * @param {boolean} excludeSyncedContent
+ * @returns {boolean}
+ */
+export const shouldSyncFile = (fileName, excludeSyncedContent) => {
+  if (excludeSyncedContent && CRDT_SYNCED_FILES.has(fileName)) return false;
+  return true;
+};
+
+/**
+ * Read existing docx file contents from Yjs.
+ * Reads from the per-file Y.Map ('docxFiles') first, falling back to
+ * the legacy monolithic array in metaMap ('docx').
+ *
+ * @param {Y.Doc} ydoc
+ * @returns {Record<string, string>} Map of filename → XML content
+ */
+const readExistingDocxFiles = (ydoc) => {
+  const existing = {};
+  const docxFilesMap = ydoc.getMap('docxFiles');
+
+  if (docxFilesMap.size > 0) {
+    docxFilesMap.forEach((content, name) => {
+      existing[name] = content;
+    });
+    return existing;
+  }
+
+  // Legacy fallback: monolithic array in metaMap
+  const metaMap = ydoc.getMap('meta');
+  const docxValue = metaMap.get('docx');
+  if (!docxValue) return existing;
+
+  let docx = [];
+  if (Array.isArray(docxValue)) {
+    docx = docxValue;
+  } else if (docxValue && typeof docxValue.toArray === 'function') {
+    docx = docxValue.toArray();
+  } else if (docxValue && typeof docxValue[Symbol.iterator] === 'function') {
+    docx = Array.from(docxValue);
+  }
+
+  docx.forEach((file) => {
+    if (file?.name && file?.content) existing[file.name] = file.content;
+  });
+  return existing;
+};
+
+/**
  * Update the Ydoc document data with the latest Docx XML.
+ *
+ * Each DOCX file is stored as a separate entry in a Y.Map ('docxFiles')
+ * so that each Yjs update message stays small. This avoids exceeding
+ * WebSocket message size limits (e.g. Liveblocks' ~1 MB cap).
  *
  * @param {Editor} editor The editor instance
  * @returns {Promise<void>}
@@ -10,54 +85,30 @@ export const updateYdocDocxData = async (editor, ydoc) => {
     if (!ydoc) return;
     if (!editor || editor.isDestroyed) return;
 
+    const docxFilesMap = ydoc.getMap('docxFiles');
     const metaMap = ydoc.getMap('meta');
-    const docxValue = metaMap.get('docx');
+    const existingFiles = readExistingDocxFiles(ydoc);
 
-    let docx = [];
-    if (Array.isArray(docxValue)) {
-      docx = [...docxValue];
-    } else if (docxValue && typeof docxValue.toArray === 'function') {
-      docx = docxValue.toArray();
-    } else if (docxValue && typeof docxValue[Symbol.iterator] === 'function') {
-      docx = Array.from(docxValue);
-    }
-
-    if (!docx.length && Array.isArray(editor.options.content)) {
-      docx = [...editor.options.content];
+    // Seed from editor content if nothing stored yet
+    if (!Object.keys(existingFiles).length && Array.isArray(editor.options.content)) {
+      editor.options.content.forEach((file) => {
+        if (file?.name && file?.content) existingFiles[file.name] = file.content;
+      });
     }
 
     const newXml = await editor.exportDocx({ getUpdatedDocs: true });
     if (!newXml || typeof newXml !== 'object') return;
 
-    let hasChanges = false;
-
+    // Write each changed file as its own Y.Map entry (separate WS messages).
+    const excludeSynced = !!editor.options.excludeSyncedContent;
     Object.keys(newXml).forEach((key) => {
-      const fileIndex = docx.findIndex((item) => item.name === key);
-      const existingContent = fileIndex > -1 ? docx[fileIndex].content : null;
-
-      // Skip if content hasn't changed
-      if (existingContent === newXml[key]) {
-        return;
-      }
-
-      hasChanges = true;
-      if (fileIndex > -1) {
-        docx.splice(fileIndex, 1);
-      }
-      docx.push({
-        name: key,
-        content: newXml[key],
-      });
+      if (!shouldSyncFile(key, excludeSynced)) return;
+      if (existingFiles[key] === newXml[key]) return;
+      docxFilesMap.set(key, newXml[key]);
     });
 
-    // Only transact if there were actual changes OR this is initial setup
-    if (hasChanges || !docxValue) {
-      ydoc.transact(
-        () => {
-          metaMap.set('docx', docx);
-        },
-        { event: 'docx-update', user: editor.options.user },
-      );
+    if (!metaMap.get('docxReady')) {
+      metaMap.set('docxReady', true);
     }
   } catch (error) {
     console.warn('[collaboration] Failed to update Ydoc docx data', error);

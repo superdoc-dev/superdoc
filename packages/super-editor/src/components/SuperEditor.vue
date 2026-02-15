@@ -19,6 +19,7 @@ import { getFileObject } from '@superdoc/common';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { isMacOS } from '@core/utilities/isMacOS.js';
+import { PLACEHOLDER_DOCUMENT_XML } from '@extensions/collaboration/collaboration-helpers.js';
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -684,13 +685,37 @@ const stopPolling = () => {
 
 const pollForMetaMapData = (ydoc, retries = 10, interval = 500) => {
   const metaMap = ydoc.getMap('meta');
+  const docxFilesMap = ydoc.getMap('docxFiles');
 
   const checkData = () => {
-    const docx = metaMap.get('docx');
-    if (docx) {
+    // New format: per-file Y.Map
+    if (docxFilesMap.size > 0 && metaMap.get('docxReady')) {
+      const docx = [];
+      docxFilesMap.forEach((content, name) => {
+        docx.push({ name, content });
+      });
+
+      // word/document.xml may be excluded from Y.Map when excludeSyncedContent
+      // is enabled (its content is synced via y-prosemirror XmlFragment instead).
+      // Provide a minimal placeholder so the converter can initialize its schema.
+      if (!docx.some((f) => f.name === 'word/document.xml')) {
+        docx.push({ name: 'word/document.xml', content: PLACEHOLDER_DOCUMENT_XML });
+      }
+
       stopPolling();
       initEditor({ content: docx });
-    } else if (retries > 0) {
+      return;
+    }
+
+    // Legacy format: monolithic array in metaMap
+    const docxLegacy = metaMap.get('docx');
+    if (docxLegacy) {
+      stopPolling();
+      initEditor({ content: docxLegacy });
+      return;
+    }
+
+    if (retries > 0) {
       dataPollTimeout = setTimeout(checkData, interval);
       retries--;
     } else {
@@ -760,8 +785,9 @@ const initializeData = async () => {
 
     waitForSync().then(async () => {
       const metaMap = ydoc.getMap('meta');
+      const docxFilesMap = ydoc.getMap('docxFiles');
 
-      if (metaMap.has('docx')) {
+      if (metaMap.has('docxReady') || docxFilesMap.size > 0 || metaMap.has('docx')) {
         // Existing content - poll for it
         pollForMetaMapData(ydoc);
       } else {

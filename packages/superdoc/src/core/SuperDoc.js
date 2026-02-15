@@ -455,7 +455,7 @@ export class SuperDoc extends EventEmitter {
     this.isCollaborative = true;
 
     // Check for external ydoc/provider (provider-agnostic mode)
-    const { ydoc: externalYdoc, provider: externalProvider } = collaborationModuleConfig;
+    const { ydoc: externalYdoc, provider: externalProvider, excludeSyncedContent } = collaborationModuleConfig;
 
     if (externalYdoc && externalProvider) {
       // Use external provider - wire up awareness for SuperDoc events
@@ -478,6 +478,7 @@ export class SuperDoc extends EventEmitter {
       this.config.documents.forEach((doc) => {
         doc.ydoc = externalYdoc;
         doc.provider = externalProvider;
+        doc.excludeSyncedContent = excludeSyncedContent || false;
         doc.role = this.config.role;
       });
 

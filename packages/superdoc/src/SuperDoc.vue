@@ -499,6 +499,7 @@ const editorOptions = (doc) => {
     onTransaction: onEditorTransaction,
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
+    excludeSyncedContent: doc.excludeSyncedContent || false,
     isNewFile,
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],

@@ -24,6 +24,7 @@ export default function useDocument(params, superdocConfig) {
   const ydoc = shallowRef(params.ydoc);
   const provider = shallowRef(params.provider);
   const socket = shallowRef(params.socket);
+  const excludeSyncedContent = ref(params.excludeSyncedContent || false);
   const isNewFile = ref(params.isNewFile);
 
   // For docx
@@ -96,6 +97,7 @@ export default function useDocument(params, superdocConfig) {
     ydoc,
     provider,
     socket,
+    excludeSyncedContent,
     isNewFile,
 
     // Placement

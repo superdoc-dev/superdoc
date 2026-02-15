@@ -328,6 +328,9 @@ export interface EditorOptions {
   /** Collaboration provider */
   collaborationProvider?: CollaborationProvider | null;
 
+  /** Skip syncing files already handled by y-prosemirror XmlFragment (e.g. word/document.xml) to reduce WebSocket message sizes */
+  excludeSyncedContent?: boolean;
+
   /** Whether the collaboration provider finished syncing */
   collaborationIsReady?: boolean;
 

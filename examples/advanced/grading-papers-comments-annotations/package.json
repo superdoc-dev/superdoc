@@ -11,7 +11,8 @@
   "dependencies": {
     "pdfjs-dist": "4.3.136",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "superdoc": "latest"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.4",

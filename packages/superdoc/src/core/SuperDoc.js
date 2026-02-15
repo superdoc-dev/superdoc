@@ -289,7 +289,7 @@ export class SuperDoc extends EventEmitter {
       superdoc: this,
       enabled,
     });
-    this.emit('whiteboard:ready', { whiteboard: this.whiteboard });
+    this.emit('whiteboard:init', { whiteboard: this.whiteboard });
   }
 
   /**

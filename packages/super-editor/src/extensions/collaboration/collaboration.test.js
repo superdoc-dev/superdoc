@@ -45,11 +45,17 @@ const createYMap = (initial = {}) => {
       store.set(key, value);
     }),
     get: vi.fn((key) => store.get(key)),
+    has: vi.fn((key) => store.has(key)),
+    delete: vi.fn((key) => store.delete(key)),
+    forEach: vi.fn((fn) => store.forEach((value, key) => fn(value, key))),
     observe: vi.fn((fn) => {
       observer = fn;
     }),
     _trigger(keys) {
       observer?.({ changes: { keys } });
+    },
+    get size() {
+      return store.size;
     },
     store,
   };
@@ -60,12 +66,14 @@ const createYDocStub = ({ docxValue, hasDocx = true } = {}) => {
   const metas = createYMap(initialMetaEntries);
   if (!hasDocx) metas.store.delete('docx');
   const media = createYMap();
+  const docxFiles = createYMap();
   const headerFooterJson = createYMap();
   const listeners = {};
   return {
     getXmlFragment: vi.fn(() => ({ fragment: true })),
     getMap: vi.fn((name) => {
       if (name === 'meta') return metas;
+      if (name === 'docxFiles') return docxFiles;
       if (name === 'headerFooterJson') return headerFooterJson;
       return media;
     }),
@@ -73,7 +81,7 @@ const createYDocStub = ({ docxValue, hasDocx = true } = {}) => {
       listeners[event] = handler;
     }),
     transact: vi.fn((fn, meta) => fn(meta)),
-    _maps: { metas, media, headerFooterJson },
+    _maps: { metas, media, docxFiles, headerFooterJson },
     _listeners: listeners,
   };
 };
@@ -87,26 +95,260 @@ afterEach(() => {
 });
 
 describe('collaboration helpers', () => {
-  it('updates docx payloads inside the ydoc meta map', async () => {
-    const ydoc = createYDocStub();
-    const metas = ydoc._maps.metas;
-    metas.store.set('docx', [{ name: 'word/document.xml', content: '<old />' }]);
+  describe('per-file format', () => {
+    it('writes changed files to docxFilesMap', async () => {
+      const ydoc = createYDocStub({ hasDocx: false });
+      // Pre-populate docxFiles to simulate existing per-file format
+      const docxFiles = ydoc._maps.docxFiles;
+      docxFiles.store.set('word/styles.xml', '<old-styles />');
 
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new />', 'word/styles.xml': '<styles />' }),
-    };
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' } },
+        exportDocx: vi.fn().mockResolvedValue({
+          'word/styles.xml': '<new-styles />',
+          'word/numbering.xml': '<numbering />',
+        }),
+      };
 
-    await updateYdocDocxData(editor);
+      await updateYdocDocxData(editor);
 
-    expect(editor.exportDocx).toHaveBeenCalledWith({ getUpdatedDocs: true });
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ]);
-    expect(ydoc.transact).toHaveBeenCalledWith(expect.any(Function), {
-      event: 'docx-update',
-      user: editor.options.user,
+      expect(editor.exportDocx).toHaveBeenCalledWith({ getUpdatedDocs: true });
+      expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<new-styles />');
+      expect(docxFiles.set).toHaveBeenCalledWith('word/numbering.xml', '<numbering />');
+    });
+
+    it('skips unchanged files', async () => {
+      const ydoc = createYDocStub({ hasDocx: false });
+      const docxFiles = ydoc._maps.docxFiles;
+      docxFiles.store.set('word/styles.xml', '<styles />');
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' } },
+        exportDocx: vi.fn().mockResolvedValue({
+          'word/styles.xml': '<styles />',
+        }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      // set is called during migration seeding but not for unchanged content
+      // Since docxFiles already has entries (size > 0), no migration happens.
+      // The only set call would be for changed files — none here.
+      const setCallsAfterExport = docxFiles.set.mock.calls.filter(
+        ([key, value]) => key === 'word/styles.xml' && value === '<styles />',
+      );
+      expect(setCallsAfterExport).toHaveLength(0);
+    });
+
+    it('skips CRDT-synced files (word/document.xml)', async () => {
+      const ydoc = createYDocStub({ hasDocx: false });
+      const docxFiles = ydoc._maps.docxFiles;
+      docxFiles.store.set('word/styles.xml', '<styles />');
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' } },
+        exportDocx: vi.fn().mockResolvedValue({
+          'word/document.xml': '<new-doc />',
+          'word/styles.xml': '<new-styles />',
+        }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      const docXmlCalls = docxFiles.set.mock.calls.filter(([key]) => key === 'word/document.xml');
+      expect(docXmlCalls).toHaveLength(0);
+      expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<new-styles />');
+    });
+
+    it('sets docxReady flag', async () => {
+      const ydoc = createYDocStub({ hasDocx: false });
+      const metas = ydoc._maps.metas;
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' }, content: [{ name: 'word/styles.xml', content: '<s />' }] },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<s />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      expect(metas.set).toHaveBeenCalledWith('docxReady', true);
+    });
+
+    it('does not overwrite docxReady if already set', async () => {
+      const ydoc = createYDocStub({ hasDocx: false });
+      const metas = ydoc._maps.metas;
+      metas.store.set('docxReady', true);
+
+      const docxFiles = ydoc._maps.docxFiles;
+      docxFiles.store.set('word/styles.xml', '<styles />');
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' } },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<styles />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      const docxReadyCalls = metas.set.mock.calls.filter(([key]) => key === 'docxReady');
+      expect(docxReadyCalls).toHaveLength(0);
+    });
+
+    it('seeds from editor.options.content when nothing stored', async () => {
+      const ydoc = createYDocStub({ hasDocx: false });
+      const docxFiles = ydoc._maps.docxFiles;
+
+      const editor = {
+        options: {
+          ydoc,
+          user: { id: 'user-1' },
+          content: [
+            { name: 'word/styles.xml', content: '<styles />' },
+            { name: 'word/document.xml', content: '<doc />' },
+          ],
+        },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<styles />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      // Seeded content triggers migration (writes all syncable files to docxFilesMap)
+      expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<styles />');
+      // word/document.xml is CRDT-synced, so it should NOT be in docxFilesMap
+      const docXmlCalls = docxFiles.set.mock.calls.filter(([key]) => key === 'word/document.xml');
+      expect(docXmlCalls).toHaveLength(0);
+    });
+
+    it('prefers the explicit ydoc argument over editor options', async () => {
+      const optionsYdoc = createYDocStub({ hasDocx: false });
+      const explicitYdoc = createYDocStub({ hasDocx: false });
+      const explicitDocxFiles = explicitYdoc._maps.docxFiles;
+      explicitDocxFiles.store.set('word/styles.xml', '<old />');
+
+      const editor = {
+        options: { ydoc: optionsYdoc, user: { id: 'user-5' } },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<new />' }),
+      };
+
+      await updateYdocDocxData(editor, explicitYdoc);
+
+      expect(explicitDocxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<new />');
+      expect(optionsYdoc._maps.docxFiles.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('legacy migration', () => {
+    it('copies all legacy files to docxFilesMap', async () => {
+      const ydoc = createYDocStub({
+        docxValue: [
+          { name: 'word/document.xml', content: '<doc />' },
+          { name: 'word/styles.xml', content: '<styles />' },
+          { name: 'word/theme/theme1.xml', content: '<theme />' },
+        ],
+      });
+      const docxFiles = ydoc._maps.docxFiles;
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' } },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<styles />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      // All syncable files should be migrated
+      expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<styles />');
+      expect(docxFiles.set).toHaveBeenCalledWith('word/theme/theme1.xml', '<theme />');
+    });
+
+    it('skips CRDT-synced files during migration', async () => {
+      const ydoc = createYDocStub({
+        docxValue: [
+          { name: 'word/document.xml', content: '<doc />' },
+          { name: 'word/styles.xml', content: '<styles />' },
+        ],
+      });
+      const docxFiles = ydoc._maps.docxFiles;
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' } },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<styles />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      const docXmlCalls = docxFiles.set.mock.calls.filter(([key]) => key === 'word/document.xml');
+      expect(docXmlCalls).toHaveLength(0);
+    });
+
+    it('deletes legacy meta.docx after migration', async () => {
+      const ydoc = createYDocStub({
+        docxValue: [{ name: 'word/styles.xml', content: '<styles />' }],
+      });
+      const metas = ydoc._maps.metas;
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' } },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<styles />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      expect(metas.delete).toHaveBeenCalledWith('docx');
+    });
+
+    it('handles Y.Array-like values via toArray', async () => {
+      const docxSource = {
+        toArray: vi.fn(() => [{ name: 'word/styles.xml', content: '<styles />' }]),
+      };
+      const ydoc = createYDocStub({ docxValue: docxSource });
+      const docxFiles = ydoc._maps.docxFiles;
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-2' }, content: [] },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<new-styles />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      expect(docxSource.toArray).toHaveBeenCalled();
+      expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<new-styles />');
+    });
+
+    it('handles iterable collections', async () => {
+      const docxSet = new Set([
+        { name: 'word/styles.xml', content: '<styles />' },
+        { name: 'word/numbering.xml', content: '<numbers />' },
+      ]);
+      const ydoc = createYDocStub({ docxValue: docxSet });
+      const docxFiles = ydoc._maps.docxFiles;
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-3' }, content: [] },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<new-styles />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      // Both files should be migrated to docxFilesMap
+      expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<new-styles />');
+      expect(docxFiles.set).toHaveBeenCalledWith('word/numbering.xml', '<numbers />');
+    });
+
+    it('skips migration when already in new format', async () => {
+      const ydoc = createYDocStub({ hasDocx: false });
+      const docxFiles = ydoc._maps.docxFiles;
+      const metas = ydoc._maps.metas;
+      // Pre-populate docxFiles to indicate new format
+      docxFiles.store.set('word/styles.xml', '<styles />');
+
+      const editor = {
+        options: { ydoc, user: { id: 'user-1' } },
+        exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<styles />' }),
+      };
+
+      await updateYdocDocxData(editor);
+
+      // meta.docx should not be deleted (it doesn't exist anyway)
+      expect(metas.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -119,227 +361,6 @@ describe('collaboration helpers', () => {
     await updateYdocDocxData(editor);
 
     expect(editor.exportDocx).not.toHaveBeenCalled();
-  });
-
-  it('normalizes docx arrays via toArray when meta map stores a Y.Array-like structure', async () => {
-    const docxSource = {
-      toArray: vi.fn(() => [{ name: 'word/document.xml', content: '<old />' }]),
-    };
-    const ydoc = createYDocStub({ docxValue: docxSource });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-2' }, content: [] },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<new />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(docxSource.toArray).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ]);
-  });
-
-  it('normalizes docx payloads when meta map stores an iterable collection', async () => {
-    const docxSet = new Set([
-      { name: 'word/document.xml', content: '<old />' },
-      { name: 'word/numbering.xml', content: '<numbers />' },
-    ]);
-    const ydoc = createYDocStub({ docxValue: docxSet });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-3' }, content: [] },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new />' }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/numbering.xml', content: '<numbers />' },
-      { name: 'word/document.xml', content: '<new />' },
-    ]);
-  });
-
-  it('falls back to editor options content when no docx entry exists in the meta map', async () => {
-    const initialContent = [
-      { name: 'word/document.xml', content: '<initial />' },
-      { name: 'word/footnotes.xml', content: '<foot />' },
-    ];
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-4' }, content: initialContent },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<updated />' }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/footnotes.xml', content: '<foot />' },
-      { name: 'word/document.xml', content: '<updated />' },
-    ]);
-    const originalDocEntry = initialContent.find((entry) => entry.name === 'word/document.xml');
-    expect(originalDocEntry.content).toBe('<initial />');
-  });
-
-  it('prefers the explicit ydoc argument over editor options', async () => {
-    const optionsYdoc = createYDocStub();
-    const explicitYdoc = createYDocStub();
-    explicitYdoc._maps.metas.store.set('docx', [{ name: 'word/document.xml', content: '<old explicit />' }]);
-
-    const editor = {
-      options: { ydoc: optionsYdoc, user: { id: 'user-5' } },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new explicit />' }),
-    };
-
-    await updateYdocDocxData(editor, explicitYdoc);
-
-    expect(explicitYdoc._maps.metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new explicit />' },
-    ]);
-    expect(optionsYdoc._maps.metas.set).not.toHaveBeenCalled();
-  });
-
-  it('skips transaction when docx content has not changed', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<same />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<same />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(editor.exportDocx).toHaveBeenCalledWith({ getUpdatedDocs: true });
-    expect(ydoc.transact).not.toHaveBeenCalled();
-  });
-
-  it('updates only changed files and triggers transaction', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<old />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<new />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith(
-      'docx',
-      expect.arrayContaining([
-        { name: 'word/styles.xml', content: '<styles />' },
-        { name: 'word/document.xml', content: '<new />' },
-      ]),
-    );
-  });
-
-  it('triggers transaction when new file is added', async () => {
-    const existingDocx = [{ name: 'word/document.xml', content: '<doc />' }];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/numbering.xml': '<numbering />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).toHaveBeenCalled();
-  });
-
-  it('skips transaction when multiple files all remain unchanged', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<doc />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-      { name: 'word/numbering.xml', content: '<numbering />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/styles.xml': '<styles />',
-        'word/numbering.xml': '<numbering />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).not.toHaveBeenCalled();
-  });
-
-  it('initializes docx metadata even when exported content matches initial content', async () => {
-    const initialContent = [
-      { name: 'word/document.xml', content: '<doc />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    // No docx entry exists in meta map (hasDocx: false)
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' }, content: initialContent },
-      // Export returns identical content to initial
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    // Transaction should still happen to initialize the docx metadata for collaborators
-    expect(ydoc.transact).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith('docx', initialContent);
-  });
-
-  it('initializes docx metadata for new documents with no changes', async () => {
-    const initialContent = [{ name: 'word/document.xml', content: '<empty />' }];
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'new-user' }, content: initialContent },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<empty />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    // Even with no content changes, the metadata must be persisted for collaborators
-    expect(ydoc.transact).toHaveBeenCalledWith(expect.any(Function), {
-      event: 'docx-update',
-      user: editor.options.user,
-    });
-    expect(metas.set).toHaveBeenCalledWith('docx', initialContent);
   });
 });
 
@@ -455,7 +476,10 @@ describe('collaboration extension', () => {
     const editor = {
       options: {
         isNewFile: true,
-        content: { 'word/document.xml': '<doc />' },
+        content: [
+          { name: 'word/styles.xml', content: '<styles />' },
+          { name: 'word/document.xml', content: '<doc />' },
+        ],
         fonts: { font1: 'binary' },
         mediaFiles: { 'word/media/img.png': new Uint8Array([1]) },
       },
@@ -467,14 +491,24 @@ describe('collaboration extension', () => {
 
     const { onFirstRender } = YProsemirror.ySyncPlugin.mock.calls[0][1];
     onFirstRender();
-    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('docx', editor.options.content);
+
+    // initializeMetaMap writes each file to docxFilesMap (skipping CRDT-synced files)
+    const docxFiles = ydoc._maps.docxFiles;
+    expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<styles />');
+    // word/document.xml is CRDT-synced, should not be in docxFilesMap
+    const docXmlCalls = docxFiles.set.mock.calls.filter(([key]) => key === 'word/document.xml');
+    expect(docXmlCalls).toHaveLength(0);
+    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('docxReady', true);
   });
 
   it('initializes meta map with content, fonts, and media', () => {
     const ydoc = createYDocStub();
     const editor = {
       options: {
-        content: { 'word/document.xml': '<doc />' },
+        content: [
+          { name: 'word/styles.xml', content: '<styles />' },
+          { name: 'word/document.xml', content: '<doc />' },
+        ],
         fonts: { 'font1.ttf': new Uint8Array([1]) },
         mediaFiles: { 'word/media/img.png': new Uint8Array([5]) },
       },
@@ -483,8 +517,13 @@ describe('collaboration extension', () => {
     initializeMetaMap(ydoc, editor);
 
     const metaStore = ydoc._maps.metas.store;
-    expect(metaStore.get('docx')).toEqual(editor.options.content);
+    const docxFiles = ydoc._maps.docxFiles;
     expect(metaStore.get('fonts')).toEqual(editor.options.fonts);
+    expect(metaStore.get('docxReady')).toBe(true);
+    expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<styles />');
+    // word/document.xml is CRDT-synced
+    const docXmlCalls = docxFiles.set.mock.calls.filter(([key]) => key === 'word/document.xml');
+    expect(docXmlCalls).toHaveLength(0);
     expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([5]));
   });
 
@@ -495,12 +534,12 @@ describe('collaboration extension', () => {
     const editor = {
       state: { doc },
       options: {
-        content: [{ name: 'word/document.xml', content: '<doc />' }],
+        content: [{ name: 'word/styles.xml', content: '<styles />' }],
         fonts: {},
         mediaFiles: {},
         user: { id: 'user' },
       },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<updated />' }),
+      exportDocx: vi.fn().mockResolvedValue({ 'word/styles.xml': '<updated />' }),
     };
 
     const data = await generateCollaborationData(editor);
@@ -990,7 +1029,10 @@ describe('collaboration extension', () => {
         ydoc,
         options: {
           isNewFile: true,
-          content: { 'word/document.xml': '<doc />' },
+          content: [
+            { name: 'word/styles.xml', content: '<styles />' },
+            { name: 'word/document.xml', content: '<doc />' },
+          ],
           fonts: { 'font1.ttf': new Uint8Array([1]) },
           mediaFiles: { 'word/media/img.png': new Uint8Array([5]) },
         },
@@ -998,10 +1040,14 @@ describe('collaboration extension', () => {
       Collaboration.config.addPmPlugins.call(context);
       Collaboration.config.onCreate.call(context);
 
-      // initializeMetaMap should have been called, writing to the meta map
       const metaStore = ydoc._maps.metas.store;
-      expect(metaStore.get('docx')).toEqual({ 'word/document.xml': '<doc />' });
+      const docxFiles = ydoc._maps.docxFiles;
       expect(metaStore.get('fonts')).toEqual({ 'font1.ttf': new Uint8Array([1]) });
+      expect(metaStore.get('docxReady')).toBe(true);
+      expect(docxFiles.set).toHaveBeenCalledWith('word/styles.xml', '<styles />');
+      // word/document.xml is CRDT-synced
+      const docXmlCalls = docxFiles.set.mock.calls.filter(([key]) => key === 'word/document.xml');
+      expect(docXmlCalls).toHaveLength(0);
       expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([5]));
     });
   });

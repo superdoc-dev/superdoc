@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import {
   DOCX_CONTENT_TYPE,
+  REGISTRY_KEY,
   buildDocRelativePath,
   coerceDocEntryFromRelativePath,
   createCorpusR2Client,
@@ -93,6 +94,22 @@ function sortRegistryDocs(docs) {
   );
 }
 
+async function loadExistingRegistryForPush(client) {
+  const existing = await loadRegistryOrNull(client);
+  if (existing) return existing;
+
+  // listObjects is prefix-based; exact-match filter to avoid false positives.
+  const existingKeys = await client.listObjects(REGISTRY_KEY);
+  const hasRegistry = existingKeys.some((key) => normalizePath(key) === REGISTRY_KEY);
+  if (hasRegistry) {
+    throw new Error(
+      'Existing registry.json could not be read. Refusing to overwrite registry; fix registry.json and retry.',
+    );
+  }
+
+  return { updated_at: '', docs: [] };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const absoluteFile = path.resolve(args.filePath);
@@ -123,7 +140,7 @@ async function main() {
   const client = await createCorpusR2Client();
 
   try {
-    const existingRegistry = (await loadRegistryOrNull(client)) ?? { updated_at: '', docs: [] };
+    const existingRegistry = await loadExistingRegistryForPush(client);
     const docs = Array.isArray(existingRegistry.docs) ? [...existingRegistry.docs] : [];
 
     const normalizedTarget = normalizePath(targetRelativePath).toLowerCase();

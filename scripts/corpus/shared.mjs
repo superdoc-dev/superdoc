@@ -431,8 +431,15 @@ export function ensureVisualTestDataSymlink(corpusRoot) {
   const absoluteCorpusRoot = path.resolve(corpusRoot);
   const symlinkTarget = path.relative(path.dirname(visualDataPath), absoluteCorpusRoot);
 
-  if (fs.existsSync(visualDataPath)) {
-    const stat = fs.lstatSync(visualDataPath);
+  let stat = null;
+  try {
+    // lstat() detects existing symlink entries even if their targets are missing.
+    stat = fs.lstatSync(visualDataPath);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+
+  if (stat) {
     if (stat.isSymbolicLink()) {
       const existingTarget = fs.readlinkSync(visualDataPath);
       const existingResolved = path.resolve(path.dirname(visualDataPath), existingTarget);

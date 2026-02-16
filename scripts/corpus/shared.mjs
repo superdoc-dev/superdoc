@@ -24,6 +24,25 @@ const WRANGLER_CONFIG_PATHS =
     ? [path.join(os.homedir(), 'Library/Preferences/.wrangler/config/default.toml')]
     : [path.join(os.homedir(), '.config/.wrangler/config/default.toml')];
 
+const ACCOUNT_ID_ENV_KEYS = ['SUPERDOC_CORPUS_R2_ACCOUNT_ID', 'SD_TESTING_R2_ACCOUNT_ID', 'SD_VISUAL_TESTING_R2_ACCOUNT_ID'];
+const BUCKET_ENV_KEYS = [
+  'SUPERDOC_CORPUS_R2_BUCKET',
+  'SD_TESTING_R2_BUCKET_NAME',
+  'SD_TESTING_R2_BUCKET',
+  'SD_VISUAL_TESTING_R2_BUCKET_NAME',
+  'SD_VISUAL_TESTING_R2_BUCKET',
+];
+const ACCESS_KEY_ID_ENV_KEYS = [
+  'SUPERDOC_CORPUS_R2_ACCESS_KEY_ID',
+  'SD_TESTING_R2_ACCESS_KEY_ID',
+  'SD_VISUAL_TESTING_R2_ACCESS_KEY_ID',
+];
+const SECRET_ACCESS_KEY_ENV_KEYS = [
+  'SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY',
+  'SD_TESTING_R2_SECRET_ACCESS_KEY',
+  'SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY',
+];
+
 function firstEnv(names) {
   for (const name of names) {
     const value = process.env[name];
@@ -76,7 +95,7 @@ function assertWranglerToken() {
   const config = readWranglerConfig();
   if (!config?.oauthToken) {
     throw new Error(
-      'No wrangler OAuth token found. Run `npx wrangler login` (or set SUPERDOC_CORPUS_R2_* / SD_TESTING_R2_* credentials).',
+      'No wrangler OAuth token found. Run `npx wrangler login` (or set SUPERDOC_CORPUS_R2_* / SD_TESTING_R2_* / SD_VISUAL_TESTING_R2_* credentials).',
     );
   }
 
@@ -119,7 +138,7 @@ async function fetchCloudflareJson(url, token) {
 }
 
 async function resolveAccountId(token) {
-  const explicit = firstEnv(['SUPERDOC_CORPUS_R2_ACCOUNT_ID', 'SD_TESTING_R2_ACCOUNT_ID', 'SD_VISUAL_TESTING_R2_ACCOUNT_ID']);
+  const explicit = firstEnv(ACCOUNT_ID_ENV_KEYS);
   if (explicit) return explicit;
 
   const memberships = await fetchCloudflareJson('https://api.cloudflare.com/client/v4/memberships', token);
@@ -131,11 +150,7 @@ async function resolveAccountId(token) {
 }
 
 async function resolveBucketName({ token, accountId }) {
-  const explicit = firstEnv([
-    'SUPERDOC_CORPUS_R2_BUCKET',
-    'SD_TESTING_R2_BUCKET_NAME',
-    'SD_VISUAL_TESTING_R2_BUCKET_NAME',
-  ]);
+  const explicit = firstEnv(BUCKET_ENV_KEYS);
   if (explicit) return explicit;
 
   const payload = await fetchCloudflareJson(
@@ -197,29 +212,17 @@ async function runWrangler(args, { accountId }) {
 }
 
 function resolveS3Credentials() {
-  const accessKeyId = firstEnv([
-    'SUPERDOC_CORPUS_R2_ACCESS_KEY_ID',
-    'SD_TESTING_R2_ACCESS_KEY_ID',
-    'SD_VISUAL_TESTING_R2_ACCESS_KEY_ID',
-  ]);
-  const secretAccessKey = firstEnv([
-    'SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY',
-    'SD_TESTING_R2_SECRET_ACCESS_KEY',
-    'SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY',
-  ]);
+  const accessKeyId = firstEnv(ACCESS_KEY_ID_ENV_KEYS);
+  const secretAccessKey = firstEnv(SECRET_ACCESS_KEY_ENV_KEYS);
 
   if (!accessKeyId && !secretAccessKey) return null;
 
-  const accountId = firstEnv(['SUPERDOC_CORPUS_R2_ACCOUNT_ID', 'SD_TESTING_R2_ACCOUNT_ID', 'SD_VISUAL_TESTING_R2_ACCOUNT_ID']);
-  const bucketName = firstEnv([
-    'SUPERDOC_CORPUS_R2_BUCKET',
-    'SD_TESTING_R2_BUCKET_NAME',
-    'SD_VISUAL_TESTING_R2_BUCKET_NAME',
-  ]);
+  const accountId = firstEnv(ACCOUNT_ID_ENV_KEYS);
+  const bucketName = firstEnv(BUCKET_ENV_KEYS);
 
   if (!accountId || !bucketName || !accessKeyId || !secretAccessKey) {
     throw new Error(
-      'Incomplete S3 credential configuration. Set account, bucket, access key ID, and secret access key (SUPERDOC_CORPUS_R2_* or SD_TESTING_R2_*).',
+      'Incomplete S3 credential configuration. Set account, bucket, access key ID, and secret access key (SUPERDOC_CORPUS_R2_*, SD_TESTING_R2_*, or SD_VISUAL_TESTING_R2_*).',
     );
   }
 

@@ -34,7 +34,7 @@ Write unit tests, visual regression tests, or E2E tests for existing features. B
 Check our [good first issues](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for approachable tasks, or [help wanted](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for meatier items.
 
 **Help the community**
-Answer questions on [Discord](https://discord.gg/wjMccuygvy) or [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions).
+Answer questions on [Discord](https://discord.gg/wjMccuygvy).
 
 ## Architecture Overview
 
@@ -107,7 +107,7 @@ These are areas where community contributions are especially welcome. Check [iss
 |------|-----------|---------------|------------|
 | Documentation | Easy | [docs.superdoc.dev](https://docs.superdoc.dev) | Fix gaps, add code examples, improve explanations |
 | Examples | Easy | `examples/` | Create framework integration examples |
-| Test coverage | Easy-Medium | `e2e-tests/`, `tests/visual/` | Add tests for existing features |
+| Test coverage | Easy-Medium | `tests/visual/` | Add tests for existing features |
 | Rendering parity | Medium | `layout-engine/painters/dom/` | Open a .docx in Word and SuperDoc, fix visual differences |
 | Browser compatibility | Medium | `super-editor/`, `layout-engine/` | Fix Firefox/Safari-specific bugs |
 | Copy/paste | Medium | `super-editor/src/extensions/` | Fix formatting loss when pasting from Word, Google Docs, browsers |
@@ -313,12 +313,11 @@ pnpm run lint:fix
 ## Community
 
 - **[Discord](https://discord.gg/wjMccuygvy)** -- Chat with the team and other contributors
-- **[GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions)** -- Ask questions, share ideas
 - **[Docs](https://docs.superdoc.dev)** -- API reference and guides
 
 ### Code of Conduct
 
-This project and everyone participating in it are governed by our Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to [support@harbourshare.com](mailto:support@harbourshare.com).
+This project and everyone participating in it are governed by our Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to [support@superdoc.dev](mailto:support@superdoc.dev).
 
 ### Recognition
 
@@ -330,4 +329,4 @@ We value every contribution. Contributors are:
 
 ---
 
-Questions? Join our [Discord](https://discord.gg/wjMccuygvy) or start a [GitHub Discussion](https://github.com/superdoc-dev/superdoc/discussions).
+Questions? Join our [Discord](https://discord.gg/wjMccuygvy).

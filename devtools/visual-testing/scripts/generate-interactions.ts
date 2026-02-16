@@ -333,6 +333,7 @@ function buildHarnessConfig(story: InteractionStory) {
 
   return {
     layout,
+    virtualization: story.virtualization ?? false,
     comments,
     toolbar: story.toolbar ?? 'none',
     trackChanges: story.trackChanges ?? false,

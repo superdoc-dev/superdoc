@@ -4575,8 +4575,8 @@ describe('measureBlock', () => {
       const para0Height = block0Measure.kind === 'paragraph' ? block0Measure.totalHeight : 0;
       const para1Height = block1Measure.kind === 'paragraph' ? block1Measure.totalHeight : 0;
 
-      // Cell height includes: para0Height + 10 + para1Height + 20 + padding (default 0 top + 0 bottom)
-      const expectedCellHeight = para0Height + 10 + para1Height + 20 + 0;
+      // Cell height includes: para0Height + 10 + para1Height + 20
+      const expectedCellHeight = para0Height + 10 + para1Height + 20;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 

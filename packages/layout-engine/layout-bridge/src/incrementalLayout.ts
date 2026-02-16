@@ -290,6 +290,7 @@ const resolveFootnoteMeasurementWidth = (options: LayoutOptions, blocks?: FlowBl
 
 const MIN_FOOTNOTE_BODY_HEIGHT = 1;
 const DEFAULT_FOOTNOTE_SEPARATOR_SPACING_BEFORE = 12;
+const MAX_FOOTNOTE_LAYOUT_PASSES = 4;
 
 const computeMaxFootnoteReserve = (layoutForPages: Layout, pageIndex: number, baseReserve = 0): number => {
   const page = layoutForPages.pages?.[pageIndex];
@@ -1662,26 +1663,28 @@ export async function incrementalLayout(
         return { columns, idsByColumn };
       };
 
+      const relayout = (footnoteReservedByPageIndex: number[]) =>
+        layoutDocument(currentBlocks, currentMeasures, {
+          ...options,
+          footnoteReservedByPageIndex,
+          headerContentHeights,
+          footerContentHeights,
+          remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
+            remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
+        });
+
       // Pass 1: assign + reserve from current layout.
       let { columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout);
       let { measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn));
       let plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, [], pageColumns);
       let reserves = plan.reserves;
 
-      const MAX_FOOTNOTE_LAYOUT_PASSES = 4;
-
       // Relayout with footnote reserves and iterate until reserves and page count stabilize,
       // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
       if (reserves.some((h) => h > 0)) {
+        let reservesStabilized = false;
         for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
-          layout = layoutDocument(currentBlocks, currentMeasures, {
-            ...options,
-            footnoteReservedByPageIndex: reserves,
-            headerContentHeights,
-            footerContentHeights,
-            remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
-              remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
-          });
+          layout = relayout(reserves);
           ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
           ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
           plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
@@ -1690,8 +1693,22 @@ export async function incrementalLayout(
             nextReserves.length === reserves.length &&
             nextReserves.every((h, i) => (reserves[i] ?? 0) === h) &&
             reserves.every((h, i) => (nextReserves[i] ?? 0) === h);
-          reserves = nextReserves;
-          if (reservesStable) break;
+          if (reservesStable) {
+            reserves = nextReserves;
+            reservesStabilized = true;
+            break;
+          }
+          // Only update reserves when we will do another layout pass; otherwise layout
+          // would be built with the previous reserves while reserves would be nextReserves,
+          // and the plan/injection phase could place footnotes in the wrong band.
+          if (pass < MAX_FOOTNOTE_LAYOUT_PASSES - 1) {
+            reserves = nextReserves;
+          }
+        }
+        if (!reservesStabilized) {
+          console.warn(
+            `[incrementalLayout] Footnote reserve loop hit max passes (${MAX_FOOTNOTE_LAYOUT_PASSES}) without stabilizing; layout may have suboptimal footnote placement.`,
+          );
         }
 
         let { columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout);
@@ -1712,14 +1729,7 @@ export async function incrementalLayout(
           finalReserves.some((h, i) => (reserves[i] ?? 0) !== h) ||
           reserves.some((h, i) => (finalReserves[i] ?? 0) !== h);
         if (reservesDiffer) {
-          layout = layoutDocument(currentBlocks, currentMeasures, {
-            ...options,
-            footnoteReservedByPageIndex: finalReserves,
-            headerContentHeights,
-            footerContentHeights,
-            remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
-              remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
-          });
+          layout = relayout(finalReserves);
           reservesAppliedToLayout = finalReserves;
           ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
           ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(

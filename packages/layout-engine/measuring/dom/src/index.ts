@@ -2674,7 +2674,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
        * ```
        * cell.blocks = [paragraph1, paragraph2, paragraph3]
        * contentHeight = para1.height + para2.height + para3.height
-       * totalCellHeight = contentHeight + 2 (top) + 2 (bottom)
+       * totalCellHeight = contentHeight;
        * ```
        */
       const blockMeasures: Measure[] = [];

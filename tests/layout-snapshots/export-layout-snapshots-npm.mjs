@@ -129,7 +129,7 @@ function parseArgs(argv) {
       continue;
     }
 
-    if (!arg.startsWith('-') && !options.version) {
+    if (!options.version) {
       options.version = arg;
       continue;
     }

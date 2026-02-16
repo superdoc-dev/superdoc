@@ -47,7 +47,7 @@
     "test:layout": "node ./scripts/test-layout.mjs",
     "layout:snapshots": "bun tests/layout-snapshots/export-layout-snapshots.mjs --jobs 4",
     "layout:snapshots:npm": "bun tests/layout-snapshots/export-layout-snapshots-npm.mjs --jobs 4",
-    "layout:snapshots:compare": "bun tests/layout-snapshots/compare-layout-snapshots.mjs",
+    "layout:compare": "bun tests/layout-snapshots/compare-layout-snapshots.mjs --jobs 4",
     "corpus:pull": "node scripts/corpus/pull.mjs",
     "corpus:push": "node scripts/corpus/push.mjs",
     "watch": "pnpm --prefix packages/superdoc run watch:es",

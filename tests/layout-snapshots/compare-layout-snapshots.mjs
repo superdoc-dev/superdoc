@@ -22,14 +22,16 @@ const DEFAULT_REPORTS_ROOT = path.join(REPO_ROOT, 'tests', 'layout-snapshots', '
 const DEFAULT_VISUAL_WORKDIR = path.join(REPO_ROOT, 'devtools', 'visual-testing');
 const CANDIDATE_EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapshots.mjs');
 const NPM_EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapshots-npm.mjs');
+const NPM_PACKAGE_NAME = 'superdoc';
+const DEFAULT_NPM_DIST_TAG = 'next';
 
 function printHelp() {
   console.log(`
 Usage:
-  bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference <version> [options]
+  bun tests/layout-snapshots/compare-layout-snapshots.mjs [--reference <version> | --reference-root <path>] [options]
 
 Options:
-      --reference <version>           Reference version label/spec (e.g. 1.13.0-next.15)
+      --reference <version>           Reference version label/spec (default: npm ${NPM_PACKAGE_NAME}@${DEFAULT_NPM_DIST_TAG})
       --reference-root <path>         Use explicit reference folder path instead of --reference
       --reference-base <path>         Reference base folder (default: ${DEFAULT_REFERENCE_BASE})
       --candidate-root <path>         Candidate folder (default: ${DEFAULT_CANDIDATE_ROOT})
@@ -267,11 +269,48 @@ function parseArgs(argv) {
     }
   }
 
-  if (!args.reference && !args.referenceRoot) {
-    throw new Error('Provide either --reference <version> or --reference-root <path>.');
+  return args;
+}
+
+async function resolveNpmDistTagVersion({ packageName, distTag }) {
+  const encodedPackage = encodeURIComponent(packageName);
+  const url = `https://registry.npmjs.org/-/package/${encodedPackage}/dist-tags`;
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to fetch npm dist-tag "${distTag}" for ${packageName}: ${message}`);
   }
 
-  return args;
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(
+      `npm dist-tag lookup failed for ${packageName}@${distTag}: HTTP ${response.status}${body ? ` (${body.slice(0, 180)})` : ''}`,
+    );
+  }
+
+  const payload = await response.json().catch(() => null);
+  const resolvedVersion = payload?.[distTag];
+  if (typeof resolvedVersion !== 'string' || !resolvedVersion.trim()) {
+    throw new Error(`npm dist-tag "${distTag}" is not set for package "${packageName}".`);
+  }
+  return resolvedVersion.trim();
+}
+
+async function resolveGeneratedReferenceRoot({ generatedFolder, referenceBase, reference, errorContext }) {
+  if (generatedFolder && (await pathExists(generatedFolder))) {
+    return { root: path.resolve(generatedFolder), label: path.basename(path.resolve(generatedFolder)) };
+  }
+  const fallback = path.join(referenceBase, normalizeVersionLabel(reference));
+  if (!(await pathExists(fallback))) {
+    throw new Error(`${errorContext} completed but folder not found: ${fallback}`);
+  }
+  return { root: fallback, label: path.basename(fallback) };
 }
 
 async function pathExists(targetPath) {
@@ -813,6 +852,17 @@ async function main() {
   const candidateRoot = path.resolve(args.candidateRoot);
   const referenceBase = path.resolve(args.referenceBase);
 
+  if (!args.reference && !args.referenceRoot) {
+    console.log(
+      `[layout-snapshots:compare] No --reference provided. Resolving npm dist-tag "${DEFAULT_NPM_DIST_TAG}" for ${NPM_PACKAGE_NAME}...`,
+    );
+    args.reference = await resolveNpmDistTagVersion({
+      packageName: NPM_PACKAGE_NAME,
+      distTag: DEFAULT_NPM_DIST_TAG,
+    });
+    console.log(`[layout-snapshots:compare] Resolved default reference: ${args.reference}`);
+  }
+
   let referenceRoot = args.referenceRoot ? path.resolve(args.referenceRoot) : null;
   let resolvedReferenceLabel = args.reference ? normalizeVersionLabel(args.reference) : path.basename(referenceRoot ?? 'reference');
   let candidateGenerated = false;
@@ -847,16 +897,14 @@ async function main() {
       args,
     });
     referenceGenerated = true;
-    if (generatedFolder && (await pathExists(generatedFolder))) {
-      referenceRoot = path.resolve(generatedFolder);
-      resolvedReferenceLabel = path.basename(referenceRoot);
-    } else {
-      referenceRoot = path.join(referenceBase, normalizeVersionLabel(args.reference));
-      if (!(await pathExists(referenceRoot))) {
-        throw new Error(`Reference generation completed but folder not found: ${referenceRoot}`);
-      }
-      resolvedReferenceLabel = path.basename(referenceRoot);
-    }
+    const resolved = await resolveGeneratedReferenceRoot({
+      generatedFolder,
+      referenceBase,
+      reference: args.reference,
+      errorContext: 'Reference generation',
+    });
+    referenceRoot = resolved.root;
+    resolvedReferenceLabel = resolved.label;
   } else if (!args.referenceRoot) {
     resolvedReferenceLabel = path.basename(referenceRoot);
   }
@@ -882,16 +930,14 @@ async function main() {
       args,
     });
     referenceGenerated = true;
-    if (generatedFolder && (await pathExists(generatedFolder))) {
-      referenceRoot = path.resolve(generatedFolder);
-      resolvedReferenceLabel = path.basename(referenceRoot);
-    } else {
-      referenceRoot = path.join(referenceBase, normalizeVersionLabel(args.reference));
-      if (!(await pathExists(referenceRoot))) {
-        throw new Error(`Reference regeneration completed but folder not found: ${referenceRoot}`);
-      }
-      resolvedReferenceLabel = path.basename(referenceRoot);
-    }
+    const resolved = await resolveGeneratedReferenceRoot({
+      generatedFolder,
+      referenceBase,
+      reference: args.reference,
+      errorContext: 'Reference regeneration',
+    });
+    referenceRoot = resolved.root;
+    resolvedReferenceLabel = resolved.label;
 
     referenceFiles = await listSnapshotFiles(referenceRoot);
     referencePaths = [...referenceFiles.keys()].sort();

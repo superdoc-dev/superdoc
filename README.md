@@ -133,7 +133,6 @@ See our [Contributing Guide](CONTRIBUTING.md) for more details.
 ## 💬 Community
 
 - [Discord](https://discord.com/invite/b9UuaZRyaB) - Join our community chat
-- [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions) - Ask questions and share ideas
 - [Team email](mailto:q@superdoc.dev) - Get help from our team
 
 ## 📄 License
@@ -151,6 +150,12 @@ See our [Contributing Guide](CONTRIBUTING.md) for more details.
 
 - [✉️ Email](mailto:q@superdoc.dev?subject=[SuperDoc]%20Project%20inquiry)
 - [⛵️ Website](https://superdoc.dev)
+
+## Contributors
+
+<a href="https://github.com/superdoc-dev/superdoc/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=superdoc-dev/superdoc" />
+</a>
 
 ---
 

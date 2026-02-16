@@ -316,7 +316,7 @@ This project and everyone participating in it are governed by our [Code of Condu
 
 ### Recognition
 
-We value every contribution. Contributors are recognized in release notes and on Discord.
+We value every contribution. Contributors appear in our [contributors page](https://github.com/superdoc-dev/superdoc#contributors) and are recognized in release notes and on Discord.
 
 ---
 

@@ -1,5 +1,6 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
 import { Fragment } from 'prosemirror-model';
+import { TableMap } from 'prosemirror-tables';
 import { decodeRPrFromMarks, encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
 import {
   calculateResolvedParagraphProperties,
@@ -171,20 +172,37 @@ function getRunContext($pos) {
  * }|null}
  */
 export function extractTableInfo($pos, depth) {
-  const cellIndex = $pos.index(depth - 1);
   const rowNode = $pos.node(depth - 1);
-  const rowIndex = $pos.index(depth - 2);
   const tableNode = $pos.node(depth - 2);
-  if (rowNode.type.name === 'tableRow' && tableNode.type.name === 'table') {
+  if (rowNode.type.name !== 'tableRow' || tableNode.type.name !== 'table') {
+    return null;
+  }
+
+  const fallbackInfo = {
+    tableProperties: tableNode.attrs.tableProperties || null,
+    rowIndex: $pos.index(depth - 2),
+    cellIndex: $pos.index(depth - 1),
+    numCells: rowNode.childCount,
+    numRows: tableNode.childCount,
+  };
+
+  try {
+    const tableMap = TableMap.get(tableNode);
+    const tableStart = $pos.before(depth - 2) + 1;
+    const cellStart = $pos.before(depth);
+    const cellRect = tableMap.findCell(cellStart - tableStart);
+
     return {
       tableProperties: tableNode.attrs.tableProperties || null,
-      rowIndex,
-      cellIndex,
-      numCells: rowNode.childCount,
-      numRows: tableNode.childCount,
+      rowIndex: cellRect.top,
+      cellIndex: cellRect.left,
+      numCells: tableMap.width,
+      numRows: tableMap.height,
     };
+  } catch {
+    // Fall back to physical positions for malformed tables where TableMap cannot be built.
+    return fallbackInfo;
   }
-  return null;
 }
 /**
  * Find the absolute document position of the first run node inside a paragraph.

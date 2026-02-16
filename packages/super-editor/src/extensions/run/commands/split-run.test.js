@@ -617,7 +617,6 @@ describe('splitRunToParagraph with style marks', () => {
     expect(markTypes).toContain('bold');
     expect(markTypes).toContain('italic');
     expect(markTypes).toContain('textStyle');
-    console.log(JSON.stringify(insertedTextNode.marks, null, 2));
   });
 
   it('passes table split context through resolveRunProperties call shape', () => {

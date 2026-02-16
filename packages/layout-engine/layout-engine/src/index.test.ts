@@ -3256,6 +3256,108 @@ describe('requirePageBoundary edge cases', () => {
       expect(fragment.x).toBeGreaterThanOrEqual(DEFAULT_OPTIONS.margins!.left + 5);
       expect(fragment.y).toBeGreaterThanOrEqual(DEFAULT_OPTIONS.margins!.top + 3);
     });
+
+    it('creates fragment for page-relative anchored drawing (SD-1838)', () => {
+      const paragraphBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-anchor',
+        runs: [],
+      };
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'drawing-page-relative',
+        drawingKind: 'vectorShape',
+        geometry: { width: 100, height: 60, rotation: 0 },
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          alignH: 'left',
+          offsetH: 10,
+          offsetV: 80,
+        },
+        wrap: {
+          type: 'None',
+        },
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'vectorShape',
+        width: 100,
+        height: 60,
+        scale: 1,
+        naturalWidth: 100,
+        naturalHeight: 60,
+        geometry: { width: 100, height: 60, rotation: 0, flipH: false, flipV: false },
+      };
+      const layout = layoutDocument(
+        [paragraphBlock, drawingBlock],
+        [paragraphMeasure, drawingMeasure],
+        DEFAULT_OPTIONS,
+      );
+      const fragment = layout.pages[0].fragments.find(
+        (frag) => frag.blockId === 'drawing-page-relative',
+      ) as DrawingFragment;
+      expect(fragment).toBeTruthy();
+      expect(fragment.kind).toBe('drawing');
+      expect(fragment.isAnchored).toBe(true);
+      expect(fragment.y).toBe(80); // offsetV from page top
+      expect(fragment.width).toBe(100);
+      expect(fragment.height).toBe(60);
+    });
+
+    it('creates fragment for margin-relative anchored drawing with wrapNone', () => {
+      const paragraphBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-anchor-2',
+        runs: [],
+      };
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'drawing-margin-relative',
+        drawingKind: 'vectorShape',
+        geometry: { width: 80, height: 40, rotation: 0 },
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'margin',
+          vRelativeFrom: 'margin',
+          alignH: 'left',
+          alignV: 'top',
+          offsetH: 0,
+          offsetV: 15,
+        },
+        wrap: {
+          type: 'None',
+        },
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'vectorShape',
+        width: 80,
+        height: 40,
+        scale: 1,
+        naturalWidth: 80,
+        naturalHeight: 40,
+        geometry: { width: 80, height: 40, rotation: 0, flipH: false, flipV: false },
+      };
+      const layout = layoutDocument(
+        [paragraphBlock, drawingBlock],
+        [paragraphMeasure, drawingMeasure],
+        DEFAULT_OPTIONS,
+      );
+      const fragment = layout.pages[0].fragments.find(
+        (frag) => frag.blockId === 'drawing-margin-relative',
+      ) as DrawingFragment;
+      expect(fragment).toBeTruthy();
+      expect(fragment.kind).toBe('drawing');
+      expect(fragment.isAnchored).toBe(true);
+      // margin-relative, alignV='top', offsetV=15: contentTop + 15
+      expect(fragment.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
+      expect(fragment.width).toBe(80);
+      expect(fragment.height).toBe(40);
+    });
   });
 
   describe('anchored images bounds and zIndex', () => {

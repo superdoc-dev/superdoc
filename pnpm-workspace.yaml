@@ -15,7 +15,7 @@ catalog:
   '@fontsource/inter': ^5.2.8
   '@hocuspocus/provider': ^2.13.6
   '@hocuspocus/server': ^2.13.6
-  '@linear/sdk': ^53.0.0
+  '@linear/sdk': ^75.0.0
   '@playwright/test': ^1.57.0
   '@semantic-release/changelog': ^6.0.3
   '@semantic-release/git': ^10.0.1

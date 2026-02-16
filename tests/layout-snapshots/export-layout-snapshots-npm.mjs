@@ -13,7 +13,9 @@ const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapshots.mjs');
 
-const DEFAULT_INPUT_ROOT = path.join(REPO_ROOT, 'devtools', 'visual-testing', 'test-docs');
+const DEFAULT_INPUT_ROOT = process.env.SUPERDOC_CORPUS_ROOT
+  ? path.resolve(process.env.SUPERDOC_CORPUS_ROOT)
+  : path.join(REPO_ROOT, 'test-corpus');
 const DEFAULT_OUTPUT_BASE = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'reference');
 
 function printHelp() {

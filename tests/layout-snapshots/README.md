@@ -2,7 +2,7 @@
 
 Exports layout JSON for every `.docx` under:
 
-- `<repo>/devtools/visual-testing/test-docs`
+- `<repo>/test-corpus`
 
 into candidate snapshots at:
 
@@ -32,6 +32,9 @@ Candidate output naming:
 ## Run
 
 ```bash
+# Sync corpus locally first (shared with tests/visual)
+pnpm corpus:pull
+
 bun tests/layout-snapshots/export-layout-snapshots.mjs
 ```
 

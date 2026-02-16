@@ -16,7 +16,9 @@ const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const SNAPSHOT_OUTPUT_BASE = path.join(REPO_ROOT, 'tests', 'layout-snapshots');
 
-const DEFAULT_INPUT_ROOT = path.join(REPO_ROOT, 'devtools', 'visual-testing', 'test-docs');
+const DEFAULT_INPUT_ROOT = process.env.SUPERDOC_CORPUS_ROOT
+  ? path.resolve(process.env.SUPERDOC_CORPUS_ROOT)
+  : path.join(REPO_ROOT, 'test-corpus');
 const DEFAULT_OUTPUT_ROOT = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'candidate');
 const DEFAULT_SUPER_EDITOR_MODULE = path.resolve(REPO_ROOT, 'packages/superdoc/dist/super-editor.es.js');
 const DEFAULT_PIPELINE = 'headless';

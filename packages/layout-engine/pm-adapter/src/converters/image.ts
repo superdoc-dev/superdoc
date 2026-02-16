@@ -297,6 +297,8 @@ export function imageNodeToBlock(
     gain: typeof attrs.gain === 'string' || typeof attrs.gain === 'number' ? attrs.gain : undefined,
     blacklevel:
       typeof attrs.blacklevel === 'string' || typeof attrs.blacklevel === 'number' ? attrs.blacklevel : undefined,
+    // OOXML image effects (grayscale, etc.)
+    grayscale: typeof attrs.grayscale === 'boolean' ? attrs.grayscale : undefined,
     // Image transformations from OOXML a:xfrm
     ...(rotation !== undefined && { rotation }),
     ...(flipH !== undefined && { flipH }),

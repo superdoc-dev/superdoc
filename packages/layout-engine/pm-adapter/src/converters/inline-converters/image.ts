@@ -143,6 +143,19 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
     if (flipV !== undefined) run.flipV = flipV;
   }
 
+  // VML image adjustments for watermark effects
+  if (typeof attrs.gain === 'string' || typeof attrs.gain === 'number') {
+    run.gain = attrs.gain;
+  }
+  if (typeof attrs.blacklevel === 'string' || typeof attrs.blacklevel === 'number') {
+    run.blacklevel = attrs.blacklevel;
+  }
+
+  // OOXML image effects
+  if (typeof attrs.grayscale === 'boolean') {
+    run.grayscale = attrs.grayscale;
+  }
+
   return run;
 }
 

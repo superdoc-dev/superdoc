@@ -302,6 +302,12 @@ export type ImageRun = {
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip
   flipV?: boolean; // Vertical flip
+
+  // VML image adjustments for watermark effects
+  gain?: string | number; // Brightness/washout (VML hex string or number)
+  blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
+  // OOXML image effects
+  grayscale?: boolean; // Apply grayscale filter to image
 };
 
 export type BreakRun = {
@@ -545,6 +551,8 @@ export type ImageBlock = {
   // VML image adjustments for watermark effects
   gain?: string | number; // Brightness/washout (VML hex string or number)
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
+  // OOXML image effects
+  grayscale?: boolean; // Apply grayscale filter to image
   // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip

@@ -2571,7 +2571,6 @@ export class DomPainter {
   }
 
   private renderImageFragment(fragment: ImageFragment, context: FragmentRenderContext): HTMLElement {
-    console.log('Rendering image fragment:', fragment);
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
       if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
@@ -2670,6 +2669,12 @@ export class DomPainter {
       // conversion formulas calculated based on Libreoffice vml reader
       // https://github.com/LibreOffice/core/blob/951a74d047cfddff78014225f55ecb2bbdcd9c4c/oox/source/vml/vmlshapecontext.cxx#L465C13-L493C1
       const filters: string[] = [];
+
+      // Apply OOXML grayscale effect
+      if (block.grayscale) {
+        filters.push('grayscale(100%)');
+      }
+
       if (block.gain != null || block.blacklevel != null) {
         // Convert VML gain to CSS contrast
         // VML gain is a hex string like "19661f" - higher = more contrast
@@ -2688,10 +2693,10 @@ export class DomPainter {
             filters.push(`brightness(${brightness})`);
           }
         }
+      }
 
-        if (filters.length > 0) {
-          img.style.filter = filters.join(' ');
-        }
+      if (filters.length > 0) {
+        img.style.filter = filters.join(' ');
       }
       fragmentEl.appendChild(img);
 
@@ -3924,7 +3929,6 @@ export class DomPainter {
    * ```
    */
   private renderImageRun(run: ImageRun): HTMLElement | null {
-    console.log('Rendering image run:', run);
     if (!this.doc || !run.src) {
       return null;
     }
@@ -4042,6 +4046,37 @@ export class DomPainter {
     if (transforms.length > 0) {
       img.style.transform = transforms.join(' ');
       img.style.transformOrigin = 'center';
+    }
+
+    console.log({ run, transforms, img });
+    // Apply image effects (grayscale, VML adjustments for watermarks)
+    const filters: string[] = [];
+
+    // Apply OOXML grayscale effect
+    if (run.grayscale) {
+      filters.push('grayscale(100%)');
+    }
+
+    if (run.gain != null || run.blacklevel != null) {
+      // Convert VML gain to CSS contrast
+      if (run.gain && typeof run.gain === 'string' && run.gain.endsWith('f')) {
+        const contrast = Math.max(0, parseInt(run.gain) / 65536) * (2 / 3);
+        if (contrast > 0) {
+          filters.push(`contrast(${contrast})`);
+        }
+      }
+
+      // Convert VML blacklevel to CSS brightness
+      if (run.blacklevel && typeof run.blacklevel === 'string' && run.blacklevel.endsWith('f')) {
+        const brightness = Math.max(0, 1 + parseInt(run.blacklevel) / 327 / 100) * 1.3;
+        if (brightness > 0) {
+          filters.push(`brightness(${brightness})`);
+        }
+      }
+    }
+
+    if (filters.length > 0) {
+      img.style.filter = filters.join(' ');
     }
 
     // Position and z-index on the image only (not the line) so resize overlay can stack above.

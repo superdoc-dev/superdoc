@@ -270,6 +270,9 @@ export function handleImageNode(node, params, isAnchor) {
     return null;
   }
 
+  // Check for image effects (grayscale, etc.)
+  const hasGrayscale = blip.elements?.some((el) => el.name === 'a:grayscl');
+
   // Check for stretch mode: <a:stretch><a:fillRect/></a:stretch>
   // This tells Word to scale the image to fill the extent rectangle.
   //
@@ -407,6 +410,7 @@ export function handleImageNode(node, params, isAnchor) {
     rId: relAttributes['Id'],
     ...(order.length ? { drawingChildOrder: order } : {}),
     ...(originalChildren.length ? { originalDrawingChildren: originalChildren } : {}),
+    ...(hasGrayscale ? { grayscale: true } : {}),
   };
 
   return {

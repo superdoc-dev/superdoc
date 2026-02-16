@@ -155,7 +155,6 @@ See our [Contributing Guide](CONTRIBUTING.md) for more details.
 
 Special thanks to these community members who have contributed code to SuperDoc:
 
-<a href="https://github.com/johanneswilm"><img src="https://github.com/johanneswilm.png" width="50" height="50" alt="johanneswilm" title="Johannes Wilm" /></a>
 <a href="https://github.com/financialvice"><img src="https://github.com/financialvice.png" width="50" height="50" alt="financialvice" title="financialvice" /></a>
 <a href="https://github.com/luciorubeens"><img src="https://github.com/luciorubeens.png" width="50" height="50" alt="luciorubeens" title="Lúcio Caetano" /></a>
 <a href="https://github.com/Dannyhvv"><img src="https://github.com/Dannyhvv.png" width="50" height="50" alt="Dannyhvv" title="Dannyhvv" /></a>

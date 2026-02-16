@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /*
 
 The MIT License (MIT)
@@ -192,6 +191,20 @@ export class DIBitmap implements Bitmap {
     const absHeight = Math.abs(height);
     const topDown = height < 0; // Negative height means top-down storage
 
+    // Check if alpha channel is actually used (any non-zero alpha values)
+    let alphaUsed = false;
+    if (hasAlpha) {
+      for (let y = 0; y < absHeight && !alphaUsed; y++) {
+        const srcY = topDown ? y : absHeight - 1 - y;
+        for (let x = 0; x < width && !alphaUsed; x++) {
+          const srcOffset = srcY * rowSize + x * 4;
+          if (bitmapData[srcOffset + 3] > 0) {
+            alphaUsed = true;
+          }
+        }
+      }
+    }
+
     for (let y = 0; y < absHeight; y++) {
       const srcY = topDown ? y : absHeight - 1 - y;
       for (let x = 0; x < width; x++) {
@@ -202,12 +215,8 @@ export class DIBitmap implements Bitmap {
         pixels[dstOffset] = bitmapData[srcOffset + 2]; // R
         pixels[dstOffset + 1] = bitmapData[srcOffset + 1]; // G
         pixels[dstOffset + 2] = bitmapData[srcOffset]; // B
-        // For alpha, use the bitmap alpha if it's meaningful, otherwise make it opaque
-        if (hasAlpha && bitmapData[srcOffset + 3] > 0) {
-          pixels[dstOffset + 3] = bitmapData[srcOffset + 3]; // A
-        } else {
-          pixels[dstOffset + 3] = 255; // Fully opaque
-        }
+        // Preserve alpha channel as-is if it's used, otherwise make it opaque
+        pixels[dstOffset + 3] = alphaUsed ? bitmapData[srcOffset + 3] : 255;
       }
     }
 
@@ -227,10 +236,14 @@ export class DIBitmap implements Bitmap {
       switch (header.compression) {
         case Helper.GDI.BitmapCompression.BI_JPEG:
           this._reader.seek(this._location.data.off);
-          return 'data:image/jpeg;base64,' + btoa(this._reader.readBinary(this._location.data.size));
+          const jpegData = 'data:image/jpeg;base64,' + btoa(this._reader.readBinary(this._location.data.size));
+          this._reader.seek(prevpos);
+          return jpegData;
         case Helper.GDI.BitmapCompression.BI_PNG:
           this._reader.seek(this._location.data.off);
-          return 'data:image/png;base64,' + btoa(this._reader.readBinary(this._location.data.size));
+          const pngData = 'data:image/png;base64,' + btoa(this._reader.readBinary(this._location.data.size));
+          this._reader.seek(prevpos);
+          return pngData;
       }
     }
 

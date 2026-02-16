@@ -3981,9 +3981,10 @@ export class DomPainter {
     // Apply inline-block display
     img.style.display = 'inline-block';
 
-    // For clipped images, margins, verticalAlign, position and z-index go on the wrapper only (set below).
-    // Skip them on img to avoid set-then-undo.
-    if (!hasClipPath) {
+    // When we use a wrapper (clipPath + positive dimensions), margins/verticalAlign/position/zIndex go on the wrapper only.
+    // When we don't use a wrapper (no clipPath, or clipPath with width/height 0), apply them on the img so layout is correct.
+    const useWrapper = hasClipPath && run.width > 0 && run.height > 0;
+    if (!useWrapper) {
       // Apply vertical alignment (bottom-aligned to text baseline)
       img.style.verticalAlign = run.verticalAlign ?? 'bottom';
 
@@ -4013,7 +4014,8 @@ export class DomPainter {
     // wrap in a clip container so only the cropped portion occupies space in the document.
     // Wrapper size is the only layout box (position calculation uses run.width/run.height).
     // PM position attributes go on the wrapper only so selection highlight and selection rects use the wrapper, not the scaled img.
-    if (hasClipPath && run.width > 0 && run.height > 0) {
+    // Skip wrapper when width or height is 0 (no layout box); img already has margins/verticalAlign/position/zIndex from above.
+    if (useWrapper) {
       const wrapper = this.doc.createElement('span');
       wrapper.classList.add('superdoc-inline-image-clip-wrapper');
       wrapper.style.display = 'inline-block';

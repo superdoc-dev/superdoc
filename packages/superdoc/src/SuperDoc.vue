@@ -280,7 +280,14 @@ const onEditorUpdate = ({ editor }) => {
 };
 
 let selectionUpdateRafId = null;
-const onEditorSelectionChange = ({ editor, transaction }) => {
+const onEditorSelectionChange = ({ editor }) => {
+  // Always cancel any pending RAF first — a queued callback from a previous
+  // call could fire after mode switches and repopulate stale selection state.
+  if (selectionUpdateRafId != null) {
+    cancelAnimationFrame(selectionUpdateRafId);
+    selectionUpdateRafId = null;
+  }
+
   if (skipSelectionUpdate.value) {
     // When comment is added selection will be equal to comment text
     // Should skip calculations to keep text selection for comments correct
@@ -301,12 +308,12 @@ const onEditorSelectionChange = ({ editor, transaction }) => {
   // activeSelection, toolsMenuPosition), which triggers Vue's flushJobs microtask to re-evaluate
   // hundreds of components — blocking the main thread for ~300ms per keystroke.
   // RAF batches this work with the layout pipeline rerender, keeping typing responsive.
-  if (selectionUpdateRafId != null) {
-    cancelAnimationFrame(selectionUpdateRafId);
-  }
+  // Note: we capture only `editor` (not `transaction`) — by the time RAF fires,
+  // ProseMirror may have processed more keystrokes, making the transaction stale.
+  // processSelectionChange already reads editor.state.selection as the primary source.
   selectionUpdateRafId = requestAnimationFrame(() => {
     selectionUpdateRafId = null;
-    processSelectionChange(editor, transaction);
+    processSelectionChange(editor);
   });
 };
 

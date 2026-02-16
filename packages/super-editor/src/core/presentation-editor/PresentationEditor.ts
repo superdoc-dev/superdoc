@@ -193,7 +193,7 @@ const layoutDebugEnabled =
 /** Log performance metrics when debug is enabled */
 const perfLog = (...args: unknown[]): void => {
   if (!layoutDebugEnabled) return;
-  console.warn(...args);
+  console.log(...args);
 };
 /** Budget for header/footer initialization before warning (milliseconds) */
 const HEADER_FOOTER_INIT_BUDGET_MS = 200;
@@ -465,7 +465,6 @@ export class PresentationEditor extends EventEmitter {
 
     // Wire up manager callbacks to use PresentationEditor methods
     this.#remoteCursorManager.setUpdateCallback(() => this.#updateRemoteCursors());
-    this.#remoteCursorManager.setReRenderCallback(() => this.#renderRemoteCursors());
 
     this.#hoverOverlay = doc.createElement('div');
     this.#hoverOverlay.className = 'presentation-editor__hover-overlay';

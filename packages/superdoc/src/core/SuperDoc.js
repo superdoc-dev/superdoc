@@ -469,8 +469,16 @@ export class SuperDoc extends EventEmitter {
       // Without this, y-prosemirror's cursor plugin mutates user.color to '#ffa500'
       // (orange) as a default, causing color flickering between that default and
       // the fallback colors used by RemoteCursorAwareness.
+      // Use a hash of the user identity to pick a deterministic color from the
+      // palette so that different users get different colors.
       if (!this.config.user.color) {
-        this.config.user.color = this.colors[0] || '#4ECDC4';
+        const userKey = this.config.user.email || this.config.user.name || '';
+        let hash = 0;
+        for (let i = 0; i < userKey.length; i++) {
+          hash = (hash * 31 + userKey.charCodeAt(i)) | 0;
+        }
+        const colorIndex = this.colors.length > 0 ? Math.abs(hash) % this.colors.length : 0;
+        this.config.user.color = this.colors[colorIndex] || '#4ECDC4';
       }
 
       setupAwarenessHandler(externalProvider, this, this.config.user);

@@ -47,7 +47,9 @@ function useSuperdocCollaboration(userName: string): CollaborationState {
         },
         onAwarenessUpdate: ({ states }: any) => setUsers(states),
         onEditorCreate: ({ editor }: any) => {
-          (window as any).editor = editor;
+          if (import.meta.env.DEV) {
+            (window as any).editor = editor;
+          }
         },
       });
     });

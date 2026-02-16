@@ -6,7 +6,7 @@ import 'superdoc/style.css';
 import * as Y from 'yjs';
 
 const PUBLIC_KEY = import.meta.env.VITE_LIVEBLOCKS_PUBLIC_KEY as string;
-const ROOM_ID = (import.meta.env.VITE_ROOM_ID as string) || 'superdoc-room';
+const ROOM_ID = (import.meta.env.VITE_ROOM_ID as string) || 'superdoc-collab-v8';
 
 // ---------------------------------------------------------------------------
 // Hook: useSuperdocCollaboration

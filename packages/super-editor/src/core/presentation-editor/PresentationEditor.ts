@@ -2263,7 +2263,13 @@ export class PresentationEditor extends EventEmitter {
       }
     };
     const handleSelection = () => {
-      this.#scheduleSelectionUpdate();
+      // Use immediate rendering for selection-only changes (clicks, arrow keys).
+      // Without immediate, the render is RAF-deferred — leaving a window where
+      // a remote collaborator's edit can cancel the pending render via
+      // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
+      // if layout is updating (due to a concurrent doc change), flushNow()
+      // is a no-op and the render will be picked up after layout completes.
+      this.#scheduleSelectionUpdate({ immediate: true });
       // Update local cursor in awareness for collaboration
       // This bypasses y-prosemirror's focus check which may fail for hidden PM views
       this.#updateLocalAwarenessCursor();

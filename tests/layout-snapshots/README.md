@@ -13,6 +13,7 @@ while preserving subdirectories and source filename identity.
 Prerequisites:
 
 - Run commands from the repo root with `pnpm`.
+- Pull the corpus before running any snapshot command: `pnpm corpus:pull`.
 
 Important:
 
@@ -32,7 +33,7 @@ Candidate output naming:
 ## Run
 
 ```bash
-# Sync corpus locally first (shared with tests/visual)
+# One-time setup (repeat whenever corpus contents change)
 pnpm corpus:pull
 
 pnpm layout:snapshots

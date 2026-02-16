@@ -245,6 +245,11 @@ export function writeHtmlReport(
         border: 1px solid rgba(15, 25, 45, 0.1);
       }
 
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
       main {
         padding: 24px 28px 60px;
       }
@@ -318,8 +323,11 @@ export function writeHtmlReport(
         color: var(--ink-700);
       }
 
-      summary .approve-btn {
+      .summary-actions {
         margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
 
       .group-body {
@@ -456,6 +464,24 @@ export function writeHtmlReport(
       .approve-btn:hover {
         background: rgba(82, 212, 166, 0.3);
         border-color: rgba(82, 212, 166, 0.6);
+      }
+
+      .word-btn {
+        border: 1px solid rgba(15, 25, 45, 0.18);
+        background: rgba(15, 25, 45, 0.06);
+        color: var(--ink-700);
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .word-btn:hover:not(:disabled) {
+        background: rgba(15, 25, 45, 0.12);
+        border-color: rgba(15, 25, 45, 0.28);
       }
 
       details.group.approved {
@@ -755,6 +781,7 @@ export function writeHtmlReport(
           diffPercent: item.diffPercent,
           hasDiff: Boolean(item.diffPath),
           word: item.word || null,
+          sourceDoc: item.sourceDoc || null,
           milestoneLabel,
           storyName,
           storyDescription,
@@ -932,15 +959,42 @@ export function writeHtmlReport(
           count.textContent = items.length + (items.length === 1 ? ' diff' : ' diffs');
         }
 
+        const sourceDoc = items.find((item) => item.sourceDoc)?.sourceDoc || null;
+        const actionWrap = document.createElement('div');
+        actionWrap.className = 'summary-actions';
+
+        if (!isInteractions) {
+          const wordBtn = document.createElement('button');
+          wordBtn.type = 'button';
+          wordBtn.className = 'word-btn';
+          wordBtn.textContent = 'Open in Word';
+
+          if (sourceDoc && sourceDoc.wordUrl) {
+            wordBtn.dataset.wordUrl = sourceDoc.wordUrl;
+            wordBtn.title = sourceDoc.relativePath
+              ? 'Open ' + sourceDoc.relativePath + ' in Word'
+              : 'Open in Word';
+          } else {
+            wordBtn.disabled = true;
+            wordBtn.title =
+              sourceDoc && sourceDoc.localPath
+                ? 'Open in Word is available on macOS only.'
+                : 'Doc not available locally.';
+          }
+
+          actionWrap.appendChild(wordBtn);
+        }
+
         const approveBtn = document.createElement('button');
         approveBtn.type = 'button';
         approveBtn.className = 'approve-btn';
         approveBtn.textContent = 'Approve doc';
         approveBtn.dataset.group = dir;
+        actionWrap.appendChild(approveBtn);
 
         summary.appendChild(titleWrap);
         summary.appendChild(count);
-        summary.appendChild(approveBtn);
+        summary.appendChild(actionWrap);
         details.appendChild(summary);
 
         const body = document.createElement('div');
@@ -1255,6 +1309,18 @@ export function writeHtmlReport(
       }
 
       groupsContainer.addEventListener('click', (event) => {
+        const openWordBtn = event.target.closest('.word-btn');
+        if (openWordBtn) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (openWordBtn.disabled) return;
+          const wordUrl = openWordBtn.dataset.wordUrl;
+          if (wordUrl) {
+            window.location.assign(wordUrl);
+          }
+          return;
+        }
+
         const btn = event.target.closest('.approve-btn');
         if (!btn) return;
 

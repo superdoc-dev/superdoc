@@ -28,6 +28,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import { generateResultsFolderName, getSuperdocVersion, sanitizeFilename } from './generate-refs.js';
@@ -64,6 +65,16 @@ const SCREENSHOTS_DIR = 'screenshots';
 const BASELINES_DIR = 'baselines';
 const RESULTS_DIR = 'results';
 const REPORT_FILE = 'report.json';
+const WORD_OPEN_STAGING_ENV = 'SUPERDOC_WORD_OPEN_DIR';
+const WORD_OPEN_STAGING_DEFAULT = path.join(
+  os.homedir(),
+  'Library',
+  'Containers',
+  'com.microsoft.Word',
+  'Data',
+  'Documents',
+  'superdoc-report-open',
+);
 
 export interface CompareOptions {
   /** Threshold for pixel difference (0-100, default: 0.05) */
@@ -113,6 +124,8 @@ export interface ImageCompareResult {
   reason?: CompareFailureReason;
   /** Word comparison assets (if generated) */
   word?: WordImageSet;
+  /** Source document metadata (if available) */
+  sourceDoc?: SourceDocMetadata;
   /** Interaction story metadata (if available) */
   interaction?: InteractionMetadata;
 }
@@ -128,6 +141,16 @@ export interface InteractionMetadata {
   storyDescription?: string;
   milestoneLabel?: string;
   milestoneDescription?: string;
+}
+
+/** Metadata linking a comparison result back to its source .docx file. */
+export interface SourceDocMetadata {
+  /** Corpus-relative path of the source document (e.g. "tables/basic.docx") */
+  relativePath: string;
+  /** Absolute local path to the (possibly staged) copy of the document */
+  localPath: string;
+  /** ms-word: protocol deep-link URL (macOS only) */
+  wordUrl?: string;
 }
 
 type DocumentInfo = {
@@ -796,6 +819,31 @@ function parseDocKeyAndPage(
   return { docKey, pageIndex, pageToken };
 }
 
+function toWordDeepLink(localPath: string): string | undefined {
+  if (process.platform !== 'darwin') return undefined;
+  return `ms-word:ofe|u|${pathToFileURL(localPath).href}`;
+}
+
+function resolveWordOpenStagingDir(): string | undefined {
+  if (process.platform !== 'darwin') return undefined;
+  const custom = (process.env[WORD_OPEN_STAGING_ENV] ?? '').trim();
+  if (custom) {
+    return path.resolve(custom);
+  }
+  return WORD_OPEN_STAGING_DEFAULT;
+}
+
+function stageDocForWordOpen(localPath: string, identity: string): string {
+  const stagingDir = resolveWordOpenStagingDir();
+  if (!stagingDir) return localPath;
+
+  const digest = createHash('sha1').update(identity).digest('hex').slice(0, 20);
+  const stagedPath = path.join(stagingDir, `${digest}.docx`);
+  fs.mkdirSync(path.dirname(stagedPath), { recursive: true });
+  fs.copyFileSync(localPath, stagedPath);
+  return stagedPath;
+}
+
 async function buildDocumentKeyMap(provider: CorpusProvider): Promise<Map<string, string>> {
   const docs = await listCorpusDocuments(provider);
   const map = new Map<string, string>();
@@ -848,6 +896,84 @@ export async function findMissingDocuments(
   missingDocs.sort();
   unknownKeys.sort();
   return { missingDocs, unknownKeys };
+}
+
+async function augmentReportWithSourceDocs(
+  report: ComparisonReport,
+  options: {
+    resultsPrefix?: string;
+    providerOptions?: { mode: StorageMode; docsDir?: string };
+  },
+): Promise<ComparisonReport> {
+  const diffResults = report.results.filter((item) => !item.passed);
+  if (diffResults.length === 0) {
+    return report;
+  }
+
+  const provider = await createCorpusProvider(options.providerOptions);
+  try {
+    const docInfoMap = await buildDocumentInfoMap(provider);
+    const sourceDocByKey = new Map<string, SourceDocMetadata | null>();
+
+    for (const item of diffResults) {
+      const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
+      if (!parsed) continue;
+      const { docKey } = parsed;
+      if (sourceDocByKey.has(docKey)) continue;
+
+      const docInfo = docInfoMap.get(docKey);
+      if (!docInfo) {
+        sourceDocByKey.set(docKey, null);
+        continue;
+      }
+
+      try {
+        const localPath = await provider.fetchDoc(docInfo.doc_id, docInfo.doc_rev);
+        let openPath = localPath;
+        try {
+          openPath = stageDocForWordOpen(localPath, `${docInfo.relativePath}:${docInfo.doc_rev}`);
+        } catch (error) {
+          console.warn(
+            colors.warning(
+              `Unable to stage doc for Word open (${docInfo.relativePath}): ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            ),
+          );
+        }
+
+        sourceDocByKey.set(docKey, {
+          relativePath: docInfo.relativePath,
+          localPath: openPath,
+          wordUrl: toWordDeepLink(openPath),
+        });
+      } catch (error) {
+        sourceDocByKey.set(docKey, null);
+        console.warn(
+          colors.warning(
+            `Skipping source doc metadata for ${docKey}: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+      }
+    }
+
+    if (sourceDocByKey.size === 0) {
+      return report;
+    }
+
+    for (const item of report.results) {
+      const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
+      if (!parsed) continue;
+      const sourceDoc = sourceDocByKey.get(parsed.docKey);
+      if (sourceDoc) {
+        item.sourceDoc = sourceDoc;
+      }
+    }
+
+    return report;
+  } finally {
+    await provider.close?.();
+  }
 }
 
 async function fillMissingDocs(
@@ -2269,14 +2395,21 @@ async function main(): Promise<void> {
         }
       }
 
-      if (resolvedMode === 'visual' && includeWord) {
-        const wordResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
-        report = await augmentReportWithWord(report, {
-          resultsFolderName: resultsFolderName!,
-          resultsPrefix: wordResultsPrefix,
-          targetVersion: resolvedTargetVersion,
+      if (resolvedMode === 'visual') {
+        const visualResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
+        report = await augmentReportWithSourceDocs(report, {
+          resultsPrefix: visualResultsPrefix,
           providerOptions: { mode, docsDir },
         });
+
+        if (includeWord) {
+          report = await augmentReportWithWord(report, {
+            resultsFolderName: resultsFolderName!,
+            resultsPrefix: visualResultsPrefix,
+            targetVersion: resolvedTargetVersion,
+            providerOptions: { mode, docsDir },
+          });
+        }
 
         const outputFolder = path.join(RESULTS_DIR, outputFolderName);
         fs.writeFileSync(path.join(outputFolder, REPORT_FILE), JSON.stringify(report, null, 2));

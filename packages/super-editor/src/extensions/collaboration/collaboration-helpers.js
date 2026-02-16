@@ -86,10 +86,35 @@ export const updateYdocDocxData = async (editor, ydoc) => {
 
     const docxFilesMap = ydoc.getMap('docxFiles');
     const metaMap = ydoc.getMap('meta');
+
+    // When the file owner uploads/replaces a file, write ALL files from the
+    // new content to docxFilesMap synchronously (before any await). This is
+    // critical because:
+    // 1. replaceFile does NOT await this function — only synchronous code runs
+    //    before Y.encodeStateAsUpdate captures the state
+    // 2. exportDocx({ getUpdatedDocs: true }) only returns editor-changed files,
+    //    NOT static XML like headers, footers, rels, themes, etc.
+    // 3. The old seeding logic only triggered when docxFilesMap was empty, but
+    //    after replaceFile the blank doc's files already populate it
+    if (editor.options.isNewFile && Array.isArray(editor.options.content)) {
+      const documentXml = editor.options.content.find((f) => f.name === 'word/document.xml')?.content;
+      const sectPrXml = extractBodySectPr(documentXml);
+      if (sectPrXml && sectPrXml !== metaMap.get('bodySectPr')) {
+        metaMap.set('bodySectPr', sectPrXml);
+      }
+
+      // Write every file from the new content to docxFilesMap
+      editor.options.content.forEach((file) => {
+        if (file?.name && file?.content && shouldSyncFile(file.name)) {
+          docxFilesMap.set(file.name, file.content);
+        }
+      });
+    }
+
     const isNewFormat = docxFilesMap.size > 0;
     const existingFiles = readExistingDocxFiles(ydoc);
 
-    // Seed from editor content if nothing stored yet
+    // Seed from editor content if nothing stored yet (first load, no replaceFile)
     if (!Object.keys(existingFiles).length && Array.isArray(editor.options.content)) {
       editor.options.content.forEach((file) => {
         if (file?.name && file?.content) existingFiles[file.name] = file.content;
@@ -127,6 +152,43 @@ export const updateYdocDocxData = async (editor, ydoc) => {
   } catch (error) {
     console.warn('[collaboration] Failed to update Ydoc docx data', error);
   }
+};
+
+/**
+ * Extract the body-level <w:sectPr> element from a document.xml string.
+ * This contains header/footer references, page size, margins, and other
+ * section properties needed by joining collaboration clients.
+ *
+ * @param {string} documentXml The raw XML content of word/document.xml
+ * @returns {string|null} The raw <w:sectPr>...</w:sectPr> substring, or null
+ */
+export const extractBodySectPr = (documentXml) => {
+  if (!documentXml) return null;
+  const lastIdx = documentXml.lastIndexOf('<w:sectPr');
+  if (lastIdx === -1) return null;
+  const endIdx = documentXml.indexOf('</w:sectPr>', lastIdx);
+  if (endIdx === -1) return null;
+  return documentXml.substring(lastIdx, endIdx + '</w:sectPr>'.length);
+};
+
+/**
+ * Build a placeholder document.xml that includes the real body sectPr.
+ * Used by joining clients so the converter can resolve header/footer
+ * variant mappings, page size, margins, etc. from the section properties.
+ *
+ * @param {string|null} bodySectPr The raw <w:sectPr> XML string
+ * @returns {string} A minimal document.xml with the section properties included
+ */
+export const buildDocumentXmlPlaceholder = (bodySectPr) => {
+  if (!bodySectPr) return PLACEHOLDER_DOCUMENT_XML;
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<w:body><w:p><w:r><w:t></w:t></w:r></w:p>' +
+    bodySectPr +
+    '</w:body></w:document>'
+  );
 };
 
 // Header/footer real-time sync

@@ -2978,6 +2978,9 @@ export class PresentationEditor extends EventEmitter {
       let footerLayouts: HeaderFooterLayoutResult[] | undefined;
       let extraBlocks: FlowBlock[] | undefined;
       let extraMeasures: Measure[] | undefined;
+      // Refresh header/footer descriptors so the manager picks up any new
+      // headers/footers after replaceFile recreates the converter.
+      this.#headerFooterSession?.manager?.refresh();
       const headerFooterInput = this.#buildHeaderFooterInput();
       try {
         const incrementalLayoutStart = perfNow();

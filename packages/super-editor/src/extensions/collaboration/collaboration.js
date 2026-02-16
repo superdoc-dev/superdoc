@@ -5,6 +5,7 @@ import { ySyncPlugin, ySyncPluginKey, yUndoPluginKey, prosemirrorToYDoc } from '
 import {
   updateYdocDocxData,
   applyRemoteHeaderFooterChanges,
+  extractBodySectPr,
   shouldSyncFile,
 } from '@extensions/collaboration/collaboration-helpers.js';
 
@@ -134,6 +135,14 @@ export const initializeMetaMap = (ydoc, editor) => {
   Object.entries(editor.options.mediaFiles).forEach(([key, value]) => {
     mediaMap.set(key, value);
   });
+
+  // Store body sectPr so joining clients can resolve header/footer variant
+  // mappings, page size, margins, etc. from the placeholder document.xml.
+  const documentXml = Array.isArray(content) ? content.find((f) => f.name === 'word/document.xml')?.content : null;
+  const sectPrXml = extractBodySectPr(documentXml);
+  if (sectPrXml) {
+    metaMap.set('bodySectPr', sectPrXml);
+  }
 };
 
 const checkDocxChanged = (transaction, docxFilesMap) => {

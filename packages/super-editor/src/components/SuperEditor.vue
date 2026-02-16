@@ -19,7 +19,7 @@ import { getFileObject } from '@superdoc/common';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { isMacOS } from '@core/utilities/isMacOS.js';
-import { PLACEHOLDER_DOCUMENT_XML } from '@extensions/collaboration/collaboration-helpers.js';
+import { buildDocumentXmlPlaceholder } from '@extensions/collaboration/collaboration-helpers.js';
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -696,10 +696,13 @@ const pollForMetaMapData = (ydoc, retries = 10, interval = 500) => {
       });
 
       // word/document.xml is not stored in Y.Map — its content is synced via
-      // y-prosemirror XmlFragment instead. Provide a minimal placeholder so the
-      // converter can initialize its schema.
+      // y-prosemirror XmlFragment instead. Provide a placeholder that includes
+      // the real body sectPr so the converter can resolve header/footer variant
+      // mappings, page size, margins, etc.
       if (!docx.some((f) => f.name === 'word/document.xml')) {
-        docx.push({ name: 'word/document.xml', content: PLACEHOLDER_DOCUMENT_XML });
+        const bodySectPr = metaMap.get('bodySectPr');
+        const placeholder = buildDocumentXmlPlaceholder(bodySectPr);
+        docx.push({ name: 'word/document.xml', content: placeholder });
       }
 
       stopPolling();

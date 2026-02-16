@@ -35,7 +35,8 @@ import * as CollaborationHelpers from './collaboration-helpers.js';
 
 const { Collaboration, CollaborationPluginKey, createSyncPlugin, initializeMetaMap, generateCollaborationData } =
   CollaborationModule;
-const { updateYdocDocxData } = CollaborationHelpers;
+const { updateYdocDocxData, extractBodySectPr, buildDocumentXmlPlaceholder, PLACEHOLDER_DOCUMENT_XML } =
+  CollaborationHelpers;
 
 const createYMap = (initial = {}) => {
   const store = new Map(Object.entries(initial));
@@ -361,6 +362,109 @@ describe('collaboration helpers', () => {
     await updateYdocDocxData(editor);
 
     expect(editor.exportDocx).not.toHaveBeenCalled();
+  });
+});
+
+describe('extractBodySectPr', () => {
+  it('extracts sectPr from a typical document.xml', () => {
+    const xml =
+      '<?xml version="1.0"?><w:document><w:body><w:p/>' +
+      '<w:sectPr w:rsidR="00A77B3E"><w:headerReference w:type="default" r:id="rId6"/>' +
+      '<w:pgSz w:w="12240" w:h="15840"/></w:sectPr>' +
+      '</w:body></w:document>';
+    const result = extractBodySectPr(xml);
+    expect(result).toBe(
+      '<w:sectPr w:rsidR="00A77B3E"><w:headerReference w:type="default" r:id="rId6"/>' +
+        '<w:pgSz w:w="12240" w:h="15840"/></w:sectPr>',
+    );
+  });
+
+  it('returns null for null/undefined input', () => {
+    expect(extractBodySectPr(null)).toBeNull();
+    expect(extractBodySectPr(undefined)).toBeNull();
+  });
+
+  it('returns null when no sectPr exists', () => {
+    const xml = '<w:document><w:body><w:p/></w:body></w:document>';
+    expect(extractBodySectPr(xml)).toBeNull();
+  });
+
+  it('extracts the last sectPr when multiple exist', () => {
+    const xml =
+      '<w:document><w:body>' +
+      '<w:sectPr><w:pgSz w:w="1"/></w:sectPr>' +
+      '<w:sectPr><w:pgSz w:w="2"/></w:sectPr>' +
+      '</w:body></w:document>';
+    expect(extractBodySectPr(xml)).toBe('<w:sectPr><w:pgSz w:w="2"/></w:sectPr>');
+  });
+});
+
+describe('buildDocumentXmlPlaceholder', () => {
+  it('returns minimal placeholder when no sectPr provided', () => {
+    expect(buildDocumentXmlPlaceholder(null)).toBe(PLACEHOLDER_DOCUMENT_XML);
+    expect(buildDocumentXmlPlaceholder(undefined)).toBe(PLACEHOLDER_DOCUMENT_XML);
+  });
+
+  it('includes sectPr in the placeholder', () => {
+    const sectPr = '<w:sectPr><w:headerReference w:type="default" r:id="rId6"/></w:sectPr>';
+    const result = buildDocumentXmlPlaceholder(sectPr);
+    expect(result).toContain(sectPr);
+    expect(result).toContain('<w:body>');
+    expect(result).toContain('</w:body></w:document>');
+  });
+
+  it('places sectPr after the paragraph and before body close', () => {
+    const sectPr = '<w:sectPr><w:pgSz w:w="12240"/></w:sectPr>';
+    const result = buildDocumentXmlPlaceholder(sectPr);
+    const bodyContent = result.match(/<w:body>(.*)<\/w:body>/)?.[1];
+    expect(bodyContent).toMatch(/<w:p>.*<\/w:p>.*<w:sectPr>/);
+  });
+});
+
+describe('initializeMetaMap bodySectPr', () => {
+  it('stores bodySectPr in meta map when document.xml has sectPr', () => {
+    const documentXml =
+      '<w:document><w:body><w:p/>' +
+      '<w:sectPr><w:headerReference w:type="default" r:id="rId6"/></w:sectPr>' +
+      '</w:body></w:document>';
+    const content = [
+      { name: 'word/document.xml', content: documentXml },
+      { name: 'word/styles.xml', content: '<styles/>' },
+    ];
+    const ydoc = createYDocStub();
+    const editor = {
+      options: { fonts: {}, content, mediaFiles: {}, user: {} },
+    };
+
+    initializeMetaMap(ydoc, editor);
+
+    const metaMap = ydoc._maps.metas;
+    expect(metaMap.get('bodySectPr')).toBe('<w:sectPr><w:headerReference w:type="default" r:id="rId6"/></w:sectPr>');
+  });
+
+  it('does not store bodySectPr when document.xml has no sectPr', () => {
+    const content = [{ name: 'word/document.xml', content: '<w:document><w:body><w:p/></w:body></w:document>' }];
+    const ydoc = createYDocStub();
+    const editor = {
+      options: { fonts: {}, content, mediaFiles: {}, user: {} },
+    };
+
+    initializeMetaMap(ydoc, editor);
+
+    const metaMap = ydoc._maps.metas;
+    expect(metaMap.get('bodySectPr')).toBeUndefined();
+  });
+
+  it('does not store bodySectPr when content is not an array', () => {
+    const ydoc = createYDocStub();
+    const editor = {
+      options: { fonts: {}, content: 'not-an-array', mediaFiles: {}, user: {} },
+    };
+
+    initializeMetaMap(ydoc, editor);
+
+    const metaMap = ydoc._maps.metas;
+    expect(metaMap.get('bodySectPr')).toBeUndefined();
   });
 });
 

@@ -164,9 +164,15 @@ const checkDocxChanged = (transaction) => {
 };
 
 const initDocumentListener = ({ ydoc, editor }) => {
+  // 30s debounce: the actual document content syncs in real-time via
+  // y-prosemirror's XmlFragment. This DOCX blob is supplementary data
+  // (for new joiners' converter setup). Writing it every 1s generates
+  // large Y.js updates (full DOCX XML) that accumulate as Y.Map
+  // tombstones, gradually growing the room's stored data until
+  // Liveblocks rejects connections with code 1011.
   const debouncedUpdate = debounce((editor) => {
     updateYdocDocxData(editor);
-  }, 1000);
+  }, 30000);
 
   const afterTransactionHandler = (transaction) => {
     const { local } = transaction;

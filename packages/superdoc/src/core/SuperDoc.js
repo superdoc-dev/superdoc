@@ -1159,20 +1159,19 @@ export class SuperDoc extends EventEmitter {
     // Mark as destroyed early to prevent in-flight init from mounting
     this.#destroyed = true;
 
-    this.#cleanupCollaboration();
-
-    if (!this.app) {
-      return;
+    // Unmount the app FIRST so editors are destroyed — this triggers each
+    // extension's onDestroy() which cancels debounced Y.js writes and
+    // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.
+    if (this.app) {
+      this.#log('[superdoc] Unmounting app');
+      this.superdocStore.reset();
+      this.app.unmount();
+      this.removeAllListeners();
+      delete this.app.config.globalProperties.$config;
+      delete this.app.config.globalProperties.$superdoc;
     }
 
-    this.#log('[superdoc] Unmounting app');
-
-    this.superdocStore.reset();
-
-    this.app.unmount();
-    this.removeAllListeners();
-    delete this.app.config.globalProperties.$config;
-    delete this.app.config.globalProperties.$superdoc;
+    this.#cleanupCollaboration();
 
     // Remove the internal wrapper element from the user's container
     if (this.#mountWrapper) {

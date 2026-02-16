@@ -383,7 +383,7 @@ describe('collaboration extension', () => {
   });
 
   describe('debounced docx sync', () => {
-    const DEBOUNCE_DELAY_MS = 1000;
+    const DEBOUNCE_DELAY_MS = 30000;
 
     const createDebouncedSyncTestContext = () => {
       const updateSpy = vi.spyOn(CollaborationHelpers, 'updateYdocDocxData').mockResolvedValue();

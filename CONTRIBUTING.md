@@ -135,7 +135,7 @@ pnpm install
 pnpm dev
 ```
 
-The dev server runs from `examples/` and gives you a live editor to test changes.
+The dev server gives you a live editor to test changes.
 
 ### 3. Create a branch
 
@@ -283,8 +283,6 @@ SuperDoc uses automated CI/CD with semantic-release. No manual version bumps are
 
 Every merge to `main` publishes a pre-release automatically. Stable releases are promoted from `main` via a GitHub Actions workflow.
 
-For full CI/CD details, see [cicd.md](cicd.md).
-
 ## Style Guidelines
 
 - Use JavaScript with JSDoc type annotations for all new code
@@ -314,15 +312,11 @@ pnpm run lint:fix
 
 ### Code of Conduct
 
-This project and everyone participating in it are governed by our Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to [support@superdoc.dev](mailto:support@superdoc.dev).
+This project and everyone participating in it are governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to [support@superdoc.dev](mailto:support@superdoc.dev).
 
 ### Recognition
 
-We value every contribution. Contributors are:
-
-- Featured in our [contributors page](https://github.com/superdoc-dev/superdoc#contributors)
-- Mentioned in release notes
-- Recognized with a community contributor badge in Discord
+We value every contribution. Contributors are recognized in release notes and on Discord.
 
 ---
 

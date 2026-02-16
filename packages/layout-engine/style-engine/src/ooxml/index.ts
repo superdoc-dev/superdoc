@@ -1,6 +1,8 @@
 /**
  * @superdoc/style-engine/ooxml
  *
+ * TEST: critical risk PR — style engine change
+ *
  * Shared OOXML style resolution logic used by the converter and layout engine.
  * This module is format-aware (docx), but translator-agnostic.
  */

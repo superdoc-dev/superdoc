@@ -579,21 +579,35 @@ export const Image = Node.create({
     const hasClipPath = typeof clipPath === 'string' && clipPath.trim().length > 0;
     const { width: sizeW, height: sizeH } = size ?? {};
 
-    // When clipPath is set we scale the image so the cropped portion fills the box; wrap in a container so only that portion occupies space and overflow is hidden. Resize updates node size so wrapper gets new dimensions and cropped portion stays within.
+    // When clipPath is set we scale the image so the cropped portion fills the box;
+    // wrap in a container so only that portion occupies space and overflow is hidden.
+    // Resize updates node size so wrapper gets new dimensions and cropped portion stays within.
     if (hasClipPath && sizeW > 0 && sizeH > 0) {
-      const wrapperStyle =
-        (finalAttributes.style || '') +
-        ' overflow: hidden; width: ' +
-        sizeW +
-        'px; height: ' +
-        sizeH +
-        'px; display: inline-block; box-sizing: border-box;';
-      const imgInnerStyle =
-        'width: 100%; height: 100%; max-width: 100%; max-height: 100%; min-width: 0; min-height: 0; box-sizing: border-box;' +
-        ' clip-path: ' +
-        clipPath +
-        '; ' +
-        (formatInsetClipPathTransform(clipPath) || '');
+      const wrapperStyle = [
+        finalAttributes.style || '',
+        'overflow: hidden',
+        `width: ${sizeW}px`,
+        `height: ${sizeH}px`,
+        'display: inline-block',
+        'box-sizing: border-box',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      // clipPath attribute's renderDOM returns {} when size is set (so styles go on wrapper);
+      // inner img is built here so we set clip-path and fill styles explicitly.
+      const imgInnerStyle = [
+        'width: 100%',
+        'height: 100%',
+        'max-width: 100%',
+        'max-height: 100%',
+        'min-width: 0',
+        'min-height: 0',
+        'box-sizing: border-box',
+        `clip-path: ${clipPath}`,
+        formatInsetClipPathTransform(clipPath) || '',
+      ]
+        .filter(Boolean)
+        .join('; ');
       const imgAttrs = Attribute.mergeAttributes(this.options.htmlAttributes, {
         src: this.storage.media[node.attrs.src] ?? node.attrs.src,
         alt: node.attrs.alt ?? 'Uploaded picture',

@@ -3938,13 +3938,15 @@ export class DomPainter {
       img.width = run.width;
       img.height = run.height;
     } else {
-      img.style.width = '100%';
-      img.style.height = '100%';
-      img.style.maxWidth = '100%';
-      img.style.maxHeight = '100%';
-      img.style.boxSizing = 'border-box';
-      img.style.minWidth = '0';
-      img.style.minHeight = '0';
+      Object.assign(img.style, {
+        width: '100%',
+        height: '100%',
+        maxWidth: '100%',
+        maxHeight: '100%',
+        boxSizing: 'border-box',
+        minWidth: '0',
+        minHeight: '0',
+      });
     }
     applyImageClipPath(img, run.clipPath);
 
@@ -3979,26 +3981,30 @@ export class DomPainter {
     // Apply inline-block display
     img.style.display = 'inline-block';
 
-    // Apply vertical alignment (bottom-aligned to text baseline)
-    img.style.verticalAlign = run.verticalAlign ?? 'bottom';
+    // For clipped images, margins, verticalAlign, position and z-index go on the wrapper only (set below).
+    // Skip them on img to avoid set-then-undo.
+    if (!hasClipPath) {
+      // Apply vertical alignment (bottom-aligned to text baseline)
+      img.style.verticalAlign = run.verticalAlign ?? 'bottom';
 
-    // Apply spacing as CSS margins
-    if (run.distTop) {
-      img.style.marginTop = `${run.distTop}px`;
-    }
-    if (run.distBottom) {
-      img.style.marginBottom = `${run.distBottom}px`;
-    }
-    if (run.distLeft) {
-      img.style.marginLeft = `${run.distLeft}px`;
-    }
-    if (run.distRight) {
-      img.style.marginRight = `${run.distRight}px`;
-    }
+      // Apply spacing as CSS margins
+      if (run.distTop) {
+        img.style.marginTop = `${run.distTop}px`;
+      }
+      if (run.distBottom) {
+        img.style.marginBottom = `${run.distBottom}px`;
+      }
+      if (run.distLeft) {
+        img.style.marginLeft = `${run.distLeft}px`;
+      }
+      if (run.distRight) {
+        img.style.marginRight = `${run.distRight}px`;
+      }
 
-    // Position and z-index on the image only (not the line) so resize overlay can stack above.
-    img.style.position = 'relative';
-    img.style.zIndex = '1';
+      // Position and z-index on the image only (not the line) so resize overlay can stack above.
+      img.style.position = 'relative';
+      img.style.zIndex = '1';
+    }
 
     // Assert PM positions are present for cursor fallback
     assertPmPositions(run, 'inline image run');
@@ -4008,12 +4014,6 @@ export class DomPainter {
     // Wrapper size is the only layout box (position calculation uses run.width/run.height).
     // PM position attributes go on the wrapper only so selection highlight and selection rects use the wrapper, not the scaled img.
     if (hasClipPath && run.width > 0 && run.height > 0) {
-      // Margins live on the wrapper only; img must fill wrapper exactly so transform percentages stay correct after resize
-      img.style.marginTop = '0';
-      img.style.marginBottom = '0';
-      img.style.marginLeft = '0';
-      img.style.marginRight = '0';
-      img.style.verticalAlign = 'unset';
       const wrapper = this.doc.createElement('span');
       wrapper.classList.add('superdoc-inline-image-clip-wrapper');
       wrapper.style.display = 'inline-block';
@@ -4026,6 +4026,7 @@ export class DomPainter {
       if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
       if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
       if (run.distRight) wrapper.style.marginRight = `${run.distRight}px`;
+      wrapper.style.position = 'relative';
       wrapper.style.zIndex = '1';
       if (run.pmStart != null) wrapper.dataset.pmStart = String(run.pmStart);
       if (run.pmEnd != null) wrapper.dataset.pmEnd = String(run.pmEnd);

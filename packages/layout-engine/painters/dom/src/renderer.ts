@@ -4048,7 +4048,6 @@ export class DomPainter {
       img.style.transformOrigin = 'center';
     }
 
-    console.log({ run, transforms, img });
     // Apply image effects (grayscale, VML adjustments for watermarks)
     const filters: string[] = [];
 

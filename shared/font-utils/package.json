@@ -1,7 +1,7 @@
 {
   "name": "@superdoc/font-utils",
   "version": "0.1.0",
-  "description": "Shared font fallback helpers for SuperDoc layout packages",
+  "description": "Shared font-fallback helpers for SuperDoc layout packages",
   "private": true,
   "type": "module",
   "main": "./index.js",

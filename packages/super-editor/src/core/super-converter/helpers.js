@@ -597,6 +597,86 @@ function convertSizeToCSS(value, type) {
   }
 }
 
+/**
+ * Detects image type from file content using magic bytes (file signatures).
+ * Supports PNG, JPEG, GIF, BMP, TIFF, WEBP.
+ *
+ * @param {Uint8Array|string} data - Binary data as Uint8Array or base64 string
+ * @returns {string|null} - Detected image type (e.g., 'png', 'jpeg') or null if not detected
+ */
+const detectImageType = (data) => {
+  let bytes;
+
+  if (typeof data === 'string') {
+    // Assume base64 string
+    try {
+      bytes = base64ToUint8Array(data);
+    } catch {
+      return null;
+    }
+  } else if (data instanceof Uint8Array) {
+    bytes = data;
+  } else {
+    return null;
+  }
+
+  if (bytes.length < 12) return null;
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return 'png';
+  }
+
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'jpeg';
+  }
+
+  // GIF: 47 49 46 38 (GIF8)
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return 'gif';
+  }
+
+  // BMP: 42 4D (BM)
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return 'bmp';
+  }
+
+  // TIFF: 49 49 2A 00 (little-endian) or 4D 4D 00 2A (big-endian)
+  if (
+    (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
+    (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a)
+  ) {
+    return 'tiff';
+  }
+
+  // WEBP: 52 49 46 46 ... 57 45 42 50 (RIFF....WEBP)
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'webp';
+  }
+
+  return null;
+};
+
 export {
   PIXELS_PER_INCH,
   inchesToTwips,
@@ -640,4 +720,5 @@ export {
   resolveOpcTargetPath,
   computeCrc32Hex,
   base64ToUint8Array,
+  detectImageType,
 };

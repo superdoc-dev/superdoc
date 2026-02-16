@@ -130,6 +130,19 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
     run.sdt = sdtMetadata;
   }
 
+  // Extract rotation/flip transforms from transformData
+  const transformData = isPlainObject(attrs.transformData) ? attrs.transformData : undefined;
+  if (transformData) {
+    const rotation = typeof transformData.rotation === 'number' ? transformData.rotation : undefined;
+    if (rotation !== undefined) run.rotation = rotation;
+
+    const flipH = typeof transformData.horizontalFlip === 'boolean' ? transformData.horizontalFlip : undefined;
+    if (flipH !== undefined) run.flipH = flipH;
+
+    const flipV = typeof transformData.verticalFlip === 'boolean' ? transformData.verticalFlip : undefined;
+    if (flipV !== undefined) run.flipV = flipV;
+  }
+
   return run;
 }
 

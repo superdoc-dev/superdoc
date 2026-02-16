@@ -2571,6 +2571,7 @@ export class DomPainter {
   }
 
   private renderImageFragment(fragment: ImageFragment, context: FragmentRenderContext): HTMLElement {
+    console.log('Rendering image fragment:', fragment);
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
       if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
@@ -2629,6 +2630,41 @@ export class DomPainter {
         img.style.objectPosition = 'left top';
       }
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
+
+      // Apply rotation and flip transforms from OOXML a:xfrm
+      const transforms: string[] = [];
+
+      // Calculate translation offset to keep top-left corner fixed when rotating
+      if (block.rotation != null && block.rotation !== 0) {
+        const angleRad = (block.rotation * Math.PI) / 180;
+        const w = block.width ?? fragment.width;
+        const h = block.height ?? fragment.height;
+
+        // Calculate how much the top-left corner moves when rotating around center
+        // Top-left corner starts at (0, 0) in element space
+        // Center is at (w/2, h/2)
+        // After rotation, we need to translate to keep top-left at (0, 0)
+        const cosA = Math.cos(angleRad);
+        const sinA = Math.sin(angleRad);
+
+        // Position of top-left corner after rotation (relative to original top-left)
+        const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
+        const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
+
+        transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+        transforms.push(`rotate(${block.rotation}deg)`);
+      }
+      if (block.flipH) {
+        transforms.push('scaleX(-1)');
+      }
+      if (block.flipV) {
+        transforms.push('scaleY(-1)');
+      }
+
+      if (transforms.length > 0) {
+        img.style.transform = transforms.join(' ');
+        img.style.transformOrigin = 'center';
+      }
 
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
       // conversion formulas calculated based on Libreoffice vml reader
@@ -3888,6 +3924,7 @@ export class DomPainter {
    * ```
    */
   private renderImageRun(run: ImageRun): HTMLElement | null {
+    console.log('Rendering image run:', run);
     if (!this.doc || !run.src) {
       return null;
     }
@@ -3971,6 +4008,40 @@ export class DomPainter {
     }
     if (run.distRight) {
       img.style.marginRight = `${run.distRight}px`;
+    }
+
+    // Apply rotation and flip transforms from OOXML a:xfrm
+    const transforms: string[] = [];
+
+    // Calculate translation offset to keep top-left corner fixed when rotating
+    if (run.rotation != null && run.rotation !== 0) {
+      const angleRad = (run.rotation * Math.PI) / 180;
+      const w = run.width;
+      const h = run.height;
+
+      // Calculate how much the top-left corner moves when rotating around center
+      // Top-left corner starts at (0, 0) in element space
+      // Center is at (w/2, h/2)
+      // After rotation, we need to translate to keep top-left at (0, 0)
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+
+      // Position of top-left corner after rotation (relative to original top-left)
+      const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
+      const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
+
+      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+      transforms.push(`rotate(${run.rotation}deg)`);
+    }
+    if (run.flipH) {
+      transforms.push('scaleX(-1)');
+    }
+    if (run.flipV) {
+      transforms.push('scaleY(-1)');
+    }
+    if (transforms.length > 0) {
+      img.style.transform = transforms.join(' ');
+      img.style.transformOrigin = 'center';
     }
 
     // Position and z-index on the image only (not the line) so resize overlay can stack above.

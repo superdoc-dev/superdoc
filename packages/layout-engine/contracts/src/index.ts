@@ -297,6 +297,11 @@ export type ImageRun = {
    * Custom data attributes propagated from ProseMirror marks (keys must be data-*).
    */
   dataAttrs?: Record<string, string>;
+
+  // Image transformations from OOXML a:xfrm (applies to inline images)
+  rotation?: number; // Rotation angle in degrees
+  flipH?: boolean; // Horizontal flip
+  flipV?: boolean; // Vertical flip
 };
 
 export type BreakRun = {
@@ -540,6 +545,10 @@ export type ImageBlock = {
   // VML image adjustments for watermark effects
   gain?: string | number; // Brightness/washout (VML hex string or number)
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
+  // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
+  rotation?: number; // Rotation angle in degrees
+  flipH?: boolean; // Horizontal flip
+  flipV?: boolean; // Vertical flip
 };
 
 export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup';

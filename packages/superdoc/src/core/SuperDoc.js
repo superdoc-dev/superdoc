@@ -472,13 +472,42 @@ export class SuperDoc extends EventEmitter {
       // Use a hash of the user identity to pick a deterministic color from the
       // palette so that different users get different colors.
       if (!this.config.user.color) {
+        // 24 visually distinct hex colors — large enough palette to minimize
+        // collisions (~4% for two users) while staying within y-prosemirror's
+        // hex-only color format requirement.
+        const defaultPalette = [
+          '#FF6B6B',
+          '#4ECDC4',
+          '#45B7D1',
+          '#FFA07A',
+          '#98D8C8',
+          '#F7DC6F',
+          '#BB8FCE',
+          '#85C1E2',
+          '#F1948A',
+          '#82E0AA',
+          '#F8C471',
+          '#AED6F1',
+          '#D7BDE2',
+          '#A3E4D7',
+          '#F0B27A',
+          '#AEB6BF',
+          '#E74C3C',
+          '#2ECC71',
+          '#3498DB',
+          '#E67E22',
+          '#1ABC9C',
+          '#9B59B6',
+          '#34495E',
+          '#F39C12',
+        ];
+        const palette = this.colors.length > 0 ? this.colors : defaultPalette;
         const userKey = this.config.user.email || this.config.user.name || '';
-        let hash = 0;
+        let hash = 5381;
         for (let i = 0; i < userKey.length; i++) {
-          hash = (hash * 31 + userKey.charCodeAt(i)) | 0;
+          hash = ((hash << 5) + hash) ^ userKey.charCodeAt(i);
         }
-        const colorIndex = this.colors.length > 0 ? Math.abs(hash) % this.colors.length : 0;
-        this.config.user.color = this.colors[colorIndex] || '#4ECDC4';
+        this.config.user.color = palette[Math.abs(hash) % palette.length];
       }
 
       setupAwarenessHandler(externalProvider, this, this.config.user);

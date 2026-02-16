@@ -92,9 +92,15 @@ Generate a diff report between:
 The compare script regenerates candidate snapshots before every run (full refresh by default), and auto-generates the
 reference version when missing. References are only regenerated when missing/incomplete.
 
+When changed docs are detected, compare now automatically runs `devtools/visual-testing` in local mode for only those
+changed docs, using the same reference version as the visual baseline.
+
 ```bash
 # Compare against a reference version (auto-generates reference if missing)
 bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15
+
+# Disable auto visual post-step
+bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15 --no-visual-on-change
 
 # Fail with non-zero exit if any diffs/missing files are found
 bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15 --fail-on-diff

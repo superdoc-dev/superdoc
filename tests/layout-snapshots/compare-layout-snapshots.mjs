@@ -19,6 +19,7 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const DEFAULT_CANDIDATE_ROOT = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'candidate');
 const DEFAULT_REFERENCE_BASE = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'reference');
 const DEFAULT_REPORTS_ROOT = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'reports');
+const DEFAULT_VISUAL_WORKDIR = path.join(REPO_ROOT, 'devtools', 'visual-testing');
 const CANDIDATE_EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapshots.mjs');
 const NPM_EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapshots-npm.mjs');
 
@@ -44,6 +45,12 @@ Options:
       --input-root <path>             Input docs root for auto-generation
       --numeric-tolerance <value>     Number comparison tolerance (default: 0.001)
       --max-diff-entries <n>          Max diff entries per doc (default: 2000)
+      --visual-on-change              Run visual compare for changed docs after layout compare (default: on)
+      --no-visual-on-change           Disable visual compare post-step
+      --visual-reference <version>    Visual baseline version (default: same as --reference)
+      --visual-workdir <path>         devtools/visual-testing root (default: ${DEFAULT_VISUAL_WORKDIR})
+      --visual-browser <name>         Browser for visual compare (default: chromium)
+      --visual-threshold <percent>    Visual diff threshold percent
       --fail-on-diff                  Exit with code 1 when diffs or missing docs are found
   -h, --help                          Show this help
 
@@ -110,6 +117,11 @@ function parseArgs(argv) {
     inputRoot: null,
     numericTolerance: 0.001,
     maxDiffEntries: 2000,
+    visualOnChange: true,
+    visualReference: null,
+    visualWorkdir: DEFAULT_VISUAL_WORKDIR,
+    visualBrowser: 'chromium',
+    visualThreshold: null,
     failOnDiff: false,
   };
 
@@ -214,6 +226,38 @@ function parseArgs(argv) {
         throw new Error(`Invalid --max-diff-entries value "${next}".`);
       }
       args.maxDiffEntries = Math.floor(parsed);
+      i += 1;
+      continue;
+    }
+    if (arg === '--visual-on-change') {
+      args.visualOnChange = true;
+      continue;
+    }
+    if (arg === '--no-visual-on-change') {
+      args.visualOnChange = false;
+      continue;
+    }
+    if (arg === '--visual-reference' && next) {
+      args.visualReference = next;
+      i += 1;
+      continue;
+    }
+    if (arg === '--visual-workdir' && next) {
+      args.visualWorkdir = next;
+      i += 1;
+      continue;
+    }
+    if (arg === '--visual-browser' && next) {
+      args.visualBrowser = next;
+      i += 1;
+      continue;
+    }
+    if (arg === '--visual-threshold' && next) {
+      const parsed = Number(next);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new Error(`Invalid --visual-threshold value "${next}".`);
+      }
+      args.visualThreshold = parsed;
       i += 1;
       continue;
     }
@@ -645,6 +689,78 @@ async function runCandidateGeneration({ candidateRoot, args }) {
   }
 }
 
+function snapshotPathToDocxRelativePath(snapshotRelativePath) {
+  if (typeof snapshotRelativePath !== 'string') return null;
+  if (!snapshotRelativePath.endsWith('.layout.json')) return null;
+  return snapshotRelativePath.slice(0, -'.layout.json'.length);
+}
+
+function collectChangedDocRelativePaths(changedDocs) {
+  const uniquePaths = new Set();
+  for (const entry of changedDocs) {
+    const docRelativePath = snapshotPathToDocxRelativePath(entry?.path);
+    if (!docRelativePath) continue;
+    uniquePaths.add(docRelativePath);
+  }
+  return [...uniquePaths].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+async function runVisualCompareForChangedDocs({ changedDocPaths, args }) {
+  const visualWorkdir = path.resolve(args.visualWorkdir);
+  const visualPackagePath = path.join(visualWorkdir, 'package.json');
+  if (!(await pathExists(visualPackagePath))) {
+    throw new Error(`Visual testing workspace not found: ${visualWorkdir}`);
+  }
+
+  const visualReference = args.visualReference ?? args.reference;
+  if (!visualReference) {
+    throw new Error('Visual compare requires --reference (or explicit --visual-reference).');
+  }
+
+  const visualDocsRoot = args.inputRoot ? path.resolve(args.inputRoot) : path.join(REPO_ROOT, 'test-corpus');
+  const commandArgs = ['compare:visual', visualReference, '--local', '--docs', visualDocsRoot];
+
+  if (args.visualBrowser) {
+    commandArgs.push('--browser', args.visualBrowser);
+  }
+  if (typeof args.visualThreshold === 'number') {
+    commandArgs.push('--threshold', String(args.visualThreshold));
+  }
+  for (const docPath of changedDocPaths) {
+    commandArgs.push('--doc', docPath);
+  }
+
+  console.log(`[layout-snapshots:compare] Visual workdir:    ${visualWorkdir}`);
+  console.log(`[layout-snapshots:compare] Visual docs root:  ${visualDocsRoot}`);
+  console.log(`[layout-snapshots:compare] Visual reference:  ${visualReference}`);
+  console.log(`[layout-snapshots:compare] Visual docs count: ${changedDocPaths.length}`);
+
+  const child = spawn('pnpm', commandArgs, {
+    cwd: visualWorkdir,
+    env: {
+      ...process.env,
+      ...(process.stdout.isTTY ? {} : { CI: process.env.CI ?? 'true' }),
+    },
+    stdio: 'inherit',
+  });
+
+  const exitCode = await new Promise((resolve) => {
+    child.on('close', (code) => resolve(code ?? 1));
+    child.on('error', () => resolve(1));
+  });
+
+  if (exitCode !== 0) {
+    throw new Error(`Visual compare failed with exit code ${exitCode}.`);
+  }
+
+  return {
+    workdir: visualWorkdir,
+    docsRoot: visualDocsRoot,
+    reference: visualReference,
+    docCount: changedDocPaths.length,
+  };
+}
+
 function buildReportMarkdown(summary) {
   const lines = [];
   lines.push('# Layout Snapshot Diff Report');
@@ -899,6 +1015,63 @@ async function main() {
     );
   }
 
+  const changedDocPaths = collectChangedDocRelativePaths(changedDocs);
+  const visualReference = args.visualReference ?? args.reference;
+  const visualEligible = args.visualOnChange && changedDocPaths.length > 0 && Boolean(visualReference);
+
+  let visualSkipReason = null;
+  if (!args.visualOnChange) {
+    visualSkipReason = 'Disabled via --no-visual-on-change.';
+  } else if (changedDocPaths.length === 0) {
+    visualSkipReason = 'No changed docs.';
+  } else if (!visualReference) {
+    visualSkipReason = 'No --reference/--visual-reference provided.';
+  }
+
+  let visualComparison = {
+    enabled: args.visualOnChange,
+    executed: false,
+    status: 'skipped',
+    reason: visualSkipReason,
+    changedDocCount: changedDocPaths.length,
+    docs: changedDocPaths,
+    workdir: null,
+    docsRoot: null,
+    reference: null,
+    error: null,
+  };
+
+  if (visualEligible) {
+    console.log('');
+    console.log(
+      `[layout-snapshots:compare] Changed docs detected (${changedDocPaths.length}). Running visual compare...`,
+    );
+    try {
+      const visualRun = await runVisualCompareForChangedDocs({
+        changedDocPaths,
+        args,
+      });
+      visualComparison = {
+        ...visualComparison,
+        executed: true,
+        status: 'success',
+        reason: null,
+        ...visualRun,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      visualComparison = {
+        ...visualComparison,
+        executed: true,
+        status: 'failed',
+        reason: message,
+        error: message,
+      };
+      console.error(`[layout-snapshots:compare] Visual compare failed: ${message}`);
+      process.exitCode = 1;
+    }
+  }
+
   const summary = {
     generatedAt: new Date().toISOString(),
     reportDir,
@@ -915,6 +1088,8 @@ async function main() {
     missingInReference: relation.missingInReference,
     missingInCandidate: relation.missingInCandidate,
     changedDocs,
+    changedDocPaths,
+    visualComparison,
   };
 
   await fs.writeFile(path.join(reportDir, 'summary.json'), JSON.stringify(summary, null, 2), 'utf8');
@@ -926,6 +1101,9 @@ async function main() {
   console.log(`[layout-snapshots:compare] Unchanged docs:     ${unchangedDocCount}`);
   console.log(`[layout-snapshots:compare] Missing reference:  ${relation.missingInReference.length}`);
   console.log(`[layout-snapshots:compare] Missing candidate:  ${relation.missingInCandidate.length}`);
+  if (visualComparison.executed || visualComparison.enabled) {
+    console.log(`[layout-snapshots:compare] Visual compare:    ${visualComparison.status}`);
+  }
   console.log(`[layout-snapshots:compare] Report:             ${reportDir}`);
 
   const hasDiffs =

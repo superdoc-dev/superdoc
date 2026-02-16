@@ -96,6 +96,7 @@ Notes:
 - `--filter <prefix>` match by path/story prefix (e.g. `layout`, `sd-1401`).
 - `--match <text>` match by substring anywhere in path/story.
 - `--exclude <prefix>` skip by path/story prefix.
+- `--doc <relative.docx>` target specific corpus docs on visual commands (repeatable), e.g. `comments-tcs/basic-comments.docx`.
 - Repeat `--filter`, `--match`, or `--exclude` to combine multiple values.
 - `--force` regenerate baselines even if they already exist.
 - `--skip-existing` skip docs/stories that already have outputs.

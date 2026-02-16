@@ -16,6 +16,7 @@
  *   pnpm compare --filter sdt       # Only generate/compare files in sdt/ folder
  *   pnpm compare --exclude samples  # Skip files in samples/ folder
  *   pnpm compare --match sd-1401    # Match substring anywhere in path
+ *   pnpm compare --doc comments-tcs/basic-comments.docx  # Compare a specific corpus doc
  *   pnpm compare --folder <name>    # Compare an existing results folder (skip generation)
  *   pnpm compare --results-root <dir> # Read comparison results from this root folder
  *   pnpm compare --report-all       # Include passing pages in the HTML report
@@ -56,6 +57,7 @@ import {
 } from './storage-flags.js';
 import { HARNESS_PORT, HARNESS_URL, isPortOpen, ensureHarnessRunning, stopHarness } from './harness-utils.js';
 import { ensureLocalTarballInstalled } from './workspace-utils.js';
+import { normalizeDocPath } from './utils.js';
 
 // Configuration
 const SCREENSHOTS_DIR = 'screenshots';
@@ -225,6 +227,7 @@ async function runGenerate(options: {
   filters: string[];
   matches: string[];
   excludes: string[];
+  docs: string[];
   append?: boolean;
   browser?: BrowserName;
   scaleFactor?: number;
@@ -240,6 +243,9 @@ async function runGenerate(options: {
   }
   for (const exclude of options.excludes) {
     args.push('--exclude', exclude);
+  }
+  for (const doc of options.docs) {
+    args.push('--doc', doc);
   }
   if (options.append) {
     args.push('--append');
@@ -278,6 +284,7 @@ async function runBaseline(options: {
   filters: string[];
   matches: string[];
   excludes: string[];
+  docs: string[];
   browserArg?: string;
   scaleFactor?: number;
   storageArgs?: string[];
@@ -294,6 +301,9 @@ async function runBaseline(options: {
   }
   for (const exclude of options.excludes) {
     args.push('--exclude', exclude);
+  }
+  for (const doc of options.docs) {
+    args.push('--doc', doc);
   }
   if (options.scaleFactor && options.scaleFactor !== 1) {
     args.push('--scale-factor', String(options.scaleFactor));
@@ -446,6 +456,14 @@ export function matchesFilterWithBrowserPrefix(
  */
 function normalizePath(pathValue: string): string {
   return pathValue.replace(/\\/g, '/');
+}
+
+export function docPathToScreenshotFilter(pathValue: string): string {
+  const normalized = normalizeDocPath(pathValue);
+  const parsed = path.posix.parse(normalized);
+  const baseName = sanitizeFilename(parsed.name || parsed.base);
+  const directory = normalizePath(parsed.dir);
+  return directory && directory !== '.' ? normalizePath(path.posix.join(directory, baseName)) : baseName;
 }
 
 /**
@@ -862,9 +880,10 @@ async function fillMissingDocs(
     console.log(colors.muted(`Filling ${missingDocs.length} missing doc(s)...`));
     await runGenerate({
       outputFolder: resultsFolderName,
-      filters: missingDocs,
+      filters: [],
       matches: [],
       excludes,
+      docs: missingDocs,
       append: true,
       browser,
       scaleFactor,
@@ -1739,6 +1758,7 @@ function parseArgs(): {
   filters: string[];
   matches: string[];
   excludes: string[];
+  docs: string[];
   baselineRoot?: string;
   resultsRoot?: string;
   resultsPrefix?: string;
@@ -1762,6 +1782,7 @@ function parseArgs(): {
   const filters: string[] = [];
   const matches: string[] = [];
   const excludes: string[] = [];
+  const docs: string[] = [];
   let baselineRoot: string | undefined;
   let resultsRoot: string | undefined;
   let resultsPrefix: string | undefined;
@@ -1802,6 +1823,12 @@ function parseArgs(): {
       const rawExclude = args[i + 1].trim();
       if (rawExclude) {
         excludes.push(rawExclude);
+      }
+      i++;
+    } else if (args[i] === '--doc' && args[i + 1]) {
+      const rawDoc = args[i + 1].trim();
+      if (rawDoc) {
+        docs.push(rawDoc);
       }
       i++;
     } else if (args[i] === '--baseline-root' && args[i + 1]) {
@@ -1860,6 +1887,7 @@ function parseArgs(): {
     filters,
     matches,
     excludes,
+    docs,
     baselineRoot,
     resultsRoot,
     resultsPrefix,
@@ -1889,6 +1917,7 @@ async function main(): Promise<void> {
     filters,
     matches,
     excludes,
+    docs,
     baselineRoot,
     resultsRoot,
     resultsPrefix,
@@ -1904,6 +1933,15 @@ async function main(): Promise<void> {
     mode,
     docsDir,
   } = parseArgs();
+  const normalizedDocs = Array.from(new Set(docs.map((value) => normalizeDocPath(value)).filter(Boolean)));
+  const docFilters = normalizedDocs.map((docPath) => docPathToScreenshotFilter(docPath));
+  const effectiveFilters = docFilters.length > 0 ? docFilters : filters;
+  const generationFilters = normalizedDocs.length > 0 ? [] : filters;
+
+  if (docFilters.length > 0 && filters.length > 0) {
+    console.warn(colors.warning('Using --doc selectors and ignoring --filter values for comparison scope.'));
+  }
+
   const storageArgs = buildStorageArgs(mode, docsDir);
   const normalizedResultsPrefix = normalizePrefix(resultsPrefix);
   const normalizedReportTrim = normalizePrefix(reportTrim);
@@ -1911,7 +1949,7 @@ async function main(): Promise<void> {
     reportMode === 'interactions' ||
     (normalizedResultsPrefix ? normalizedResultsPrefix.startsWith('interactions/') : false) ||
     (normalizedReportTrim ? normalizedReportTrim.startsWith('interactions/') : false) ||
-    filters.some((value) => value.startsWith('interactions/'));
+    effectiveFilters.some((value) => value.startsWith('interactions/'));
   const baselinePrefix = isInteractionMode ? 'baselines-interactions' : BASELINES_DIR;
   const baselineDir = resolveBaselineRoot(baselinePrefix, mode, baselineRoot);
   const resolvedResultsRoot = resultsRoot ? resolvePathInput(resultsRoot) : undefined;
@@ -1948,8 +1986,14 @@ async function main(): Promise<void> {
   const ensureBaseline = async (version: string, versionSpec?: string, force: boolean = false): Promise<void> => {
     if (mode === 'local') {
       const baselinePath = path.join(baselineDir, version);
-      if (!fs.existsSync(baselinePath)) {
-        console.log(colors.info(`📸 Baseline ${version} not found locally. Generating...`));
+      const baselineExists = fs.existsSync(baselinePath);
+      const shouldEnsureSelectedDocs = baselineExists && normalizedDocs.length > 0;
+      if (!baselineExists || shouldEnsureSelectedDocs) {
+        if (!baselineExists) {
+          console.log(colors.info(`📸 Baseline ${version} not found locally. Generating...`));
+        } else {
+          console.log(colors.info(`📸 Ensuring baseline coverage for ${normalizedDocs.length} selected doc(s)...`));
+        }
         const script =
           baselinePrefix === 'baselines-interactions'
             ? 'scripts/baseline-interactions.ts'
@@ -1964,9 +2008,10 @@ async function main(): Promise<void> {
         await runBaseline({
           script,
           versionSpec,
-          filters,
+          filters: generationFilters,
           matches,
           excludes,
+          docs: script === 'scripts/baseline-visual.ts' ? normalizedDocs : [],
           browserArg,
           scaleFactor,
           storageArgs,
@@ -1983,7 +2028,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
+    const hasFilters = effectiveFilters.length > 0 || matches.length > 0 || excludes.length > 0;
     const browserFilters = browserArg ? browsers : undefined;
     if (refreshBaselines) {
       if (hasFilters || browserFilters) {
@@ -1991,7 +2036,7 @@ async function main(): Promise<void> {
           prefix: baselinePrefix,
           version,
           localRoot: baselineDir,
-          filters,
+          filters: effectiveFilters,
           matches,
           excludes,
           browsers: browserFilters,
@@ -2028,8 +2073,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const baselineSpecForEnsure = baselineVersion || normalizedDocs.length > 0 ? baselineSelection?.spec : undefined;
+
   if (!targetVersion) {
-    await ensureBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
+    await ensureBaseline(baselineToUse, baselineSpecForEnsure);
   }
 
   if (targetVersion) {
@@ -2047,10 +2094,19 @@ async function main(): Promise<void> {
     await runVersionSwitch(targetSpec);
     console.log(colors.muted(`Generating: ${targetLabel}`));
     for (const browser of browsers) {
-      await runGenerate({ outputFolder: targetLabel, filters, matches, excludes, browser, scaleFactor, storageArgs });
+      await runGenerate({
+        outputFolder: targetLabel,
+        filters: generationFilters,
+        matches,
+        excludes,
+        docs: normalizedDocs,
+        browser,
+        scaleFactor,
+        storageArgs,
+      });
     }
 
-    await ensureBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
+    await ensureBaseline(baselineToUse, baselineSpecForEnsure);
 
     resultsFolderName = targetLabel;
 
@@ -2059,7 +2115,7 @@ async function main(): Promise<void> {
       await fillMissingDocs(
         resultsFolderName,
         baselineFolder,
-        filters,
+        effectiveFilters,
         matches,
         excludes,
         browser,
@@ -2083,9 +2139,10 @@ async function main(): Promise<void> {
       for (const browser of browsers) {
         await runGenerate({
           outputFolder: resultsFolderName,
-          filters,
+          filters: generationFilters,
           matches,
           excludes,
+          docs: normalizedDocs,
           browser,
           scaleFactor,
           storageArgs,
@@ -2097,7 +2154,7 @@ async function main(): Promise<void> {
         await fillMissingDocs(
           resultsFolderName,
           baselineFolder,
-          filters,
+          effectiveFilters,
           matches,
           excludes,
           browser,
@@ -2124,7 +2181,7 @@ async function main(): Promise<void> {
 
   const resolvedMode =
     reportMode ??
-    (reportTrim || filters.some((value) => value.startsWith('interactions/')) ? 'interactions' : 'visual');
+    (reportTrim || effectiveFilters.some((value) => value.startsWith('interactions/')) ? 'interactions' : 'visual');
   const resolvedTrim = reportTrim ?? (resolvedMode === 'interactions' ? 'interactions/' : undefined);
   const ignorePrefixes = resolvedMode === 'visual' ? ['interactions/'] : undefined;
 
@@ -2134,7 +2191,10 @@ async function main(): Promise<void> {
   for (const browser of browsers) {
     // Build compact config line
     const configParts = [`Baseline: ${baselineToUse}`, `Browser: ${browser}`];
-    if (filters.length > 0) configParts.push(`Filter: "${filters.join(', ')}"`);
+    if (docFilters.length > 0) configParts.push(`Docs: ${docFilters.length}`);
+    if (docFilters.length === 0 && effectiveFilters.length > 0) {
+      configParts.push(`Filter: "${effectiveFilters.join(', ')}"`);
+    }
     if (matches.length > 0) configParts.push(`Match: "${matches.join(', ')}"`);
     if (excludes.length > 0) configParts.push(`Exclude: "${excludes.join(', ')}"`);
     if (threshold > 0) configParts.push(`Threshold: ${threshold}%`);
@@ -2151,7 +2211,7 @@ async function main(): Promise<void> {
         resultsPrefix,
         browser,
         outputFolderName,
-        filters,
+        filters: effectiveFilters,
         matches,
         excludes,
         ignorePrefixes,
@@ -2188,7 +2248,7 @@ async function main(): Promise<void> {
               resultsPrefix,
               browser,
               outputFolderName,
-              filters,
+              filters: effectiveFilters,
               matches,
               excludes,
               ignorePrefixes,

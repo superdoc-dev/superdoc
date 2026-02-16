@@ -494,7 +494,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     if (!telemetryConfig?.enabled) {
-      console.debug('[super-editor] Telemetry: disabled');
       return;
     }
 

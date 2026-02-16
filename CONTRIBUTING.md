@@ -22,7 +22,7 @@ Contributing isn't just about writing code. Here are several ways you can help:
 Open a .docx in SuperDoc and compare it with Microsoft Word. If something looks different, [open an issue](https://github.com/superdoc-dev/superdoc/issues/new?template=bug-report.yml) with the file attached. Good bug reports with reproduction files are incredibly valuable.
 
 **Improve documentation**
-Our docs live at [docs.superdoc.dev](https://docs.superdoc.dev). Fix typos, add code examples, improve explanations, or write guides. Documentation PRs are always welcome and a great way to get started.
+Our docs live in `apps/docs/` ([docs.superdoc.dev](https://docs.superdoc.dev)) and are built with Mintlify. Fix typos, add code examples, improve explanations, or write guides. Run `pnpm run dev:docs` to preview locally. Documentation PRs are always welcome and a great way to get started.
 
 **Add examples and integrations**
 Create example projects showing SuperDoc with different frameworks (Next.js, Nuxt, Remix, etc.) in the `examples/` directory.

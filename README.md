@@ -151,7 +151,22 @@ See our [Contributing Guide](CONTRIBUTING.md) for more details.
 - [✉️ Email](mailto:q@superdoc.dev?subject=[SuperDoc]%20Project%20inquiry)
 - [⛵️ Website](https://superdoc.dev)
 
-## Contributors
+## Community Contributors
+
+Special thanks to these community members who have contributed code to SuperDoc:
+
+<a href="https://github.com/johanneswilm"><img src="https://github.com/johanneswilm.png" width="50" height="50" alt="johanneswilm" title="Johannes Wilm" /></a>
+<a href="https://github.com/financialvice"><img src="https://github.com/financialvice.png" width="50" height="50" alt="financialvice" title="financialvice" /></a>
+<a href="https://github.com/luciorubeens"><img src="https://github.com/luciorubeens.png" width="50" height="50" alt="luciorubeens" title="Lúcio Caetano" /></a>
+<a href="https://github.com/Dannyhvv"><img src="https://github.com/Dannyhvv.png" width="50" height="50" alt="Dannyhvv" title="Dannyhvv" /></a>
+<a href="https://github.com/henriquedevelops"><img src="https://github.com/henriquedevelops.png" width="50" height="50" alt="henriquedevelops" title="henriquedevelops" /></a>
+<a href="https://github.com/ybrodsky"><img src="https://github.com/ybrodsky.png" width="50" height="50" alt="ybrodsky" title="Yael Brodsky" /></a>
+<a href="https://github.com/icaroharry"><img src="https://github.com/icaroharry.png" width="50" height="50" alt="icaroharry" title="Ícaro Harry" /></a>
+<a href="https://github.com/asumaran"><img src="https://github.com/asumaran.png" width="50" height="50" alt="asumaran" title="Alfredo Sumaran" /></a>
+
+Want to see your avatar here? Check our [Contributing Guide](CONTRIBUTING.md) to get started.
+
+## Team
 
 <a href="https://github.com/superdoc-dev/superdoc/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=superdoc-dev/superdoc" />

@@ -60,8 +60,9 @@
   "module": "./dist/superdoc.es.js",
   "scripts": {
     "dev": "vite",
-    "dev:collab": "concurrently -k -n VITE,COLLAB -c cyan,green \"vite\" \"node src/dev/collab-server.js\"",
-    "collab-server": "node src/dev/collab-server.js",
+    "dev:collab": "pnpm run dev:collab:hocuspocus",
+    "dev:collab:hocuspocus": "concurrently -k -n VITE,COLLAB -c cyan,green \"vite\" \"node src/dev/hocuspocus-server.js\"",
+    "dev:collab:liveblocks": "concurrently -k -n VITE,LIVEBLOCKS -c cyan,magenta \"vite\" \"node src/dev/liveblocks-server.js\"",
     "build": "vite build && pnpm run build:umd",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
     "postbuild": "node ./scripts/ensure-types.cjs",

@@ -1,4 +1,4 @@
-import { isEqual } from 'lodash';
+import { isEqual, isMatch } from 'lodash';
 
 const normalizeAttrs = (attrs = {}) => {
   return Object.fromEntries(Object.entries(attrs).filter(([, value]) => value !== null && value !== undefined));
@@ -56,6 +56,8 @@ const markAttrsIncludeSnapshotAttrs = (mark, snapshot) => {
   if (Object.keys(normalizedSnapshotAttrs).length === 0) {
     return false;
   }
+
+  return isMatch(normalizedMarkAttrs, normalizedSnapshotAttrs);
 };
 
 export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {

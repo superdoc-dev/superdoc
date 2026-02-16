@@ -1,4 +1,5 @@
 // @ts-nocheck
+// risk-label CI test — sensitive path
 import { Mark, Attribute } from '@core/index.js';
 import { createCascadeToggleCommands } from '@extensions/shared/cascade-toggle.js';
 

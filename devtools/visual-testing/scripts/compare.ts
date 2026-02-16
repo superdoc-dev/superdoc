@@ -28,9 +28,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { PNG } from 'pngjs';
-import pixelmatch from 'pixelmatch';
 import { generateResultsFolderName, getSuperdocVersion, sanitizeFilename } from './generate-refs.js';
 import { buildDocRelativePath, createCorpusProvider, type CorpusProvider } from './corpus-provider.js';
 import { writeHtmlReport } from './report.js';
@@ -59,6 +58,10 @@ import {
 import { HARNESS_PORT, HARNESS_URL, isPortOpen, ensureHarnessRunning, stopHarness } from './harness-utils.js';
 import { ensureLocalTarballInstalled } from './workspace-utils.js';
 import { normalizeDocPath } from './utils.js';
+
+const require = createRequire(import.meta.url);
+const { PNG } = require('pngjs') as typeof import('pngjs');
+const pixelmatch = require('pixelmatch') as typeof import('pixelmatch').default;
 
 // Configuration
 const SCREENSHOTS_DIR = 'screenshots';
@@ -910,8 +913,9 @@ async function augmentReportWithSourceDocs(
     return report;
   }
 
-  const provider = await createCorpusProvider(options.providerOptions);
+  let provider: CorpusProvider | null = null;
   try {
+    provider = await createCorpusProvider(options.providerOptions);
     const docInfoMap = await buildDocumentInfoMap(provider);
     const sourceDocByKey = new Map<string, SourceDocMetadata | null>();
 
@@ -971,8 +975,15 @@ async function augmentReportWithSourceDocs(
     }
 
     return report;
+  } catch (error) {
+    console.warn(
+      colors.warning(
+        `Skipping source doc metadata enrichment: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+    return report;
   } finally {
-    await provider.close?.();
+    await provider?.close?.();
   }
 }
 

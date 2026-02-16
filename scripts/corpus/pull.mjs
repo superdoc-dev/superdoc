@@ -113,10 +113,14 @@ async function loadCorpusDocs(client) {
     return {
       source: REGISTRY_KEY,
       docs: registry.docs
-        .map((doc) => ({
-          ...doc,
-          relative_path: buildDocRelativePath(doc),
-        }))
+        .map((doc) => {
+          const relativePath = buildDocRelativePath(doc);
+          return {
+            ...doc,
+            relative_path: relativePath,
+            object_key: relativePath,
+          };
+        })
         .filter((doc) => doc.relative_path && doc.relative_path.toLowerCase().endsWith('.docx')),
     };
   }
@@ -125,10 +129,12 @@ async function loadCorpusDocs(client) {
   const docs = legacyKeys
     .filter((key) => key.toLowerCase().endsWith('.docx'))
     .map((key) => {
+      const objectKey = normalizePath(key);
       const relativePath = normalizePath(key.replace(/^documents\//, ''));
       return {
         ...coerceDocEntryFromRelativePath(relativePath),
         relative_path: relativePath,
+        object_key: objectKey,
       };
     });
 
@@ -204,6 +210,7 @@ async function main() {
 
     for (const doc of selectedDocs) {
       const relativePath = normalizePath(doc.relative_path);
+      const objectKey = normalizePath(doc.object_key ?? relativePath);
       const destinationPath = path.join(destinationRoot, relativePath);
 
       if (!args.force && fs.existsSync(destinationPath)) {
@@ -217,7 +224,7 @@ async function main() {
         continue;
       }
 
-      await client.getObjectToFile(relativePath, destinationPath);
+      await client.getObjectToFile(objectKey, destinationPath);
       downloaded += 1;
 
       if (downloaded % 25 === 0 || downloaded === selectedDocs.length) {

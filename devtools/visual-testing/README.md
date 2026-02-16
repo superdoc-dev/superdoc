@@ -72,8 +72,8 @@ Examples:
 - `pnpm compare` compare visual + interaction snapshots.
 - `pnpm compare:visual` compare visual snapshots only.
 - `pnpm compare:interactions` compare interaction snapshots only.
-- `pnpm upload --folder <name> <file.docx>` upload a single docx into the corpus and update `registry.json`.
-- `pnpm get-corpus [dest] --filter <name>` download corpus docs into a local folder (default: `./test-docs`).
+- `pnpm upload --folder <name> <file.docx>` upload a single docx via the shared repo corpus CLI and update `registry.json`.
+- `pnpm get-corpus [dest] --filter <name>` download corpus docs via the shared repo corpus CLI (default: `./test-docs`).
 - `pnpm get-docx <path>` download a single docx into a temp folder (prints the local path).
 - `pnpm filters` list filterable folders for `--filter`.
 - `pnpm clear:all` remove all baselines, screenshots, and results.
@@ -96,6 +96,7 @@ Notes:
 - `--filter <prefix>` match by path/story prefix (e.g. `layout`, `sd-1401`).
 - `--match <text>` match by substring anywhere in path/story.
 - `--exclude <prefix>` skip by path/story prefix.
+- `--doc <relative.docx>` target specific corpus docs on visual commands (repeatable), e.g. `comments-tcs/basic-comments.docx`.
 - Repeat `--filter`, `--match`, or `--exclude` to combine multiple values.
 - `--force` regenerate baselines even if they already exist.
 - `--skip-existing` skip docs/stories that already have outputs.
@@ -129,6 +130,23 @@ Notes:
 Open the HTML file in your browser.
 
 Word comparisons are opt-in. Use `--include-word` and install `superdoc-benchmark` globally.
+
+## Word Overlay In Report (Visual Only)
+
+Visual reports now include a per-document `Show Word Overlay` button next to `Open in Word`.
+
+What it does:
+- captures a fresh Word reference for that document through the local sidecar
+- overlays the Word page on top of both `Baseline` and `Actual` images
+- exposes overlay controls (opacity + blend mode) in the report
+
+Requirements:
+- `superdoc-benchmark` installed globally (`npm i -g @superdoc-dev/visual-benchmarks`)
+- sidecar running from repo root: `pnpm word-benchmark-sidecar`
+
+Notes:
+- this is available on visual reports only (not interaction reports)
+- the report calls `http://127.0.0.1:9185` by default; override with `?wordOverlayService=http://host:port`
 
 ## Interaction stories
 

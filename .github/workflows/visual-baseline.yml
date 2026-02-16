@@ -6,6 +6,10 @@ permissions:
 on:
   workflow_dispatch:
   workflow_call:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/visual/tests/**/*.spec.ts'
 
 concurrency:
   group: visual-baseline
@@ -74,5 +78,5 @@ jobs:
         working-directory: tests/visual
 
       - name: Upload baselines to R2
-        run: pnpm baseline:upload
+        run: pnpm exec tsx scripts/upload-baselines.ts
         working-directory: tests/visual

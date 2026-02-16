@@ -46,6 +46,11 @@ interface SuperDocConfig {
     commentsReadonly?: boolean;
     trackChanges?: boolean;
   };
+  telemetry?: {
+    enabled: boolean;
+    endpoint?: string;
+    metadata?: Record<string, unknown>;
+  };
   document?: {
     data: File;
     type?: 'docx' | 'pdf';
@@ -148,6 +153,7 @@ function buildSuperdocConfig(): SuperDocConfig {
     selector: '#editor',
     pagination: config.layout,
     useLayoutEngine: config.layout,
+    telemetry: { enabled: false },
     onReady,
     onTransaction,
     modules: {},

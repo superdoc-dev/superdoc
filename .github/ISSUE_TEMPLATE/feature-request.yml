@@ -1,0 +1,37 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels:
+  - "stage: triage"
+  - "type: feature"
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or pain point.
+      placeholder: |
+        I'm trying to [do X] but SuperDoc doesn't support [Y] yet.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work? Include code examples or mockups if helpful.
+      placeholder: |
+        It would be great if SuperDoc could...
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you tried any workarounds?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, sample files, links to related issues, etc.

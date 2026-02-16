@@ -245,6 +245,11 @@ export function writeHtmlReport(
         border: 1px solid rgba(15, 25, 45, 0.1);
       }
 
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
       main {
         padding: 24px 28px 60px;
       }
@@ -318,8 +323,21 @@ export function writeHtmlReport(
         color: var(--ink-700);
       }
 
-      summary .approve-btn {
+      .summary-actions {
         margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .summary-overlay-row {
+        padding: 0 20px 10px;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .summary-overlay-row[hidden] {
+        display: none !important;
       }
 
       .group-body {
@@ -458,6 +476,89 @@ export function writeHtmlReport(
         border-color: rgba(82, 212, 166, 0.6);
       }
 
+      .word-btn,
+      .word-overlay-btn {
+        border: 1px solid rgba(15, 25, 45, 0.18);
+        background: rgba(15, 25, 45, 0.06);
+        color: var(--ink-700);
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .word-btn:hover:not(:disabled),
+      .word-overlay-btn:hover:not(:disabled) {
+        background: rgba(15, 25, 45, 0.12);
+        border-color: rgba(15, 25, 45, 0.28);
+      }
+
+      .word-overlay-controls {
+        border: 1px solid rgba(15, 25, 45, 0.14);
+        border-radius: 10px;
+        padding: 6px 8px;
+        background: rgba(255, 255, 255, 0.82);
+        display: grid;
+        gap: 6px;
+        min-width: 220px;
+      }
+
+      .word-overlay-controls[hidden] {
+        display: none !important;
+      }
+
+      .word-overlay-controls__row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(100px, 1fr));
+        gap: 8px;
+        align-items: end;
+      }
+
+      .word-overlay-controls__label {
+        display: grid;
+        gap: 4px;
+        font-size: 11px;
+        color: #475569;
+        font-weight: 600;
+      }
+
+      .word-overlay-controls__label input[type='range'] {
+        width: 100%;
+        margin: 0;
+      }
+
+      .word-overlay-controls__label select {
+        border: 1px solid rgba(148, 163, 184, 0.6);
+        border-radius: 6px;
+        padding: 4px 6px;
+        font-size: 11px;
+        background: #ffffff;
+        color: #1e293b;
+      }
+
+      .word-overlay-controls__status {
+        margin: 0;
+        font-size: 12px;
+        color: #166534;
+        font-weight: 600;
+      }
+
+      .word-overlay-controls__error {
+        margin: 0;
+        font-size: 12px;
+        color: #b91c1c;
+        font-weight: 600;
+      }
+
+      .word-overlay-controls__hint {
+        margin: 0;
+        font-size: 12px;
+        color: #64748b;
+      }
+
       details.group.approved {
         display: none;
       }
@@ -557,13 +658,39 @@ export function writeHtmlReport(
         position: relative;
       }
 
-      .image-frame img {
+      .image-frame .image-main {
         width: 100%;
         max-width: 1500px;
         height: auto;
         border-radius: 10px;
         box-shadow: 0 10px 24px rgba(15, 25, 45, 0.12);
         background: #ffffff;
+      }
+
+      .word-overlay-host {
+        position: relative;
+        width: 100%;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .word-overlay-host .image-main {
+        display: block;
+      }
+
+      .word-overlay-image {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: fill;
+        pointer-events: none;
+        z-index: 2;
+        display: none;
+      }
+
+      .word-overlay-image.is-visible {
+        display: block;
       }
 
       .image-missing {
@@ -698,11 +825,309 @@ export function writeHtmlReport(
       const trimPrefix = ${JSON.stringify(trimPrefix)};
       const reportMode = ${JSON.stringify(mode)};
       const isInteractions = reportMode === 'interactions';
+      const reportQueryParams = new URLSearchParams(window.location.search);
+      const wordBaselineServiceUrl =
+        reportQueryParams.get('wordOverlayService') ||
+        reportQueryParams.get('wordBaselineService') ||
+        'http://127.0.0.1:9185';
+      const WORD_OVERLAY_BLEND_MODES = ['difference', 'normal', 'multiply', 'screen', 'overlay'];
+      const DEFAULT_WORD_OVERLAY_OPACITY = 0.45;
+      const DEFAULT_WORD_OVERLAY_BLEND_MODE = 'difference';
 
       function formatMilestoneLabel(baseName) {
         const stripped = baseName.replace(/^\\d+[-_]?/, '');
         const cleaned = stripped.replace(/[-_]+/g, ' ').trim();
         return cleaned || baseName;
+      }
+
+      function clampWordOverlayOpacity(value) {
+        if (!Number.isFinite(value)) return DEFAULT_WORD_OVERLAY_OPACITY;
+        return Math.max(0, Math.min(1, value));
+      }
+
+      function parsePageNumberFromBaseName(baseName) {
+        if (typeof baseName !== 'string') return null;
+        const match = baseName.match(/^p(\\d+)$/i);
+        if (!match) return null;
+        const parsed = Number.parseInt(match[1], 10);
+        if (!Number.isFinite(parsed) || parsed <= 0) return null;
+        return parsed;
+      }
+
+      function createWordOverlayController(sourceDoc) {
+        const sourceLocalPath = typeof sourceDoc?.localPath === 'string' ? sourceDoc.localPath : '';
+        const sourceRelativePath = typeof sourceDoc?.relativePath === 'string' ? sourceDoc.relativePath : '';
+        const hasLocalSource = Boolean(sourceLocalPath);
+
+        const state = {
+          enabled: false,
+          isLoading: false,
+          pages: [],
+          opacity: DEFAULT_WORD_OVERLAY_OPACITY,
+          blendMode: DEFAULT_WORD_OVERLAY_BLEND_MODE,
+          status: '',
+          error: '',
+        };
+
+        const slotsByPage = new Map();
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'word-overlay-btn';
+
+        const controls = document.createElement('div');
+        controls.className = 'word-overlay-controls';
+        controls.hidden = true;
+        const controlsRow = document.createElement('div');
+        controlsRow.className = 'summary-overlay-row';
+        controlsRow.hidden = true;
+        controlsRow.appendChild(controls);
+
+        const row = document.createElement('div');
+        row.className = 'word-overlay-controls__row';
+
+        const opacityWrap = document.createElement('label');
+        opacityWrap.className = 'word-overlay-controls__label';
+        const opacityText = document.createElement('span');
+        const opacityInput = document.createElement('input');
+        opacityInput.type = 'range';
+        opacityInput.min = '0';
+        opacityInput.max = '1';
+        opacityInput.step = '0.01';
+        opacityInput.value = String(state.opacity);
+        opacityWrap.appendChild(opacityText);
+        opacityWrap.appendChild(opacityInput);
+
+        const blendWrap = document.createElement('label');
+        blendWrap.className = 'word-overlay-controls__label';
+        const blendText = document.createElement('span');
+        blendText.textContent = 'Blend';
+        const blendSelect = document.createElement('select');
+        WORD_OVERLAY_BLEND_MODES.forEach((mode) => {
+          const option = document.createElement('option');
+          option.value = mode;
+          option.textContent = mode;
+          blendSelect.appendChild(option);
+        });
+        blendSelect.value = state.blendMode;
+        blendWrap.appendChild(blendText);
+        blendWrap.appendChild(blendSelect);
+
+        row.appendChild(opacityWrap);
+        row.appendChild(blendWrap);
+
+        const statusLine = document.createElement('p');
+        statusLine.className = 'word-overlay-controls__status';
+
+        const errorLine = document.createElement('p');
+        errorLine.className = 'word-overlay-controls__error';
+
+        const hintLine = document.createElement('p');
+        hintLine.className = 'word-overlay-controls__hint';
+
+        controls.appendChild(row);
+        controls.appendChild(statusLine);
+        controls.appendChild(errorLine);
+        controls.appendChild(hintLine);
+
+        function getOpacityLabel() {
+          return Math.round(state.opacity * 100) + '%';
+        }
+
+        function applyOverlayForPage(pageNumber) {
+          const pageSlots = slotsByPage.get(pageNumber);
+          if (!pageSlots || pageSlots.length === 0) return;
+
+          const pageUrl = state.pages[pageNumber - 1] || '';
+          const shouldShow = state.enabled && Boolean(pageUrl);
+
+          pageSlots.forEach((overlayImage) => {
+            if (!shouldShow) {
+              overlayImage.classList.remove('is-visible');
+              overlayImage.removeAttribute('src');
+              return;
+            }
+
+            if (overlayImage.getAttribute('src') !== pageUrl) {
+              overlayImage.setAttribute('src', pageUrl);
+            }
+            overlayImage.style.opacity = String(state.opacity);
+            overlayImage.style.mixBlendMode = state.blendMode;
+            overlayImage.classList.add('is-visible');
+          });
+        }
+
+        function applyOverlayToAllPages() {
+          slotsByPage.forEach((_, pageNumber) => {
+            applyOverlayForPage(pageNumber);
+          });
+        }
+
+        function shouldShowControls() {
+          return state.enabled;
+        }
+
+        function renderControls() {
+          controls.hidden = !shouldShowControls();
+          controlsRow.hidden = controls.hidden;
+
+          const controlsDisabled = state.isLoading || state.pages.length === 0;
+          opacityInput.disabled = controlsDisabled;
+          blendSelect.disabled = controlsDisabled;
+          opacityInput.value = String(state.opacity);
+          blendSelect.value = state.blendMode;
+          opacityText.textContent = 'Opacity ' + getOpacityLabel();
+
+          statusLine.hidden = true;
+          statusLine.textContent = '';
+          errorLine.hidden = true;
+          errorLine.textContent = '';
+          hintLine.hidden = true;
+          hintLine.textContent = '';
+        }
+
+        function renderButton() {
+          if (state.isLoading) {
+            button.textContent = 'Generating Word Overlay...';
+          } else if (state.enabled) {
+            button.textContent = 'Hide Word Overlay';
+          } else {
+            button.textContent = 'Show Word Overlay';
+          }
+
+          button.disabled = !hasLocalSource || state.isLoading;
+          if (!hasLocalSource) {
+            button.title = 'Doc not available locally.';
+          } else if (state.enabled) {
+            button.title = 'Hide the Word overlay on baseline and actual views.';
+          } else {
+            button.title = 'Generate Word reference and show overlay on baseline + actual views.';
+          }
+        }
+
+        function toOverlayErrorMessage(error) {
+          const rawMessage = error instanceof Error ? error.message : String(error);
+          if (rawMessage.includes('Failed to fetch')) {
+            return (
+              'Unable to reach Word baseline sidecar at ' +
+              wordBaselineServiceUrl +
+              '. Start it with "pnpm word-benchmark-sidecar".'
+            );
+          }
+          return rawMessage;
+        }
+
+        async function captureWordReference() {
+          state.isLoading = true;
+          state.error = '';
+          state.status = 'Generating Word reference...';
+          renderButton();
+          renderControls();
+
+          try {
+            const response = await fetch(wordBaselineServiceUrl + '/api/word-baseline/from-path', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                localPath: sourceLocalPath,
+                fileName: sourceRelativePath || 'document.docx',
+              }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload?.error || 'Word reference request failed (' + response.status + ')');
+            }
+
+            if (!Array.isArray(payload?.pages) || payload.pages.length === 0) {
+              throw new Error('Word reference request completed but returned no page images');
+            }
+
+            state.pages = payload.pages.filter((entry) => typeof entry === 'string' && entry);
+            if (state.pages.length === 0) {
+              throw new Error('Word reference request completed but returned no valid page URLs');
+            }
+
+            state.enabled = true;
+            state.status = 'Generated ' + state.pages.length + ' Word reference page(s).';
+            state.error = '';
+            applyOverlayToAllPages();
+          } catch (error) {
+            state.enabled = false;
+            state.status = '';
+            state.error = toOverlayErrorMessage(error);
+            applyOverlayToAllPages();
+          } finally {
+            state.isLoading = false;
+            renderButton();
+            renderControls();
+          }
+        }
+
+        async function onToggleClick(event) {
+          event.preventDefault();
+          event.stopPropagation();
+
+          if (button.disabled) return;
+
+          if (state.enabled) {
+            state.enabled = false;
+            state.status = '';
+            applyOverlayToAllPages();
+            renderButton();
+            renderControls();
+            return;
+          }
+
+          if (state.pages.length === 0) {
+            await captureWordReference();
+            return;
+          }
+
+          state.enabled = true;
+          state.status = '';
+          state.error = '';
+          applyOverlayToAllPages();
+          renderButton();
+          renderControls();
+        }
+
+        function registerOverlaySlot(pageNumber, overlayImage) {
+          if (!Number.isFinite(pageNumber) || pageNumber <= 0) return;
+          if (!(overlayImage instanceof HTMLImageElement)) return;
+
+          if (!slotsByPage.has(pageNumber)) {
+            slotsByPage.set(pageNumber, []);
+          }
+          slotsByPage.get(pageNumber).push(overlayImage);
+          applyOverlayForPage(pageNumber);
+        }
+
+        button.addEventListener('click', onToggleClick);
+
+        opacityInput.addEventListener('input', () => {
+          state.opacity = clampWordOverlayOpacity(Number.parseFloat(opacityInput.value));
+          applyOverlayToAllPages();
+          renderControls();
+        });
+
+        blendSelect.addEventListener('change', () => {
+          state.blendMode = String(blendSelect.value || DEFAULT_WORD_OVERLAY_BLEND_MODE);
+          applyOverlayToAllPages();
+          renderControls();
+        });
+
+        renderButton();
+        renderControls();
+
+        return {
+          button,
+          controlsRow,
+          controls,
+          registerOverlaySlot,
+        };
       }
 
       items.forEach((item) => {
@@ -755,6 +1180,7 @@ export function writeHtmlReport(
           diffPercent: item.diffPercent,
           hasDiff: Boolean(item.diffPath),
           word: item.word || null,
+          sourceDoc: item.sourceDoc || null,
           milestoneLabel,
           storyName,
           storyDescription,
@@ -792,7 +1218,7 @@ export function writeHtmlReport(
         return badge;
       }
 
-      function buildImagePanel(kind, label, src, isMissing) {
+      function buildImagePanel(kind, label, src, isMissing, overlayConfig) {
         const panel = document.createElement('div');
         panel.className = 'image-panel';
         panel.dataset.kind = kind;
@@ -819,7 +1245,29 @@ export function writeHtmlReport(
           img.src = src;
           img.alt = label;
           img.loading = 'lazy';
-          frame.appendChild(img);
+          img.className = 'image-main';
+
+          const canAttachOverlay =
+            overlayConfig &&
+            Number.isFinite(overlayConfig.pageNumber) &&
+            typeof overlayConfig.registerOverlaySlot === 'function';
+
+          if (canAttachOverlay) {
+            const overlayHost = document.createElement('div');
+            overlayHost.className = 'word-overlay-host';
+            overlayHost.appendChild(img);
+
+            const overlayImage = document.createElement('img');
+            overlayImage.className = 'word-overlay-image';
+            overlayImage.alt = 'Word reference overlay';
+            overlayImage.loading = 'lazy';
+            overlayHost.appendChild(overlayImage);
+
+            frame.appendChild(overlayHost);
+            overlayConfig.registerOverlaySlot(overlayConfig.pageNumber, overlayImage);
+          } else {
+            frame.appendChild(img);
+          }
         }
 
         panel.appendChild(panelLabel);
@@ -851,7 +1299,14 @@ export function writeHtmlReport(
           tabs.appendChild(tab);
           tabMap.set(item.kind, tab);
 
-          const panel = buildImagePanel(item.kind, item.label, item.src, item.missing);
+          const overlayConfig =
+            Number.isFinite(item.overlayPageNumber) && typeof config.registerOverlaySlot === 'function'
+              ? {
+                  pageNumber: item.overlayPageNumber,
+                  registerOverlaySlot: config.registerOverlaySlot,
+                }
+              : null;
+          const panel = buildImagePanel(item.kind, item.label, item.src, item.missing, overlayConfig);
           panelMap.set(item.kind, panel);
         });
 
@@ -932,16 +1387,50 @@ export function writeHtmlReport(
           count.textContent = items.length + (items.length === 1 ? ' diff' : ' diffs');
         }
 
+        const sourceDoc = items.find((item) => item.sourceDoc)?.sourceDoc || null;
+        const actionWrap = document.createElement('div');
+        actionWrap.className = 'summary-actions';
+        let wordOverlayController = null;
+
+        if (!isInteractions) {
+          const wordBtn = document.createElement('button');
+          wordBtn.type = 'button';
+          wordBtn.className = 'word-btn';
+          wordBtn.textContent = 'Open in Word';
+
+          if (sourceDoc && sourceDoc.wordUrl) {
+            wordBtn.dataset.wordUrl = sourceDoc.wordUrl;
+            wordBtn.title = sourceDoc.relativePath
+              ? 'Open ' + sourceDoc.relativePath + ' in Word'
+              : 'Open in Word';
+          } else {
+            wordBtn.disabled = true;
+            wordBtn.title =
+              sourceDoc && sourceDoc.localPath
+                ? 'Open in Word is available on macOS only.'
+                : 'Doc not available locally.';
+          }
+
+          actionWrap.appendChild(wordBtn);
+
+          wordOverlayController = createWordOverlayController(sourceDoc);
+          actionWrap.appendChild(wordOverlayController.button);
+        }
+
         const approveBtn = document.createElement('button');
         approveBtn.type = 'button';
         approveBtn.className = 'approve-btn';
         approveBtn.textContent = 'Approve doc';
         approveBtn.dataset.group = dir;
+        actionWrap.appendChild(approveBtn);
 
         summary.appendChild(titleWrap);
         summary.appendChild(count);
-        summary.appendChild(approveBtn);
+        summary.appendChild(actionWrap);
         details.appendChild(summary);
+        if (wordOverlayController) {
+          details.appendChild(wordOverlayController.controlsRow);
+        }
 
         const body = document.createElement('div');
         body.className = 'group-body';
@@ -992,6 +1481,7 @@ export function writeHtmlReport(
           const diffSrc = item.hasDiff ? baseDir + item.baseName + '-diff.png' : '';
           const baselineSrc = baseDir + item.baseName + '-baseline.png';
           const actualSrc = baseDir + item.baseName + '-actual.png';
+          const pageNumber = parsePageNumberFromBaseName(item.baseName);
 
           const missingBaseline = item.reason === 'missing_in_baseline';
           const missingActual = item.reason === 'missing_in_results';
@@ -1015,10 +1505,23 @@ export function writeHtmlReport(
           const superdocSwitcher = createImageSwitcher({
             defaultKind: item.hasDiff ? 'diff' : (missingBaseline ? 'actual' : 'baseline'),
             items: [
-              { kind: 'baseline', label: 'Baseline', src: baselineSrc, missing: missingBaseline },
+              {
+                kind: 'baseline',
+                label: 'Baseline',
+                src: baselineSrc,
+                missing: missingBaseline,
+                overlayPageNumber: pageNumber,
+              },
               { kind: 'diff', label: 'Diff', src: diffSrc, missing: !item.hasDiff },
-              { kind: 'actual', label: 'Actual', src: actualSrc, missing: missingActual },
+              {
+                kind: 'actual',
+                label: 'Actual',
+                src: actualSrc,
+                missing: missingActual,
+                overlayPageNumber: pageNumber,
+              },
             ],
+            registerOverlaySlot: wordOverlayController ? wordOverlayController.registerOverlaySlot : null,
           });
 
           superdocBlock.appendChild(superdocSwitcher);
@@ -1255,6 +1758,18 @@ export function writeHtmlReport(
       }
 
       groupsContainer.addEventListener('click', (event) => {
+        const openWordBtn = event.target.closest('.word-btn');
+        if (openWordBtn) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (openWordBtn.disabled) return;
+          const wordUrl = openWordBtn.dataset.wordUrl;
+          if (wordUrl) {
+            window.location.assign(wordUrl);
+          }
+          return;
+        }
+
         const btn = event.target.closest('.approve-btn');
         if (!btn) return;
 

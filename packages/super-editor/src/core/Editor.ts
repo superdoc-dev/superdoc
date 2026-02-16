@@ -339,11 +339,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
 
-    // License key (defaults to community license)
-    licenseKey: COMMUNITY_LICENSE_KEY,
+    // License key (resolved in #initTelemetry; undefined means "not explicitly set")
+    licenseKey: undefined,
 
     // Telemetry configuration
-    telemetry: null,
+    telemetry: { enabled: true },
   };
 
   /**
@@ -483,17 +483,29 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #initTelemetry(): void {
     const { telemetry: telemetryConfig, licenseKey } = this.options;
 
-    // Skip if telemetry is not enabled
-    if (!telemetryConfig?.enabled) {
-      console.debug('[super-editor] Telemetry: disabled');
+    // Skip in test environments and when telemetry is not enabled
+    if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
       return;
     }
+
+    // Skip for sub-editors that are not primary document editors
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+      return;
+    }
+
+    if (!telemetryConfig?.enabled) {
+      return;
+    }
+
+    // Root-level licenseKey has a priority; fall back to deprecated telemetry.licenseKey
+    const resolvedLicenseKey =
+      licenseKey !== undefined ? licenseKey : (telemetryConfig.licenseKey ?? COMMUNITY_LICENSE_KEY);
 
     try {
       this.#telemetry = new Telemetry({
         enabled: true,
         endpoint: telemetryConfig.endpoint,
-        licenseKey: licenseKey === undefined ? COMMUNITY_LICENSE_KEY : licenseKey,
+        licenseKey: resolvedLicenseKey,
         metadata: telemetryConfig.metadata,
       });
       console.debug('[super-editor] Telemetry: enabled');
@@ -1317,25 +1329,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get viewport coordinates for a document position. Falls back to the PresentationEditor
-   * when running without a ProseMirror view (layout mode).
+   * Get viewport coordinates for a document position.
+   * In presentation mode the ProseMirror view is hidden off-screen, so we
+   * delegate to PresentationEditor which uses visual layout coordinates.
    */
   coordsAtPos(pos: number): ReturnType<PmEditorView['coordsAtPos']> | null {
-    if (this.view) {
-      return this.view.coordsAtPos(pos);
+    if (this.presentationEditor) {
+      return this.presentationEditor.coordsAtPos(pos);
     }
 
-    const layoutRects = this.presentationEditor?.getRangeRects?.(pos, pos);
-    if (Array.isArray(layoutRects) && layoutRects.length > 0) {
-      const rect = layoutRects[0];
-      return {
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-        width: rect.width,
-        height: rect.height,
-      } as ReturnType<PmEditorView['coordsAtPos']>;
+    if (this.view) {
+      return this.view.coordsAtPos(pos);
     }
 
     return null;

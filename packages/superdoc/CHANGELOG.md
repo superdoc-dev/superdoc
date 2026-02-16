@@ -1,3 +1,56 @@
+# [1.12.0](https://github.com/superdoc-dev/superdoc/compare/v1.11.0...v1.12.0) (2026-02-12)
+
+
+### Bug Fixes
+
+* allow paste from context menu ([#1910](https://github.com/superdoc-dev/superdoc/issues/1910)) ([b6666bf](https://github.com/superdoc-dev/superdoc/commit/b6666bf94a3bc6a4f8a71a49e95136e2e5e9e2ae))
+* **ci:** include sub-package commits in superdoc release filter ([a2c237b](https://github.com/superdoc-dev/superdoc/commit/a2c237bb631130de5ae345209ca109f1ff645519))
+* **ci:** move superdoc releaserc to package dir for proper commit filtering ([688f8e0](https://github.com/superdoc-dev/superdoc/commit/688f8e09df258d7279e7364c03d08e217c742c3d))
+* context menu clicks would change selection position ([#1889](https://github.com/superdoc-dev/superdoc/issues/1889)) ([ace0daf](https://github.com/superdoc-dev/superdoc/commit/ace0dafcf58535ec0ba6ff48efcd7ee113b021ce))
+* **converter:** handle absolute paths in header/footer relationship targets ([#1945](https://github.com/superdoc-dev/superdoc/issues/1945)) ([9d82632](https://github.com/superdoc-dev/superdoc/commit/9d82632c62a70cc6cb19015f9fca89b3f28a4323))
+* cursor drift during vertical arrow navigation (SD-1689) ([#1918](https://github.com/superdoc-dev/superdoc/issues/1918)) ([982118d](https://github.com/superdoc-dev/superdoc/commit/982118df475b3178351713f0c00f6fe447853c61))
+* disable footnotes typing ([#1974](https://github.com/superdoc-dev/superdoc/issues/1974)) ([92b4d62](https://github.com/superdoc-dev/superdoc/commit/92b4d6288a48275435660ae2a848b064506390f6))
+* headless yjs ([#1913](https://github.com/superdoc-dev/superdoc/issues/1913)) ([4cdecf7](https://github.com/superdoc-dev/superdoc/commit/4cdecf7c592f8fbf23655b05200c36b9edfb6d7e))
+* image z-index and overlaps ([#1950](https://github.com/superdoc-dev/superdoc/issues/1950)) ([39875ac](https://github.com/superdoc-dev/superdoc/commit/39875acda1a1799f52d433d463739926e73eea61))
+* issue updating paragraph properties (SD-1778) ([#1944](https://github.com/superdoc-dev/superdoc/issues/1944)) ([a9076ed](https://github.com/superdoc-dev/superdoc/commit/a9076eda595e0e64b57add6d3809fed587e62f7d))
+* **layout-bridge:** defer table fragment click mapping to geometry fallback ([#1968](https://github.com/superdoc-dev/superdoc/issues/1968)) ([0eac43c](https://github.com/superdoc-dev/superdoc/commit/0eac43c2880c39767407279db585bd2568a758d9))
+* load alternative style definitions when main one is missing ([#1922](https://github.com/superdoc-dev/superdoc/issues/1922)) ([bb4083f](https://github.com/superdoc-dev/superdoc/commit/bb4083fbbabe61078e71af5c06a251a4e60670fd))
+* mount Vue on wrapper element to prevent host framework conflicts (SD-1832) ([#1971](https://github.com/superdoc-dev/superdoc/issues/1971)) ([0c4bdda](https://github.com/superdoc-dev/superdoc/commit/0c4bddab0fd1c47e9530860492480748497ad51d))
+* performance ([#1914](https://github.com/superdoc-dev/superdoc/issues/1914)) ([0747b03](https://github.com/superdoc-dev/superdoc/commit/0747b03e81231917c7c2cb5d69f90dbaf0646932))
+* persist comments on reload in collab mode ([#1949](https://github.com/superdoc-dev/superdoc/issues/1949)) ([2b2e56e](https://github.com/superdoc-dev/superdoc/commit/2b2e56ea85acd8f70e300ad89e0a536a4f974bf7))
+* preserve text selection highlight on right-click ([#1994](https://github.com/superdoc-dev/superdoc/issues/1994)) ([db5466a](https://github.com/superdoc-dev/superdoc/commit/db5466a6bf4efce8f1057552182702dd6a4a57d1))
+* return null instead of blank num definition when not found ([#1990](https://github.com/superdoc-dev/superdoc/issues/1990)) ([3acac3b](https://github.com/superdoc-dev/superdoc/commit/3acac3b0e071ca940b27434c1e54c9d89d35d028))
+* **super-converter:** add tableHeader export handler to fix corrupted docx ([#1900](https://github.com/superdoc-dev/superdoc/issues/1900)) ([010799b](https://github.com/superdoc-dev/superdoc/commit/010799b87ee133134a61272e47cc1d77fe08d937))
+* **super-converter:** resolve table style conditional shading on cell import (SD-1833) ([#1985](https://github.com/superdoc-dev/superdoc/issues/1985)) ([5e206f4](https://github.com/superdoc-dev/superdoc/commit/5e206f45ea7139bf9193912726b21af03d70c86e))
+* **super-editor:** allow Backspace to delete empty paragraphs in suggesting mode ([#1966](https://github.com/superdoc-dev/superdoc/issues/1966)) ([820c73c](https://github.com/superdoc-dev/superdoc/commit/820c73c297ff97156316470cc53a4e28f5daaf3c))
+* **super-editor:** prevent invalid paragraph updates for nested runs in headless import ([8c11718](https://github.com/superdoc-dev/superdoc/commit/8c117188219b554fe5c55fd376172804b623015e))
+* **super-editor:** prevent invalid paragraph updates for nested runs in headless import ([c5ee6e3](https://github.com/superdoc-dev/superdoc/commit/c5ee6e3a606e8f8e8284ffc5c38833af9ecaf29d))
+* **super-editor:** restore marks correctly after clear format + undo (SD-1771) ([#1967](https://github.com/superdoc-dev/superdoc/issues/1967)) ([bc9dc76](https://github.com/superdoc-dev/superdoc/commit/bc9dc76c5cf93143ed26353ffc2b84a018f71a2e))
+* **superdoc:** enhance comment input focus handling and edit init ([#1935](https://github.com/superdoc-dev/superdoc/issues/1935)) ([0e9112c](https://github.com/superdoc-dev/superdoc/commit/0e9112c44ce6a89672c2a52d09fbd96d4a1f6bd2))
+* **superdoc:** update comment text ([b5ff644](https://github.com/superdoc-dev/superdoc/commit/b5ff64496cb962ffde32c15a3d249a6540a804d0))
+* **superdoc:** update entry point comment ([#1926](https://github.com/superdoc-dev/superdoc/issues/1926)) ([0dde298](https://github.com/superdoc-dev/superdoc/commit/0dde29868dde357bebf0c7c0363355ea855fa39a))
+* **table:** resolve column resize only working on first page (SD-1772) ([#1959](https://github.com/superdoc-dev/superdoc/issues/1959)) ([df43867](https://github.com/superdoc-dev/superdoc/commit/df43867b3119ee605225794becf66dc2bd327342))
+* **tracked-changes:** fix suggested insertions from paste failures ([#1969](https://github.com/superdoc-dev/superdoc/issues/1969)) ([e74c14a](https://github.com/superdoc-dev/superdoc/commit/e74c14a76c9bbad994d9bde3699e0d8c911c061a))
+* trigger patch release ([7bc1b74](https://github.com/superdoc-dev/superdoc/commit/7bc1b747b8f265e2b7d70118e425d442736a0f92))
+* trigger patch release ([32ced9c](https://github.com/superdoc-dev/superdoc/commit/32ced9c4822cdaf51fafa4b7c54993ea8ea89f9d))
+* trigger patch release ([da7f484](https://github.com/superdoc-dev/superdoc/commit/da7f484027c90cad9d3c5fd1c3ef61d0e39c3996))
+* trigger release ([8367dd6](https://github.com/superdoc-dev/superdoc/commit/8367dd6760dc2d0bf61c1b445c3daceb0b522c63))
+* use DEFLATE compression for docx export instead of STORE ([#1933](https://github.com/superdoc-dev/superdoc/issues/1933)) ([ebcd986](https://github.com/superdoc-dev/superdoc/commit/ebcd98644ff7859cf297da79c549257e6c241523))
+* zIndex updates ([#1973](https://github.com/superdoc-dev/superdoc/issues/1973)) ([3ca7aa3](https://github.com/superdoc-dev/superdoc/commit/3ca7aa390abf12838a88ca36d96bd5667ed83225))
+
+
+### Features
+
+* **super-editor:** add w:lock support for StructuredContent nodes (SD-1616) ([#1939](https://github.com/superdoc-dev/superdoc/issues/1939)) ([2c16f1c](https://github.com/superdoc-dev/superdoc/commit/2c16f1c906ae522e1dd9fb1604d9d7b19d941eef))
+* telemetry ([#1932](https://github.com/superdoc-dev/superdoc/issues/1932)) ([fab3ce9](https://github.com/superdoc-dev/superdoc/commit/fab3ce959dc5d3a21bfeffa5283c01f491d2b4c4))
+* **template-builder:** add cspNonce support ([#1911](https://github.com/superdoc-dev/superdoc/issues/1911)) ([bcb9d28](https://github.com/superdoc-dev/superdoc/commit/bcb9d285a196c998cf45c760ba7bfa3b94c95d25))
+* whiteboard ([#1954](https://github.com/superdoc-dev/superdoc/issues/1954)) ([c9d1484](https://github.com/superdoc-dev/superdoc/commit/c9d14847269d439f053ad35cdc9caacbf6a2a06f))
+
+
+### Performance Improvements
+
+* **build:** remove redundant steps and add fast dev build (SD-1886) ([#1999](https://github.com/superdoc-dev/superdoc/issues/1999)) ([db46bf8](https://github.com/superdoc-dev/superdoc/commit/db46bf81028361d8c56ff6787f40501d8f1c7a3b))
+
 # [1.11.0](https://github.com/superdoc-dev/superdoc/compare/v1.10.0...v1.11.0) (2026-02-06)
 
 

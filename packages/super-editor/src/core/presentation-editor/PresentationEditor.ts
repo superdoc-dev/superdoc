@@ -1883,19 +1883,39 @@ export class PresentationEditor extends EventEmitter {
 
     // In body mode, use main document layout
     const rects = this.getRangeRects(pos, pos);
-    if (!rects || rects.length === 0) {
-      return null;
+    if (rects && rects.length > 0) {
+      const rect = rects[0];
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      };
     }
 
-    const rect = rects[0];
-    return {
-      top: rect.top,
-      bottom: rect.bottom,
-      left: rect.left,
-      right: rect.right,
-      width: rect.width,
-      height: rect.height,
-    };
+    // Fallback: getRangeRects returns empty for collapsed selections on empty
+    // lines (no painted inline content to measure). Use caret geometry which
+    // combines DOM position data with layout metrics for these cases.
+    const caretRect = this.#computeCaretLayoutRect(pos);
+    if (caretRect) {
+      // caretRect is in page-local layout units; convert to viewport pixels.
+      const viewport = this.denormalizeClientPoint(caretRect.x, caretRect.y, caretRect.pageIndex, caretRect.height);
+      if (viewport) {
+        const h = viewport.height ?? caretRect.height;
+        return {
+          top: viewport.y,
+          bottom: viewport.y + h,
+          left: viewport.x,
+          right: viewport.x + 1, // caret is zero-width; use 1px so callers get a valid rect
+          width: 1,
+          height: h,
+        };
+      }
+    }
+
+    return null;
   }
 
   /**

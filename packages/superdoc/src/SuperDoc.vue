@@ -527,6 +527,7 @@ const editorOptions = (doc) => {
           enabled: true,
           endpoint: proxy.$superdoc.config.telemetry?.endpoint,
           metadata: proxy.$superdoc.config.telemetry?.metadata,
+          licenseKey: proxy.$superdoc.config.telemetry?.licenseKey,
         }
       : null,
   };

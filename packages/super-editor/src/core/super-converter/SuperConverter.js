@@ -1,9 +1,9 @@
+/* global TextEncoder */
 import * as xmljs from 'xml-js';
 import { v4 as uuidv4 } from 'uuid';
-import crc32 from 'buffer-crc32';
 import { DocxExporter, exportSchemaToJson } from './exporter';
 import { createDocumentJson, addDefaultStylesIfMissing } from './v2/importer/docxImporter.js';
-import { deobfuscateFont, getArrayBufferFromUrl } from './helpers.js';
+import { deobfuscateFont, getArrayBufferFromUrl, computeCrc32Hex } from './helpers.js';
 import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';
 import { DEFAULT_CUSTOM_XML, DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
 import {
@@ -758,9 +758,8 @@ class SuperConverter {
    */
   #generateIdentifierHash() {
     const combined = `${this.documentGuid}|${this.getDocumentCreatedTimestamp()}`;
-    const buffer = Buffer.from(combined, 'utf8');
-    const hash = crc32(buffer);
-    return `HASH-${hash.toString('hex').toUpperCase()}`;
+    const data = new TextEncoder().encode(combined);
+    return `HASH-${computeCrc32Hex(data).toUpperCase()}`;
   }
 
   /**
@@ -775,21 +774,21 @@ class SuperConverter {
     }
 
     try {
-      let buffer;
+      let data;
 
-      if (Buffer.isBuffer(this.fileSource)) {
-        buffer = this.fileSource;
+      if (ArrayBuffer.isView(this.fileSource)) {
+        const view = this.fileSource;
+        data = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
       } else if (this.fileSource instanceof ArrayBuffer) {
-        buffer = Buffer.from(this.fileSource);
+        data = new Uint8Array(this.fileSource);
       } else if (this.fileSource instanceof Blob || this.fileSource instanceof File) {
         const arrayBuffer = await this.fileSource.arrayBuffer();
-        buffer = Buffer.from(arrayBuffer);
+        data = new Uint8Array(arrayBuffer);
       } else {
         return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
       }
 
-      const hash = crc32(buffer);
-      return `HASH-${hash.toString('hex').toUpperCase()}`;
+      return `HASH-${computeCrc32Hex(data).toUpperCase()}`;
     } catch (e) {
       console.warn('[super-converter] Could not generate content hash:', e);
       return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;

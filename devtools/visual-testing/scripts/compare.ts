@@ -16,6 +16,7 @@
  *   pnpm compare --filter sdt       # Only generate/compare files in sdt/ folder
  *   pnpm compare --exclude samples  # Skip files in samples/ folder
  *   pnpm compare --match sd-1401    # Match substring anywhere in path
+ *   pnpm compare --doc comments-tcs/basic-comments.docx  # Compare a specific corpus doc
  *   pnpm compare --folder <name>    # Compare an existing results folder (skip generation)
  *   pnpm compare --results-root <dir> # Read comparison results from this root folder
  *   pnpm compare --report-all       # Include passing pages in the HTML report
@@ -27,8 +28,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { PNG } from 'pngjs';
-import pixelmatch from 'pixelmatch';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { generateResultsFolderName, getSuperdocVersion, sanitizeFilename } from './generate-refs.js';
 import { buildDocRelativePath, createCorpusProvider, type CorpusProvider } from './corpus-provider.js';
 import { writeHtmlReport } from './report.js';
@@ -56,12 +57,45 @@ import {
 } from './storage-flags.js';
 import { HARNESS_PORT, HARNESS_URL, isPortOpen, ensureHarnessRunning, stopHarness } from './harness-utils.js';
 import { ensureLocalTarballInstalled } from './workspace-utils.js';
+import { normalizeDocPath } from './utils.js';
+
+const require = createRequire(import.meta.url);
+const { PNG } = require('pngjs') as typeof import('pngjs');
+
+function resolvePixelmatch(moduleValue: unknown): typeof import('pixelmatch').default {
+  if (typeof moduleValue === 'function') {
+    return moduleValue as typeof import('pixelmatch').default;
+  }
+
+  if (
+    moduleValue &&
+    typeof moduleValue === 'object' &&
+    'default' in moduleValue &&
+    typeof (moduleValue as { default?: unknown }).default === 'function'
+  ) {
+    return (moduleValue as { default: typeof import('pixelmatch').default }).default;
+  }
+
+  throw new Error('Unsupported pixelmatch module shape. Expected function export or default function export.');
+}
+
+const pixelmatch = resolvePixelmatch(require('pixelmatch'));
 
 // Configuration
 const SCREENSHOTS_DIR = 'screenshots';
 const BASELINES_DIR = 'baselines';
 const RESULTS_DIR = 'results';
 const REPORT_FILE = 'report.json';
+const WORD_OPEN_STAGING_ENV = 'SUPERDOC_WORD_OPEN_DIR';
+const WORD_OPEN_STAGING_DEFAULT = path.join(
+  os.homedir(),
+  'Library',
+  'Containers',
+  'com.microsoft.Word',
+  'Data',
+  'Documents',
+  'superdoc-report-open',
+);
 
 export interface CompareOptions {
   /** Threshold for pixel difference (0-100, default: 0.05) */
@@ -111,6 +145,8 @@ export interface ImageCompareResult {
   reason?: CompareFailureReason;
   /** Word comparison assets (if generated) */
   word?: WordImageSet;
+  /** Source document metadata (if available) */
+  sourceDoc?: SourceDocMetadata;
   /** Interaction story metadata (if available) */
   interaction?: InteractionMetadata;
 }
@@ -126,6 +162,16 @@ export interface InteractionMetadata {
   storyDescription?: string;
   milestoneLabel?: string;
   milestoneDescription?: string;
+}
+
+/** Metadata linking a comparison result back to its source .docx file. */
+export interface SourceDocMetadata {
+  /** Corpus-relative path of the source document (e.g. "tables/basic.docx") */
+  relativePath: string;
+  /** Absolute local path to the (possibly staged) copy of the document */
+  localPath: string;
+  /** ms-word: protocol deep-link URL (macOS only) */
+  wordUrl?: string;
 }
 
 type DocumentInfo = {
@@ -225,6 +271,7 @@ async function runGenerate(options: {
   filters: string[];
   matches: string[];
   excludes: string[];
+  docs: string[];
   append?: boolean;
   browser?: BrowserName;
   scaleFactor?: number;
@@ -240,6 +287,9 @@ async function runGenerate(options: {
   }
   for (const exclude of options.excludes) {
     args.push('--exclude', exclude);
+  }
+  for (const doc of options.docs) {
+    args.push('--doc', doc);
   }
   if (options.append) {
     args.push('--append');
@@ -278,6 +328,7 @@ async function runBaseline(options: {
   filters: string[];
   matches: string[];
   excludes: string[];
+  docs: string[];
   browserArg?: string;
   scaleFactor?: number;
   storageArgs?: string[];
@@ -294,6 +345,9 @@ async function runBaseline(options: {
   }
   for (const exclude of options.excludes) {
     args.push('--exclude', exclude);
+  }
+  for (const doc of options.docs) {
+    args.push('--doc', doc);
   }
   if (options.scaleFactor && options.scaleFactor !== 1) {
     args.push('--scale-factor', String(options.scaleFactor));
@@ -446,6 +500,14 @@ export function matchesFilterWithBrowserPrefix(
  */
 function normalizePath(pathValue: string): string {
   return pathValue.replace(/\\/g, '/');
+}
+
+export function docPathToScreenshotFilter(pathValue: string): string {
+  const normalized = normalizeDocPath(pathValue);
+  const parsed = path.posix.parse(normalized);
+  const baseName = sanitizeFilename(parsed.name || parsed.base);
+  const directory = normalizePath(parsed.dir);
+  return directory && directory !== '.' ? normalizePath(path.posix.join(directory, baseName)) : baseName;
 }
 
 /**
@@ -778,6 +840,31 @@ function parseDocKeyAndPage(
   return { docKey, pageIndex, pageToken };
 }
 
+function toWordDeepLink(localPath: string): string | undefined {
+  if (process.platform !== 'darwin') return undefined;
+  return `ms-word:ofe|u|${pathToFileURL(localPath).href}`;
+}
+
+function resolveWordOpenStagingDir(): string | undefined {
+  if (process.platform !== 'darwin') return undefined;
+  const custom = (process.env[WORD_OPEN_STAGING_ENV] ?? '').trim();
+  if (custom) {
+    return path.resolve(custom);
+  }
+  return WORD_OPEN_STAGING_DEFAULT;
+}
+
+function stageDocForWordOpen(localPath: string, identity: string): string {
+  const stagingDir = resolveWordOpenStagingDir();
+  if (!stagingDir) return localPath;
+
+  const digest = createHash('sha1').update(identity).digest('hex').slice(0, 20);
+  const stagedPath = path.join(stagingDir, `${digest}.docx`);
+  fs.mkdirSync(path.dirname(stagedPath), { recursive: true });
+  fs.copyFileSync(localPath, stagedPath);
+  return stagedPath;
+}
+
 async function buildDocumentKeyMap(provider: CorpusProvider): Promise<Map<string, string>> {
   const docs = await listCorpusDocuments(provider);
   const map = new Map<string, string>();
@@ -832,6 +919,92 @@ export async function findMissingDocuments(
   return { missingDocs, unknownKeys };
 }
 
+async function augmentReportWithSourceDocs(
+  report: ComparisonReport,
+  options: {
+    resultsPrefix?: string;
+    providerOptions?: { mode: StorageMode; docsDir?: string };
+  },
+): Promise<ComparisonReport> {
+  const diffResults = report.results.filter((item) => !item.passed);
+  if (diffResults.length === 0) {
+    return report;
+  }
+
+  let provider: CorpusProvider | null = null;
+  try {
+    provider = await createCorpusProvider(options.providerOptions);
+    const docInfoMap = await buildDocumentInfoMap(provider);
+    const sourceDocByKey = new Map<string, SourceDocMetadata | null>();
+
+    for (const item of diffResults) {
+      const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
+      if (!parsed) continue;
+      const { docKey } = parsed;
+      if (sourceDocByKey.has(docKey)) continue;
+
+      const docInfo = docInfoMap.get(docKey);
+      if (!docInfo) {
+        sourceDocByKey.set(docKey, null);
+        continue;
+      }
+
+      try {
+        const localPath = await provider.fetchDoc(docInfo.doc_id, docInfo.doc_rev);
+        let openPath = localPath;
+        try {
+          openPath = stageDocForWordOpen(localPath, `${docInfo.relativePath}:${docInfo.doc_rev}`);
+        } catch (error) {
+          console.warn(
+            colors.warning(
+              `Unable to stage doc for Word open (${docInfo.relativePath}): ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            ),
+          );
+        }
+
+        sourceDocByKey.set(docKey, {
+          relativePath: docInfo.relativePath,
+          localPath: openPath,
+          wordUrl: toWordDeepLink(openPath),
+        });
+      } catch (error) {
+        sourceDocByKey.set(docKey, null);
+        console.warn(
+          colors.warning(
+            `Skipping source doc metadata for ${docKey}: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+      }
+    }
+
+    if (sourceDocByKey.size === 0) {
+      return report;
+    }
+
+    for (const item of report.results) {
+      const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
+      if (!parsed) continue;
+      const sourceDoc = sourceDocByKey.get(parsed.docKey);
+      if (sourceDoc) {
+        item.sourceDoc = sourceDoc;
+      }
+    }
+
+    return report;
+  } catch (error) {
+    console.warn(
+      colors.warning(
+        `Skipping source doc metadata enrichment: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+    return report;
+  } finally {
+    await provider?.close?.();
+  }
+}
+
 async function fillMissingDocs(
   resultsFolderName: string,
   baselineFolder: string,
@@ -862,9 +1035,10 @@ async function fillMissingDocs(
     console.log(colors.muted(`Filling ${missingDocs.length} missing doc(s)...`));
     await runGenerate({
       outputFolder: resultsFolderName,
-      filters: missingDocs,
+      filters: [],
       matches: [],
       excludes,
+      docs: missingDocs,
       append: true,
       browser,
       scaleFactor,
@@ -1739,6 +1913,7 @@ function parseArgs(): {
   filters: string[];
   matches: string[];
   excludes: string[];
+  docs: string[];
   baselineRoot?: string;
   resultsRoot?: string;
   resultsPrefix?: string;
@@ -1762,6 +1937,7 @@ function parseArgs(): {
   const filters: string[] = [];
   const matches: string[] = [];
   const excludes: string[] = [];
+  const docs: string[] = [];
   let baselineRoot: string | undefined;
   let resultsRoot: string | undefined;
   let resultsPrefix: string | undefined;
@@ -1802,6 +1978,12 @@ function parseArgs(): {
       const rawExclude = args[i + 1].trim();
       if (rawExclude) {
         excludes.push(rawExclude);
+      }
+      i++;
+    } else if (args[i] === '--doc' && args[i + 1]) {
+      const rawDoc = args[i + 1].trim();
+      if (rawDoc) {
+        docs.push(rawDoc);
       }
       i++;
     } else if (args[i] === '--baseline-root' && args[i + 1]) {
@@ -1860,6 +2042,7 @@ function parseArgs(): {
     filters,
     matches,
     excludes,
+    docs,
     baselineRoot,
     resultsRoot,
     resultsPrefix,
@@ -1889,6 +2072,7 @@ async function main(): Promise<void> {
     filters,
     matches,
     excludes,
+    docs,
     baselineRoot,
     resultsRoot,
     resultsPrefix,
@@ -1904,6 +2088,15 @@ async function main(): Promise<void> {
     mode,
     docsDir,
   } = parseArgs();
+  const normalizedDocs = Array.from(new Set(docs.map((value) => normalizeDocPath(value)).filter(Boolean)));
+  const docFilters = normalizedDocs.map((docPath) => docPathToScreenshotFilter(docPath));
+  const effectiveFilters = docFilters.length > 0 ? docFilters : filters;
+  const generationFilters = normalizedDocs.length > 0 ? [] : filters;
+
+  if (docFilters.length > 0 && filters.length > 0) {
+    console.warn(colors.warning('Using --doc selectors and ignoring --filter values for comparison scope.'));
+  }
+
   const storageArgs = buildStorageArgs(mode, docsDir);
   const normalizedResultsPrefix = normalizePrefix(resultsPrefix);
   const normalizedReportTrim = normalizePrefix(reportTrim);
@@ -1911,7 +2104,7 @@ async function main(): Promise<void> {
     reportMode === 'interactions' ||
     (normalizedResultsPrefix ? normalizedResultsPrefix.startsWith('interactions/') : false) ||
     (normalizedReportTrim ? normalizedReportTrim.startsWith('interactions/') : false) ||
-    filters.some((value) => value.startsWith('interactions/'));
+    effectiveFilters.some((value) => value.startsWith('interactions/'));
   const baselinePrefix = isInteractionMode ? 'baselines-interactions' : BASELINES_DIR;
   const baselineDir = resolveBaselineRoot(baselinePrefix, mode, baselineRoot);
   const resolvedResultsRoot = resultsRoot ? resolvePathInput(resultsRoot) : undefined;
@@ -1948,8 +2141,14 @@ async function main(): Promise<void> {
   const ensureBaseline = async (version: string, versionSpec?: string, force: boolean = false): Promise<void> => {
     if (mode === 'local') {
       const baselinePath = path.join(baselineDir, version);
-      if (!fs.existsSync(baselinePath)) {
-        console.log(colors.info(`📸 Baseline ${version} not found locally. Generating...`));
+      const baselineExists = fs.existsSync(baselinePath);
+      const shouldEnsureSelectedDocs = baselineExists && normalizedDocs.length > 0;
+      if (!baselineExists || shouldEnsureSelectedDocs) {
+        if (!baselineExists) {
+          console.log(colors.info(`📸 Baseline ${version} not found locally. Generating...`));
+        } else {
+          console.log(colors.info(`📸 Ensuring baseline coverage for ${normalizedDocs.length} selected doc(s)...`));
+        }
         const script =
           baselinePrefix === 'baselines-interactions'
             ? 'scripts/baseline-interactions.ts'
@@ -1964,9 +2163,10 @@ async function main(): Promise<void> {
         await runBaseline({
           script,
           versionSpec,
-          filters,
+          filters: generationFilters,
           matches,
           excludes,
+          docs: script === 'scripts/baseline-visual.ts' ? normalizedDocs : [],
           browserArg,
           scaleFactor,
           storageArgs,
@@ -1983,7 +2183,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
+    const hasFilters = effectiveFilters.length > 0 || matches.length > 0 || excludes.length > 0;
     const browserFilters = browserArg ? browsers : undefined;
     if (refreshBaselines) {
       if (hasFilters || browserFilters) {
@@ -1991,7 +2191,7 @@ async function main(): Promise<void> {
           prefix: baselinePrefix,
           version,
           localRoot: baselineDir,
-          filters,
+          filters: effectiveFilters,
           matches,
           excludes,
           browsers: browserFilters,
@@ -2028,8 +2228,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const baselineSpecForEnsure = baselineVersion || normalizedDocs.length > 0 ? baselineSelection?.spec : undefined;
+
   if (!targetVersion) {
-    await ensureBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
+    await ensureBaseline(baselineToUse, baselineSpecForEnsure);
   }
 
   if (targetVersion) {
@@ -2047,10 +2249,19 @@ async function main(): Promise<void> {
     await runVersionSwitch(targetSpec);
     console.log(colors.muted(`Generating: ${targetLabel}`));
     for (const browser of browsers) {
-      await runGenerate({ outputFolder: targetLabel, filters, matches, excludes, browser, scaleFactor, storageArgs });
+      await runGenerate({
+        outputFolder: targetLabel,
+        filters: generationFilters,
+        matches,
+        excludes,
+        docs: normalizedDocs,
+        browser,
+        scaleFactor,
+        storageArgs,
+      });
     }
 
-    await ensureBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
+    await ensureBaseline(baselineToUse, baselineSpecForEnsure);
 
     resultsFolderName = targetLabel;
 
@@ -2059,7 +2270,7 @@ async function main(): Promise<void> {
       await fillMissingDocs(
         resultsFolderName,
         baselineFolder,
-        filters,
+        effectiveFilters,
         matches,
         excludes,
         browser,
@@ -2083,9 +2294,10 @@ async function main(): Promise<void> {
       for (const browser of browsers) {
         await runGenerate({
           outputFolder: resultsFolderName,
-          filters,
+          filters: generationFilters,
           matches,
           excludes,
+          docs: normalizedDocs,
           browser,
           scaleFactor,
           storageArgs,
@@ -2097,7 +2309,7 @@ async function main(): Promise<void> {
         await fillMissingDocs(
           resultsFolderName,
           baselineFolder,
-          filters,
+          effectiveFilters,
           matches,
           excludes,
           browser,
@@ -2124,7 +2336,7 @@ async function main(): Promise<void> {
 
   const resolvedMode =
     reportMode ??
-    (reportTrim || filters.some((value) => value.startsWith('interactions/')) ? 'interactions' : 'visual');
+    (reportTrim || effectiveFilters.some((value) => value.startsWith('interactions/')) ? 'interactions' : 'visual');
   const resolvedTrim = reportTrim ?? (resolvedMode === 'interactions' ? 'interactions/' : undefined);
   const ignorePrefixes = resolvedMode === 'visual' ? ['interactions/'] : undefined;
 
@@ -2134,7 +2346,10 @@ async function main(): Promise<void> {
   for (const browser of browsers) {
     // Build compact config line
     const configParts = [`Baseline: ${baselineToUse}`, `Browser: ${browser}`];
-    if (filters.length > 0) configParts.push(`Filter: "${filters.join(', ')}"`);
+    if (docFilters.length > 0) configParts.push(`Docs: ${docFilters.length}`);
+    if (docFilters.length === 0 && effectiveFilters.length > 0) {
+      configParts.push(`Filter: "${effectiveFilters.join(', ')}"`);
+    }
     if (matches.length > 0) configParts.push(`Match: "${matches.join(', ')}"`);
     if (excludes.length > 0) configParts.push(`Exclude: "${excludes.join(', ')}"`);
     if (threshold > 0) configParts.push(`Threshold: ${threshold}%`);
@@ -2151,7 +2366,7 @@ async function main(): Promise<void> {
         resultsPrefix,
         browser,
         outputFolderName,
-        filters,
+        filters: effectiveFilters,
         matches,
         excludes,
         ignorePrefixes,
@@ -2188,7 +2403,7 @@ async function main(): Promise<void> {
               resultsPrefix,
               browser,
               outputFolderName,
-              filters,
+              filters: effectiveFilters,
               matches,
               excludes,
               ignorePrefixes,
@@ -2209,14 +2424,21 @@ async function main(): Promise<void> {
         }
       }
 
-      if (resolvedMode === 'visual' && includeWord) {
-        const wordResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
-        report = await augmentReportWithWord(report, {
-          resultsFolderName: resultsFolderName!,
-          resultsPrefix: wordResultsPrefix,
-          targetVersion: resolvedTargetVersion,
+      if (resolvedMode === 'visual') {
+        const visualResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
+        report = await augmentReportWithSourceDocs(report, {
+          resultsPrefix: visualResultsPrefix,
           providerOptions: { mode, docsDir },
         });
+
+        if (includeWord) {
+          report = await augmentReportWithWord(report, {
+            resultsFolderName: resultsFolderName!,
+            resultsPrefix: visualResultsPrefix,
+            targetVersion: resolvedTargetVersion,
+            providerOptions: { mode, docsDir },
+          });
+        }
 
         const outputFolder = path.join(RESULTS_DIR, outputFolderName);
         fs.writeFileSync(path.join(outputFolder, REPORT_FILE), JSON.stringify(report, null, 2));

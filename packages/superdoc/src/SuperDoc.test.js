@@ -86,7 +86,7 @@ const stubComponent = (name) =>
 const SuperEditorStub = defineComponent({
   name: 'SuperEditorStub',
   props: ['fileSource', 'state', 'documentId', 'options'],
-  emits: ['pageMarginsChange'],
+  emits: ['pageMarginsChange', 'editor-ready'],
   setup(props) {
     return () => h('div', { class: 'super-editor-stub' }, [JSON.stringify(props.options.documentId)]);
   },
@@ -446,6 +446,46 @@ describe('SuperDoc.vue', () => {
 
     options.onException({ error: new Error('boom'), editor: editorMock });
     expect(superdocStub.emit).toHaveBeenCalledWith('exception', { error: expect.any(Error), editor: editorMock });
+  });
+
+  it('passes slash menu and context menu options through to SuperEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    const slashMenuConfig = {
+      includeDefaultItems: false,
+      items: [{ id: 'custom-section', items: [{ id: 'custom-item', label: 'Custom Item', action: vi.fn() }] }],
+    };
+    superdocStub.config.modules.slashMenu = slashMenuConfig;
+    superdocStub.config.disableContextMenu = true;
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.slashMenuConfig).toBe(slashMenuConfig);
+    expect(options.disableContextMenu).toBe(true);
+  });
+
+  it('handles editor-ready by storing presentation editor and syncing context menu disable state', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.disableContextMenu = true;
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const doc = superdocStoreStub.documents.value[0];
+    doc.setPresentationEditor = vi.fn();
+
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn(),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const editor = { options: { documentId: 'doc-1' } };
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', { editor, presentationEditor });
+    await nextTick();
+
+    expect(doc.setPresentationEditor).toHaveBeenCalledWith(presentationEditor);
+    expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(true);
+    expect(presentationEditor.on).toHaveBeenCalledWith('commentPositions', expect.any(Function));
   });
 
   it('shows comments sidebar and tools, handles menu actions', async () => {

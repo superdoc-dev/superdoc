@@ -35,7 +35,7 @@ import {
 import { layoutParagraphBlock } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
 import { layoutDrawingBlock } from './layout-drawing.js';
-import { layoutTableBlock, createAnchoredTableFragment } from './layout-table.js';
+import { layoutTableBlock, createAnchoredTableFragment, ANCHORED_TABLE_FULL_WIDTH_RATIO } from './layout-table.js';
 import { collectAnchoredDrawings, collectAnchoredTables, collectPreRegisteredAnchors } from './anchors.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
@@ -1718,27 +1718,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
 
       const anchorsForPara = anchoredByParagraph.get(index);
-
-      // Register anchored tables for this paragraph before layout
-      // so the float manager knows about them when laying out text
       const tablesForPara = anchoredTablesByParagraph.get(index);
-      if (tablesForPara) {
-        const state = paginator.ensurePage();
-        for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
-          if (placedAnchoredTableIds.has(tableBlock.id)) continue;
-
-          // Register the table with the float manager for text wrapping
-          floatManager.registerTable(tableBlock, tableMeasure, state.cursorY, state.columnIndex, state.page.number);
-
-          // Create and place the table fragment at its anchored position
-          const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
-          const anchorY = state.cursorY + (tableBlock.anchor?.offsetV ?? 0);
-
-          const tableFragment = createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY);
-          state.page.fragments.push(tableFragment);
-          placedAnchoredTableIds.add(tableBlock.id);
-        }
-      }
 
       /**
        * keepNext Chain-Aware Page Break Logic
@@ -1875,6 +1855,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
+      // Paragraph start Y (OOXML: anchor for vertAnchor="text"). Captured before layout so
+      // paragraph-anchored tables use it as base; offsetV (tblpY) positions below start to avoid overlap.
+      const paragraphStartY = paginator.ensurePage().cursorY;
+
       layoutParagraphBlock(
         {
           block,
@@ -1902,6 +1886,41 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             }
           : undefined,
       );
+
+      // Register and place anchored tables after the paragraph. Anchor base is paragraph start (OOXML-style).
+      // Full-width floating tables are treated as inline and laid out when we hit the table block.
+      // Only vRelativeFrom=paragraph is supported. Position = max(paragraphStartY + offsetV, paragraphBottom) so the table never overlaps the paragraph.
+      if (tablesForPara) {
+        const state = paginator.ensurePage();
+        const columnWidthForTable = getCurrentColumns().width;
+        let tableBottomY = state.cursorY;
+        for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
+          if (placedAnchoredTableIds.has(tableBlock.id)) continue;
+          const totalWidth = tableMeasure.totalWidth ?? 0;
+          if (columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO) continue;
+
+          // OOXML: position = paragraph start + tblpY (offsetV). Clamp so table top is never above paragraph
+          // bottom, ensuring no overlap when offsetV is 0 or small.
+          const offsetV = tableBlock.anchor?.offsetV ?? 0;
+          const anchorY = Math.max(paragraphStartY + offsetV, state.cursorY);
+          floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
+
+          const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+
+          const tableFragment = createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY);
+          state.page.fragments.push(tableFragment);
+          placedAnchoredTableIds.add(tableBlock.id);
+
+          // Only advance cursor for tables that affect flow (wrap type other than 'None').
+          // wrap.type === 'None' is absolute overlay with no exclusion zone; pushing cursor would add unwanted whitespace.
+          const wrapType = tableBlock.wrap?.type ?? 'None';
+          if (wrapType !== 'None') {
+            const bottom = anchorY + (tableMeasure.totalHeight ?? 0);
+            if (bottom > tableBottomY) tableBottomY = bottom;
+          }
+        }
+        state.cursorY = tableBottomY;
+      }
       continue;
     }
     if (block.kind === 'image') {

@@ -1,0 +1,165 @@
+name: AI Risk Assessment
+
+# Runs AFTER risk-label.yml applies the file-path label.
+# Only triggers for critical/sensitive PRs — low-risk PRs skip AI entirely.
+#
+# - Updates the risk label if AI disagrees with file-path classification
+# - Logs full details to workflow output (visible in Actions tab)
+# - Only posts a PR comment if Sonnet finds actual bugs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to assess'
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: risk-assess-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+
+jobs:
+  assess:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Layer 1: file-path classification (same as risk-label.yml)
+      - name: Classify by file paths
+        id: filepath
+        run: |
+          gh pr diff ${{ env.PR_NUMBER }} --name-only \
+            | node .github/scripts/risk-label.mjs > /tmp/risk.json
+          LEVEL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/tmp/risk.json','utf-8')).level)")
+          echo "level=$LEVEL" >> $GITHUB_OUTPUT
+          echo "File-path risk: $LEVEL"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Skip AI for low-risk PRs
+      - name: Skip AI for low-risk
+        if: steps.filepath.outputs.level == 'low'
+        run: echo "Low risk — skipping AI assessment"
+
+      # Install Agent SDK (only for non-low PRs)
+      - name: Setup Node and Agent SDK
+        if: steps.filepath.outputs.level != 'low'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Agent SDK
+        if: steps.filepath.outputs.level != 'low'
+        run: npm install --prefix .github/scripts @anthropic-ai/claude-agent-sdk
+        env:
+          NODE_ENV: production
+
+      # Layer 2+3: AI assessment
+      - name: Run tiered AI assessment
+        if: steps.filepath.outputs.level != 'low'
+        id: assess
+        run: node .github/scripts/risk-assess.mjs ${{ env.PR_NUMBER }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_OUTPUT: $GITHUB_OUTPUT
+          REPO: ${{ github.repository }}
+          REPO_ROOT: ${{ github.workspace }}
+
+      # Update risk label if AI disagrees with file-path classification
+      - name: Update risk label from AI
+        if: steps.filepath.outputs.level != 'low'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('/tmp/tiered-risk-assessment.json', 'utf-8'));
+            const r = results[0];
+            if (!r || r.error) return;
+
+            const aiLevel = r.finalLevel;
+            const filePathLevel = r.filePath?.level;
+            const prNumber = ${{ env.PR_NUMBER }};
+
+            // Only update if AI assessment differs from file-path
+            if (aiLevel === filePathLevel) {
+              console.log(`AI agrees with file-path: ${aiLevel} — no label change`);
+              return;
+            }
+
+            console.log(`AI reclassified: ${filePathLevel} → ${aiLevel}`);
+
+            const LABELS = {
+              critical: 'risk: critical',
+              sensitive: 'risk: sensitive',
+              low: 'risk: low',
+            };
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Remove old risk labels
+            const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner, repo, issue_number: prNumber,
+            });
+            for (const label of currentLabels.filter(l => l.name.startsWith('risk: '))) {
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number: prNumber, name: label.name,
+              });
+            }
+
+            // Add new label
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number: prNumber, labels: [LABELS[aiLevel]],
+            });
+
+      # Only comment if Sonnet found actual bugs
+      - name: Comment on bugs found
+        if: steps.filepath.outputs.level != 'low'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('/tmp/tiered-risk-assessment.json', 'utf-8'));
+            const r = results[0];
+            if (!r || r.error || !r.sonnet?.bugs_found?.length) return;
+
+            const bugs = r.sonnet.bugs_found.map(b => `- ${b}`).join('\n');
+            const prNumber = ${{ env.PR_NUMBER }};
+            const body = [
+              `<!-- risk-assess-bugs -->`,
+              `⚠️ **AI Risk Review — potential issues found**`,
+              ``,
+              bugs,
+              ``,
+              `<sub>Via L3 deep analysis · ${r.finalLevel} risk</sub>`,
+            ].join('\n');
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Update existing or create new
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: prNumber,
+            });
+            const existing = comments.find(c => c.body.includes('<!-- risk-assess-bugs -->'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body,
+              });
+            }

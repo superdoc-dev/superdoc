@@ -28,18 +28,23 @@ From repo root (workspace):
 npm run test --workspace=@superdoc/layout-tests
 ```
 
+Memory profiling lane (GC-enabled, isolated):
+```bash
+npm run test:memory --workspace=@superdoc/layout-tests
+```
+
 ## Configuration
 
 - **Test Runner**: Vitest (configured via `vitest.config.mjs`)
-- **Environment**: Node (no DOM/browser globals needed)
+- **Default Environment**: `happy-dom` (set `VITEST_DOM=node` for Node-only runs)
 - **Imports**: Uses JSON fixtures via `assert { type: 'json' }`
 
 ### vitest.config.mjs
 
 Key settings:
-- Runs in Node environment (no jsdom overhead)
-- Includes only `src/**/*.test.js` files
+- Includes `src/**/*.test.ts` files
 - No coverage collection (integration tests focus on correctness, not coverage)
+- Memory-sensitive leak assertions are intended for `NODE_OPTIONS=--expose-gc` runs
 
 ## Adding New Tests
 
@@ -50,7 +55,7 @@ Key settings:
 ## Dependencies
 
 - Relies on `@superdoc/pm-adapter`, `@superdoc/style-engine`, `@superdoc/layout-engine`, `@superdoc/painter-dom`.
-- Runner: Vitest (Node).
+- Runner: Vitest (`happy-dom` by default).
 
 ## Debugging
 

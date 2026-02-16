@@ -13,6 +13,7 @@
  *   pnpm generate --filter basic --filter layout
  *   pnpm generate --exclude samples     # Skip documents in samples/ folder
  *   pnpm generate --match sd-1401       # Match substring anywhere in path
+ *   pnpm generate --doc comments-tcs/basic-comments.docx  # Only selected doc(s)
  *   pnpm generate --output my-run       # Write results to screenshots/my-run
  *   pnpm generate --append              # Keep existing output folder when using --output
  *   pnpm generate --skip-existing       # Skip docs that already have screenshots
@@ -45,6 +46,7 @@ import { isPathLikeVersion, normalizeVersionLabel, versionLabelFromPath } from '
 import { getBrowserType, resolveBrowserNames, type BrowserName } from './browser-utils.js';
 import { ensureHarnessRunning, stopHarness, HARNESS_URL } from './harness-utils.js';
 import { getBaselineOutputRoot, parseStorageFlags, resolveDocsDir, type StorageMode } from './storage-flags.js';
+import { normalizeDocPath } from './utils.js';
 
 // Configuration
 const SCREENSHOTS_DIR = 'screenshots';
@@ -181,6 +183,10 @@ interface DocumentInfo {
   needsFetch?: boolean;
 }
 
+function normalizeDocSelector(value: string): string {
+  return normalizeDocPath(value).toLowerCase();
+}
+
 /**
  * Find documents from the corpus registry.
  */
@@ -188,12 +194,19 @@ export async function findDocumentsFromCorpus(
   provider: CorpusProvider,
   outputDir: string,
   filters: CorpusFilters,
+  docSelectors: string[] = [],
 ): Promise<DocumentInfo[]> {
   const docs = await provider.listDocs(filters);
+  const normalizedDocSelectors = Array.from(new Set(docSelectors.map((value) => normalizeDocSelector(value))));
+  const hasDocSelectors = normalizedDocSelectors.length > 0;
+  const docSelectorSet = new Set(normalizedDocSelectors);
   const documents: DocumentInfo[] = [];
 
   for (const doc of docs) {
     const relativePath = buildDocRelativePath(doc);
+    if (hasDocSelectors && !docSelectorSet.has(normalizeDocSelector(relativePath))) {
+      continue;
+    }
     const ext = path.extname(doc.filename).toLowerCase();
     if (!VALID_EXTENSIONS.has(ext)) {
       continue;
@@ -395,19 +408,38 @@ async function captureDocument(page: Page, doc: DocumentInfo, provider: CorpusPr
   // Ensure output directory exists
   fs.mkdirSync(doc.outputDir, { recursive: true });
 
-  // Capture each page
-  for (let i = 0; i < pageCount; i++) {
+  // Capture each page. Re-check count each iteration because late pagination updates
+  // can remove trailing pages after initial stabilization.
+  let i = 0;
+  while (true) {
+    const currentCount = await pages.count();
+    if (i >= currentCount) break;
+
     const pageLocator = pages.nth(i);
     const pageNum = String(i + 1).padStart(3, '0');
     const filename = `p${pageNum}.png`;
     const outputPath = path.join(doc.outputDir, filename);
 
-    await pageLocator.screenshot({
-      path: outputPath,
-      animations: 'disabled',
-    });
+    try {
+      await pageLocator.screenshot({
+        path: outputPath,
+        animations: 'disabled',
+      });
+    } catch (error) {
+      const refreshedCount = await pages.count();
+      if (i >= refreshedCount) {
+        console.warn(
+          colors.warning(
+            `  ⚠ Page count changed during capture for ${doc.relativePath} (stopped at ${refreshedCount} page(s))`,
+          ),
+        );
+        break;
+      }
+      throw error;
+    }
 
     capturedFiles.push(outputPath);
+    i += 1;
   }
 
   return capturedFiles;
@@ -434,6 +466,7 @@ function parseArgs(): {
   filters: string[];
   matches: string[];
   excludes: string[];
+  docs: string[];
   output?: string;
   skipExisting: boolean;
   failOnError: boolean;
@@ -460,6 +493,7 @@ function parseArgs(): {
   const filters: string[] = [];
   const matches: string[] = [];
   const excludes: string[] = [];
+  const docs: string[] = [];
   let output: string | undefined;
   let browserArg: string | undefined;
   let scaleFactor = 1.5;
@@ -485,6 +519,12 @@ function parseArgs(): {
       const rawExclude = args[i + 1].trim();
       if (rawExclude) {
         excludes.push(rawExclude);
+      }
+      i++;
+    } else if (arg === '--doc' && args[i + 1]) {
+      const rawDoc = args[i + 1].trim();
+      if (rawDoc) {
+        docs.push(rawDoc);
       }
       i++;
     } else if (arg === '--output' && args[i + 1]) {
@@ -518,6 +558,7 @@ function parseArgs(): {
     filters,
     matches,
     excludes,
+    docs,
     output,
     skipExisting,
     failOnError,
@@ -640,6 +681,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     filters,
     matches,
     excludes,
+    docs,
     output,
     skipExisting,
     failOnError,
@@ -690,7 +732,7 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
 
   try {
     console.log(colors.info('🔍 Finding documents...'));
-    const documents = await findDocumentsFromCorpus(provider, outputDir, { filters, matches, excludes });
+    const documents = await findDocumentsFromCorpus(provider, outputDir, { filters, matches, excludes }, docs);
     if (filters.length > 0) {
       console.log(colors.info(`🔎 Filter: "${filters.join(', ')}"`));
     }
@@ -699,6 +741,9 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
     }
     if (excludes.length > 0) {
       console.log(colors.info(`🔎 Exclude: "${excludes.join(', ')}"`));
+    }
+    if (docs.length > 0) {
+      console.log(colors.info(`🔎 Docs: ${docs.length} explicitly selected`));
     }
 
     if (documents.length === 0) {
@@ -750,6 +795,8 @@ async function runForBrowser(browser: BrowserName, options: ParsedArgs): Promise
         deviceScaleFactor: scaleFactor,
       });
       const page = await context.newPage();
+      // Block telemetry requests during tests
+      await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
       workers.push(processDocumentQueue(i + 1, page, queue, results, shouldSkipExisting, provider, progress, ci));
     }
 

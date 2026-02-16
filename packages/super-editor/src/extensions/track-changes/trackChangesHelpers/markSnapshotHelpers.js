@@ -1,4 +1,4 @@
-import { objectIncludes } from '@core/utilities/objectIncludes.js';
+import { isEqual } from 'lodash';
 
 const normalizeAttrs = (attrs = {}) => {
   return Object.fromEntries(Object.entries(attrs).filter(([, value]) => value !== null && value !== undefined));
@@ -7,7 +7,7 @@ const normalizeAttrs = (attrs = {}) => {
 export const attrsExactlyMatch = (left = {}, right = {}) => {
   const normalizedLeft = normalizeAttrs(left);
   const normalizedRight = normalizeAttrs(right);
-  return objectIncludes(normalizedLeft, normalizedRight) && objectIncludes(normalizedRight, normalizedLeft);
+  return isEqual(normalizedLeft, normalizedRight);
 };
 
 const getTypeName = (markLike) => {
@@ -56,8 +56,6 @@ const markAttrsIncludeSnapshotAttrs = (mark, snapshot) => {
   if (Object.keys(normalizedSnapshotAttrs).length === 0) {
     return false;
   }
-
-  return objectIncludes(normalizedMarkAttrs, normalizedSnapshotAttrs);
 };
 
 export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {

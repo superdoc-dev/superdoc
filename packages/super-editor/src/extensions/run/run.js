@@ -1,4 +1,5 @@
 // @ts-nocheck
+// TEST: sensitive risk PR — editor extension change
 
 import { Attribute, OxmlNode } from '@core/index.js';
 import { splitRunToParagraph, splitRunAtCursor } from './commands/index.js';

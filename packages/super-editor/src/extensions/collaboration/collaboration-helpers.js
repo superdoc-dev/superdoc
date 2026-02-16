@@ -86,6 +86,7 @@ export const updateYdocDocxData = async (editor, ydoc) => {
 
     const docxFilesMap = ydoc.getMap('docxFiles');
     const metaMap = ydoc.getMap('meta');
+    const isNewFormat = docxFilesMap.size > 0;
     const existingFiles = readExistingDocxFiles(ydoc);
 
     // Seed from editor content if nothing stored yet
@@ -93,6 +94,21 @@ export const updateYdocDocxData = async (editor, ydoc) => {
       editor.options.content.forEach((file) => {
         if (file?.name && file?.content) existingFiles[file.name] = file.content;
       });
+    }
+
+    // Migrate legacy format: copy ALL files to per-file Y.Map before updating.
+    // Without this, static assets (themes, fontTable, docProps) would be lost
+    // because exportDocx({ getUpdatedDocs: true }) only returns changed files.
+    if (!isNewFormat && Object.keys(existingFiles).length > 0) {
+      Object.entries(existingFiles).forEach(([name, content]) => {
+        if (shouldSyncFile(name)) {
+          docxFilesMap.set(name, content);
+        }
+      });
+      // Delete the legacy monolithic array to free up space in the Y.Doc.
+      if (metaMap.has('docx')) {
+        metaMap.delete('docx');
+      }
     }
 
     const newXml = await editor.exportDocx({ getUpdatedDocs: true });

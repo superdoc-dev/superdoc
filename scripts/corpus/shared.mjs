@@ -416,7 +416,7 @@ export async function loadRegistryOrNull(client) {
       throw new Error('Invalid registry.json format (missing docs array).');
     }
     return parsed;
-  } catch (error) {
+  } catch {
     return null;
   }
 }

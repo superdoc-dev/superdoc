@@ -12,7 +12,7 @@ while preserving subdirectories and source filename identity.
 
 Prerequisites:
 
-- **bun** is required to run these scripts. All `package.json` scripts and examples below use `bun` as the runner.
+- Run commands from the repo root with `pnpm`.
 
 Important:
 
@@ -35,24 +35,24 @@ Candidate output naming:
 # Sync corpus locally first (shared with tests/visual)
 pnpm corpus:pull
 
-bun tests/layout-snapshots/export-layout-snapshots.mjs
+pnpm layout:snapshots
 ```
 
 ## Common commands
 
 ```bash
-# Fast headless generation (default)
-bun tests/layout-snapshots/export-layout-snapshots.mjs --jobs 4
+# Fast headless generation (default via package script)
+pnpm layout:snapshots
 
 # Limit sample size while iterating
-bun tests/layout-snapshots/export-layout-snapshots.mjs --limit 10 --jobs 2
+pnpm layout:snapshots -- --limit 10 --jobs 2
 
 # Fallback to PresentationEditor path for comparison
-bun tests/layout-snapshots/export-layout-snapshots.mjs --pipeline presentation --jobs 1
+pnpm layout:snapshots -- --pipeline presentation --jobs 1
 
 # Telemetry controls
-bun tests/layout-snapshots/export-layout-snapshots.mjs --telemetry off
-bun tests/layout-snapshots/export-layout-snapshots.mjs --enable-telemetry
+pnpm layout:snapshots -- --telemetry off
+pnpm layout:snapshots -- --enable-telemetry
 ```
 
 If native `canvas` is unavailable in your runtime, the script falls back to a mock canvas and warns that metrics are approximate.
@@ -63,13 +63,13 @@ Use the wrapper script to install any published `superdoc` version/tag from npm,
 
 ```bash
 # Install superdoc@1.12.0 in a temp dir and export to reference/v.1.12.0
-bun tests/layout-snapshots/export-layout-snapshots-npm.mjs 1.12.0 --jobs 4
+pnpm layout:snapshots:npm -- 1.12.0
 
 # Use npm tag
-bun tests/layout-snapshots/export-layout-snapshots-npm.mjs latest --jobs 4
+pnpm layout:snapshots:npm -- latest
 
 # Fast smoke run
-bun tests/layout-snapshots/export-layout-snapshots-npm.mjs 1.12.0 --limit 10 --jobs 2
+pnpm layout:snapshots:npm -- 1.12.0 --limit 10 --jobs 2
 ```
 
 Versioned reference output root:
@@ -96,14 +96,17 @@ When changed docs are detected, compare now automatically runs `devtools/visual-
 changed docs, using the same reference version as the visual baseline.
 
 ```bash
-# Compare against a reference version (auto-generates reference if missing)
-bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15
+# Compare against npm superdoc@next (default when --reference is omitted)
+pnpm layout:compare
+
+# Compare against a specific reference version (auto-generates reference if missing)
+pnpm layout:compare -- --reference 1.13.0-next.15
 
 # Disable auto visual post-step
-bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15 --no-visual-on-change
+pnpm layout:compare -- --reference 1.13.0-next.15 --no-visual-on-change
 
 # Fail with non-zero exit if any diffs/missing files are found
-bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15 --fail-on-diff
+pnpm layout:compare -- --reference 1.13.0-next.15 --fail-on-diff
 ```
 
 Reports are written under:
@@ -124,5 +127,5 @@ pnpm run pack:es
 2. Point exporter at your installed module:
 
 ```bash
-bun tests/layout-snapshots/export-layout-snapshots.mjs --module superdoc/super-editor --jobs 4
+pnpm layout:snapshots -- --module superdoc/super-editor --jobs 4
 ```

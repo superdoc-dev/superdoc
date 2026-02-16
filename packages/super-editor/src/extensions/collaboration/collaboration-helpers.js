@@ -1,6 +1,6 @@
 /**
  * Files whose content is already synced via y-prosemirror XmlFragment.
- * When `excludeSyncedContent` is enabled, these are skipped in Y.Map storage
+ * These are automatically skipped in Y.Map storage during collaboration
  * to avoid exceeding WebSocket message size limits.
  */
 const CRDT_SYNCED_FILES = new Set(['word/document.xml']);
@@ -18,15 +18,14 @@ export const PLACEHOLDER_DOCUMENT_XML =
 
 /**
  * Returns true if a DOCX file should be synced to the Y.Map.
- * When `excludeSyncedContent` is enabled, files already synced via
- * y-prosemirror XmlFragment (e.g. word/document.xml) are excluded.
+ * Files already synced via y-prosemirror XmlFragment (e.g. word/document.xml)
+ * are automatically excluded during collaboration.
  *
  * @param {string} fileName
- * @param {boolean} excludeSyncedContent
  * @returns {boolean}
  */
-export const shouldSyncFile = (fileName, excludeSyncedContent) => {
-  if (excludeSyncedContent && CRDT_SYNCED_FILES.has(fileName)) return false;
+export const shouldSyncFile = (fileName) => {
+  if (CRDT_SYNCED_FILES.has(fileName)) return false;
   return true;
 };
 
@@ -100,9 +99,8 @@ export const updateYdocDocxData = async (editor, ydoc) => {
     if (!newXml || typeof newXml !== 'object') return;
 
     // Write each changed file as its own Y.Map entry (separate WS messages).
-    const excludeSynced = !!editor.options.excludeSyncedContent;
     Object.keys(newXml).forEach((key) => {
-      if (!shouldSyncFile(key, excludeSynced)) return;
+      if (!shouldSyncFile(key)) return;
       if (existingFiles[key] === newXml[key]) return;
       docxFilesMap.set(key, newXml[key]);
     });

@@ -393,7 +393,6 @@ const init = async () => {
             collaboration: {
               ydoc: ydocRef.value,
               provider: providerRef.value,
-              excludeSyncedContent: collabProvider === 'liveblocks',
             },
           }
         : {}),

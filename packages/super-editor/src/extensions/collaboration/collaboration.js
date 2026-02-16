@@ -119,12 +119,11 @@ export const initializeMetaMap = (ydoc, editor) => {
   metaMap.set('fonts', editor.options.fonts);
 
   // Store each docx file as a separate Y.Map entry (smaller Yjs messages).
-  const excludeSynced = !!editor.options.excludeSyncedContent;
   const docxFilesMap = ydoc.getMap('docxFiles');
   const content = editor.options.content;
   if (Array.isArray(content)) {
     content.forEach((file) => {
-      if (file?.name && file?.content && shouldSyncFile(file.name, excludeSynced)) {
+      if (file?.name && file?.content && shouldSyncFile(file.name)) {
         docxFilesMap.set(file.name, file.content);
       }
     });

@@ -695,9 +695,9 @@ const pollForMetaMapData = (ydoc, retries = 10, interval = 500) => {
         docx.push({ name, content });
       });
 
-      // word/document.xml may be excluded from Y.Map when excludeSyncedContent
-      // is enabled (its content is synced via y-prosemirror XmlFragment instead).
-      // Provide a minimal placeholder so the converter can initialize its schema.
+      // word/document.xml is not stored in Y.Map — its content is synced via
+      // y-prosemirror XmlFragment instead. Provide a minimal placeholder so the
+      // converter can initialize its schema.
       if (!docx.some((f) => f.name === 'word/document.xml')) {
         docx.push({ name: 'word/document.xml', content: PLACEHOLDER_DOCUMENT_XML });
       }

@@ -28,7 +28,7 @@ Our docs live in `apps/docs/` ([docs.superdoc.dev](https://docs.superdoc.dev)) a
 Create example projects showing SuperDoc with different frameworks (Next.js, Nuxt, Remix, etc.) in the `examples/` directory.
 
 **Add test coverage**
-Write unit tests, visual regression tests, or E2E tests for existing features. Better test coverage helps everyone.
+Write unit tests or visual regression tests for existing features. Better test coverage helps everyone.
 
 **Fix bugs and implement features**
 Check our [good first issues](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for approachable tasks, or [help wanted](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for meatier items.
@@ -75,8 +75,7 @@ packages/
   collaboration-yjs/     Collaboration server
 shared/                  Internal utilities
 examples/                Framework integration examples
-e2e-tests/               Playwright E2E tests
-tests/visual/            Visual regression tests
+tests/visual/            Visual regression tests (Playwright)
 ```
 
 ### Where to Make Changes
@@ -91,7 +90,6 @@ tests/visual/            Visual regression tests
 | React integration | `packages/react/` |
 | Main entry point (Vue) | `packages/superdoc/` |
 | Visual regression tests | `tests/visual/` |
-| E2E tests | `e2e-tests/` |
 
 ### Key Design Principle
 
@@ -266,7 +264,6 @@ When you open a PR, the following checks run automatically:
 - Linting (ESLint)
 - Unit tests
 - Visual regression tests (if UI changes)
-- E2E tests (for PRs to main)
 
 ### Before Submitting
 

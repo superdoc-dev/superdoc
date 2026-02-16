@@ -172,7 +172,8 @@ grep -r "your-keyword" packages/ --include="*.js" -l
 pnpm test
 
 # Run tests for a specific package
-pnpm test --filter super-editor
+pnpm run test:editor        # super-editor tests
+pnpm run test:superdoc      # superdoc package tests
 
 # Check formatting and linting
 pnpm run format:check

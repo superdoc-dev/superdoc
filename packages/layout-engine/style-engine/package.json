@@ -1,7 +1,7 @@
 {
   "name": "@superdoc/style-engine",
   "version": "0.1.0",
-  "description": "OOXML style resolution engine - produces ComputedStyle objects for layout engines",
+  "description": "OOXML style resolution engine — produces ComputedStyle objects for layout engines",
   "type": "module",
   "private": true,
   "main": "./src/index.ts",

@@ -100,6 +100,6 @@ export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
   });
 
   const liveMark = exactMatch || subsetMatch || (shouldFallbackToTypeOnly ? typeOnlyMatch : null);
-  if (!liveMark) console.warn('[track-changes] could not find live mark for snapshot', snapshot);
+  if (!liveMark) console.debug('[track-changes] could not find live mark for snapshot', snapshot);
   return liveMark;
 };

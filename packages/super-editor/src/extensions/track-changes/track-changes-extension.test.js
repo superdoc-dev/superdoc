@@ -446,13 +446,16 @@ describe('TrackChanges extension commands', () => {
 
       interactionEditor.commands.rejectTrackedChangesBetween(0, interactionEditor.state.doc.content.size);
 
-      const marks = interactionEditor.state.doc.nodeAt(1)?.marks || [];
+      const textPos = getFirstTextRange(interactionEditor.state.doc);
+      const textNode = interactionEditor.state.doc.nodeAt(textPos.from);
+      const marks = textNode?.marks || [];
       const textStyle = marks.find((mark) => mark.type.name === 'textStyle');
 
       expect(marks.some((mark) => mark.type.name === TrackFormatMarkName)).toBe(false);
       expect(marks.some((mark) => mark.type.name === 'bold')).toBe(false);
       expect(marks.some((mark) => mark.type.name === 'underline')).toBe(false);
       expect(textStyle?.attrs?.color).not.toBe('#FF00AA');
+      expect(textStyle?.attrs?.fontFamily).toBe('Times New Roman, serif');
     } finally {
       interactionEditor.destroy();
     }

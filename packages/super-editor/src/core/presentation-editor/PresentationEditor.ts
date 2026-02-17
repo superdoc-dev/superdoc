@@ -2197,7 +2197,7 @@ export class PresentationEditor extends EventEmitter {
    */
   #syncDecorationAttributes(): void {
     const view = this.#editor?.view;
-    if (!view) return;
+    if (!view?.state) return;
 
     const { state } = view;
 

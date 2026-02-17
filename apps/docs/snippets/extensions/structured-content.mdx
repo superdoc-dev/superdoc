@@ -66,6 +66,50 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
         }
       },
       {
+        label: 'Lock inline field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.updateStructuredContentById('1', {
+            attrs: { lockMode: 'sdtContentLocked' },
+          });
+        }
+      },
+      {
+        label: 'Unlock inline field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.updateStructuredContentById('1', {
+            attrs: { lockMode: 'unlocked' },
+          });
+        }
+      },
+      {
+        label: 'Lock block field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.updateStructuredContentById('2', {
+            attrs: { lockMode: 'sdtContentLocked' },
+          });
+        }
+      },
+      {
+        label: 'Unlock block field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.updateStructuredContentById('2', {
+            attrs: { lockMode: 'unlocked' },
+          });
+        }
+      },
+      {
         label: 'Delete all fields',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor

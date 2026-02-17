@@ -3307,6 +3307,94 @@ describe('requirePageBoundary edge cases', () => {
       expect(fragment.height).toBe(60);
     });
 
+    it('emits pre-registered page-relative drawings on their stored page after pagination advances', () => {
+      const firstPageParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-page-1',
+        runs: [],
+      };
+      const forcedBreak: FlowBlock = {
+        kind: 'pageBreak',
+        id: 'pb-before-drawing',
+      };
+      const secondPageParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-page-2',
+        runs: [],
+      };
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'drawing-pre-reg-page',
+        drawingKind: 'vectorShape',
+        geometry: { width: 120, height: 120, rotation: 0 },
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          alignH: 'left',
+          alignV: 'top',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'vectorShape',
+        width: 120,
+        height: 120,
+        scale: 1,
+        naturalWidth: 120,
+        naturalHeight: 120,
+        geometry: { width: 120, height: 120, rotation: 0, flipH: false, flipV: false },
+      };
+
+      const remeasureParagraph: NonNullable<LayoutOptions['remeasureParagraph']> = (_block, _maxWidth) => {
+        return makeMeasure([20]);
+      };
+
+      const layout = layoutDocument(
+        [firstPageParagraph, forcedBreak, drawingBlock, secondPageParagraph],
+        [paragraphMeasure, { kind: 'pageBreak' }, drawingMeasure, paragraphMeasure],
+        {
+          ...DEFAULT_OPTIONS,
+          remeasureParagraph,
+        },
+      );
+
+      expect(layout.pages).toHaveLength(2);
+
+      const page1 = layout.pages[0];
+      const page2 = layout.pages[1];
+
+      const wrappedPara = page1.fragments.find(
+        (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-page-1',
+      ) as ParaFragment;
+      expect(wrappedPara).toBeTruthy();
+      expect(wrappedPara.x).toBeGreaterThan(DEFAULT_OPTIONS.margins!.left);
+
+      const page2Para = page2.fragments.find(
+        (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-page-2',
+      ) as ParaFragment;
+      expect(page2Para).toBeTruthy();
+
+      const drawingOnPage1 = page1.fragments.find(
+        (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'drawing-pre-reg-page',
+      );
+      const drawingOnPage2 = page2.fragments.find(
+        (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'drawing-pre-reg-page',
+      );
+
+      expect(drawingOnPage1).toBeTruthy();
+      expect(drawingOnPage2).toBeUndefined();
+    });
+
     it('creates fragment for margin-relative anchored drawing with wrapNone', () => {
       const paragraphBlock: FlowBlock = {
         kind: 'paragraph',
@@ -3386,6 +3474,77 @@ describe('requirePageBoundary edge cases', () => {
       expect(img.y).toBeLessThan(options.margins!.top); // negative relative offset applied
       // behindDoc → zIndex 0
       expect(img.zIndex).toBe(0);
+    });
+
+    it('emits pre-registered page-relative images on their stored page after pagination advances', () => {
+      const firstPageParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-page-1',
+        runs: [],
+      };
+      const forcedBreak: FlowBlock = {
+        kind: 'pageBreak',
+        id: 'pb-before-image',
+      };
+      const secondPageParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-page-2',
+        runs: [],
+      };
+      const imageBlock: ImageBlock = {
+        kind: 'image',
+        id: 'img-pre-reg-page',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          alignH: 'left',
+          alignV: 'top',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const imageMeasure: ImageMeasure = {
+        kind: 'image',
+        width: 120,
+        height: 120,
+      };
+
+      const remeasureParagraph: NonNullable<LayoutOptions['remeasureParagraph']> = (_block, _maxWidth) => {
+        return makeMeasure([20]);
+      };
+
+      const layout = layoutDocument(
+        [firstPageParagraph, forcedBreak, imageBlock, secondPageParagraph],
+        [paragraphMeasure, { kind: 'pageBreak' }, imageMeasure, paragraphMeasure],
+        {
+          ...DEFAULT_OPTIONS,
+          remeasureParagraph,
+        },
+      );
+
+      expect(layout.pages).toHaveLength(2);
+
+      const page1 = layout.pages[0];
+      const page2 = layout.pages[1];
+
+      const imageOnPage1 = page1.fragments.find(
+        (fragment) => fragment.kind === 'image' && fragment.blockId === 'img-pre-reg-page',
+      );
+      const imageOnPage2 = page2.fragments.find(
+        (fragment) => fragment.kind === 'image' && fragment.blockId === 'img-pre-reg-page',
+      );
+
+      expect(imageOnPage1).toBeTruthy();
+      expect(imageOnPage2).toBeUndefined();
     });
   });
 

@@ -2629,6 +2629,10 @@ export class DomPainter {
         img.style.objectPosition = 'left top';
       }
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
+      const imageClipPath = resolveBlockClipPath(block);
+      if (imageClipPath) {
+        img.style.clipPath = imageClipPath;
+      }
 
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
       // conversion formulas calculated based on Libreoffice vml reader
@@ -2756,6 +2760,10 @@ export class DomPainter {
       img.style.objectPosition = 'left top';
     }
     img.style.display = 'block';
+    const imageClipPath = resolveBlockClipPath(drawing);
+    if (imageClipPath) {
+      img.style.clipPath = imageClipPath;
+    }
     return img;
   }
 
@@ -3995,6 +4003,44 @@ export class DomPainter {
     // Apply data attributes
     if (run.dataAttrs) {
       applyRunDataAttributes(img, run.dataAttrs);
+    }
+
+    const runClipPath = readClipPathValue((run as { clipPath?: unknown }).clipPath);
+    if (runClipPath && this.doc) {
+      img.style.clipPath = runClipPath;
+      img.style.display = 'block';
+      img.style.marginTop = '';
+      img.style.marginBottom = '';
+      img.style.marginLeft = '';
+      img.style.marginRight = '';
+      img.style.verticalAlign = '';
+      img.style.position = 'static';
+      img.style.zIndex = '';
+
+      const wrapper = this.doc.createElement('span');
+      wrapper.classList.add('superdoc-inline-image-clip-wrapper');
+      wrapper.style.display = 'inline-block';
+      wrapper.style.width = `${run.width}px`;
+      wrapper.style.height = `${run.height}px`;
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      wrapper.style.position = 'relative';
+      wrapper.style.zIndex = '1';
+      if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
+      if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
+      if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
+      if (run.distRight) wrapper.style.marginRight = `${run.distRight}px`;
+
+      if (run.pmStart != null) {
+        wrapper.dataset.pmStart = String(run.pmStart);
+      }
+      if (run.pmEnd != null) {
+        wrapper.dataset.pmEnd = String(run.pmEnd);
+      }
+      wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
+      this.applySdtDataset(wrapper, run.sdt);
+
+      wrapper.appendChild(img);
+      return wrapper;
     }
 
     return img;
@@ -5572,6 +5618,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
             imgRun.distBottom ?? '',
             imgRun.distLeft ?? '',
             imgRun.distRight ?? '',
+            readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
             // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           ].join(',');
         }
@@ -5676,7 +5723,14 @@ const deriveBlockVersion = (block: FlowBlock): string => {
   }
 
   if (block.kind === 'image') {
-    return [block.src ?? '', block.width ?? '', block.height ?? '', block.alt ?? '', block.title ?? ''].join('|');
+    return [
+      block.src ?? '',
+      block.width ?? '',
+      block.height ?? '',
+      block.alt ?? '',
+      block.title ?? '',
+      resolveBlockClipPath(block),
+    ].join('|');
   }
 
   if (block.kind === 'drawing') {
@@ -5689,6 +5743,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         imageLike.width ?? '',
         imageLike.height ?? '',
         imageLike.alt ?? '',
+        resolveBlockClipPath(imageLike),
       ].join('|');
     }
     if (block.drawingKind === 'vectorShape') {
@@ -5939,6 +5994,29 @@ interface CommentHighlightResult {
   baseColor?: string;
   hasNestedComments?: boolean;
 }
+
+const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
+
+const readClipPathValue = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim();
+  if (normalized.length === 0) return '';
+  const lower = normalized.toLowerCase();
+  if (!CLIP_PATH_PREFIXES.some((prefix) => lower.startsWith(prefix))) return '';
+  return normalized;
+};
+
+const resolveClipPathFromAttrs = (attrs: unknown): string => {
+  if (!attrs || typeof attrs !== 'object') return '';
+  const record = attrs as Record<string, unknown>;
+  return readClipPathValue(record.clipPath);
+};
+
+const resolveBlockClipPath = (block: unknown): string => {
+  if (!block || typeof block !== 'object') return '';
+  const record = block as Record<string, unknown>;
+  return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
+};
 
 const getCommentHighlight = (run: TextRun, activeCommentId: string | null): CommentHighlightResult => {
   const comments = run.comments;

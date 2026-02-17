@@ -284,6 +284,42 @@ describe('extractStrokeColor', () => {
     };
     expect(extractStrokeColor(spPr, style)).toBeNull();
   });
+
+  it('falls back to style lnRef with srgbClr', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:lnRef',
+          attributes: { idx: '1' },
+          elements: [{ name: 'a:srgbClr', attributes: { val: '123456' } }],
+        },
+      ],
+    };
+
+    expect(extractStrokeColor(spPr, style)).toBe('#123456');
+  });
+
+  it('falls back to style lnRef with prstClr and modifiers', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:lnRef',
+          attributes: { idx: '1' },
+          elements: [
+            {
+              name: 'a:prstClr',
+              attributes: { val: 'white' },
+              elements: [{ name: 'a:shade', attributes: { val: '50000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractStrokeColor(spPr, style)).toBe('#808080');
+  });
 });
 
 describe('extractFillColor', () => {
@@ -429,5 +465,51 @@ describe('extractFillColor', () => {
       ],
     };
     expect(extractFillColor(spPr, style)).toBeNull();
+  });
+
+  it('falls back to style fillRef with srgbClr and alpha', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:fillRef',
+          attributes: { idx: '1' },
+          elements: [
+            {
+              name: 'a:srgbClr',
+              attributes: { val: '00ff00' },
+              elements: [{ name: 'a:alpha', attributes: { val: '50000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractFillColor(spPr, style)).toEqual({
+      type: 'solidWithAlpha',
+      color: '#00ff00',
+      alpha: 0.5,
+    });
+  });
+
+  it('falls back to style fillRef with prstClr and modifiers', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:fillRef',
+          attributes: { idx: '1' },
+          elements: [
+            {
+              name: 'a:prstClr',
+              attributes: { val: 'white' },
+              elements: [{ name: 'a:shade', attributes: { val: '50000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractFillColor(spPr, style)).toBe('#808080');
   });
 });

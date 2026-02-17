@@ -1937,7 +1937,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         Number.isFinite(preRegPos.pageNumber)
       ) {
         // Use pre-computed position for page-relative anchors
-        const state = paginator.ensurePage();
+        const state = paginator.getPageByNumber(preRegPos.pageNumber);
         const imgBlock = block as ImageBlock;
         const imgMeasure = measure as ImageMeasure;
 
@@ -2013,7 +2013,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         Number.isFinite(preRegPos.pageNumber)
       ) {
         // Use pre-computed position for page-relative anchored drawings
-        const state = paginator.ensurePage();
+        const state = paginator.getPageByNumber(preRegPos.pageNumber);
         const drawBlock = block as DrawingBlock;
         const drawMeasure = measure as DrawingMeasure;
 

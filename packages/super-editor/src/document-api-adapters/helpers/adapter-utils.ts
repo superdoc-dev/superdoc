@@ -3,12 +3,32 @@ import { getBlockIndex } from './index-cache.js';
 import { findBlockById, isTextBlockCandidate, type BlockCandidate, type BlockIndex } from './node-address-resolver.js';
 import { resolveTextRangeInBlock } from './text-offset-resolver.js';
 import type { Editor } from '../../core/Editor.js';
+import { DocumentApiAdapterError } from '../errors.js';
 
 export type WithinResult = { ok: true; range: { start: number; end: number } | undefined } | { ok: false };
 export type ResolvedTextTarget = { from: number; to: number };
 
+function findTextBlockCandidates(index: BlockIndex, blockId: string): BlockCandidate[] {
+  return index.candidates.filter((candidate) => candidate.nodeId === blockId && isTextBlockCandidate(candidate));
+}
+
+function assertUnambiguous(matches: BlockCandidate[], blockId: string): void {
+  if (matches.length > 1) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      `Block ID "${blockId}" is ambiguous: matched ${matches.length} text blocks.`,
+      {
+        blockId,
+        matchCount: matches.length,
+      },
+    );
+  }
+}
+
 function findInlineWithinTextBlock(index: BlockIndex, blockId: string): BlockCandidate | undefined {
-  return index.candidates.find((candidate) => candidate.nodeId === blockId && isTextBlockCandidate(candidate));
+  const matches = findTextBlockCandidates(index, blockId);
+  assertUnambiguous(matches, blockId);
+  return matches[0];
 }
 
 /**
@@ -17,12 +37,13 @@ function findInlineWithinTextBlock(index: BlockIndex, blockId: string): BlockCan
  * @param editor - The editor instance.
  * @param target - The text address to resolve.
  * @returns Absolute `{ from, to }` positions, or `null` if the target block cannot be found.
+ * @throws {DocumentApiAdapterError} `INVALID_TARGET` when multiple text blocks share the same blockId.
  */
 export function resolveTextTarget(editor: Editor, target: TextAddress): ResolvedTextTarget | null {
   const index = getBlockIndex(editor);
-  const block = index.candidates.find(
-    (candidate) => candidate.nodeId === target.blockId && isTextBlockCandidate(candidate),
-  );
+  const matches = findTextBlockCandidates(index, target.blockId);
+  assertUnambiguous(matches, target.blockId);
+  const block = matches[0];
   if (!block) return null;
   return resolveTextRangeInBlock(block.node, block.pos, target.range);
 }

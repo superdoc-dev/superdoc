@@ -107,6 +107,65 @@ function makeEditor(text = 'Hello'): {
   return { editor, dispatch, insertTrackedChange, textBetween, tr };
 }
 
+function makeEditorWithDuplicateBlockIds(): {
+  editor: Editor;
+  dispatch: ReturnType<typeof vi.fn>;
+  tr: {
+    insertText: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    setMeta: ReturnType<typeof vi.fn>;
+    addMark: ReturnType<typeof vi.fn>;
+  };
+} {
+  const firstTextNode = createNode('text', [], { text: 'Hello' });
+  const secondTextNode = createNode('text', [], { text: 'World' });
+  const firstParagraph = createNode('paragraph', [firstTextNode], {
+    attrs: { sdBlockId: 'dup' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const secondParagraph = createNode('paragraph', [secondTextNode], {
+    attrs: { sdBlockId: 'dup' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [firstParagraph, secondParagraph], { isBlock: false });
+
+  const tr = {
+    insertText: vi.fn(),
+    delete: vi.fn(),
+    setMeta: vi.fn(),
+    addMark: vi.fn(),
+  };
+  tr.insertText.mockReturnValue(tr);
+  tr.delete.mockReturnValue(tr);
+  tr.setMeta.mockReturnValue(tr);
+  tr.addMark.mockReturnValue(tr);
+
+  const dispatch = vi.fn();
+
+  const editor = {
+    state: {
+      doc: {
+        ...doc,
+        textBetween: vi.fn((from: number, to: number) => {
+          const docText = 'Hello\nWorld';
+          const start = Math.max(0, from - 1);
+          const end = Math.max(start, to - 1);
+          return docText.slice(start, end);
+        }),
+      },
+      tr,
+    },
+    commands: {
+      insertTrackedChange: vi.fn(() => true),
+    },
+    dispatch,
+  } as unknown as Editor;
+
+  return { editor, dispatch, tr };
+}
+
 function makeEditorWithoutEditableTextBlock(): {
   editor: Editor;
 } {
@@ -301,6 +360,28 @@ describe('writeAdapter', () => {
         { changeMode: 'direct' },
       ),
     ).toThrow('Mutation target could not be resolved.');
+  });
+
+  it('throws INVALID_TARGET when target block id is ambiguous across multiple text blocks', () => {
+    const { editor, dispatch, tr } = makeEditorWithDuplicateBlockIds();
+
+    try {
+      writeAdapter(
+        editor,
+        {
+          kind: 'replace',
+          target: { kind: 'text', blockId: 'dup', range: { start: 0, end: 1 } },
+          text: 'X',
+        },
+        { changeMode: 'direct' },
+      );
+      throw new Error('Expected writeAdapter to throw for ambiguous blockId target.');
+    } catch (error) {
+      expect((error as { code?: string }).code).toBe('INVALID_TARGET');
+    }
+
+    expect(tr.insertText).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('requires collapsed targets for insert', () => {

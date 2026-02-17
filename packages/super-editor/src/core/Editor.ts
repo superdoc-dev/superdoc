@@ -2089,23 +2089,29 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
 
-      transactionToApply =
-        isTrackChangesActive && !skipTrackChanges
-          ? trackedTransaction({
-              tr: transactionToApply,
-              state: prevState,
-              user: this.options.user!,
-            })
-          : transactionToApply;
+      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      if (shouldTrack && forceTrackChanges && !this.options.user) {
+        throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
+      }
+
+      transactionToApply = shouldTrack
+        ? trackedTransaction({
+            tr: transactionToApply,
+            state: prevState,
+            user: this.options.user!,
+          })
+        : transactionToApply;
 
       const { state: appliedState } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
     } catch (error) {
+      if (forceTrackChanges) throw error;
       // just in case
       nextState = prevState.apply(transactionToApply);
       console.log(error);

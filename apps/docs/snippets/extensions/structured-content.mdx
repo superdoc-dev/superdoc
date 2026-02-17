@@ -15,7 +15,7 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
   customButtons={[
     [
       {
-        label: 'Insert inline field',
+        label: 'Insert inline (sdtLocked)',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
           if (!editor?.commands) return
@@ -24,13 +24,14 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
             attrs: {
              id: '1',
              alias: 'Client Name',
+             lockMode: 'sdtLocked',
             },
             text: 'John Doe',
           });
         }
       },
       {
-        label: 'Insert block field',
+        label: 'Insert block (sdtLocked)',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
           if (!editor?.commands) return
@@ -39,6 +40,7 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
             attrs: {
               id: '2',
               alias: 'Payment Terms',
+              lockMode: 'sdtLocked',
             },
             json: { type: 'paragraph', content: [{ type: 'text', text: 'Payment is due within 30 days of invoice date. Late payments incur a 1.5% monthly fee. All disputes must be submitted in writing within 10 business days.' }] }
           });
@@ -65,7 +67,7 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
         }
       },
       {
-        label: 'Lock inline field',
+        label: 'Lock inline (sdtContentLocked)',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
           if (!editor?.commands) return
@@ -76,18 +78,7 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
         }
       },
       {
-        label: 'Unlock inline field',
-        onClick: (superdoc) => {
-          const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
-
-          editor.commands.updateStructuredContentById('1', {
-            attrs: { lockMode: 'unlocked' },
-          });
-        }
-      },
-      {
-        label: 'Lock block field',
+        label: 'Lock block (sdtContentLocked)',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
           if (!editor?.commands) return
@@ -98,11 +89,14 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
         }
       },
       {
-        label: 'Unlock block field',
+        label: 'Unlock all fields',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
           if (!editor?.commands) return
 
+          editor.commands.updateStructuredContentById('1', {
+            attrs: { lockMode: 'unlocked' },
+          });
           editor.commands.updateStructuredContentById('2', {
             attrs: { lockMode: 'unlocked' },
           });

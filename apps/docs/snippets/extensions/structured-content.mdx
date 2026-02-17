@@ -2,9 +2,10 @@ Native Word SDT (w:sdt) fields for documents. Supports inline and block structur
 
 ## Use case
 
-- Form templates - Create fillable documents with inline text fields and block content areas
-- Contract generation - Dynamic clauses and terms that map to Word content controls
-- Document automation - Programmatically update specific sections while preserving structure
+- Form templates — Create fillable documents with inline text fields and block content areas
+- Contract generation — Dynamic clauses and terms that map to Word content controls
+- Document automation — Programmatically update specific sections while preserving structure
+- Protected fields — Lock modes control which fields users can edit or delete (ECMA-376 `w:lock`)
 
 import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
 
@@ -30,6 +31,22 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
         }
       },
       {
+        label: 'Insert locked field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.insertStructuredContentInline({
+            attrs: {
+              id: '3',
+              alias: 'Account ID',
+              lockMode: 'sdtContentLocked',
+            },
+            text: 'ACC-00042',
+          });
+        }
+      },
+      {
         label: 'Insert block field',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
@@ -39,6 +56,7 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
             attrs: {
               id: '2',
               alias: 'Terms & Conditions',
+              lockMode: 'sdtLocked',
             },
             json: { type: 'paragraph', content: [{ type: 'text', text: 'Legal content...' }] }
           });
@@ -54,13 +72,24 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
         }
       },
       {
-        label: 'Update block field',
+        label: 'Lock inline field',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
           if (!editor?.commands) return
 
-          editor.commands.updateStructuredContentById('2', {
-            json: { type: 'paragraph', content: [{ type: 'text', text: 'Updated legal content...' }] }
+          editor.commands.updateStructuredContentById('1', {
+            attrs: { lockMode: 'contentLocked' },
+          });
+        }
+      },
+      {
+        label: 'Unlock inline field',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+
+          editor.commands.updateStructuredContentById('1', {
+            attrs: { lockMode: 'unlocked' },
           });
         }
       },
@@ -85,29 +114,39 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
 editor.commands.insertStructuredContentInline({
   attrs: {
     id: '1',
-    alias: 'Customer Name'
+    alias: 'Customer Name',
+    lockMode: 'sdtLocked', // users can edit the value but not delete the field
   },
   text: 'John Doe'
+});
+
+// Insert a read-only system field
+editor.commands.insertStructuredContentInline({
+  attrs: {
+    id: '3',
+    alias: 'Account ID',
+    lockMode: 'sdtContentLocked', // fully protected — no edits, no deletion
+  },
+  text: 'ACC-00042'
 });
 
 // Insert block field for terms section
 editor.commands.insertStructuredContentBlock({
   attrs: {
     id: '2',
-    alias: 'Terms & Conditions'
+    alias: 'Terms & Conditions',
   },
   html: '<p>Please review the terms...</p>'
 });
 
-// Update inline field content
+// Update field content
 editor.commands.updateStructuredContentById('1', {
   text: 'Jane Smith'
 });
 
-// Update block field content and attributes
-editor.commands.updateStructuredContentById('2', {
-  html: '<p>Updated terms and conditions...</p>',
-  attrs: { alias: 'Legal Terms' }
+// Change lock mode without changing content
+editor.commands.updateStructuredContentById('1', {
+  attrs: { lockMode: 'contentLocked' }
 });
 
 // Get all structured content tags

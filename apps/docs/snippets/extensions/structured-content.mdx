@@ -69,37 +69,6 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
     ],
     [
       {
-        label: 'Lock inline (sdtContentLocked)',
-        onClick: (superdoc) => {
-          const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
-          editor.commands.updateStructuredContentById('1', {
-            attrs: { lockMode: 'sdtContentLocked' },
-          });
-        }
-      },
-      {
-        label: 'Lock block (sdtContentLocked)',
-        onClick: (superdoc) => {
-          const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
-          editor.commands.updateStructuredContentById('2', {
-            attrs: { lockMode: 'sdtContentLocked' },
-          });
-        }
-      },
-      {
-        label: 'Unlock all',
-        onClick: (superdoc) => {
-          const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
-          editor.commands.updateStructuredContentById('1', { attrs: { lockMode: 'unlocked' } });
-          editor.commands.updateStructuredContentById('2', { attrs: { lockMode: 'unlocked' } });
-        }
-      },
-    ],
-    [
-      {
         label: 'Delete all fields',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor

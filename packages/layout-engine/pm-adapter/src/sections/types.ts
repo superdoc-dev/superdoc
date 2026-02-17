@@ -72,7 +72,7 @@ export type SectionSignature = {
   orientation?: 'portrait' | 'landscape';
   headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
-  columnsPx?: { count: number; gap: number };
+  columnsPx?: { count: number; gap: number; withSeparator?: boolean };
   numbering?: {
     format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
     start?: number;
@@ -105,7 +105,7 @@ export interface SectionRange {
   } | null;
   pageSize: { w: number; h: number } | null;
   orientation: 'portrait' | 'landscape' | null;
-  columns: { count: number; gap: number } | null;
+  columns: { count: number; gap: number; withSeparator?: boolean } | null;
   type: SectionType;
   titlePg: boolean;
   headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;

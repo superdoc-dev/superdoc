@@ -213,6 +213,44 @@ describe('layoutDocument', () => {
     expect(layout.columns).toMatchObject({ count: 2, gap: 20 });
   });
 
+  it('sets "page.columns" with separator when column separator is enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    expect(layout.columns).toMatchObject({ count: 2, gap: 20, withSeparator: true });
+  });
+
+  it('does not set "page.columns" on single column layout', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toBeUndefined();
+    expect(layout.columns).toBeUndefined();
+  });
+
+  it('sets "page.columns" without separator when column separator is not enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: false },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+    expect(layout.columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+  });
+
   it('applies spacing before and after paragraphs', () => {
     const spacingBlock: FlowBlock = {
       kind: 'paragraph',

@@ -15,8 +15,8 @@ export type SectionState = {
   pendingFooterDistance: number | null;
   activePageSize: { w: number; h: number };
   pendingPageSize: { w: number; h: number } | null;
-  activeColumns: { count: number; gap: number };
-  pendingColumns: { count: number; gap: number } | null;
+  activeColumns: { count: number; gap: number; withSeparator?: boolean };
+  pendingColumns: { count: number; gap: number; withSeparator?: boolean } | null;
   activeOrientation: 'portrait' | 'landscape' | null;
   pendingOrientation: 'portrait' | 'landscape' | null;
   hasAnyPages: boolean;
@@ -29,7 +29,10 @@ export type BreakDecision = {
 };
 
 /** Default single-column configuration per OOXML spec (absence of w:cols element) */
-const SINGLE_COLUMN_DEFAULT: Readonly<{ count: number; gap: number }> = { count: 1, gap: 0 };
+const SINGLE_COLUMN_DEFAULT: Readonly<{ count: number; gap: number; withSeparator?: boolean }> = {
+  count: 1,
+  gap: 0,
+};
 
 /**
  * Get the column configuration for a section break.
@@ -37,10 +40,16 @@ const SINGLE_COLUMN_DEFAULT: Readonly<{ count: number; gap: number }> = { count:
  * Per OOXML spec, absence of <w:cols> element means single column layout.
  *
  * @param blockColumns - The columns property from the section break block (may be undefined)
- * @returns Column configuration with count and gap
+ * @returns Column configuration with count, gap, and separator presence
  */
-function getColumnConfig(blockColumns: { count: number; gap: number } | undefined): { count: number; gap: number } {
-  return blockColumns ? { count: blockColumns.count, gap: blockColumns.gap } : { ...SINGLE_COLUMN_DEFAULT };
+function getColumnConfig(blockColumns: { count: number; gap: number; withSeparator?: boolean } | undefined): {
+  count: number;
+  gap: number;
+  withSeparator?: boolean;
+} {
+  return blockColumns
+    ? { count: blockColumns.count, gap: blockColumns.gap, withSeparator: blockColumns.withSeparator }
+    : { ...SINGLE_COLUMN_DEFAULT };
 }
 
 /**

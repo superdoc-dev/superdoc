@@ -16,7 +16,7 @@ import type { FlowBlock, SectionVerticalAlign } from '@superdoc/contracts';
 export type SectionProps = {
   margins?: { header?: number; footer?: number; top?: number; right?: number; bottom?: number; left?: number };
   pageSize?: { w: number; h: number };
-  columns?: { count: number; gap: number };
+  columns?: { count: number; gap: number; withSeparator?: boolean };
   orientation?: 'portrait' | 'landscape';
   vAlign?: SectionVerticalAlign;
 };
@@ -59,7 +59,7 @@ const _snapshotSectionProps = (block: FlowBlock): SectionProps | null => {
   }
   if (block.columns) {
     hasProps = true;
-    props.columns = { count: block.columns.count, gap: block.columns.gap };
+    props.columns = { count: block.columns.count, gap: block.columns.gap, withSeparator: block.columns.withSeparator };
   }
   if (block.orientation) {
     hasProps = true;
@@ -135,7 +135,11 @@ export function computeNextSectionPropsAtBreak(blocks: FlowBlock[]): Map<number,
       props.pageSize = { w: source.pageSize.w, h: source.pageSize.h };
     }
     if (source.columns) {
-      props.columns = { count: source.columns.count, gap: source.columns.gap };
+      props.columns = {
+        count: source.columns.count,
+        gap: source.columns.gap,
+        withSeparator: source.columns.withSeparator,
+      };
     }
     if (source.orientation) {
       props.orientation = source.orientation;

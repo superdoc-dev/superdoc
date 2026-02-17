@@ -42,6 +42,15 @@ export function parseColumnGap(gapTwips: string | number | undefined): number {
   return Number.isFinite(gap) ? gap / TWIPS_PER_INCH : DEFAULT_COLUMN_GAP_INCHES;
 }
 
+/**
+ * Parse presence of column separator from w:sep attribute (can be '1', 'true' or 'on').
+ * @param rawValue - Raw value from w:sep attribute
+ * @returns Presence of column separator
+ */
+export function parseColumnSeparator(rawValue: string | number | undefined): boolean {
+  return rawValue === '1' || rawValue === 'true' || rawValue === 'on' || rawValue === 1;
+}
+
 type SectionType = 'continuous' | 'nextPage' | 'evenPage' | 'oddPage';
 type Orientation = 'portrait' | 'landscape';
 type HeaderRefType = Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
@@ -208,16 +217,20 @@ function extractPageNumbering(elements: SectionElement[]):
 /**
  * Extract columns from <w:cols> element.
  */
-function extractColumns(elements: SectionElement[]): { count: number; gap: number } | undefined {
+function extractColumns(
+  elements: SectionElement[],
+): { count: number; gap: number; withSeparator?: boolean } | undefined {
   const cols = elements.find((el) => el?.name === 'w:cols');
   if (!cols?.attributes) return undefined;
 
   const count = parseColumnCount(cols.attributes['w:num'] as string | number | undefined);
   const gapInches = parseColumnGap(cols.attributes['w:space'] as string | number | undefined);
+  const withSeparator = parseColumnSeparator(cols.attributes['w:sep'] as string | number | undefined);
 
   return {
     count,
     gap: gapInches * PX_PER_INCH,
+    withSeparator,
   };
 }
 
@@ -286,7 +299,7 @@ export function extractSectionData(para: PMNode): {
   type?: SectionType;
   pageSizePx?: { w: number; h: number };
   orientation?: Orientation;
-  columnsPx?: { count: number; gap: number };
+  columnsPx?: { count: number; gap: number; withSeparator?: boolean };
   titlePg?: boolean;
   headerRefs?: HeaderRefType;
   footerRefs?: HeaderRefType;

@@ -2065,6 +2065,8 @@ export class DomPainter {
       el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index)));
     });
     this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderColumnSeparators(el, page, width, height);
+
     return el;
   }
 
@@ -2144,6 +2146,36 @@ export class DomPainter {
       return null;
     }
   }
+	private renderColumnSeparators(pageEl: HTMLElement, page: Page, pageWidth: number, pageHeight: number): void {
+		if (!this.doc) return;
+		if (!page.columns) return;
+		if (!page.columns.withSeparator) return;
+		if (page.columns.count <= 1) return;
+		if (!page.margins) return;
+
+		const leftMargin = page.margins.left ?? 0;
+		const rightMargin = page.margins.right ?? 0;
+		const topMargin = page.margins.top ?? 0;
+		const bottomMargin = page.margins.bottom ?? 0;
+		const contentWidth = pageWidth - leftMargin - rightMargin;
+		const columnCount = page.columns.count;
+		const gap = page.columns.gap;
+		const columnWidth = (contentWidth - gap * (columnCount - 1)) / columnCount;
+
+		for (let i = 0; i < columnCount - 1; i++) {
+			const separatorX = leftMargin + (i + 1) * columnWidth + i * gap + gap / 2;
+			const separatorEl = this.doc.createElement('div');
+
+			separatorEl.style.position = 'absolute';
+			separatorEl.style.left = `${separatorX}px`;
+			separatorEl.style.top = `${topMargin}px`;
+			separatorEl.style.height = `${pageHeight - topMargin - bottomMargin}px`;
+			separatorEl.style.width = '1px';
+			separatorEl.style.backgroundColor = '#b3b3b3';
+			separatorEl.style.pointerEvents = 'none';
+			pageEl.appendChild(separatorEl);
+		}
+	}
 
   private renderDecorationsForPage(pageEl: HTMLElement, page: Page, pageIndex: number): void {
     if (this.isSemanticFlow) return;
@@ -2579,7 +2611,9 @@ export class DomPainter {
     });
 
     this.renderDecorationsForPage(el, page, pageIndex);
-    return { element: el, fragments: fragmentStates };
+    this.renderColumnSeparators(el, page, pageSize.w, pageSize.h);
+
+	return { element: el, fragments: fragmentStates };
   }
 
   private applySemanticPageOverrides(el: HTMLElement): void {

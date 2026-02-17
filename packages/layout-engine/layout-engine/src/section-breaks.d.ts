@@ -23,10 +23,12 @@ export type SectionState = {
   activeColumns: {
     count: number;
     gap: number;
+    withSeparator?: boolean;
   };
   pendingColumns: {
     count: number;
     gap: number;
+    withSeparator?: boolean;
   } | null;
   activeOrientation: 'portrait' | 'landscape' | null;
   pendingOrientation: 'portrait' | 'landscape' | null;

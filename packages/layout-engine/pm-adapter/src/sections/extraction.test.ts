@@ -250,6 +250,7 @@ describe('extraction', () => {
       expect(result?.columnsPx).toEqual({
         count: 2,
         gap: 48, // 720 twips = 0.5 inches = 48 pixels
+        withSeparator: false,
       });
     });
 
@@ -338,6 +339,129 @@ describe('extraction', () => {
 
     it('should return 1 for negative number', () => {
       expect(parseColumnCount(-5)).toBe(1);
+    });
+  });
+
+  // ==================== extractSectionData - column separator (w:sep) tests ====================
+  describe('extractSectionData - column separator', () => {
+    it('should include separator when w:sep="1"', () => {
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '2', 'w:space': '720', 'w:sep': '1' },
+                },
+              ],
+            },
+          },
+        },
+      };
+      const result = extractSectionData(para);
+
+      expect(result).not.toBeNull();
+      expect(result?.columnsPx).toEqual({
+        count: 2,
+        gap: 48,
+        withSeparator: true,
+      });
+    });
+
+    it('should include separator when w:sep="true"', () => {
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '2', 'w:space': '720', 'w:sep': 'true' },
+                },
+              ],
+            },
+          },
+        },
+      };
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx?.withSeparator).toBe(true);
+    });
+
+    it('should include separator when w:sep="on"', () => {
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '2', 'w:space': '720', 'w:sep': 'on' },
+                },
+              ],
+            },
+          },
+        },
+      };
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx?.withSeparator).toBe(true);
+    });
+
+    it('should not include separator when w:sep is absent', () => {
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '2', 'w:space': '720' },
+                },
+              ],
+            },
+          },
+        },
+      };
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx).toEqual({ count: 2, gap: 48, withSeparator: false });
+    });
+
+    it('should not include separator when w:sep="0"', () => {
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '2', 'w:space': '720', 'w:sep': '0' },
+                },
+              ],
+            },
+          },
+        },
+      };
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx).toEqual({ count: 2, gap: 48, withSeparator: false });
     });
   });
 

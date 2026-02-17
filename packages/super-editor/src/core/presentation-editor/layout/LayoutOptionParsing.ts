@@ -20,20 +20,23 @@ export function inchesToPx(value: unknown): number | undefined {
 /**
  * Parses column layout configuration from raw input.
  *
- * Extracts column count and gap spacing from various possible property names,
+ * Extracts column count, gap spacing, and separator presence from various possible property names,
  * normalizing to a standard ColumnLayout object. Returns undefined for single-column
  * layouts (count <= 1) since they don't require special column handling.
  *
  * @param raw - Raw column configuration object with properties like count, num, or numberOfColumns
- * @returns ColumnLayout with count and gap, or undefined if not multi-column or invalid
+ * @returns ColumnLayout with count, gap and separator presence, or undefined if not multi-column
+ * or invalid
  *
  * @remarks
  * - Returns undefined if raw is not an object
  * - Accepts count from: 'count', 'num', or 'numberOfColumns' properties
  * - Returns undefined if count <= 1 (single column doesn't need layout)
  * - Accepts gap from: 'space' or 'gap' properties (converted from inches to pixels)
- * - Gap defaults to 0 if not provided or invalid
+ * - Accepts separator presence from: 'withSeparator' boolean property
  * - Column count is floored to nearest integer and minimum of 1
+ * - Gap defaults to 0 if not provided or invalid
+ * - Separator presence defaults to false if not provided or not a boolean
  */
 export function parseColumns(raw: unknown): ColumnLayout | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -44,5 +47,6 @@ export function parseColumns(raw: unknown): ColumnLayout | undefined {
   }
   const count = Math.max(1, Math.floor(rawCount));
   const gap = inchesToPx(columnSource.space ?? columnSource.gap) ?? 0;
-  return { count, gap };
+  const withSeparator = typeof columnSource.withSeparator === 'boolean' ? columnSource.withSeparator : false;
+  return { count, gap, withSeparator };
 }

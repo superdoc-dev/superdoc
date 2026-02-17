@@ -17,7 +17,7 @@ export type {
 export { SectionType, DEFAULT_PARAGRAPH_SECTION_TYPE, DEFAULT_BODY_SECTION_TYPE } from './types.js';
 
 // Extraction
-export { extractSectionData, parseColumnCount, parseColumnGap } from './extraction.js';
+export { extractSectionData, parseColumnCount, parseColumnGap, parseColumnSeparator } from './extraction.js';
 
 // Analysis
 export {

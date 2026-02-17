@@ -995,7 +995,7 @@ describe('toFlowBlocks', () => {
       expect(multiColumnBreak).toBeDefined();
       expect((multiColumnBreak as FlowBlock).attrs?.requirePageBoundary).toBeUndefined();
       // Gap is in pixels (0.5in = 48px @96DPI)
-      expect((multiColumnBreak as FlowBlock).columns).toEqual({ count: 2, gap: 48 });
+      expect((multiColumnBreak as FlowBlock).columns).toEqual({ count: 2, gap: 48, withSeparator: false });
     });
 
     it('interprets missing w:num in w:cols as a single-column layout change', () => {
@@ -1028,7 +1028,7 @@ describe('toFlowBlocks', () => {
       const allBreaks = getSectionBreaks(blocks, { includeFirst: true });
       const tailBreak = allBreaks.find((b) => b.attrs?.sectionIndex === 0);
       expect(tailBreak).toBeDefined();
-      expect((tailBreak as never).columns).toEqual({ count: 1, gap: 48 });
+      expect((tailBreak as never).columns).toEqual({ count: 1, gap: 48, withSeparator: false });
     });
 
     describe('Regression tests for section property bug fixes', () => {
@@ -1076,7 +1076,7 @@ describe('toFlowBlocks', () => {
         expect(firstBreak).toBeDefined();
         expect(secondBreak).toBeDefined();
         // Both have w:space="720" which means single column
-        expect((firstBreak as FlowBlock).columns).toEqual({ count: 1, gap: 48 });
+        expect((firstBreak as FlowBlock).columns).toEqual({ count: 1, gap: 48, withSeparator: false });
         expect((secondBreak as FlowBlock).type).toBe('continuous'); // Second sectPr
       });
 
@@ -1116,7 +1116,7 @@ describe('toFlowBlocks', () => {
 
         // Should emit the section break despite paragraph having content
         expect(contentBreak).toBeDefined();
-        expect((contentBreak as FlowBlock).columns).toEqual({ count: 2, gap: 48 });
+        expect((contentBreak as FlowBlock).columns).toEqual({ count: 2, gap: 48, withSeparator: false });
       });
 
       it('detects column changes from single to multi to single column', () => {

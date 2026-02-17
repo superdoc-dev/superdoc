@@ -284,6 +284,22 @@ describe('writeAdapter', () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
+  it('sets skipTrackChanges metadata for direct writes to preserve direct mutation semantics', () => {
+    const { editor, tr } = makeEditor('Hello');
+
+    writeAdapter(
+      editor,
+      {
+        kind: 'replace',
+        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+        text: 'World',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(tr.setMeta).toHaveBeenCalledWith('skipTrackChanges', true);
+  });
+
   it('creates tracked changes for tracked writes', () => {
     const resolverSpy = vi
       .spyOn(trackedChangeResolver, 'toCanonicalTrackedChangeId')

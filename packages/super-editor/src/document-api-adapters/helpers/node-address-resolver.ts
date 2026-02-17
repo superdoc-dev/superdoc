@@ -148,6 +148,7 @@ export function toBlockAddress(candidate: BlockCandidate): BlockNodeAddress {
 export function buildBlockIndex(editor: Editor): BlockIndex {
   const candidates: BlockCandidate[] = [];
   const byId = new Map<string, BlockCandidate>();
+  const ambiguous = new Set<string>();
 
   // This traversal is a hot path for adapter workflows (for example find ->
   // getNode). Keep this pure snapshot builder so a transaction-invalidated
@@ -167,7 +168,13 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
     };
 
     candidates.push(candidate);
-    byId.set(`${candidate.nodeType}:${candidate.nodeId}`, candidate);
+    const key = `${candidate.nodeType}:${candidate.nodeId}`;
+    if (byId.has(key)) {
+      ambiguous.add(key);
+      byId.delete(key);
+    } else if (!ambiguous.has(key)) {
+      byId.set(key, candidate);
+    }
   });
 
   return { candidates, byId };

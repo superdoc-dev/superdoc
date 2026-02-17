@@ -395,8 +395,7 @@ describe('buildBlockIndex', () => {
       expect(index.candidates.map((c) => c.nodeId)).toEqual(['a', 'b', 'c']);
     });
 
-    it('last candidate wins in byId when composite keys collide', () => {
-      // Duplicate IDs are invalid, but if present, the map keeps the last seen node.
+    it('excludes ambiguous composite keys from byId to prevent silent arbitrary resolution', () => {
       const p1 = makeNode('paragraph', { sdBlockId: 'dup' }, 10);
       const p2 = makeNode('paragraph', { sdBlockId: 'dup' }, 10);
       const doc = makeNode('doc', {}, 24, [
@@ -405,9 +404,10 @@ describe('buildBlockIndex', () => {
       ]);
       const index = buildBlockIndex(makeEditor(doc));
 
-      // The map keeps the last one set
-      const found = index.byId.get('paragraph:dup');
-      expect(found?.pos).toBe(12);
+      // Ambiguous keys are excluded from byId to prevent silent arbitrary resolution.
+      // Both candidates still appear in the ordered candidates array.
+      expect(index.byId.get('paragraph:dup')).toBeUndefined();
+      expect(index.candidates.filter((c) => c.nodeId === 'dup')).toHaveLength(2);
     });
 
     it('returns empty index for a document with no block nodes', () => {
@@ -458,6 +458,15 @@ describe('findBlockById', () => {
       anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
     };
     expect(findBlockById(index, address)).toBeUndefined();
+  });
+
+  it('treats duplicate nodeType:nodeId matches as ambiguous and does not resolve an arbitrary block', () => {
+    const index = indexFromNodes(
+      { typeName: 'paragraph', attrs: { sdBlockId: 'dup' }, offset: 0 },
+      { typeName: 'paragraph', attrs: { sdBlockId: 'dup' }, offset: 12 },
+    );
+
+    expect(findBlockById(index, { kind: 'block', nodeType: 'paragraph', nodeId: 'dup' })).toBeUndefined();
   });
 });
 

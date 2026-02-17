@@ -9,6 +9,7 @@ import type {
 } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from './errors.js';
 import { ensureTrackedCapability } from './helpers/mutation-helpers.js';
+import { applyDirectMutationMeta } from './helpers/transaction-meta.js';
 import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from './helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
 import { toCanonicalTrackedChangeId } from './helpers/tracked-change-resolver.js';
@@ -114,17 +115,15 @@ function applyDirectWrite(
   resolvedTarget: ResolvedWriteTarget,
 ): TextMutationReceipt {
   if (request.kind === 'delete') {
-    const tr = editor.state.tr
-      .delete(resolvedTarget.range.from, resolvedTarget.range.to)
-      .setMeta('inputType', 'programmatic');
+    const tr = applyDirectMutationMeta(editor.state.tr.delete(resolvedTarget.range.from, resolvedTarget.range.to));
     editor.dispatch(tr);
     return { success: true, resolution: resolvedTarget.resolution };
   }
 
   // text is guaranteed non-empty for insert/replace after validateWriteRequest
-  const tr = editor.state.tr
-    .insertText(request.text ?? '', resolvedTarget.range.from, resolvedTarget.range.to)
-    .setMeta('inputType', 'programmatic');
+  const tr = applyDirectMutationMeta(
+    editor.state.tr.insertText(request.text ?? '', resolvedTarget.range.from, resolvedTarget.range.to),
+  );
   editor.dispatch(tr);
   return { success: true, resolution: resolvedTarget.resolution };
 }

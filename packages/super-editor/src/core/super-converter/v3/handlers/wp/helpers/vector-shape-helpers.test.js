@@ -207,6 +207,30 @@ describe('extractStrokeColor', () => {
     expect(extractStrokeColor(spPr, null)).toBe('#808080');
   });
 
+  it('applies shade modifier to srgbClr stroke color', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:ln',
+          elements: [
+            {
+              name: 'a:solidFill',
+              elements: [
+                {
+                  name: 'a:srgbClr',
+                  attributes: { val: 'FFFFFF' },
+                  elements: [{ name: 'a:shade', attributes: { val: '50000' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractStrokeColor(spPr, null)).toBe('#808080');
+  });
+
   it('falls back to style when spPr has no stroke', () => {
     const spPr = { elements: [] };
     const style = {

@@ -151,71 +151,60 @@ export function getPresetColor(name) {
 }
 
 /**
- * Extracts color and alpha from a color element (a:schemeClr, a:srgbClr, or a:prstClr).
- * Consolidates shared modifier/alpha logic used by both fill and stroke extraction.
- * @param {Object} solidFill - The a:solidFill element
+ * Applies color modifiers (shade, tint, lumMod, lumOff) and extracts alpha from
+ * a color element's child modifier elements.
+ * @param {string} color - The base hex color
+ * @param {Array} elements - Child elements of the color node (e.g., a:shade, a:alpha)
+ * @returns {{ color: string, alpha: number|null }}
+ */
+function applyModifiersAndAlpha(color, elements) {
+  let alpha = null;
+  const modifiers = elements || [];
+  modifiers.forEach((mod) => {
+    if (mod.name === 'a:shade') {
+      color = applyColorModifier(color, 'shade', mod.attributes['val']);
+    } else if (mod.name === 'a:tint') {
+      color = applyColorModifier(color, 'tint', mod.attributes['val']);
+    } else if (mod.name === 'a:lumMod') {
+      color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
+    } else if (mod.name === 'a:lumOff') {
+      color = applyColorModifier(color, 'lumOff', mod.attributes['val']);
+    } else if (mod.name === 'a:alpha') {
+      alpha = parseInt(mod.attributes['val']) / 100000;
+    }
+  });
+  return { color, alpha };
+}
+
+/**
+ * Extracts color and alpha from an element containing a color child
+ * (a:schemeClr, a:srgbClr, or a:prstClr). Works with a:solidFill, style
+ * reference elements (a:lnRef, a:fillRef), or any parent that hosts a color child.
+ * @param {Object} element - The parent element (e.g., a:solidFill, a:lnRef, a:fillRef)
  * @returns {{ color: string, alpha: number|null }|null} Color and optional alpha, or null if no color found
  */
-function extractColorFromSolidFill(solidFill) {
-  if (!solidFill?.elements) return null;
+function extractColorFromElement(element) {
+  if (!element?.elements) return null;
 
-  const schemeClr = solidFill.elements.find((el) => el.name === 'a:schemeClr');
+  const schemeClr = element.elements.find((el) => el.name === 'a:schemeClr');
   if (schemeClr) {
     const themeName = schemeClr.attributes?.['val'];
-    let color = getThemeColor(themeName);
-    let alpha = null;
-
-    const modifiers = schemeClr.elements || [];
-    modifiers.forEach((mod) => {
-      if (mod.name === 'a:shade') {
-        color = applyColorModifier(color, 'shade', mod.attributes['val']);
-      } else if (mod.name === 'a:tint') {
-        color = applyColorModifier(color, 'tint', mod.attributes['val']);
-      } else if (mod.name === 'a:lumMod') {
-        color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
-      } else if (mod.name === 'a:lumOff') {
-        color = applyColorModifier(color, 'lumOff', mod.attributes['val']);
-      } else if (mod.name === 'a:alpha') {
-        alpha = parseInt(mod.attributes['val']) / 100000;
-      }
-    });
-
-    return { color, alpha };
+    const baseColor = getThemeColor(themeName);
+    return applyModifiersAndAlpha(baseColor, schemeClr.elements);
   }
 
-  const srgbClr = solidFill.elements.find((el) => el.name === 'a:srgbClr');
+  const srgbClr = element.elements.find((el) => el.name === 'a:srgbClr');
   if (srgbClr) {
-    let alpha = null;
-    const alphaEl = srgbClr.elements?.find((el) => el.name === 'a:alpha');
-    if (alphaEl) {
-      alpha = parseInt(alphaEl.attributes?.['val'] || '100000', 10) / 100000;
-    }
-    return { color: '#' + srgbClr.attributes?.['val'], alpha };
+    const baseColor = '#' + srgbClr.attributes?.['val'];
+    return applyModifiersAndAlpha(baseColor, srgbClr.elements);
   }
 
-  const prstClr = solidFill.elements.find((el) => el.name === 'a:prstClr');
+  const prstClr = element.elements.find((el) => el.name === 'a:prstClr');
   if (prstClr) {
     const presetName = prstClr.attributes?.['val'];
-    let color = getPresetColor(presetName);
-    if (!color) return null;
-    let alpha = null;
-
-    const modifiers = prstClr.elements || [];
-    modifiers.forEach((mod) => {
-      if (mod.name === 'a:shade') {
-        color = applyColorModifier(color, 'shade', mod.attributes['val']);
-      } else if (mod.name === 'a:tint') {
-        color = applyColorModifier(color, 'tint', mod.attributes['val']);
-      } else if (mod.name === 'a:lumMod') {
-        color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
-      } else if (mod.name === 'a:lumOff') {
-        color = applyColorModifier(color, 'lumOff', mod.attributes['val']);
-      } else if (mod.name === 'a:alpha') {
-        alpha = parseInt(mod.attributes['val']) / 100000;
-      }
-    });
-
-    return { color, alpha };
+    const baseColor = getPresetColor(presetName);
+    if (!baseColor) return null;
+    return applyModifiersAndAlpha(baseColor, prstClr.elements);
   }
 
   return null;
@@ -365,7 +354,7 @@ export function extractStrokeColor(spPr, style) {
 
     const solidFill = ln.elements?.find((el) => el.name === 'a:solidFill');
     if (solidFill) {
-      const result = extractColorFromSolidFill(solidFill);
+      const result = extractColorFromElement(solidFill);
       if (result) return result.color;
     }
   }
@@ -389,7 +378,7 @@ export function extractStrokeColor(spPr, style) {
   }
 
   // Try extracting color from the lnRef element using the shared helper
-  const lnRefResult = extractColorFromSolidFill(lnRef);
+  const lnRefResult = extractColorFromElement(lnRef);
   if (lnRefResult) return lnRefResult.color;
 
   return null;
@@ -410,7 +399,7 @@ export function extractFillColor(spPr, style) {
 
   const solidFill = spPr?.elements?.find((el) => el.name === 'a:solidFill');
   if (solidFill) {
-    const result = extractColorFromSolidFill(solidFill);
+    const result = extractColorFromElement(solidFill);
     if (result) {
       if (result.alpha !== null && result.alpha < 1) {
         return { type: 'solidWithAlpha', color: result.color, alpha: result.alpha };
@@ -449,7 +438,7 @@ export function extractFillColor(spPr, style) {
   }
 
   // Try extracting color from the fillRef element using the shared helper
-  const fillRefResult = extractColorFromSolidFill(fillRef);
+  const fillRefResult = extractColorFromElement(fillRef);
   if (fillRefResult) {
     if (fillRefResult.alpha !== null && fillRefResult.alpha < 1) {
       return { type: 'solidWithAlpha', color: fillRefResult.color, alpha: fillRefResult.alpha };

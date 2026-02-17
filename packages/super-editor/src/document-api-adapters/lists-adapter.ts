@@ -165,6 +165,18 @@ export function listsInsertAdapter(
     'Insert list item command is not available on this editor instance.',
   );
 
+  if (options?.dryRun) {
+    return {
+      success: true,
+      item: { kind: 'block', nodeType: 'listItem', nodeId: '(dry-run)' },
+      insertionPoint: {
+        kind: 'text',
+        blockId: '(dry-run)',
+        range: { start: 0, end: 0 },
+      },
+    };
+  }
+
   const createdId = uuidv4();
   const didApply = insertListItemAt({
     pos: target.candidate.pos,
@@ -234,6 +246,10 @@ export function listsSetTypeAdapter(
     'Set list type command is not available on this editor instance.',
   );
 
+  if (options?.dryRun) {
+    return { success: true, item: target.address };
+  }
+
   const didApply = setListTypeAt({
     pos: target.candidate.pos,
     kind: input.kind,
@@ -263,16 +279,21 @@ export function listsIndentAdapter(
     return toListsFailure('NO_OP', 'List item is already at the maximum supported level.', { target: input.target });
   }
 
+  const increaseListIndent = requireCommand<() => boolean>(
+    editor.commands?.increaseListIndent as (() => boolean) | undefined,
+    'Increase list indent command is not available on this editor instance.',
+  );
+
+  if (options?.dryRun) {
+    return { success: true, item: target.address };
+  }
+
   if (!setSelectionToListItem(editor, target)) {
     return toListsFailure('INVALID_TARGET', 'List item target could not be selected for indentation.', {
       target: input.target,
     });
   }
 
-  const increaseListIndent = requireCommand<() => boolean>(
-    editor.commands?.increaseListIndent as (() => boolean) | undefined,
-    'Increase list indent command is not available on this editor instance.',
-  );
   const didApply = increaseListIndent();
   if (!didApply) {
     return toListsFailure('INVALID_TARGET', 'List indentation could not be applied.', { target: input.target });
@@ -295,16 +316,21 @@ export function listsOutdentAdapter(
     return toListsFailure('NO_OP', 'List item is already at level 0.', { target: input.target });
   }
 
+  const decreaseListIndent = requireCommand<() => boolean>(
+    editor.commands?.decreaseListIndent as (() => boolean) | undefined,
+    'Decrease list indent command is not available on this editor instance.',
+  );
+
+  if (options?.dryRun) {
+    return { success: true, item: target.address };
+  }
+
   if (!setSelectionToListItem(editor, target)) {
     return toListsFailure('INVALID_TARGET', 'List item target could not be selected for outdent.', {
       target: input.target,
     });
   }
 
-  const decreaseListIndent = requireCommand<() => boolean>(
-    editor.commands?.decreaseListIndent as (() => boolean) | undefined,
-    'Decrease list indent command is not available on this editor instance.',
-  );
   const didApply = decreaseListIndent();
   if (!didApply) {
     return toListsFailure('INVALID_TARGET', 'List outdent could not be applied.', { target: input.target });
@@ -334,16 +360,21 @@ export function listsRestartAdapter(
     });
   }
 
+  const restartNumbering = requireCommand<() => boolean>(
+    editor.commands?.restartNumbering as (() => boolean) | undefined,
+    'Restart numbering command is not available on this editor instance.',
+  );
+
+  if (options?.dryRun) {
+    return { success: true, item: target.address };
+  }
+
   if (!setSelectionToListItem(editor, target)) {
     return toListsFailure('INVALID_TARGET', 'List item target could not be selected for restart.', {
       target: input.target,
     });
   }
 
-  const restartNumbering = requireCommand<() => boolean>(
-    editor.commands?.restartNumbering as (() => boolean) | undefined,
-    'Restart numbering command is not available on this editor instance.',
-  );
   const didApply = restartNumbering();
   if (!didApply) {
     return toListsFailure('INVALID_TARGET', 'List restart could not be applied.', { target: input.target });
@@ -363,6 +394,18 @@ export function listsExitAdapter(editor: Editor, input: ListTargetInput, options
     editor.commands?.exitListItemAt as ExitListItemAtCommand | undefined,
     'Exit list item command is not available on this editor instance.',
   );
+
+  if (options?.dryRun) {
+    return {
+      success: true,
+      paragraph: {
+        kind: 'block',
+        nodeType: 'paragraph',
+        nodeId: '(dry-run)',
+      },
+    };
+  }
+
   const didApply = exitListItemAt({ pos: target.candidate.pos });
   if (!didApply) {
     return toListsFailure('INVALID_TARGET', 'List exit could not be applied.', { target: input.target });

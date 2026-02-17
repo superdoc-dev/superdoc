@@ -258,6 +258,7 @@ export const TrackChanges = Extension.create({
             from = state.selection.from,
             to = state.selection.to,
             text = '',
+            id,
             user,
             comment,
             addToHistory = true,
@@ -296,7 +297,7 @@ export const TrackChanges = Extension.create({
           // For replacements (both deletion and insertion), generate a shared ID upfront
           // so the deletion and insertion marks are linked together
           const isReplacement = from !== to && text;
-          const sharedId = isReplacement ? uuidv4() : null;
+          const sharedId = id ?? (isReplacement ? uuidv4() : null);
 
           let changeId = sharedId;
           let insertPos = to; // Default insert position is after the selection

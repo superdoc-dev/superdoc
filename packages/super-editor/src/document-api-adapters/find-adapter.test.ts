@@ -651,6 +651,33 @@ describe('findAdapter — text selectors', () => {
     expect(result.context![0].snippet).toBeDefined();
   });
 
+  it('reports true total for paginated text queries (not capped by page window)', () => {
+    // Build a search that respects maxMatches to expose the capping bug
+    const allMatches = [
+      { from: 5, to: 8, text: 'a' },
+      { from: 15, to: 18, text: 'b' },
+      { from: 25, to: 28, text: 'c' },
+      { from: 35, to: 38, text: 'd' },
+      { from: 45, to: 48, text: 'e' },
+    ];
+    const doc = buildDoc(
+      'a'.repeat(102),
+      { typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 },
+      { typeName: 'paragraph', attrs: { sdBlockId: 'p2' }, nodeSize: 50, offset: 52 },
+    );
+    const search: SearchFn = (_pattern, opts) => {
+      const max = (opts as { maxMatches?: number })?.maxMatches ?? Infinity;
+      return allMatches.slice(0, max);
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = { select: { type: 'text', pattern: 'test' }, offset: 0, limit: 2 };
+
+    const result = findAdapter(editor, query);
+
+    expect(result.matches).toHaveLength(2);
+    expect(result.total).toBe(5); // must be 5, not 2
+  });
+
   it('filters text matches by within scope', () => {
     const doc = buildDoc(
       'a'.repeat(70),

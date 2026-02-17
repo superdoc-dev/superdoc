@@ -220,6 +220,9 @@ describe('writeAdapter', () => {
   });
 
   it('creates tracked changes for tracked writes', () => {
+    const resolverSpy = vi
+      .spyOn(trackedChangeResolver, 'toCanonicalTrackedChangeId')
+      .mockReturnValue('resolved-change-id');
     const { editor, insertTrackedChange } = makeEditor('Hello');
 
     const receipt = writeAdapter(
@@ -241,6 +244,7 @@ describe('writeAdapter', () => {
       text: 'World',
     });
     expect(typeof insertTrackedChange.mock.calls[0]?.[0]?.id).toBe('string');
+    resolverSpy.mockRestore();
   });
 
   it('returns canonical tracked-change entity ids when resolver can map raw ids', () => {
@@ -261,6 +265,25 @@ describe('writeAdapter', () => {
 
     expect(receipt.success).toBe(true);
     expect(receipt.inserted?.[0]?.entityId).toBe('stable-change-id');
+    resolverSpy.mockRestore();
+  });
+
+  it('returns degraded success without inserted ref when canonical resolution fails', () => {
+    const resolverSpy = vi.spyOn(trackedChangeResolver, 'toCanonicalTrackedChangeId').mockReturnValue(null);
+    const { editor } = makeEditor('Hello');
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'replace',
+        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+        text: 'World',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(receipt.inserted).toBeUndefined();
     resolverSpy.mockRestore();
   });
 

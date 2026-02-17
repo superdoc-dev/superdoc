@@ -87,17 +87,11 @@ export function executeTextSelector(
     );
   }
 
-  // When there is no within scope, we can limit the search engine to only
-  // produce the matches we need (offset + limit). With a scope, post-search
-  // filtering makes the needed count unpredictable, so fetch all.
-  const effectiveMaxMatches =
-    !scope.range && query.limit != null && Number.isFinite(query.limit)
-      ? (query.offset ?? 0) + query.limit
-      : Number.MAX_SAFE_INTEGER;
-
+  // Fetch all matches so `total` reflects the true document-wide count.
+  // Pagination is applied after filtering via paginate().
   const rawResult = search(pattern, {
     highlight: false,
-    maxMatches: effectiveMaxMatches,
+    maxMatches: Number.MAX_SAFE_INTEGER,
     caseSensitive: selector.caseSensitive ?? false,
   });
 

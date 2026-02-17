@@ -350,4 +350,122 @@ describe('lists adapter', () => {
     if (result.success) return;
     expect(result.failure.code).toBe('INVALID_TARGET');
   });
+
+  describe('dryRun', () => {
+    function makeListEditor() {
+      return makeEditor([
+        makeListParagraph({
+          id: 'li-1',
+          text: 'One',
+          numId: 1,
+          ilvl: 1,
+          markerText: '1.',
+          path: [1],
+          numberingType: 'decimal',
+        }),
+        makeListParagraph({
+          id: 'li-2',
+          text: 'Two',
+          numId: 1,
+          ilvl: 1,
+          markerText: '2.',
+          path: [2],
+          numberingType: 'decimal',
+        }),
+      ]);
+    }
+
+    it('insert: returns placeholder success without mutating the document', () => {
+      const editor = makeListEditor();
+      const insertListItemAt = editor.commands!.insertListItemAt as ReturnType<typeof vi.fn>;
+
+      const result = listsInsertAdapter(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          position: 'after',
+        },
+        { dryRun: true },
+      );
+
+      expect(result.success).toBe(true);
+      expect(insertListItemAt).not.toHaveBeenCalled();
+    });
+
+    it('setType: returns success without dispatching command', () => {
+      const editor = makeListEditor();
+      const setListTypeAt = editor.commands!.setListTypeAt as ReturnType<typeof vi.fn>;
+
+      const result = listsSetTypeAdapter(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          kind: 'bullet',
+        },
+        { dryRun: true },
+      );
+
+      expect(result.success).toBe(true);
+      expect(setListTypeAt).not.toHaveBeenCalled();
+    });
+
+    it('indent: returns success without dispatching command', () => {
+      vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+      const editor = makeListEditor();
+      const increaseListIndent = editor.commands!.increaseListIndent as ReturnType<typeof vi.fn>;
+
+      const result = listsIndentAdapter(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { dryRun: true },
+      );
+
+      expect(result.success).toBe(true);
+      expect(increaseListIndent).not.toHaveBeenCalled();
+    });
+
+    it('outdent: returns success without dispatching command', () => {
+      const editor = makeListEditor();
+      const decreaseListIndent = editor.commands!.decreaseListIndent as ReturnType<typeof vi.fn>;
+
+      const result = listsOutdentAdapter(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { dryRun: true },
+      );
+
+      expect(result.success).toBe(true);
+      expect(decreaseListIndent).not.toHaveBeenCalled();
+    });
+
+    it('restart: returns success without dispatching command', () => {
+      const editor = makeListEditor();
+      const restartNumbering = editor.commands!.restartNumbering as ReturnType<typeof vi.fn>;
+
+      const result = listsRestartAdapter(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' } },
+        { dryRun: true },
+      );
+
+      expect(result.success).toBe(true);
+      expect(restartNumbering).not.toHaveBeenCalled();
+    });
+
+    it('exit: returns placeholder success without dispatching command', () => {
+      const editor = makeListEditor();
+      const exitListItemAt = editor.commands!.exitListItemAt as ReturnType<typeof vi.fn>;
+
+      const result = listsExitAdapter(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { dryRun: true },
+      );
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.paragraph.nodeId).toBe('(dry-run)');
+      expect(exitListItemAt).not.toHaveBeenCalled();
+    });
+  });
 });

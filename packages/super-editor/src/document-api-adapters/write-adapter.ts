@@ -166,18 +166,22 @@ function applyTrackedWrite(
       },
     };
   }
-  const publicChangeId = toCanonicalTrackedChangeId(editor, changeId) ?? changeId;
+  const publicChangeId = toCanonicalTrackedChangeId(editor, changeId);
 
   return {
     success: true,
     resolution: resolvedTarget.resolution,
-    inserted: [
-      {
-        kind: 'entity',
-        entityType: 'trackedChange',
-        entityId: publicChangeId,
-      },
-    ],
+    ...(publicChangeId
+      ? {
+          inserted: [
+            {
+              kind: 'entity',
+              entityType: 'trackedChange',
+              entityId: publicChangeId,
+            },
+          ],
+        }
+      : {}),
   };
 }
 

@@ -56,6 +56,10 @@ function hasBoldCapability(editor: Editor): boolean {
 
 function hasTrackedModeCapability(editor: Editor, operationId: OperationId): boolean {
   if (!hasCommand(editor, 'insertTrackedChange')) return false;
+  // ensureTrackedCapability (mutation-helpers.ts) requires editor.options.user;
+  // report tracked mode as unavailable when no user is configured so capability-
+  // gated clients don't offer tracked actions that would deterministically fail.
+  if (!editor.options?.user) return false;
   if (operationId === 'format.bold') {
     return Boolean(editor.schema?.marks?.[TrackFormatMarkName]);
   }

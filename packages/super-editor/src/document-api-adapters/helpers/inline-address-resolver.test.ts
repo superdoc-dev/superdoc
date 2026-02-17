@@ -127,4 +127,103 @@ describe('inline-address-resolver', () => {
     expect(bookmarks[0]!.anchor.start.offset).toBe(0);
     expect(bookmarks[0]!.anchor.end.offset).toBe(1);
   });
+
+  it('does not count comment range markers toward comment offsets', () => {
+    const commentStart = createNode('commentRangeStart', [], {
+      isInline: true,
+      isLeaf: true,
+      attrs: { 'w:id': 'c1' },
+    });
+    const textNode = createNode('text', [], { text: 'A' });
+    const commentEnd = createNode('commentRangeEnd', [], {
+      isInline: true,
+      isLeaf: true,
+      attrs: { 'w:id': 'c1' },
+    });
+    const paragraph = createNode('paragraph', [commentStart, textNode, commentEnd], {
+      attrs: { sdBlockId: 'p3' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+
+    const editor = makeEditor(doc);
+    const blockIndex = buildBlockIndexFromParagraph(paragraph, 'p3');
+    const inlineIndex = buildInlineIndex(editor, blockIndex);
+
+    const comments = findInlineByType(inlineIndex, 'comment');
+    expect(comments).toHaveLength(1);
+    expect(comments[0]!.anchor.start.offset).toBe(0);
+    expect(comments[0]!.anchor.end.offset).toBe(1);
+  });
+
+  it('does not count bookmark range markers toward subsequent offsets', () => {
+    const bookmarkStart = createNode('bookmarkStart', [], {
+      isInline: true,
+      isLeaf: false,
+      attrs: { id: 'b1', name: 'bm' },
+    });
+    const textA = createNode('text', [], { text: 'A' });
+    const bookmarkEnd = createNode('bookmarkEnd', [], { isInline: true, isLeaf: true, attrs: { id: 'b1' } });
+    const linkMark = makeMark('link', { href: 'https://example.com' });
+    const textB = createNode('text', [], { text: 'B', marks: [linkMark] });
+    const paragraph = createNode('paragraph', [bookmarkStart, textA, bookmarkEnd, textB], {
+      attrs: { sdBlockId: 'p4' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+
+    const editor = makeEditor(doc);
+    const blockIndex = buildBlockIndexFromParagraph(paragraph, 'p4');
+    const inlineIndex = buildInlineIndex(editor, blockIndex);
+
+    const bookmarks = findInlineByType(inlineIndex, 'bookmark');
+    expect(bookmarks).toHaveLength(1);
+    expect(bookmarks[0]!.anchor.start.offset).toBe(0);
+    expect(bookmarks[0]!.anchor.end.offset).toBe(1);
+
+    // "B" starts immediately after "A" at offset 1, not 2.
+    const hyperlinks = findInlineByType(inlineIndex, 'hyperlink');
+    expect(hyperlinks).toHaveLength(1);
+    expect(hyperlinks[0]!.anchor.start.offset).toBe(1);
+    expect(hyperlinks[0]!.anchor.end.offset).toBe(2);
+  });
+
+  it('does not count comment range markers toward subsequent offsets', () => {
+    const commentStart = createNode('commentRangeStart', [], {
+      isInline: true,
+      isLeaf: true,
+      attrs: { 'w:id': 'c1' },
+    });
+    const textA = createNode('text', [], { text: 'A' });
+    const commentEnd = createNode('commentRangeEnd', [], {
+      isInline: true,
+      isLeaf: true,
+      attrs: { 'w:id': 'c1' },
+    });
+    const linkMark = makeMark('link', { href: 'https://example.com' });
+    const textB = createNode('text', [], { text: 'B', marks: [linkMark] });
+    const paragraph = createNode('paragraph', [commentStart, textA, commentEnd, textB], {
+      attrs: { sdBlockId: 'p5' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+
+    const editor = makeEditor(doc);
+    const blockIndex = buildBlockIndexFromParagraph(paragraph, 'p5');
+    const inlineIndex = buildInlineIndex(editor, blockIndex);
+
+    const comments = findInlineByType(inlineIndex, 'comment');
+    expect(comments).toHaveLength(1);
+    expect(comments[0]!.anchor.start.offset).toBe(0);
+    expect(comments[0]!.anchor.end.offset).toBe(1);
+
+    // "B" starts immediately after "A" at offset 1, not 3.
+    const hyperlinks = findInlineByType(inlineIndex, 'hyperlink');
+    expect(hyperlinks).toHaveLength(1);
+    expect(hyperlinks[0]!.anchor.start.offset).toBe(1);
+    expect(hyperlinks[0]!.anchor.end.offset).toBe(2);
+  });
 });

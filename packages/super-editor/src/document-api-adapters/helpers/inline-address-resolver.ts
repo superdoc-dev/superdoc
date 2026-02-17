@@ -19,6 +19,7 @@ const SUPPORTED_INLINE_TYPES: ReadonlySet<InlineNodeType> = new Set<InlineNodeTy
   'lineBreak',
 ]);
 
+/** A single inline-level element (mark span, atom, or range marker) resolved to block-relative offsets. */
 export type InlineCandidate = {
   nodeType: InlineNodeType;
   anchor: InlineAnchor;
@@ -30,6 +31,7 @@ export type InlineCandidate = {
   attrs?: Record<string, unknown>;
 };
 
+/** Position-sorted index of inline candidates with type and anchor lookup maps. */
 export type InlineIndex = {
   candidates: InlineCandidate[];
   byType: Map<InlineNodeType, InlineCandidate[]>;
@@ -104,7 +106,8 @@ type ActiveMark = {
  *
  * **Offset model**: Text nodes contribute their UTF-16 length. Leaf atoms
  * (images, tabs, breaks) contribute 1. Block separators (between sibling
- * blocks) contribute 1. This mirrors ProseMirror's
+ * blocks) contribute 1. Zero-width range delimiters (bookmarkEnd,
+ * commentRangeStart, commentRangeEnd) contribute 0. This mirrors ProseMirror's
  * `textBetween(from, to, '\n', '\ufffc')` model.
  *
  * **Mark lifecycle**: `syncMarks()` opens/closes mark spans when the active
@@ -291,10 +294,13 @@ function walkNode(state: BlockWalkState, node: ProseMirrorNode, docPos: number):
 
     if (node.type?.name === 'bookmarkEnd') {
       handleBookmarkEnd(state, node, docPos);
+      return; // Zero-width range delimiter — no text offset contribution.
     } else if (node.type?.name === 'commentRangeStart') {
       handleCommentRangeStart(state, node, docPos);
+      return; // Zero-width range delimiter — no text offset contribution.
     } else if (node.type?.name === 'commentRangeEnd') {
       handleCommentRangeEnd(state, node, docPos);
+      return; // Zero-width range delimiter — no text offset contribution.
     } else if (!isBookmarkStart) {
       const nodeType = mapInlineNodeType(node);
       if (nodeType) {

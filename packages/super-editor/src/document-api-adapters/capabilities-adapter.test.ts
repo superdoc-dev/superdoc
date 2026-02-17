@@ -40,23 +40,34 @@ function makeEditor(overrides: Partial<Editor> = {}): Editor {
   };
 
   const overrideCommands = (overrides.commands ?? {}) as Partial<Editor['commands']>;
-  const overrideSchema = (overrides.schema ?? {}) as Partial<Editor['schema']>;
-  const overrideMarks = (overrideSchema.marks ?? {}) as Record<string, unknown>;
 
   const commands = {
     ...defaultCommands,
     ...overrideCommands,
   };
 
-  const schema = {
-    ...overrideSchema,
-    marks: {
-      ...defaultMarks,
-      ...overrideMarks,
-    },
+  // When the caller explicitly passes `schema: undefined`, respect that instead
+  // of constructing a default schema with marks.
+  const explicitUndefinedSchema = 'schema' in overrides && overrides.schema === undefined;
+  const overrideSchema = (overrides.schema ?? {}) as Partial<Editor['schema']>;
+  const overrideMarks = (overrideSchema.marks ?? {}) as Record<string, unknown>;
+
+  const schema = explicitUndefinedSchema
+    ? undefined
+    : {
+        ...overrideSchema,
+        marks: {
+          ...defaultMarks,
+          ...overrideMarks,
+        },
+      };
+
+  const defaultOptions = {
+    user: { name: 'Test User', email: 'test@example.com' },
   };
 
   return {
+    options: defaultOptions,
     ...overrides,
     commands,
     schema,
@@ -107,6 +118,20 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations['create.paragraph'].dryRun).toBe(true);
   });
 
+  it('reports tracked mode unavailable when no editor user is configured', () => {
+    const capabilities = getDocumentApiCapabilities(
+      makeEditor({
+        options: { user: null } as unknown as Editor['options'],
+      }),
+    );
+
+    expect(capabilities.operations.insert.available).toBe(true);
+    expect(capabilities.operations.insert.tracked).toBe(false);
+    expect(capabilities.operations.insert.reasons).toContain('TRACKED_MODE_UNAVAILABLE');
+    expect(capabilities.operations['create.paragraph'].tracked).toBe(false);
+    expect(capabilities.operations['create.paragraph'].reasons).toContain('TRACKED_MODE_UNAVAILABLE');
+  });
+
   it('never reports tracked=true when the operation is unavailable', () => {
     const capabilities = getDocumentApiCapabilities(
       makeEditor({
@@ -139,7 +164,9 @@ describe('getDocumentApiCapabilities', () => {
     const capabilities = getDocumentApiCapabilities(editor);
 
     expect(capabilities.operations['format.bold'].available).toBe(false);
-    expect(capabilities.operations.insert.tracked).toBe(false);
+    // insert.tracked remains true because the default insertTrackedChange command
+    // is still present — tracked mode for insert depends on commands, not schema.
+    expect(capabilities.operations.insert.tracked).toBe(true);
     // Smoke-test: every operation has a defined entry
     for (const id of OPERATION_IDS) {
       expect(capabilities.operations[id]).toBeDefined();

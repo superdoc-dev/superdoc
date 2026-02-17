@@ -617,3 +617,77 @@ describe('commentsAdapter additional operations', () => {
     expect(all.total).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('invariant: imported comment ID normalization', () => {
+  // These tests verify that comments with both a canonical commentId and an
+  // importedId (the w:id from DOCX) are treated as a single identity throughout
+  // the adapter. The import pipeline (prepareCommentsForImport) guarantees this
+  // today; these tests guard against regressions if a new code path creates
+  // marks or store entries with inconsistent IDs.
+
+  it('invariant: list() returns one record when mark carries both commentId and importedId', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({
+      commentId: 'canonical-uuid',
+      importedId: 'imported-5',
+      internal: false,
+    });
+    const paragraph = schema.node('paragraph', { paraId: 'p1' }, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const editor = createPmEditor(doc, {}, [
+      { commentId: 'canonical-uuid', importedId: 'imported-5', commentText: 'Body' },
+    ]);
+    const api = createCommentsAdapter(editor);
+    const result = api.list();
+
+    const matchingRecords = result.matches.filter(
+      (c) => c.commentId === 'canonical-uuid' || c.importedId === 'imported-5',
+    );
+    expect(matchingRecords).toHaveLength(1);
+    expect(matchingRecords[0]!.commentId).toBe('canonical-uuid');
+  });
+
+  it('invariant: get() by importedId returns the canonical record', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({
+      commentId: 'canonical-uuid',
+      importedId: 'imported-5',
+      internal: false,
+    });
+    const paragraph = schema.node('paragraph', { paraId: 'p1' }, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const editor = createPmEditor(doc, {}, [
+      { commentId: 'canonical-uuid', importedId: 'imported-5', commentText: 'Body' },
+    ]);
+    const api = createCommentsAdapter(editor);
+    const info = api.get({ commentId: 'imported-5' });
+
+    expect(info.commentId).toBe('canonical-uuid');
+    expect(info.target).toBeTruthy();
+  });
+
+  it('invariant: move() passes canonical commentId to moveComment command for imported comments', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({
+      commentId: 'canonical-uuid',
+      importedId: 'imported-5',
+      internal: false,
+    });
+    const paragraph = schema.node('paragraph', { paraId: 'p1' }, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const moveComment = vi.fn(() => true);
+    const editor = createPmEditor(doc, { moveComment }, [
+      { commentId: 'canonical-uuid', importedId: 'imported-5', commentText: 'Move me' },
+    ]);
+
+    const receipt = createCommentsAdapter(editor).move({
+      commentId: 'imported-5',
+      target: { kind: 'text', blockId: 'p1', range: { start: 1, end: 4 } },
+    });
+
+    expect(receipt.success).toBe(true);
+    expect(moveComment).toHaveBeenCalledWith(expect.objectContaining({ commentId: 'canonical-uuid' }));
+  });
+});

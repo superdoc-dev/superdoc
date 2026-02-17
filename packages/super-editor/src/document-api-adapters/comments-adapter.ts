@@ -62,6 +62,16 @@ function isSameTarget(
   return left.blockId === right.blockId && left.range.start === right.range.start && left.range.end === right.range.end;
 }
 
+/**
+ * Attempts to list comment anchors, returning an empty array on failure.
+ *
+ * listCommentAnchors walks the ProseMirror document tree and can throw when
+ * the document is in a transient or inconsistent state (e.g. mid-transaction,
+ * partially-loaded). Since this is only used by read-path aggregation
+ * (buildCommentInfos), returning an empty array is a safe degradation —
+ * callers will simply see fewer anchors rather than crashing the entire
+ * list/get flow.
+ */
 function listCommentAnchorsSafe(editor: Editor): ReturnType<typeof listCommentAnchors> {
   try {
     return listCommentAnchors(editor);
@@ -139,17 +149,18 @@ function resolveCommentIdentity(
   };
 }
 
-function buildCommentInfos(editor: Editor): CommentInfo[] {
-  const store = getCommentEntityStore(editor);
-  const infosById = new Map<string, CommentInfo>();
-
-  for (const entry of store) {
-    const commentId = toNonEmptyString(entry.commentId) ?? toNonEmptyString(entry.importedId) ?? null;
-    if (!commentId) continue;
-    infosById.set(commentId, toCommentInfo({ ...entry, commentId }));
-  }
-
-  const anchors = listCommentAnchorsSafe(editor);
+/**
+ * Merges document anchor data into a partially-built CommentInfo map.
+ *
+ * Grouping by anchor.commentId is safe because prepareCommentsForImport always
+ * sets the canonical commentId on marks (comments-helpers.js:650) and rewrites
+ * w:id on resolved range nodes (comments-helpers.js:621,639).
+ * resolveCommentIdFromAttrs returns canonical commentId first, so
+ * anchor.commentId matches the entity store key. If a non-import path ever
+ * creates marks without a canonical commentId attr, this grouping would need
+ * alias-merging by importedId.
+ */
+function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnType<typeof listCommentAnchors>): void {
   const grouped = new Map<string, typeof anchors>();
   for (const anchor of anchors) {
     const group = grouped.get(anchor.commentId) ?? [];
@@ -187,6 +198,19 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
       ),
     );
   }
+}
+
+function buildCommentInfos(editor: Editor): CommentInfo[] {
+  const store = getCommentEntityStore(editor);
+  const infosById = new Map<string, CommentInfo>();
+
+  for (const entry of store) {
+    const commentId = toNonEmptyString(entry.commentId) ?? toNonEmptyString(entry.importedId) ?? null;
+    if (!commentId) continue;
+    infosById.set(commentId, toCommentInfo({ ...entry, commentId }));
+  }
+
+  mergeAnchorData(infosById, listCommentAnchorsSafe(editor));
 
   const infos = Array.from(infosById.values());
   infos.sort((left, right) => {
@@ -456,6 +480,11 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput): Receipt {
     };
   }
 
+  // NOTE: Passing canonical commentId is sufficient because findRangeById checks
+  // marks by commentId || importedId (comments-plugin.js:1058) and resolved range
+  // nodes have w:id rewritten to canonical id during import (comments-helpers.js:621,639).
+  // If a non-import path ever creates anchors keyed only by importedId, this would
+  // need to fall back to identity.importedId.
   const didMove = moveComment({
     commentId: identity.commentId,
     from: resolved.from,

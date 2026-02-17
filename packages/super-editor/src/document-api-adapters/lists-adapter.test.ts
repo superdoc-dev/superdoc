@@ -113,7 +113,11 @@ function makeDoc(children: MockParagraphNode[]) {
   };
 }
 
-function makeEditor(children: MockParagraphNode[], commandOverrides: Record<string, unknown> = {}): Editor {
+function makeEditor(
+  children: MockParagraphNode[],
+  commandOverrides: Record<string, unknown> = {},
+  editorOptions: { user?: { name: string } } = {},
+): Editor {
   const doc = makeDoc(children);
   const baseCommands = {
     insertListItemAt: vi.fn(
@@ -175,6 +179,7 @@ function makeEditor(children: MockParagraphNode[], commandOverrides: Record<stri
       ...baseCommands,
       ...commandOverrides,
     },
+    options: { user: editorOptions.user },
     converter: {
       numbering: { definitions: {}, abstracts: {} },
     },
@@ -467,5 +472,39 @@ describe('lists adapter', () => {
       expect(result.paragraph.nodeId).toBe('(dry-run)');
       expect(exitListItemAt).not.toHaveBeenCalled();
     });
+  });
+
+  it('throws TRACK_CHANGE_COMMAND_UNAVAILABLE for tracked insert dry-run without a configured user', () => {
+    const editor = makeEditor([
+      makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, markerText: '1.', path: [1], numberingType: 'decimal' }),
+    ]);
+
+    expect(() =>
+      listsInsertAdapter(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          position: 'after',
+        },
+        { changeMode: 'tracked', dryRun: true },
+      ),
+    ).toThrow('requires a user to be configured');
+  });
+
+  it('throws same error for tracked insert non-dry-run without a configured user', () => {
+    const editor = makeEditor([
+      makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, markerText: '1.', path: [1], numberingType: 'decimal' }),
+    ]);
+
+    expect(() =>
+      listsInsertAdapter(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          position: 'after',
+        },
+        { changeMode: 'tracked' },
+      ),
+    ).toThrow('requires a user to be configured');
   });
 });

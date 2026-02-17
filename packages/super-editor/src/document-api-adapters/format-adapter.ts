@@ -2,6 +2,7 @@ import type { Editor } from '../core/Editor.js';
 import type { FormatBoldInput, MutationOptions, TextMutationReceipt } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
 import { DocumentApiAdapterError } from './errors.js';
+import { ensureTrackedUser } from './helpers/tracked-mode-guards.js';
 import { resolveTextTarget } from './helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
 
@@ -9,12 +10,13 @@ function assertTrackedFormatCapability(editor: Editor): void {
   const hasTrackedInsertCommand = typeof editor.commands?.insertTrackedChange === 'function';
   const hasTrackFormatMark = Boolean(editor.schema?.marks?.[TrackFormatMarkName]);
 
-  if (hasTrackedInsertCommand && hasTrackFormatMark) return;
-
-  throw new DocumentApiAdapterError(
-    'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-    'Tracked bold formatting is not available on this editor instance.',
-  );
+  if (!hasTrackedInsertCommand || !hasTrackFormatMark) {
+    throw new DocumentApiAdapterError(
+      'TRACK_CHANGE_COMMAND_UNAVAILABLE',
+      'Tracked bold formatting is not available on this editor instance.',
+    );
+  }
+  ensureTrackedUser(editor, 'Tracked bold formatting');
 }
 
 export function formatBoldAdapter(

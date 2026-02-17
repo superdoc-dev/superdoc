@@ -10,6 +10,7 @@ import { clearIndexCache, getBlockIndex } from './helpers/index-cache.js';
 import { findBlockById, type BlockCandidate } from './helpers/node-address-resolver.js';
 import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js';
 import { DocumentApiAdapterError } from './errors.js';
+import { ensureTrackedUser } from './helpers/tracked-mode-guards.js';
 
 type InsertParagraphAtCommandOptions = {
   pos: number;
@@ -56,6 +57,7 @@ function ensureTrackedCreateCapability(editor: Editor): void {
       'Tracked paragraph creation is not available on this editor instance.',
     );
   }
+  ensureTrackedUser(editor, 'Tracked paragraph creation');
 }
 
 function resolveCreatedParagraph(editor: Editor, paragraphId: string): BlockCandidate {

@@ -14,6 +14,7 @@ import type {
   MutationOptions,
 } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from './errors.js';
+import { ensureTrackedUser } from './helpers/tracked-mode-guards.js';
 import { clearIndexCache, getBlockIndex } from './helpers/index-cache.js';
 import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js';
 import {
@@ -63,6 +64,7 @@ function ensureTrackedInsertCapability(editor: Editor, mode: 'direct' | 'tracked
       'lists.insert tracked mode is not available on this editor instance.',
     );
   }
+  ensureTrackedUser(editor, 'lists.insert tracked mode');
 }
 
 function resolveInsertedListItem(editor: Editor, sdBlockId: string): ListItemProjection {

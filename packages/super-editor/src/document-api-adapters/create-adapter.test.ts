@@ -159,10 +159,12 @@ function makeEditor({
   withTrackedCommand = true,
   insertReturns = true,
   insertedParagraphAttrs,
+  user,
 }: {
   withTrackedCommand?: boolean;
   insertReturns?: boolean;
   insertedParagraphAttrs?: Record<string, unknown>;
+  user?: { name: string };
 } = {}): {
   editor: Editor;
   insertParagraphAt: ReturnType<typeof vi.fn>;
@@ -184,6 +186,7 @@ function makeEditor({
       insertParagraphAt,
       insertTrackedChange: withTrackedCommand ? vi.fn(() => true) : undefined,
     },
+    options: { user },
   } as unknown as Editor;
 
   return { editor, insertParagraphAt };
@@ -256,7 +259,7 @@ describe('createParagraphAdapter', () => {
   it('creates tracked paragraphs without losing nodesBetween context', () => {
     const resolverSpy = vi.spyOn(trackedChangeResolver, 'buildTrackedChangeCanonicalIdMap').mockReturnValue(new Map());
 
-    const { editor } = makeEditor();
+    const { editor } = makeEditor({ user: { name: 'Test' } });
 
     const result = createParagraphAdapter(editor, { text: 'Tracked paragraph' }, { changeMode: 'tracked' });
 
@@ -358,5 +361,21 @@ describe('createParagraphAdapter', () => {
       blockId: generatedId,
       range: { start: 0, end: 0 },
     });
+  });
+
+  it('throws TRACK_CHANGE_COMMAND_UNAVAILABLE for tracked dry-run without a configured user', () => {
+    const { editor } = makeEditor();
+
+    expect(() => createParagraphAdapter(editor, { text: 'Tracked' }, { changeMode: 'tracked', dryRun: true })).toThrow(
+      'requires a user to be configured',
+    );
+  });
+
+  it('throws same error for tracked non-dry-run without a configured user', () => {
+    const { editor } = makeEditor();
+
+    expect(() => createParagraphAdapter(editor, { text: 'Tracked' }, { changeMode: 'tracked' })).toThrow(
+      'requires a user to be configured',
+    );
   });
 });

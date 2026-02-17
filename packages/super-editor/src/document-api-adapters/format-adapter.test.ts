@@ -51,7 +51,10 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
   } as unknown as ProseMirrorNode;
 }
 
-function makeEditor(text = 'Hello'): {
+function makeEditor(
+  text = 'Hello',
+  options: { user?: { name: string } } = {},
+): {
   editor: Editor;
   dispatch: ReturnType<typeof vi.fn>;
   insertTrackedChange: ReturnType<typeof vi.fn>;
@@ -105,6 +108,7 @@ function makeEditor(text = 'Hello'): {
     commands: {
       insertTrackedChange,
     },
+    options: { user: options.user },
     dispatch,
   } as unknown as Editor;
 
@@ -132,7 +136,7 @@ describe('formatBoldAdapter', () => {
   });
 
   it('sets forceTrackChanges meta in tracked mode', () => {
-    const { editor, tr } = makeEditor();
+    const { editor, tr } = makeEditor('Hello', { user: { name: 'Test' } });
     const receipt = formatBoldAdapter(
       editor,
       { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
@@ -210,7 +214,7 @@ describe('formatBoldAdapter', () => {
   });
 
   it('supports tracked dry-run without building a transaction', () => {
-    const { editor, dispatch, tr } = makeEditor();
+    const { editor, dispatch, tr } = makeEditor('Hello', { user: { name: 'Test' } });
     const receipt = formatBoldAdapter(
       editor,
       { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
@@ -225,7 +229,7 @@ describe('formatBoldAdapter', () => {
   });
 
   it('keeps direct and tracked bold operations deterministic for the same target', () => {
-    const { editor, tr } = makeEditor();
+    const { editor, tr } = makeEditor('Hello', { user: { name: 'Test' } });
 
     const direct = formatBoldAdapter(
       editor,
@@ -241,5 +245,29 @@ describe('formatBoldAdapter', () => {
     );
     expect(tracked.success).toBe(true);
     expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
+  });
+
+  it('throws TRACK_CHANGE_COMMAND_UNAVAILABLE for tracked dry-run without a configured user', () => {
+    const { editor } = makeEditor();
+
+    expect(() =>
+      formatBoldAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+        { changeMode: 'tracked', dryRun: true },
+      ),
+    ).toThrow('requires a user to be configured');
+  });
+
+  it('throws same error for tracked non-dry-run without a configured user', () => {
+    const { editor } = makeEditor();
+
+    expect(() =>
+      formatBoldAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+        { changeMode: 'tracked' },
+      ),
+    ).toThrow('requires a user to be configured');
   });
 });

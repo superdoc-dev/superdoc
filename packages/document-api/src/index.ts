@@ -3,6 +3,8 @@
  */
 
 export * from './types/index.js';
+export * from './contract/index.js';
+export * from './capabilities/capabilities.js';
 
 import type {
   CreateParagraphInput,
@@ -102,6 +104,11 @@ import {
   executeTrackChangesRejectAll,
 } from './track-changes/track-changes.js';
 import type { MutationOptions, WriteAdapter } from './write/write.js';
+import {
+  executeCapabilities,
+  type CapabilitiesAdapter,
+  type DocumentApiCapabilities,
+} from './capabilities/capabilities.js';
 
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
@@ -220,6 +227,12 @@ export interface DocumentApi {
    * List item operations.
    */
   lists: ListsApi;
+  /**
+   * Runtime capability introspection.
+   */
+  capabilities: {
+    get(): DocumentApiCapabilities;
+  };
 }
 
 export interface DocumentApiAdapters {
@@ -227,6 +240,7 @@ export interface DocumentApiAdapters {
   getNode: GetNodeAdapter;
   getText: GetTextAdapter;
   info: InfoAdapter;
+  capabilities: CapabilitiesAdapter;
   comments: CommentsAdapter;
   write: WriteAdapter;
   format: FormatAdapter;
@@ -340,6 +354,11 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     create: {
       paragraph(input: CreateParagraphInput, options?: MutationOptions): CreateParagraphResult {
         return executeCreateParagraph(adapters.create, input, options);
+      },
+    },
+    capabilities: {
+      get(): DocumentApiCapabilities {
+        return executeCapabilities(adapters.capabilities);
       },
     },
     lists: {

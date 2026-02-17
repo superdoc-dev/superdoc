@@ -4,6 +4,7 @@ import { findAdapter } from './find-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
+import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsAdapter } from './comments-adapter.js';
 import { writeAdapter } from './write-adapter.js';
 import { formatBoldAdapter } from './format-adapter.js';
@@ -47,6 +48,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     info: {
       info: (input) => infoAdapter(editor, input),
+    },
+    capabilities: {
+      get: () => getDocumentApiCapabilities(editor),
     },
     comments: createCommentsAdapter(editor),
     write: {

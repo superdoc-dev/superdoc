@@ -777,9 +777,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         imageWrapper.style.height = `${blockMeasure.height}px`;
         imageWrapper.style.maxWidth = '100%';
         imageWrapper.style.boxSizing = 'border-box';
-        if ((block as ImageBlock).attrs?.clipPath) {
-          imageWrapper.style.overflow = 'hidden';
-        }
         applySdtDataset(imageWrapper, (block as ImageBlock).attrs?.sdt);
 
         const imgEl = doc.createElement('img');
@@ -795,7 +792,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         if (block.objectFit === 'cover') {
           imgEl.style.objectPosition = 'left top';
         }
-        applyImageClipPath(imgEl, block.attrs?.clipPath);
+        applyImageClipPath(imgEl, block.attrs?.clipPath, { clipContainer: imageWrapper });
         imgEl.style.display = 'block';
 
         imageWrapper.appendChild(imgEl);
@@ -839,7 +836,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           if (block.objectFit === 'cover') {
             img.style.objectPosition = 'left top';
           }
-          applyImageClipPath(img, block.attrs?.clipPath);
+          applyImageClipPath(img, block.attrs?.clipPath, { clipContainer: drawingInner });
           drawingInner.appendChild(img);
         } else if (renderDrawingContent) {
           // Use the callback for other drawing types (vectorShape, shapeGroup, etc.)
@@ -1104,9 +1101,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         imageWrapper.style.maxWidth = '100%';
         imageWrapper.style.boxSizing = 'border-box';
         imageWrapper.style.zIndex = String(zIndex);
-        if (anchoredBlock.attrs?.clipPath) {
-          imageWrapper.style.overflow = 'hidden';
-        }
         applySdtDataset(imageWrapper, anchoredBlock.attrs?.sdt);
 
         const imgEl = doc.createElement('img');
@@ -1121,7 +1115,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         if (anchoredBlock.objectFit === 'cover') {
           imgEl.style.objectPosition = 'left top';
         }
-        applyImageClipPath(imgEl, anchoredBlock.attrs?.clipPath);
+        applyImageClipPath(imgEl, anchoredBlock.attrs?.clipPath, { clipContainer: imageWrapper });
         imgEl.style.display = 'block';
         imageWrapper.appendChild(imgEl);
         content.appendChild(imageWrapper);
@@ -1157,7 +1151,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           if (anchoredBlock.objectFit === 'cover') {
             img.style.objectPosition = 'left top';
           }
-          applyImageClipPath(img, anchoredBlock.attrs?.clipPath);
+          applyImageClipPath(img, anchoredBlock.attrs?.clipPath, { clipContainer: drawingInner });
           drawingInner.appendChild(img);
         } else if (renderDrawingContent) {
           const drawingContent = renderDrawingContent(anchoredBlock as DrawingBlock);

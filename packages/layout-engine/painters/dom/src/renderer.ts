@@ -2585,7 +2585,7 @@ export class DomPainter {
       const block = lookup.block as ImageBlock;
 
       const fragmentEl = this.doc.createElement('div');
-      fragmentEl.classList.add(CLASS_NAMES.fragment, 'superdoc-image-fragment');
+      fragmentEl.classList.add(CLASS_NAMES.fragment, DOM_CLASS_NAMES.IMAGE_FRAGMENT);
       applyStyles(fragmentEl, fragmentStyles);
       this.applyFragmentFrame(fragmentEl, fragment, context.section);
       fragmentEl.style.height = `${fragment.height}px`;
@@ -2615,11 +2615,6 @@ export class DomPainter {
         fragmentEl.setAttribute('data-image-metadata', JSON.stringify(fragment.metadata));
       }
 
-      // When clipPath is applied we scale the image so the cropped portion fills the box; clip overflow so it doesn't overlap text
-      if (block.attrs?.clipPath) {
-        fragmentEl.style.overflow = 'hidden';
-      }
-
       // behindDoc images are supported via z-index; suppress noisy debug logs
 
       const img = this.doc.createElement('img');
@@ -2634,7 +2629,7 @@ export class DomPainter {
       if (block.objectFit === 'cover') {
         img.style.objectPosition = 'left top';
       }
-      applyImageClipPath(img, block.attrs?.clipPath);
+      applyImageClipPath(img, block.attrs?.clipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
@@ -3906,7 +3901,7 @@ export class DomPainter {
 
     // Create img element
     const img = this.doc.createElement('img');
-    img.classList.add('superdoc-inline-image');
+    img.classList.add(DOM_CLASS_NAMES.INLINE_IMAGE);
 
     // Set source - validate data URLs with strict format and size checks
     // Note: data: URLs are blocked by sanitizeUrl for hyperlinks (XSS risk),
@@ -4017,7 +4012,7 @@ export class DomPainter {
     // Skip wrapper when width or height is 0 (no layout box); img already has margins/verticalAlign/position/zIndex from above.
     if (useWrapper) {
       const wrapper = this.doc.createElement('span');
-      wrapper.classList.add('superdoc-inline-image-clip-wrapper');
+      wrapper.classList.add(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER);
       wrapper.style.display = 'inline-block';
       wrapper.style.width = `${run.width}px`;
       wrapper.style.height = `${run.height}px`;

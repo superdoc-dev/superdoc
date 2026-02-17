@@ -67,6 +67,23 @@ export const DOM_CLASS_NAMES = {
    * Applied/removed by SdtGroupedHover to highlight all fragments of the same SDT.
    */
   SDT_HOVER: 'sdt-hover',
+
+  /**
+   * Class name for block-level image fragments (ImageBlock).
+   */
+  IMAGE_FRAGMENT: 'superdoc-image-fragment',
+
+  /**
+   * Class name for inline image elements (ImageRun inside paragraphs).
+   */
+  INLINE_IMAGE: 'superdoc-inline-image',
+
+  /**
+   * Class name for the clip wrapper around cropped inline images.
+   * When an inline image has a clipPath, it is wrapped in a span with this class
+   * so the resizer and selection outline work on the visible cropped portion.
+   */
+  INLINE_IMAGE_CLIP_WRAPPER: 'superdoc-inline-image-clip-wrapper',
 } as const;
 
 /**

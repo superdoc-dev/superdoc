@@ -57,4 +57,23 @@ describe('applyImageClipPath', () => {
     applyImageClipPath(el, 'inset(0% 0% 0% 0%)');
     expect(el.style.transform).toBe('translate(0%, 0%) scale(1, 1)');
   });
+
+  it('sets overflow:hidden on clipContainer when clipPath resolves', () => {
+    const container = document.createElement('div');
+    applyImageClipPath(el, 'inset(10% 20% 30% 40%)', { clipContainer: container });
+    expect(container.style.overflow).toBe('hidden');
+    expect(el.style.clipPath).toBe('inset(10% 20% 30% 40%)');
+  });
+
+  it('does not set overflow when clipPath is empty', () => {
+    const container = document.createElement('div');
+    applyImageClipPath(el, '', { clipContainer: container });
+    expect(container.style.overflow).toBe('');
+  });
+
+  it('does not set overflow when clipContainer is not provided', () => {
+    applyImageClipPath(el, 'inset(10% 20% 30% 40%)');
+    // No error thrown, only el is affected
+    expect(el.style.clipPath).toBe('inset(10% 20% 30% 40%)');
+  });
 });

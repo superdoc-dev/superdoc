@@ -136,6 +136,8 @@ const getPositionTracker = (editor) => {
  * @property {boolean} [highlight=true] - Whether to apply CSS classes for visual highlighting of search matches.
  *   When true, matches are styled with 'ProseMirror-search-match' or 'ProseMirror-active-search-match' classes.
  *   When false, matches are tracked without visual styling, useful for programmatic search without UI changes.
+ * @property {number} [maxMatches=1000] - Maximum number of matches to return.
+ * @property {boolean} [caseSensitive=false] - Whether the search should be case-sensitive.
  */
 
 /**

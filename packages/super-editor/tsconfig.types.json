@@ -12,6 +12,7 @@
     { "path": "../layout-engine/painters/dom/tsconfig.json" },
     { "path": "../layout-engine/style-engine/tsconfig.json" },
     { "path": "../word-layout/tsconfig.json" },
-    { "path": "../../shared/common/tsconfig.json" }
+    { "path": "../../shared/common/tsconfig.json" },
+    { "path": "../document-api/tsconfig.json" }
   ]
 }

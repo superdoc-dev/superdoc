@@ -10,8 +10,7 @@ Native Word SDT (w:sdt) fields for documents. Supports inline and block structur
 import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
 
 <SuperDocEditor
-  html={`<p><br/><br/><i>"People will forget what you said, people will forget what you did, but 
-people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</b></p>`}
+  html={`<p><b>Service Agreement</b></p><p>This agreement is entered into by and between <i>Acme Corp</i> ("Company") and the client named below. The Company agrees to provide consulting services as outlined in the attached statement of work.</p><p><b>Client Information</b></p><p>Name: ________&nbsp;&nbsp;&nbsp;&nbsp;Date: January 1, 2026</p><p><b>Terms</b></p><p>Payment is due within 30 days of invoice date. All work products remain property of the Company until final payment is received.</p>`}
   height="300px"
   customButtons={[
     [
@@ -24,9 +23,9 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
           editor.commands.insertStructuredContentInline({
             attrs: {
              id: '1',
-             alias: 'Customer Name',
+             alias: 'Client Name',
             },
-            text: 'Enter your name',
+            text: 'John Doe',
           });
         }
       },
@@ -39,9 +38,9 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
           editor.commands.insertStructuredContentBlock({
             attrs: {
               id: '2',
-              alias: 'Terms & Conditions',
+              alias: 'Payment Terms',
             },
-            json: { type: 'paragraph', content: [{ type: 'text', text: 'Legal content...' }] }
+            json: { type: 'paragraph', content: [{ type: 'text', text: 'Payment is due within 30 days of invoice date. Late payments incur a 1.5% monthly fee. All disputes must be submitted in writing within 10 business days.' }] }
           });
         },
       },
@@ -51,7 +50,7 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
           const editor = superdoc?.activeEditor || superdoc?.editor
           if (!editor?.commands) return
 
-          editor.commands.updateStructuredContentById('1', { text: 'Jane Doe' });
+          editor.commands.updateStructuredContentById('1', { text: 'Jane Smith' });
         }
       },
       {
@@ -61,7 +60,7 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
           if (!editor?.commands) return
 
           editor.commands.updateStructuredContentById('2', {
-            json: { type: 'paragraph', content: [{ type: 'text', text: 'Updated legal content...' }] }
+            json: { type: 'paragraph', content: [{ type: 'text', text: 'Net-15 payment terms apply. A 2% early payment discount is available for invoices settled within 7 days.' }] }
           });
         }
       },

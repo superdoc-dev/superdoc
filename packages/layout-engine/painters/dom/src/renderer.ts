@@ -109,6 +109,7 @@ type WordLayoutMarker = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    vanish?: boolean;
   };
 };
 
@@ -2285,66 +2286,69 @@ export class DomPainter {
           const marker = wordLayout.marker!;
           lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`; // HERE CONTROLS WHERE TAB STARTS - I think this will vary with justification
 
-          const markerContainer = this.doc!.createElement('span');
-          markerContainer.style.display = 'inline-block';
-          // Justification is implemented via `word-spacing` on the line element. The list marker (and its
-          // tab/space suffix) must not inherit this spacing or it will shift the text start and can
-          // cause overflow for justified list paragraphs.
-          markerContainer.style.wordSpacing = '0px';
+          // Skip marker rendering when hidden by vanish property (preserves list indentation)
+          if (!marker.run.vanish) {
+            const markerContainer = this.doc!.createElement('span');
+            markerContainer.style.display = 'inline-block';
+            // Justification is implemented via `word-spacing` on the line element. The list marker (and its
+            // tab/space suffix) must not inherit this spacing or it will shift the text start and can
+            // cause overflow for justified list paragraphs.
+            markerContainer.style.wordSpacing = '0px';
 
-          const markerEl = this.doc!.createElement('span');
-          markerEl.classList.add('superdoc-paragraph-marker');
-          markerEl.textContent = marker.markerText ?? '';
-          markerEl.style.pointerEvents = 'none';
+            const markerEl = this.doc!.createElement('span');
+            markerEl.classList.add('superdoc-paragraph-marker');
+            markerEl.textContent = marker.markerText ?? '';
+            markerEl.style.pointerEvents = 'none';
 
-          // Left-justified markers stay inline to share flow with the tab spacer.
-          // Other justifications use absolute positioning.
-          const markerJustification = marker.justification ?? 'left';
+            // Left-justified markers stay inline to share flow with the tab spacer.
+            // Other justifications use absolute positioning.
+            const markerJustification = marker.justification ?? 'left';
 
-          markerContainer.style.position = 'relative';
-          if (markerJustification === 'right') {
-            markerContainer.style.position = 'absolute';
-            markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
-          } else if (markerJustification === 'center') {
-            markerContainer.style.position = 'absolute';
-            markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
-            lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+            markerContainer.style.position = 'relative';
+            if (markerJustification === 'right') {
+              markerContainer.style.position = 'absolute';
+              markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+            } else if (markerJustification === 'center') {
+              markerContainer.style.position = 'absolute';
+              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+            }
+
+            // Apply marker run styling with font fallback chain
+            markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
+            markerEl.style.fontSize = `${marker.run.fontSize}px`;
+            markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
+            markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
+            if (marker.run.color) {
+              markerEl.style.color = marker.run.color;
+            }
+            if (marker.run.letterSpacing != null) {
+              markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
+            }
+            markerContainer.appendChild(markerEl);
+
+            const suffix = marker.suffix ?? 'tab';
+            if (suffix === 'tab') {
+              const tabEl = this.doc!.createElement('span');
+              tabEl.className = 'superdoc-tab';
+              tabEl.innerHTML = '&nbsp;';
+              tabEl.style.display = 'inline-block';
+              tabEl.style.wordSpacing = '0px';
+              tabEl.style.width = `${listTabWidth}px`;
+
+              lineEl.prepend(tabEl);
+            } else if (suffix === 'space') {
+              // Insert a non-breaking space in the inline flow to separate marker and text.
+              // Wrap it so it can opt out of inherited `word-spacing` used for justification.
+              const spaceEl = this.doc!.createElement('span');
+              spaceEl.classList.add('superdoc-marker-suffix-space');
+              spaceEl.style.wordSpacing = '0px';
+              spaceEl.textContent = '\u00A0';
+
+              lineEl.prepend(spaceEl);
+            }
+            lineEl.prepend(markerContainer);
           }
-
-          // Apply marker run styling with font fallback chain
-          markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-          markerEl.style.fontSize = `${marker.run.fontSize}px`;
-          markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
-          markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
-          if (marker.run.color) {
-            markerEl.style.color = marker.run.color;
-          }
-          if (marker.run.letterSpacing != null) {
-            markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-          }
-          markerContainer.appendChild(markerEl);
-
-          const suffix = marker.suffix ?? 'tab';
-          if (suffix === 'tab') {
-            const tabEl = this.doc!.createElement('span');
-            tabEl.className = 'superdoc-tab';
-            tabEl.innerHTML = '&nbsp;';
-            tabEl.style.display = 'inline-block';
-            tabEl.style.wordSpacing = '0px';
-            tabEl.style.width = `${listTabWidth}px`;
-
-            lineEl.prepend(tabEl);
-          } else if (suffix === 'space') {
-            // Insert a non-breaking space in the inline flow to separate marker and text.
-            // Wrap it so it can opt out of inherited `word-spacing` used for justification.
-            const spaceEl = this.doc!.createElement('span');
-            spaceEl.classList.add('superdoc-marker-suffix-space');
-            spaceEl.style.wordSpacing = '0px';
-            spaceEl.textContent = '\u00A0';
-
-            lineEl.prepend(spaceEl);
-          }
-          lineEl.prepend(markerContainer);
         }
         fragmentEl.appendChild(lineEl);
       });

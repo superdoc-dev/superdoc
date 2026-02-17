@@ -1084,6 +1084,7 @@ export type WordLayoutMarker = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    vanish?: boolean;
   };
 };
 

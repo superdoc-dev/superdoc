@@ -18,8 +18,8 @@ const GENERATED_MARKER = '{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm 
 const OUTPUT_ROOT = 'apps/docs/document-api/reference';
 const REFERENCE_INDEX_PATH = `${OUTPUT_ROOT}/index.mdx`;
 const OVERVIEW_PATH = 'apps/docs/document-api/overview.mdx';
-const OVERVIEW_API_SURFACE_START = '{/* DOC_API_GENERATED_API_SURFACE_START */}';
-const OVERVIEW_API_SURFACE_END = '{/* DOC_API_GENERATED_API_SURFACE_END */}';
+const OVERVIEW_OPERATIONS_START = '{/* DOC_API_OPERATIONS_START */}';
+const OVERVIEW_OPERATIONS_END = '{/* DOC_API_OPERATIONS_END */}';
 
 interface OperationGroup {
   definition: ReferenceOperationGroupDefinition;
@@ -236,32 +236,32 @@ function renderOverviewApiSurfaceSection(operations: ContractOperationSnapshot[]
     })
     .join('\n');
 
-  return `${OVERVIEW_API_SURFACE_START}
-### Current API surface (generated)
+  return `${OVERVIEW_OPERATIONS_START}
+### Available operations
 
-This section is generated from the canonical contract. Update the contract, then run \`pnpm run docapi:sync\`.
+Use the tables below to see what operations are available and where each one is documented.
 
 | Namespace | Operations | Reference |
 | --- | --- | --- |
 ${namespaceRows}
 
-| API member path | Operation ID |
+| Editor method | Operation ID |
 | --- | --- |
 ${operationRows}
-${OVERVIEW_API_SURFACE_END}`;
+${OVERVIEW_OPERATIONS_END}`;
 }
 
 function replaceOverviewSection(content: string, section: string): string {
-  const startIndex = content.indexOf(OVERVIEW_API_SURFACE_START);
-  const endIndex = content.indexOf(OVERVIEW_API_SURFACE_END);
+  const startIndex = content.indexOf(OVERVIEW_OPERATIONS_START);
+  const endIndex = content.indexOf(OVERVIEW_OPERATIONS_END);
 
   if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
     throw new Error(
-      `overview marker block not found in ${OVERVIEW_PATH}. Expected ${OVERVIEW_API_SURFACE_START} ... ${OVERVIEW_API_SURFACE_END}.`,
+      `overview marker block not found in ${OVERVIEW_PATH}. Expected ${OVERVIEW_OPERATIONS_START} ... ${OVERVIEW_OPERATIONS_END}.`,
     );
   }
 
-  const endMarkerEndIndex = endIndex + OVERVIEW_API_SURFACE_END.length;
+  const endMarkerEndIndex = endIndex + OVERVIEW_OPERATIONS_END.length;
   return `${content.slice(0, startIndex)}${section}${content.slice(endMarkerEndIndex)}`;
 }
 
@@ -372,9 +372,9 @@ export function getOverviewDocsPath(): string {
 }
 
 export function getOverviewApiSurfaceStartMarker(): string {
-  return OVERVIEW_API_SURFACE_START;
+  return OVERVIEW_OPERATIONS_START;
 }
 
 export function getOverviewApiSurfaceEndMarker(): string {
-  return OVERVIEW_API_SURFACE_END;
+  return OVERVIEW_OPERATIONS_END;
 }

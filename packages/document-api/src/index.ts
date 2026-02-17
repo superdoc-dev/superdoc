@@ -158,6 +158,16 @@ export type {
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 
 /**
+ * Callable capability accessor returned by `createDocumentApi`.
+ *
+ * Can be invoked directly (`capabilities()`) or via the `.get()` alias.
+ */
+export interface CapabilitiesApi {
+  (): DocumentApiCapabilities;
+  get(): DocumentApiCapabilities;
+}
+
+/**
  * The Document API interface for querying and inspecting document nodes.
  */
 export interface DocumentApi {
@@ -229,10 +239,10 @@ export interface DocumentApi {
   lists: ListsApi;
   /**
    * Runtime capability introspection.
+   *
+   * Callable directly (`capabilities()`) or via `.get()`.
    */
-  capabilities: {
-    get(): DocumentApiCapabilities;
-  };
+  capabilities: CapabilitiesApi;
 }
 
 export interface DocumentApiAdapters {
@@ -266,10 +276,8 @@ export interface DocumentApiAdapters {
  * ```
  */
 export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
-  const capabilities = (() => executeCapabilities(adapters.capabilities)) as (() => DocumentApiCapabilities) & {
-    get: () => DocumentApiCapabilities;
-  };
-  capabilities.get = capabilities;
+  const capFn = () => executeCapabilities(adapters.capabilities);
+  const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
 
   return {
     find(selectorOrQuery: Selector | Query, options?: FindOptions): QueryResult {

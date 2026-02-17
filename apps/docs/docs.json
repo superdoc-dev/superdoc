@@ -91,7 +91,7 @@
           },
           {
             "group": "Document API",
-            "tag": "SOON",
+            "tag": "ALPHA",
             "pages": ["document-api/overview"]
           },
           {

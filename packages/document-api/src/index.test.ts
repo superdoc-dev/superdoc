@@ -21,6 +21,7 @@ import { createDocumentApi } from './index.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 import type { CreateAdapter } from './create/create.js';
 import type { ListsAdapter } from './lists/lists.js';
+import type { CapabilitiesAdapter, DocumentApiCapabilities } from './capabilities/capabilities.js';
 
 function makeFindAdapter(result: QueryResult): FindAdapter {
   return { find: vi.fn(() => result) };
@@ -180,6 +181,21 @@ function makeListsAdapter(): ListsAdapter {
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
+  };
+}
+
+function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): CapabilitiesAdapter {
+  const defaultCapabilities: DocumentApiCapabilities = {
+    global: {
+      trackChanges: { enabled: false },
+      comments: { enabled: false },
+      lists: { enabled: false },
+      dryRun: { enabled: false },
+    },
+    operations: {} as DocumentApiCapabilities['operations'],
+  };
+  return {
+    get: vi.fn(() => ({ ...defaultCapabilities, ...overrides })),
   };
 }
 
@@ -589,5 +605,28 @@ describe('createDocumentApi', () => {
     expect(listsAdpt.outdent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
     expect(listsAdpt.restart).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
     expect(listsAdpt.exit).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+  });
+
+  it('exposes capabilities as a callable function with .get() alias', () => {
+    const capAdpt = makeCapabilitiesAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      capabilities: capAdpt,
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: makeFormatAdapter(),
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const directResult = api.capabilities();
+    const getResult = api.capabilities.get();
+
+    expect(directResult).toEqual(getResult);
+    expect(capAdpt.get).toHaveBeenCalledTimes(2);
   });
 });

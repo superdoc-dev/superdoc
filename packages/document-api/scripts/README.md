@@ -9,6 +9,19 @@ This folder contains deterministic generator/check entry points for the Document
 - In this repository snapshot, these scripts are not directly referenced from root `package.json` scripts or `.github/workflows`.
 - Typical caller today: local ad-hoc invocations or higher-level wrappers in feature branches/CI jobs.
 
+## Manual vs generated boundaries
+
+- Hand-authored inputs:
+  - `packages/document-api/src/contract/*`
+  - `packages/document-api/src/index.ts` and related runtime/types
+  - `packages/document-api/scripts/*`
+- Generated outputs (checked into git):
+  - `packages/document-api/generated/*`
+  - `apps/docs/document-api/reference/*`
+  - generated marker block in `apps/docs/document-api/overview.mdx`
+
+Do not hand-edit generated output files. Regenerate instead.
+
 ## Script index
 
 | Script | Kind | Purpose | Reads | Writes | Typical caller |

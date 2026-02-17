@@ -1,5 +1,17 @@
 # Document API
 
+## Ownership boundary (manual vs generated)
+
+- Manual source of truth:
+  - `packages/document-api/src/**` (this folder)
+  - `packages/document-api/scripts/**`
+- Generated and committed:
+  - `packages/document-api/generated/**`
+  - `apps/docs/document-api/reference/**`
+  - marker block in `apps/docs/document-api/overview.mdx`
+
+Do not hand-edit generated files; regenerate via script.
+
 ## Non-Negotiables
 
 - The Document API modules are engine-agnostic and must never parse or depend on ProseMirror directly.

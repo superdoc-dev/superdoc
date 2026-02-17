@@ -51,6 +51,17 @@ describe('document-api contract catalog', () => {
     }
   });
 
+  it('includes CAPABILITY_UNAVAILABLE in throws.preApply for all mutation operations', () => {
+    for (const operationId of OPERATION_IDS) {
+      const metadata = COMMAND_CATALOG[operationId];
+      if (!metadata.mutates) continue;
+      expect(
+        metadata.throws.preApply,
+        `${operationId} should include CAPABILITY_UNAVAILABLE in throws.preApply`,
+      ).toContain('CAPABILITY_UNAVAILABLE');
+    }
+  });
+
   it('keeps input schemas closed for object-shaped payloads', () => {
     const schemas = buildInternalContractSchemas();
 

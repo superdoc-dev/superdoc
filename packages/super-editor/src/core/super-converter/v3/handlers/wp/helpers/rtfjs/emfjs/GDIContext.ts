@@ -333,6 +333,26 @@ export class GDIContext {
     colorUsage: number,
     dib: DIBitmap,
   ): void {
+    Helper.log(
+      '[gdi] stretchDibBits: srcX=' +
+        srcX +
+        ' srcY=' +
+        srcY +
+        ' srcW=' +
+        srcW +
+        ' srcH=' +
+        srcH +
+        ' dstX=' +
+        dstX +
+        ' dstY=' +
+        dstY +
+        ' dstW=' +
+        dstW +
+        ' dstH=' +
+        dstH +
+        ' rasterOp=0x' +
+        rasterOp.toString(16),
+    );
     srcX = this._todevX(srcX);
     srcY = this._todevY(srcY);
     srcW = this._todevW(srcW);
@@ -341,6 +361,27 @@ export class GDIContext {
     dstY = this._todevY(dstY);
     dstW = this._todevW(dstW);
     dstH = this._todevH(dstH);
+    Helper.log(
+      '[gdi] stretchDibBits: TRANSLATED:' +
+        ' srcX=' +
+        srcX +
+        ' srcY=' +
+        srcY +
+        ' srcW=' +
+        srcW +
+        ' srcH=' +
+        srcH +
+        ' dstX=' +
+        dstX +
+        ' dstY=' +
+        dstY +
+        ' dstW=' +
+        dstW +
+        ' dstH=' +
+        dstH +
+        ' rasterOp=0x' +
+        rasterOp.toString(16),
+    );
     this._pushGroup();
     this._svg.image(this.state._svggroup, dstX, dstY, dstW, dstH, dib.base64ref());
   }

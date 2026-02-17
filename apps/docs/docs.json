@@ -108,7 +108,9 @@
               },
               "modules/comments",
               "modules/toolbar",
-              "modules/context-menu"
+              "modules/context-menu",
+              "modules/pdf",
+              "modules/whiteboard"
             ]
           },
           {

@@ -68,6 +68,8 @@ type WordLayoutMarker = {
     color?: string;
     /** Letter spacing in pixels */
     letterSpacing?: number;
+    /** Hidden text flag */
+    vanish?: boolean;
   };
 };
 
@@ -971,7 +973,12 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
            * - The marker has a non-zero width
            */
           const shouldRenderMarker =
-            markerLayout && markerMeasure && lineIdx === 0 && localStartLine === 0 && markerMeasure.markerWidth > 0;
+            markerLayout &&
+            markerMeasure &&
+            lineIdx === 0 &&
+            localStartLine === 0 &&
+            markerMeasure.markerWidth > 0 &&
+            !markerLayout.run?.vanish;
 
           if (shouldRenderMarker) {
             /**

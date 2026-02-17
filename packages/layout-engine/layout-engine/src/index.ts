@@ -1939,7 +1939,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         Number.isFinite(preRegPos.pageNumber)
       ) {
         // Use pre-computed position for page-relative anchors
-        const state = paginator.ensurePage();
+        const state = paginator.getPageByNumber(preRegPos.pageNumber);
         const imgBlock = block as ImageBlock;
         const imgMeasure = measure as ImageMeasure;
 
@@ -2005,6 +2005,45 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (measure.kind !== 'drawing') {
         throw new Error(`layoutDocument: expected drawing measure for block ${block.id}`);
       }
+
+      // Check if this is a pre-registered page-relative anchor
+      const preRegPos = preRegisteredPositions.get(block.id);
+      if (
+        preRegPos &&
+        Number.isFinite(preRegPos.anchorX) &&
+        Number.isFinite(preRegPos.anchorY) &&
+        Number.isFinite(preRegPos.pageNumber)
+      ) {
+        // Use pre-computed position for page-relative anchored drawings
+        const state = paginator.getPageByNumber(preRegPos.pageNumber);
+        const drawBlock = block as DrawingBlock;
+        const drawMeasure = measure as DrawingMeasure;
+
+        const fragment: DrawingFragment = {
+          kind: 'drawing',
+          blockId: drawBlock.id,
+          drawingKind: drawBlock.drawingKind,
+          x: preRegPos.anchorX,
+          y: preRegPos.anchorY,
+          width: drawMeasure.width,
+          height: drawMeasure.height,
+          geometry: drawMeasure.geometry,
+          scale: drawMeasure.scale,
+          isAnchored: true,
+          behindDoc: drawBlock.anchor?.behindDoc === true,
+          zIndex: getFragmentZIndex(drawBlock),
+          drawingContentId: drawBlock.drawingContentId,
+        };
+
+        const attrs = drawBlock.attrs as Record<string, unknown> | undefined;
+        if (attrs?.pmStart != null) fragment.pmStart = attrs.pmStart as number;
+        if (attrs?.pmEnd != null) fragment.pmEnd = attrs.pmEnd as number;
+
+        state.page.fragments.push(fragment);
+        placedAnchoredIds.add(drawBlock.id);
+        continue;
+      }
+
       layoutDrawingBlock({
         block: block as DrawingBlock,
         measure: measure as DrawingMeasure,

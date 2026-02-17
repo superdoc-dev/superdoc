@@ -110,6 +110,7 @@ type WordLayoutMarker = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    vanish?: boolean;
   };
 };
 
@@ -2286,66 +2287,69 @@ export class DomPainter {
           const marker = wordLayout.marker!;
           lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`; // HERE CONTROLS WHERE TAB STARTS - I think this will vary with justification
 
-          const markerContainer = this.doc!.createElement('span');
-          markerContainer.style.display = 'inline-block';
-          // Justification is implemented via `word-spacing` on the line element. The list marker (and its
-          // tab/space suffix) must not inherit this spacing or it will shift the text start and can
-          // cause overflow for justified list paragraphs.
-          markerContainer.style.wordSpacing = '0px';
+          // Skip marker rendering when hidden by vanish property (preserves list indentation)
+          if (!marker.run.vanish) {
+            const markerContainer = this.doc!.createElement('span');
+            markerContainer.style.display = 'inline-block';
+            // Justification is implemented via `word-spacing` on the line element. The list marker (and its
+            // tab/space suffix) must not inherit this spacing or it will shift the text start and can
+            // cause overflow for justified list paragraphs.
+            markerContainer.style.wordSpacing = '0px';
 
-          const markerEl = this.doc!.createElement('span');
-          markerEl.classList.add('superdoc-paragraph-marker');
-          markerEl.textContent = marker.markerText ?? '';
-          markerEl.style.pointerEvents = 'none';
+            const markerEl = this.doc!.createElement('span');
+            markerEl.classList.add('superdoc-paragraph-marker');
+            markerEl.textContent = marker.markerText ?? '';
+            markerEl.style.pointerEvents = 'none';
 
-          // Left-justified markers stay inline to share flow with the tab spacer.
-          // Other justifications use absolute positioning.
-          const markerJustification = marker.justification ?? 'left';
+            // Left-justified markers stay inline to share flow with the tab spacer.
+            // Other justifications use absolute positioning.
+            const markerJustification = marker.justification ?? 'left';
 
-          markerContainer.style.position = 'relative';
-          if (markerJustification === 'right') {
-            markerContainer.style.position = 'absolute';
-            markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
-          } else if (markerJustification === 'center') {
-            markerContainer.style.position = 'absolute';
-            markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
-            lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+            markerContainer.style.position = 'relative';
+            if (markerJustification === 'right') {
+              markerContainer.style.position = 'absolute';
+              markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+            } else if (markerJustification === 'center') {
+              markerContainer.style.position = 'absolute';
+              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+            }
+
+            // Apply marker run styling with font fallback chain
+            markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
+            markerEl.style.fontSize = `${marker.run.fontSize}px`;
+            markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
+            markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
+            if (marker.run.color) {
+              markerEl.style.color = marker.run.color;
+            }
+            if (marker.run.letterSpacing != null) {
+              markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
+            }
+            markerContainer.appendChild(markerEl);
+
+            const suffix = marker.suffix ?? 'tab';
+            if (suffix === 'tab') {
+              const tabEl = this.doc!.createElement('span');
+              tabEl.className = 'superdoc-tab';
+              tabEl.innerHTML = '&nbsp;';
+              tabEl.style.display = 'inline-block';
+              tabEl.style.wordSpacing = '0px';
+              tabEl.style.width = `${listTabWidth}px`;
+
+              lineEl.prepend(tabEl);
+            } else if (suffix === 'space') {
+              // Insert a non-breaking space in the inline flow to separate marker and text.
+              // Wrap it so it can opt out of inherited `word-spacing` used for justification.
+              const spaceEl = this.doc!.createElement('span');
+              spaceEl.classList.add('superdoc-marker-suffix-space');
+              spaceEl.style.wordSpacing = '0px';
+              spaceEl.textContent = '\u00A0';
+
+              lineEl.prepend(spaceEl);
+            }
+            lineEl.prepend(markerContainer);
           }
-
-          // Apply marker run styling with font fallback chain
-          markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-          markerEl.style.fontSize = `${marker.run.fontSize}px`;
-          markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
-          markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
-          if (marker.run.color) {
-            markerEl.style.color = marker.run.color;
-          }
-          if (marker.run.letterSpacing != null) {
-            markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-          }
-          markerContainer.appendChild(markerEl);
-
-          const suffix = marker.suffix ?? 'tab';
-          if (suffix === 'tab') {
-            const tabEl = this.doc!.createElement('span');
-            tabEl.className = 'superdoc-tab';
-            tabEl.innerHTML = '&nbsp;';
-            tabEl.style.display = 'inline-block';
-            tabEl.style.wordSpacing = '0px';
-            tabEl.style.width = `${listTabWidth}px`;
-
-            lineEl.prepend(tabEl);
-          } else if (suffix === 'space') {
-            // Insert a non-breaking space in the inline flow to separate marker and text.
-            // Wrap it so it can opt out of inherited `word-spacing` used for justification.
-            const spaceEl = this.doc!.createElement('span');
-            spaceEl.classList.add('superdoc-marker-suffix-space');
-            spaceEl.style.wordSpacing = '0px';
-            spaceEl.textContent = '\u00A0';
-
-            lineEl.prepend(spaceEl);
-          }
-          lineEl.prepend(markerContainer);
         }
         fragmentEl.appendChild(lineEl);
       });
@@ -2629,7 +2633,8 @@ export class DomPainter {
       if (block.objectFit === 'cover') {
         img.style.objectPosition = 'left top';
       }
-      applyImageClipPath(img, block.attrs?.clipPath, { clipContainer: fragmentEl });
+      const imageClipPath = resolveBlockClipPath(block);
+      applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
@@ -2757,7 +2762,8 @@ export class DomPainter {
     if (drawing.objectFit === 'cover') {
       img.style.objectPosition = 'left top';
     }
-    applyImageClipPath(img, drawing.attrs?.clipPath);
+    const imageClipPath = resolveBlockClipPath(drawing);
+    applyImageClipPath(img, imageClipPath);
     img.style.display = 'block';
     return img;
   }
@@ -4049,6 +4055,44 @@ export class DomPainter {
     // Apply data attributes
     if (run.dataAttrs) {
       applyRunDataAttributes(img, run.dataAttrs);
+    }
+
+    const runClipPath = readClipPathValue((run as { clipPath?: unknown }).clipPath);
+    if (runClipPath && this.doc) {
+      img.style.clipPath = runClipPath;
+      img.style.display = 'block';
+      img.style.marginTop = '';
+      img.style.marginBottom = '';
+      img.style.marginLeft = '';
+      img.style.marginRight = '';
+      img.style.verticalAlign = '';
+      img.style.position = 'static';
+      img.style.zIndex = '';
+
+      const wrapper = this.doc.createElement('span');
+      wrapper.classList.add('superdoc-inline-image-clip-wrapper');
+      wrapper.style.display = 'inline-block';
+      wrapper.style.width = `${run.width}px`;
+      wrapper.style.height = `${run.height}px`;
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      wrapper.style.position = 'relative';
+      wrapper.style.zIndex = '1';
+      if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
+      if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
+      if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
+      if (run.distRight) wrapper.style.marginRight = `${run.distRight}px`;
+
+      if (run.pmStart != null) {
+        wrapper.dataset.pmStart = String(run.pmStart);
+      }
+      if (run.pmEnd != null) {
+        wrapper.dataset.pmEnd = String(run.pmEnd);
+      }
+      wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
+      this.applySdtDataset(wrapper, run.sdt);
+
+      wrapper.appendChild(img);
+      return wrapper;
     }
 
     return img;
@@ -5627,6 +5671,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
             imgRun.distBottom ?? '',
             imgRun.distLeft ?? '',
             imgRun.distRight ?? '',
+            readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
             // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           ].join(',');
         }
@@ -5737,7 +5782,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
       block.height ?? '',
       block.alt ?? '',
       block.title ?? '',
-      block.attrs?.clipPath ?? '',
+      resolveBlockClipPath(block),
     ].join('|');
   }
 
@@ -5751,7 +5796,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         imageLike.width ?? '',
         imageLike.height ?? '',
         imageLike.alt ?? '',
-        imageLike.attrs?.clipPath ?? '',
+        resolveBlockClipPath(imageLike),
       ].join('|');
     }
     if (block.drawingKind === 'vectorShape') {
@@ -6002,6 +6047,29 @@ interface CommentHighlightResult {
   baseColor?: string;
   hasNestedComments?: boolean;
 }
+
+const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
+
+const readClipPathValue = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim();
+  if (normalized.length === 0) return '';
+  const lower = normalized.toLowerCase();
+  if (!CLIP_PATH_PREFIXES.some((prefix) => lower.startsWith(prefix))) return '';
+  return normalized;
+};
+
+const resolveClipPathFromAttrs = (attrs: unknown): string => {
+  if (!attrs || typeof attrs !== 'object') return '';
+  const record = attrs as Record<string, unknown>;
+  return readClipPathValue(record.clipPath);
+};
+
+const resolveBlockClipPath = (block: unknown): string => {
+  if (!block || typeof block !== 'object') return '';
+  const record = block as Record<string, unknown>;
+  return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
+};
 
 const getCommentHighlight = (run: TextRun, activeCommentId: string | null): CommentHighlightResult => {
   const comments = run.comments;

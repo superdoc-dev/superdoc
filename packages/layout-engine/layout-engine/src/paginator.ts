@@ -117,6 +117,10 @@ export function createPaginator(opts: PaginatorOptions) {
     return startNewPage();
   };
 
+  const getPageByNumber = (pageNumber: number): PageState => {
+    return states.find((s) => s.page.number === pageNumber) ?? ensurePage();
+  };
+
   return {
     pages,
     states,
@@ -125,5 +129,6 @@ export function createPaginator(opts: PaginatorOptions) {
     advanceColumn,
     columnX,
     getActiveColumnsForState,
+    getPageByNumber,
   } as const;
 }

@@ -39,12 +39,17 @@ function compileRegex(selector: TextSelector, diagnostics: UnknownNodeDiagnostic
   }
 }
 
-function buildSearchPattern(selector: TextSelector, diagnostics: UnknownNodeDiagnostic[]): string | RegExp | null {
+function buildSearchPattern(selector: TextSelector, diagnostics: UnknownNodeDiagnostic[]): RegExp | null {
   const mode = selector.mode ?? 'contains';
   if (mode === 'regex') {
     return compileRegex(selector, diagnostics);
   }
-  return selector.pattern;
+  // Compile as an escaped RegExp to guarantee literal matching. Passing a raw
+  // string can be reinterpreted by the search command (e.g. slash-delimited
+  // strings like "/foo/" are parsed as regex syntax by some implementations).
+  const escaped = selector.pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const flags = selector.caseSensitive ? 'g' : 'gi';
+  return new RegExp(escaped, flags);
 }
 
 /**
@@ -82,11 +87,12 @@ export function executeTextSelector(
 
   const search = requireEditorCommand(editor.commands?.search, 'find (search)');
 
-  // Fetch all matches so `total` reflects the true document-wide count.
-  // Pagination is applied after filtering via paginate().
+  // Cap materialized matches to avoid memory pressure on high-frequency queries
+  // (e.g. single-character patterns). Pagination is applied after filtering.
+  const MAX_SEARCH_MATCHES = 1000;
   const rawResult = search(pattern, {
     highlight: false,
-    maxMatches: Number.MAX_SAFE_INTEGER,
+    maxMatches: MAX_SEARCH_MATCHES,
     caseSensitive: selector.caseSensitive ?? false,
   });
 

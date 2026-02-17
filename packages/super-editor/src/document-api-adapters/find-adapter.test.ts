@@ -594,7 +594,7 @@ describe('findAdapter — text selectors', () => {
     expect((capturedPattern as RegExp).flags).not.toContain('i');
   });
 
-  it('passes string pattern for default contains mode', () => {
+  it('passes escaped RegExp for default contains mode', () => {
     let capturedPattern: string | RegExp | undefined;
     const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
     const search: SearchFn = (pattern) => {
@@ -606,11 +606,55 @@ describe('findAdapter — text selectors', () => {
 
     findAdapter(editor, query);
 
-    expect(typeof capturedPattern).toBe('string');
-    expect(capturedPattern).toBe('hello');
+    expect(capturedPattern).toBeInstanceOf(RegExp);
+    expect((capturedPattern as RegExp).source).toBe('hello');
+    expect((capturedPattern as RegExp).flags).toContain('i');
   });
 
-  it('passes string pattern for case-sensitive contains mode', () => {
+  it('treats slash-delimited contains patterns as literal text', () => {
+    const text = 'foo /foo/ foo';
+    const doc = buildDoc(text, {
+      typeName: 'paragraph',
+      attrs: { sdBlockId: 'p1' },
+      nodeSize: text.length + 4,
+      offset: 0,
+    });
+    const search: SearchFn = (pattern, options) => {
+      const caseSensitive = (options as { caseSensitive?: boolean })?.caseSensitive ?? false;
+      let effectivePattern: RegExp;
+
+      if (pattern instanceof RegExp) {
+        const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+        effectivePattern = new RegExp(pattern.source, flags);
+      } else if (typeof pattern === 'string' && /^\/(.+)\/([gimsuy]*)$/.test(pattern)) {
+        const [, body, flags] = pattern.match(/^\/(.+)\/([gimsuy]*)$/) as RegExpMatchArray;
+        effectivePattern = new RegExp(body, flags.includes('g') ? flags : `${flags}g`);
+      } else {
+        const escaped = String(pattern).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        effectivePattern = new RegExp(escaped, caseSensitive ? 'g' : 'gi');
+      }
+
+      return Array.from(text.matchAll(effectivePattern)).map((match) => {
+        const from = match.index ?? 0;
+        return {
+          from,
+          to: from + match[0].length,
+          text: match[0],
+        };
+      });
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = { select: { type: 'text', pattern: '/foo/' } };
+
+    const result = findAdapter(editor, query);
+
+    expect(result.total).toBe(1);
+    expect(result.context).toBeDefined();
+    const context = result.context![0];
+    expect(context.snippet.slice(context.highlightRange.start, context.highlightRange.end)).toBe('/foo/');
+  });
+
+  it('passes case-sensitive escaped RegExp for contains mode', () => {
     let capturedPattern: string | RegExp | undefined;
     const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
     const search: SearchFn = (pattern) => {
@@ -622,8 +666,9 @@ describe('findAdapter — text selectors', () => {
 
     findAdapter(editor, query);
 
-    expect(typeof capturedPattern).toBe('string');
-    expect(capturedPattern).toBe('Hello');
+    expect(capturedPattern).toBeInstanceOf(RegExp);
+    expect((capturedPattern as RegExp).source).toBe('Hello');
+    expect((capturedPattern as RegExp).flags).not.toContain('i');
   });
 
   it('forwards caseSensitive option to search command for contains mode', () => {
@@ -640,6 +685,23 @@ describe('findAdapter — text selectors', () => {
 
     expect(capturedOptions).toBeDefined();
     expect(capturedOptions!.caseSensitive).toBe(true);
+  });
+
+  it('bounds maxMatches when pagination requests a small page', () => {
+    let capturedOptions: Record<string, unknown> | undefined;
+    const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
+    const search: SearchFn = (_pattern, options) => {
+      capturedOptions = options as Record<string, unknown>;
+      return [];
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = { select: { type: 'text', pattern: 'a' }, offset: 0, limit: 2 };
+
+    findAdapter(editor, query);
+
+    expect(capturedOptions).toBeDefined();
+    expect(typeof capturedOptions!.maxMatches).toBe('number');
+    expect(capturedOptions!.maxMatches as number).toBeLessThanOrEqual(1000);
   });
 
   it('throws when editor has no search command', () => {

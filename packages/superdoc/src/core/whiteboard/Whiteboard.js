@@ -144,6 +144,13 @@ export class Whiteboard extends EventEmitter {
   }
 
   /**
+   * Re-render all pages.
+   */
+  rerender() {
+    this.#pages.forEach((page) => page.render());
+  }
+
+  /**
    * Set size for a page (creates page if missing).
    * @param {number} pageIndex
    * @param {WhiteboardPageSize} size

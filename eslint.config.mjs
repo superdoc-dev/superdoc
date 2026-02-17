@@ -50,6 +50,7 @@ export default [
         // Universal APIs (available in both environments)
         console: 'readonly',
         fetch: 'readonly',
+        AbortSignal: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         setInterval: 'readonly',

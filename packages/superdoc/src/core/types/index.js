@@ -75,6 +75,12 @@
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services
+ * @property {Object} [pdf] PDF module configuration
+ * @property {Object} pdf.pdfLib Preloaded pdf.js library instance
+ * @property {string} [pdf.workerSrc] PDF.js worker source URL (falls back to CDN when omitted)
+ * @property {boolean} [pdf.setWorker] Whether to auto-configure pdf.js worker
+ * @property {boolean} [pdf.textLayer] Enable text layer rendering (default: false)
+ * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
  * @property {Object} [toolbar] Toolbar module configuration
  * @property {Object} [slashMenu] Slash menu module configuration

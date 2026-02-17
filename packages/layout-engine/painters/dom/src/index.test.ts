@@ -100,6 +100,22 @@ const buildSingleParagraphData = (blockId: string, runLength: number) => {
   return { paragraphMeasure, paragraphLayout };
 };
 
+const expectCssColor = (actual: string, expectedHex: string): void => {
+  const normalizedActual = actual.replace(/\s+/g, '').toLowerCase();
+  let normalizedHex = expectedHex.toLowerCase();
+  if (!normalizedHex.startsWith('#')) {
+    normalizedHex = `#${normalizedHex}`;
+  }
+  if (normalizedHex.length === 4) {
+    normalizedHex = `#${normalizedHex[1]}${normalizedHex[1]}${normalizedHex[2]}${normalizedHex[2]}${normalizedHex[3]}${normalizedHex[3]}`;
+  }
+  const r = Number.parseInt(normalizedHex.slice(1, 3), 16);
+  const g = Number.parseInt(normalizedHex.slice(3, 5), 16);
+  const b = Number.parseInt(normalizedHex.slice(5, 7), 16);
+  const rgb = `rgb(${r},${g},${b})`;
+  expect([normalizedHex, rgb]).toContain(normalizedActual);
+};
+
 const sdtBlock: FlowBlock = {
   kind: 'paragraph',
   id: 'sdt-block',
@@ -1239,7 +1255,7 @@ describe('DomPainter', () => {
     expect(lines.length).toBe(2);
 
     // First line should have negative word-spacing applied
-    expect(lines[0].style.wordSpacing).toBe('-3.3333333333333335px');
+    expect(Number.parseFloat(lines[0].style.wordSpacing)).toBeCloseTo(-3.3333333333333335, 5);
 
     // Last line should NOT be justified
     expect(lines[1].style.wordSpacing).toBe('');
@@ -3423,7 +3439,7 @@ describe('DomPainter', () => {
     expect(anchor).toBeTruthy();
     expect(anchor.getAttribute('href')).toBe('https://example.com');
     expect(anchor.style.textDecorationLine).toContain('underline');
-    expect(anchor.style.backgroundColor).toBe('rgb(255, 255, 0)');
+    expectCssColor(anchor.style.backgroundColor, '#ffff00');
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
     expect(fragment.style.textAlign).toBe('center');
@@ -3805,10 +3821,10 @@ describe('DomPainter', () => {
     expect(borderLayer).toBeTruthy();
     expect(borderLayer.style.borderTopStyle).toBe('solid');
     expect(borderLayer.style.borderTopWidth).toBe('2px');
-    expect(borderLayer.style.borderTopColor).toBe('rgb(255, 0, 0)');
+    expectCssColor(borderLayer.style.borderTopColor, '#ff0000');
     expect(borderLayer.style.borderLeftStyle).toBe('dashed');
     expect(borderLayer.style.borderLeftWidth).toBe('1px');
-    expect(borderLayer.style.borderLeftColor).toBe('rgb(0, 255, 0)');
+    expectCssColor(borderLayer.style.borderLeftColor, '#00ff00');
   });
 
   it('applies paragraph shading fill to fragment backgrounds', () => {
@@ -3853,7 +3869,7 @@ describe('DomPainter', () => {
     const fragment = mount.querySelector('[data-block-id="shaded-block"]') as HTMLElement;
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
     expect(shadingLayer).toBeTruthy();
-    expect(shadingLayer.style.backgroundColor).toBe('rgb(255, 238, 170)');
+    expectCssColor(shadingLayer.style.backgroundColor, '#ffeeaa');
   });
 
   it('strips indent padding when rendering list content', () => {

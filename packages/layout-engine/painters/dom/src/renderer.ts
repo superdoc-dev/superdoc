@@ -1069,7 +1069,7 @@ export class DomPainter {
     applyStyles(mount, containerStyles);
 
     if (this.virtualEnabled) {
-      // Keep container gap at 0 so spacers don't introduce extra offsets.
+      // Keep container gap at 0 so spacer elements don't introduce extra offsets.
       mount.style.gap = '0px';
       this.renderVirtualized(layout, mount);
       this.currentLayout = layout;
@@ -1130,14 +1130,14 @@ export class DomPainter {
     this.configureSpacerElement(this.topSpacerEl, 'top');
     this.configureSpacerElement(this.bottomSpacerEl, 'bottom');
 
-    // Create and configure pages container (handles the inter-page gap)
-    // Use pageGap for visual consistency with non-virtualized mode.
+    // Create and configure pages container (handles the inter-page gap).
+    // Virtualized rendering uses its own gap setting independent from normal pageGap.
     this.virtualPagesEl = this.doc.createElement('div');
     this.virtualPagesEl.style.display = 'flex';
     this.virtualPagesEl.style.flexDirection = 'column';
     this.virtualPagesEl.style.alignItems = 'center';
     this.virtualPagesEl.style.width = '100%';
-    this.virtualPagesEl.style.gap = `${this.pageGap}px`;
+    this.virtualPagesEl.style.gap = `${this.virtualGap}px`;
 
     mount.appendChild(this.topSpacerEl);
     mount.appendChild(this.virtualPagesEl);
@@ -1194,12 +1194,12 @@ export class DomPainter {
     if (N !== this.virtualHeights.length) {
       this.virtualHeights = this.currentLayout.pages.map((p) => p.size?.h ?? this.currentLayout!.pageSize.h);
     }
-    // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap)
-    // Use pageGap for consistency with CSS gap on virtualPagesEl
+    // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap).
+    // Use virtualGap to match CSS gap on virtualPagesEl.
     const offsets: number[] = new Array(this.virtualHeights.length + 1);
     offsets[0] = 0;
     for (let i = 0; i < this.virtualHeights.length; i += 1) {
-      offsets[i + 1] = offsets[i] + this.virtualHeights[i] + this.pageGap;
+      offsets[i + 1] = offsets[i] + this.virtualHeights[i] + this.virtualGap;
     }
     this.virtualOffsets = offsets;
   }
@@ -1214,7 +1214,7 @@ export class DomPainter {
     // Total content height without trailing gap after last page
     const n = this.virtualHeights.length;
     if (n <= 0) return 0;
-    return this.virtualOffsets[n] - this.pageGap;
+    return this.virtualOffsets[n] - this.virtualGap;
   }
 
   private getMountPaddingTopPx(): number {
@@ -1353,7 +1353,7 @@ export class DomPainter {
         gap.dataset.gapFrom = String(prevIndex);
         gap.dataset.gapTo = String(idx);
         const gapHeight =
-          this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.pageGap * 2;
+          this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.virtualGap * 2;
         gap.style.height = `${Math.max(0, Math.floor(gapHeight))}px`;
         this.virtualGapSpacers.push(gap);
         this.virtualPagesEl.appendChild(gap);
@@ -1393,7 +1393,7 @@ export class DomPainter {
     const clampedLast = Math.max(0, Math.min(last, Math.max(0, n - 1)));
 
     const top = this.topOfIndex(clampedFirst);
-    const bottom = this.topOfIndex(n) - this.topOfIndex(clampedLast + 1) - this.pageGap;
+    const bottom = this.topOfIndex(n) - this.topOfIndex(clampedLast + 1) - this.virtualGap;
     this.topSpacerEl.style.height = `${Math.max(0, Math.floor(top))}px`;
     this.bottomSpacerEl.style.height = `${Math.max(0, Math.floor(bottom))}px`;
   }
@@ -6024,10 +6024,8 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
         hasNestedComments: nestedComments.length > 0,
       };
     }
-    // This run doesn't contain the active comment - still show light highlight for its own comments
-    const primary = comments[0];
-    const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-    return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
+    // Active comment is set but this run does not belong to it - do not highlight.
+    return {};
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)

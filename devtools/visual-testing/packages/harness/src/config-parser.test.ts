@@ -12,6 +12,16 @@ describe('parseConfig', () => {
     expect(config.layout).toBe(false);
   });
 
+  it('should default virtualization to false', () => {
+    const config = parseConfig('');
+    expect(config.virtualization).toBe(false);
+  });
+
+  it('should enable virtualization when virtualization=1', () => {
+    const config = parseConfig('?virtualization=1');
+    expect(config.virtualization).toBe(true);
+  });
+
   it('should parse toolbar modes', () => {
     expect(parseConfig('?toolbar=full').toolbar).toBe('full');
     expect(parseConfig('?toolbar=minimal').toolbar).toBe('minimal');
@@ -40,15 +50,15 @@ describe('parseConfig', () => {
   });
 
   it('should parse hideCaret, hideSelection, and caretBlink', () => {
-    // Defaults to true
+    // Defaults for visual stability
     expect(parseConfig('').hideCaret).toBe(true);
     expect(parseConfig('').hideSelection).toBe(true);
-    expect(parseConfig('').caretBlink).toBe(true);
+    expect(parseConfig('').caretBlink).toBe(false);
 
-    // Can be disabled
+    // Can be disabled/enabled
     expect(parseConfig('?hideCaret=0').hideCaret).toBe(false);
     expect(parseConfig('?hideSelection=0').hideSelection).toBe(false);
-    expect(parseConfig('?caretBlink=0').caretBlink).toBe(false);
+    expect(parseConfig('?caretBlink=1').caretBlink).toBe(true);
   });
 
   it('should parse extensions', () => {
@@ -68,8 +78,18 @@ describe('buildUrl', () => {
     expect(url).toBe('http://localhost:9989?layout=0');
   });
 
+  it('should add virtualization=1 only when explicitly true', () => {
+    const url = buildUrl('http://localhost:9989', { virtualization: true });
+    expect(url).toBe('http://localhost:9989?virtualization=1');
+  });
+
   it('should not add layout param when true (default)', () => {
     const url = buildUrl('http://localhost:9989', { layout: true });
+    expect(url).toBe('http://localhost:9989');
+  });
+
+  it('should not add virtualization param when false (default)', () => {
+    const url = buildUrl('http://localhost:9989', { virtualization: false });
     expect(url).toBe('http://localhost:9989');
   });
 
@@ -104,6 +124,11 @@ describe('describeConfig', () => {
   it('should note when layout is disabled', () => {
     const config = parseConfig('?layout=0');
     expect(describeConfig(config)).toContain('no-layout');
+  });
+
+  it('should note when virtualization is enabled', () => {
+    const config = parseConfig('?virtualization=1');
+    expect(describeConfig(config)).toContain('virtualization-on');
   });
 
   it('should note toolbar mode', () => {

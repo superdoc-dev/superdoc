@@ -850,10 +850,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         } else {
           // Fallback placeholder when no rendering callback is provided
           const placeholder = doc.createElement('div');
+          placeholder.classList.add('superdoc-drawing-placeholder');
           placeholder.style.width = '100%';
           placeholder.style.height = '100%';
-          placeholder.style.background =
+          const stripePattern =
             'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
+          // Set both shorthand and longhand to handle partial CSS property support in test DOMs.
+          placeholder.style.background = stripePattern;
+          placeholder.style.backgroundImage = stripePattern;
           placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
           drawingInner.appendChild(placeholder);
         }
@@ -1162,10 +1166,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           drawingInner.appendChild(drawingContent);
         } else {
           const placeholder = doc.createElement('div');
+          placeholder.classList.add('superdoc-drawing-placeholder');
           placeholder.style.width = '100%';
           placeholder.style.height = '100%';
-          placeholder.style.background =
+          const stripePattern =
             'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
+          // Set both shorthand and longhand to handle partial CSS property support in test DOMs.
+          placeholder.style.background = stripePattern;
+          placeholder.style.backgroundImage = stripePattern;
           placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
           drawingInner.appendChild(placeholder);
         }

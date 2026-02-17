@@ -13,7 +13,7 @@ while preserving subdirectories and source filename identity.
 Prerequisites:
 
 - Run commands from the repo root with `pnpm`.
-- Pull the corpus before running any snapshot command: `pnpm corpus:pull`.
+- For `pnpm layout:snapshots`, pull the corpus before running: `pnpm corpus:pull`.
 
 Important:
 
@@ -25,6 +25,7 @@ Important:
 - Long log lines wrap at 120 chars instead of being truncated.
 - `Complete in ...` is printed as the final line of output.
 - End-of-run output includes average time and phase totals.
+- If the default local module (`packages/superdoc/dist/super-editor.es.js`) is missing, the exporter auto-runs `pnpm run pack:es`.
 
 Candidate output naming:
 
@@ -93,8 +94,23 @@ Generate a diff report between:
 The compare script regenerates candidate snapshots before every run (full refresh by default), and auto-generates the
 reference version when missing. References are only regenerated when missing/incomplete.
 
+Compare also supports `--limit N`:
+
+- Limits candidate generation to the first `N` docs (same ordering as exporter).
+- Applies the same limit to npm reference generation.
+- Restricts compare/reporting scope to that limited candidate set.
+
+When using the default corpus root (`test-corpus` or `SUPERDOC_CORPUS_ROOT`):
+
+- If corpus is missing, compare auto-runs `pnpm corpus:pull`.
+- If corpus exists, compare prompts: `Update corpus folder?`.
+- Use `--update-docs` to skip the prompt and always run `pnpm corpus:pull`.
+- If `--input-root` is provided, compare skips this corpus preflight.
+
 When changed docs are detected, compare now automatically runs `devtools/visual-testing` in local mode for only those
 changed docs, using the same reference version as the visual baseline.
+
+- If `devtools/visual-testing/node_modules` is missing, compare auto-runs `pnpm install` in that folder before visual compare.
 
 ```bash
 # Compare against npm superdoc@next (default when --reference is omitted)
@@ -102,6 +118,12 @@ pnpm layout:compare
 
 # Compare against a specific reference version (auto-generates reference if missing)
 pnpm layout:compare -- --reference 1.13.0-next.15
+
+# Compare only first 5 docs (generation + compare scope)
+pnpm layout:compare -- --reference 1.13.0-next.15 --limit 5
+
+# Force corpus refresh before compare (skip prompt)
+pnpm layout:compare -- --reference 1.13.0-next.15 --update-docs
 
 # Disable auto visual post-step
 pnpm layout:compare -- --reference 1.13.0-next.15 --no-visual-on-change

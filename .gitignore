@@ -69,10 +69,8 @@ codex.config.json
 perf-baseline-results.json
 .claude
 plans/
-dev/
 
 tests/layout-snapshots/candidate/
 tests/layout-snapshots/reference/
 test-corpus/
 .pnpm-store
-

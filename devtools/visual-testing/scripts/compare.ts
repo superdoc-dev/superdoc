@@ -61,7 +61,25 @@ import { normalizeDocPath } from './utils.js';
 
 const require = createRequire(import.meta.url);
 const { PNG } = require('pngjs') as typeof import('pngjs');
-const pixelmatch = require('pixelmatch') as typeof import('pixelmatch').default;
+
+function resolvePixelmatch(moduleValue: unknown): typeof import('pixelmatch').default {
+  if (typeof moduleValue === 'function') {
+    return moduleValue as typeof import('pixelmatch').default;
+  }
+
+  if (
+    moduleValue &&
+    typeof moduleValue === 'object' &&
+    'default' in moduleValue &&
+    typeof (moduleValue as { default?: unknown }).default === 'function'
+  ) {
+    return (moduleValue as { default: typeof import('pixelmatch').default }).default;
+  }
+
+  throw new Error('Unsupported pixelmatch module shape. Expected function export or default function export.');
+}
+
+const pixelmatch = resolvePixelmatch(require('pixelmatch'));
 
 // Configuration
 const SCREENSHOTS_DIR = 'screenshots';
@@ -150,6 +168,8 @@ export interface InteractionMetadata {
 export interface SourceDocMetadata {
   /** Corpus-relative path of the source document (e.g. "tables/basic.docx") */
   relativePath: string;
+  /** Absolute local path to the original source document (corpus location/cache file) */
+  originalLocalPath: string;
   /** Absolute local path to the (possibly staged) copy of the document */
   localPath: string;
   /** ms-word: protocol deep-link URL (macOS only) */
@@ -948,6 +968,7 @@ async function augmentReportWithSourceDocs(
 
         sourceDocByKey.set(docKey, {
           relativePath: docInfo.relativePath,
+          originalLocalPath: localPath,
           localPath: openPath,
           wordUrl: toWordDeepLink(openPath),
         });

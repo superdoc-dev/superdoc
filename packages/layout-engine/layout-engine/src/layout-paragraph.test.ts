@@ -1140,17 +1140,22 @@ describe('layoutParagraphBlock - keepLines', () => {
     pageState.cursorY = 650;
     pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
 
-    const advanceColumn = vi.fn((state: PageState) => ({
-      ...state,
-      cursorY: 50, // Reset to top of new page
-      page: { number: 2, fragments: [] },
-    }));
+    let currentState = pageState;
+    const advanceColumn = vi.fn((state: PageState) => {
+      currentState = {
+        ...state,
+        cursorY: 50, // Reset to top of new page
+        page: { number: state.page.number + 1, fragments: [] },
+        trailingSpacing: 0,
+      };
+      return currentState;
+    });
 
     const ctx: ParagraphLayoutContext = {
       block,
       measure,
       columnWidth: 200,
-      ensurePage: vi.fn(() => pageState),
+      ensurePage: vi.fn(() => currentState),
       advanceColumn,
       columnX: vi.fn(() => 50),
       floatManager: makeFloatManager(),
@@ -1202,7 +1207,7 @@ describe('layoutParagraphBlock - keepLines', () => {
     expect(advanceColumn).not.toHaveBeenCalled();
   });
 
-  it('does not advance when keepLines is true but paragraph would not fit on blank page either', () => {
+  it('does not pre-advance for keepLines when paragraph cannot fit on a blank page', () => {
     const block: ParagraphBlock = {
       kind: 'paragraph',
       id: 'test-block',
@@ -1225,13 +1230,22 @@ describe('layoutParagraphBlock - keepLines', () => {
     pageState.cursorY = 650; // Only 100px remaining
     pageState.page.fragments.push({ blockId: 'existing', kind: 'para' } as never);
 
-    const advanceColumn = vi.fn((state: PageState) => state);
+    let currentState = pageState;
+    const advanceColumn = vi.fn((state: PageState) => {
+      currentState = {
+        ...state,
+        page: { number: state.page.number + 1, fragments: [] },
+        cursorY: state.topMargin,
+        trailingSpacing: 0,
+      };
+      return currentState;
+    });
 
     const ctx: ParagraphLayoutContext = {
       block,
       measure,
       columnWidth: 200,
-      ensurePage: vi.fn(() => pageState),
+      ensurePage: vi.fn(() => currentState),
       advanceColumn,
       columnX: vi.fn(() => 50),
       floatManager: makeFloatManager(),
@@ -1239,8 +1253,15 @@ describe('layoutParagraphBlock - keepLines', () => {
 
     layoutParagraphBlock(ctx);
 
-    // Should NOT advance - paragraph won't fit on blank page anyway
-    expect(advanceColumn).not.toHaveBeenCalled();
+    // keepLines should not force an upfront move to the next page when the paragraph
+    // cannot fit on a blank page anyway. The first fragment should still start on this page.
+    const firstFragment = pageState.page.fragments.find(
+      (fragment) => fragment.kind === 'para' && fragment.blockId === 'test-block',
+    ) as { y: number } | undefined;
+    expect(firstFragment).toBeTruthy();
+    expect(firstFragment?.y).toBe(650);
+    // The paragraph is still taller than the page, so normal pagination advances later.
+    expect(advanceColumn).toHaveBeenCalled();
   });
 
   it('uses baseSpacingBefore (not collapsed) for blank page fit check', () => {

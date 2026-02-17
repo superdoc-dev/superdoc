@@ -1887,9 +1887,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           : undefined,
       );
 
-      // Register and place anchored tables after the paragraph. Anchor base is paragraph start (OOXML-style).
+      // Register and place anchored tables after the paragraph. Anchor base is paragraph-relative
+      // (OOXML-style), clamped to paragraph bottom to avoid overlap, then offsetV is applied.
       // Full-width floating tables are treated as inline and laid out when we hit the table block.
-      // Only vRelativeFrom=paragraph is supported. Position = max(paragraphStartY + offsetV, paragraphBottom) so the table never overlaps the paragraph.
+      // Only vRelativeFrom=paragraph is supported.
       if (tablesForPara) {
         const state = paginator.ensurePage();
         const columnWidthForTable = getCurrentColumns().width;
@@ -1899,10 +1900,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           const totalWidth = tableMeasure.totalWidth ?? 0;
           if (columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO) continue;
 
-          // OOXML: position = paragraph start + tblpY (offsetV). Clamp so table top is never above paragraph
-          // bottom, ensuring no overlap when offsetV is 0 or small.
+          // OOXML anchor base is paragraph-relative. Clamp to paragraph bottom so the table never overlaps
+          // paragraph text, then apply offsetV from that resolved anchor position.
           const offsetV = tableBlock.anchor?.offsetV ?? 0;
-          const anchorY = Math.max(paragraphStartY + offsetV, state.cursorY);
+          const anchorBaseY = Math.max(paragraphStartY, state.cursorY);
+          const anchorY = anchorBaseY + offsetV;
           floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
 
           const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);

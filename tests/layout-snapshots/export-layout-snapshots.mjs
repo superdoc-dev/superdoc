@@ -245,6 +245,57 @@ async function resolveModuleUrl(specifier) {
   return pathToFileURL(resolvedPath).href;
 }
 
+async function runCommand(command, commandArgs, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, commandArgs, {
+      cwd: options.cwd ?? process.cwd(),
+      env: options.env ?? process.env,
+      stdio: options.stdio ?? 'inherit',
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => resolve(code ?? 1));
+  });
+}
+
+function resolveLocalModulePath(specifier) {
+  const normalized = resolveModuleSpecifier(specifier);
+  if (!normalized.startsWith('file:')) {
+    return null;
+  }
+  return path.resolve(fileURLToPath(normalized));
+}
+
+async function ensureDefaultSuperEditorBuild(args) {
+  if (args.isWorker) return;
+
+  const modulePath = resolveLocalModulePath(args.module);
+  if (!modulePath || modulePath !== DEFAULT_SUPER_EDITOR_MODULE) return;
+
+  try {
+    await fs.access(modulePath);
+    return;
+  } catch {
+    // Build on-demand when the local dist module is missing.
+  }
+
+  logLine(`[layout-snapshots] Missing module at ${modulePath}`);
+  logLine('[layout-snapshots] Running `pnpm run pack:es` to build local artifacts...');
+
+  const exitCode = await runCommand('pnpm', ['run', 'pack:es'], {
+    cwd: REPO_ROOT,
+  });
+  if (exitCode !== 0) {
+    throw new Error(`Auto-build failed: "pnpm run pack:es" exited with code ${exitCode}.`);
+  }
+
+  try {
+    await fs.access(modulePath);
+  } catch {
+    throw new Error(`Auto-build completed but module is still missing: ${modulePath}`);
+  }
+}
+
 function resolveCanvasConstructor() {
   try {
     const { Canvas } = require('canvas');
@@ -1596,6 +1647,7 @@ async function loadWorkerDocEntries(args) {
 async function run() {
   const args = parseArgs(process.argv.slice(2));
   const restoreConsoleFilter = installTelemetryConsoleFilter(args.telemetryEnabled);
+  await ensureDefaultSuperEditorBuild(args);
   const moduleUrl = await resolveModuleUrl(args.module);
   const inputRoot = path.resolve(args.inputRoot);
   const outputRoot = path.resolve(args.outputRoot);

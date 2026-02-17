@@ -17,14 +17,14 @@
 </div>
 
 <p align="center">
-  <strong>A JavaScript library that renders and edits .docx files in the browser.</strong><br>
+  <strong>A JavaScript library that renders and edits .docx files in the browser (and headless).</strong><br>
   Tracked changes, complex tables, headers/footers, real-time collaboration — the features your users actually need.<br>
   Self-hosted. Open source. Works with React, Vue, and vanilla JS.
 </p>
 
 <div align="center">
   <a href="https://www.superdoc.dev" target="_blank">
-    <img alt="SuperDoc editor screenshot" src="https://storage.googleapis.com/public_statichosting/SuperDocHomepage/screeenshot.png" width="600px" height="auto" />
+   <img width="800px" height="auto" alt="SuperDoc" src="https://github.com/user-attachments/assets/0d349b23-2fde-4bd2-adf4-e1ce4ace6526" />
   </a>
 </div>
 
@@ -111,7 +111,7 @@ Starter projects to get you running quickly:
 
 ## Roadmap
 
-See the [SuperDoc roadmap](https://github.com/superdoc-dev/superdoc/wiki/%F0%9F%8E%AF%EF%B8%8F-SuperDoc-Roadmap) for what's coming next. DOCX import/export fidelity is always a top priority.
+See the [SuperDoc roadmap](https://github.com/superdoc-dev/superdoc/issues/1982) for what's coming next. DOCX import/export fidelity is always a top priority.
 
 ## Contributing
 
@@ -144,12 +144,6 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/asumaran"><img src="https://github.com/asumaran.png" width="50" height="50" alt="asumaran" title="Alfredo Sumaran" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
-
-## Team
-
-<a href="https://github.com/superdoc-dev/superdoc/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=superdoc-dev/superdoc" />
-</a>
 
 ---
 

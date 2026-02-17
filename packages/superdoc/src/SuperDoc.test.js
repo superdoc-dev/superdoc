@@ -98,7 +98,6 @@ const FloatingCommentsStub = stubComponent('FloatingComments');
 const CommentsLayerStub = stubComponent('CommentsLayer');
 const HrbrFieldsLayerStub = stubComponent('HrbrFieldsLayer');
 const AiLayerStub = stubComponent('AiLayer');
-const PdfViewerStub = stubComponent('PdfViewer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
 
 // Mock @superdoc/super-editor with stubs and PresentationEditor class
@@ -116,10 +115,6 @@ vi.mock('@superdoc/super-editor', () => ({
       });
     }
   },
-}));
-
-vi.mock('./components/PdfViewer/PdfViewer.vue', () => ({
-  default: PdfViewerStub,
 }));
 
 vi.mock('./components/HtmlViewer/HtmlViewer.vue', () => ({

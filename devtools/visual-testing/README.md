@@ -131,6 +131,23 @@ Open the HTML file in your browser.
 
 Word comparisons are opt-in. Use `--include-word` and install `superdoc-benchmark` globally.
 
+## Word Overlay In Report (Visual Only)
+
+Visual reports now include a per-document `Show Word Overlay` button next to `Open in Word`.
+
+What it does:
+- captures a fresh Word reference for that document through the local sidecar
+- overlays the Word page on top of both `Baseline` and `Actual` images
+- exposes overlay controls (opacity + blend mode) in the report
+
+Requirements:
+- `superdoc-benchmark` installed globally (`npm i -g @superdoc-dev/visual-benchmarks`)
+- sidecar running from repo root: `pnpm word-benchmark-sidecar`
+
+Notes:
+- this is available on visual reports only (not interaction reports)
+- the report calls `http://127.0.0.1:9185` by default; override with `?wordOverlayService=http://host:port`
+
 ## Interaction stories
 
 Stories live in `tests/interactions/stories`.

@@ -71,6 +71,16 @@ function logCi(message: string): void {
   }
 }
 
+function buildVisualHarnessUrl(): string {
+  // Pin every visual-testing param explicitly to guard against harness default drift.
+  const url = new URL(BASE_URL);
+  url.searchParams.set('layout', '1');
+  url.searchParams.set('hideCaret', '1');
+  url.searchParams.set('hideSelection', '1');
+  url.searchParams.set('virtualization', '0');
+  return url.toString();
+}
+
 /**
  * Check if SuperDoc is installed from a local file (not npm).
  */
@@ -362,7 +372,7 @@ async function captureDocument(page: Page, doc: DocumentInfo, provider: CorpusPr
   const capturedFiles: string[] = [];
 
   // Navigate to harness with layout engine enabled
-  await page.goto(`${BASE_URL}/?layout=1&hideCaret=1&hideSelection=1`);
+  await page.goto(buildVisualHarnessUrl());
 
   // Wait for editor to be ready
   await page.waitForSelector('div.super-editor', { timeout: TIMEOUT_EDITOR_READY });
@@ -408,19 +418,38 @@ async function captureDocument(page: Page, doc: DocumentInfo, provider: CorpusPr
   // Ensure output directory exists
   fs.mkdirSync(doc.outputDir, { recursive: true });
 
-  // Capture each page
-  for (let i = 0; i < pageCount; i++) {
+  // Capture each page. Re-check count each iteration because late pagination updates
+  // can remove trailing pages after initial stabilization.
+  let i = 0;
+  while (true) {
+    const currentCount = await pages.count();
+    if (i >= currentCount) break;
+
     const pageLocator = pages.nth(i);
     const pageNum = String(i + 1).padStart(3, '0');
     const filename = `p${pageNum}.png`;
     const outputPath = path.join(doc.outputDir, filename);
 
-    await pageLocator.screenshot({
-      path: outputPath,
-      animations: 'disabled',
-    });
+    try {
+      await pageLocator.screenshot({
+        path: outputPath,
+        animations: 'disabled',
+      });
+    } catch (error) {
+      const refreshedCount = await pages.count();
+      if (i >= refreshedCount) {
+        console.warn(
+          colors.warning(
+            `  ⚠ Page count changed during capture for ${doc.relativePath} (stopped at ${refreshedCount} page(s))`,
+          ),
+        );
+        break;
+      }
+      throw error;
+    }
 
     capturedFiles.push(outputPath);
+    i += 1;
   }
 
   return capturedFiles;

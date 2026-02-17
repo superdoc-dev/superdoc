@@ -10,7 +10,12 @@ pnpm corpus:pull
 
 # Upload a doc and update registry.json in R2
 pnpm corpus:push -- --path rendering/sd-1234-example.docx /path/to/file.docx
+
+# Reconcile registry.json in R2 by removing entries for missing object keys
+pnpm corpus:update-registry
 ```
+
+`pnpm corpus:pull` now tolerates missing keys and prunes stale `registry.json` entries automatically.
 
 ## Auth
 

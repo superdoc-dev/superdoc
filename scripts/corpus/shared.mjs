@@ -491,6 +491,14 @@ export function formatDurationMs(ms) {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+export function sortRegistryDocs(docs) {
+  return [...docs].sort((a, b) =>
+    buildDocRelativePath(a).localeCompare(buildDocRelativePath(b), undefined, {
+      sensitivity: 'base',
+    }),
+  );
+}
+
 export function coerceDocEntryFromRelativePath(relativePath) {
   const filename = path.basename(relativePath);
   const group = relativePath.includes('/') ? relativePath.split('/')[0] : undefined;

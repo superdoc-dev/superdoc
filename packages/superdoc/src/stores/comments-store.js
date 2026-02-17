@@ -384,7 +384,7 @@ export const useCommentsStore = defineStore('comments', () => {
     const selection = { ...superdocStore.activeSelection };
     selection.selectionBounds = { ...selection.selectionBounds };
 
-    if (superdocStore.selectionPosition?.source) {
+    if (superdocStore.selectionPosition?.source && superdocStore.selectionPosition.source !== 'pdf') {
       superdocStore.selectionPosition.source = null;
     }
 

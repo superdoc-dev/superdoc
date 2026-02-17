@@ -99,6 +99,7 @@ export default defineStory({
 
   // LAYOUT & VIEW
   layout: true,                    // Use layout engine (paginated view)
+  virtualization: false,           // Keep all pages mounted for deterministic snapshots
   viewport: { width: 1600, height: 1200 },
 
   // FEATURES

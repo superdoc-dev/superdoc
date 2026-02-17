@@ -16,6 +16,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      'superdoc/style.css': path.join(superdocPkg, 'dist/style.css'),
+      superdoc: path.join(superdocPkg, 'dist/superdoc.es.js'),
       yjs: yjsPkg,
     },
   },

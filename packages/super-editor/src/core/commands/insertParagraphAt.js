@@ -1,0 +1,44 @@
+/**
+ * Insert a paragraph node at an absolute document position.
+ *
+ * Supports optional seed text, deterministic block id assignment, and
+ * operation-scoped tracked-change conversion via transaction meta.
+ *
+ * @param {{ pos: number; text?: string; sdBlockId?: string; tracked?: boolean }} options
+ * @returns {import('./types/index.js').Command}
+ */
+export const insertParagraphAt =
+  ({ pos, text = '', sdBlockId, tracked = false }) =>
+  ({ state, dispatch }) => {
+    const paragraphType = state.schema.nodes.paragraph;
+    if (!paragraphType) return false;
+    if (!Number.isInteger(pos) || pos < 0 || pos > state.doc.content.size) return false;
+
+    const attrs = sdBlockId ? { sdBlockId } : undefined;
+    const normalizedText = typeof text === 'string' ? text : '';
+    const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;
+
+    let paragraphNode;
+    try {
+      paragraphNode =
+        paragraphType.createAndFill(attrs, textNode ?? undefined) ??
+        paragraphType.create(attrs, textNode ? [textNode] : undefined);
+    } catch {
+      return false;
+    }
+
+    if (!paragraphNode) return false;
+
+    if (!dispatch) return true;
+
+    try {
+      const tr = state.tr.insert(pos, paragraphNode).setMeta('inputType', 'programmatic');
+      if (tracked) {
+        tr.setMeta('forceTrackChanges', true);
+      }
+      dispatch(tr);
+      return true;
+    } catch {
+      return false;
+    }
+  };

@@ -38,6 +38,7 @@ type CoreCommandNames =
   | 'selectTextblockEnd'
   | 'insertContent'
   | 'insertContentAt'
+  | 'insertParagraphAt'
   | 'undoInputRule'
   | 'setSectionPageMarginsAtSelection'
   | 'toggleList'
@@ -45,6 +46,9 @@ type CoreCommandNames =
   | 'decreaseListIndent'
   | 'changeListLevel'
   | 'removeNumberingProperties'
+  | 'insertListItemAt'
+  | 'setListTypeAt'
+  | 'exitListItemAt'
   | 'restoreSelection'
   | 'setTextSelection'
   | 'getSelectionMarks';

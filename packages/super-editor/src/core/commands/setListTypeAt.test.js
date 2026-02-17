@@ -141,13 +141,15 @@ describe('setListTypeAt', () => {
     expect(result).toBe(false);
   });
 
-  it('does not dispatch when dispatch is not provided', () => {
+  it('is side-effect-free when dispatch is not provided', () => {
     const props = createMockProps();
     props.dispatch = undefined;
 
     const result = setListTypeAt({ pos: 0, kind: 'bullet' })(props);
 
     expect(result).toBe(true);
-    expect(updateNumberingProperties).toHaveBeenCalled();
+    expect(ListHelpers.getNewListId).not.toHaveBeenCalled();
+    expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+    expect(updateNumberingProperties).not.toHaveBeenCalled();
   });
 });

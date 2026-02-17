@@ -170,6 +170,25 @@ describe('insertListItemAt', () => {
     expect(state.schema.text).toHaveBeenCalledWith('New item');
   });
 
+  it('does not inherit sdBlockId from the target node when omitted', () => {
+    const targetWithBlockId = {
+      type: { name: 'paragraph' },
+      attrs: {
+        sdBlockId: 'source-block-id',
+        paragraphProperties: { numberingProperties },
+        numberingProperties,
+      },
+      nodeSize: 7,
+    };
+    const { state, dispatch, paragraphType } = createMockState(targetWithBlockId);
+    state.doc.nodeAt.mockReturnValue(targetWithBlockId);
+
+    insertListItemAt({ pos: 0, position: 'after' })({ state, dispatch });
+
+    const callArgs = paragraphType.createAndFill.mock.calls[0];
+    expect(callArgs?.[0]?.sdBlockId).toBeNull();
+  });
+
   it('returns false when createAndFill throws', () => {
     const { state, dispatch, paragraphType } = createMockState();
     paragraphType.createAndFill.mockImplementation(() => {

@@ -33,7 +33,7 @@ export const insertListItemAt =
 
     const attrs = {
       ...(targetNode.attrs ?? {}),
-      ...(sdBlockId ? { sdBlockId } : {}),
+      sdBlockId: sdBlockId ?? null,
       paraId: null,
       textId: null,
       listRendering: null,

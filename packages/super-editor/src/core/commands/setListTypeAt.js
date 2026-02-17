@@ -27,8 +27,10 @@ export const setListTypeAt =
     if (!numberingProperties) return false;
 
     const level = Number(numberingProperties.ilvl ?? 0) || 0;
-
     const listType = kind === 'bullet' ? 'bulletList' : 'orderedList';
+
+    if (!dispatch) return true;
+
     const newNumId = Number(ListHelpers.getNewListId(editor));
     if (!Number.isFinite(newNumId)) return false;
 
@@ -50,6 +52,6 @@ export const setListTypeAt =
       tr,
     );
 
-    if (dispatch) dispatch(tr);
+    dispatch(tr);
     return true;
   };

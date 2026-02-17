@@ -266,6 +266,11 @@ export interface DocumentApiAdapters {
  * ```
  */
 export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
+  const capabilities = (() => executeCapabilities(adapters.capabilities)) as (() => DocumentApiCapabilities) & {
+    get: () => DocumentApiCapabilities;
+  };
+  capabilities.get = capabilities;
+
   return {
     find(selectorOrQuery: Selector | Query, options?: FindOptions): QueryResult {
       return executeFind(adapters.find, selectorOrQuery, options);
@@ -356,11 +361,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeCreateParagraph(adapters.create, input, options);
       },
     },
-    capabilities: {
-      get(): DocumentApiCapabilities {
-        return executeCapabilities(adapters.capabilities);
-      },
-    },
+    capabilities,
     lists: {
       list(query?: ListsListQuery): ListsListResult {
         return executeListsList(adapters.lists, query);

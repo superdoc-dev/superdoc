@@ -17,3 +17,7 @@ export function memberPathForOperation(operationId: OperationId): string {
 export const DOCUMENT_API_MEMBER_PATHS = [...new Set(OPERATION_IDS.map(memberPathForOperation))] as const;
 
 export type DocumentApiMemberPath = (typeof DOCUMENT_API_MEMBER_PATHS)[number];
+
+export const OPERATION_MEMBER_PATH_MAP = Object.fromEntries(
+  OPERATION_IDS.map((operationId) => [operationId, memberPathForOperation(operationId)]),
+) as Record<OperationId, DocumentApiMemberPath>;

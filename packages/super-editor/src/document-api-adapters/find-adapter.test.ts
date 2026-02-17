@@ -626,6 +626,22 @@ describe('findAdapter — text selectors', () => {
     expect(capturedPattern).toBe('Hello');
   });
 
+  it('forwards caseSensitive option to search command for contains mode', () => {
+    let capturedOptions: Record<string, unknown> | undefined;
+    const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
+    const search: SearchFn = (_pattern, options) => {
+      capturedOptions = options as Record<string, unknown>;
+      return [];
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = { select: { type: 'text', pattern: 'Hello', caseSensitive: true } };
+
+    findAdapter(editor, query);
+
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions!.caseSensitive).toBe(true);
+  });
+
   it('throws when editor has no search command', () => {
     const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
     const editor = makeEditor(doc); // no search command

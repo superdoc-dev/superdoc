@@ -5627,6 +5627,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
             imgRun.height,
             imgRun.alt ?? '',
             imgRun.title ?? '',
+            imgRun.clipPath ?? '',
             imgRun.distTop ?? '',
             imgRun.distBottom ?? '',
             imgRun.distLeft ?? '',
@@ -5735,7 +5736,14 @@ const deriveBlockVersion = (block: FlowBlock): string => {
   }
 
   if (block.kind === 'image') {
-    return [block.src ?? '', block.width ?? '', block.height ?? '', block.alt ?? '', block.title ?? ''].join('|');
+    return [
+      block.src ?? '',
+      block.width ?? '',
+      block.height ?? '',
+      block.alt ?? '',
+      block.title ?? '',
+      block.attrs?.clipPath ?? '',
+    ].join('|');
   }
 
   if (block.kind === 'drawing') {
@@ -5748,6 +5756,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         imageLike.width ?? '',
         imageLike.height ?? '',
         imageLike.alt ?? '',
+        imageLike.attrs?.clipPath ?? '',
       ].join('|');
     }
     if (block.drawingKind === 'vectorShape') {

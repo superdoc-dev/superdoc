@@ -313,7 +313,8 @@ export function handleImageNode(node, params, isAnchor) {
   // - Negative values (e.g., b="-3978"): Word extended the mapping (image doesn't need clipping)
   // - Empty/no srcRect: no pre-adjustment, use cover+clip for aspect ratio mismatch
   //
-  // Only skip cover mode when srcRect has negative values (Word already adjusted the mapping).
+  // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
+  // negative values (Word already adjusted the mapping).
   const stretch = blipFill?.elements?.find((el) => el.name === 'a:stretch');
   const fillRect = stretch?.elements?.find((el) => el.name === 'a:fillRect');
   const srcRect = blipFill?.elements?.find((el) => el.name === 'a:srcRect');
@@ -327,8 +328,9 @@ export function handleImageNode(node, params, isAnchor) {
   });
 
   const shouldStretch = Boolean(stretch && fillRect);
-  // Use cover mode when stretching, unless srcRect has negative values (Word already adjusted)
-  const shouldCover = shouldStretch && !srcRectHasNegativeValues;
+  // Use cover mode when stretching, unless srcRect already produced an explicit clipPath
+  // or srcRect has negative values (Word already adjusted mapping).
+  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {

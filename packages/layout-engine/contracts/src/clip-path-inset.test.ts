@@ -40,6 +40,7 @@ describe('parseInsetClipPathForScale', () => {
     expect(parseInsetClipPathForScale('inset(10 20 30 40)')).toBeNull(); // no %
     expect(parseInsetClipPathForScale('inset(10% 20% 30%)')).toBeNull(); // only 3 values
     expect(parseInsetClipPathForScale('inset()')).toBeNull();
+    expect(parseInsetClipPathForScale('inset(1..2% 0% 0% 0%)')).toBeNull(); // malformed number token
   });
 
   it('returns null when visible area has zero or negative size', () => {
@@ -73,6 +74,7 @@ describe('formatInsetClipPathTransform', () => {
   it('returns undefined for invalid clipPath', () => {
     expect(formatInsetClipPathTransform('circle(50%)')).toBeUndefined();
     expect(formatInsetClipPathTransform('')).toBeUndefined();
+    expect(formatInsetClipPathTransform('inset(1..2% 0% 0% 0%)')).toBeUndefined();
   });
 
   it('output can be applied as inline style', () => {

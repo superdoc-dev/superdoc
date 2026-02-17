@@ -20,12 +20,17 @@ export type InsetClipPathScale = {
  * @returns Scale and translate values, or null if not a valid inset()
  */
 export function parseInsetClipPathForScale(clipPath: string): InsetClipPathScale | null {
-  const m = clipPath.trim().match(/^inset\(\s*([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%\s*\)$/);
+  const m = clipPath
+    .trim()
+    .match(
+      /^inset\(\s*(\d+(?:\.\d+)?|\.\d+)%\s+(\d+(?:\.\d+)?|\.\d+)%\s+(\d+(?:\.\d+)?|\.\d+)%\s+(\d+(?:\.\d+)?|\.\d+)%\s*\)$/,
+    );
   if (!m) return null;
   const top = Number(m[1]);
   const right = Number(m[2]);
   const bottom = Number(m[3]);
   const left = Number(m[4]);
+  if (![top, right, bottom, left].every(Number.isFinite)) return null;
   const visibleW = 100 - left - right;
   const visibleH = 100 - top - bottom;
   if (visibleW <= 0 || visibleH <= 0) return null;

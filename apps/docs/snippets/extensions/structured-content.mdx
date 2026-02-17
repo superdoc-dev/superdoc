@@ -69,36 +69,6 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
     ],
     [
       {
-        label: 'Toggle inline lock',
-        onClick: (superdoc) => {
-          const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
-          const tags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state)
-          const field = tags.find(t => String(t.node.attrs.id) === '1')
-          if (!field) return
-          const locked = field.node.attrs.lockMode && field.node.attrs.lockMode !== 'unlocked'
-          editor.commands.updateStructuredContentById('1', {
-            attrs: { lockMode: locked ? 'unlocked' : 'sdtContentLocked' },
-          })
-        }
-      },
-      {
-        label: 'Toggle block lock',
-        onClick: (superdoc) => {
-          const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
-          const tags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state)
-          const field = tags.find(t => String(t.node.attrs.id) === '2')
-          if (!field) return
-          const locked = field.node.attrs.lockMode && field.node.attrs.lockMode !== 'unlocked'
-          editor.commands.updateStructuredContentById('2', {
-            attrs: { lockMode: locked ? 'unlocked' : 'sdtContentLocked' },
-          })
-        }
-      },
-    ],
-    [
-      {
         label: 'Delete all fields',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor

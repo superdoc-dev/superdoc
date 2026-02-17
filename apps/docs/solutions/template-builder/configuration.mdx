@@ -43,34 +43,11 @@ Define which fields users can insert:
         label: "Signature",
         mode: "block", // Force block-level insertion
       },
-      {
-        id: "3",
-        label: "Account ID",
-        lockMode: "sdtContentLocked", // Fully protected — no edits, no deletion
-      },
-      {
-        id: "4",
-        label: "Editable Clause",
-        lockMode: "sdtLocked", // Users can edit content but not delete the field
-      },
     ],
     allowCreate: true, // Let users create new fields on the fly
   }}
 />
 ```
-
-### Lock modes
-
-Control what users can do with each field using the `lockMode` property:
-
-| Lock mode | Field wrapper | Field content | Use case |
-|-----------|---------------|---------------|----------|
-| `unlocked` | Deletable | Editable | Default — no restrictions |
-| `sdtLocked` | Protected | Editable | Protect field structure, allow value changes |
-| `contentLocked` | Deletable | Read-only | Display a computed value users can remove |
-| `sdtContentLocked` | Protected | Read-only | Fully protected (e.g., system-generated ID) |
-
-Lock modes are compatible with Microsoft Word — exported documents preserve the `w:lock` element per the ECMA-376 standard. See the [Structured Content extension](/extensions/structured-content#lock-modes) for full details.
 
 ### Field creation
 

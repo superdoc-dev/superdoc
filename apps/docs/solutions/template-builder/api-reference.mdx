@@ -138,11 +138,8 @@ interface FieldDefinition {
   metadata?: Record<string, any>; // Custom metadata
   mode?: "inline" | "block"; // Field insertion mode (default: "inline")
   group?: string; // Category/group name
-  lockMode?: StructuredContentLockMode; // Editing restrictions (default: "unlocked")
 }
 ```
-
-The `lockMode` property controls what users can do with the field once inserted. See the [Structured Content extension](/extensions/structured-content#lock-modes) for details on each mode.
 
 ### TemplateField
 
@@ -156,7 +153,6 @@ interface TemplateField {
   position?: number; // Position in document
   mode?: "inline" | "block"; // Rendering mode
   group?: string; // Group ID for related fields
-  lockMode?: StructuredContentLockMode; // Current lock state
 }
 ```
 

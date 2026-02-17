@@ -72,26 +72,28 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
         label: 'Toggle inline lock',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
+          if (!editor?.state) return
           const tags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state)
           const field = tags.find(t => String(t.node.attrs.id) === '1')
-          const locked = field?.node.attrs.lockMode && field.node.attrs.lockMode !== 'unlocked'
-          editor.commands.updateStructuredContentById('1', {
-            attrs: { lockMode: locked ? 'unlocked' : 'sdtContentLocked' },
-          });
+          if (!field) return
+          const locked = field.node.attrs.lockMode && field.node.attrs.lockMode !== 'unlocked'
+          const tr = editor.state.tr
+          tr.setNodeAttribute(field.pos, 'lockMode', locked ? 'unlocked' : 'sdtContentLocked')
+          editor.view.dispatch(tr)
         }
       },
       {
         label: 'Toggle block lock',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
+          if (!editor?.state) return
           const tags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state)
           const field = tags.find(t => String(t.node.attrs.id) === '2')
-          const locked = field?.node.attrs.lockMode && field.node.attrs.lockMode !== 'unlocked'
-          editor.commands.updateStructuredContentById('2', {
-            attrs: { lockMode: locked ? 'unlocked' : 'sdtContentLocked' },
-          });
+          if (!field) return
+          const locked = field.node.attrs.lockMode && field.node.attrs.lockMode !== 'unlocked'
+          const tr = editor.state.tr
+          tr.setNodeAttribute(field.pos, 'lockMode', locked ? 'unlocked' : 'sdtContentLocked')
+          editor.view.dispatch(tr)
         }
       },
     ],

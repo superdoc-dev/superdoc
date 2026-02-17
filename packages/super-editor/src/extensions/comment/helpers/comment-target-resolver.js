@@ -14,12 +14,30 @@ const resolveMoveIds = ({ commentId, importedId }) => {
   return { canonicalId, fallbackImportedId };
 };
 
-const collectMarkSegmentsByAttr = (doc, attrName, attrValue) => {
+const collectCanonicalMarkSegments = (doc, canonicalId) => {
   const segments = [];
   doc.descendants((node, pos) => {
     if (!node.isInline) return;
     const commentMark = node.marks?.find(
-      (mark) => mark.type.name === CommentMarkName && mark.attrs?.[attrName] === attrValue,
+      (mark) => mark.type.name === CommentMarkName && mark.attrs?.commentId === canonicalId,
+    );
+    if (!commentMark) return;
+    segments.push({
+      from: pos,
+      to: pos + node.nodeSize,
+      attrs: commentMark.attrs ?? {},
+      mark: commentMark,
+    });
+  });
+  return segments;
+};
+
+const collectImportedMarkSegments = (doc, importedId) => {
+  const segments = [];
+  doc.descendants((node, pos) => {
+    if (!node.isInline) return;
+    const commentMark = node.marks?.find(
+      (mark) => mark.type.name === CommentMarkName && mark.attrs?.importedId === importedId,
     );
     if (!commentMark) return;
     segments.push({
@@ -67,7 +85,7 @@ export const resolveCommentIdentity = (doc, { commentId, importedId }) => {
   }
 
   if (canonicalId) {
-    const canonicalMarks = collectMarkSegmentsByAttr(doc, 'commentId', canonicalId);
+    const canonicalMarks = collectCanonicalMarkSegments(doc, canonicalId);
     const canonicalAnchors = collectAnchorsById(doc, canonicalId);
     if (canonicalMarks.length > 0 || canonicalAnchors.length > 0) {
       return {
@@ -84,7 +102,7 @@ export const resolveCommentIdentity = (doc, { commentId, importedId }) => {
     return { status: 'unresolved', reason: 'no-targets' };
   }
 
-  const fallbackMarks = collectMarkSegmentsByAttr(doc, 'importedId', fallbackImportedId);
+  const fallbackMarks = collectImportedMarkSegments(doc, fallbackImportedId);
   const fallbackAnchors = collectAnchorsById(doc, fallbackImportedId);
   if (fallbackMarks.length === 0 && fallbackAnchors.length === 0) {
     return { status: 'unresolved', reason: 'no-targets' };
@@ -115,12 +133,13 @@ export const resolveCommentIdentity = (doc, { commentId, importedId }) => {
  *
  * @param {import('prosemirror-model').Node} doc - The ProseMirror document
  * @param {ReturnType<typeof resolveCommentIdentity>} identity - A resolved identity from {@link resolveCommentIdentity}
- * @returns {Array<{ from: number, to: number, attrs: Record<string, any>, mark: import('prosemirror-model').Mark }>} Mark segments, empty when identity is not resolved
+ * @returns {Array<{ from: number, to: number, attrs: Object, mark: Object }>} Mark segments, empty when identity is not resolved
  */
 export const collectCommentMarkSegments = (doc, identity) => {
   if (!identity || identity.status !== 'resolved') return [];
-  const attrName = identity.strategy === 'canonical' ? 'commentId' : 'importedId';
-  return collectMarkSegmentsByAttr(doc, attrName, identity.matchId);
+  return identity.strategy === 'canonical'
+    ? collectCanonicalMarkSegments(doc, identity.matchId)
+    : collectImportedMarkSegments(doc, identity.matchId);
 };
 
 /**
@@ -128,7 +147,7 @@ export const collectCommentMarkSegments = (doc, identity) => {
  *
  * @param {import('prosemirror-model').Node} doc - The ProseMirror document
  * @param {ReturnType<typeof resolveCommentIdentity>} identity - A resolved identity from {@link resolveCommentIdentity}
- * @returns {Array<{ pos: number, typeName: string, attrs: Record<string, any> }>} Anchor nodes, empty when identity is not resolved
+ * @returns {Array<{ pos: number, typeName: string, attrs: Object }>} Anchor nodes, empty when identity is not resolved
  */
 export const collectCommentAnchorNodes = (doc, identity) => {
   if (!identity || identity.status !== 'resolved') return [];
@@ -140,13 +159,27 @@ export const collectCommentAnchorNodes = (doc, identity) => {
  *
  * @param {import('prosemirror-model').Node} doc - The ProseMirror document
  * @param {ReturnType<typeof resolveCommentIdentity>} identity - A resolved identity from {@link resolveCommentIdentity}
- * @returns {{ startPos: number, endPos: number, startAttrs: Record<string, any> } | null} Range positions, or null when anchors are missing/incomplete
+ * @returns {{ startPos: number, endPos: number, startAttrs: Object } | null} Range positions, or null when anchors are missing/incomplete
  */
 export const collectCommentRangeAnchors = (doc, identity) => {
   if (!identity || identity.status !== 'resolved') return null;
-  const anchors = collectAnchorsById(doc, identity.matchId);
-  const start = anchors.find((a) => a.typeName === 'commentRangeStart');
-  const end = anchors.find((a) => a.typeName === 'commentRangeEnd');
-  if (!start || !end) return null;
-  return { startPos: start.pos, endPos: end.pos, startAttrs: start.attrs };
+  let startPos = null;
+  let endPos = null;
+  let startAttrs = { 'w:id': identity.matchId };
+
+  doc.descendants((node, pos) => {
+    if (!COMMENT_RANGE_NODE_TYPES.has(node.type?.name)) return;
+    if (node.attrs?.['w:id'] !== identity.matchId) return;
+    if (node.type.name === 'commentRangeStart') {
+      startPos = pos;
+      startAttrs = { ...node.attrs };
+      return;
+    }
+    if (node.type.name === 'commentRangeEnd') {
+      endPos = pos;
+    }
+  });
+
+  if (startPos == null || endPos == null) return null;
+  return { startPos, endPos, startAttrs };
 };

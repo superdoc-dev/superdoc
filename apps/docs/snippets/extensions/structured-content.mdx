@@ -31,22 +31,6 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
         }
       },
       {
-        label: 'Insert locked field',
-        onClick: (superdoc) => {
-          const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
-
-          editor.commands.insertStructuredContentInline({
-            attrs: {
-              id: '3',
-              alias: 'Account ID',
-              lockMode: 'sdtContentLocked',
-            },
-            text: 'ACC-00042',
-          });
-        }
-      },
-      {
         label: 'Insert block field',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
@@ -56,7 +40,6 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
             attrs: {
               id: '2',
               alias: 'Terms & Conditions',
-              lockMode: 'sdtLocked',
             },
             json: { type: 'paragraph', content: [{ type: 'text', text: 'Legal content...' }] }
           });
@@ -72,24 +55,13 @@ people will never forget how you made them feel."</i><br/><br/><b>Maya Angelou</
         }
       },
       {
-        label: 'Lock inline field',
+        label: 'Update block field',
         onClick: (superdoc) => {
           const editor = superdoc?.activeEditor || superdoc?.editor
           if (!editor?.commands) return
 
-          editor.commands.updateStructuredContentById('1', {
-            attrs: { lockMode: 'contentLocked' },
-          });
-        }
-      },
-      {
-        label: 'Unlock inline field',
-        onClick: (superdoc) => {
-          const editor = superdoc?.activeEditor || superdoc?.editor
-          if (!editor?.commands) return
-
-          editor.commands.updateStructuredContentById('1', {
-            attrs: { lockMode: 'unlocked' },
+          editor.commands.updateStructuredContentById('2', {
+            json: { type: 'paragraph', content: [{ type: 'text', text: 'Updated legal content...' }] }
           });
         }
       },

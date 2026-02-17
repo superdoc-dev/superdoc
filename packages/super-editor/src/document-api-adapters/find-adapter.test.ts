@@ -647,7 +647,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc); // no search command
     const query: Query = { select: { type: 'text', pattern: 'hello' } };
 
-    expect(() => findAdapter(editor, query)).toThrow('search command is not available');
+    expect(() => findAdapter(editor, query)).toThrow('command is not available');
   });
 
   it('paginates text results and contexts together', () => {

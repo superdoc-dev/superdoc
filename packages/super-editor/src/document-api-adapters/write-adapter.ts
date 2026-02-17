@@ -8,6 +8,7 @@ import type {
   WriteRequest,
 } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from './errors.js';
+import { ensureTrackedCapability } from './helpers/mutation-helpers.js';
 import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from './helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
 import { toCanonicalTrackedChangeId } from './helpers/tracked-change-resolver.js';
@@ -128,24 +129,14 @@ function applyDirectWrite(
   return { success: true, resolution: resolvedTarget.resolution };
 }
 
-function assertTrackedWriteCapability(editor: Editor): NonNullable<Editor['commands']>['insertTrackedChange'] {
-  const insertTrackedChange = editor.commands?.insertTrackedChange;
-  if (!insertTrackedChange) {
-    throw new DocumentApiAdapterError(
-      'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-      'Tracked write command is not available on this editor instance.',
-    );
-  }
-
-  return insertTrackedChange;
-}
-
 function applyTrackedWrite(
   editor: Editor,
   request: WriteRequest,
   resolvedTarget: ResolvedWriteTarget,
 ): TextMutationReceipt {
-  const insertTrackedChange = assertTrackedWriteCapability(editor);
+  ensureTrackedCapability(editor, { operation: 'write' });
+  // insertTrackedChange is guaranteed to exist after ensureTrackedCapability.
+  const insertTrackedChange = editor.commands!.insertTrackedChange!;
   const text = request.kind === 'delete' ? '' : (request.text ?? '');
 
   const changeId = uuidv4();
@@ -208,7 +199,7 @@ export function writeAdapter(editor: Editor, request: WriteRequest, options?: Mu
 
   const mode = options?.changeMode ?? 'direct';
   if (options?.dryRun) {
-    if (mode === 'tracked') assertTrackedWriteCapability(editor);
+    if (mode === 'tracked') ensureTrackedCapability(editor, { operation: 'write' });
     return { success: true, resolution: resolvedTarget.resolution };
   }
 

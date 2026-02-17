@@ -29,10 +29,12 @@ export const insertParagraphAt =
 
     if (!paragraphNode) return false;
 
-    if (!dispatch) return true;
-
+    // Validate the structural insertion before the dispatch guard so that
+    // editor.can().insertParagraphAt() accurately reflects feasibility.
     try {
-      const tr = state.tr.insert(pos, paragraphNode).setMeta('inputType', 'programmatic');
+      const tr = state.tr.insert(pos, paragraphNode);
+      if (!dispatch) return true;
+      tr.setMeta('inputType', 'programmatic');
       if (tracked) {
         tr.setMeta('forceTrackChanges', true);
       }

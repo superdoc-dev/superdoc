@@ -246,7 +246,7 @@ describe('lists adapter', () => {
     expect(result.insertionPoint.range).toEqual({ start: 0, end: 0 });
   });
 
-  it('throws TRACK_CHANGE_COMMAND_UNAVAILABLE for direct-only tracked requests', () => {
+  it('throws CAPABILITY_UNAVAILABLE for direct-only tracked requests', () => {
     const editor = makeEditor([
       makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, markerText: '1.', path: [1], numberingType: 'decimal' }),
     ]);
@@ -327,6 +327,30 @@ describe('lists adapter', () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.failure.code).toBe('NO_OP');
+  });
+
+  it('returns NO_OP for restart when a level-1 item starts after a level-0 item with same numId', () => {
+    const editor = makeEditor([
+      makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, markerText: '1.', path: [1], numberingType: 'decimal' }),
+      makeListParagraph({
+        id: 'li-2',
+        numId: 1,
+        ilvl: 1,
+        markerText: 'a.',
+        path: [1, 1],
+        numberingType: 'lowerLetter',
+      }),
+    ]);
+    const restartNumbering = editor.commands!.restartNumbering as ReturnType<typeof vi.fn>;
+
+    const result = listsRestartAdapter(editor, {
+      target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.failure.code).toBe('NO_OP');
+    expect(restartNumbering).not.toHaveBeenCalled();
   });
 
   it('throws TARGET_NOT_FOUND for stale list targets', () => {
@@ -474,7 +498,7 @@ describe('lists adapter', () => {
     });
   });
 
-  it('throws TRACK_CHANGE_COMMAND_UNAVAILABLE for tracked insert dry-run without a configured user', () => {
+  it('throws CAPABILITY_UNAVAILABLE for tracked insert dry-run without a configured user', () => {
     const editor = makeEditor([
       makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, markerText: '1.', path: [1], numberingType: 'decimal' }),
     ]);
@@ -489,6 +513,57 @@ describe('lists adapter', () => {
         { changeMode: 'tracked', dryRun: true },
       ),
     ).toThrow('requires a user to be configured');
+  });
+
+  it('returns TARGET_NOT_FOUND failure when post-apply list item resolution fails', () => {
+    const children = [
+      makeListParagraph({
+        id: 'li-1',
+        text: 'One',
+        numId: 1,
+        ilvl: 0,
+        markerText: '1.',
+        path: [1],
+        numberingType: 'decimal',
+      }),
+    ];
+
+    // Custom insertListItemAt that returns true but inserts a node with a
+    // different sdBlockId/paraId than what was requested, making it
+    // unresolvable by resolveInsertedListItem.
+    const insertListItemAt = vi.fn((options: { pos: number; position: 'before' | 'after'; sdBlockId?: string }) => {
+      const inserted = makeListParagraph({
+        id: 'unrelated-id',
+        sdBlockId: 'unrelated-sdBlockId',
+        numId: 1,
+        ilvl: 0,
+        markerText: '',
+        path: [1],
+        numberingType: 'decimal',
+      });
+      const at = options.position === 'before' ? 0 : 1;
+      children.splice(at, 0, inserted);
+      return true;
+    });
+
+    const editor = makeEditor(children, { insertListItemAt });
+
+    const result = listsInsertAdapter(
+      editor,
+      {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        position: 'after',
+      },
+      { changeMode: 'direct' },
+    );
+
+    // Contract: success:false means no mutation was applied.
+    // The mutation DID apply, so we must return success with the generated ID.
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.item.nodeType).toBe('listItem');
+    expect(typeof result.item.nodeId).toBe('string');
+    expect(result.item.nodeId).not.toBe('(dry-run)');
   });
 
   it('throws same error for tracked insert non-dry-run without a configured user', () => {

@@ -1,9 +1,5 @@
 /** Error codes used by {@link DocumentApiAdapterError} to classify adapter failures. */
-export type DocumentApiAdapterErrorCode =
-  | 'TARGET_NOT_FOUND'
-  | 'TRACK_CHANGE_COMMAND_UNAVAILABLE'
-  | 'INVALID_TARGET'
-  | 'COMMAND_UNAVAILABLE';
+export type DocumentApiAdapterErrorCode = 'TARGET_NOT_FOUND' | 'INVALID_TARGET' | 'CAPABILITY_UNAVAILABLE';
 
 /**
  * Structured error thrown by document-api adapter functions.

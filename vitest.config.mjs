@@ -12,6 +12,7 @@ export default defineConfig({
     // Use package directories; Vitest will pick up each package's vite.config.js
     projects: [
       './packages/super-editor',
+      './packages/document-api',
       './packages/superdoc',
       './packages/ai',
       './packages/collaboration-yjs',

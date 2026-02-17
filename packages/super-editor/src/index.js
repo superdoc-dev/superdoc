@@ -114,3 +114,5 @@ export {
   defineNode,
   defineMark,
 };
+
+export { assembleDocumentApiAdapters } from './document-api-adapters/assemble-adapters.js';

@@ -101,6 +101,9 @@ function makeEditor(text = 'Hello'): {
     commands: {
       insertTrackedChange,
     },
+    options: {
+      user: { name: 'Test User' },
+    },
     dispatch,
   } as unknown as Editor;
 
@@ -159,6 +162,9 @@ function makeEditorWithDuplicateBlockIds(): {
     },
     commands: {
       insertTrackedChange: vi.fn(() => true),
+    },
+    options: {
+      user: { name: 'Test User' },
     },
     dispatch,
   } as unknown as Editor;
@@ -484,7 +490,7 @@ describe('writeAdapter', () => {
     ).toThrow('Mutation target could not be resolved.');
   });
 
-  it('throws when tracked writes are unavailable', () => {
+  it('throws CAPABILITY_UNAVAILABLE when tracked writes are unavailable', () => {
     const { editor } = makeEditor('Hello');
     (editor.commands as { insertTrackedChange?: unknown }).insertTrackedChange = undefined;
 
@@ -498,10 +504,10 @@ describe('writeAdapter', () => {
         },
         { changeMode: 'tracked' },
       ),
-    ).toThrow('Tracked write command is not available on this editor instance.');
+    ).toThrow('requires the insertTrackedChange command');
   });
 
-  it('throws when tracked dry-run capability is unavailable', () => {
+  it('throws CAPABILITY_UNAVAILABLE when tracked dry-run capability is unavailable', () => {
     const { editor } = makeEditor('Hello');
     (editor.commands as { insertTrackedChange?: unknown }).insertTrackedChange = undefined;
 
@@ -515,7 +521,24 @@ describe('writeAdapter', () => {
         },
         { changeMode: 'tracked', dryRun: true },
       ),
-    ).toThrow('Tracked write command is not available on this editor instance.');
+    ).toThrow('requires the insertTrackedChange command');
+  });
+
+  it('throws CAPABILITY_UNAVAILABLE for tracked write without a configured user', () => {
+    const { editor } = makeEditor('Hello');
+    (editor as { options: { user?: unknown } }).options.user = undefined;
+
+    expect(() =>
+      writeAdapter(
+        editor,
+        {
+          kind: 'replace',
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+          text: 'World',
+        },
+        { changeMode: 'tracked' },
+      ),
+    ).toThrow('requires a user to be configured');
   });
 
   it('returns explicit NO_OP when replacement text is unchanged', () => {

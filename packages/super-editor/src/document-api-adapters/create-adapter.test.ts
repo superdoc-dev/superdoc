@@ -186,6 +186,9 @@ function makeEditor({
       insertParagraphAt,
       insertTrackedChange: withTrackedCommand ? vi.fn(() => true) : undefined,
     },
+    can: () => ({
+      insertParagraphAt: () => insertReturns,
+    }),
     options: { user },
   } as unknown as Editor;
 
@@ -248,11 +251,11 @@ describe('createParagraphAdapter', () => {
     ).toThrow('target block was not found');
   });
 
-  it('throws TRACK_CHANGE_COMMAND_UNAVAILABLE when tracked create is requested without tracked capability', () => {
+  it('throws CAPABILITY_UNAVAILABLE when tracked create is requested without tracked capability', () => {
     const { editor } = makeEditor({ withTrackedCommand: false });
 
     expect(() => createParagraphAdapter(editor, { text: 'Tracked' }, { changeMode: 'tracked' })).toThrow(
-      'Tracked paragraph creation is not available',
+      'requires the insertTrackedChange command',
     );
   });
 
@@ -297,6 +300,16 @@ describe('createParagraphAdapter', () => {
     expect(insertParagraphAt).not.toHaveBeenCalled();
   });
 
+  it('dry-run returns INVALID_TARGET when insertion cannot be applied', () => {
+    const { editor } = makeEditor({ insertReturns: false });
+
+    const result = createParagraphAdapter(editor, { text: 'Dry run text' }, { changeMode: 'direct', dryRun: true });
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.failure.code).toBe('INVALID_TARGET');
+  });
+
   it('dry-run still throws TARGET_NOT_FOUND when target block does not exist', () => {
     const { editor } = makeEditor();
 
@@ -314,12 +327,12 @@ describe('createParagraphAdapter', () => {
     ).toThrow('target block was not found');
   });
 
-  it('dry-run still throws TRACK_CHANGE_COMMAND_UNAVAILABLE when tracked capability is missing', () => {
+  it('dry-run still throws CAPABILITY_UNAVAILABLE when tracked capability is missing', () => {
     const { editor } = makeEditor({ withTrackedCommand: false });
 
     expect(() =>
       createParagraphAdapter(editor, { text: 'Tracked dry run' }, { changeMode: 'tracked', dryRun: true }),
-    ).toThrow('Tracked paragraph creation is not available');
+    ).toThrow('requires the insertTrackedChange command');
   });
 
   it('resolves created paragraph when block index identity prefers paraId over sdBlockId', () => {
@@ -338,8 +351,8 @@ describe('createParagraphAdapter', () => {
     expect(result.insertionPoint.blockId).toBe('pm-para-id');
   });
 
-  it('returns success with generated sdBlockId when post-apply paragraph resolution fails', () => {
-    const { editor, insertParagraphAt } = makeEditor({
+  it('returns success with generated ID when post-apply paragraph resolution fails', () => {
+    const { editor } = makeEditor({
       insertedParagraphAttrs: {
         sdBlockId: undefined,
       },
@@ -347,23 +360,16 @@ describe('createParagraphAdapter', () => {
 
     const result = createParagraphAdapter(editor, { text: 'Inserted paragraph' }, { changeMode: 'direct' });
 
+    // Contract: success:false means no mutation was applied.
+    // The mutation DID apply, so we must return success with the generated ID.
     expect(result.success).toBe(true);
     if (!result.success) return;
-    const generatedId = insertParagraphAt.mock.calls[0]?.[0]?.sdBlockId;
-    expect(generatedId).toBeTypeOf('string');
-    expect(result.paragraph).toEqual({
-      kind: 'block',
-      nodeType: 'paragraph',
-      nodeId: generatedId,
-    });
-    expect(result.insertionPoint).toEqual({
-      kind: 'text',
-      blockId: generatedId,
-      range: { start: 0, end: 0 },
-    });
+    expect(result.paragraph.nodeType).toBe('paragraph');
+    expect(typeof result.paragraph.nodeId).toBe('string');
+    expect(result.paragraph.nodeId).not.toBe('(dry-run)');
   });
 
-  it('throws TRACK_CHANGE_COMMAND_UNAVAILABLE for tracked dry-run without a configured user', () => {
+  it('throws CAPABILITY_UNAVAILABLE for tracked dry-run without a configured user', () => {
     const { editor } = makeEditor();
 
     expect(() => createParagraphAdapter(editor, { text: 'Tracked' }, { changeMode: 'tracked', dryRun: true })).toThrow(

@@ -20,12 +20,7 @@ describe('DocumentApiAdapterError', () => {
   });
 
   it('supports all error codes', () => {
-    const codes = [
-      'TARGET_NOT_FOUND',
-      'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-      'INVALID_TARGET',
-      'COMMAND_UNAVAILABLE',
-    ] as const;
+    const codes = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 
     for (const code of codes) {
       const error = new DocumentApiAdapterError(code, `Error: ${code}`);
@@ -34,7 +29,7 @@ describe('DocumentApiAdapterError', () => {
   });
 
   it('is caught by instanceof checks after setPrototypeOf', () => {
-    const error = new DocumentApiAdapterError('COMMAND_UNAVAILABLE', 'test');
+    const error = new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'test');
 
     try {
       throw error;

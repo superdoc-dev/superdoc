@@ -10,7 +10,7 @@ import { clearIndexCache, getBlockIndex } from './helpers/index-cache.js';
 import { findBlockById, type BlockCandidate } from './helpers/node-address-resolver.js';
 import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js';
 import { DocumentApiAdapterError } from './errors.js';
-import { ensureTrackedUser } from './helpers/tracked-mode-guards.js';
+import { requireEditorCommand, ensureTrackedCapability } from './helpers/mutation-helpers.js';
 
 type InsertParagraphAtCommandOptions = {
   pos: number;
@@ -36,28 +36,6 @@ function resolveParagraphInsertPosition(editor: Editor, input: CreateParagraphIn
   }
 
   return location.kind === 'before' ? target.pos : target.end;
-}
-
-function getInsertParagraphAtCommand(editor: Editor): InsertParagraphAtCommand {
-  const command = editor.commands?.insertParagraphAt;
-  if (!command) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Create paragraph command is not available on this editor instance.',
-    );
-  }
-  return command as InsertParagraphAtCommand;
-}
-
-function ensureTrackedCreateCapability(editor: Editor): void {
-  const hasTrackedInsertCommand = typeof editor.commands?.insertTrackedChange === 'function';
-  if (!hasTrackedInsertCommand) {
-    throw new DocumentApiAdapterError(
-      'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-      'Tracked paragraph creation is not available on this editor instance.',
-    );
-  }
-  ensureTrackedUser(editor, 'Tracked paragraph creation');
 }
 
 function resolveCreatedParagraph(editor: Editor, paragraphId: string): BlockCandidate {
@@ -112,16 +90,35 @@ export function createParagraphAdapter(
   input: CreateParagraphInput,
   options?: MutationOptions,
 ): CreateParagraphResult {
-  const insertParagraphAt = getInsertParagraphAtCommand(editor);
+  const insertParagraphAt = requireEditorCommand(
+    editor.commands?.insertParagraphAt,
+    'create.paragraph',
+  ) as InsertParagraphAtCommand;
   const mode = options?.changeMode ?? 'direct';
 
   if (mode === 'tracked') {
-    ensureTrackedCreateCapability(editor);
+    ensureTrackedCapability(editor, { operation: 'create.paragraph' });
   }
 
   const insertAt = resolveParagraphInsertPosition(editor, input);
 
   if (options?.dryRun) {
+    const canInsert = editor.can().insertParagraphAt?.({
+      pos: insertAt,
+      text: input.text,
+      tracked: mode === 'tracked',
+    });
+
+    if (!canInsert) {
+      return {
+        success: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Paragraph creation could not be applied at the requested location.',
+        },
+      };
+    }
+
     return {
       success: true,
       paragraph: {
@@ -164,8 +161,8 @@ export function createParagraphAdapter(
 
     return buildParagraphCreateSuccess(paragraph.nodeId, trackedChangeRefs);
   } catch {
-    // Mutation already applied. Preserve success semantics with the generated
-    // block ID even if post-apply paragraph enrichment cannot be resolved.
+    // Mutation already applied — contract requires success: true.
+    // Fall back to the generated ID we assigned to the command.
     return buildParagraphCreateSuccess(paragraphId);
   }
 }

@@ -367,7 +367,7 @@ export const CommentsPlugin = Extension.create({
             const mappedFrom = tr.mapping.map(from);
             const mappedTo = tr.mapping.map(to);
             tr.addMark(mappedFrom, mappedTo, markType.create(attrs));
-            dispatch(tr);
+            if (dispatch) dispatch(tr);
             return true;
           }
 
@@ -399,7 +399,7 @@ export const CommentsPlugin = Extension.create({
           const mappedTo = tr.mapping.map(to);
           tr.insert(mappedTo, endType.create({ 'w:id': commentId }));
           tr.insert(mappedFrom, startType.create({ ...startAttrs, 'w:id': commentId }));
-          dispatch(tr);
+          if (dispatch) dispatch(tr);
           return true;
         },
       setCursorById:

@@ -175,7 +175,7 @@ describe('track-changes adapters', () => {
     }
   });
 
-  it('throws COMMAND_UNAVAILABLE when accept/reject commands are missing', () => {
+  it('throws CAPABILITY_UNAVAILABLE when accept/reject commands are missing', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
       {
         mark: {
@@ -235,7 +235,7 @@ describe('track-changes adapters', () => {
     expect(rejectReceipt.failure?.code).toBe('NO_OP');
   });
 
-  it('throws COMMAND_UNAVAILABLE for missing accept-all/reject-all commands', () => {
+  it('throws CAPABILITY_UNAVAILABLE for missing accept-all/reject-all commands', () => {
     vi.mocked(getTrackChanges).mockReturnValue([] as never);
 
     const editor = makeEditor({
@@ -264,6 +264,26 @@ describe('track-changes adapters', () => {
         rejectTrackedChangeById: vi.fn(() => true),
         acceptAllTrackedChanges: vi.fn(() => false),
         rejectAllTrackedChanges: vi.fn(() => false),
+      } as never,
+    });
+
+    const acceptAllReceipt = trackChangesAcceptAllAdapter(editor, {});
+    const rejectAllReceipt = trackChangesRejectAllAdapter(editor, {});
+    expect(acceptAllReceipt.success).toBe(false);
+    expect(acceptAllReceipt.failure?.code).toBe('NO_OP');
+    expect(rejectAllReceipt.success).toBe(false);
+    expect(rejectAllReceipt.failure?.code).toBe('NO_OP');
+  });
+
+  it('returns NO_OP failure when accept-all/reject-all report true but no tracked changes exist', () => {
+    vi.mocked(getTrackChanges).mockReturnValue([] as never);
+
+    const editor = makeEditor({
+      commands: {
+        acceptTrackedChangeById: vi.fn(() => true),
+        rejectTrackedChangeById: vi.fn(() => true),
+        acceptAllTrackedChanges: vi.fn(() => true),
+        rejectAllTrackedChanges: vi.fn(() => true),
       } as never,
     });
 

@@ -315,6 +315,22 @@ describe('CommentsPlugin commands', () => {
     expect(updatedMark?.attrs.internal).toBe(false);
   });
 
+  it('supports moveComment capability checks when dispatch is undefined', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({ commentId: 'c-move', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { editor, commands } = createEditorEnvironment(schema, doc);
+
+    const command = commands.moveComment({ commentId: 'c-move', from: 2, to: 4 });
+
+    let result;
+    expect(() => {
+      result = command({ tr: editor.state.tr, dispatch: undefined, state: editor.state, editor });
+    }).not.toThrow();
+    expect(result).toBe(true);
+  });
+
   it('focuses editor when moving the cursor to a comment by id', () => {
     const schema = createCommentSchema();
     const mark = schema.marks[CommentMarkName].create({ commentId: 'c-10', internal: true });

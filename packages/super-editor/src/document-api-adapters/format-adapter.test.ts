@@ -183,7 +183,7 @@ describe('formatBoldAdapter', () => {
         { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
         { changeMode: 'direct' },
       ),
-    ).toThrow('Bold mark is not available on this editor instance.');
+    ).toThrow('requires the "bold" mark');
   });
 
   it('throws when tracked format capability is unavailable', () => {
@@ -196,7 +196,7 @@ describe('formatBoldAdapter', () => {
         { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
         { changeMode: 'tracked' },
       ),
-    ).toThrow('Tracked bold formatting is not available on this editor instance.');
+    ).toThrow('requires the insertTrackedChange command');
   });
 
   it('supports direct dry-run without building a transaction', () => {
@@ -247,7 +247,7 @@ describe('formatBoldAdapter', () => {
     expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
   });
 
-  it('throws TRACK_CHANGE_COMMAND_UNAVAILABLE for tracked dry-run without a configured user', () => {
+  it('throws CAPABILITY_UNAVAILABLE for tracked dry-run without a configured user', () => {
     const { editor } = makeEditor();
 
     expect(() =>

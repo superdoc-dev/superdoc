@@ -2,22 +2,9 @@ import type { Editor } from '../core/Editor.js';
 import type { FormatBoldInput, MutationOptions, TextMutationReceipt } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
 import { DocumentApiAdapterError } from './errors.js';
-import { ensureTrackedUser } from './helpers/tracked-mode-guards.js';
+import { requireSchemaMark, ensureTrackedCapability } from './helpers/mutation-helpers.js';
 import { resolveTextTarget } from './helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
-
-function assertTrackedFormatCapability(editor: Editor): void {
-  const hasTrackedInsertCommand = typeof editor.commands?.insertTrackedChange === 'function';
-  const hasTrackFormatMark = Boolean(editor.schema?.marks?.[TrackFormatMarkName]);
-
-  if (!hasTrackedInsertCommand || !hasTrackFormatMark) {
-    throw new DocumentApiAdapterError(
-      'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-      'Tracked bold formatting is not available on this editor instance.',
-    );
-  }
-  ensureTrackedUser(editor, 'Tracked bold formatting');
-}
 
 export function formatBoldAdapter(
   editor: Editor,
@@ -49,13 +36,11 @@ export function formatBoldAdapter(
     };
   }
 
-  const boldMark = editor.schema?.marks?.bold;
-  if (!boldMark) {
-    throw new DocumentApiAdapterError('COMMAND_UNAVAILABLE', 'Bold mark is not available on this editor instance.');
-  }
+  const boldMark = requireSchemaMark(editor, 'bold', 'format.bold');
 
   const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') assertTrackedFormatCapability(editor);
+  if (mode === 'tracked')
+    ensureTrackedCapability(editor, { operation: 'format.bold', requireMarks: [TrackFormatMarkName] });
 
   if (options?.dryRun) {
     return { success: true, resolution };

@@ -18,6 +18,7 @@ import {
 import { addDiagnostic, findCandidateByPos, paginate, resolveWithinScope } from '../helpers/adapter-utils.js';
 import { buildTextContext, toTextAddress } from './common.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { requireEditorCommand } from '../helpers/mutation-helpers.js';
 
 /** Shape returned by `editor.commands.search`. */
 type SearchMatch = {
@@ -79,13 +80,7 @@ export function executeTextSelector(
   const pattern = buildSearchPattern(selector, diagnostics);
   if (!pattern) return { matches: [], total: 0 };
 
-  const search = editor.commands?.search;
-  if (!search) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Editor search command is not available on this editor instance.',
-    );
-  }
+  const search = requireEditorCommand(editor.commands?.search, 'find (search)');
 
   // Fetch all matches so `total` reflects the true document-wide count.
   // Pagination is applied after filtering via paginate().
@@ -97,7 +92,7 @@ export function executeTextSelector(
 
   if (!Array.isArray(rawResult)) {
     throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
+      'CAPABILITY_UNAVAILABLE',
       'Editor search command returned an unexpected result format.',
     );
   }

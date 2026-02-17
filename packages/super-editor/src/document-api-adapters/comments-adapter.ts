@@ -19,6 +19,7 @@ import type {
 import { TextSelection } from 'prosemirror-state';
 import { v4 as uuidv4 } from 'uuid';
 import { DocumentApiAdapterError } from './errors.js';
+import { requireEditorCommand } from './helpers/mutation-helpers.js';
 import { clearIndexCache } from './helpers/index-cache.js';
 import { resolveTextTarget } from './helpers/adapter-utils.js';
 import {
@@ -211,12 +212,7 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
  * @returns A receipt indicating success and the created entity address.
  */
 function addCommentHandler(editor: Editor, input: AddCommentInput): Receipt {
-  if (typeof editor.commands?.addComment !== 'function') {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Comment commands are not available on this editor instance.',
-    );
-  }
+  requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
 
   if (input.target.range.start === input.target.range.end) {
     return {
@@ -258,13 +254,7 @@ function addCommentHandler(editor: Editor, input: AddCommentInput): Receipt {
   }
 
   // Re-read after selection so the command closure captures the updated selection snapshot.
-  const addComment = editor.commands?.addComment;
-  if (typeof addComment !== 'function') {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Comment commands are not available on this editor instance.',
-    );
-  }
+  const addComment = requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
 
   const didInsert =
     addComment({
@@ -310,13 +300,7 @@ function addCommentHandler(editor: Editor, input: AddCommentInput): Receipt {
 }
 
 function editCommentHandler(editor: Editor, input: EditCommentInput): Receipt {
-  const editComment = editor.commands?.editComment;
-  if (!editComment) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Edit comment command is not available on this editor instance.',
-    );
-  }
+  const editComment = requireEditorCommand(editor.commands?.editComment, 'comments.edit (editComment)');
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
@@ -360,13 +344,7 @@ function editCommentHandler(editor: Editor, input: EditCommentInput): Receipt {
 }
 
 function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput): Receipt {
-  const addCommentReply = editor.commands?.addCommentReply;
-  if (!addCommentReply) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Reply-to-comment command is not available on this editor instance.',
-    );
-  }
+  const addCommentReply = requireEditorCommand(editor.commands?.addCommentReply, 'comments.reply (addCommentReply)');
 
   if (!input.parentCommentId) {
     return {
@@ -420,13 +398,7 @@ function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput): Rece
 }
 
 function moveCommentHandler(editor: Editor, input: MoveCommentInput): Receipt {
-  const moveComment = editor.commands?.moveComment;
-  if (!moveComment) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Move comment command is not available on this editor instance.',
-    );
-  }
+  const moveComment = requireEditorCommand(editor.commands?.moveComment, 'comments.move (moveComment)');
 
   if (input.target.range.start === input.target.range.end) {
     return {
@@ -507,13 +479,7 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput): Receipt {
 }
 
 function resolveCommentHandler(editor: Editor, input: ResolveCommentInput): Receipt {
-  const resolveComment = editor.commands?.resolveComment;
-  if (!resolveComment) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Resolve comment command is not available on this editor instance.',
-    );
-  }
+  const resolveComment = requireEditorCommand(editor.commands?.resolveComment, 'comments.resolve (resolveComment)');
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
@@ -558,13 +524,7 @@ function resolveCommentHandler(editor: Editor, input: ResolveCommentInput): Rece
 }
 
 function removeCommentHandler(editor: Editor, input: RemoveCommentInput): Receipt {
-  const removeComment = editor.commands?.removeComment;
-  if (!removeComment) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Remove comment command is not available on this editor instance.',
-    );
-  }
+  const removeComment = requireEditorCommand(editor.commands?.removeComment, 'comments.remove (removeComment)');
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
@@ -604,13 +564,10 @@ function removeCommentHandler(editor: Editor, input: RemoveCommentInput): Receip
 }
 
 function setCommentInternalHandler(editor: Editor, input: SetCommentInternalInput): Receipt {
-  const setCommentInternal = editor.commands?.setCommentInternal;
-  if (!setCommentInternal) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Set-comment-internal command is not available on this editor instance.',
-    );
-  }
+  const setCommentInternal = requireEditorCommand(
+    editor.commands?.setCommentInternal,
+    'comments.setInternal (setCommentInternal)',
+  );
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
@@ -658,13 +615,10 @@ function setCommentInternalHandler(editor: Editor, input: SetCommentInternalInpu
 }
 
 function setCommentActiveHandler(editor: Editor, input: SetCommentActiveInput): Receipt {
-  const setActiveComment = editor.commands?.setActiveComment;
-  if (!setActiveComment) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Set-active-comment command is not available on this editor instance.',
-    );
-  }
+  const setActiveComment = requireEditorCommand(
+    editor.commands?.setActiveComment,
+    'comments.setActive (setActiveComment)',
+  );
 
   let resolvedCommentId: string | null = null;
   if (input.commentId != null) {
@@ -689,13 +643,7 @@ function setCommentActiveHandler(editor: Editor, input: SetCommentActiveInput): 
 }
 
 function goToCommentHandler(editor: Editor, input: GoToCommentInput): Receipt {
-  const setCursorById = editor.commands?.setCursorById;
-  if (!setCursorById) {
-    throw new DocumentApiAdapterError(
-      'COMMAND_UNAVAILABLE',
-      'Go-to-comment command is not available on this editor instance.',
-    );
-  }
+  const setCursorById = requireEditorCommand(editor.commands?.setCursorById, 'comments.goTo (setCursorById)');
 
   const identity = resolveCommentIdentity(editor, input.commentId);
   let didSetCursor = setCursorById(identity.commentId);

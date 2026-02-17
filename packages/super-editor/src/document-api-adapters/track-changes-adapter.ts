@@ -12,6 +12,7 @@ import type {
   TrackChangesListResult,
 } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from './errors.js';
+import { requireEditorCommand } from './helpers/mutation-helpers.js';
 import { paginate } from './helpers/adapter-utils.js';
 import {
   groupTrackedChanges,
@@ -55,15 +56,6 @@ function requireTrackChangeById(editor: Editor, id: string): GroupedTrackedChang
   });
 }
 
-function requireTrackChangesCommand<T>(command: T | undefined, operation: string): T {
-  if (command) return command;
-
-  throw new DocumentApiAdapterError(
-    'COMMAND_UNAVAILABLE',
-    `${operation} command is not available on this editor instance.`,
-  );
-}
-
 function toNoOpReceipt(message: string, details?: unknown): Receipt {
   return {
     success: false,
@@ -98,7 +90,7 @@ export function trackChangesAcceptAdapter(editor: Editor, input: TrackChangesAcc
   const { id } = input;
   const change = requireTrackChangeById(editor, id);
 
-  const acceptById = requireTrackChangesCommand(editor.commands?.acceptTrackedChangeById, 'Accept tracked change');
+  const acceptById = requireEditorCommand(editor.commands?.acceptTrackedChangeById, 'Accept tracked change');
   const didAccept = Boolean(acceptById(change.rawId));
   if (didAccept) return { success: true };
 
@@ -109,7 +101,7 @@ export function trackChangesRejectAdapter(editor: Editor, input: TrackChangesRej
   const { id } = input;
   const change = requireTrackChangeById(editor, id);
 
-  const rejectById = requireTrackChangesCommand(editor.commands?.rejectTrackedChangeById, 'Reject tracked change');
+  const rejectById = requireEditorCommand(editor.commands?.rejectTrackedChangeById, 'Reject tracked change');
   const didReject = Boolean(rejectById(change.rawId));
   if (didReject) return { success: true };
 
@@ -117,7 +109,12 @@ export function trackChangesRejectAdapter(editor: Editor, input: TrackChangesRej
 }
 
 export function trackChangesAcceptAllAdapter(editor: Editor, _input: TrackChangesAcceptAllInput): Receipt {
-  const acceptAll = requireTrackChangesCommand(editor.commands?.acceptAllTrackedChanges, 'Accept all tracked changes');
+  const acceptAll = requireEditorCommand(editor.commands?.acceptAllTrackedChanges, 'Accept all tracked changes');
+
+  if (groupTrackedChanges(editor).length === 0) {
+    return toNoOpReceipt('Accept all tracked changes produced no change.');
+  }
+
   const didAcceptAll = Boolean(acceptAll());
   if (didAcceptAll) return { success: true };
 
@@ -125,7 +122,12 @@ export function trackChangesAcceptAllAdapter(editor: Editor, _input: TrackChange
 }
 
 export function trackChangesRejectAllAdapter(editor: Editor, _input: TrackChangesRejectAllInput): Receipt {
-  const rejectAll = requireTrackChangesCommand(editor.commands?.rejectAllTrackedChanges, 'Reject all tracked changes');
+  const rejectAll = requireEditorCommand(editor.commands?.rejectAllTrackedChanges, 'Reject all tracked changes');
+
+  if (groupTrackedChanges(editor).length === 0) {
+    return toNoOpReceipt('Reject all tracked changes produced no change.');
+  }
+
   const didRejectAll = Boolean(rejectAll());
   if (didRejectAll) return { success: true };
 

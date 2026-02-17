@@ -185,7 +185,7 @@ describe('addCommentAdapter', () => {
         target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 1 } },
         text: 'No commands',
       }),
-    ).toThrow('Comment commands are not available on this editor instance.');
+    ).toThrow('command is not available');
   });
 
   it('returns false when blockId is not found', () => {

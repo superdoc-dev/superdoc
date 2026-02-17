@@ -8,5 +8,6 @@ import type { GetTextInput } from '@superdoc/document-api';
  * @returns Plain text content of the document.
  */
 export function getTextAdapter(editor: Editor, _input: GetTextInput): string {
-  return editor.state.doc.textContent;
+  const doc = editor.state.doc;
+  return doc.textBetween(0, doc.content.size, '\n', '\n');
 }

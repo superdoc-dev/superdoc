@@ -14,7 +14,7 @@ import type {
   MutationOptions,
 } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from './errors.js';
-import { ensureTrackedUser } from './helpers/tracked-mode-guards.js';
+import { requireEditorCommand, ensureTrackedCapability, rejectTrackedMode } from './helpers/mutation-helpers.js';
 import { clearIndexCache, getBlockIndex } from './helpers/index-cache.js';
 import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js';
 import {
@@ -37,34 +37,8 @@ type SetListTypeAtCommand = (options: { pos: number; kind: 'ordered' | 'bullet' 
 type ExitListItemAtCommand = (options: { pos: number }) => boolean;
 type SetTextSelectionCommand = (options: { from: number; to?: number }) => boolean;
 
-function requireCommand<T>(command: T | undefined, message: string): T {
-  if (command) return command;
-  throw new DocumentApiAdapterError('COMMAND_UNAVAILABLE', message);
-}
-
 function toListsFailure(code: 'NO_OP' | 'INVALID_TARGET', message: string, details?: unknown) {
   return { success: false as const, failure: { code, message, details } };
-}
-
-function ensureDirectOnly(operation: string, options?: MutationOptions): void {
-  const mode = options?.changeMode ?? 'direct';
-  if (mode === 'direct') return;
-  throw new DocumentApiAdapterError(
-    'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-    `${operation} does not support tracked mode in v1.`,
-  );
-}
-
-function ensureTrackedInsertCapability(editor: Editor, mode: 'direct' | 'tracked'): void {
-  if (mode !== 'tracked') return;
-  const hasTrackedInsertCommand = typeof editor.commands?.insertTrackedChange === 'function';
-  if (!hasTrackedInsertCommand) {
-    throw new DocumentApiAdapterError(
-      'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-      'lists.insert tracked mode is not available on this editor instance.',
-    );
-  }
-  ensureTrackedUser(editor, 'lists.insert tracked mode');
 }
 
 function resolveInsertedListItem(editor: Editor, sdBlockId: string): ListItemProjection {
@@ -95,10 +69,10 @@ function selectionAnchorPos(item: ListItemProjection): number {
 }
 
 function setSelectionToListItem(editor: Editor, item: ListItemProjection): boolean {
-  const setTextSelection = requireCommand<SetTextSelectionCommand>(
+  const setTextSelection = requireEditorCommand(
     editor.commands?.setTextSelection as SetTextSelectionCommand | undefined,
-    'List selection command is not available on this editor instance.',
-  );
+    'lists (setTextSelection)',
+  ) as SetTextSelectionCommand;
   const anchor = selectionAnchorPos(item);
   return Boolean(setTextSelection({ from: anchor, to: anchor }));
 }
@@ -133,7 +107,7 @@ function isRestartNoOp(editor: Editor, item: ListItemProjection): boolean {
       nodeId: previous.nodeId,
     });
 
-    return previousProjection.numId !== item.numId;
+    return previousProjection.numId !== item.numId || previousProjection.level !== item.level;
   }
 
   return true;
@@ -160,12 +134,12 @@ export function listsInsertAdapter(
   const target = withListTarget(editor, { target: input.target });
   const changeMode = options?.changeMode ?? 'direct';
   const mode = changeMode === 'tracked' ? 'tracked' : 'direct';
-  ensureTrackedInsertCapability(editor, mode);
+  if (mode === 'tracked') ensureTrackedCapability(editor, { operation: 'lists.insert' });
 
-  const insertListItemAt = requireCommand<InsertListItemAtCommand>(
+  const insertListItemAt = requireEditorCommand(
     editor.commands?.insertListItemAt as InsertListItemAtCommand | undefined,
-    'Insert list item command is not available on this editor instance.',
-  );
+    'lists.insert (insertListItemAt)',
+  ) as InsertListItemAtCommand;
 
   if (options?.dryRun) {
     return {
@@ -201,8 +175,8 @@ export function listsInsertAdapter(
   try {
     created = resolveInsertedListItem(editor, createdId);
   } catch {
-    // Insertion succeeded but the new item could not be located in the index.
-    // Return a degraded success with the generated sdBlockId as the address.
+    // Mutation already applied — contract requires success: true.
+    // Fall back to the generated ID we assigned to the command.
     return {
       success: true,
       item: { kind: 'block', nodeType: 'listItem', nodeId: createdId },
@@ -234,7 +208,7 @@ export function listsSetTypeAdapter(
   input: ListSetTypeInput,
   options?: MutationOptions,
 ): ListsMutateItemResult {
-  ensureDirectOnly('lists.setType', options);
+  rejectTrackedMode('lists.setType', options);
   const target = withListTarget(editor, { target: input.target });
   if (target.kind === input.kind) {
     return toListsFailure('NO_OP', 'List item already has the requested list kind.', {
@@ -243,10 +217,10 @@ export function listsSetTypeAdapter(
     });
   }
 
-  const setListTypeAt = requireCommand<SetListTypeAtCommand>(
+  const setListTypeAt = requireEditorCommand(
     editor.commands?.setListTypeAt as SetListTypeAtCommand | undefined,
-    'Set list type command is not available on this editor instance.',
-  );
+    'lists.setType (setListTypeAt)',
+  ) as SetListTypeAtCommand;
 
   if (options?.dryRun) {
     return { success: true, item: target.address };
@@ -275,16 +249,16 @@ export function listsIndentAdapter(
   input: ListTargetInput,
   options?: MutationOptions,
 ): ListsMutateItemResult {
-  ensureDirectOnly('lists.indent', options);
+  rejectTrackedMode('lists.indent', options);
   const target = withListTarget(editor, input);
   if (isAtMaximumLevel(editor, target)) {
     return toListsFailure('NO_OP', 'List item is already at the maximum supported level.', { target: input.target });
   }
 
-  const increaseListIndent = requireCommand<() => boolean>(
+  const increaseListIndent = requireEditorCommand(
     editor.commands?.increaseListIndent as (() => boolean) | undefined,
-    'Increase list indent command is not available on this editor instance.',
-  );
+    'lists.indent (increaseListIndent)',
+  ) as () => boolean;
 
   if (options?.dryRun) {
     return { success: true, item: target.address };
@@ -312,16 +286,16 @@ export function listsOutdentAdapter(
   input: ListTargetInput,
   options?: MutationOptions,
 ): ListsMutateItemResult {
-  ensureDirectOnly('lists.outdent', options);
+  rejectTrackedMode('lists.outdent', options);
   const target = withListTarget(editor, input);
   if ((target.level ?? 0) <= 0) {
     return toListsFailure('NO_OP', 'List item is already at level 0.', { target: input.target });
   }
 
-  const decreaseListIndent = requireCommand<() => boolean>(
+  const decreaseListIndent = requireEditorCommand(
     editor.commands?.decreaseListIndent as (() => boolean) | undefined,
-    'Decrease list indent command is not available on this editor instance.',
-  );
+    'lists.outdent (decreaseListIndent)',
+  ) as () => boolean;
 
   if (options?.dryRun) {
     return { success: true, item: target.address };
@@ -349,7 +323,7 @@ export function listsRestartAdapter(
   input: ListTargetInput,
   options?: MutationOptions,
 ): ListsMutateItemResult {
-  ensureDirectOnly('lists.restart', options);
+  rejectTrackedMode('lists.restart', options);
   const target = withListTarget(editor, input);
   if (target.numId == null) {
     return toListsFailure('INVALID_TARGET', 'List restart requires numbering metadata on the target item.', {
@@ -362,10 +336,10 @@ export function listsRestartAdapter(
     });
   }
 
-  const restartNumbering = requireCommand<() => boolean>(
+  const restartNumbering = requireEditorCommand(
     editor.commands?.restartNumbering as (() => boolean) | undefined,
-    'Restart numbering command is not available on this editor instance.',
-  );
+    'lists.restart (restartNumbering)',
+  ) as () => boolean;
 
   if (options?.dryRun) {
     return { success: true, item: target.address };
@@ -389,13 +363,13 @@ export function listsRestartAdapter(
 }
 
 export function listsExitAdapter(editor: Editor, input: ListTargetInput, options?: MutationOptions): ListsExitResult {
-  ensureDirectOnly('lists.exit', options);
+  rejectTrackedMode('lists.exit', options);
   const target = withListTarget(editor, input);
 
-  const exitListItemAt = requireCommand<ExitListItemAtCommand>(
+  const exitListItemAt = requireEditorCommand(
     editor.commands?.exitListItemAt as ExitListItemAtCommand | undefined,
-    'Exit list item command is not available on this editor instance.',
-  );
+    'lists.exit (exitListItemAt)',
+  ) as ExitListItemAtCommand;
 
   if (options?.dryRun) {
     return {

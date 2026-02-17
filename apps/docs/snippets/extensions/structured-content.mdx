@@ -16,7 +16,7 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
     const editor = superdoc?.activeEditor || superdoc?.editor
     if (!editor?.commands) return
 
-    // Find "________" in "Client name:" paragraph and replace with inline sdtLocked field
+    // Find "________" in "Client name:" paragraph and replace with inline field
     let inlinePos = null
     editor.state.doc.descendants((node, pos) => {
       if (node.isText && node.text.includes('________') && inlinePos === null) {
@@ -26,12 +26,12 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
     if (inlinePos !== null) {
       editor.commands.setTextSelection({ from: inlinePos, to: inlinePos + 8 })
       editor.commands.insertStructuredContentInline({
-        attrs: { id: '1', alias: 'Client Name', lockMode: 'sdtLocked' },
+        attrs: { id: '1', alias: 'Client Name' },
         text: 'John Doe',
       })
     }
 
-    // Find the second "________" paragraph and replace with block sdtLocked field
+    // Find the second "________" paragraph and replace with block field
     let blockPos = null
     editor.state.doc.descendants((node, pos) => {
       if (node.isText && node.text.includes('________')) {
@@ -41,7 +41,7 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
     if (blockPos !== null) {
       editor.commands.setTextSelection({ from: blockPos, to: blockPos + 8 })
       editor.commands.insertStructuredContentBlock({
-        attrs: { id: '2', alias: 'Payment Terms', lockMode: 'sdtLocked' },
+        attrs: { id: '2', alias: 'Payment Terms' },
         json: { type: 'paragraph', content: [{ type: 'text', text: 'Payment is due within 30 days of invoice date. Late payments incur a 1.5% monthly fee.' }] },
       })
     }

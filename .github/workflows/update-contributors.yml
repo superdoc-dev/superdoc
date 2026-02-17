@@ -5,9 +5,6 @@ on:
     types: [closed]
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   update-contributors:
     if: github.event.pull_request.merged == true
@@ -23,11 +20,19 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Generate token
+        if: steps.check-bot.outputs.skip == 'false'
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Check if author should be excluded
         if: steps.check-bot.outputs.skip == 'false'
         id: check-excluded
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           EXCLUDED_CONTRIBUTORS: ${{ vars.EXCLUDED_CONTRIBUTORS }}
         run: |
           AUTHOR="${{ github.event.pull_request.user.login }}"
@@ -47,14 +52,6 @@ jobs:
           fi
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
-
-      - name: Generate token
-        if: steps.check-bot.outputs.skip == 'false' && steps.check-excluded.outputs.skip == 'false'
-        id: generate_token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout
         if: steps.check-bot.outputs.skip == 'false' && steps.check-excluded.outputs.skip == 'false'
@@ -92,8 +89,17 @@ jobs:
             exit 0
           fi
 
+          # Create a PR instead of pushing directly (branch protection)
+          BRANCH="docs/add-contributor-$AUTHOR"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add README.md
           git commit -m "docs: add $AUTHOR to community contributors"
-          git push origin main
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "docs: add $AUTHOR to community contributors" \
+            --body "Auto-generated: adds $AUTHOR to the README community contributors section."

@@ -67,11 +67,11 @@ Set the lock mode when inserting:
 ```javascript Usage
 editor.commands.insertStructuredContentInline({
   attrs: {
-    id: '1',
-    alias: 'Customer Name',
-    lockMode: 'sdtLocked',
+    id: '3',
+    alias: 'Account ID',
+    lockMode: 'sdtContentLocked',
   },
-  text: 'John Doe',
+  text: 'ACC-00042',
 });
 ```
 
@@ -86,11 +86,11 @@ const superdoc = new SuperDoc({
     const editor = superdoc.activeEditor;
     editor.commands.insertStructuredContentInline({
       attrs: {
-        id: '1',
-        alias: 'Customer Name',
-        lockMode: 'sdtLocked',
+        id: '3',
+        alias: 'Account ID',
+        lockMode: 'sdtContentLocked',
       },
-      text: 'John Doe',
+      text: 'ACC-00042',
     });
   },
 });
@@ -123,6 +123,7 @@ const superdoc = new SuperDoc({
 ```
 </CodeGroup>
 
+<Expandable title="How lock enforcement works">
 Lock modes are enforced at the editor plugin level using a three-layer defense:
 
 1. **Key interception** — Delete, Backspace, and Cut are blocked before a transaction is created, preventing cursor jumps
@@ -130,6 +131,7 @@ Lock modes are enforced at the editor plugin level using a three-layer defense:
 3. **Transaction filter** — Safety net that catches paste, drag-drop, and programmatic edits
 
 Users can still place their cursor inside locked content and select text for copying. Only modifications are blocked.
+</Expandable>
 
 <Info>
   Lock modes round-trip through DOCX. A document with `w:lock` elements in
@@ -696,7 +698,7 @@ type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 's
     ProseMirror JSON
   </ResponseField>
   <ResponseField name="attrs" type="Object">
-    Node attributes (`id`, `alias`, `tag`, `lockMode`)
+    Node attributes (`id`, `alias`, `tag`, `lockMode`, `group`)
   </ResponseField>
 </Expandable>
 

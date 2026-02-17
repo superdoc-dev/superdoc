@@ -39,6 +39,7 @@ export type { RulerOptions } from './renderer.js';
 export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
 
 export { applySquareWrapExclusionsToLines } from './utils/anchor-helpers';
+export { buildImagePmSelector, buildInlineImagePmSelector } from './utils/image-selectors.js';
 
 // Re-export PM position validation utilities
 export {

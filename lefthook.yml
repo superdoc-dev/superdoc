@@ -13,7 +13,7 @@ pre-commit:
       stage_fixed: true
     lint:
       glob: "*.{js,jsx,ts,tsx}"
-      run: pnpm exec eslint --fix {staged_files}
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
     cli-build:
       root: "apps/cli/"

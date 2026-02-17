@@ -1,0 +1,11 @@
+{
+  "name": "@superdoc/umd-smoke-test",
+  "private": true,
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "serve": "^14.2.0"
+  }
+}

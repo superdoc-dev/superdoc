@@ -1,3 +1,47 @@
+# [1.14.0](https://github.com/superdoc-dev/superdoc/compare/v1.13.1...v1.14.0) (2026-02-17)
+
+
+### Bug Fixes
+
+* **build:** remove dead vite-plugin-node-polyfills from UMD externals ([91de1fc](https://github.com/superdoc-dev/superdoc/commit/91de1fc2e47b0061d088db5d46b0da4cc07dc837))
+* **converter:** handle empty rPrChange run properties without dropping tracked-style runs ([c25d24d](https://github.com/superdoc-dev/superdoc/commit/c25d24d35534c39836c3251ee9baf1b908a6c78c))
+* correctly pass table info when deriving inline run properties (SD-1865) ([#2007](https://github.com/superdoc-dev/superdoc/issues/2007)) ([d752aff](https://github.com/superdoc-dev/superdoc/commit/d752afff9dc11041798ea2a28d487cc190e13383))
+* replace Node.js Buffer APIs with browser-native alternatives ([#2028](https://github.com/superdoc-dev/superdoc/issues/2028)) ([b17774a](https://github.com/superdoc-dev/superdoc/commit/b17774a566750c4cca084415f9b2c2b4c4386668)), closes [#exportProcessMediaFiles](https://github.com/superdoc-dev/superdoc/issues/exportProcessMediaFiles)
+* **tracked-changes:** colors should be restored when format rejected ([#1970](https://github.com/superdoc-dev/superdoc/issues/1970)) ([01ea504](https://github.com/superdoc-dev/superdoc/commit/01ea504737e38815c8ed7e5e585308ca5600e169))
+
+
+### Features
+
+* add pdf infra, migrate layers ([#2078](https://github.com/superdoc-dev/superdoc/issues/2078)) ([7d416e9](https://github.com/superdoc-dev/superdoc/commit/7d416e9b8d8bce2fbd914684a4d3e0f10ab5eff1))
+* layout snapshot testing ([#2035](https://github.com/superdoc-dev/superdoc/issues/2035)) ([b070cd7](https://github.com/superdoc-dev/superdoc/commit/b070cd79d376c528fdc4efdb3371c55a1a3cf908))
+
+## [1.13.1](https://github.com/superdoc-dev/superdoc/compare/v1.13.0...v1.13.1) (2026-02-14)
+
+
+### Bug Fixes
+
+* **build:** remove dead vite-plugin-node-polyfills from UMD externals ([91de1fc](https://github.com/superdoc-dev/superdoc/commit/91de1fc2e47b0061d088db5d46b0da4cc07dc837))
+
+# [1.13.0](https://github.com/superdoc-dev/superdoc/compare/v1.12.0...v1.13.0) (2026-02-14)
+
+
+### Bug Fixes
+
+* anchor table overlaps text ([#1995](https://github.com/superdoc-dev/superdoc/issues/1995)) ([fc05e29](https://github.com/superdoc-dev/superdoc/commit/fc05e295efef9e02db9d7cccafc771d3d00da3e6))
+* collaboration cursor styles fix ([fd6db10](https://github.com/superdoc-dev/superdoc/commit/fd6db10558caa4136da262ad10b751dbb4bdac2c))
+* ensure we do not duplicate bubble text ([#1934](https://github.com/superdoc-dev/superdoc/issues/1934)) ([c41cf9e](https://github.com/superdoc-dev/superdoc/commit/c41cf9e21d763aa08546eb3445c54a078bf66d33))
+* ignore sdBlockId when pasting content ([#2010](https://github.com/superdoc-dev/superdoc/issues/2010)) ([1b08572](https://github.com/superdoc-dev/superdoc/commit/1b08572ef696dfe9fb45cd079c4381bd86c3b2d3))
+* normalize bookmarks in tables ([#1892](https://github.com/superdoc-dev/superdoc/issues/1892)) ([369b7e1](https://github.com/superdoc-dev/superdoc/commit/369b7e1bfc1e2777916aba77f076de718735a612))
+* replace Node.js Buffer APIs with browser-native alternatives ([#2028](https://github.com/superdoc-dev/superdoc/issues/2028)) ([b17774a](https://github.com/superdoc-dev/superdoc/commit/b17774a566750c4cca084415f9b2c2b4c4386668)), closes [#exportProcessMediaFiles](https://github.com/superdoc-dev/superdoc/issues/exportProcessMediaFiles)
+* use correct template syntax for GitHub release URL in PR comments ([9d1bca2](https://github.com/superdoc-dev/superdoc/commit/9d1bca2cd9aa0d99e42b836ad093b07c6b5a513f))
+
+
+### Features
+
+* enabled telemetry by default and added documentation ([#2001](https://github.com/superdoc-dev/superdoc/issues/2001)) ([8598ef7](https://github.com/superdoc-dev/superdoc/commit/8598ef7d200e666911c68c6c116996ef47fa9261))
+* enhance telemetry handling for sub-editors ([#2017](https://github.com/superdoc-dev/superdoc/issues/2017)) ([37bc030](https://github.com/superdoc-dev/superdoc/commit/37bc030bb30a999cb73de0b1a8cd96cc588780dd))
+* update telemetry configuration to prioritize root licenseKey ([#2016](https://github.com/superdoc-dev/superdoc/issues/2016)) ([3b4ff6b](https://github.com/superdoc-dev/superdoc/commit/3b4ff6bb43cc70549397ec8d4d9d69eb7a84b90c))
+
 # [1.12.0](https://github.com/superdoc-dev/superdoc/compare/v1.11.0...v1.12.0) (2026-02-12)
 
 

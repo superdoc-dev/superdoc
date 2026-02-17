@@ -60,6 +60,7 @@ export class SuperDoc extends EventEmitter {
   /** @type {import('@hocuspocus/provider').HocuspocusProvider | undefined} */
   provider;
 
+  /** @type {Whiteboard | null} */
   whiteboard;
 
   /** @type {Config} */
@@ -290,7 +291,7 @@ export class SuperDoc extends EventEmitter {
       superdoc: this,
       enabled,
     });
-    this.emit('whiteboard:ready', { whiteboard: this.whiteboard });
+    this.emit('whiteboard:init', { whiteboard: this.whiteboard });
   }
 
   /**
@@ -431,7 +432,7 @@ export class SuperDoc extends EventEmitter {
     this.on('comments-update', this.config.onCommentsUpdate);
     this.on('awareness-update', this.config.onAwarenessUpdate);
     this.on('locked', this.config.onLocked);
-    this.on('pdf-document-ready', this.config.onPdfDocumentReady);
+    this.on('pdf:document-ready', this.config.onPdfDocumentReady);
     this.on('sidebar-toggle', this.config.onSidebarToggle);
     this.on('collaboration-ready', this.config.onCollaborationReady);
     this.on('editor-update', this.config.onEditorUpdate);
@@ -599,7 +600,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {void}
    */
   broadcastPdfDocumentReady() {
-    this.emit('pdf-document-ready');
+    this.emit('pdf:document-ready');
   }
 
   /**
@@ -1084,7 +1085,7 @@ export class SuperDoc extends EventEmitter {
 
   /**
    * Export editors to DOCX format.
-   * @param {{ commentsType?: string, isFinalDoc?: boolean }} [options]
+   * @param {{ commentsType?: string, isFinalDoc?: boolean, fieldsHighlightColor?: string }} [options]
    * @returns {Promise<Array<Blob>>}
    */
   async exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor } = {}) {

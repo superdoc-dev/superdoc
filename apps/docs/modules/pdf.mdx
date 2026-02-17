@@ -1,0 +1,101 @@
+---
+title: PDF
+keywords: "pdf viewer, pdf.js, pdf rendering, text layer, zoom, annotations"
+---
+
+Render PDFs in SuperDoc. The PDF viewer is configured through `modules.pdf`.
+
+## Install pdf.js
+
+Install `pdfjs-dist` in your app:
+
+```bash
+npm i pdfjs-dist
+```
+
+Supported versions: `>= 5.4.296`.
+
+## Quick start
+
+```javascript
+import { SuperDoc } from 'superdoc';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
+
+const pathToWorker = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString(); // example in Vite
+
+const superdoc = new SuperDoc({
+  selector: '#viewer',
+  document: fileBlob,
+  modules: {
+    pdf: {
+      pdfLib: pdfjsLib, // required
+      setWorker: true, // auto-configure worker
+      workerSrc: pathToWorker, // path to worker (falls back to CDN if omitted)
+    },
+  },
+  onPdfDocumentReady: () => {
+    console.log('PDF ready');
+  },
+});
+```
+
+## Worker setup (recommended)
+
+This is the recommended approach because the worker is configured once for the whole application.
+
+```javascript
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+```
+
+Then disable auto-setup:
+
+```javascript
+modules: {
+  pdf: {
+    pdfLib: pdfjsLib,
+    setWorker: false,
+  },
+}
+```
+
+## Configuration
+
+<ParamField path="modules.pdf.pdfLib" type="Object" required>
+  Preloaded pdf.js library instance
+</ParamField>
+
+<ParamField path="modules.pdf.workerSrc" type="string">
+  PDF.js worker source URL (falls back to CDN when omitted)
+</ParamField>
+
+<ParamField path="modules.pdf.setWorker" type="boolean" default="false">
+  Whether to auto-configure pdf.js worker
+</ParamField>
+
+<ParamField path="modules.pdf.textLayer" type="boolean" default="false">
+  Enable text layer rendering (for text selection)
+</ParamField>
+
+<ParamField path="modules.pdf.outputScale" type="number" default="2">
+  Canvas render scale (quality)
+</ParamField>
+
+## Events
+
+### `pdf:document-ready`
+
+Fired when all PDF pages are rendered.
+
+```javascript
+superdoc.on('pdf:document-ready', () => {
+  console.log('PDF ready');
+});
+```
+
+## Notes
+
+- `outputScale` affects render quality; zooming does not re-render the canvas.
+- If you need text selection, enable `textLayer: true`.

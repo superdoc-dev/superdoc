@@ -37,6 +37,8 @@ const EXACT_EXTERNAL_IMPORTS = new Set([
   'react-dom',
   'react-dom/client',
   'vue',
+  'pdfjs-dist',
+  'pdfjs-dist/build/pdf.mjs',
   'yjs',
   'y-prosemirror',
   'y-websocket',

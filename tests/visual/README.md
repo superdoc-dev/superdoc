@@ -1,6 +1,6 @@
 # Visual Testing
 
-Playwright-based visual regression tests for SuperDoc. Everything lives in a single R2 bucket (`superdoc-visual-testing`) with two prefixes: `documents/` for test files and `baselines/` for screenshots.
+Playwright-based visual regression tests for SuperDoc. Test DOCX files are synced from the shared R2 corpus into the repo-level `test-corpus/` mirror (and linked into `tests/visual/test-data`). Baselines are stored in R2.
 
 ## Quick Start
 
@@ -67,7 +67,7 @@ Rendering tests are auto-discovered from `test-data/rendering/`. Just upload a d
 ```bash
 pnpm docs:upload ~/Downloads/my-doc.docx
 # Prompts for: Linear issue ID, short description
-# → uploads as documents/rendering/sd-1679-anchor-table-overlap.docx
+# → uploads as rendering/sd-1679-anchor-table-overlap.docx in the shared corpus
 
 pnpm docs:download        # pull the new file locally
 pnpm test                 # verify it loads and renders
@@ -77,17 +77,22 @@ No spec file needed — `rendering.spec.ts` auto-discovers all `.docx` files. Ba
 
 ## R2 Storage
 
-Everything lives in one bucket. The folder structure mirrors the test structure:
+Corpus files are stored in a shared R2 bucket as plain relative keys (plus `registry.json`), for example:
 
 ```
-superdoc-visual-testing/
-  documents/                    Test .docx files
-    behavior/
-      comments-tcs/             Documents for comments-tcs tests
-      formatting/               Documents for formatting tests
-      ...
-    rendering/                  Documents for rendering tests
-  baselines/                    Screenshot baselines (auto-generated)
+registry.json
+basic/advanced-tables.docx
+comments-tcs/tracked-changes.docx
+rendering/sd-1679-anchor-table-overlap.docx
+...
+```
+
+`pnpm docs:download` syncs that corpus into repo-local `test-corpus/` and links `tests/visual/test-data` to it.
+
+Screenshot baselines remain in R2 and are auto-generated in CI:
+
+```
+baselines/
     behavior/
       basic-commands/
         type-basic-text.spec.ts-snapshots/
@@ -101,8 +106,8 @@ superdoc-visual-testing/
 
 | Command | What it does |
 |---------|-------------|
-| `pnpm docs:download` | Download all documents from R2 → `test-data/` |
-| `pnpm docs:upload <file>` | Upload a rendering test document to R2 (prompts for issue ID and description) |
+| `pnpm docs:download` | Sync shared corpus from R2 → `test-corpus/` and link `test-data/` |
+| `pnpm docs:upload <file>` | Upload a rendering test document to the shared corpus (prompts for issue ID and description) |
 
 ## Fixture Helpers
 

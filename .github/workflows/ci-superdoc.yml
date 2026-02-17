@@ -72,3 +72,10 @@ jobs:
 
       - name: Run slow tests
         run: pnpm test:slow
+
+      - name: Install Playwright for UMD smoke test
+        run: pnpm --filter @superdoc/umd-smoke-test exec playwright install --with-deps chromium
+
+      - name: Run UMD smoke test
+        working-directory: packages/superdoc/tests/umd-smoke
+        run: pnpm test

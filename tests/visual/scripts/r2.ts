@@ -25,7 +25,8 @@ export interface R2Client {
 // --- S3 backend (CI / explicit credentials) ---
 
 async function createS3Client(): Promise<R2Client> {
-  const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, CopyObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+  const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, CopyObjectCommand, DeleteObjectCommand } =
+    await import('@aws-sdk/client-s3');
 
   const accessKeyId = process.env.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID!;
   const secretAccessKey = process.env.SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY!;

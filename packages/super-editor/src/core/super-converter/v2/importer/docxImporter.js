@@ -167,6 +167,7 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     // Safety: drop any inline-only nodes that accidentally landed at the doc root
     parsedContent = filterOutRootInlineNodes(parsedContent);
+    parsedContent = normalizeTableBookmarksInContent(parsedContent, editor);
     collapseWhitespaceNextToInlinePassthrough(parsedContent);
 
     const result = {
@@ -842,6 +843,205 @@ export function filterOutRootInlineNodes(content = []) {
   });
 
   return result;
+}
+
+/**
+ * Normalize bookmark nodes that appear as direct table children.
+ * Moves bookmarkStart/End into the first/last cell textblock of the table.
+ *
+ * Some non-conformant DOCX producers place bookmarks as direct table children.
+ * Per ECMA-376 §17.13.6.2, they should be inside cells (bookmarkStart) or
+ * as children of rows (bookmarkEnd).
+ * PM can't accept bookmarks as a direct child of table row and that is why
+ * we relocate them for compatibility.
+ *
+ * @param {Array<{type: string, content?: any[], attrs?: any}>} content
+ * @param {Editor} [editor]
+ * @returns {Array}
+ */
+export function normalizeTableBookmarksInContent(content = [], editor) {
+  if (!Array.isArray(content) || content.length === 0) return content;
+
+  return content.map((node) => normalizeTableBookmarksInNode(node, editor));
+}
+
+function normalizeTableBookmarksInNode(node, editor) {
+  if (!node || typeof node !== 'object') return node;
+
+  if (node.type === 'table') {
+    node = normalizeTableBookmarksInTable(node, editor);
+  }
+
+  if (Array.isArray(node.content)) {
+    node = { ...node, content: normalizeTableBookmarksInContent(node.content, editor) };
+  }
+
+  return node;
+}
+
+function parseColIndex(val) {
+  if (val == null || val === '') return null;
+  const n = parseInt(String(val), 10);
+  return Number.isNaN(n) ? null : Math.max(0, n);
+}
+
+/** colFirst/colLast apply only to bookmarkStart; bookmarkEnd always uses first/last cell by position. */
+function getCellIndexForBookmark(bookmarkNode, position, rowCellCount) {
+  if (!rowCellCount) return 0;
+  if (bookmarkNode?.type === 'bookmarkEnd') {
+    return position === 'start' ? 0 : rowCellCount - 1;
+  }
+  const attrs = bookmarkNode?.attrs ?? {};
+  const col = parseColIndex(position === 'start' ? attrs.colFirst : attrs.colLast);
+  if (col == null) return position === 'start' ? 0 : rowCellCount - 1;
+  return Math.min(col, rowCellCount - 1);
+}
+
+function addBookmarkToRowCellInlines(rowCellInlines, rowIndex, position, bookmarkNode, rowCellCount) {
+  const cellIndex = getCellIndexForBookmark(bookmarkNode, position, rowCellCount);
+  const bucket = rowCellInlines[rowIndex][position];
+  if (!bucket[cellIndex]) bucket[cellIndex] = [];
+  bucket[cellIndex].push(bookmarkNode);
+}
+
+/** Apply collected start/end bookmark inlines to a single row; returns new row. */
+function applyBookmarksToRow(rowNode, { start: startByCell, end: endByCell }, editor) {
+  const cellIndices = [
+    ...new Set([...Object.keys(startByCell).map(Number), ...Object.keys(endByCell).map(Number)]),
+  ].sort((a, b) => a - b);
+  let row = rowNode;
+  for (const cellIndex of cellIndices) {
+    const startNodes = startByCell[cellIndex];
+    const endNodes = endByCell[cellIndex];
+    if (startNodes?.length) row = insertInlineIntoRow(row, startNodes, editor, 'start', cellIndex);
+    if (endNodes?.length) row = insertInlineIntoRow(row, endNodes, editor, 'end', cellIndex);
+  }
+  return row;
+}
+
+function normalizeTableBookmarksInTable(tableNode, editor) {
+  if (!tableNode || tableNode.type !== 'table' || !Array.isArray(tableNode.content)) return tableNode;
+
+  const rows = tableNode.content.filter((child) => child?.type === 'tableRow');
+  if (!rows.length) return tableNode;
+
+  /** @type {{ start: Record<number, unknown[]>, end: Record<number, unknown[]> }[]} */
+  const rowCellInlines = rows.map(() => ({
+    start: /** @type {Record<number, unknown[]>} */ ({}),
+    end: /** @type {Record<number, unknown[]>} */ ({}),
+  }));
+  let rowCursor = 0;
+
+  // Collect bookmark positions per row/cell (no content array yet).
+  for (const child of tableNode.content) {
+    if (child?.type === 'tableRow') {
+      rowCursor += 1;
+      continue;
+    }
+    if (isBookmarkNode(child)) {
+      const prevRowIndex = rowCursor > 0 ? rowCursor - 1 : null;
+      const nextRowIndex = rowCursor < rows.length ? rowCursor : null;
+      const row = (nextRowIndex ?? prevRowIndex) != null ? rows[nextRowIndex ?? prevRowIndex] : null;
+      const rowCellCount = row?.content?.length ?? 0;
+      if (child.type === 'bookmarkStart') {
+        if (nextRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, nextRowIndex, 'start', child, rowCellCount);
+        else if (prevRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, prevRowIndex, 'end', child, rowCellCount);
+      } else {
+        if (prevRowIndex != null) addBookmarkToRowCellInlines(rowCellInlines, prevRowIndex, 'end', child, rowCellCount);
+        else if (nextRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, nextRowIndex, 'start', child, rowCellCount);
+      }
+    }
+  }
+
+  const updatedRows = rows.map((row, index) => applyBookmarksToRow(row, rowCellInlines[index], editor));
+
+  rowCursor = 0;
+  const content = [];
+  for (const child of tableNode.content) {
+    if (child?.type === 'tableRow') {
+      content.push(updatedRows[rowCursor] ?? child);
+      rowCursor += 1;
+    } else if (!isBookmarkNode(child)) {
+      content.push(child);
+    }
+  }
+
+  return {
+    ...tableNode,
+    content,
+  };
+}
+
+/**
+ * @param {number} [cellIndex] - If set, insert into this cell; otherwise first (start) or last (end) cell.
+ */
+function insertInlineIntoRow(rowNode, inlineNodes, editor, position, cellIndex) {
+  if (!rowNode || !inlineNodes?.length) return rowNode;
+
+  if (!Array.isArray(rowNode.content) || rowNode.content.length === 0) {
+    const paragraph = { type: 'paragraph', content: inlineNodes };
+    const newCell = { type: 'tableCell', content: [paragraph], attrs: {}, marks: [] };
+    return { ...rowNode, content: [newCell] };
+  }
+
+  const lastCellIndex = rowNode.content.length - 1;
+  const targetIndex =
+    cellIndex != null ? Math.min(Math.max(0, cellIndex), lastCellIndex) : position === 'end' ? lastCellIndex : 0;
+  const targetCell = rowNode.content[targetIndex];
+  const updatedCell = insertInlineIntoCell(targetCell, inlineNodes, editor, position);
+
+  if (updatedCell === targetCell) return rowNode;
+
+  const nextContent = rowNode.content.slice();
+  nextContent[targetIndex] = updatedCell;
+  return { ...rowNode, content: nextContent };
+}
+
+function findTextblockIndex(content, editor, fromEnd) {
+  const start = fromEnd ? content.length - 1 : 0;
+  const end = fromEnd ? -1 : content.length;
+  const step = fromEnd ? -1 : 1;
+  for (let i = start; fromEnd ? i > end : i < end; i += step) {
+    if (isTextblockNode(content[i], editor)) return i;
+  }
+  return -1;
+}
+
+function insertInlineIntoCell(cellNode, inlineNodes, editor, position) {
+  if (!cellNode || !inlineNodes?.length) return cellNode;
+
+  const content = Array.isArray(cellNode.content) ? cellNode.content.slice() : [];
+  const targetIndex = findTextblockIndex(content, editor, position === 'end');
+
+  if (targetIndex === -1) {
+    const paragraph = { type: 'paragraph', content: inlineNodes };
+    if (position === 'end') content.push(paragraph);
+    else content.unshift(paragraph);
+    return { ...cellNode, content };
+  }
+
+  const targetBlock = content[targetIndex] || { type: 'paragraph', content: [] };
+  const blockContent = Array.isArray(targetBlock.content) ? targetBlock.content.slice() : [];
+  const nextBlockContent = position === 'end' ? blockContent.concat(inlineNodes) : inlineNodes.concat(blockContent);
+
+  content[targetIndex] = { ...targetBlock, content: nextBlockContent };
+  return { ...cellNode, content };
+}
+
+function isBookmarkNode(node) {
+  const typeName = node?.type;
+  return typeName === 'bookmarkStart' || typeName === 'bookmarkEnd';
+}
+
+function isTextblockNode(node, editor) {
+  const typeName = node?.type;
+  if (!typeName) return false;
+  const nodeType = editor?.schema?.nodes?.[typeName];
+  if (nodeType && typeof nodeType.isTextblock === 'boolean') return nodeType.isTextblock;
+  return typeName === 'paragraph';
 }
 
 /**

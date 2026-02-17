@@ -899,7 +899,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       return measureText(markerText, markerFont, ctx);
     },
   );
-  const effectiveTextStartPx = resolvedTextStartPx ?? textStartPx;
+  // Keep precedence aligned with the painter:
+  // explicit producer-provided starts (marker.textStartX/textStartPx) win over inferred values.
+  const effectiveTextStartPx = textStartPx ?? resolvedTextStartPx;
 
   if (typeof effectiveTextStartPx === 'number' && effectiveTextStartPx > indentLeft) {
     // textStartPx indicates where text actually starts on the first line (after marker + tab/space).

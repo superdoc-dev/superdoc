@@ -489,8 +489,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
       return;
     }
 
+    // Skip for sub-editors that are not primary document editors
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+      return;
+    }
+
     if (!telemetryConfig?.enabled) {
-      console.debug('[super-editor] Telemetry: disabled');
       return;
     }
 
@@ -1326,25 +1330,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get viewport coordinates for a document position. Falls back to the PresentationEditor
-   * when running without a ProseMirror view (layout mode).
+   * Get viewport coordinates for a document position.
+   * In presentation mode the ProseMirror view is hidden off-screen, so we
+   * delegate to PresentationEditor which uses visual layout coordinates.
    */
   coordsAtPos(pos: number): ReturnType<PmEditorView['coordsAtPos']> | null {
-    if (this.view) {
-      return this.view.coordsAtPos(pos);
+    if (this.presentationEditor) {
+      return this.presentationEditor.coordsAtPos(pos);
     }
 
-    const layoutRects = this.presentationEditor?.getRangeRects?.(pos, pos);
-    if (Array.isArray(layoutRects) && layoutRects.length > 0) {
-      const rect = layoutRects[0];
-      return {
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-        width: rect.width,
-        height: rect.height,
-      } as ReturnType<PmEditorView['coordsAtPos']>;
+    if (this.view) {
+      return this.view.coordsAtPos(pos);
     }
 
     return null;

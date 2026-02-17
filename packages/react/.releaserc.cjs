@@ -11,7 +11,8 @@ const config = {
     'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
-    ['@semantic-release/npm', { npmPublish: true }],
+    ['semantic-release-pnpm', { npmPublish: false }],
+    '../../scripts/publish-react.cjs',
   ],
 };
 
@@ -36,7 +37,7 @@ config.plugins.push(['semantic-release-linear-app', { teamKeys: ['SD'], addComme
 config.plugins.push([
   '@semantic-release/github',
   {
-    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/react** v${nextRelease.version}\n\nThe release is available on [GitHub release](<github_release_url>)',
+    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/react** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
   }
 ]);
 

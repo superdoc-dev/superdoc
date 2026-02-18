@@ -18,6 +18,7 @@ import type {
   RenderedLineInfo,
 } from '@superdoc/contracts';
 import { applyCellBorders } from './border-utils.js';
+import { applyImageClipPath } from '../utils/image-clip-path.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
@@ -67,6 +68,8 @@ type WordLayoutMarker = {
     color?: string;
     /** Letter spacing in pixels */
     letterSpacing?: number;
+    /** Hidden text flag */
+    vanish?: boolean;
   };
 };
 
@@ -599,11 +602,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   } = deps;
 
   const attrs = cell?.attrs;
-  const padding = attrs?.padding || { top: 2, left: 4, right: 4, bottom: 2 };
+  const padding = attrs?.padding || { top: 0, left: 4, right: 4, bottom: 0 };
   const paddingLeft = padding.left ?? 4;
-  const paddingTop = padding.top ?? 2;
+  const paddingTop = padding.top ?? 0;
   const paddingRight = padding.right ?? 4;
-  const paddingBottom = padding.bottom ?? 2;
+  const paddingBottom = padding.bottom ?? 0;
 
   const cellEl = doc.createElement('div');
   cellEl.style.position = 'absolute';
@@ -791,6 +794,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         if (block.objectFit === 'cover') {
           imgEl.style.objectPosition = 'left top';
         }
+        applyImageClipPath(imgEl, block.attrs?.clipPath, { clipContainer: imageWrapper });
         imgEl.style.display = 'block';
 
         imageWrapper.appendChild(imgEl);
@@ -834,6 +838,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           if (block.objectFit === 'cover') {
             img.style.objectPosition = 'left top';
           }
+          applyImageClipPath(img, block.attrs?.clipPath, { clipContainer: drawingInner });
           drawingInner.appendChild(img);
         } else if (renderDrawingContent) {
           // Use the callback for other drawing types (vectorShape, shapeGroup, etc.)
@@ -844,10 +849,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         } else {
           // Fallback placeholder when no rendering callback is provided
           const placeholder = doc.createElement('div');
+          placeholder.classList.add('superdoc-drawing-placeholder');
           placeholder.style.width = '100%';
           placeholder.style.height = '100%';
-          placeholder.style.background =
+          const stripePattern =
             'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
+          // Set both shorthand and longhand to handle partial CSS property support in test DOMs.
+          placeholder.style.background = stripePattern;
+          placeholder.style.backgroundImage = stripePattern;
           placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
           drawingInner.appendChild(placeholder);
         }
@@ -964,7 +973,12 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
            * - The marker has a non-zero width
            */
           const shouldRenderMarker =
-            markerLayout && markerMeasure && lineIdx === 0 && localStartLine === 0 && markerMeasure.markerWidth > 0;
+            markerLayout &&
+            markerMeasure &&
+            lineIdx === 0 &&
+            localStartLine === 0 &&
+            markerMeasure.markerWidth > 0 &&
+            !markerLayout.run?.vanish;
 
           if (shouldRenderMarker) {
             /**
@@ -1108,6 +1122,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         if (anchoredBlock.objectFit === 'cover') {
           imgEl.style.objectPosition = 'left top';
         }
+        applyImageClipPath(imgEl, anchoredBlock.attrs?.clipPath, { clipContainer: imageWrapper });
         imgEl.style.display = 'block';
         imageWrapper.appendChild(imgEl);
         content.appendChild(imageWrapper);
@@ -1143,6 +1158,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           if (anchoredBlock.objectFit === 'cover') {
             img.style.objectPosition = 'left top';
           }
+          applyImageClipPath(img, anchoredBlock.attrs?.clipPath, { clipContainer: drawingInner });
           drawingInner.appendChild(img);
         } else if (renderDrawingContent) {
           const drawingContent = renderDrawingContent(anchoredBlock as DrawingBlock);
@@ -1151,10 +1167,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           drawingInner.appendChild(drawingContent);
         } else {
           const placeholder = doc.createElement('div');
+          placeholder.classList.add('superdoc-drawing-placeholder');
           placeholder.style.width = '100%';
           placeholder.style.height = '100%';
-          placeholder.style.background =
+          const stripePattern =
             'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
+          // Set both shorthand and longhand to handle partial CSS property support in test DOMs.
+          placeholder.style.background = stripePattern;
+          placeholder.style.backgroundImage = stripePattern;
           placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
           drawingInner.appendChild(placeholder);
         }

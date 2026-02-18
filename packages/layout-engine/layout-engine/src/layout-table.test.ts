@@ -244,9 +244,9 @@ describe('layoutTableBlock', () => {
       const boundaries = fragments[0].metadata?.columnBoundaries;
       expect(boundaries).toBeDefined();
 
-      // All columns should have minWidth >= 25 (absolute minimum)
+      // Keep a fixed floor so resize constraints always allow shrinking.
       boundaries?.forEach((boundary) => {
-        expect(boundary.minWidth).toBeGreaterThanOrEqual(25);
+        expect(boundary.minWidth).toBe(10);
       });
     });
 
@@ -602,8 +602,7 @@ describe('layoutTableBlock', () => {
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
       expect(boundaries).toHaveLength(1);
-      expect(boundaries![0].minWidth).toBeGreaterThanOrEqual(25);
-      expect(boundaries![0].minWidth).toBeLessThanOrEqual(200);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle very wide column (> 200px)', () => {
@@ -628,8 +627,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Min width should be capped at 200px
-      expect(boundaries![0].minWidth).toBe(200);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle very narrow column (< 25px)', () => {
@@ -654,8 +652,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Min width should be at least 25px
-      expect(boundaries![0].minWidth).toBe(25);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle empty columnWidths array', () => {
@@ -707,8 +704,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Should default to minimum 25px for negative widths
-      expect(boundaries![0].minWidth).toBe(25);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle zero measured width', () => {
@@ -733,8 +729,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Should default to minimum 25px for zero width
-      expect(boundaries![0].minWidth).toBe(25);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle multiple columns with varying widths', () => {
@@ -760,12 +755,9 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Column 0: 10px -> should be 25px (minimum)
-      expect(boundaries![0].minWidth).toBe(25);
-      // Column 1: 100px -> should be 100px (within range)
-      expect(boundaries![1].minWidth).toBe(100);
-      // Column 2: 500px -> should be 200px (capped)
-      expect(boundaries![2].minWidth).toBe(200);
+      boundaries?.forEach((boundary) => {
+        expect(boundary.minWidth).toBe(10);
+      });
     });
   });
 
@@ -1815,22 +1807,46 @@ describe('layoutTableBlock', () => {
       expect(fragmentsWithPartialRow.length).toBeGreaterThan(0);
     });
 
-    it('should maintain minimum line advancement across all cells', () => {
-      // Test that the minimum line advancement algorithm correctly identifies
-      // and applies the minimum advancement across all cells
+    it('should maintain monotonic per-cell advancement across continuation fragments', () => {
+      // Verify continuation fragments keep per-cell line progress monotonic
+      // when cells have different line heights.
       const block = createMockTableBlock(1);
 
-      // Create cells with different line heights where the minimum advancement
-      // will be determined by the cell with the tallest lines
-      const measure = createMockTableMeasure(
-        [100, 100, 100],
-        [120],
-        [
-          [10, 10, 10, 10, 10], // Cell 0: 5 lines of 10px (total 50px)
-          [20, 20, 20, 20, 20], // Cell 1: 5 lines of 20px (total 100px)
-          [40, 40, 40], // Cell 2: 3 lines of 40px (total 120px)
-        ],
-      );
+      // createMockTableMeasure applies line data per row (not per cell), so seed with
+      // row defaults then override each cell explicitly.
+      const measure = createMockTableMeasure([100, 100, 100], [120], [[10, 10, 10, 10, 10]]);
+      if (measure.rows[0].cells[1]) {
+        measure.rows[0].cells[1].paragraph = {
+          kind: 'paragraph',
+          lines: [20, 20, 20, 20, 20].map((lineHeight) => ({
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 1,
+            width: 100,
+            ascent: lineHeight * 0.75,
+            descent: lineHeight * 0.25,
+            lineHeight,
+          })),
+          totalHeight: 100,
+        };
+      }
+      if (measure.rows[0].cells[2]) {
+        measure.rows[0].cells[2].paragraph = {
+          kind: 'paragraph',
+          lines: [40, 40, 40].map((lineHeight) => ({
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 1,
+            width: 100,
+            ascent: lineHeight * 0.75,
+            descent: lineHeight * 0.25,
+            lineHeight,
+          })),
+          totalHeight: 120,
+        };
+      }
 
       const fragments: TableFragment[] = [];
       let cursorY = 0;
@@ -1861,24 +1877,21 @@ describe('layoutTableBlock', () => {
       // Should create multiple fragments
       expect(fragments.length).toBeGreaterThan(1);
 
-      // Verify line advancement consistency
-      for (const fragment of fragments) {
-        if ('partialRow' in fragment && fragment.partialRow && !fragment.partialRow.isLastPart) {
-          const { toLineByCell, fromLineByCell } = fragment.partialRow;
-          const advancements = toLineByCell.map((to, idx) => to - fromLineByCell[idx]);
+      const partialFragments = fragments.filter((f) => 'partialRow' in f && Boolean(f.partialRow));
+      expect(partialFragments.length).toBeGreaterThan(1);
 
-          // All cells that have remaining lines should advance by the same amount
-          // (this is the core of the line advancement algorithm)
-          const positiveAdvancements = advancements.filter((a) => a > 0);
-          if (positiveAdvancements.length > 0) {
-            const minAdvancement = Math.min(...positiveAdvancements);
-            // In the second pass, all cells should be normalized to minAdvancement
-            // (unless they've already completed)
-            positiveAdvancements.forEach((adv) => {
-              expect(adv).toBe(minAdvancement);
-            });
-          }
-        }
+      // First fragment should show uneven (independent) advancement.
+      const firstPartial = partialFragments[0].partialRow!;
+      const firstAdvancements = firstPartial.toLineByCell.map((to, idx) => to - firstPartial.fromLineByCell[idx]);
+      expect(new Set(firstAdvancements.filter((a) => a > 0)).size).toBeGreaterThan(1);
+
+      // Continuations must not regress per-cell line indices.
+      for (let i = 1; i < partialFragments.length; i += 1) {
+        const prev = partialFragments[i - 1].partialRow!;
+        const current = partialFragments[i].partialRow!;
+        current.fromLineByCell.forEach((fromLine, idx) => {
+          expect(fromLine).toBe(prev.toLineByCell[idx]);
+        });
       }
     });
 

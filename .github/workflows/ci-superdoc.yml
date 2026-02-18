@@ -66,5 +66,16 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Run memory profiling tests (non-blocking)
+        continue-on-error: true
+        run: pnpm --filter @superdoc/layout-tests run test:memory
+
       - name: Run slow tests
         run: pnpm test:slow
+
+      - name: Install Playwright for UMD smoke test
+        run: pnpm --filter @superdoc/umd-smoke-test exec playwright install --with-deps chromium
+
+      - name: Run UMD smoke test
+        working-directory: packages/superdoc/tests/umd-smoke
+        run: pnpm test

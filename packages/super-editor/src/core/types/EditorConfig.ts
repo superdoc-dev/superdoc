@@ -432,5 +432,9 @@ export interface EditorOptions {
     endpoint?: string;
     /** Custom metadata to include with telemetry events (optional) */
     metadata?: Record<string, unknown>;
+    /**
+     * @deprecated Use root-level `licenseKey` instead. If both are provided, root-level has priority.
+     */
+    licenseKey?: string | null;
   } | null;
 }

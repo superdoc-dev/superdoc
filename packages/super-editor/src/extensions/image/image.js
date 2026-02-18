@@ -1,4 +1,5 @@
 import { Attribute, Node } from '@core/index.js';
+import { formatInsetClipPathTransform } from '@superdoc/contracts';
 import { ImageRegistrationPlugin } from './imageHelpers/imageRegistrationPlugin.js';
 import { ImagePositionPlugin } from './imageHelpers/imagePositionPlugin.js';
 import { getNormalizedImageAttrs } from './imageHelpers/legacyAttributes.js';
@@ -209,6 +210,24 @@ export const Image = Node.create({
         rendered: false,
       },
 
+      clipPath: {
+        default: null,
+        renderDOM: (attrs) => {
+          const clipPath = attrs.clipPath;
+          if (typeof clipPath !== 'string' || clipPath.trim().length === 0) {
+            return {};
+          }
+          // When we have size we render a wrapper in renderDOM; clip-path and scale go on the inner img only, so don't add here
+          if (attrs.size?.width && attrs.size?.height) {
+            return {};
+          }
+          let style = `clip-path: ${clipPath};`;
+          const scaleStyle = formatInsetClipPathTransform(clipPath);
+          if (scaleStyle) style += ` ${scaleStyle}`;
+          return { style };
+        },
+      },
+
       size: {
         default: {},
         renderDOM: ({ size, shouldCover }) => {
@@ -248,6 +267,10 @@ export const Image = Node.create({
         rendered: false,
       },
       originalDrawingChildren: {
+        default: null,
+        rendered: false,
+      },
+      rawSrcRect: {
         default: null,
         rendered: false,
       },
@@ -550,6 +573,48 @@ export const Image = Node.create({
     if (style) {
       const existingStyle = finalAttributes.style || '';
       finalAttributes.style = existingStyle + (existingStyle ? ' ' : '') + style;
+    }
+
+    const clipPath = node.attrs.clipPath;
+    const hasClipPath = typeof clipPath === 'string' && clipPath.trim().length > 0;
+    const { width: sizeW, height: sizeH } = size ?? {};
+
+    // When clipPath is set we scale the image so the cropped portion fills the box;
+    // wrap in a container so only that portion occupies space and overflow is hidden.
+    // Resize updates node size so wrapper gets new dimensions and cropped portion stays within.
+    if (hasClipPath && sizeW > 0 && sizeH > 0) {
+      const wrapperStyle = [
+        finalAttributes.style || '',
+        'overflow: hidden',
+        `width: ${sizeW}px`,
+        `height: ${sizeH}px`,
+        'display: inline-block',
+        'box-sizing: border-box',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      // clipPath attribute's renderDOM returns {} when size is set (so styles go on wrapper);
+      // inner img is built here so we set clip-path and fill styles explicitly.
+      const imgInnerStyle = [
+        'width: 100%',
+        'height: 100%',
+        'max-width: 100%',
+        'max-height: 100%',
+        'min-width: 0',
+        'min-height: 0',
+        'box-sizing: border-box',
+        `clip-path: ${clipPath}`,
+        formatInsetClipPathTransform(clipPath) || '',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      const imgAttrs = Attribute.mergeAttributes(this.options.htmlAttributes, {
+        src: this.storage.media[node.attrs.src] ?? node.attrs.src,
+        alt: node.attrs.alt ?? 'Uploaded picture',
+        title: node.attrs.title ?? undefined,
+        style: imgInnerStyle,
+      });
+      return ['span', { ...finalAttributes, style: wrapperStyle }, ['img', imgAttrs]];
     }
 
     return ['img', Attribute.mergeAttributes(this.options.htmlAttributes, finalAttributes)];

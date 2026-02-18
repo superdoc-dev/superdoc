@@ -357,6 +357,43 @@ describe('SuperEditor.vue', () => {
     wrapper.unmount();
   });
 
+  it('renders SlashMenu only when context menus are enabled', async () => {
+    vi.useFakeTimers();
+    EditorConstructor.loadXmlData
+      .mockResolvedValueOnce(['<docx />', {}, {}, {}])
+      .mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+    const mountAndReady = async (disableContextMenu) => {
+      const fileSource = new Blob([], { type: DOCX_MIME });
+      const wrapper = mount(SuperEditor, {
+        props: {
+          documentId: `doc-context-menu-${disableContextMenu ? 'off' : 'on'}`,
+          fileSource,
+          options: { disableContextMenu },
+        },
+      });
+
+      await flushPromises();
+
+      const instance = getEditorInstance();
+      instance.listeners.collaborationReady();
+      vi.runAllTimers();
+      await flushPromises();
+
+      return wrapper;
+    };
+
+    const enabledWrapper = await mountAndReady(false);
+    expect(enabledWrapper.findComponent({ name: 'SlashMenu' }).exists()).toBe(true);
+    enabledWrapper.unmount();
+
+    const disabledWrapper = await mountAndReady(true);
+    expect(disabledWrapper.findComponent({ name: 'SlashMenu' }).exists()).toBe(false);
+    disabledWrapper.unmount();
+
+    vi.useRealTimers();
+  });
+
   describe('handleMarginClick', () => {
     it('should ignore right-clicks (button !== 0)', async () => {
       vi.useFakeTimers();

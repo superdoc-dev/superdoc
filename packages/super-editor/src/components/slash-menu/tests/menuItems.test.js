@@ -228,6 +228,17 @@ describe('menuItems.js', () => {
   });
 
   describe('getItems - custom configuration', () => {
+    it('should keep default items when slashMenuConfig is an empty object', () => {
+      mockEditor.options.slashMenuConfig = {};
+      mockContext.editor = mockEditor;
+
+      const sections = getItems(mockContext);
+      const sectionIds = sections.map((section) => section.id);
+
+      expect(sectionIds).toContain('general');
+      expect(sections.length).toBeGreaterThan(0);
+    });
+
     it('should add custom items when customItems is provided', () => {
       mockEditor.options.slashMenuConfig = SlashMenuConfigs.customOnly;
       mockContext.editor = mockEditor;
@@ -264,6 +275,31 @@ describe('menuItems.js', () => {
       // Should only have custom sections
       expect(sections).toHaveLength(1);
       expect(sections[0].id).toBe('custom-section');
+    });
+
+    it('should support slashMenuConfig.items as an alias for customItems', () => {
+      mockEditor.options.slashMenuConfig = {
+        includeDefaultItems: false,
+        items: [
+          {
+            id: 'items-alias-section',
+            items: [
+              {
+                id: 'items-alias-item',
+                label: 'Items Alias Item',
+                showWhen: (context) => [TRIGGERS.slash, TRIGGERS.click].includes(context.trigger),
+                action: vi.fn(),
+              },
+            ],
+          },
+        ],
+      };
+      mockContext.editor = mockEditor;
+
+      const sections = getItems(mockContext);
+      expect(sections).toHaveLength(1);
+      expect(sections[0].id).toBe('items-alias-section');
+      expect(sections[0].items[0].id).toBe('items-alias-item');
     });
 
     it('should apply menuProvider function', () => {

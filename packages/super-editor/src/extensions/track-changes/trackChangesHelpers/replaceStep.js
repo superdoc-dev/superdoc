@@ -21,6 +21,32 @@ import { findMarkPosition } from './documentHelpers.js';
  * @param {number} options.originalStepIndex Original step index.
  */
 export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalStep, originalStepIndex }) => {
+  // Handle structural deletions with no inline content (e.g., empty paragraph removal,
+  // paragraph joins). When there's no content being inserted and no inline content in
+  // the deletion range, markDeletion has nothing to mark — apply the step directly.
+  //
+  // Edge case: if a paragraph contains only TrackDelete-marked text, hasInlineContent
+  // returns true and the normal tracking flow runs. markDeletion skips already-deleted
+  // nodes, but the join still applies through the replace machinery — the delete is
+  // not swallowed. This is correct: the structural join merges the blocks while
+  // preserving the existing deletion marks on the text content.
+  if (step.from !== step.to && step.slice.content.size === 0) {
+    let hasInlineContent = false;
+    newTr.doc.nodesBetween(step.from, step.to, (node) => {
+      if (node.isInline) {
+        hasInlineContent = true;
+        return false;
+      }
+    });
+
+    if (!hasInlineContent) {
+      if (!newTr.maybeStep(step).failed) {
+        map.appendMap(step.getMap());
+      }
+      return;
+    }
+  }
+
   const trTemp = state.apply(newTr).tr;
 
   // Default: insert replacement after the selected range (Word-like replace behavior).

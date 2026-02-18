@@ -111,7 +111,7 @@ export function handleStyleChangeMarksV2(rPrChange, currentMarks, params) {
     return [];
   }
 
-  const { attributes } = rPrChange;
+  const attributes = rPrChange.attributes || {};
   const mappedAttributes = {
     id: attributes['w:id'],
     date: attributes['w:date'],
@@ -121,7 +121,7 @@ export function handleStyleChangeMarksV2(rPrChange, currentMarks, params) {
   let submarks = [];
   const rPr = rPrChange.elements?.find((el) => el.name === 'w:rPr');
   if (rPr) {
-    const runProperties = wRPrTranslator.encode({ ...params, nodes: [rPr] });
+    const runProperties = wRPrTranslator.encode({ ...params, nodes: [rPr] }) || {};
     submarks = encodeMarksFromRPr(runProperties, params?.docx);
   }
 

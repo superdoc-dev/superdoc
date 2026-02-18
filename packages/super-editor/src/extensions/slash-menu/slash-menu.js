@@ -112,7 +112,7 @@ export function findContainingBlockAncestor(element) {
 export const SlashMenuPluginKey = new PluginKey('slashMenu');
 
 // Menu positioning constants (in pixels)
-const MENU_OFFSET_X = 100; // Horizontal offset for slash menu
+const MENU_OFFSET_X = 0; // Horizontal offset for slash menu (aligned with cursor)
 const MENU_OFFSET_Y = 28; // Vertical offset for slash menu
 const CONTEXT_MENU_OFFSET_X = 10; // Small offset for right-click
 const CONTEXT_MENU_OFFSET_Y = 10; // Small offset for right-click
@@ -223,18 +223,26 @@ export const SlashMenu = Extension.create({
               } else {
                 // Fallback to selection-based positioning (slash menu)
                 const relativePoint = getSurfaceRelativePoint(editor, meta);
-                if (relativePoint) {
-                  // Need to convert surface-relative to viewport coordinates
-                  const surface = editor.presentationEditor?.element ?? editor.view?.dom ?? editor.options?.element;
-                  if (surface) {
-                    try {
-                      const rect = surface.getBoundingClientRect();
-                      left = rect.left + relativePoint.left;
-                      top = rect.top + relativePoint.top;
-                    } catch (error) {
-                      console.warn('SlashMenu: Failed to get surface bounds', error);
-                      return ensureStateShape(value); // Return unchanged state on error
-                    }
+                const surface = editor.presentationEditor?.element ?? editor.view?.dom ?? editor.options?.element;
+                if (relativePoint && surface) {
+                  try {
+                    const rect = surface.getBoundingClientRect();
+                    left = rect.left + relativePoint.left;
+                    top = rect.top + relativePoint.top;
+                  } catch (error) {
+                    console.warn('SlashMenu: Failed to get surface bounds', error);
+                    return ensureStateShape(value);
+                  }
+                } else if (surface) {
+                  // coordsAtPos unavailable (e.g. blank document before first layout).
+                  // Position the menu at the top-left of the visible editor surface.
+                  try {
+                    const rect = surface.getBoundingClientRect();
+                    left = rect.left;
+                    top = rect.top;
+                  } catch (error) {
+                    console.warn('SlashMenu: Failed to get surface bounds for fallback', error);
+                    return ensureStateShape(value);
                   }
                 }
               }

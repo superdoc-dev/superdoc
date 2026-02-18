@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { translator, config } from './r-translator.js';
+import * as converterStyles from '../../../../styles.js';
 
 describe('w:r r-translator (node)', () => {
   it('exposes correct metadata', () => {
@@ -151,6 +152,81 @@ describe('w:r r-translator (node)', () => {
     expect(child.type).toBe('passthroughInline');
     expect(child.marks).toEqual([]);
     expect(child.attrs).toEqual({ originalName: 'w:custom' });
+  });
+
+  it('passes tableInfo and numberingDefinedInline to resolveRunProperties when table context is available', () => {
+    const resolveRunPropertiesSpy = vi
+      .spyOn(converterStyles, 'resolveRunProperties')
+      .mockImplementation(() => ({ bold: true }));
+    const runNode = {
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Cell' }] }],
+    };
+
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [{ type: 'text', text: 'Cell', marks: [] }]) },
+      docx: {},
+      extraParams: {
+        paragraphProperties: { styleId: 'ListParagraph' },
+        rowIndex: 2,
+        columnIndex: 1,
+        tableProperties: { tableStyleId: 'TableGrid' },
+        totalColumns: 3,
+        totalRows: 4,
+        numberingDefinedInline: true,
+      },
+    };
+
+    translator.encode(params);
+
+    expect(resolveRunPropertiesSpy).toHaveBeenCalledTimes(1);
+    expect(resolveRunPropertiesSpy).toHaveBeenCalledWith(
+      params,
+      {},
+      { styleId: 'ListParagraph' },
+      {
+        rowIndex: 2,
+        cellIndex: 1,
+        tableProperties: { tableStyleId: 'TableGrid' },
+        numCells: 3,
+        numRows: 4,
+      },
+      false,
+      true,
+    );
+
+    resolveRunPropertiesSpy.mockRestore();
+  });
+
+  it('passes null tableInfo to resolveRunProperties when table context is incomplete', () => {
+    const resolveRunPropertiesSpy = vi.spyOn(converterStyles, 'resolveRunProperties').mockImplementation(() => ({}));
+    const runNode = {
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'No table context' }] }],
+    };
+
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [{ type: 'text', text: 'No table context', marks: [] }]) },
+      docx: {},
+      extraParams: {
+        paragraphProperties: { styleId: 'Normal' },
+        rowIndex: 0,
+        columnIndex: 0,
+        tableProperties: { tableStyleId: 'TableGrid' },
+        totalColumns: 2,
+        // totalRows missing on purpose
+      },
+    };
+
+    translator.encode(params);
+
+    expect(resolveRunPropertiesSpy).toHaveBeenCalledTimes(1);
+    expect(resolveRunPropertiesSpy.mock.calls[0][3]).toBeNull();
+    expect(resolveRunPropertiesSpy.mock.calls[0][5]).toBeUndefined();
+
+    resolveRunPropertiesSpy.mockRestore();
   });
 
   it('does not wrap a comment range start and end in a run node', () => {

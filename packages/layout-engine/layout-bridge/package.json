@@ -31,7 +31,7 @@
   "devDependencies": {
     "@superdoc/pm-adapter": "workspace:*",
     "@types/node": "catalog:",
-    "tsup": "^8.0.2",
+    "tsup": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

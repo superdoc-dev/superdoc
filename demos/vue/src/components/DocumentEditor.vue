@@ -1,6 +1,6 @@
 <template>
   <div class="document-editor">
-    <div :key="documentKey" class="editor-container">
+    <div class="editor-container">
       <div id="superdoc-toolbar" class="toolbar"></div>
       <div id="superdoc" class="editor"></div>
     </div>
@@ -8,7 +8,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
 
@@ -27,11 +27,11 @@ const emit = defineEmits(['editor-ready', 'editor-error']);
 
 // Use ref to track the editor instance
 const editor = ref(null);
-const documentKey = ref(0);
 
 // Function to safely destroy editor
 const destroyEditor = () => {
   if (editor.value) {
+    editor.value.destroy();
     editor.value = null;
   }
 };
@@ -39,11 +39,11 @@ const destroyEditor = () => {
 // Function to initialize editor
 const initializeEditor = async () => {
   try {
-    // Ensure cleanup of previous instance
+    // Ensure cleanup of previous instance before re-initializing.
     destroyEditor();
-    
-    // Increment key to force re-render
-    documentKey.value++;
+
+    // Wait one tick so the container refs stay stable during remount scenarios.
+    await nextTick();
 
     // Create new editor instance
     editor.value = new SuperDoc({
@@ -68,14 +68,14 @@ const initializeEditor = async () => {
 
 // Watch for changes in props that should trigger re-initialization
 watch(
-  () => [props.documentId, props.initialData, props.readOnly],
+  () => [props.initialData, props.readOnly],
   () => {
-    initializeEditor();
+    void initializeEditor();
   }
 );
 
 onMounted(() => {
-  initializeEditor();
+  void initializeEditor();
 });
 
 onUnmounted(() => {

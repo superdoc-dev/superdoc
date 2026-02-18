@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  smoke-test:
+  validate:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

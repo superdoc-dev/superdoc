@@ -1,16 +1,23 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "willow",
+  "theme": "mint",
   "name": "SuperDoc",
   "description": "Web-based DOCX editor with full Microsoft Word compatibility. Handle tracked changes, complex tables, and document automation. Works with any framework and AI agents.",
   "colors": {
-    "primary": "#0055FF",
-    "light": "#0085FF",
-    "dark": "#003ACC"
+    "primary": "#6366F1",
+    "light": "#8968F6",
+    "dark": "#4F46E5"
+  },
+  "background": {
+    "color": {
+      "light": "#f8f8fc",
+      "dark": "#0a0a0f"
+    }
   },
   "logo": {
     "light": "/public/images/logo-light.png",
-    "dark": "/public/images/logo-dark.png"
+    "dark": "/public/images/logo-dark.png",
+    "href": "https://superdoc.dev"
   },
   "favicon": "/public/images/favicon.png",
   "icons": {
@@ -20,9 +27,6 @@
     "family": "Plus Jakarta Sans",
     "body": {
       "family": "Inter"
-    },
-    "heading": {
-      "font-size": "2.5rem !important"
     }
   },
   "contextual": {
@@ -41,14 +45,14 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Editor",
+        "tab": "SuperDoc",
         "groups": [
           {
             "group": "Getting Started",
             "pages": [
               "getting-started/introduction",
+              "getting-started/quickstart",
               "getting-started/ai-agents",
-              "getting-started/installation",
               {
                 "group": "Frameworks",
                 "pages": [
@@ -67,7 +71,6 @@
             "pages": [
               {
                 "group": "SuperDoc",
-                "tag": "UDPATED",
                 "pages": [
                   "core/superdoc/overview",
                   "core/superdoc/configuration",
@@ -77,7 +80,6 @@
               },
               {
                 "group": "SuperEditor",
-                "tag": "UDPATED",
                 "pages": [
                   "core/supereditor/overview",
                   "core/supereditor/configuration",
@@ -89,7 +91,7 @@
           },
           {
             "group": "Document API",
-            "tag": "SOON",
+            "tag": "ALPHA",
             "pages": ["document-api/overview"]
           },
           {
@@ -106,7 +108,9 @@
               },
               "modules/comments",
               "modules/toolbar",
-              "modules/context-menu"
+              "modules/context-menu",
+              "modules/pdf",
+              "modules/whiteboard"
             ]
           },
           {
@@ -221,7 +225,12 @@
           },
           {
             "group": "Resources",
-            "pages": ["guides/general/accessibility", "guides/general/security", "resources/license"]
+            "pages": [
+              "guides/general/accessibility",
+              "resources/telemetry",
+              "guides/general/security",
+              "resources/license"
+            ]
           }
         ]
       },
@@ -264,10 +273,8 @@
     },
     "links": [
       {
-        "type": "button",
-        "href": "https://github.com/superdoc-dev/superdoc",
-        "label": "",
-        "icon": "github"
+        "type": "github",
+        "href": "https://github.com/superdoc-dev/superdoc"
       },
       {
         "type": "button",
@@ -292,7 +299,11 @@
     },
     {
       "source": "/guide/quick-start",
-      "destination": "/getting-started/installation"
+      "destination": "/getting-started/quickstart"
+    },
+    {
+      "source": "/getting-started/installation",
+      "destination": "/getting-started/quickstart"
     },
     {
       "source": "/guide/modes-roles",

@@ -1,0 +1,36 @@
+{
+  "contractVersion": "0.1.0",
+  "sourceHash": "3e7edc551feb80b42bfa59f928a0ce1f34ecb7cf71952d5a489107089105d543",
+  "workflows": [
+    {
+      "id": "find-mutate",
+      "operations": ["find", "replace"],
+      "title": "Find + mutate workflow"
+    },
+    {
+      "id": "tracked-insert",
+      "operations": ["capabilities.get", "insert"],
+      "title": "Tracked insert workflow"
+    },
+    {
+      "id": "comment-thread-lifecycle",
+      "operations": ["comments.add", "comments.reply", "comments.resolve"],
+      "title": "Comment lifecycle workflow"
+    },
+    {
+      "id": "list-manipulation",
+      "operations": ["lists.insert", "lists.setType", "lists.indent", "lists.outdent", "lists.exit"],
+      "title": "List manipulation workflow"
+    },
+    {
+      "id": "capabilities-aware-branching",
+      "operations": ["capabilities.get", "replace", "insert"],
+      "title": "Capabilities-aware branching workflow"
+    },
+    {
+      "id": "track-change-review",
+      "operations": ["trackChanges.list", "trackChanges.accept", "trackChanges.reject"],
+      "title": "Track-change review workflow"
+    }
+  ]
+}

@@ -44,6 +44,10 @@ const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
  * @returns {Array<Object>} Mark definitions representing the run styling.
  */
 export function encodeMarksFromRPr(runProperties, docx) {
+  if (!runProperties || typeof runProperties !== 'object') {
+    return [];
+  }
+
   const marks = [];
   const textStyleAttrs = {};
   let highlightColor = null;

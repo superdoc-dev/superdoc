@@ -324,6 +324,8 @@ export declare const SuperInput: any;
 export declare const BasicUpload: any;
 export declare const Toolbar: any;
 export declare const AIWriter: any;
+export declare const ContextMenu: any;
+/** @deprecated Use ContextMenu instead */
 export declare const SlashMenu: any;
 
 // ============================================

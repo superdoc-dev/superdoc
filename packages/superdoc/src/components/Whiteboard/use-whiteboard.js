@@ -16,8 +16,22 @@ export const useWhiteboard = ({ proxy, layers, documents, modules }) => {
   const whiteboardPageSizes = reactive({});
   const whiteboardPageOffsets = reactive({});
 
+  const whiteboardReady = ref(false);
+  const whiteboardReadyPages = ref(0);
+  const whiteboardTotalPages = ref(0);
+
   const whiteboardOpacity = ref(1);
   const whiteboardEnabled = ref(whiteboardModuleConfig.value?.enabled ?? false);
+
+  const checkWhiteboardReady = () => {
+    if (whiteboardReady.value) return;
+    whiteboardReadyPages.value += 1;
+    const total = whiteboardTotalPages.value || whiteboardPages.value.length;
+    if (total && whiteboardReadyPages.value >= total) {
+      whiteboardReady.value = true;
+      proxy?.$superdoc?.emit('whiteboard:ready', { whiteboard: whiteboard });
+    }
+  };
 
   // Sync page size + instances when PDF viewer reports page-ready.
   const handleWhiteboardPageReady = (payload) => {
@@ -43,14 +57,17 @@ export const useWhiteboard = ({ proxy, layers, documents, modules }) => {
         .getPages()
         .sort((a, b) => a.pageIndex - b.pageIndex)
         .map((page) => markRaw(page));
+      whiteboardTotalPages.value = whiteboardPages.value.length;
     }
-    nextTick(() => updateWhiteboardPageOffsets());
+    nextTick(() => {
+      updateWhiteboardPageOffsets();
+      checkWhiteboardReady();
+    });
   };
 
   // Re-emit for host app consumers.
   const handleWhiteboardChange = (data) => {
     proxy?.$superdoc?.emit('whiteboard:change', data);
-    console.debug('[Whiteboard] change', data);
   };
 
   // Update UI pages after setWhiteboardData.
@@ -60,6 +77,7 @@ export const useWhiteboard = ({ proxy, layers, documents, modules }) => {
       if (size) page.setSize(size);
     });
     whiteboardPages.value = pages.map((page) => markRaw(page));
+    whiteboardTotalPages.value = whiteboardPages.value.length;
     nextTick(() => updateWhiteboardPageOffsets());
   };
 
@@ -87,7 +105,8 @@ export const useWhiteboard = ({ proxy, layers, documents, modules }) => {
 
   const updateWhiteboardPDFPageSizes = ({ doc }) => {
     whiteboardPages.value.forEach((page) => {
-      const pageEl = document.getElementById(`${doc.id}-page-${page.pageIndex + 1}`);
+      const pageId = `${doc.id}-page-${page.pageIndex + 1}`;
+      const pageEl = document.querySelector(`[data-page-id="${pageId}"]`);
       if (!pageEl) return;
       const pageBounds = pageEl.getBoundingClientRect();
       const existingSize = whiteboardPageSizes[page.pageIndex] || {};
@@ -118,7 +137,8 @@ export const useWhiteboard = ({ proxy, layers, documents, modules }) => {
 
   const updateWhiteboardPDFPageOffsets = ({ doc, layerBounds }) => {
     whiteboardPages.value.forEach((page) => {
-      const pageEl = document.getElementById(`${doc.id}-page-${page.pageIndex + 1}`);
+      const pageId = `${doc.id}-page-${page.pageIndex + 1}`;
+      const pageEl = document.querySelector(`[data-page-id="${pageId}"]`);
       if (!pageEl) return;
       const pageBounds = pageEl.getBoundingClientRect();
       whiteboardPageOffsets[page.pageIndex] = {
@@ -153,6 +173,7 @@ export const useWhiteboard = ({ proxy, layers, documents, modules }) => {
     whiteboardPageOffsets,
     whiteboardEnabled,
     whiteboardOpacity,
+    whiteboardReady,
     handleWhiteboardPageReady,
     updateWhiteboardPageSizes,
     updateWhiteboardPageOffsets,

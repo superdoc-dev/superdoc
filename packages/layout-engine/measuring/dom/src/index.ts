@@ -899,7 +899,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       return measureText(markerText, markerFont, ctx);
     },
   );
-  const effectiveTextStartPx = resolvedTextStartPx ?? textStartPx;
+  // Keep precedence aligned with the painter:
+  // explicit producer-provided starts (marker.textStartX/textStartPx) win over inferred values.
+  const effectiveTextStartPx = textStartPx ?? resolvedTextStartPx;
 
   if (typeof effectiveTextStartPx === 'number' && effectiveTextStartPx > indentLeft) {
     // textStartPx indicates where text actually starts on the first line (after marker + tab/space).
@@ -2454,7 +2456,6 @@ function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number
 
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
-
   // Resolve percentage or explicit pixel table width
   const resolvedTableWidth = resolveTableWidth(block.attrs, maxWidth);
 
@@ -2524,8 +2525,11 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
     return scaled;
   };
-  // Determine actual column count from table structure
-  const maxCellCount = Math.max(1, Math.max(...block.rows.map((r) => r.cells.length)));
+  // Determine actual column count from table structure (accounting for colspan)
+  const maxCellCount = Math.max(
+    1,
+    Math.max(...block.rows.map((r) => r.cells.reduce((sum, cell) => sum + (cell.colSpan ?? 1), 0))),
+  );
 
   // Effective target width: use resolvedTableWidth if set (from percentage or explicit px),
   // but never exceed maxWidth (available column space)
@@ -2577,7 +2581,10 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         columnWidths = columnWidths.slice(0, maxCellCount);
       }
 
-      // Scale proportionally if total width exceeds effective target width
+      // Scale down if total width exceeds available space (prevent overflow).
+      // Auto-width tables (w:tblW type="auto") size to their grid/content in Word.
+      // Do NOT scale up — tables that fill the page do so because their grid columns
+      // already sum to the page width, not because of scaling.
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
       if (totalWidth > effectiveTargetWidth) {
         columnWidths = scaleColumnWidths(columnWidths, effectiveTargetWidth);
@@ -2645,9 +2652,9 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
       }
 
       // Get cell padding for height calculation
-      const cellPadding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
-      const paddingTop = cellPadding.top ?? 2;
-      const paddingBottom = cellPadding.bottom ?? 2;
+      const cellPadding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
+      const paddingTop = cellPadding.top ?? 0;
+      const paddingBottom = cellPadding.bottom ?? 0;
       const paddingLeft = cellPadding.left ?? 4;
       const paddingRight = cellPadding.right ?? 4;
 
@@ -2675,7 +2682,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
        * ```
        * cell.blocks = [paragraph1, paragraph2, paragraph3]
        * contentHeight = para1.height + para2.height + para3.height
-       * totalCellHeight = contentHeight + 2 (top) + 2 (bottom)
+       * totalCellHeight = contentHeight;
        * ```
        */
       const blockMeasures: Measure[] = [];
@@ -2701,12 +2708,20 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
         contentHeight += blockHeight;
 
-        // Add paragraph spacing.after to content height for all paragraphs.
-        // Word applies spacing.after even to the last paragraph in a cell, creating space at the bottom.
+        // Add paragraph spacing.after to content height.
+        // For the last paragraph, Word absorbs spacing.after into cell bottom padding —
+        // so only add the excess beyond what the padding already provides.
+        const isLastBlock = blockIndex === cellBlocks.length - 1;
         if (block.kind === 'paragraph') {
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-            contentHeight += spacingAfter;
+            if (isLastBlock) {
+              // Only add the portion not absorbed by cell bottom padding
+              const excess = Math.max(0, spacingAfter - paddingBottom);
+              contentHeight += excess;
+            } else {
+              contentHeight += spacingAfter;
+            }
           }
         }
       }

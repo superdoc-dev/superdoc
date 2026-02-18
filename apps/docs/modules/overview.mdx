@@ -14,7 +14,7 @@ const superdoc = new SuperDoc({
     toolbar: { selector: '#toolbar' },
     comments: { allowResolve: true },
     collaboration: { ydoc, provider },
-    slashMenu: { includeDefaultItems: true }
+    contextMenu: { includeDefaultItems: true }
   }
 });
 ```
@@ -33,6 +33,12 @@ const superdoc = new SuperDoc({
   </Card>
   <Card title="Context Menu" icon="menu" href="/modules/context-menu">
     Right-click actions and custom commands
+  </Card>
+  <Card title="PDF" icon="file-text" href="/modules/pdf">
+    PDF viewer setup and configuration
+  </Card>
+  <Card title="Whiteboard" icon="pencil" href="/modules/whiteboard">
+    Annotation layer for documents
   </Card>
 </CardGroup>
 

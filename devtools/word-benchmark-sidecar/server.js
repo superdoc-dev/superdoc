@@ -8,6 +8,8 @@ import { URL } from 'node:url';
 
 const HOST = process.env.SUPERDOC_WORD_BASELINE_HOST ?? '127.0.0.1';
 const PORT = Number.parseInt(process.env.SUPERDOC_WORD_BASELINE_PORT ?? '9185', 10);
+const STAY_ALIVE_ON_REUSE =
+  process.argv.includes('--stay-alive-on-reuse') || process.env.SUPERDOC_WORD_BASELINE_STAY_ALIVE_ON_REUSE === '1';
 const JOB_ROOT = path.resolve(
   process.env.SUPERDOC_WORD_BASELINE_DIR ?? path.join(os.tmpdir(), 'superdoc-word-baselines'),
 );
@@ -57,6 +59,16 @@ const createHttpError = (statusCode, message) => {
   const err = new Error(message);
   err.statusCode = statusCode;
   return err;
+};
+
+const ensureDocxBufferWithinLimits = (docxBuffer) => {
+  if (!Buffer.isBuffer(docxBuffer) || docxBuffer.length === 0) {
+    throw createHttpError(400, 'Decoded docx payload is empty');
+  }
+
+  if (docxBuffer.length > MAX_DOCX_BYTES) {
+    throw createHttpError(413, `DOCX exceeds max size (${MAX_DOCX_BYTES} bytes)`);
+  }
 };
 
 const readJsonBody = async (req, maxBytes) => {
@@ -113,6 +125,23 @@ const normalizeBase64 = (input) => {
   const trimmed = input.trim();
   const commaIndex = trimmed.indexOf(',');
   return commaIndex >= 0 ? trimmed.slice(commaIndex + 1) : trimmed;
+};
+
+const normalizeLocalPath = (input) => {
+  if (typeof input !== 'string' || !input.trim()) {
+    throw createHttpError(400, 'localPath is required');
+  }
+
+  const trimmed = input.trim();
+  if (!path.isAbsolute(trimmed)) {
+    throw createHttpError(400, 'localPath must be an absolute path');
+  }
+
+  if (path.extname(trimmed).toLowerCase() !== '.docx') {
+    throw createHttpError(400, 'localPath must point to a .docx file');
+  }
+
+  return path.resolve(trimmed);
 };
 
 const runWordCapture = async (docxPath, outputRoot) => {
@@ -194,17 +223,8 @@ const findCapturedPages = async (outputRoot) => {
   return candidates[0];
 };
 
-const createJob = async ({ fileName, docxBase64, requestOrigin }) => {
-  const normalizedBase64 = normalizeBase64(docxBase64);
-  const docxBuffer = Buffer.from(normalizedBase64, 'base64');
-
-  if (docxBuffer.length === 0) {
-    throw createHttpError(400, 'Decoded docx payload is empty');
-  }
-
-  if (docxBuffer.length > MAX_DOCX_BYTES) {
-    throw createHttpError(413, `DOCX exceeds max size (${MAX_DOCX_BYTES} bytes)`);
-  }
+const createJobFromBuffer = async ({ fileName, docxBuffer, requestOrigin }) => {
+  ensureDocxBufferWithinLimits(docxBuffer);
 
   const safeFileName = sanitizeFileName(fileName);
   const jobId = crypto.randomUUID();
@@ -241,6 +261,47 @@ const createJob = async ({ fileName, docxBase64, requestOrigin }) => {
   };
 };
 
+const createJobFromBase64Payload = async ({ fileName, docxBase64, requestOrigin }) => {
+  const normalizedBase64 = normalizeBase64(docxBase64);
+  const docxBuffer = Buffer.from(normalizedBase64, 'base64');
+  return createJobFromBuffer({ fileName, docxBuffer, requestOrigin });
+};
+
+const createJobFromLocalPath = async ({ fileName, localPath, requestOrigin }) => {
+  const absolutePath = normalizeLocalPath(localPath);
+
+  let stat;
+  try {
+    stat = await fs.stat(absolutePath);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      throw createHttpError(404, `DOCX not found: ${absolutePath}`);
+    }
+    throw createHttpError(500, `Unable to access DOCX path: ${toErrorMessage(error)}`);
+  }
+
+  if (!stat.isFile()) {
+    throw createHttpError(400, `Path is not a file: ${absolutePath}`);
+  }
+
+  if (stat.size > MAX_DOCX_BYTES) {
+    throw createHttpError(413, `DOCX exceeds max size (${MAX_DOCX_BYTES} bytes)`);
+  }
+
+  let docxBuffer;
+  try {
+    docxBuffer = await fs.readFile(absolutePath);
+  } catch (error) {
+    throw createHttpError(500, `Failed to read DOCX: ${toErrorMessage(error)}`);
+  }
+
+  return createJobFromBuffer({
+    fileName: fileName || path.basename(absolutePath),
+    docxBuffer,
+    requestOrigin,
+  });
+};
+
 const cleanupExpiredJobs = async () => {
   const cutoff = Date.now() - CLEANUP_AGE_MS;
   const removals = [];
@@ -270,6 +331,64 @@ const parsePageRoute = (pathname) => {
   };
 };
 
+const waitForShutdownSignal = () =>
+  new Promise((resolve) => {
+    // Keep this process alive when reusing an existing sidecar so concurrently
+    // doesn't treat WORD as "finished" and shut down Vite.
+    const keepAliveTimer = setInterval(() => {}, 60_000);
+
+    const handleShutdown = () => {
+      clearInterval(keepAliveTimer);
+      process.off('SIGINT', handleShutdown);
+      process.off('SIGTERM', handleShutdown);
+      resolve();
+    };
+
+    process.on('SIGINT', handleShutdown);
+    process.on('SIGTERM', handleShutdown);
+  });
+
+const probeExistingSidecar = async () => {
+  const healthUrl = `http://${HOST}:${PORT}/health`;
+  try {
+    const response = await fetch(healthUrl, { signal: AbortSignal.timeout(1500) });
+    if (!response.ok) {
+      return { isHealthySidecar: false };
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    const isHealthySidecar =
+      payload && payload.status === 'ok' && String(payload.host ?? '').length > 0 && Number(payload.port) === PORT;
+
+    return { isHealthySidecar, payload };
+  } catch {
+    return { isHealthySidecar: false };
+  }
+};
+
+const startServer = () =>
+  new Promise((resolve, reject) => {
+    let settled = false;
+
+    const handleError = (error) => {
+      if (settled) return;
+      settled = true;
+      server.off('listening', handleListening);
+      reject(error);
+    };
+
+    const handleListening = () => {
+      if (settled) return;
+      settled = true;
+      server.off('error', handleError);
+      resolve();
+    };
+
+    server.once('error', handleError);
+    server.once('listening', handleListening);
+    server.listen(PORT, HOST);
+  });
+
 const server = http.createServer(async (req, res) => {
   const method = req.method || 'GET';
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || `${HOST}:${PORT}`}`);
@@ -297,9 +416,29 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req, MAX_REQUEST_BYTES);
       const requestOrigin = getRequestOrigin(req);
       const result = await enqueue(() =>
-        createJob({
+        createJobFromBase64Payload({
           fileName: body?.fileName,
           docxBase64: body?.docxBase64,
+          requestOrigin,
+        }),
+      );
+
+      writeJson(res, 200, result);
+    } catch (error) {
+      const statusCode = Number(error?.statusCode) || 500;
+      writeJson(res, statusCode, { error: toErrorMessage(error) });
+    }
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/api/word-baseline/from-path') {
+    try {
+      const body = await readJsonBody(req, MAX_REQUEST_BYTES);
+      const requestOrigin = getRequestOrigin(req);
+      const result = await enqueue(() =>
+        createJobFromLocalPath({
+          fileName: body?.fileName,
+          localPath: body?.localPath,
           requestOrigin,
         }),
       );
@@ -362,7 +501,28 @@ const cleanupTimer = setInterval(() => {
 }, CLEANUP_INTERVAL_MS);
 cleanupTimer.unref();
 
-server.listen(PORT, HOST, () => {
+try {
+  await startServer();
   console.log(`[word-sidecar] listening on http://${HOST}:${PORT}`);
   console.log(`[word-sidecar] job root: ${JOB_ROOT}`);
-});
+} catch (error) {
+  if (error?.code === 'EADDRINUSE') {
+    const probe = await probeExistingSidecar();
+    if (probe.isHealthySidecar) {
+      if (STAY_ALIVE_ON_REUSE) {
+        console.log(`[word-sidecar] word-sidecar is already running at http://${HOST}:${PORT}; skipping local start.`);
+        await waitForShutdownSignal();
+        process.exit(0);
+      } else {
+        console.log(`[word-sidecar] existing instance detected at http://${HOST}:${PORT}; reusing it.`);
+        process.exit(0);
+      }
+    }
+
+    console.error(`[word-sidecar] port ${PORT} on ${HOST} is already in use by another process.`);
+    process.exit(1);
+  }
+
+  console.error(`[word-sidecar] failed to start: ${toErrorMessage(error)}`);
+  process.exit(1);
+}

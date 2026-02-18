@@ -7,6 +7,8 @@ export default defineStory({
   name: 'story-name',
   description: 'One sentence describing the purpose of the story.',
   startDocument: null,
+  layout: true,
+  virtualization: false,
   includeComments: false,
 
   async run(_page, helpers): Promise<void> {

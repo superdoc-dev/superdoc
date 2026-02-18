@@ -94,6 +94,12 @@ Generate a diff report between:
 The compare script regenerates candidate snapshots before every run (full refresh by default), and auto-generates the
 reference version when missing. References are only regenerated when missing/incomplete.
 
+Compare also supports `--limit N`:
+
+- Limits candidate generation to the first `N` docs (same ordering as exporter).
+- Applies the same limit to npm reference generation.
+- Restricts compare/reporting scope to that limited candidate set.
+
 When using the default corpus root (`test-corpus` or `SUPERDOC_CORPUS_ROOT`):
 
 - If corpus is missing, compare auto-runs `pnpm corpus:pull`.
@@ -112,6 +118,9 @@ pnpm layout:compare
 
 # Compare against a specific reference version (auto-generates reference if missing)
 pnpm layout:compare -- --reference 1.13.0-next.15
+
+# Compare only first 5 docs (generation + compare scope)
+pnpm layout:compare -- --reference 1.13.0-next.15 --limit 5
 
 # Force corpus refresh before compare (skip prompt)
 pnpm layout:compare -- --reference 1.13.0-next.15 --update-docs

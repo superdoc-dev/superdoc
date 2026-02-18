@@ -45,10 +45,10 @@ Options:
       --auto-generate-reference       Generate missing reference snapshots automatically (default: on)
       --no-auto-generate-reference    Do not auto-generate missing reference snapshots
       --jobs <n>                      Worker count if auto-generating snapshots/references (default: 4)
+      --limit <n>                     Process at most n docs during generation and compare
       --pipeline <mode>               headless | presentation for auto-generation (default: headless)
       --installer <name>              auto | bun | npm for auto-generation (default: auto)
       --input-root <path>             Input docs root for auto-generation
-      --update-docs                   Auto-run corpus update (pnpm corpus:pull) for default corpus root
       --numeric-tolerance <value>     Number comparison tolerance (default: 0.001)
       --max-diff-entries <n>          Max diff entries per doc (default: 2000)
       --visual-on-change              Run visual compare for changed docs after layout compare (default: on)
@@ -118,10 +118,10 @@ function parseArgs(argv) {
     autoGenerateCandidate: true,
     autoGenerateReference: true,
     jobs: 4,
+    limit: undefined,
     pipeline: 'headless',
     installer: 'auto',
     inputRoot: null,
-    updateDocs: false,
     numericTolerance: 0.001,
     maxDiffEntries: 2000,
     visualOnChange: true,
@@ -195,6 +195,15 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if (arg === '--limit' && next) {
+      const parsed = Number(next);
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        throw new Error(`Invalid --limit value "${next}".`);
+      }
+      args.limit = Math.floor(parsed);
+      i += 1;
+      continue;
+    }
     if (arg === '--pipeline' && next) {
       const normalized = String(next).toLowerCase();
       if (normalized !== 'headless' && normalized !== 'presentation') {
@@ -216,10 +225,6 @@ function parseArgs(argv) {
     if (arg === '--input-root' && next) {
       args.inputRoot = next;
       i += 1;
-      continue;
-    }
-    if (arg === '--update-docs') {
-      args.updateDocs = true;
       continue;
     }
     if (arg === '--numeric-tolerance' && next) {
@@ -331,35 +336,6 @@ async function pathExists(targetPath) {
   }
 }
 
-function canPromptUser() {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY && !process.env.CI);
-}
-
-async function promptYesNo(question, defaultValue = false) {
-  if (!canPromptUser()) return defaultValue;
-
-  const suffix = defaultValue ? ' [Y/n] ' : ' [y/N] ';
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const ask = () => new Promise((resolve) => rl.question(`${question}${suffix}`, resolve));
-
-  try {
-    while (true) {
-      const raw = await ask();
-      const value = String(raw ?? '').trim().toLowerCase();
-      if (!value) return defaultValue;
-      if (value === 'y' || value === 'yes') return true;
-      if (value === 'n' || value === 'no') return false;
-      console.log('Please answer yes or no.');
-    }
-  } finally {
-    rl.close();
-  }
-}
-
 async function runCommand(command, commandArgs, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, commandArgs, {
@@ -370,6 +346,25 @@ async function runCommand(command, commandArgs, options = {}) {
 
     child.on('error', reject);
     child.on('close', (code) => resolve(code ?? 1));
+  });
+}
+
+async function runCommandCapture(command, commandArgs, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, commandArgs, {
+      cwd: options.cwd ?? process.cwd(),
+      env: options.env ?? process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const chunks = [];
+    child.stdout.on('data', (data) => chunks.push(data));
+    child.stderr.on('data', (data) => chunks.push(data));
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve({ exitCode: code ?? 1, output: Buffer.concat(chunks).toString('utf8') });
+    });
   });
 }
 
@@ -395,16 +390,7 @@ async function ensureDefaultCorpusReady(args) {
     return;
   }
 
-  if (args.updateDocs) {
-    console.log('[layout-snapshots:compare] Updating corpus folder via `pnpm corpus:pull` (--update-docs)...');
-    await runCorpusPull();
-    return;
-  }
-
-  const shouldUpdate = await promptYesNo('[layout-snapshots:compare] Update corpus folder?', false);
-  if (!shouldUpdate) return;
-
-  console.log('[layout-snapshots:compare] Updating corpus folder via `pnpm corpus:pull`...');
+  console.log('[layout-snapshots:compare] Syncing corpus (downloading missing files)...');
   await runCorpusPull();
 }
 
@@ -718,6 +704,9 @@ async function runNpmReferenceGeneration({ referenceSpecifier, args }) {
     '--installer',
     args.installer,
   ];
+  if (typeof args.limit === 'number') {
+    childArgs.push('--limit', String(args.limit));
+  }
   if (args.inputRoot) {
     childArgs.push('--input-root', path.resolve(args.inputRoot));
   }
@@ -778,6 +767,9 @@ async function runCandidateGeneration({ candidateRoot, args }) {
     args.pipeline,
     '--disable-telemetry',
   ];
+  if (typeof args.limit === 'number') {
+    childArgs.push('--limit', String(args.limit));
+  }
   if (args.inputRoot) {
     childArgs.push('--input-root', path.resolve(args.inputRoot));
   }
@@ -972,6 +964,15 @@ async function main() {
   }
 
   if (args.autoGenerateCandidate) {
+    process.stdout.write('[layout-snapshots:compare] Packing SuperDoc...');
+    const packResult = await runCommandCapture('pnpm', ['run', 'pack:es'], { cwd: REPO_ROOT });
+    if (packResult.exitCode !== 0) {
+      console.log(' FAILED');
+      console.error(packResult.output);
+      throw new Error(`"pnpm run pack:es" failed with exit code ${packResult.exitCode}.`);
+    }
+    console.log(' done');
+
     console.log(`[layout-snapshots:compare] Refreshing candidate snapshots at ${candidateRoot}...`);
     await runCandidateGeneration({
       candidateRoot,
@@ -1013,6 +1014,13 @@ async function main() {
   let candidatePaths = [...candidateFiles.keys()].sort();
   let referencePaths = [...referenceFiles.keys()].sort();
 
+  if (typeof args.limit === 'number') {
+    const limitedCandidatePaths = candidatePaths.slice(0, args.limit);
+    const limitedCandidateSet = new Set(limitedCandidatePaths);
+    candidatePaths = limitedCandidatePaths;
+    referencePaths = referencePaths.filter((relPath) => limitedCandidateSet.has(relPath));
+  }
+
   let relation = buildPathRelation(candidatePaths, referencePaths);
 
   if (
@@ -1040,6 +1048,10 @@ async function main() {
 
     referenceFiles = await listSnapshotFiles(referenceRoot);
     referencePaths = [...referenceFiles.keys()].sort();
+    if (typeof args.limit === 'number') {
+      const limitedCandidateSet = new Set(candidatePaths);
+      referencePaths = referencePaths.filter((relPath) => limitedCandidateSet.has(relPath));
+    }
     relation = buildPathRelation(candidatePaths, referencePaths);
   }
 
@@ -1055,6 +1067,9 @@ async function main() {
   console.log(`[layout-snapshots:compare] Candidate root: ${candidateRoot}`);
   console.log(`[layout-snapshots:compare] Reference root: ${referenceRoot}`);
   console.log(`[layout-snapshots:compare] Report dir:     ${reportDir}`);
+  if (typeof args.limit === 'number') {
+    console.log(`[layout-snapshots:compare] Limit:          ${args.limit}`);
+  }
 
   const changedDocs = [];
   let unchangedDocCount = 0;
@@ -1225,6 +1240,7 @@ async function main() {
     referenceLabel: resolvedReferenceLabel,
     candidateGenerated,
     referenceGenerated,
+    limit: args.limit ?? null,
     candidateDocCount: candidatePaths.length,
     referenceDocCount: referencePaths.length,
     matchedDocCount: relation.matched.length,

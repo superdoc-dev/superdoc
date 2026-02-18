@@ -100,6 +100,22 @@ const buildSingleParagraphData = (blockId: string, runLength: number) => {
   return { paragraphMeasure, paragraphLayout };
 };
 
+const expectCssColor = (actual: string, expectedHex: string): void => {
+  const normalizedActual = actual.replace(/\s+/g, '').toLowerCase();
+  let normalizedHex = expectedHex.toLowerCase();
+  if (!normalizedHex.startsWith('#')) {
+    normalizedHex = `#${normalizedHex}`;
+  }
+  if (normalizedHex.length === 4) {
+    normalizedHex = `#${normalizedHex[1]}${normalizedHex[1]}${normalizedHex[2]}${normalizedHex[2]}${normalizedHex[3]}${normalizedHex[3]}`;
+  }
+  const r = Number.parseInt(normalizedHex.slice(1, 3), 16);
+  const g = Number.parseInt(normalizedHex.slice(3, 5), 16);
+  const b = Number.parseInt(normalizedHex.slice(5, 7), 16);
+  const rgb = `rgb(${r},${g},${b})`;
+  expect([normalizedHex, rgb]).toContain(normalizedActual);
+};
+
 const sdtBlock: FlowBlock = {
   kind: 'paragraph',
   id: 'sdt-block',
@@ -1239,7 +1255,7 @@ describe('DomPainter', () => {
     expect(lines.length).toBe(2);
 
     // First line should have negative word-spacing applied
-    expect(lines[0].style.wordSpacing).toBe('-3.3333333333333335px');
+    expect(Number.parseFloat(lines[0].style.wordSpacing)).toBeCloseTo(-3.3333333333333335, 5);
 
     // Last line should NOT be justified
     expect(lines[1].style.wordSpacing).toBe('');
@@ -2398,6 +2414,89 @@ describe('DomPainter', () => {
     expect(fragmentAfter?.textContent).toContain('world!!!');
   });
 
+  it('updates structured-content lock metadata when lockMode changes via setData', () => {
+    const lockedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'lock-mode-block',
+      runs: [{ text: 'Protected text', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'sc-lock-mode-1',
+          alias: 'Protected Control',
+          lockMode: 'unlocked',
+        },
+      },
+    };
+
+    const lockedMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 14,
+          width: 140,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const lockedLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'lock-mode-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 20,
+              y: 30,
+              width: 300,
+              pmStart: 0,
+              pmEnd: 14,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createDomPainter({ blocks: [lockedBlock], measures: [lockedMeasure] });
+    painter.paint(lockedLayout, mount);
+
+    const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(fragmentBefore.dataset.lockMode).toBe('unlocked');
+
+    const updatedLockedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'lock-mode-block',
+      runs: [{ text: 'Protected text', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'sc-lock-mode-1',
+          alias: 'Protected Control',
+          lockMode: 'contentLocked',
+        },
+      },
+    };
+
+    painter.setData?.([updatedLockedBlock], [lockedMeasure]);
+    painter.paint(lockedLayout, mount);
+
+    const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(fragmentAfter.dataset.lockMode).toBe('contentLocked');
+  });
+
   it('updates fragment positions in virtualized mode when layout changes without block diffs', () => {
     const painter = createDomPainter({
       blocks: [block],
@@ -3423,7 +3522,7 @@ describe('DomPainter', () => {
     expect(anchor).toBeTruthy();
     expect(anchor.getAttribute('href')).toBe('https://example.com');
     expect(anchor.style.textDecorationLine).toContain('underline');
-    expect(anchor.style.backgroundColor).toBe('rgb(255, 255, 0)');
+    expectCssColor(anchor.style.backgroundColor, '#ffff00');
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
     expect(fragment.style.textAlign).toBe('center');
@@ -3805,10 +3904,10 @@ describe('DomPainter', () => {
     expect(borderLayer).toBeTruthy();
     expect(borderLayer.style.borderTopStyle).toBe('solid');
     expect(borderLayer.style.borderTopWidth).toBe('2px');
-    expect(borderLayer.style.borderTopColor).toBe('rgb(255, 0, 0)');
+    expectCssColor(borderLayer.style.borderTopColor, '#ff0000');
     expect(borderLayer.style.borderLeftStyle).toBe('dashed');
     expect(borderLayer.style.borderLeftWidth).toBe('1px');
-    expect(borderLayer.style.borderLeftColor).toBe('rgb(0, 255, 0)');
+    expectCssColor(borderLayer.style.borderLeftColor, '#00ff00');
   });
 
   it('applies paragraph shading fill to fragment backgrounds', () => {
@@ -3853,7 +3952,7 @@ describe('DomPainter', () => {
     const fragment = mount.querySelector('[data-block-id="shaded-block"]') as HTMLElement;
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
     expect(shadingLayer).toBeTruthy();
-    expect(shadingLayer.style.backgroundColor).toBe('rgb(255, 238, 170)');
+    expectCssColor(shadingLayer.style.backgroundColor, '#ffeeaa');
   });
 
   it('strips indent padding when rendering list content', () => {
@@ -4526,6 +4625,77 @@ describe('DomPainter', () => {
 
       const img = mount.querySelector('img');
       expect(img).toBeNull();
+    });
+
+    it('renders cropped inline image with clipPath in wrapper (overflow hidden, img with clip-path and transform)', () => {
+      const clipPath = 'inset(10% 20% 30% 40%)';
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-block',
+        runs: [
+          {
+            kind: 'image',
+            src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            width: 80,
+            height: 60,
+            clipPath,
+          },
+        ],
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 0,
+            width: 80,
+            ascent: 60,
+            descent: 0,
+            lineHeight: 60,
+          },
+        ],
+        totalHeight: 60,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 80,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+
+      const wrapper = mount.querySelector('.superdoc-inline-image-clip-wrapper');
+      expect(wrapper).toBeTruthy();
+      expect((wrapper as HTMLElement).style.overflow).toBe('hidden');
+      expect((wrapper as HTMLElement).style.width).toBe('80px');
+      expect((wrapper as HTMLElement).style.height).toBe('60px');
+
+      const img = wrapper?.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.clipPath).toBe(clipPath);
+      expect((img as HTMLElement).style.transformOrigin).toBe('0 0');
+      expect((img as HTMLElement).style.transform).toMatch(
+        /translate\([-\d.]+%,\s*[-\d.]+%\)\s*scale\([-\d.]+,\s*[-\d.]+\)/,
+      );
     });
 
     it('returns null for data URLs exceeding MAX_DATA_URL_LENGTH (10MB)', () => {

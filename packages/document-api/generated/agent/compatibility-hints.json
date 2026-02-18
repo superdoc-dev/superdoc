@@ -1,0 +1,366 @@
+{
+  "contractVersion": "0.1.0",
+  "operations": {
+    "capabilities.get": {
+      "deterministicTargetResolution": true,
+      "memberPath": "capabilities",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.add": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.add",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.edit": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.edit",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.get": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.get",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.goTo": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.goTo",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.list": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.list",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.move": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.move",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.remove": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.remove",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.reply": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.reply",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.resolve": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.resolve",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.setActive": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.setActive",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "comments.setInternal": {
+      "deterministicTargetResolution": true,
+      "memberPath": "comments.setInternal",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "create.heading": {
+      "deterministicTargetResolution": true,
+      "memberPath": "create.heading",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "create.paragraph": {
+      "deterministicTargetResolution": true,
+      "memberPath": "create.paragraph",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "delete": {
+      "deterministicTargetResolution": true,
+      "memberPath": "delete",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "find": {
+      "deterministicTargetResolution": false,
+      "memberPath": "find",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "format.bold": {
+      "deterministicTargetResolution": true,
+      "memberPath": "format.bold",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "format.italic": {
+      "deterministicTargetResolution": true,
+      "memberPath": "format.italic",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "format.strikethrough": {
+      "deterministicTargetResolution": true,
+      "memberPath": "format.strikethrough",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "format.underline": {
+      "deterministicTargetResolution": true,
+      "memberPath": "format.underline",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "getNode": {
+      "deterministicTargetResolution": true,
+      "memberPath": "getNode",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "getNodeById": {
+      "deterministicTargetResolution": true,
+      "memberPath": "getNodeById",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "getText": {
+      "deterministicTargetResolution": true,
+      "memberPath": "getText",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "info": {
+      "deterministicTargetResolution": true,
+      "memberPath": "info",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "insert": {
+      "deterministicTargetResolution": true,
+      "memberPath": "insert",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "lists.exit": {
+      "deterministicTargetResolution": true,
+      "memberPath": "lists.exit",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": false
+    },
+    "lists.get": {
+      "deterministicTargetResolution": true,
+      "memberPath": "lists.get",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "lists.indent": {
+      "deterministicTargetResolution": true,
+      "memberPath": "lists.indent",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": false
+    },
+    "lists.insert": {
+      "deterministicTargetResolution": true,
+      "memberPath": "lists.insert",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "lists.list": {
+      "deterministicTargetResolution": true,
+      "memberPath": "lists.list",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "lists.outdent": {
+      "deterministicTargetResolution": true,
+      "memberPath": "lists.outdent",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": false
+    },
+    "lists.restart": {
+      "deterministicTargetResolution": true,
+      "memberPath": "lists.restart",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": false
+    },
+    "lists.setType": {
+      "deterministicTargetResolution": true,
+      "memberPath": "lists.setType",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": false
+    },
+    "replace": {
+      "deterministicTargetResolution": true,
+      "memberPath": "replace",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "trackChanges.accept": {
+      "deterministicTargetResolution": true,
+      "memberPath": "trackChanges.accept",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "trackChanges.acceptAll": {
+      "deterministicTargetResolution": true,
+      "memberPath": "trackChanges.acceptAll",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "trackChanges.get": {
+      "deterministicTargetResolution": true,
+      "memberPath": "trackChanges.get",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "trackChanges.list": {
+      "deterministicTargetResolution": true,
+      "memberPath": "trackChanges.list",
+      "mutates": false,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": false,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "trackChanges.reject": {
+      "deterministicTargetResolution": true,
+      "memberPath": "trackChanges.reject",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    },
+    "trackChanges.rejectAll": {
+      "deterministicTargetResolution": true,
+      "memberPath": "trackChanges.rejectAll",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": false,
+      "supportsTrackedMode": false
+    }
+  },
+  "sourceHash": "3e7edc551feb80b42bfa59f928a0ce1f34ecb7cf71952d5a489107089105d543"
+}

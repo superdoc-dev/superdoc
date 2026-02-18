@@ -28,6 +28,7 @@ Then open `http://localhost:9989` with query parameters.
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `layout` | `0`, `1` | `1` (on) | Layout engine mode (use `0` to disable) |
+| `virtualization` | `0`, `1` | `0` (off) | Layout virtualization (use `1` to enable) |
 | `toolbar` | `none`, `minimal`, `full` | `none` | Toolbar display mode |
 | `comments` | `off`, `on`, `panel`, `readonly` | `off` | Comments module mode |
 | `trackChanges` | `0`, `1` | `0` | Enable track changes |
@@ -53,6 +54,9 @@ http://localhost:9989?toolbar=full
 
 # Disable layout engine
 http://localhost:9989?layout=0
+
+# Enable virtualization while keeping layout on
+http://localhost:9989?virtualization=1
 
 # Custom viewport
 http://localhost:9989?width=1200&height=800
@@ -89,16 +93,17 @@ import { buildUrl, parseConfig, describeConfig } from './src/config-parser';
 const url = buildUrl('http://localhost:9989', {
   comments: 'panel',
   hideCaret: false,
+  virtualization: true,
 });
-// → 'http://localhost:9989?comments=panel&hideCaret=0'
+// → 'http://localhost:9989?virtualization=1&comments=panel&hideCaret=0'
 
 // Parse config from URL
 const config = parseConfig('?layout=1&comments=on');
-// → { layout: true, comments: 'on', toolbar: 'none', ... }
+// → { layout: true, virtualization: false, comments: 'on', toolbar: 'none', ... }
 
 // Get a description for test naming
 const desc = describeConfig(config);
-// → 'layout-engine_comments-on'
+// → 'comments-on'
 ```
 
 ## Architecture
@@ -114,4 +119,3 @@ packages/harness/
 ├── vite.config.ts
 └── package.json
 ```
-

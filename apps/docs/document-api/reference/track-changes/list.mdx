@@ -1,0 +1,151 @@
+---
+title: trackChanges.list
+sidebarTitle: trackChanges.list
+description: Generated reference for trackChanges.list
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `trackChanges.list`
+- API member path: `editor.doc.trackChanges.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    },
+    "type": {
+      "enum": [
+        "insert",
+        "delete",
+        "format"
+      ]
+    }
+  },
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "changes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "trackedChange"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          "author": {
+            "type": "string"
+          },
+          "authorEmail": {
+            "type": "string"
+          },
+          "authorImage": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "insert",
+              "delete",
+              "format"
+            ]
+          }
+        },
+        "required": [
+          "address",
+          "id",
+          "type"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "matches": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "entityId": {
+            "type": "string"
+          },
+          "entityType": {
+            "const": "trackedChange"
+          },
+          "kind": {
+            "const": "entity"
+          }
+        },
+        "required": [
+          "kind",
+          "entityType",
+          "entityId"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "total": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "matches",
+    "total"
+  ],
+  "type": "object"
+}
+```

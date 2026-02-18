@@ -10,7 +10,7 @@ import { Gapcursor } from './gapcursor/index.js';
 import { Collaboration } from './collaboration/index.js';
 import { CollaborationCursor } from './collaboration-cursor/index.js';
 import { AiPlugin, AiMark, AiAnimationMark, AiLoaderNode } from './ai/index.js';
-import { SlashMenu } from './slash-menu';
+import { ContextMenu } from './context-menu';
 import {
   StructuredContentCommands,
   StructuredContent,
@@ -139,7 +139,7 @@ const getStarterExtensions = () => {
     LineBreak,
     HardBreak,
     Run,
-    SlashMenu,
+    ContextMenu,
     Strike,
     TabNode,
     TableOfContents,

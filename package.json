@@ -51,12 +51,16 @@
     "layout:compare": "bun tests/layout-snapshots/compare-layout-snapshots.mjs --jobs 4",
     "corpus:pull": "node scripts/corpus/pull.mjs",
     "corpus:push": "node scripts/corpus/push.mjs",
+    "corpus:update-registry": "node scripts/corpus/update-registry.mjs",
     "watch": "pnpm --prefix packages/superdoc run watch:es",
     "check:all": "pnpm run format && pnpm run lint:fix && pnpm --prefix packages/super-editor run types:build && pnpm run test",
     "local:publish": "pnpm --prefix packages/superdoc version prerelease --preid=local && pnpm --prefix packages/superdoc publish --registry http://localhost:4873",
     "update-preset-geometry": "ROOT=$(pwd) && cd ../superdoc-devtools/preset-geometry && pnpm run build && cp ./dist/index.js ./dist/index.js.map ./dist/index.d.ts \"$ROOT/packages/preset-geometry/\"",
     "manual-tag": "bash scripts/manual-tag.sh",
-    "manual-clean-tag": "bash scripts/manual-clean-tag.sh"
+    "manual-clean-tag": "bash scripts/manual-clean-tag.sh",
+    "docapi:sync": "pnpm exec tsx packages/document-api/scripts/generate-contract-outputs.ts",
+    "docapi:check": "pnpm exec tsx packages/document-api/scripts/check-contract-parity.ts && pnpm exec tsx packages/document-api/scripts/check-contract-outputs.ts",
+    "docapi:sync:check": "pnpm run docapi:sync && pnpm run docapi:check"
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",
@@ -82,6 +86,7 @@
     "semantic-release-commit-filter": "catalog:",
     "semantic-release-linear-app": "catalog:",
     "semantic-release-pnpm": "^1.0.2",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "verdaccio": "catalog:",

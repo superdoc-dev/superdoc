@@ -1,3 +1,5 @@
+import { DOM_CLASS_NAMES } from './constants.js';
+
 export const CLASS_NAMES = {
   container: 'superdoc-layout',
   page: 'superdoc-page',
@@ -356,8 +358,25 @@ const SDT_CONTAINER_STYLES = `
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+/* Group hover (JavaScript-coordinated) */
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+.superdoc-structured-content-block.ProseMirror-selectednode {
+  border-color: #629be7;
+  outline: none;
 }
 
 /* Structured content drag handle/label - positioned above */
@@ -380,7 +399,9 @@ const SDT_CONTAINER_STYLES = `
   box-sizing: border-box;
   z-index: 10;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
 }
 
 .superdoc-structured-content__label span {
@@ -390,9 +411,8 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-/* Hover effect for block structured content (via event delegation class).
- * Shows label on hover — border reveal is handled by the lock-mode hover rule below. */
-.superdoc-structured-content-block.sdt-hover .superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label,
+.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) .superdoc-structured-content__label {
   display: inline-flex;
 }
 
@@ -433,12 +453,23 @@ const SDT_CONTAINER_STYLES = `
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
   display: inline;
   z-index: 10;
 }
 
+/* Hover effect for inline structured content */
+.superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+.superdoc-structured-content-inline.ProseMirror-selectednode {
+  border-color: #629be7;
+  outline: none;
+  background-color: transparent;
+}
 /* Inline structured content label - shown on hover */
 .superdoc-structured-content-inline__label {
   position: absolute;
@@ -453,20 +484,26 @@ const SDT_CONTAINER_STYLES = `
   white-space: nowrap;
   z-index: 100;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
 }
 
-.superdoc-structured-content-inline:hover .superdoc-structured-content-inline__label {
+.superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-structured-content-inline__label {
   display: block;
 }
 
+.superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover .superdoc-structured-content-inline__label {
+  display: none;
+}
+
 /* Hover highlight for SDT containers.
- * Blue border is always visible (set in base rules above).
  * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-hover class (event delegation for multi-fragment coordination).
- * Inline SDTs use :hover (single element, no coordination needed). */
-.superdoc-structured-content-block[data-lock-mode].sdt-hover,
-.superdoc-structured-content-inline[data-lock-mode]:hover {
+ * Inline SDTs use :hover (single element, no coordination needed).
+ * Hover is suppressed when the node is selected (SD-1584). */
+.superdoc-structured-content-block[data-lock-mode].sdt-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
   background-color: rgba(98, 155, 231, 0.08);
   z-index: 9999999;
 }
@@ -477,6 +514,11 @@ const SDT_CONTAINER_STYLES = `
   background: none;
   border: none;
   padding: 0;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-block:hover {
+  background: none;
+  border: none;
 }
 
 .presentation-editor--viewing .superdoc-structured-content-inline:hover {
@@ -562,7 +604,12 @@ const IMAGE_SELECTION_STYLES = `
 }
 
 /* Ensure inline images can be targeted */
-.superdoc-inline-image.superdoc-image-selected {
+.${DOM_CLASS_NAMES.INLINE_IMAGE}.superdoc-image-selected {
+  outline-offset: 2px;
+}
+
+/* Selection on clip wrapper so outline matches the visible cropped portion, not the scaled image */
+.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}.superdoc-image-selected {
   outline-offset: 2px;
 }
 `;

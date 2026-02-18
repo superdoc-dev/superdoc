@@ -70,8 +70,12 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
           doc: {
             resolve: vi.fn(() => ({
               parent: { inlineContent: true },
-              min: vi.fn(function (other) { return this; }),
-              max: vi.fn(function (other) { return this; }),
+              min: vi.fn(function (other) {
+                return this;
+              }),
+              max: vi.fn(function (other) {
+                return this;
+              }),
             })),
           },
         },

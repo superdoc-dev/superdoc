@@ -20,6 +20,8 @@ From repo root:
 pnpm word-benchmark-sidecar
 ```
 
+If a healthy sidecar is already running on the configured host/port, this command exits successfully and reuses the existing instance.
+
 Or run together with Vite:
 
 ```bash
@@ -38,6 +40,9 @@ pnpm dev
 - `POST /api/word-baseline`
   - JSON body: `{ "fileName": "document.docx", "docxBase64": "..." }`
   - Response: `{ "jobId": "...", "pageCount": 2, "pages": ["http://.../api/word-baseline/jobs/<id>/pages/page_0001.png", ...] }`
+- `POST /api/word-baseline/from-path`
+  - JSON body: `{ "localPath": "/absolute/path/to/document.docx", "fileName": "optional-name.docx" }`
+  - Response: same shape as `POST /api/word-baseline`
 - `GET /api/word-baseline/jobs/:jobId/pages/:pageName`
 
 ## Environment

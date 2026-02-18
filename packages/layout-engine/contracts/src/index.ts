@@ -16,6 +16,12 @@ export {
   type CalculateJustifySpacingParams,
 } from './justify-utils.js';
 
+export {
+  parseInsetClipPathForScale,
+  formatInsetClipPathTransform,
+  type InsetClipPathScale,
+} from './clip-path-inset.js';
+
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
@@ -267,6 +273,8 @@ export type ImageRun = {
   alt?: string;
   /** Image title (tooltip). */
   title?: string;
+  /** Clip-path value for cropped images. */
+  clipPath?: string;
 
   /**
    * Spacing around the image (from DOCX distT/distB/distL/distR attributes).
@@ -702,6 +710,7 @@ export type ShapeGroupImageChild = {
   attrs: PositionedDrawingGeometry & {
     src: string;
     alt?: string;
+    clipPath?: string;
     imageId?: string;
     imageName?: string;
   };
@@ -1084,6 +1093,7 @@ export type WordLayoutMarker = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    vanish?: boolean;
   };
 };
 
@@ -1584,6 +1594,9 @@ export type TableFragment = {
   metadata?: TableFragmentMetadata;
   pmStart?: number;
   pmEnd?: number;
+  /** Per-fragment column widths, rescaled when table is clamped to section width.
+   *  When set, the renderer uses these instead of measure.columnWidths. */
+  columnWidths?: number[];
 };
 
 export type ImageFragment = {

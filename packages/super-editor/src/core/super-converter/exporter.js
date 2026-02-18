@@ -565,7 +565,7 @@ export class DocxExporter {
   #replaceSpecialCharacters(text) {
     if (text === undefined || text === null) return text;
     return String(text)
-      .replace(/&(?!#\d+;|#x[0-9a-fA-F]+;|(?:amp|lt|gt|quot|apos);)/g, '&amp;')
+      .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
@@ -612,6 +612,14 @@ export class DocxExporter {
     if (!node) return null;
     let { name } = node;
     const { elements, attributes } = node;
+
+    // Normalize w:delInstrText → w:instrText. During import, w:del wrappers around
+    // field character runs lose their trackDelete marks (only text content gets marked),
+    // so on export the w:del wrapper is absent. Per ECMA-376 §17.16.13, w:delInstrText
+    // outside w:del is non-conformant — renaming to w:instrText keeps the field valid.
+    if (name === 'w:delInstrText') {
+      name = 'w:instrText';
+    }
 
     let tag = `<${name}`;
 

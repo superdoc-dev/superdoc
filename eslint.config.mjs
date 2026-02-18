@@ -37,6 +37,9 @@ export default [
       // Examples (different environments and coding styles)
       'examples/**',
       '**/examples/**',
+      // Demos (different environments and dependency sets)
+      'demos/**',
+      '**/demos/**',
       // Config files (CommonJS/different environments)
       '**/*.config.js',
       '**/*.cjs',
@@ -52,6 +55,7 @@ export default [
         // Universal APIs (available in both environments)
         console: 'readonly',
         fetch: 'readonly',
+        AbortSignal: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         setInterval: 'readonly',

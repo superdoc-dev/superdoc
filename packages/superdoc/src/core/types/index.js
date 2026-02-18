@@ -75,12 +75,19 @@
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services
+ * @property {Object} [pdf] PDF module configuration
+ * @property {Object} pdf.pdfLib Preloaded pdf.js library instance
+ * @property {string} [pdf.workerSrc] PDF.js worker source URL (falls back to CDN when omitted)
+ * @property {boolean} [pdf.setWorker] Whether to auto-configure pdf.js worker
+ * @property {boolean} [pdf.textLayer] Enable text layer rendering (default: false)
+ * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
  * @property {Object} [toolbar] Toolbar module configuration
- * @property {Object} [slashMenu] Slash menu module configuration
- * @property {Array} [slashMenu.customItems] Array of custom menu sections with items
- * @property {Function} [slashMenu.menuProvider] Function to customize menu items
- * @property {boolean} [slashMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [contextMenu] Context menu module configuration
+ * @property {Array} [contextMenu.customItems] Array of custom menu sections with items
+ * @property {Function} [contextMenu.menuProvider] Function to customize menu items
+ * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [slashMenu] @deprecated Use contextMenu instead
  */
 
 /** @typedef {import('@superdoc/super-editor').Editor} Editor */

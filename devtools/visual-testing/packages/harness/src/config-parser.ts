@@ -6,14 +6,16 @@
  *
  * Defaults:
  *   - Layout engine: ON (use ?layout=0 to disable)
+ *   - Virtualization: OFF (use ?virtualization=1 to enable)
  *   - Port: 9989
  *
  * Example URLs:
- *   http://localhost:9989               - Default (layout engine on)
- *   ?layout=0                           - Disable layout engine
- *   ?comments=panel                     - Comments panel open
- *   ?toolbar=full&comments=on           - Full toolbar with comments
- *   ?width=1200&height=800              - Custom viewport
+ *   http://localhost:9989                            - Default (layout engine on, virtualization off)
+ *   ?layout=0                                        - Disable layout engine
+ *   ?virtualization=1                                - Enable layout virtualization
+ *   ?comments=panel                                  - Comments panel open
+ *   ?toolbar=full&comments=on                        - Full toolbar with comments
+ *   ?width=1200&height=800                           - Custom viewport
  */
 
 /** Toolbar display mode options */
@@ -34,6 +36,8 @@ export interface Viewport {
 export interface HarnessConfig {
   /** Enable layout engine (pagination mode). Default: true */
   layout: boolean;
+  /** Enable layout virtualization. Default: false */
+  virtualization: boolean;
   /** Toolbar display mode. Default: 'none' */
   toolbar: ToolbarMode;
   /** Comments module mode. Default: 'off' */
@@ -72,6 +76,8 @@ export function parseConfig(search: string): HarnessConfig {
   return {
     // Core rendering (default: layout engine ON)
     layout: params.get('layout') !== '0',
+    // Virtualization (default: OFF for deterministic visual snapshots)
+    virtualization: params.get('virtualization') === '1',
 
     // Toolbar: none (default), minimal, full
     toolbar: parseToolbar(params.get('toolbar')),
@@ -165,6 +171,11 @@ export function buildUrl(baseUrl: string, config: Partial<HarnessConfig>): strin
     params.set('layout', '0');
   }
 
+  // Virtualization is OFF by default, so only set param if explicitly true
+  if (config.virtualization === true) {
+    params.set('virtualization', '1');
+  }
+
   if (config.toolbar && config.toolbar !== 'none') {
     params.set('toolbar', config.toolbar);
   }
@@ -230,6 +241,10 @@ export function describeConfig(config: HarnessConfig): string {
     parts.push('no-layout');
   }
 
+  if (config.virtualization === true) {
+    parts.push('virtualization-on');
+  }
+
   if (config.toolbar !== 'none') {
     parts.push(`toolbar-${config.toolbar}`);
   }
@@ -256,6 +271,7 @@ export function logAvailableParams(config: HarnessConfig): void {
 
   // Build current params string (only non-defaults)
   if (!config.layout) currentParams.set('layout', '0');
+  if (config.virtualization) currentParams.set('virtualization', '1');
   if (config.toolbar !== 'none') currentParams.set('toolbar', config.toolbar);
   if (config.comments !== 'off') currentParams.set('comments', config.comments);
   if (config.trackChanges) currentParams.set('trackChanges', '1');
@@ -271,6 +287,7 @@ export function logAvailableParams(config: HarnessConfig): void {
 
   console.log(`[Test Harness] Available URL Parameters:
   layout        - Layout engine on/off (default: 1, use 0 to disable)
+  virtualization - Layout virtualization on/off (default: 0, use 1 to enable)
   toolbar       - Toolbar mode: none | minimal | full (default: none)
   comments      - Comments mode: off | on | panel | readonly (default: off)
   trackChanges  - Track changes: 0 | 1 (default: 0)
@@ -282,6 +299,6 @@ export function logAvailableParams(config: HarnessConfig): void {
   caretBlink    - Enable caret blink: 0 | 1 (default: 0)
   extensions    - Custom extensions (comma-separated)
 
-  Example: ?layout=0&comments=panel&toolbar=full
+  Example: ?layout=0&virtualization=1&comments=panel&toolbar=full
   Current: ${currentString ? `?${currentString}` : '(defaults)'}`);
 }

@@ -4,7 +4,7 @@
  *
  * Layer 1: File-path classifier (free, instant) — already run by risk-label.yml
  * Layer 2: Haiku triage (no tools, ~$0.008, ~2s) — classifies change type
- * Layer 3: Sonnet deep analysis (codebase tools, ~$0.10, ~60s) — blast radius + bugs
+ * Layer 3: Sonnet deep analysis (codebase tools, ~$0.10, ~60s) — blast radius
  *
  * Usage:
  *   node risk-assess.mjs <pr-number>
@@ -13,19 +13,16 @@
  *
  * Env:
  *   ANTHROPIC_API_KEY  — required
- *   GITHUB_TOKEN       — for posting PR comments (optional in dry-run)
+ *   GITHUB_TOKEN       — for fetching PR data via gh CLI
  *   REPO               — owner/repo (default: superdoc-dev/superdoc)
  */
 
 import { execSync } from 'node:child_process';
-import { writeFileSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { writeFileSync } from 'node:fs';
 
 // Allow running inside a Claude Code session
 delete process.env.CLAUDECODE;
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = process.env.REPO || 'superdoc-dev/superdoc';
 
 /** Extract the first valid JSON object containing "level" from text. */
@@ -60,11 +57,6 @@ function extractJSON(text) {
 
 function run(cmd) {
   return execSync(cmd, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }).trim();
-}
-
-function getPRInfo(pr) {
-  const json = run(`gh pr view ${pr} --repo ${REPO} --json title,files,changedFiles`);
-  return JSON.parse(json);
 }
 
 function getPRDiff(pr) {
@@ -217,13 +209,12 @@ Focus on:
 1. How widely changed functions are used (grep for callers)
 2. Whether changes are backward-compatible
 3. Whether tests cover the changed behavior
-4. Any bugs or issues in the diff itself
 
 ## Output (MANDATORY)
 
 End your response with this exact JSON structure. No markdown fences.
 
-{"level":"critical|sensitive|low","confidence":"high|medium|low","summary":"One sentence of actual risk","key_changes":["Change 1","Change 2"],"blast_radius":"What could break and how widely","reasoning":"2-3 sentences explaining your assessment","bugs_found":["Any actual bugs spotted in the diff, or empty array"]}`;
+{"level":"critical|sensitive|low","confidence":"high|medium|low","summary":"One sentence of actual risk","key_changes":["Change 1","Change 2"],"blast_radius":"What could break and how widely","reasoning":"2-3 sentences explaining your assessment"}`;
 }
 
 async function sonnetDeepAnalysis(pr, title, diff, haikuResult, repoRoot) {
@@ -325,9 +316,6 @@ async function assess(prNumber, { forceDeep = false, repoRoot } = {}) {
   const sonnet = await sonnetDeepAnalysis(prNumber, title, diff, haiku, repoRoot);
   console.log(`  L3 sonnet: ${sonnet.level} (${sonnet.confidence}) — $${sonnet.cost.toFixed(4)}`);
   console.log(`     ${sonnet.summary}`);
-  if (sonnet.bugs_found?.length) {
-    console.log(`     ⚠ Bugs found: ${sonnet.bugs_found.join('; ')}`);
-  }
 
   return {
     prNumber, title,
@@ -357,7 +345,6 @@ async function main() {
   }
 
   const forceDeep = flags.has('--deep');
-  const dryRun = flags.has('--dry-run');
   const repoRoot = process.env.REPO_ROOT || run('git rev-parse --show-toplevel');
 
   const results = [];

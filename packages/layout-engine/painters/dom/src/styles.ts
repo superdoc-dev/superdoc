@@ -410,13 +410,8 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label,
-.superdoc-structured-content-block.sdt-hover .superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label {
   display: inline-flex;
-}
-
-.superdoc-structured-content-block:not(.ProseMirror-selectednode):not(.sdt-hover):hover .superdoc-structured-content__label {
-  display: none;
 }
 
 /* Continuation styling for structured content blocks */
@@ -501,12 +496,12 @@ const SDT_CONTAINER_STYLES = `
 }
 
 /* Hover highlight for SDT containers.
- * Blue border is always visible (set in base rules above).
  * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-hover class (event delegation for multi-fragment coordination).
- * Inline SDTs use :hover (single element, no coordination needed). */
-.superdoc-structured-content-block[data-lock-mode].sdt-hover,
-.superdoc-structured-content-inline[data-lock-mode]:hover {
+ * Inline SDTs use :hover (single element, no coordination needed).
+ * Hover is suppressed when the node is selected (SD-1584). */
+.superdoc-structured-content-block[data-lock-mode].sdt-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
   background-color: rgba(98, 155, 231, 0.08);
   z-index: 9999999;
 }

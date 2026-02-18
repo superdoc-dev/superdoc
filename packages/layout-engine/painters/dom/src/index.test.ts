@@ -2414,6 +2414,89 @@ describe('DomPainter', () => {
     expect(fragmentAfter?.textContent).toContain('world!!!');
   });
 
+  it('updates structured-content lock metadata when lockMode changes via setData', () => {
+    const lockedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'lock-mode-block',
+      runs: [{ text: 'Protected text', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'sc-lock-mode-1',
+          alias: 'Protected Control',
+          lockMode: 'unlocked',
+        },
+      },
+    };
+
+    const lockedMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 14,
+          width: 140,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const lockedLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'lock-mode-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 20,
+              y: 30,
+              width: 300,
+              pmStart: 0,
+              pmEnd: 14,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createDomPainter({ blocks: [lockedBlock], measures: [lockedMeasure] });
+    painter.paint(lockedLayout, mount);
+
+    const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(fragmentBefore.dataset.lockMode).toBe('unlocked');
+
+    const updatedLockedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'lock-mode-block',
+      runs: [{ text: 'Protected text', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'sc-lock-mode-1',
+          alias: 'Protected Control',
+          lockMode: 'contentLocked',
+        },
+      },
+    };
+
+    painter.setData?.([updatedLockedBlock], [lockedMeasure]);
+    painter.paint(lockedLayout, mount);
+
+    const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(fragmentAfter.dataset.lockMode).toBe('contentLocked');
+  });
+
   it('updates fragment positions in virtualized mode when layout changes without block diffs', () => {
     const painter = createDomPainter({
       blocks: [block],

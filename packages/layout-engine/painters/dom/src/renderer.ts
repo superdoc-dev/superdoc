@@ -1311,6 +1311,9 @@ export class DomPainter {
     this.updateSpacersForMountedPages(mounted);
     this.clearGapSpacers();
 
+    // Reset SDT label tracking so remounted start fragments get their labels back.
+    this.sdtLabelsRendered.clear();
+
     // Remove pages that are no longer needed
     for (const [idx, state] of this.pageIndexToState.entries()) {
       if (!needed.has(idx)) {
@@ -5630,6 +5633,24 @@ const fragmentSignature = (fragment: Fragment, lookup: BlockLookup): string => {
   return base;
 };
 
+const getSdtMetadataId = (metadata: SdtMetadata | null | undefined): string => {
+  if (!metadata) return '';
+  if ('id' in metadata && metadata.id != null) {
+    return String(metadata.id);
+  }
+  return '';
+};
+
+const getSdtMetadataLockMode = (metadata: SdtMetadata | null | undefined): string => {
+  if (!metadata) return '';
+  return metadata.type === 'structuredContent' ? (metadata.lockMode ?? '') : '';
+};
+
+const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string => {
+  if (!metadata) return '';
+  return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
+};
+
 /**
  * Type guard to validate list marker attributes structure.
  *
@@ -5826,8 +5847,12 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         ].join(':')
       : '';
 
-    // Combine marker version, runs version, and paragraph attrs version
-    const parts = [markerVersion, runsVersion, paragraphAttrsVersion].filter(Boolean);
+    // Include SDT metadata so lock-mode (and other SDT property) changes invalidate the cache.
+    const sdtAttrs = (block.attrs as ParagraphAttrs | undefined)?.sdt;
+    const sdtVersion = getSdtMetadataVersion(sdtAttrs);
+
+    // Combine marker version, runs version, paragraph attrs version, and SDT version
+    const parts = [markerVersion, runsVersion, paragraphAttrsVersion, sdtVersion].filter(Boolean);
     return parts.join('|');
   }
 
@@ -5836,6 +5861,8 @@ const deriveBlockVersion = (block: FlowBlock): string => {
   }
 
   if (block.kind === 'image') {
+    const imgSdt = (block as ImageBlock).attrs?.sdt;
+    const imgSdtVersion = getSdtMetadataVersion(imgSdt);
     return [
       block.src ?? '',
       block.width ?? '',
@@ -5843,6 +5870,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
       block.alt ?? '',
       block.title ?? '',
       resolveBlockClipPath(block),
+      imgSdtVersion,
     ].join('|');
   }
 
@@ -6034,6 +6062,12 @@ const deriveBlockVersion = (block: FlowBlock): string => {
       }
       if (tblAttrs.cellSpacing !== undefined) {
         hash = hashNumber(hash, tblAttrs.cellSpacing);
+      }
+      // Include SDT metadata so lock-mode changes invalidate the cache.
+      if (tblAttrs.sdt) {
+        hash = hashString(hash, tblAttrs.sdt.type);
+        hash = hashString(hash, getSdtMetadataLockMode(tblAttrs.sdt));
+        hash = hashString(hash, getSdtMetadataId(tblAttrs.sdt));
       }
     }
 

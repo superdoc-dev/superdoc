@@ -1038,9 +1038,16 @@ export class EditorInputManager {
     // Set selection for single click
     if (!handledByDepth) {
       try {
-        let nextSelection: Selection = TextSelection.create(doc, hit.pos);
-        if (!nextSelection.$from.parent.inlineContent) {
-          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+        // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
+        const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
+        let nextSelection: Selection;
+        if (sdtBlock) {
+          nextSelection = NodeSelection.create(doc, sdtBlock.pos);
+        } else {
+          nextSelection = TextSelection.create(doc, hit.pos);
+          if (!nextSelection.$from.parent.inlineContent) {
+            nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+          }
         }
         const tr = editor.state.tr.setSelection(nextSelection);
         // Preserve stored marks (e.g., formatting selected from toolbar before clicking)

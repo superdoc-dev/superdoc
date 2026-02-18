@@ -146,6 +146,87 @@ describe('DomPainter virtualization (vertical)', () => {
     expect(firstIndexAfter).toBeGreaterThanOrEqual(firstIndexBefore);
   });
 
+  it('restores block SDT label when a virtualized start fragment remounts', () => {
+    Object.defineProperty(mount, 'clientHeight', { value: 600, configurable: true });
+    Object.defineProperty(mount, 'scrollHeight', { value: 12000, configurable: true });
+
+    const sdtBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'virtual-sdt-block',
+      runs: [{ text: 'Virtual SDT', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 11 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'virtual-sdt-1',
+          alias: 'Virtual Block Control',
+        },
+      },
+    };
+
+    const sdtMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 11,
+          width: 90,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const sdtLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: Array.from({ length: 6 }, (_, i) => ({
+        number: i + 1,
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'virtual-sdt-block',
+            fromLine: 0,
+            toLine: 1,
+            x: 24,
+            y: 24,
+            width: 220,
+            pmStart: 0,
+            pmEnd: 11,
+          },
+        ],
+      })),
+    };
+
+    const painter = createDomPainter({
+      blocks: [sdtBlock],
+      measures: [sdtMeasure],
+      virtualization: { enabled: true, window: 1, overscan: 0, gap: 72, paddingTop: 0 },
+    });
+
+    painter.paint(sdtLayout, mount);
+
+    const labelBefore = mount.querySelector(
+      '.superdoc-page[data-page-index="0"] .superdoc-structured-content__label',
+    ) as HTMLElement | null;
+    expect(labelBefore).toBeTruthy();
+
+    mount.scrollTop = 3 * (500 + 72);
+    mount.dispatchEvent(new Event('scroll'));
+    expect(mount.querySelector('.superdoc-page[data-page-index="0"]')).toBeNull();
+
+    mount.scrollTop = 0;
+    mount.dispatchEvent(new Event('scroll'));
+
+    const remountedLabel = mount.querySelector(
+      '.superdoc-page[data-page-index="0"] .superdoc-structured-content__label',
+    ) as HTMLElement | null;
+    expect(remountedLabel).toBeTruthy();
+  });
+
   it('handles window size larger than total pages', () => {
     const painter = createDomPainter({
       blocks: [block],

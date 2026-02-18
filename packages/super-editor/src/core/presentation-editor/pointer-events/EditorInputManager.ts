@@ -36,6 +36,7 @@ import {
   hitTestTable as hitTestTableFromHelper,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
+import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/painter-dom';
 
 // =============================================================================
 // Constants
@@ -1308,10 +1309,13 @@ export class EditorInputManager {
   ): boolean {
     if (!targetImg) return false;
 
-    const imgPmStart = targetImg.dataset?.pmStart ? Number(targetImg.dataset.pmStart) : null;
+    // When image has clipPath it is wrapped in a clip-wrapper; pm-start is on the wrapper
+    const wrapper = targetImg.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
+    const pmStartSource = wrapper ?? targetImg;
+    const imgPmStart = pmStartSource?.dataset?.pmStart ? Number(pmStartSource.dataset.pmStart) : null;
     if (Number.isNaN(imgPmStart) || imgPmStart == null) return false;
 
-    const imgLayoutEpochRaw = targetImg.dataset?.layoutEpoch;
+    const imgLayoutEpochRaw = pmStartSource?.dataset?.layoutEpoch;
     const imgLayoutEpoch = imgLayoutEpochRaw != null ? Number(imgLayoutEpochRaw) : NaN;
     const rawLayoutEpoch = Number.isFinite(rawHit.layoutEpoch) ? rawHit.layoutEpoch : NaN;
     const effectiveEpoch =
@@ -1343,11 +1347,14 @@ export class EditorInputManager {
       const tr = editor!.state.tr.setSelection(NodeSelection.create(doc, clampedImgPos));
       editor!.view?.dispatch(tr);
 
-      const selector = `.superdoc-inline-image[data-pm-start="${imgPmStart}"]`;
+      // Prefer wrapper (clip container) so selection outline is on the visible cropped box only, not the full image.
+      // The compound selector lists wrapper before inline-image; querySelector returns the first DOM-order
+      // match, and the wrapper is always an ancestor of the image, so it is found first when present.
       const viewportHost = this.#deps?.getViewportHost();
-      const targetElement = viewportHost?.querySelector(selector);
+      const targetElement = viewportHost?.querySelector(buildInlineImagePmSelector(imgPmStart));
+      const elementForHighlight = (wrapper ?? targetElement ?? targetImg) as HTMLElement;
       this.#callbacks.emit?.('imageSelected', {
-        element: targetElement ?? targetImg,
+        element: elementForHighlight,
         blockId: null,
         pmStart: clampedImgPos,
       });
@@ -1383,7 +1390,7 @@ export class EditorInputManager {
       if (fragmentHit.fragment.kind === 'image') {
         const viewportHost = this.#deps?.getViewportHost();
         const targetElement = viewportHost?.querySelector(
-          `.superdoc-image-fragment[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
         );
         if (targetElement) {
           this.#callbacks.emit?.('imageSelected', {

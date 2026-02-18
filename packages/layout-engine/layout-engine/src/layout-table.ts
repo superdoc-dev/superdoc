@@ -177,15 +177,21 @@ function resolveTableFrame(
 /**
  * Calculate minimum width for a table column.
  *
- * Uses a conservative minimum of 10px per column to match PM's
- * columnResizing behavior.
+ * The resize overlay uses this value to enforce drag constraints.
+ * We derive it from the measured column width and clamp to a practical range.
  *
- * @returns Minimum width in pixels (10px)
+ * @param measuredWidth - Current measured column width in pixels
+ * @returns Minimum width in pixels, clamped to [25, 200]
  */
-function calculateColumnMinWidth(): number {
-  const DEFAULT_MIN_WIDTH = 10; // Minimum usable column width in pixels
+function calculateColumnMinWidth(measuredWidth: number): number {
+  const MIN_WIDTH = 25;
+  const MAX_WIDTH = 200;
 
-  return DEFAULT_MIN_WIDTH;
+  if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
+    return MIN_WIDTH;
+  }
+
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, measuredWidth));
 }
 
 /**
@@ -215,7 +221,7 @@ function generateColumnBoundaries(measure: TableMeasure): TableColumnBoundary[] 
 
   for (let i = 0; i < measure.columnWidths.length; i++) {
     const width = measure.columnWidths[i];
-    const minWidth = calculateColumnMinWidth();
+    const minWidth = calculateColumnMinWidth(width);
 
     const boundary = {
       index: i,

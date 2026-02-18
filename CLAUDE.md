@@ -82,6 +82,14 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 - **Editing commands/behavior**: Modify `super-editor/src/extensions/`
 - **State bridging**: Modify `PresentationEditor.ts`
 
+## JSDoc types
+
+Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., `packages/superdoc/src/core/types/index.js`). These typedefs ARE the published type declarations — `vite-plugin-dts` generates `.d.ts` files from them.
+
+- **Keep JSDoc typedefs in sync with code.** If a function destructures `{ a, b, c }`, the `@typedef` must include all three properties. Missing properties become type errors for consumers.
+- **Verify types after adding parameters.** When adding a parameter to a function, update its `@typedef` or `@param` JSDoc. Build with `pnpm run --filter superdoc build:es` and check the generated `.d.ts` in `dist/`.
+- **Workspace packages don't publish types.** `@superdoc/common`, `@superdoc/contracts`, etc. are private. If a public API references their types, those types must be inlined or resolved through path aliases — consumers can't resolve workspace packages.
+
 ## Commands
 
 - `pnpm build` - Build all packages

@@ -46,10 +46,10 @@
     "@vitest/coverage-v8": "catalog:",
     "concurrently": "catalog:",
     "eslint": "catalog:",
-    "eslint-config-prettier": "^9.1.2",
+    "eslint-config-prettier": "catalog:",
     "nodemon": "catalog:",
     "prettier": "^3.5.3",
-    "tsup": "^8.5.0",
+    "tsup": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

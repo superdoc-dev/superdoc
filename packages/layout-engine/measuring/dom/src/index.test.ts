@@ -296,7 +296,7 @@ describe('measureBlock', () => {
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBeGreaterThanOrEqual(0);
       expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(16);
-      expect(measure.lines[0].lineHeight).toBeLessThan(16 * 1.15);
+      expect(measure.lines[0].lineHeight).toBeLessThanOrEqual(16 * 1.15);
       expect(measure.totalHeight).toBeGreaterThan(0);
     });
 
@@ -839,16 +839,14 @@ describe('measureBlock', () => {
           },
         ],
         attrs: {
-          spacing: { line: 1.5, lineRule: 'auto' },
+          spacing: { line: 1.5, lineUnit: 'multiplier', lineRule: 'auto' },
         },
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      // Word 2007+ uses fontSize × 1.15 as "single" line spacing (not just ascent+descent).
-      // The Canvas TextMetrics API doesn't expose lineGap, so we approximate it with 1.15×.
-      // The spacing multiplier (1.5) is applied to this base.
-      const singleLineHeight = fontSize * 1.15;
-      expect(measure.lines[0].lineHeight).toBeCloseTo(1.5 * singleLineHeight, 1);
+      // `lineUnit: "multiplier"` applies directly to fontSize.
+      // (pm-adapter already bakes the OOXML auto 1.15 factor into the multiplier value.)
+      expect(measure.lines[0].lineHeight).toBeCloseTo(1.5 * fontSize, 1);
     });
 
     it('applies higher auto multipliers to the baseline line height', async () => {
@@ -864,15 +862,12 @@ describe('measureBlock', () => {
           },
         ],
         attrs: {
-          spacing: { line: 2, lineRule: 'auto' },
+          spacing: { line: 2, lineUnit: 'multiplier', lineRule: 'auto' },
         },
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      // Word 2007+ uses fontSize × 1.15 as "single" line spacing.
-      // The spacing multiplier (2.0) is applied to this base.
-      const singleLineHeight = fontSize * 1.15;
-      expect(measure.lines[0].lineHeight).toBeCloseTo(2 * singleLineHeight, 1);
+      expect(measure.lines[0].lineHeight).toBeCloseTo(2 * fontSize, 1);
     });
 
     it('applies large auto values as multipliers', async () => {
@@ -887,13 +882,12 @@ describe('measureBlock', () => {
           },
         ],
         attrs: {
-          spacing: { line: 42, lineRule: 'auto' },
+          spacing: { line: 42, lineUnit: 'multiplier', lineRule: 'auto' },
         },
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      const singleLineHeight = 16 * 1.15;
-      expect(measure.lines[0].lineHeight).toBeCloseTo(42 * singleLineHeight, 1);
+      expect(measure.lines[0].lineHeight).toBeCloseTo(42 * 16, 1);
     });
 
     it('does not clamp line height for very small fonts', async () => {

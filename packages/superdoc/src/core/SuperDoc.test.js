@@ -768,6 +768,48 @@ describe('SuperDoc core', () => {
     });
   });
 
+  it('propagates context menu toggles to presentation and flow editors and skips no-op updates', async () => {
+    const { superdocStore } = createAppHarness();
+    const setContextMenuDisabled = vi.fn();
+    const setOptions = vi.fn();
+    const docStub = {
+      getPresentationEditor: vi.fn(() => ({ setContextMenuDisabled })),
+      getEditor: vi.fn(() => ({ setOptions })),
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [docStub];
+
+    instance.setDisableContextMenu(false);
+    expect(setContextMenuDisabled).not.toHaveBeenCalled();
+    expect(setOptions).not.toHaveBeenCalled();
+
+    instance.setDisableContextMenu(true);
+    expect(instance.config.disableContextMenu).toBe(true);
+    expect(setContextMenuDisabled).toHaveBeenCalledWith(true);
+    expect(setOptions).toHaveBeenCalledWith({ disableContextMenu: true });
+
+    instance.setDisableContextMenu(true);
+    expect(setContextMenuDisabled).toHaveBeenCalledTimes(1);
+    expect(setOptions).toHaveBeenCalledTimes(1);
+
+    instance.setDisableContextMenu(false);
+    expect(instance.config.disableContextMenu).toBe(false);
+    expect(setContextMenuDisabled).toHaveBeenLastCalledWith(false);
+    expect(setOptions).toHaveBeenLastCalledWith({ disableContextMenu: false });
+  });
+
   it('skips rendering comments list when role is viewer', async () => {
     createAppHarness();
 

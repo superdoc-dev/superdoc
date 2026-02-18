@@ -1,13 +1,8 @@
 <script setup>
-import { computed, toRefs, ref, getCurrentInstance, onMounted, nextTick } from 'vue';
+import { computed, ref, getCurrentInstance, onMounted, nextTick, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
-import { SuperInput } from '@superdoc/super-editor';
-import { superdocIcons } from '@superdoc/icons.js';
-import useSelection from '@superdoc/helpers/use-selection';
-import useComment from '@superdoc/components/CommentsLayer/use-comment';
-import Avatar from '@superdoc/components/general/Avatar.vue';
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
 import CommentInput from './CommentInput.vue';
@@ -29,9 +24,6 @@ const props = defineProps({
 });
 
 const { proxy } = getCurrentInstance();
-const role = proxy.$superdoc.config.role;
-const commentCreator = props.comment.email;
-
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
@@ -49,12 +41,30 @@ const {
   editorCommentPositions,
   isCommentHighlighted,
 } = storeToRefs(commentsStore);
-
 const { activeZoom } = storeToRefs(superdocStore);
 
 const isInternal = ref(true);
-const isFocused = ref(false);
 const commentInput = ref(null);
+const editCommentInputs = ref(new Map());
+
+const setEditCommentInputRef = (commentId) => (el) => {
+  if (!commentId) return;
+  if (el) {
+    editCommentInputs.value.set(commentId, el);
+    if (editingCommentId.value === commentId) {
+      nextTick(() => {
+        focusEditInput(commentId);
+      });
+    }
+  } else {
+    editCommentInputs.value.delete(commentId);
+  }
+};
+
+const focusEditInput = (commentId) => {
+  const input = editCommentInputs.value.get(commentId);
+  input?.focus?.();
+};
 const commentDialogElement = ref(null);
 
 const isActiveComment = computed(() => activeComment.value === props.comment.commentId);
@@ -145,9 +155,7 @@ const isInternalDropdownDisabled = computed(() => {
   return getConfig.value.readOnly;
 });
 
-const isEditingThisComment = computed(() => (comment) => {
-  return editingCommentId.value === comment.commentId;
-});
+const isEditingThisComment = computed(() => (comment) => editingCommentId.value === comment.commentId);
 
 const shouldShowInternalExternal = computed(() => {
   if (!proxy.$superdoc.config.isInternal) return false;
@@ -258,10 +266,13 @@ const handleResolve = () => {
 const handleOverflowSelect = (value, comment) => {
   switch (value) {
     case 'edit':
-      currentCommentText.value = comment.commentText;
+      currentCommentText.value = comment?.commentText?.value ?? comment?.commentText ?? '';
       activeComment.value = comment.commentId;
       editingCommentId.value = comment.commentId;
       commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
+      nextTick(() => {
+        focusEditInput(comment.commentId);
+      });
       break;
     case 'delete':
       deleteComment({ superdoc: proxy.$superdoc, commentId: comment.commentId });
@@ -309,7 +320,10 @@ const getSidebarCommentStyle = computed(() => {
   }
 
   if (pendingComment.value && pendingComment.value.commentId === props.comment.commentId) {
-    const top = Math.max(96, pendingComment.value.selection?.selectionBounds.top - 50);
+    const source = pendingComment.value.selection?.source;
+    const isPdf = source === 'pdf' || source?.value === 'pdf';
+    const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+    const top = Math.max(96, pendingComment.value.selection?.selectionBounds.top * zoom - 50);
     style.position = 'absolute';
     style.top = top + 'px';
   }
@@ -345,6 +359,26 @@ onMounted(() => {
   nextTick(() => {
     const commentId = props.comment.importedId !== undefined ? props.comment.importedId : props.comment.commentId;
     emit('ready', { commentId, elementRef: commentDialogElement });
+  });
+});
+
+watch(
+  showInputSection,
+  (isVisible) => {
+    if (!isVisible) return;
+    nextTick(() => {
+      commentInput.value?.focus?.();
+    });
+  },
+  { immediate: true },
+);
+
+watch(editingCommentId, (commentId) => {
+  if (!commentId) return;
+  const entry = comments.value.find((comment) => comment.commentId === commentId);
+  if (!entry || entry.trackedChange) return;
+  nextTick(() => {
+    focusEditInput(commentId);
   });
 });
 </script>
@@ -408,7 +442,13 @@ onMounted(() => {
           }}
         </div>
         <div v-else class="comment-editing">
-          <CommentInput :users="usersFiltered" :config="getConfig" :include-header="false" :comment="comment" />
+          <CommentInput
+            :ref="setEditCommentInputRef(comment.commentId)"
+            :users="usersFiltered"
+            :config="getConfig"
+            :include-header="false"
+            :comment="comment"
+          />
           <div class="comment-footer">
             <button class="sd-button" @click.stop.prevent="handleCancel(comment)">Cancel</button>
             <button class="sd-button primary" @click.stop.prevent="handleCommentUpdate(comment)">Update</button>
@@ -423,7 +463,7 @@ onMounted(() => {
       <CommentInput ref="commentInput" :users="usersFiltered" :config="getConfig" :comment="props.comment" />
 
       <div class="comment-footer" v-if="showButtons && !getConfig.readOnly">
-        <button class="sd-button" @click.stop.prevent="cancelComment">Cancel</button>
+        <button class="sd-button" @click.stop.prevent="handleCancel">Cancel</button>
         <button
           class="sd-button primary"
           @click.stop.prevent="handleAddComment"

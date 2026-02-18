@@ -86,6 +86,11 @@ export const toggleList =
     } else {
       // If list paragraph was not found, create a new list definition and apply it to all paragraphs in selection
       mode = 'create';
+    }
+
+    if (!dispatch) return true;
+
+    if (mode === 'create') {
       const numId = ListHelpers.getNewListId(editor);
       ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor });
       sharedNumberingProperties = {
@@ -141,6 +146,6 @@ export const toggleList =
         }
       }
     }
-    if (dispatch) dispatch(tr);
+    dispatch(tr);
     return true;
   };

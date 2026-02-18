@@ -6,6 +6,7 @@ import {
   createBooleanAttributeHandler,
 } from '@converter/v3/handlers/utils.js';
 import { translator as wLvlStartTranslator } from '../../w/start/lvlStart-translator.js';
+import { translator as wLvlRestartTranslator } from '../../w/lvlRestart/lvlRestart-translator.js';
 import { translator as wLvlPicBulletId } from '../../w/lvlPicBulletId/lvlPicBulletId-translator.js';
 import { translator as wIsLglTranslator } from '../../w/isLgl/isLgl-translator.js';
 import { translator as wPStyleTranslator } from '../../w/pStyle/pStyle-translator.js';
@@ -22,6 +23,7 @@ import { translator as wRPrTranslator } from '../../w/rpr';
 /** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   wLvlStartTranslator,
+  wLvlRestartTranslator,
   wLvlPicBulletId,
   wIsLglTranslator,
   wPStyleTranslator,

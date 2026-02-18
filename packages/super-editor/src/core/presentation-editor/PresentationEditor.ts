@@ -1,5 +1,7 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
+import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
+import { DecorationBridge } from './dom/DecorationBridge.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -15,8 +17,12 @@ import {
 import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
+  getPageOffsetY as getPageOffsetYFromTransform,
 } from './dom/CoordinateTransform.js';
-import { normalizeClientPoint as normalizeClientPointFromPointer } from './dom/PointerNormalization.js';
+import {
+  normalizeClientPoint as normalizeClientPointFromPointer,
+  denormalizeClientPoint as denormalizeClientPointFromPointer,
+} from './dom/PointerNormalization.js';
 import { getPageElementByIndex } from './dom/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
@@ -62,7 +68,7 @@ import { DragDropManager } from './input/DragDropManager.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
-import { toFlowBlocks, ConverterContext } from '@superdoc/pm-adapter';
+import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import {
   incrementalLayout,
   selectionToRects,
@@ -78,11 +84,12 @@ import type {
   HeaderFooterLayoutResult,
   HeaderFooterType,
   PositionHit,
-  MultiSectionHeaderFooterIdentifier,
   TableHitResult,
 } from '@superdoc/layout-bridge';
+
 import { createDomPainter } from '@superdoc/painter-dom';
-import type { LayoutMode, PageDecorationProvider, RulerOptions } from '@superdoc/painter-dom';
+
+import type { LayoutMode } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -95,6 +102,7 @@ import type {
   Fragment,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
+// TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 
 // Collaboration cursor imports
@@ -169,9 +177,7 @@ const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
 
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
-/** Default gap between pages when virtualization is enabled (matches renderer.ts virtualGap) */
-const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
-/** Default gap between pages without virtualization (from containerStyles in styles.ts) */
+/** Default gap between pages (from containerStyles in styles.ts) */
 const DEFAULT_PAGE_GAP = 24;
 /** Default gap for horizontal layout mode */
 const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
@@ -181,6 +187,16 @@ const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
 const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
 /** Maximum distance between clicks to register as multi-click (pixels) */
 const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
+
+/** Debug flag for performance logging - enable with SD_DEBUG_LAYOUT env variable */
+const layoutDebugEnabled =
+  typeof process !== 'undefined' && typeof process.env !== 'undefined' && Boolean(process.env.SD_DEBUG_LAYOUT);
+
+/** Log performance metrics when debug is enabled */
+const perfLog = (...args: unknown[]): void => {
+  if (!layoutDebugEnabled) return;
+  console.log(...args);
+};
 /** Budget for header/footer initialization before warning (milliseconds) */
 const HEADER_FOOTER_INIT_BUDGET_MS = 200;
 /** Maximum zoom level before warning */
@@ -254,6 +270,9 @@ export class PresentationEditor extends EventEmitter {
   #hiddenHost: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
+  /** Cache for incremental toFlowBlocks conversion */
+  #flowBlockCache: FlowBlockCache = new FlowBlockCache();
+  #footnoteNumberSignature: string | null = null;
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -273,8 +292,14 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
+  /** Bridges external PM plugin decorations onto painted DOM elements. */
+  #decorationBridge = new DecorationBridge();
+  /** RAF handle for coalesced decoration sync scheduling. */
+  #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
+  #scrollHandler: (() => void) | null = null;
+  #scrollContainer: Element | Window | null = null;
   #sectionMetadata: SectionMetadata[] = [];
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
   #inputBridge: PresentationInputBridge | null = null;
@@ -293,10 +318,24 @@ export class PresentationEditor extends EventEmitter {
     element: HTMLElement;
     pmStart: number;
   } | null = null;
+  #lastSelectedStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastSelectedStructuredContentInline: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastHoveredStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
   #remoteCursorManager: RemoteCursorManager | null = null;
+  /** Debounce timer for local cursor awareness updates (avoids ~190ms Liveblocks overhead per keystroke) */
+  #cursorUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   /** DOM element for rendering remote cursor overlays */
   #remoteCursorOverlay: HTMLElement | null = null;
   /** DOM element for rendering local selection/caret (dual-layer overlay architecture) */
@@ -378,12 +417,18 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.className = 'presentation-editor__pages';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
+
+    // Add event listeners for structured content hover coordination
+    this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
+    this.#painterHost.addEventListener('mouseout', this.#handleStructuredContentBlockMouseLeave);
+
     const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
     this.#domIndexObserverManager = new DomPositionIndexObserverManager({
       windowRoot: win,
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
         this.#rebuildDomPositionIndex();
+        this.#syncDecorations();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -444,7 +489,6 @@ export class PresentationEditor extends EventEmitter {
 
     // Wire up manager callbacks to use PresentationEditor methods
     this.#remoteCursorManager.setUpdateCallback(() => this.#updateRemoteCursors());
-    this.#remoteCursorManager.setReRenderCallback(() => this.#renderRemoteCursors());
 
     this.#hoverOverlay = doc.createElement('div');
     this.#hoverOverlay.className = 'presentation-editor__hover-overlay';
@@ -744,7 +788,7 @@ export class PresentationEditor extends EventEmitter {
    * - In body mode, returns the main editor's state
    * - In header/footer mode, returns the active header/footer editor's state
    *
-   * This enables components like SlashMenu and context menus to access document
+   * This enables components like ContextMenu to access document
    * state, selection, and schema information in the correct editing context.
    *
    * @returns The EditorState for the active editor
@@ -789,7 +833,7 @@ export class PresentationEditor extends EventEmitter {
    *
    * This property returns the options object from the appropriate editor instance,
    * providing access to configuration like document mode, AI settings, and custom
-   * slash menu configuration.
+   * context menu configuration.
    *
    * @returns The options object for the active editor
    *
@@ -1031,6 +1075,8 @@ export class PresentationEditor extends EventEmitter {
     // Re-render if mode changed OR tracked changes preferences changed.
     // Mode change affects enableComments in toFlowBlocks even if tracked changes didn't change.
     if (modeChanged || trackedChangesChanged) {
+      // Clear flow block cache since conversion-affecting settings changed
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1068,6 +1114,8 @@ export class PresentationEditor extends EventEmitter {
     this.#layoutOptions.trackedChanges = overrides;
     const trackedChangesChanged = this.#syncTrackedChangesPreferences();
     if (trackedChangesChanged) {
+      // Clear flow block cache since conversion-affecting settings changed
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1102,6 +1150,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (hasChanges) {
+      // Clear flow block cache since comment settings affect block conversion
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1681,9 +1731,7 @@ export class PresentationEditor extends EventEmitter {
     const isLeftMargin = marginLeft > 0 && x < marginLeft;
     const isRightMargin = marginRight > 0 && x > pageWidth - marginRight;
 
-    const pageEl = this.#viewportHost.querySelector(
-      `.superdoc-page[data-page-index="${pageIndex}"]`,
-    ) as HTMLElement | null;
+    const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
     if (!pageEl) {
       return null;
     }
@@ -1860,19 +1908,39 @@ export class PresentationEditor extends EventEmitter {
 
     // In body mode, use main document layout
     const rects = this.getRangeRects(pos, pos);
-    if (!rects || rects.length === 0) {
-      return null;
+    if (rects && rects.length > 0) {
+      const rect = rects[0];
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      };
     }
 
-    const rect = rects[0];
-    return {
-      top: rect.top,
-      bottom: rect.bottom,
-      left: rect.left,
-      right: rect.right,
-      width: rect.width,
-      height: rect.height,
-    };
+    // Fallback: getRangeRects returns empty for collapsed selections on empty
+    // lines (no painted inline content to measure). Use caret geometry which
+    // combines DOM position data with layout metrics for these cases.
+    const caretRect = this.#computeCaretLayoutRect(pos);
+    if (caretRect) {
+      // caretRect is in page-local layout units; convert to viewport pixels.
+      const viewport = this.denormalizeClientPoint(caretRect.x, caretRect.y, caretRect.pageIndex, caretRect.height);
+      if (viewport) {
+        const h = viewport.height ?? caretRect.height;
+        return {
+          top: viewport.y,
+          bottom: viewport.y + h,
+          left: viewport.x,
+          right: viewport.x + 1, // caret is zero-width; use 1px so callers get a valid rect
+          width: 1,
+          height: h,
+        };
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -2111,6 +2179,22 @@ export class PresentationEditor extends EventEmitter {
       }, 'Layout RAF');
     }
 
+    // Cancel pending decoration sync RAF
+    if (this.#decorationSyncRafHandle != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#decorationSyncRafHandle!);
+        this.#decorationSyncRafHandle = null;
+      }, 'Decoration sync RAF');
+    }
+    this.#decorationBridge.destroy();
+
+    // Cancel pending cursor awareness update
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+      this.#cursorUpdateTimer = null;
+    }
+
     // Clean up remote cursor manager
     if (this.#remoteCursorManager) {
       safeCleanup(() => {
@@ -2136,6 +2220,15 @@ export class PresentationEditor extends EventEmitter {
       }, 'Editor input manager');
     }
 
+    if (this.#scrollHandler) {
+      if (this.#scrollContainer) {
+        this.#scrollContainer.removeEventListener('scroll', this.#scrollHandler);
+      }
+      const win = this.#visibleHost?.ownerDocument?.defaultView;
+      win?.removeEventListener('scroll', this.#scrollHandler);
+      this.#scrollHandler = null;
+      this.#scrollContainer = null;
+    }
     this.#inputBridge?.notifyTargetChanged();
     this.#inputBridge?.destroy();
     this.#inputBridge = null;
@@ -2155,6 +2248,9 @@ export class PresentationEditor extends EventEmitter {
       this.#headerFooterSession?.destroy();
       this.#headerFooterSession = null;
     }, 'Header/footer session manager');
+
+    // Clear flow block cache to free memory
+    this.#flowBlockCache.clear();
 
     this.#domPainter = null;
     this.#pageGeometryHelper = null;
@@ -2183,6 +2279,54 @@ export class PresentationEditor extends EventEmitter {
     } catch (error) {
       debugLog('warn', 'DomPositionIndex rebuild failed', { error: String(error) });
     }
+  }
+
+  /**
+   * Runs a full decoration bridge sync: reads external plugin decorations and
+   * reconciles them onto painted DOM elements (add/update/remove).
+   *
+   * Called synchronously from post-paint and observer-rebuild paths where the
+   * DOM index is guaranteed to be fresh.
+   */
+  #syncDecorations(): void {
+    const state = this.#editor?.view?.state;
+    if (!state) return;
+
+    try {
+      this.#decorationBridge.sync(state, this.#domPositionIndex);
+    } catch (error) {
+      debugLog('warn', 'Decoration bridge sync failed', { error: String(error) });
+    }
+  }
+
+  /**
+   * Schedules a decoration sync on the next animation frame, coalesced so
+   * rapid transactions (cursor movement, selection changes) don't cause
+   * redundant work.
+   *
+   * Skips scheduling when:
+   * - A rerender is already pending (post-paint will sync).
+   * - No DecorationSet references have actually changed (identity check).
+   */
+  #scheduleDecorationSync(): void {
+    // If a full rerender is pending, the post-paint path will sync. Skip.
+    if (this.#renderScheduled || this.#isRerendering) return;
+
+    // Cheap identity check: bail if no DecorationSet references changed.
+    const state = this.#editor?.view?.state;
+    if (!state || !this.#decorationBridge.hasChanges(state)) return;
+
+    // Already scheduled — RAF will handle it.
+    if (this.#decorationSyncRafHandle != null) return;
+
+    const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+    this.#decorationSyncRafHandle = win.requestAnimationFrame(() => {
+      this.#decorationSyncRafHandle = null;
+      // Re-check: a rerender may have been scheduled between when we queued
+      // this RAF and when it fires. The post-paint path will sync instead.
+      if (this.#renderScheduled || this.#isRerendering) return;
+      this.#syncDecorations();
+    });
   }
 
   #setupEditorListeners() {
@@ -2221,16 +2365,38 @@ export class PresentationEditor extends EventEmitter {
       }
     };
     const handleSelection = () => {
-      this.#scheduleSelectionUpdate();
+      // Use immediate rendering for selection-only changes (clicks, arrow keys).
+      // Without immediate, the render is RAF-deferred — leaving a window where
+      // a remote collaborator's edit can cancel the pending render via
+      // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
+      // if layout is updating (due to a concurrent doc change), flushNow()
+      // is a no-op and the render will be picked up after layout completes.
+      this.#scheduleSelectionUpdate({ immediate: true });
       // Update local cursor in awareness for collaboration
       // This bypasses y-prosemirror's focus check which may fail for hidden PM views
       this.#updateLocalAwarenessCursor();
       this.#scheduleA11ySelectionAnnouncement();
     };
+
+    // The 'transaction' event fires for ALL transactions (doc changes,
+    // selection changes, meta-only). The 'update' event only fires for
+    // docChanged transactions, and 'selectionUpdate' only for selection
+    // changes. A meta-only transaction (e.g., a custom command that sets
+    // plugin state without editing text) fires neither.
+    //
+    // We listen on 'transaction' so the decoration bridge picks up changes
+    // from any transaction type. The bridge's own identity check + RAF
+    // coalescing prevent unnecessary work.
+    const handleTransaction = () => {
+      this.#scheduleDecorationSync();
+    };
+
     this.#editor.on('update', handleUpdate);
     this.#editor.on('selectionUpdate', handleSelection);
+    this.#editor.on('transaction', handleTransaction);
     this.#editorListeners.push({ event: 'update', handler: handleUpdate as (...args: unknown[]) => void });
     this.#editorListeners.push({ event: 'selectionUpdate', handler: handleSelection as (...args: unknown[]) => void });
+    this.#editorListeners.push({ event: 'transaction', handler: handleTransaction as (...args: unknown[]) => void });
 
     // Listen for page style changes (e.g., margin adjustments via ruler).
     // These changes don't modify document content (docChanged === false),
@@ -2315,16 +2481,18 @@ export class PresentationEditor extends EventEmitter {
    * @private
    */
   #updateLocalAwarenessCursor(): void {
-    this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
-  }
-
-  /**
-   * Schedule a remote cursor re-render without re-normalizing awareness states.
-   * Delegates to RemoteCursorManager.
-   * @private
-   */
-  #scheduleRemoteCursorReRender() {
-    this.#remoteCursorManager?.scheduleReRender();
+    // Debounce awareness cursor updates to avoid per-keystroke overhead.
+    // Collaboration providers (e.g. Liveblocks) can spend ~190ms encoding and
+    // syncing awareness state per setLocalStateField call. Batching rapid
+    // cursor movements into a single update every 100ms keeps typing responsive
+    // while maintaining real-time cursor sharing for other participants.
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+    }
+    this.#cursorUpdateTimer = setTimeout(() => {
+      this.#cursorUpdateTimer = null;
+      this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
+    }, 100);
   }
 
   /**
@@ -2383,6 +2551,7 @@ export class PresentationEditor extends EventEmitter {
       getEpochMapper: () => this.#epochMapper,
       getViewportHost: () => this.#viewportHost,
       getVisibleHost: () => this.#visibleHost,
+      getLayoutMode: () => this.#layoutOptions.layoutMode ?? 'vertical',
       getHeaderFooterSession: () => this.#headerFooterSession,
       getPageGeometryHelper: () => this.#pageGeometryHelper,
       getZoom: () => this.#layoutOptions.zoom ?? 1,
@@ -2429,6 +2598,52 @@ export class PresentationEditor extends EventEmitter {
   #setupPointerHandlers() {
     // Delegate to EditorInputManager for pointer events
     this.#editorInputManager?.bind();
+
+    // Scroll handler for virtualization - find the actual scroll container
+    // by walking up the DOM tree to find the first scrollable ancestor
+    this.#scrollHandler = () => {
+      this.#domPainter?.onScroll?.();
+    };
+
+    // Find the scrollable ancestor and attach listener there
+    this.#scrollContainer = this.#findScrollableAncestor(this.#visibleHost);
+    if (this.#scrollContainer) {
+      this.#scrollContainer.addEventListener('scroll', this.#scrollHandler, { passive: true });
+    }
+
+    // Also listen on window as fallback
+    const win = this.#visibleHost.ownerDocument?.defaultView;
+    if (win && this.#scrollContainer !== win) {
+      win.addEventListener('scroll', this.#scrollHandler, { passive: true });
+    }
+  }
+
+  /**
+   * Finds the first scrollable ancestor of an element.
+   * Returns the element itself if it's scrollable, or walks up the tree.
+   *
+   * Note: We only check for overflow CSS property, not whether content currently
+   * overflows. At setup time, content may not be laid out yet, but the element
+   * with overflow:auto/scroll will become the scroll container once content grows.
+   */
+  #findScrollableAncestor(element: HTMLElement): Element | Window | null {
+    const win = element.ownerDocument?.defaultView;
+    if (!win) return null;
+
+    let current: Element | null = element;
+    while (current) {
+      const style = win.getComputedStyle(current);
+      const overflowY = style.overflowY;
+      // Check for scrollable overflow property - don't require hasScroll since
+      // content may not be laid out yet at setup time
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    // If no scrollable ancestor found, return window
+    return win;
   }
 
   /**
@@ -2750,9 +2965,13 @@ export class PresentationEditor extends EventEmitter {
       let docJson;
       const viewWindow = this.#visibleHost.ownerDocument?.defaultView ?? window;
       const perf = viewWindow?.performance ?? GLOBAL_PERFORMANCE;
+      const perfNow = () => (perf?.now ? perf.now() : Date.now());
       const startMark = perf?.now?.();
       try {
+        const getJsonStart = perfNow();
         docJson = this.#editor.getJSON();
+        const getJsonEnd = perfNow();
+        perfLog(`[Perf] getJSON: ${(getJsonEnd - getJsonStart).toFixed(2)}ms`);
       } catch (error) {
         this.#handleLayoutError('render', this.#decorateError(error, 'getJSON'));
         return;
@@ -2768,6 +2987,7 @@ export class PresentationEditor extends EventEmitter {
         // Compute visible footnote numbering (1-based) by first appearance in the document.
         // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
         const footnoteNumberById: Record<string, number> = {};
+        const footnoteOrder: string[] = [];
         try {
           const seen = new Set<string>();
           let counter = 1;
@@ -2779,9 +2999,22 @@ export class PresentationEditor extends EventEmitter {
             if (!key || seen.has(key)) return;
             seen.add(key);
             footnoteNumberById[key] = counter;
+            footnoteOrder.push(key);
             counter += 1;
           });
-        } catch {}
+        } catch (e) {
+          // Log traversal errors - footnote numbering may be incorrect if this fails
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
+          }
+        }
+        // Invalidate flow block cache when footnote order changes, since footnote
+        // numbers are embedded in cached blocks and must be recomputed.
+        const footnoteSignature = footnoteOrder.join('|');
+        if (footnoteSignature !== this.#footnoteNumberSignature) {
+          this.#flowBlockCache.clear();
+          this.#footnoteNumberSignature = footnoteSignature;
+        }
         // Expose numbering to node views and layout adapter.
         try {
           if (converter && typeof converter === 'object') {
@@ -2792,18 +3025,20 @@ export class PresentationEditor extends EventEmitter {
         converterContext = converter
           ? {
               docx: converter.convertedXml,
-              numbering: converter.numbering,
-              linkedStyles: converter.linkedStyles,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
             }
           : undefined;
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
+        const positionMapStart = perfNow();
         const positionMap =
           this.#editor?.state?.doc && docJson ? buildPositionMapFromPmDoc(this.#editor.state.doc, docJson) : null;
+        const positionMapEnd = perfNow();
+        perfLog(`[Perf] buildPositionMapFromPmDoc: ${(positionMapEnd - positionMapStart).toFixed(2)}ms`);
         const commentsEnabled =
           this.#documentMode !== 'viewing' || this.#layoutOptions.enableCommentsInViewing === true;
+        const toFlowBlocksStart = perfNow();
         const result = toFlowBlocks(docJson, {
           mediaFiles: (this.#editor?.storage?.image as { media?: Record<string, string> })?.media,
           emitSectionBreaks: true,
@@ -2814,9 +3049,14 @@ export class PresentationEditor extends EventEmitter {
           enableRichHyperlinks: true,
           themeColors: this.#editor?.converter?.themeColors ?? undefined,
           converterContext,
+          flowBlockCache: this.#flowBlockCache,
           ...(positionMap ? { positions: positionMap } : {}),
           ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
         });
+        const toFlowBlocksEnd = perfNow();
+        perfLog(
+          `[Perf] toFlowBlocks: ${(toFlowBlocksEnd - toFlowBlocksStart).toFixed(2)}ms (blocks=${result.blocks.length})`,
+        );
         blocks = result.blocks;
         bookmarks = result.bookmarks ?? new Map();
       } catch (error) {
@@ -2843,6 +3083,7 @@ export class PresentationEditor extends EventEmitter {
         : baseLayoutOptions;
       const previousBlocks = this.#layoutState.blocks;
       const previousLayout = this.#layoutState.layout;
+      const previousMeasures = this.#layoutState.measures;
 
       let layout: Layout;
       let measures: Measure[];
@@ -2852,6 +3093,7 @@ export class PresentationEditor extends EventEmitter {
       let extraMeasures: Measure[] | undefined;
       const headerFooterInput = this.#buildHeaderFooterInput();
       try {
+        const incrementalLayoutStart = perfNow();
         const result = await incrementalLayout(
           previousBlocks,
           previousLayout,
@@ -2859,7 +3101,10 @@ export class PresentationEditor extends EventEmitter {
           layoutOptions,
           (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => measureBlock(block, constraints),
           headerFooterInput ?? undefined,
+          previousMeasures,
         );
+        const incrementalLayoutEnd = perfNow();
+        perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
 
         // Type guard: validate incrementalLayout return value
         if (!result || typeof result !== 'object') {
@@ -2975,6 +3220,7 @@ export class PresentationEditor extends EventEmitter {
       }
 
       // Pass all blocks (main document + headers + footers + extras) to the painter
+      const painterSetDataStart = perfNow();
       painter.setData?.(
         blocks,
         measures,
@@ -2983,16 +3229,25 @@ export class PresentationEditor extends EventEmitter {
         footerBlocks.length > 0 ? footerBlocks : undefined,
         footerMeasures.length > 0 ? footerMeasures : undefined,
       );
+      const painterSetDataEnd = perfNow();
+      perfLog(`[Perf] painter.setData: ${(painterSetDataEnd - painterSetDataStart).toFixed(2)}ms`);
       // Avoid MutationObserver overhead while repainting large DOM trees.
       this.#domIndexObserverManager?.pause();
       // Pass the transaction mapping for efficient position attribute updates.
       // Consumed here and cleared to prevent stale mappings on subsequent paints.
       const mapping = this.#pendingMapping;
       this.#pendingMapping = null;
+      const painterPaintStart = perfNow();
       painter.paint(layout, this.#painterHost, mapping ?? undefined);
+      const painterPaintEnd = perfNow();
+      perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
+      const painterPostStart = perfNow();
       this.#applyVertAlignToLayout();
       this.#rebuildDomPositionIndex();
+      this.#syncDecorations();
       this.#domIndexObserverManager?.resume();
+      const painterPostEnd = perfNow();
+      perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);
       this.#layoutEpoch = layoutEpoch;
       if (this.#updateHtmlAnnotationMeasurements(layoutEpoch)) {
         this.#pendingDocChange = true;
@@ -3029,11 +3284,13 @@ export class PresentationEditor extends EventEmitter {
 
       this.#selectionSync.requestRender({ immediate: true });
 
-      // Trigger cursor re-rendering on layout changes without re-normalizing awareness
-      // Layout reflow requires repositioning cursors in the DOM, but awareness states haven't changed
-      // This optimization avoids expensive Yjs position conversions on every layout update
+      // Re-normalize remote cursor positions after layout completes.
+      // Local document changes shift absolute positions, so Yjs relative positions
+      // must be re-resolved against the updated editor state. Without this,
+      // remote cursors appear offset by the number of characters the local user typed.
       if (this.#remoteCursorManager?.hasRemoteCursors()) {
-        this.#scheduleRemoteCursorReRender();
+        this.#remoteCursorManager.markDirty();
+        this.#remoteCursorManager.scheduleUpdate();
       }
     } finally {
       if (!layoutCompleted) {
@@ -3191,6 +3448,243 @@ export class PresentationEditor extends EventEmitter {
     this.#setSelectedFieldAnnotationClass(element, pmStart);
   }
 
+  #clearSelectedStructuredContentBlockClass() {
+    if (!this.#lastSelectedStructuredContentBlock) return;
+    this.#lastSelectedStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentBlock = null;
+  }
+
+  #setSelectedStructuredContentBlockClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentBlock &&
+      this.#lastSelectedStructuredContentBlock.id === id &&
+      this.#lastSelectedStructuredContentBlock.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentBlock.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentBlockClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentBlock = { id, elements };
+  }
+
+  #syncSelectedStructuredContentBlockClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContentBlock') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+      node = selection.node;
+    } else {
+      const $pos = selection.$from;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContentBlock') {
+          node = candidate;
+          break;
+        }
+      }
+      if (!node) {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentBlockClass(elements, id);
+  }
+
+  #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block');
+
+    if (!block || !(block instanceof HTMLElement)) return;
+
+    // Don't show hover effect if already selected
+    if (block.classList.contains('ProseMirror-selectednode')) return;
+
+    const rawId = block.dataset.sdtId;
+    if (!rawId) return;
+
+    this.#setHoveredStructuredContentBlockClass(rawId);
+  };
+
+  #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block') as HTMLElement | null;
+
+    if (!block) return;
+
+    const relatedTarget = event.relatedTarget as HTMLElement | null;
+    if (
+      relatedTarget &&
+      block.dataset.sdtId &&
+      relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)
+    ) {
+      return;
+    }
+
+    this.#clearHoveredStructuredContentBlockClass();
+  };
+
+  #clearHoveredStructuredContentBlockClass() {
+    if (!this.#lastHoveredStructuredContentBlock) return;
+    this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('sdt-group-hover');
+    });
+    this.#lastHoveredStructuredContentBlock = null;
+  }
+
+  #setHoveredStructuredContentBlockClass(id: string) {
+    if (this.#lastHoveredStructuredContentBlock?.id === id) return;
+
+    this.#clearHoveredStructuredContentBlockClass();
+
+    if (!this.#painterHost) return;
+
+    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+    const elements = Array.from(
+      this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+    ) as HTMLElement[];
+
+    if (elements.length === 0) return;
+
+    elements.forEach((element) => {
+      if (!element.classList.contains('ProseMirror-selectednode')) {
+        element.classList.add('sdt-group-hover');
+      }
+    });
+
+    this.#lastHoveredStructuredContentBlock = { id, elements };
+  }
+
+  #clearSelectedStructuredContentInlineClass() {
+    if (!this.#lastSelectedStructuredContentInline) return;
+    this.#lastSelectedStructuredContentInline.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentInline = null;
+  }
+
+  #setSelectedStructuredContentInlineClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentInline &&
+      this.#lastSelectedStructuredContentInline.id === id &&
+      this.#lastSelectedStructuredContentInline.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentInline.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentInlineClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentInline = { id, elements };
+  }
+
+  #syncSelectedStructuredContentInlineClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+    let pos: number | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContent') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+      node = selection.node;
+      pos = selection.from;
+    } else {
+      const $pos = selection.$from;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContent') {
+          node = candidate;
+          pos = $pos.before(depth);
+          break;
+        }
+      }
+      if (!node || pos == null) {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-inline[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentInlineClass(elements, id);
+  }
+
   /**
    * Updates the visual cursor/selection overlay to match the current editor selection.
    *
@@ -3244,13 +3738,35 @@ export class PresentationEditor extends EventEmitter {
       }
       return;
     }
+
+    const activeEditor = this.getActiveEditor();
+    const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
+    // Keep selection visible when context menu is open.
+    const contextMenuOpen = activeEditor?.state ? !!ContextMenuPluginKey.getState(activeEditor.state)?.open : false;
+
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns).
+    // Naive-UI portals dropdown content under .v-binder-follower-content at <body> level,
+    // so it won't be inside [data-editor-ui-surface]. Check both.
+    const activeEl = document.activeElement;
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.('[data-editor-ui-surface], .v-binder-follower-content');
+
+    if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
+      try {
+        this.#clearSelectedFieldAnnotationClass();
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
     const layout = this.#layoutState.layout;
-    const editorState = this.getActiveEditor().state;
+    const editorState = activeEditor.state;
     const selection = editorState?.selection;
 
     if (!selection) {
       try {
         this.#clearSelectedFieldAnnotationClass();
+        this.#clearSelectedStructuredContentBlockClass();
+        this.#clearSelectedStructuredContentInlineClass();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -3274,6 +3790,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#syncSelectedFieldAnnotationClass(selection);
+    this.#syncSelectedStructuredContentBlockClass(selection);
+    this.#syncSelectedStructuredContentInlineClass(selection);
 
     // Ensure selection endpoints remain mounted under virtualization so DOM-first
     // caret/selection rendering stays available during cross-page selection.
@@ -3978,10 +4496,12 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Get effective page gap based on layout mode and virtualization settings.
    * Keeps painter, layout, and geometry in sync.
+   * Uses DEFAULT_PAGE_GAP for both virtualized and non-virtualized modes for visual consistency.
    */
   #getEffectivePageGap(): number {
     if (this.#layoutOptions.virtualization?.enabled) {
-      return Math.max(0, this.#layoutOptions.virtualization.gap ?? DEFAULT_VIRTUALIZED_PAGE_GAP);
+      // Use explicit gap if provided, otherwise use same default as non-virtualized for consistency
+      return Math.max(0, this.#layoutOptions.virtualization.gap ?? DEFAULT_PAGE_GAP);
     }
     if (this.#layoutOptions.layoutMode === 'horizontal') {
       return DEFAULT_HORIZONTAL_PAGE_GAP;
@@ -4313,6 +4833,15 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  #getPageOffsetY(pageIndex: number): number | null {
+    return getPageOffsetYFromTransform({
+      painterHost: this.#painterHost,
+      viewportHost: this.#viewportHost,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageIndex,
+    });
+  }
+
   #convertPageLocalToOverlayCoords(
     pageIndex: number,
     pageLocalX: number,
@@ -4379,9 +4908,31 @@ export class PresentationEditor extends EventEmitter {
         visibleHost: this.#visibleHost,
         zoom: this.#layoutOptions.zoom ?? 1,
         getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
       },
       clientX,
       clientY,
+    );
+  }
+
+  denormalizeClientPoint(
+    layoutX: number,
+    layoutY: number,
+    pageIndex?: number,
+    height?: number,
+  ): { x: number; y: number; height?: number } | null {
+    return denormalizeClientPointFromPointer(
+      {
+        viewportHost: this.#viewportHost,
+        visibleHost: this.#visibleHost,
+        zoom: this.#layoutOptions.zoom ?? 1,
+        getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
+      },
+      layoutX,
+      layoutY,
+      pageIndex,
+      height,
     );
   }
 
@@ -4466,6 +5017,10 @@ export class PresentationEditor extends EventEmitter {
       };
     }
     return geometry;
+  }
+
+  computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null {
+    return this.#computeCaretLayoutRect(pos);
   }
 
   #getCurrentPageIndex(): number {

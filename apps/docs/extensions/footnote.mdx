@@ -1,0 +1,36 @@
+---
+title: Footnote extension
+sidebarTitle: "Footnote"
+keywords: "Footnote extension, superdoc Footnote, word Footnote, document Footnote, docx Footnote"
+---
+
+import Description from '/snippets/extensions/footnote.mdx'
+
+<Description />
+
+<Info>
+Footnote references are managed automatically during Word document import and export. There are no commands to programmatically create footnotes.
+</Info>
+
+## Word export
+
+Footnote references export as native Word footnotes:
+
+```xml
+<w:r>
+  <w:footnoteReference w:id="1"/>
+</w:r>
+
+<!-- In footnotes.xml -->
+<w:footnote w:id="1">
+  <w:p>
+    <w:r><w:t>Footnote text content</w:t></w:r>
+  </w:p>
+</w:footnote>
+```
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/footnote/footnote.js" />

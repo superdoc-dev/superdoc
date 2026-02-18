@@ -43,39 +43,6 @@ export declare const twipsToPx: (value: number) => number;
  */
 export declare const ptToPx: (pt?: number | null) => number | undefined;
 /**
- * Converts a value from pixels to points.
- *
- * @param px - The value in pixels to convert (optional, nullable)
- * @returns The equivalent value in points, or undefined if input is null/undefined/not finite
- *
- * @example
- * ```typescript
- * const points = pxToPt(16); // 12pt (16px at 96 DPI)
- * pxToPt(null); // undefined
- * pxToPt(Infinity); // undefined
- * ```
- */
-export declare const pxToPt: (px?: number | null) => number | undefined;
-/**
- * Converts paragraph indent values from twips to pixels.
- *
- * Takes an indent object with potentially four properties (left, right, firstLine, hanging)
- * and converts any finite numeric values from twips to pixels.
- *
- * @param indent - The paragraph indent object with values in twips (optional, nullable)
- * @returns A new indent object with values in pixels, or undefined if no valid values exist
- *
- * @example
- * ```typescript
- * const pxIndent = convertIndentTwipsToPx({ left: 1440, firstLine: 720 });
- * // { left: 96, firstLine: 48 }
- *
- * convertIndentTwipsToPx(null); // undefined
- * convertIndentTwipsToPx({}); // undefined (no valid properties)
- * ```
- */
-export declare const convertIndentTwipsToPx: (indent?: ParagraphIndent | null) => ParagraphIndent | undefined;
-/**
  * Type guard to check if a value is a finite number.
  *
  * Ensures the value is of type 'number' and is not NaN, Infinity, or -Infinity.
@@ -149,41 +116,6 @@ export declare const normalizePrefix: (value?: string) => string;
  * ```
  */
 export declare const pickNumber: (value: unknown) => number | undefined;
-/**
- * Validates and normalizes a decimal separator character.
- *
- * Only accepts '.' or ',' as valid decimal separators.
- *
- * @param value - The value to validate as a decimal separator
- * @returns The normalized separator ('.' or ','), or undefined if invalid
- *
- * @example
- * ```typescript
- * pickDecimalSeparator("."); // "."
- * pickDecimalSeparator(","); // ","
- * pickDecimalSeparator(" . "); // "."
- * pickDecimalSeparator(";"); // undefined
- * pickDecimalSeparator(123); // undefined
- * ```
- */
-export declare const pickDecimalSeparator: (value: unknown) => string | undefined;
-/**
- * Extracts and normalizes a language code string.
- *
- * Trims whitespace and converts to lowercase. Returns undefined for empty strings.
- *
- * @param value - The language code to normalize
- * @returns The normalized language code, or undefined if invalid or empty
- *
- * @example
- * ```typescript
- * pickLang("EN-US"); // "en-us"
- * pickLang("  fr  "); // "fr"
- * pickLang(""); // undefined
- * pickLang(123); // undefined
- * ```
- */
-export declare const pickLang: (value: unknown) => string | undefined;
 /**
  * Normalizes a color string, ensuring it has a leading '#' symbol.
  *
@@ -323,60 +255,6 @@ export declare function coerceBoolean(value: unknown): boolean | undefined;
  * ```
  */
 export declare const toBoolean: (value: unknown) => boolean | undefined;
-/**
- * Checks if a value is explicitly truthy according to specific patterns.
- *
- * Unlike coerceBoolean which returns undefined for unrecognized values, this
- * function always returns a definite boolean. It returns true ONLY for explicitly
- * truthy values, and false for everything else (including unrecognized values).
- *
- * Use this when you need a definite boolean answer and want to treat unknown
- * values as false rather than undefined.
- *
- * Recognized truthy values: true, 1, 'true', '1', 'on'
- *
- * @param value - The value to check for truthiness
- * @returns True if the value matches truthy patterns, false otherwise
- *
- * @example
- * ```typescript
- * isTruthy(true); // true
- * isTruthy(1); // true
- * isTruthy("true"); // true
- * isTruthy("on"); // true
- * isTruthy(false); // false
- * isTruthy(0); // false
- * isTruthy("yes"); // false (not in recognized patterns)
- * isTruthy("maybe"); // false
- * isTruthy(null); // false
- * ```
- */
-export declare const isTruthy: (value: unknown) => boolean;
-/**
- * Checks if a value is explicitly false according to specific patterns.
- *
- * Similar to isTruthy, this always returns a definite boolean. It returns true
- * ONLY when the value explicitly indicates false, not for unrecognized values.
- *
- * Recognized falsy values: false, 0, 'false', '0', 'off'
- *
- * @param value - The value to check for explicit falseness
- * @returns True if the value matches explicit false patterns, false otherwise
- *
- * @example
- * ```typescript
- * isExplicitFalse(false); // true
- * isExplicitFalse(0); // true
- * isExplicitFalse("false"); // true
- * isExplicitFalse("off"); // true
- * isExplicitFalse(true); // false
- * isExplicitFalse(1); // false
- * isExplicitFalse("no"); // false (not in recognized patterns)
- * isExplicitFalse("maybe"); // false
- * isExplicitFalse(null); // false
- * ```
- */
-export declare const isExplicitFalse: (value: unknown) => boolean;
 /**
  * Converts a spacing object to a BoxSpacing type with validated numeric values.
  *

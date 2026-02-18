@@ -195,6 +195,168 @@ describe('updateToolbarState', () => {
     toolbar.documentMode = 'editing';
   });
 
+  describe('document mode dropdown sync', () => {
+    let documentModeItem;
+
+    beforeEach(() => {
+      documentModeItem = {
+        name: { value: 'documentMode' },
+        label: { value: 'Editing' },
+        defaultLabel: { value: 'Editing' },
+        icon: { value: null },
+        allowWithoutEditor: { value: true },
+        setDisabled: vi.fn(),
+      };
+      toolbar.toolbarItems = [documentModeItem];
+      toolbar.activeEditor = null;
+    });
+
+    it('should sync to suggesting mode', () => {
+      toolbar.documentMode = 'suggesting';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Suggesting');
+      expect(documentModeItem.defaultLabel.value).toBe('Suggesting');
+      expect(documentModeItem.icon.value).toBe(toolbar.config.icons.documentSuggestingMode);
+    });
+
+    it('should sync to editing mode', () => {
+      toolbar.documentMode = 'editing';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Editing');
+      expect(documentModeItem.defaultLabel.value).toBe('Editing');
+      expect(documentModeItem.icon.value).toBe(toolbar.config.icons.documentEditingMode);
+    });
+
+    it('should sync to viewing mode', () => {
+      toolbar.documentMode = 'viewing';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Viewing');
+      expect(documentModeItem.defaultLabel.value).toBe('Viewing');
+      expect(documentModeItem.icon.value).toBe(toolbar.config.icons.documentViewingMode);
+    });
+
+    it('should default to editing when documentMode is null', () => {
+      toolbar.documentMode = null;
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Editing');
+      expect(documentModeItem.defaultLabel.value).toBe('Editing');
+    });
+
+    it('should default to editing when documentMode is undefined', () => {
+      toolbar.documentMode = undefined;
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Editing');
+      expect(documentModeItem.defaultLabel.value).toBe('Editing');
+    });
+
+    it('should default to editing when documentMode is an unknown value', () => {
+      toolbar.documentMode = 'unknown-mode';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Editing');
+      expect(documentModeItem.defaultLabel.value).toBe('Editing');
+    });
+
+    it('should handle uppercase mode values via toLowerCase', () => {
+      toolbar.documentMode = 'SUGGESTING';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Suggesting');
+      expect(documentModeItem.defaultLabel.value).toBe('Suggesting');
+    });
+
+    it('should handle mixed case mode values', () => {
+      toolbar.documentMode = 'Viewing';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Viewing');
+      expect(documentModeItem.defaultLabel.value).toBe('Viewing');
+    });
+
+    it('should use custom config.texts labels when provided', () => {
+      toolbar.config.texts.documentSuggestingMode = 'Custom Suggesting Label';
+      toolbar.documentMode = 'suggesting';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Custom Suggesting Label');
+      expect(documentModeItem.defaultLabel.value).toBe('Custom Suggesting Label');
+    });
+
+    it('should not update icon when mode-specific icon is undefined', () => {
+      const originalIcon = { type: 'original-icon' };
+      documentModeItem.icon.value = originalIcon;
+      toolbar.config.icons.documentSuggestingMode = undefined;
+      toolbar.config.icons.documentMode = undefined;
+      toolbar.documentMode = 'suggesting';
+
+      toolbar.updateToolbarState();
+
+      // Icon should remain unchanged when next.icon is falsy
+      expect(documentModeItem.icon.value).toBe(originalIcon);
+    });
+
+    it('should fall back to documentMode icon when mode-specific icon is missing', () => {
+      const fallbackIcon = { type: 'fallback-icon' };
+      toolbar.config.icons.documentEditingMode = undefined;
+      toolbar.config.icons.documentMode = fallbackIcon;
+      toolbar.documentMode = 'editing';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.icon.value).toBe(fallbackIcon);
+    });
+
+    it('should not throw when documentModeItem is missing from toolbar', () => {
+      toolbar.toolbarItems = [];
+      toolbar.documentMode = 'suggesting';
+
+      expect(() => toolbar.updateToolbarState()).not.toThrow();
+    });
+
+    it('should not update label when label.value is undefined', () => {
+      documentModeItem.label = {};
+      toolbar.documentMode = 'suggesting';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBeUndefined();
+      expect(documentModeItem.defaultLabel.value).toBe('Suggesting');
+    });
+
+    it('should not update defaultLabel when defaultLabel.value is undefined', () => {
+      documentModeItem.defaultLabel = {};
+      toolbar.documentMode = 'suggesting';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.label.value).toBe('Suggesting');
+      expect(documentModeItem.defaultLabel.value).toBeUndefined();
+    });
+
+    it('should not update icon when icon.value is undefined', () => {
+      documentModeItem.icon = {};
+      toolbar.documentMode = 'suggesting';
+
+      toolbar.updateToolbarState();
+
+      expect(documentModeItem.icon.value).toBeUndefined();
+    });
+  });
+
   it('should update toolbar state with active formatting marks', () => {
     mockGetActiveFormatting.mockReturnValue([
       { name: 'bold', attrs: {} },

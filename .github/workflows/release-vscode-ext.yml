@@ -1,0 +1,57 @@
+# Auto-releases on push to main (@next channel)
+# For stable (@latest): cherry-pick commits to stable branch, then manually dispatch this workflow
+name: 📦 Release vscode-ext
+
+on:
+  push:
+    branches: main
+    paths:
+      - 'apps/vscode-ext/**'
+      - '!apps/vscode-ext/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build superdoc
+        run: pnpm run build
+
+      - name: Build vscode-ext
+        run: pnpm run build
+        working-directory: apps/vscode-ext
+
+      - name: Release
+        run: pnpx semantic-release
+        working-directory: apps/vscode-ext
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}

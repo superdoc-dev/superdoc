@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-import { ensureClipboardPermission, readFromClipboard } from '../clipboardUtils.js';
+import { ensureClipboardPermission, readClipboardRaw, readFromClipboard } from '../clipboardUtils.js';
 
 // Helper to restore globals after each test
 const originalNavigator = global.navigator;
@@ -67,6 +67,53 @@ describe('clipboardUtils', () => {
 
       expect(readTextMock).toHaveBeenCalled();
       expect(res).toBe('plain');
+    });
+  });
+
+  describe('readClipboardRaw', () => {
+    it('returns HTML and text when clipboard.read() succeeds', async () => {
+      const htmlBlob = new Blob(['<p>rich</p>'], { type: 'text/html' });
+      const textBlob = new Blob(['rich'], { type: 'text/plain' });
+
+      const clipboardItem = {
+        types: ['text/html', 'text/plain'],
+        getType: vi.fn((type) => {
+          if (type === 'text/html') return Promise.resolve(htmlBlob);
+          if (type === 'text/plain') return Promise.resolve(textBlob);
+          return Promise.reject(new Error('unsupported type'));
+        }),
+      };
+
+      global.navigator = {
+        clipboard: {
+          read: vi.fn().mockResolvedValue([clipboardItem]),
+          readText: vi.fn().mockResolvedValue('rich'),
+        },
+        permissions: {
+          query: vi.fn().mockResolvedValue({ state: 'granted' }),
+        },
+      };
+
+      const result = await readClipboardRaw();
+
+      expect(result).toEqual({ html: '<p>rich</p>', text: 'rich' });
+    });
+
+    it('falls back to readText when permission query throws', async () => {
+      const readTextMock = vi.fn().mockResolvedValue('plain fallback text');
+      global.navigator = {
+        clipboard: {
+          readText: readTextMock,
+        },
+        permissions: {
+          query: vi.fn().mockRejectedValue(new Error('unsupported permission name')),
+        },
+      };
+
+      const result = await readClipboardRaw();
+
+      expect(readTextMock).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ html: '', text: 'plain fallback text' });
     });
   });
 });

@@ -39,6 +39,7 @@ export type { RulerOptions } from './renderer.js';
 export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
 
 export { applySquareWrapExclusionsToLines } from './utils/anchor-helpers';
+export { buildImagePmSelector, buildInlineImagePmSelector } from './utils/image-selectors.js';
 
 // Re-export PM position validation utilities
 export {
@@ -118,6 +119,7 @@ export const createDomPainter = (
   setVirtualizationPins?: (pageIndices: number[] | null | undefined) => void;
   setActiveComment?: (commentId: string | null) => void;
   getActiveComment?: () => string | null;
+  onScroll?: () => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
     pageStyles: options.pageStyles,
@@ -155,6 +157,10 @@ export const createDomPainter = (
     },
     getActiveComment() {
       return painter.getActiveComment();
+    },
+    // Trigger virtualization update when scroll container is external to the painter
+    onScroll() {
+      painter.onScroll();
     },
   };
 };

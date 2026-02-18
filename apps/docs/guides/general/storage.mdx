@@ -6,7 +6,7 @@ keywords: "storage, versioning, document storage, S3, cloud storage, Yjs, CRDT, 
 
 SuperDoc is a self-hosted solution where you decide how and when documents are stored. Existing storage solutions like S3 and Cloud Storage are secure and work well.
 
-## Storage Approaches
+## Storage approaches
 How and when a document is stored often depends on the level of document collaboration needed.
 
 | Collaboration Level | Approach | Complexity | When Changes Are Stored |
@@ -14,12 +14,12 @@ How and when a document is stored often depends on the level of document collabo
 | [High](#high-collaboration) | Yjs/CRDT | Medium | Continuously (backend) |
 | [Low](#low-collaboration) | Check in/out | Low | User-triggered (frontend) |
 
-### High Collaboration
+### High collaboration
 
 For real-time, multi-user collaboration (similar to Google Docs) using Yjs/CRDT, each client connects to a [realtime collaboration service](/modules/collaboration/overview) that merges all user updates.
 
 <Info>
-**Complexity: Medium** — Requires a server-side [Yjs/CRDT service](/modules/collaboration/self-hosted/overview)
+**Complexity: Medium** — Requires a server-side [Yjs/CRDT service](/guides/collaboration/self-hosted-overview)
 </Info>
 
 **How it works:**
@@ -27,7 +27,7 @@ For real-time, multi-user collaboration (similar to Google Docs) using Yjs/CRDT,
 - When all changes are merged, the service stores the new document
 - Storage happens continuously on the backend
 
-### Low Collaboration
+### Low collaboration
 
 For scenarios where only one user edits at a time (like SharePoint), implement a locking mechanism where users check out documents before editing.
 
@@ -36,13 +36,13 @@ For scenarios where only one user edits at a time (like SharePoint), implement a
 </Info>
 
 **How it works:**
-- When the active user [makes an edit](/core/supereditor/hooks#onupdate), debounced changes are sent to your server which stores the document
+- When the active user [makes an edit](/core/supereditor/events#onupdate), debounced changes are sent to your server which stores the document
 - Alternatively, when a user saves/checks in the document, it is sent to your server for storage
 - Storage is triggered by user actions on the frontend
 
-## What to Store
+## What to store
 
-In both [low collaboration](#low-collaboration) and [high collaboration](#high-collaboration) approaches, when the document arrives at your backend, we recommend:
+In both [low collaboration](#low-collaboration) and [high collaboration](#high-collaboration) approaches, when the document arrives at your backend:
 
 <Steps>
   <Step title="Create a unique version ID">
@@ -66,15 +66,15 @@ In both [low collaboration](#low-collaboration) and [high collaboration](#high-c
 
 When the document is requested later, look up the latest version in your database and serve it from cloud storage.
 
-## Export Methods
+## Export methods
 
 The ways to export a document are covered in [Import/Export](/getting-started/import-export#export-options).
 
 <Note>
-We recommend storing the [full DOCX binary](/getting-started/import-export#docx-export-full-fidelity) because it provides the highest fidelity version of the document. Other export options (such as [JSON](/getting-started/import-export#json-export-full-fidelity)) are also available.
+Store the [full DOCX binary](/getting-started/import-export#docx-export-full-fidelity) for the highest fidelity version of the document.
 </Note>
 
-## Best Practices
+## Best practices
 
 <CardGroup cols={2}>
   <Card title="Unique Version IDs" icon="fingerprint">

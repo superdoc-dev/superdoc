@@ -62,15 +62,7 @@ vi.mock('./sections/index.js', () => {
 });
 
 vi.mock('./utilities.js', () => ({
-  pxToPt: vi.fn((px) => (px != null ? px / 1.333 : undefined)),
   pickNumber: vi.fn((value) => (typeof value === 'number' ? value : undefined)),
-  pickDecimalSeparator: vi.fn((value) => {
-    if (typeof value === 'string' && (value.trim() === '.' || value.trim() === ',')) {
-      return value.trim();
-    }
-    return undefined;
-  }),
-  pickLang: vi.fn((value) => (typeof value === 'string' ? value.toLowerCase() : undefined)),
   normalizePrefix: vi.fn((value) => (value ? String(value) : '')),
   buildPositionMap: vi.fn(() => new WeakMap()),
   createBlockIdGenerator: vi.fn((prefix = '') => {
@@ -646,7 +638,6 @@ describe('internal', () => {
 
         toFlowBlocks(doc);
 
-        // pickLang should be called with the lang value
         expect(handleParagraphNode).toHaveBeenCalled();
       });
 

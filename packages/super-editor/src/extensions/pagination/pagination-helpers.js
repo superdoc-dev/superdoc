@@ -2,7 +2,6 @@ import { PluginKey } from 'prosemirror-state';
 import { Editor as SuperEditor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import {
-  updateYdocDocxData,
   pushHeaderFooterToYjs,
   isApplyingRemoteHeaderFooterChanges,
 } from '@extensions/collaboration/collaboration-helpers.js';
@@ -299,7 +298,13 @@ export const toggleHeaderFooterEditMode = ({ editor, focusedSectionEditor, isEdi
   }
 };
 
-export const onHeaderFooterDataUpdate = async ({ editor, transaction }, mainEditor, sectionId, type) => {
+/**
+ * Handle header/footer data updates.
+ * Updates converter storage and syncs JSON to Yjs for real-time collaboration.
+ * Note: Does NOT call updateYdocDocxData - that is handled by the debounced
+ * main document listener to avoid excessive full DOCX broadcasts.
+ */
+export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, sectionId, type) => {
   if (!type || !sectionId) return;
 
   // Skip if we're currently applying remote changes to prevent ping-pong loop
@@ -334,9 +339,13 @@ export const onHeaderFooterDataUpdate = async ({ editor, transaction }, mainEdit
   }
 
   // Push header/footer JSON to Yjs for real-time sync with collaborators
+  // This is lightweight (~1KB) and provides immediate visual sync
   pushHeaderFooterToYjs(mainEditor, type, sectionId, updatedData);
 
-  await updateYdocDocxData(mainEditor);
+  // NOTE: We intentionally do NOT call updateYdocDocxData here.
+  // The full DOCX sync is handled by the debounced main document listener
+  // which will pick up header/footer changes via the Y.Doc afterTransaction event.
+  // This prevents the ~80KB broadcast on every keystroke.
 };
 
 const setEditorToolbar = ({ editor }, mainEditor) => {

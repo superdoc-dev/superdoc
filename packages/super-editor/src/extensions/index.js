@@ -10,7 +10,7 @@ import { Gapcursor } from './gapcursor/index.js';
 import { Collaboration } from './collaboration/index.js';
 import { CollaborationCursor } from './collaboration-cursor/index.js';
 import { AiPlugin, AiMark, AiAnimationMark, AiLoaderNode } from './ai/index.js';
-import { SlashMenu } from './slash-menu';
+import { ContextMenu } from './context-menu';
 import {
   StructuredContentCommands,
   StructuredContent,
@@ -70,6 +70,7 @@ import { Search } from './search/index.js';
 import { NodeResizer } from './noderesizer/index.js';
 import { CustomSelection } from './custom-selection/index.js';
 import { PermissionRanges } from './permission-ranges/index.js';
+import { VerticalNavigation } from './vertical-navigation/index.js';
 
 // Permissions
 import { PermStart } from './perm-start/index.js';
@@ -138,7 +139,7 @@ const getStarterExtensions = () => {
     LineBreak,
     HardBreak,
     Run,
-    SlashMenu,
+    ContextMenu,
     Strike,
     TabNode,
     TableOfContents,
@@ -194,6 +195,7 @@ const getStarterExtensions = () => {
     PermStart,
     PermEnd,
     PermissionRanges,
+    VerticalNavigation,
     PassthroughInline,
     PassthroughBlock,
   ];

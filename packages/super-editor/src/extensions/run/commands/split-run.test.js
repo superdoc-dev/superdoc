@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import { TextSelection, EditorState } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import * as converterStyles from '@core/super-converter/styles.js';
 
 let splitRunToParagraph;
 let splitRunAtCursor;
@@ -187,6 +188,44 @@ describe('splitRunToParagraph with style marks', () => {
           {
             type: 'run',
             content: [{ type: 'text', text: 'Heading Text' }],
+          },
+        ],
+      },
+    ],
+  };
+
+  const STYLED_TABLE_DOC = {
+    type: 'doc',
+    content: [
+      {
+        type: 'table',
+        attrs: {
+          tableProperties: {
+            tableStyleId: 'TableBold',
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [
+                  {
+                    type: 'paragraph',
+                    attrs: {
+                      paragraphProperties: { styleId: 'BodyText' },
+                    },
+                    content: [
+                      {
+                        type: 'run',
+                        content: [{ type: 'text', text: 'Hello' }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
           },
         ],
       },
@@ -437,5 +476,194 @@ describe('splitRunToParagraph with style marks', () => {
 
     const paragraphTexts = getParagraphTexts(editor.view.state.doc);
     expect(paragraphTexts).toEqual(['Heading', ' Text']);
+  });
+
+  it('passes translated style context to resolveRunProperties when splitting', () => {
+    const mockConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: { definitions: { 1: { abstractNumId: 1 } }, abstracts: {} },
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: {} },
+        styles: { Heading1: { runProperties: { bold: true } } },
+      },
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+    const resolveRunPropertiesSpy = vi
+      .spyOn(converterStyles, 'resolveRunProperties')
+      .mockImplementation(() => ({ bold: true }));
+
+    editor.converter = mockConverter;
+    loadDoc(STYLED_PARAGRAPH_DOC);
+
+    const start = findTextPos('Heading Text');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 7);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    expect(resolveRunPropertiesSpy).toHaveBeenCalled();
+    const [paramsArg, inlineRprArg, resolvedPprArg, tableInfoArg, isListNumberArg, numberingDefinedInlineArg] =
+      resolveRunPropertiesSpy.mock.calls[0];
+    expect(paramsArg).toMatchObject({
+      translatedNumbering: mockConverter.translatedNumbering,
+      translatedLinkedStyles: mockConverter.translatedLinkedStyles,
+    });
+    expect(inlineRprArg).toEqual({});
+    expect(resolvedPprArg).toEqual({ styleId: 'Heading1' });
+    expect(tableInfoArg).toBeNull();
+    expect(isListNumberArg).toBe(false);
+    expect(numberingDefinedInlineArg).toBe(false);
+
+    resolveRunPropertiesSpy.mockRestore();
+  });
+
+  it('applies resolved style marks to inserted text after split without mocking resolveRunProperties', () => {
+    const mockConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: {} },
+        styles: {
+          Heading1: {
+            runProperties: {
+              bold: true,
+              fontSize: 28,
+            },
+          },
+        },
+      },
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+
+    editor.converter = mockConverter;
+    loadDoc(STYLED_PARAGRAPH_DOC);
+
+    const start = findTextPos('Heading Text');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 7);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    editor.commands.insertContent('X');
+
+    let insertedTextNode = null;
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'text' && node.text === 'X') {
+        insertedTextNode = node;
+        return false;
+      }
+      return true;
+    });
+
+    expect(insertedTextNode).toBeTruthy();
+    const markTypes = (insertedTextNode?.marks || []).map((mark) => mark.type?.name);
+    expect(markTypes).toContain('bold');
+    expect(markTypes).toContain('textStyle');
+  });
+
+  it('applies resolved style marks to inserted text after split inside a table cell without mocking', () => {
+    const mockConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: {} },
+        styles: {
+          BodyText: {
+            runProperties: {
+              bold: true,
+              fontSize: 26,
+            },
+          },
+          TableBold: {
+            type: 'table',
+            runProperties: { italic: true },
+          },
+        },
+      },
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+
+    editor.converter = mockConverter;
+    loadDoc(STYLED_TABLE_DOC);
+
+    const start = findTextPos('Hello');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 2);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    editor.commands.insertContent('X');
+
+    let insertedTextNode = null;
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'text' && node.text === 'X') {
+        insertedTextNode = node;
+        return false;
+      }
+      return true;
+    });
+
+    expect(insertedTextNode).toBeTruthy();
+    const markTypes = (insertedTextNode?.marks || []).map((mark) => mark.type?.name);
+    expect(markTypes).toContain('bold');
+    expect(markTypes).toContain('italic');
+    expect(markTypes).toContain('textStyle');
+  });
+
+  it('passes table split context through resolveRunProperties call shape', () => {
+    const mockConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: {} },
+        styles: {
+          BodyText: { runProperties: {} },
+          TableBold: { type: 'table', runProperties: { bold: true } },
+        },
+      },
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+    const resolveRunPropertiesSpy = vi.spyOn(converterStyles, 'resolveRunProperties').mockImplementation(() => ({}));
+
+    editor.converter = mockConverter;
+    loadDoc(STYLED_TABLE_DOC);
+
+    const start = findTextPos('Hello');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 2);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    expect(resolveRunPropertiesSpy).toHaveBeenCalled();
+    const callArgs = resolveRunPropertiesSpy.mock.calls[0];
+    expect(callArgs).toHaveLength(6);
+    expect(callArgs[0]).toMatchObject({
+      translatedNumbering: mockConverter.translatedNumbering,
+      translatedLinkedStyles: mockConverter.translatedLinkedStyles,
+    });
+    expect(callArgs[2]).toEqual({ styleId: 'BodyText' });
+    expect(callArgs[3]).toEqual({
+      tableProperties: { tableStyleId: 'TableBold' },
+      rowIndex: 0,
+      cellIndex: 0,
+      numCells: 1,
+      numRows: 1,
+    });
+    expect(callArgs[4]).toBe(false);
+    expect(callArgs[5]).toBe(false);
+
+    resolveRunPropertiesSpy.mockRestore();
   });
 });

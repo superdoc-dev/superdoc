@@ -103,7 +103,7 @@ describe('handleDocxPaste', () => {
               <span style="font-size:13pt;font-family:Calibri">First item</span>
             </li>
           </ol>
-          <p class="MsoListParagraph" style="mso-list:l0 level1 lfo1;font-size:13pt;font-family:Calibri">
+          <p class="MsoListParagraph" data-sd-block-id="copied-block-id" style="mso-list:l0 level1 lfo1;font-size:13pt;font-family:Calibri">
             <!--[if !supportLists]--><span style="font-family:Arial;font-size:12pt">2.</span><!--[endif]-->
             Second item
           </p>
@@ -133,6 +133,7 @@ describe('handleDocxPaste', () => {
     const parsedNode = parseSpy.mock.calls[0][0];
     const generatedParagraphs = Array.from(parsedNode.querySelectorAll('p[data-list-level]'));
     expect(generatedParagraphs).toHaveLength(2);
+    expect(parsedNode.querySelector('[data-sd-block-id]')).toBeNull();
     expect(generatedParagraphs[0].getAttribute('data-num-id')).toBe('200');
     expect(generatedParagraphs[0].getAttribute('data-list-level')).toBe('[1]');
     expect(generatedParagraphs[1].getAttribute('data-list-level')).toBe('[2]');

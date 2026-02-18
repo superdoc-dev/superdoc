@@ -14,6 +14,13 @@ import {
   isValidOperationIdFormat,
   type DocumentApiAdapters,
 } from '../src/index.js';
+import { buildDispatchTable } from '../src/invoke/invoke.js';
+
+/**
+ * Meta-methods on DocumentApi that are not operations.
+ * These are excluded from operation-to-member-path parity checks.
+ */
+const META_MEMBER_PATHS = ['invoke'] as const;
 
 function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object') return [];
@@ -188,7 +195,10 @@ function run(): void {
   }
 
   const api = createDocumentApi(createNoopAdapters());
-  const runtimeMemberPaths = collectFunctionMemberPaths(api).sort();
+  const metaPathSet = new Set<string>(META_MEMBER_PATHS);
+  const runtimeMemberPaths = collectFunctionMemberPaths(api)
+    .filter((path) => !metaPathSet.has(path))
+    .sort();
   const declaredMemberPaths = [...DOCUMENT_API_MEMBER_PATHS].sort();
 
   const missingRuntimeMembers = diff(declaredMemberPaths, runtimeMemberPaths);
@@ -196,6 +206,16 @@ function run(): void {
   if (missingRuntimeMembers.length > 0 || extraRuntimeMembers.length > 0) {
     errors.push(
       `DocumentApi member-path parity failed (missing runtime: ${missingRuntimeMembers.join(', ') || 'none'}, extra runtime: ${extraRuntimeMembers.join(', ') || 'none'})`,
+    );
+  }
+
+  // Verify invoke dispatch table keys match OPERATION_IDS exactly.
+  const dispatchKeys = Object.keys(buildDispatchTable(api)).sort();
+  const missingDispatch = diff(operationIds, dispatchKeys);
+  const extraDispatch = diff(dispatchKeys, operationIds);
+  if (missingDispatch.length > 0 || extraDispatch.length > 0) {
+    errors.push(
+      `invoke dispatch table parity failed (missing: ${missingDispatch.join(', ') || 'none'}, extra: ${extraDispatch.join(', ') || 'none'})`,
     );
   }
 

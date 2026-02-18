@@ -109,6 +109,9 @@ import {
   type CapabilitiesAdapter,
   type DocumentApiCapabilities,
 } from './capabilities/capabilities.js';
+import type { OperationId } from './contract/types.js';
+import type { DynamicInvokeRequest, InvokeRequest, InvokeResult } from './contract/operation-registry.js';
+import { buildDispatchTable } from './invoke/invoke.js';
 
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
@@ -243,6 +246,19 @@ export interface DocumentApi {
    * Callable directly (`capabilities()`) or via `.get()`.
    */
   capabilities: CapabilitiesApi;
+  /**
+   * Dynamically dispatch any operation by its operation ID.
+   *
+   * For TypeScript consumers, the return type narrows based on the operationId.
+   * For dynamic callers (AI agents, automation), accepts {@link DynamicInvokeRequest}
+   * with `unknown` input. Invalid inputs produce adapter-level errors.
+   *
+   * @param request - Operation envelope with operationId, input, and optional options.
+   * @returns The operation-specific result payload from the dispatched handler.
+   * @throws {Error} When operationId is unknown.
+   */
+  invoke<T extends OperationId>(request: InvokeRequest<T>): InvokeResult<T>;
+  invoke(request: DynamicInvokeRequest): unknown;
 }
 
 export interface DocumentApiAdapters {
@@ -279,7 +295,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const capFn = () => executeCapabilities(adapters.capabilities);
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
 
-  return {
+  const api: DocumentApi = {
     find(selectorOrQuery: Selector | Query, options?: FindOptions): QueryResult {
       return executeFind(adapters.find, selectorOrQuery, options);
     },
@@ -396,5 +412,16 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeListsExit(adapters.lists, input, options);
       },
     },
+    invoke(request: DynamicInvokeRequest): unknown {
+      if (!Object.prototype.hasOwnProperty.call(dispatch, request.operationId)) {
+        throw new Error(`Unknown operationId: "${request.operationId}"`);
+      }
+      const handler = dispatch[request.operationId];
+      return handler(request.input, request.options);
+    },
   };
+
+  const dispatch = buildDispatchTable(api);
+
+  return api;
 }

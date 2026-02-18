@@ -602,11 +602,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   } = deps;
 
   const attrs = cell?.attrs;
-  const padding = attrs?.padding || { top: 2, left: 4, right: 4, bottom: 2 };
+  const padding = attrs?.padding || { top: 0, left: 4, right: 4, bottom: 0 };
   const paddingLeft = padding.left ?? 4;
-  const paddingTop = padding.top ?? 2;
+  const paddingTop = padding.top ?? 0;
   const paddingRight = padding.right ?? 4;
-  const paddingBottom = padding.bottom ?? 2;
+  const paddingBottom = padding.bottom ?? 0;
 
   const cellEl = doc.createElement('div');
   cellEl.style.position = 'absolute';

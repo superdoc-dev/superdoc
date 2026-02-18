@@ -22,6 +22,9 @@
     "apps/docs/document-api/reference/find.mdx",
     "apps/docs/document-api/reference/format/bold.mdx",
     "apps/docs/document-api/reference/format/index.mdx",
+    "apps/docs/document-api/reference/format/italic.mdx",
+    "apps/docs/document-api/reference/format/strikethrough.mdx",
+    "apps/docs/document-api/reference/format/underline.mdx",
     "apps/docs/document-api/reference/get-node-by-id.mdx",
     "apps/docs/document-api/reference/get-node.mdx",
     "apps/docs/document-api/reference/get-text.mdx",
@@ -68,7 +71,7 @@
     },
     {
       "key": "format",
-      "operationIds": ["format.bold"],
+      "operationIds": ["format.bold", "format.italic", "format.underline", "format.strikethrough"],
       "pagePath": "apps/docs/document-api/reference/format/index.mdx",
       "title": "Format"
     },
@@ -120,5 +123,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "8d875ceb279d213c1e779882f103d39fa2106545ce94c6b1553ae06b6c321e03"
+  "sourceHash": "9f6796429b2a5ee8e11fe0cf9e482e59be289d0f0efed98f1c74766a6d1199d1"
 }

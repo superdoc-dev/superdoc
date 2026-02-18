@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
-import { formatBoldAdapter } from './format-adapter.js';
+import {
+  formatBoldAdapter,
+  formatItalicAdapter,
+  formatUnderlineAdapter,
+  formatStrikethroughAdapter,
+} from './format-adapter.js';
 
 type NodeOptions = {
   attrs?: Record<string, unknown>;
@@ -100,6 +105,15 @@ function makeEditor(
         bold: {
           create: vi.fn(() => ({ type: 'bold' })),
         },
+        italic: {
+          create: vi.fn(() => ({ type: 'italic' })),
+        },
+        underline: {
+          create: vi.fn(() => ({ type: 'underline' })),
+        },
+        strike: {
+          create: vi.fn(() => ({ type: 'strike' })),
+        },
         [TrackFormatMarkName]: {
           create: vi.fn(() => ({ type: TrackFormatMarkName })),
         },
@@ -115,18 +129,18 @@ function makeEditor(
   return { editor, dispatch, insertTrackedChange, textBetween, tr };
 }
 
+const TARGET = { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 5 } };
+const COLLAPSED_TARGET = { kind: 'text' as const, blockId: 'p1', range: { start: 2, end: 2 } };
+const MISSING_TARGET = { kind: 'text' as const, blockId: 'missing', range: { start: 0, end: 5 } };
+
 describe('formatBoldAdapter', () => {
   it('applies direct bold formatting', () => {
     const { editor, dispatch, tr } = makeEditor();
-    const receipt = formatBoldAdapter(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'direct' },
-    );
+    const receipt = formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'direct' });
 
     expect(receipt.success).toBe(true);
     expect(receipt.resolution).toMatchObject({
-      target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+      target: TARGET,
       range: { from: 1, to: 6 },
       text: 'Hello',
     });
@@ -137,11 +151,7 @@ describe('formatBoldAdapter', () => {
 
   it('sets skipTrackChanges meta in direct mode to preserve operation-scoped semantics', () => {
     const { editor, tr } = makeEditor();
-    const receipt = formatBoldAdapter(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'direct' },
-    );
+    const receipt = formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'direct' });
 
     expect(receipt.success).toBe(true);
     expect(tr.setMeta).toHaveBeenCalledWith('skipTrackChanges', true);
@@ -150,11 +160,7 @@ describe('formatBoldAdapter', () => {
 
   it('sets forceTrackChanges meta in tracked mode', () => {
     const { editor, tr } = makeEditor('Hello', { user: { name: 'Test' } });
-    const receipt = formatBoldAdapter(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'tracked' },
-    );
+    const receipt = formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'tracked' });
 
     expect(receipt.success).toBe(true);
     expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
@@ -162,27 +168,17 @@ describe('formatBoldAdapter', () => {
 
   it('throws when target cannot be resolved', () => {
     const { editor } = makeEditor();
-    expect(() =>
-      formatBoldAdapter(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 5 } } },
-        { changeMode: 'direct' },
-      ),
-    ).toThrow('Format target could not be resolved.');
+    expect(() => formatBoldAdapter(editor, { target: MISSING_TARGET }, { changeMode: 'direct' })).toThrow(
+      'Format target could not be resolved.',
+    );
   });
 
   it('returns INVALID_TARGET for collapsed target ranges', () => {
     const { editor } = makeEditor();
-    const receipt = formatBoldAdapter(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } } },
-      { changeMode: 'direct' },
-    );
+    const receipt = formatBoldAdapter(editor, { target: COLLAPSED_TARGET }, { changeMode: 'direct' });
 
     expect(receipt.success).toBe(false);
-    expect(receipt.failure).toMatchObject({
-      code: 'INVALID_TARGET',
-    });
+    expect(receipt.failure).toMatchObject({ code: 'INVALID_TARGET' });
     expect(receipt.resolution.range).toEqual({ from: 3, to: 3 });
   });
 
@@ -190,35 +186,23 @@ describe('formatBoldAdapter', () => {
     const { editor } = makeEditor();
     delete (editor.schema?.marks as Record<string, unknown>)?.bold;
 
-    expect(() =>
-      formatBoldAdapter(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-        { changeMode: 'direct' },
-      ),
-    ).toThrow('requires the "bold" mark');
+    expect(() => formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'direct' })).toThrow(
+      'requires the "bold" mark',
+    );
   });
 
   it('throws when tracked format capability is unavailable', () => {
     const { editor } = makeEditor();
     delete (editor.commands as Record<string, unknown>)?.insertTrackedChange;
 
-    expect(() =>
-      formatBoldAdapter(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-        { changeMode: 'tracked' },
-      ),
-    ).toThrow('requires the insertTrackedChange command');
+    expect(() => formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'tracked' })).toThrow(
+      'requires the insertTrackedChange command',
+    );
   });
 
   it('supports direct dry-run without building a transaction', () => {
     const { editor, dispatch, tr } = makeEditor();
-    const receipt = formatBoldAdapter(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'direct', dryRun: true },
-    );
+    const receipt = formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'direct', dryRun: true });
 
     expect(receipt.success).toBe(true);
     expect(receipt.resolution.range).toEqual({ from: 1, to: 6 });
@@ -228,11 +212,7 @@ describe('formatBoldAdapter', () => {
 
   it('supports tracked dry-run without building a transaction', () => {
     const { editor, dispatch, tr } = makeEditor('Hello', { user: { name: 'Test' } });
-    const receipt = formatBoldAdapter(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'tracked', dryRun: true },
-    );
+    const receipt = formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'tracked', dryRun: true });
 
     expect(receipt.success).toBe(true);
     expect(receipt.resolution.range).toEqual({ from: 1, to: 6 });
@@ -244,18 +224,10 @@ describe('formatBoldAdapter', () => {
   it('keeps direct and tracked bold operations deterministic for the same target', () => {
     const { editor, tr } = makeEditor('Hello', { user: { name: 'Test' } });
 
-    const direct = formatBoldAdapter(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'direct' },
-    );
+    const direct = formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'direct' });
     expect(direct.success).toBe(true);
 
-    const tracked = formatBoldAdapter(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'tracked' },
-    );
+    const tracked = formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'tracked' });
     expect(tracked.success).toBe(true);
     expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
   });
@@ -263,24 +235,154 @@ describe('formatBoldAdapter', () => {
   it('throws CAPABILITY_UNAVAILABLE for tracked dry-run without a configured user', () => {
     const { editor } = makeEditor();
 
-    expect(() =>
-      formatBoldAdapter(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-        { changeMode: 'tracked', dryRun: true },
-      ),
-    ).toThrow('requires a user to be configured');
+    expect(() => formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'tracked', dryRun: true })).toThrow(
+      'requires a user to be configured',
+    );
   });
 
   it('throws same error for tracked non-dry-run without a configured user', () => {
     const { editor } = makeEditor();
 
-    expect(() =>
-      formatBoldAdapter(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-        { changeMode: 'tracked' },
-      ),
-    ).toThrow('requires a user to be configured');
+    expect(() => formatBoldAdapter(editor, { target: TARGET }, { changeMode: 'tracked' })).toThrow(
+      'requires a user to be configured',
+    );
+  });
+});
+
+describe('formatItalicAdapter', () => {
+  it('applies direct italic formatting', () => {
+    const { editor, dispatch, tr } = makeEditor();
+    const receipt = formatItalicAdapter(editor, { target: TARGET }, { changeMode: 'direct' });
+
+    expect(receipt.success).toBe(true);
+    expect(receipt.resolution).toMatchObject({ target: TARGET, range: { from: 1, to: 6 }, text: 'Hello' });
+    expect(tr.addMark).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns INVALID_TARGET for collapsed target ranges', () => {
+    const { editor } = makeEditor();
+    const receipt = formatItalicAdapter(editor, { target: COLLAPSED_TARGET }, { changeMode: 'direct' });
+
+    expect(receipt.success).toBe(false);
+    expect(receipt.failure).toMatchObject({ code: 'INVALID_TARGET' });
+  });
+
+  it('throws when italic mark is unavailable', () => {
+    const { editor } = makeEditor();
+    delete (editor.schema?.marks as Record<string, unknown>)?.italic;
+
+    expect(() => formatItalicAdapter(editor, { target: TARGET }, { changeMode: 'direct' })).toThrow(
+      'requires the "italic" mark',
+    );
+  });
+
+  it('supports dry-run without building a transaction', () => {
+    const { editor, dispatch, tr } = makeEditor();
+    const receipt = formatItalicAdapter(editor, { target: TARGET }, { changeMode: 'direct', dryRun: true });
+
+    expect(receipt.success).toBe(true);
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('supports tracked mode', () => {
+    const { editor, tr } = makeEditor('Hello', { user: { name: 'Test' } });
+    const receipt = formatItalicAdapter(editor, { target: TARGET }, { changeMode: 'tracked' });
+
+    expect(receipt.success).toBe(true);
+    expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
+  });
+});
+
+describe('formatUnderlineAdapter', () => {
+  it('applies direct underline formatting', () => {
+    const { editor, dispatch, tr } = makeEditor();
+    const receipt = formatUnderlineAdapter(editor, { target: TARGET }, { changeMode: 'direct' });
+
+    expect(receipt.success).toBe(true);
+    expect(receipt.resolution).toMatchObject({ target: TARGET, range: { from: 1, to: 6 }, text: 'Hello' });
+    expect(tr.addMark).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns INVALID_TARGET for collapsed target ranges', () => {
+    const { editor } = makeEditor();
+    const receipt = formatUnderlineAdapter(editor, { target: COLLAPSED_TARGET }, { changeMode: 'direct' });
+
+    expect(receipt.success).toBe(false);
+    expect(receipt.failure).toMatchObject({ code: 'INVALID_TARGET' });
+  });
+
+  it('throws when underline mark is unavailable', () => {
+    const { editor } = makeEditor();
+    delete (editor.schema?.marks as Record<string, unknown>)?.underline;
+
+    expect(() => formatUnderlineAdapter(editor, { target: TARGET }, { changeMode: 'direct' })).toThrow(
+      'requires the "underline" mark',
+    );
+  });
+
+  it('supports dry-run without building a transaction', () => {
+    const { editor, dispatch, tr } = makeEditor();
+    const receipt = formatUnderlineAdapter(editor, { target: TARGET }, { changeMode: 'direct', dryRun: true });
+
+    expect(receipt.success).toBe(true);
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('supports tracked mode', () => {
+    const { editor, tr } = makeEditor('Hello', { user: { name: 'Test' } });
+    const receipt = formatUnderlineAdapter(editor, { target: TARGET }, { changeMode: 'tracked' });
+
+    expect(receipt.success).toBe(true);
+    expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
+  });
+});
+
+describe('formatStrikethroughAdapter', () => {
+  it('applies direct strikethrough formatting using the "strike" mark', () => {
+    const { editor, dispatch, tr } = makeEditor();
+    const receipt = formatStrikethroughAdapter(editor, { target: TARGET }, { changeMode: 'direct' });
+
+    expect(receipt.success).toBe(true);
+    expect(receipt.resolution).toMatchObject({ target: TARGET, range: { from: 1, to: 6 }, text: 'Hello' });
+    expect(tr.addMark).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns INVALID_TARGET for collapsed target ranges', () => {
+    const { editor } = makeEditor();
+    const receipt = formatStrikethroughAdapter(editor, { target: COLLAPSED_TARGET }, { changeMode: 'direct' });
+
+    expect(receipt.success).toBe(false);
+    expect(receipt.failure).toMatchObject({ code: 'INVALID_TARGET' });
+  });
+
+  it('throws when strike mark is unavailable', () => {
+    const { editor } = makeEditor();
+    delete (editor.schema?.marks as Record<string, unknown>)?.strike;
+
+    expect(() => formatStrikethroughAdapter(editor, { target: TARGET }, { changeMode: 'direct' })).toThrow(
+      'requires the "strike" mark',
+    );
+  });
+
+  it('supports dry-run without building a transaction', () => {
+    const { editor, dispatch, tr } = makeEditor();
+    const receipt = formatStrikethroughAdapter(editor, { target: TARGET }, { changeMode: 'direct', dryRun: true });
+
+    expect(receipt.success).toBe(true);
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('supports tracked mode', () => {
+    const { editor, tr } = makeEditor('Hello', { user: { name: 'Test' } });
+    const receipt = formatStrikethroughAdapter(editor, { target: TARGET }, { changeMode: 'tracked' });
+
+    expect(receipt.success).toBe(true);
+    expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
   });
 });

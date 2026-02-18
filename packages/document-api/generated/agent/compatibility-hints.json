@@ -145,6 +145,33 @@
       "supportsDryRun": true,
       "supportsTrackedMode": true
     },
+    "format.italic": {
+      "deterministicTargetResolution": true,
+      "memberPath": "format.italic",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "format.strikethrough": {
+      "deterministicTargetResolution": true,
+      "memberPath": "format.strikethrough",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    "format.underline": {
+      "deterministicTargetResolution": true,
+      "memberPath": "format.underline",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
     "getNode": {
       "deterministicTargetResolution": true,
       "memberPath": "getNode",
@@ -326,5 +353,5 @@
       "supportsTrackedMode": false
     }
   },
-  "sourceHash": "8d875ceb279d213c1e779882f103d39fa2106545ce94c6b1553ae06b6c321e03"
+  "sourceHash": "9f6796429b2a5ee8e11fe0cf9e482e59be289d0f0efed98f1c74766a6d1199d1"
 }

@@ -66,15 +66,19 @@ function makeAdapters() {
       },
     })),
   };
+  const formatReceipt = () => ({
+    success: true as const,
+    resolution: {
+      target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
+      range: { from: 1, to: 3 },
+      text: 'Hi',
+    },
+  });
   const formatAdapter: FormatAdapter = {
-    bold: vi.fn(() => ({
-      success: true as const,
-      resolution: {
-        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-        range: { from: 1, to: 3 },
-        text: 'Hi',
-      },
-    })),
+    bold: vi.fn(formatReceipt),
+    italic: vi.fn(formatReceipt),
+    underline: vi.fn(formatReceipt),
+    strikethrough: vi.fn(formatReceipt),
   };
   const trackChangesAdapter: TrackChangesAdapter = {
     list: vi.fn(() => ({ matches: [], total: 0 })),
@@ -227,6 +231,33 @@ describe('invoke', () => {
       const input = { address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' } };
       const direct = api.lists.get(input);
       const invoked = api.invoke({ operationId: 'lists.get', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('format.italic: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } } };
+      const direct = api.format.italic(input);
+      const invoked = api.invoke({ operationId: 'format.italic', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('format.underline: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } } };
+      const direct = api.format.underline(input);
+      const invoked = api.invoke({ operationId: 'format.underline', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('format.strikethrough: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } } };
+      const direct = api.format.strikethrough(input);
+      const invoked = api.invoke({ operationId: 'format.strikethrough', input });
       expect(invoked).toEqual(direct);
     });
   });

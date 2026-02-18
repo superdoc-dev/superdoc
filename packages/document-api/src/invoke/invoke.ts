@@ -46,6 +46,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
     // --- format.* ---
     'format.bold': (input, options) => api.format.bold(input, options),
+    'format.italic': (input, options) => api.format.italic(input, options),
+    'format.underline': (input, options) => api.format.underline(input, options),
+    'format.strikethrough': (input, options) => api.format.strikethrough(input, options),
 
     // --- create.* ---
     'create.paragraph': (input, options) => api.create.paragraph(input, options),

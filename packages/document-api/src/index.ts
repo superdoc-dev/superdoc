@@ -50,8 +50,20 @@ import {
 } from './comments/comments.js';
 import type { DeleteInput } from './delete/delete.js';
 import { executeFind, type FindAdapter, type FindOptions } from './find/find.js';
-import type { FormatAdapter, FormatApi, FormatBoldInput } from './format/format.js';
-import { executeFormatBold } from './format/format.js';
+import type {
+  FormatAdapter,
+  FormatApi,
+  FormatBoldInput,
+  FormatItalicInput,
+  FormatUnderlineInput,
+  FormatStrikethroughInput,
+} from './format/format.js';
+import {
+  executeFormatBold,
+  executeFormatItalic,
+  executeFormatUnderline,
+  executeFormatStrikethrough,
+} from './format/format.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -118,7 +130,13 @@ export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
 export type { InfoAdapter, InfoInput } from './info/info.js';
 export type { MutationOptions, WriteAdapter, WriteRequest } from './write/write.js';
-export type { FormatAdapter, FormatBoldInput } from './format/format.js';
+export type {
+  FormatAdapter,
+  FormatBoldInput,
+  FormatItalicInput,
+  FormatUnderlineInput,
+  FormatStrikethroughInput,
+} from './format/format.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
   TrackChangesAcceptAllInput,
@@ -358,6 +376,15 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     format: {
       bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt {
         return executeFormatBold(adapters.format, input, options);
+      },
+      italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt {
+        return executeFormatItalic(adapters.format, input, options);
+      },
+      underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt {
+        return executeFormatUnderline(adapters.format, input, options);
+      },
+      strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
+        return executeFormatStrikethrough(adapters.format, input, options);
       },
     },
     trackChanges: {

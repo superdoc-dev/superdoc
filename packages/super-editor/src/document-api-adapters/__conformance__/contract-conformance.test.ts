@@ -16,7 +16,12 @@ import {
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsAdapter } from '../comments-adapter.js';
 import { createParagraphAdapter } from '../create-adapter.js';
-import { formatBoldAdapter } from '../format-adapter.js';
+import {
+  formatBoldAdapter,
+  formatItalicAdapter,
+  formatUnderlineAdapter,
+  formatStrikethroughAdapter,
+} from '../format-adapter.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
   listsExitAdapter,
@@ -181,6 +186,15 @@ function makeTextEditor(
     marks: {
       bold: {
         create: vi.fn(() => ({ type: 'bold' })),
+      },
+      italic: {
+        create: vi.fn(() => ({ type: 'italic' })),
+      },
+      underline: {
+        create: vi.fn(() => ({ type: 'underline' })),
+      },
+      strike: {
+        create: vi.fn(() => ({ type: 'strike' })),
       },
       [TrackFormatMarkName]: {
         create: vi.fn(() => ({ type: TrackFormatMarkName })),
@@ -494,6 +508,84 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         {
           target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
         },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'format.italic': {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return formatItalicAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      return formatItalicAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return formatItalicAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'format.underline': {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return formatUnderlineAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      return formatUnderlineAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return formatUnderlineAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'format.strikethrough': {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return formatStrikethroughAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      return formatStrikethroughAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return formatStrikethroughAdapter(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
         { changeMode: 'direct' },
       );
     },
@@ -909,6 +1001,39 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'format.bold': () => {
     const { editor, dispatch, tr } = makeTextEditor();
     const result = formatBoldAdapter(
+      editor,
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(tr.addMark).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.italic': () => {
+    const { editor, dispatch, tr } = makeTextEditor();
+    const result = formatItalicAdapter(
+      editor,
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(tr.addMark).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.underline': () => {
+    const { editor, dispatch, tr } = makeTextEditor();
+    const result = formatUnderlineAdapter(
+      editor,
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(tr.addMark).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.strikethrough': () => {
+    const { editor, dispatch, tr } = makeTextEditor();
+    const result = formatStrikethroughAdapter(
       editor,
       { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
       { changeMode: 'direct', dryRun: true },

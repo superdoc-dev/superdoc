@@ -571,6 +571,90 @@
                 "required": ["available", "tracked", "dryRun"],
                 "type": "object"
               },
+              "format.italic": {
+                "additionalProperties": false,
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "reasons": {
+                    "items": {
+                      "enum": [
+                        "COMMAND_UNAVAILABLE",
+                        "OPERATION_UNAVAILABLE",
+                        "TRACKED_MODE_UNAVAILABLE",
+                        "DRY_RUN_UNAVAILABLE",
+                        "NAMESPACE_UNAVAILABLE"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "tracked": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["available", "tracked", "dryRun"],
+                "type": "object"
+              },
+              "format.strikethrough": {
+                "additionalProperties": false,
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "reasons": {
+                    "items": {
+                      "enum": [
+                        "COMMAND_UNAVAILABLE",
+                        "OPERATION_UNAVAILABLE",
+                        "TRACKED_MODE_UNAVAILABLE",
+                        "DRY_RUN_UNAVAILABLE",
+                        "NAMESPACE_UNAVAILABLE"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "tracked": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["available", "tracked", "dryRun"],
+                "type": "object"
+              },
+              "format.underline": {
+                "additionalProperties": false,
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "reasons": {
+                    "items": {
+                      "enum": [
+                        "COMMAND_UNAVAILABLE",
+                        "OPERATION_UNAVAILABLE",
+                        "TRACKED_MODE_UNAVAILABLE",
+                        "DRY_RUN_UNAVAILABLE",
+                        "NAMESPACE_UNAVAILABLE"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "tracked": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["available", "tracked", "dryRun"],
+                "type": "object"
+              },
               "getNode": {
                 "additionalProperties": false,
                 "properties": {
@@ -1142,6 +1226,9 @@
               "replace",
               "delete",
               "format.bold",
+              "format.italic",
+              "format.underline",
+              "format.strikethrough",
               "create.paragraph",
               "lists.list",
               "lists.get",
@@ -6432,6 +6519,1983 @@
         "type": "object"
       }
     },
+    "format.italic": {
+      "failureSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "failure": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": ["INVALID_TARGET"]
+              },
+              "details": {},
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["code", "message"],
+            "type": "object"
+          },
+          "resolution": {
+            "additionalProperties": false,
+            "properties": {
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "integer"
+                  },
+                  "to": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["from", "to"],
+                "type": "object"
+              },
+              "requestedTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "target": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "range", "text"],
+            "type": "object"
+          },
+          "success": {
+            "const": false
+          }
+        },
+        "required": ["success", "failure", "resolution"],
+        "type": "object"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "blockId": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "text"
+              },
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "type": "integer"
+                  },
+                  "start": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["start", "end"],
+                "type": "object"
+              }
+            },
+            "required": ["kind", "blockId", "range"],
+            "type": "object"
+          }
+        },
+        "required": ["target"],
+        "type": "object"
+      },
+      "memberPath": "format.italic",
+      "metadata": {
+        "deterministicTargetResolution": true,
+        "idempotency": "conditional",
+        "mutates": true,
+        "possibleFailureCodes": ["INVALID_TARGET"],
+        "supportsDryRun": true,
+        "supportsTrackedMode": true,
+        "throws": {
+          "postApplyForbidden": true,
+          "preApply": [
+            "TARGET_NOT_FOUND",
+            "COMMAND_UNAVAILABLE",
+            "TRACK_CHANGE_COMMAND_UNAVAILABLE",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "inserted": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "removed": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "resolution": {
+                "additionalProperties": false,
+                "properties": {
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "type": "integer"
+                      },
+                      "to": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["from", "to"],
+                    "type": "object"
+                  },
+                  "requestedTarget": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "range", "text"],
+                "type": "object"
+              },
+              "success": {
+                "const": true
+              },
+              "updated": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            },
+            "required": ["success", "resolution"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "failure": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": ["INVALID_TARGET"]
+                  },
+                  "details": {},
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["code", "message"],
+                "type": "object"
+              },
+              "resolution": {
+                "additionalProperties": false,
+                "properties": {
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "type": "integer"
+                      },
+                      "to": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["from", "to"],
+                    "type": "object"
+                  },
+                  "requestedTarget": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "range", "text"],
+                "type": "object"
+              },
+              "success": {
+                "const": false
+              }
+            },
+            "required": ["success", "failure", "resolution"],
+            "type": "object"
+          }
+        ]
+      },
+      "successSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "inserted": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "resolution": {
+            "additionalProperties": false,
+            "properties": {
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "integer"
+                  },
+                  "to": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["from", "to"],
+                "type": "object"
+              },
+              "requestedTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "target": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "range", "text"],
+            "type": "object"
+          },
+          "success": {
+            "const": true
+          },
+          "updated": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          }
+        },
+        "required": ["success", "resolution"],
+        "type": "object"
+      }
+    },
+    "format.strikethrough": {
+      "failureSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "failure": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": ["INVALID_TARGET"]
+              },
+              "details": {},
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["code", "message"],
+            "type": "object"
+          },
+          "resolution": {
+            "additionalProperties": false,
+            "properties": {
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "integer"
+                  },
+                  "to": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["from", "to"],
+                "type": "object"
+              },
+              "requestedTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "target": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "range", "text"],
+            "type": "object"
+          },
+          "success": {
+            "const": false
+          }
+        },
+        "required": ["success", "failure", "resolution"],
+        "type": "object"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "blockId": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "text"
+              },
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "type": "integer"
+                  },
+                  "start": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["start", "end"],
+                "type": "object"
+              }
+            },
+            "required": ["kind", "blockId", "range"],
+            "type": "object"
+          }
+        },
+        "required": ["target"],
+        "type": "object"
+      },
+      "memberPath": "format.strikethrough",
+      "metadata": {
+        "deterministicTargetResolution": true,
+        "idempotency": "conditional",
+        "mutates": true,
+        "possibleFailureCodes": ["INVALID_TARGET"],
+        "supportsDryRun": true,
+        "supportsTrackedMode": true,
+        "throws": {
+          "postApplyForbidden": true,
+          "preApply": [
+            "TARGET_NOT_FOUND",
+            "COMMAND_UNAVAILABLE",
+            "TRACK_CHANGE_COMMAND_UNAVAILABLE",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "inserted": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "removed": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "resolution": {
+                "additionalProperties": false,
+                "properties": {
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "type": "integer"
+                      },
+                      "to": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["from", "to"],
+                    "type": "object"
+                  },
+                  "requestedTarget": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "range", "text"],
+                "type": "object"
+              },
+              "success": {
+                "const": true
+              },
+              "updated": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            },
+            "required": ["success", "resolution"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "failure": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": ["INVALID_TARGET"]
+                  },
+                  "details": {},
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["code", "message"],
+                "type": "object"
+              },
+              "resolution": {
+                "additionalProperties": false,
+                "properties": {
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "type": "integer"
+                      },
+                      "to": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["from", "to"],
+                    "type": "object"
+                  },
+                  "requestedTarget": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "range", "text"],
+                "type": "object"
+              },
+              "success": {
+                "const": false
+              }
+            },
+            "required": ["success", "failure", "resolution"],
+            "type": "object"
+          }
+        ]
+      },
+      "successSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "inserted": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "resolution": {
+            "additionalProperties": false,
+            "properties": {
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "integer"
+                  },
+                  "to": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["from", "to"],
+                "type": "object"
+              },
+              "requestedTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "target": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "range", "text"],
+            "type": "object"
+          },
+          "success": {
+            "const": true
+          },
+          "updated": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          }
+        },
+        "required": ["success", "resolution"],
+        "type": "object"
+      }
+    },
+    "format.underline": {
+      "failureSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "failure": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": ["INVALID_TARGET"]
+              },
+              "details": {},
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["code", "message"],
+            "type": "object"
+          },
+          "resolution": {
+            "additionalProperties": false,
+            "properties": {
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "integer"
+                  },
+                  "to": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["from", "to"],
+                "type": "object"
+              },
+              "requestedTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "target": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "range", "text"],
+            "type": "object"
+          },
+          "success": {
+            "const": false
+          }
+        },
+        "required": ["success", "failure", "resolution"],
+        "type": "object"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "blockId": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "text"
+              },
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "type": "integer"
+                  },
+                  "start": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["start", "end"],
+                "type": "object"
+              }
+            },
+            "required": ["kind", "blockId", "range"],
+            "type": "object"
+          }
+        },
+        "required": ["target"],
+        "type": "object"
+      },
+      "memberPath": "format.underline",
+      "metadata": {
+        "deterministicTargetResolution": true,
+        "idempotency": "conditional",
+        "mutates": true,
+        "possibleFailureCodes": ["INVALID_TARGET"],
+        "supportsDryRun": true,
+        "supportsTrackedMode": true,
+        "throws": {
+          "postApplyForbidden": true,
+          "preApply": [
+            "TARGET_NOT_FOUND",
+            "COMMAND_UNAVAILABLE",
+            "TRACK_CHANGE_COMMAND_UNAVAILABLE",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "inserted": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "removed": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "resolution": {
+                "additionalProperties": false,
+                "properties": {
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "type": "integer"
+                      },
+                      "to": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["from", "to"],
+                    "type": "object"
+                  },
+                  "requestedTarget": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "range", "text"],
+                "type": "object"
+              },
+              "success": {
+                "const": true
+              },
+              "updated": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "comment"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entityId": {
+                          "type": "string"
+                        },
+                        "entityType": {
+                          "const": "trackedChange"
+                        },
+                        "kind": {
+                          "const": "entity"
+                        }
+                      },
+                      "required": ["kind", "entityType", "entityId"],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            },
+            "required": ["success", "resolution"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "failure": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": ["INVALID_TARGET"]
+                  },
+                  "details": {},
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["code", "message"],
+                "type": "object"
+              },
+              "resolution": {
+                "additionalProperties": false,
+                "properties": {
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "type": "integer"
+                      },
+                      "to": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["from", "to"],
+                    "type": "object"
+                  },
+                  "requestedTarget": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "text"
+                      },
+                      "range": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "type": "integer"
+                          },
+                          "start": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["start", "end"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["kind", "blockId", "range"],
+                    "type": "object"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "range", "text"],
+                "type": "object"
+              },
+              "success": {
+                "const": false
+              }
+            },
+            "required": ["success", "failure", "resolution"],
+            "type": "object"
+          }
+        ]
+      },
+      "successSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "inserted": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "resolution": {
+            "additionalProperties": false,
+            "properties": {
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "integer"
+                  },
+                  "to": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["from", "to"],
+                "type": "object"
+              },
+              "requestedTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "target": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "range", "text"],
+            "type": "object"
+          },
+          "success": {
+            "const": true
+          },
+          "updated": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "comment"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          }
+        },
+        "required": ["success", "resolution"],
+        "type": "object"
+      }
+    },
     "getNode": {
       "inputSchema": {
         "oneOf": [
@@ -10774,5 +12838,5 @@
     }
   },
   "sourceCommit": null,
-  "sourceHash": "8d875ceb279d213c1e779882f103d39fa2106545ce94c6b1553ae06b6c321e03"
+  "sourceHash": "9f6796429b2a5ee8e11fe0cf9e482e59be289d0f0efed98f1c74766a6d1199d1"
 }

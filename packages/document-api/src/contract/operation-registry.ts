@@ -21,7 +21,12 @@ import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions } from '../write/write.js';
-import type { FormatBoldInput } from '../format/format.js';
+import type {
+  FormatBoldInput,
+  FormatItalicInput,
+  FormatUnderlineInput,
+  FormatStrikethroughInput,
+} from '../format/format.js';
 import type {
   AddCommentInput,
   EditCommentInput,
@@ -73,6 +78,9 @@ export interface OperationRegistry {
 
   // --- format.* ---
   'format.bold': { input: FormatBoldInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.italic': { input: FormatItalicInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.underline': { input: FormatUnderlineInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.strikethrough': { input: FormatStrikethroughInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };

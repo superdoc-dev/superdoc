@@ -655,6 +655,39 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.bold'),
   },
+  'format.italic': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+      },
+      ['target'],
+    ),
+    output: textMutationResultSchemaFor('format.italic'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.italic'),
+  },
+  'format.underline': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+      },
+      ['target'],
+    ),
+    output: textMutationResultSchemaFor('format.underline'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.underline'),
+  },
+  'format.strikethrough': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+      },
+      ['target'],
+    ),
+    output: textMutationResultSchemaFor('format.strikethrough'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.strikethrough'),
+  },
   'create.paragraph': {
     input: objectSchema({
       at: {

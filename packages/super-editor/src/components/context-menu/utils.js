@@ -11,7 +11,7 @@ import { isList } from '@core/commands/list-helpers';
 /**
  * Get props by item id
  *
- * Takes in the itemId for the menu item and passes the SlashMenu props to help
+ * Takes in the itemId for the menu item and passes the ContextMenu props to help
  * compute the props needed
  * @param {string} itemId
  * @param {Object} props
@@ -212,7 +212,7 @@ function computeCanUndo(editor, state) {
         return !!can.undo();
       }
     } catch (error) {
-      console.warn('[SlashMenu] Unable to determine undo availability via editor.can():', error);
+      console.warn('[ContextMenu] Unable to determine undo availability via editor.can():', error);
     }
   }
 
@@ -221,14 +221,14 @@ function computeCanUndo(editor, state) {
       const undoManager = yUndoPluginKey.getState(state)?.undoManager;
       return !!undoManager && undoManager.undoStack.length > 0;
     } catch (error) {
-      console.warn('[SlashMenu] Unable to determine undo availability via y-prosemirror:', error);
+      console.warn('[ContextMenu] Unable to determine undo availability via y-prosemirror:', error);
     }
   }
 
   try {
     return undoDepth(state) > 0;
   } catch (error) {
-    console.warn('[SlashMenu] Unable to determine undo availability via history plugin:', error);
+    console.warn('[ContextMenu] Unable to determine undo availability via history plugin:', error);
     return false;
   }
 }
@@ -241,7 +241,7 @@ function computeCanRedo(editor, state) {
         return !!can.redo();
       }
     } catch (error) {
-      console.warn('[SlashMenu] Unable to determine redo availability via editor.can():', error);
+      console.warn('[ContextMenu] Unable to determine redo availability via editor.can():', error);
     }
   }
 
@@ -250,14 +250,14 @@ function computeCanRedo(editor, state) {
       const undoManager = yUndoPluginKey.getState(state)?.undoManager;
       return !!undoManager && undoManager.redoStack.length > 0;
     } catch (error) {
-      console.warn('[SlashMenu] Unable to determine redo availability via y-prosemirror:', error);
+      console.warn('[ContextMenu] Unable to determine redo availability via y-prosemirror:', error);
     }
   }
 
   try {
     return redoDepth(state) > 0;
   } catch (error) {
-    console.warn('[SlashMenu] Unable to determine redo availability via history plugin:', error);
+    console.warn('[ContextMenu] Unable to determine redo availability via history plugin:', error);
     return false;
   }
 }
@@ -328,7 +328,7 @@ function getStructureFromResolvedPos(state, pos) {
       isInSectionNode,
     };
   } catch (error) {
-    console.warn('[SlashMenu] Unable to resolve position for structural context:', error);
+    console.warn('[ContextMenu] Unable to resolve position for structural context:', error);
     return null;
   }
 }

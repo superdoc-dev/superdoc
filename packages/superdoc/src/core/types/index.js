@@ -83,10 +83,11 @@
  * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
  * @property {Object} [toolbar] Toolbar module configuration
- * @property {Object} [slashMenu] Slash menu module configuration
- * @property {Array} [slashMenu.customItems] Array of custom menu sections with items
- * @property {Function} [slashMenu.menuProvider] Function to customize menu items
- * @property {boolean} [slashMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [contextMenu] Context menu module configuration
+ * @property {Array} [contextMenu.customItems] Array of custom menu sections with items
+ * @property {Function} [contextMenu.menuProvider] Function to customize menu items
+ * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [slashMenu] @deprecated Use contextMenu instead
  */
 
 /** @typedef {import('@superdoc/super-editor').Editor} Editor */

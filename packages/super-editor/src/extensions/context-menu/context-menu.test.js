@@ -2,7 +2,7 @@ import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { schema, doc, p } from 'prosemirror-test-builder';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
-import { SlashMenu, SlashMenuPluginKey, findContainingBlockAncestor } from './slash-menu.js';
+import { ContextMenu, ContextMenuPluginKey, findContainingBlockAncestor } from './context-menu.js';
 vi.mock('@core/commands/list-helpers', () => ({
   isList: () => false,
 }));
@@ -11,13 +11,13 @@ vi.mock('../../core/helpers/editorSurface.js', () => ({
   getSurfaceRelativePoint: vi.fn(() => ({ left: 20, top: 30 })),
 }));
 
-describe('SlashMenu extension', () => {
+describe('ContextMenu extension', () => {
   it('registers the plugin key', () => {
-    expect(SlashMenuPluginKey.key.startsWith('slashMenu')).toBe(true);
+    expect(ContextMenuPluginKey.key.startsWith('contextMenu')).toBe(true);
   });
 
   it('skips plugin creation when headless', () => {
-    const headless = SlashMenu.config.addPmPlugins.call({ editor: { options: { isHeadless: true } } });
+    const headless = ContextMenu.config.addPmPlugins.call({ editor: { options: { isHeadless: true } } });
     expect(headless).toEqual([]);
   });
 
@@ -31,7 +31,7 @@ describe('SlashMenu extension', () => {
       isHeadless: false,
       disableContextMenu: false,
     });
-    const plugins = SlashMenu.config.addPmPlugins.call({ editor });
+    const plugins = ContextMenu.config.addPmPlugins.call({ editor });
     expect(plugins).toHaveLength(1);
     expect(typeof plugins[0].props.handleKeyDown).toBe('function');
     editor.destroy();
@@ -48,7 +48,7 @@ describe('SlashMenu extension', () => {
       view: null,
     };
 
-    const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+    const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
     state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
     const view = {
@@ -78,20 +78,20 @@ describe('SlashMenu extension', () => {
     expect(openEvent.preventDefault).toHaveBeenCalled();
     expect(view.dispatch).toHaveBeenCalled();
 
-    const pluginState = SlashMenuPluginKey.getState(view.state);
+    const pluginState = ContextMenuPluginKey.getState(view.state);
     expect(pluginState.open).toBe(true);
     expect(pluginState.anchorPos).toBe(1);
     expect(pluginState.menuPosition).toEqual({ left: '20px', top: '58px' });
-    expect(editor.emit).toHaveBeenCalledWith('slashMenu:open', {
+    expect(editor.emit).toHaveBeenCalledWith('contextMenu:open', {
       menuPosition: { left: '20px', top: '58px' },
     });
 
     const closeEvent = { key: 'Escape', preventDefault: vi.fn() };
     const closed = plugin.props.handleKeyDown.call(plugin, view, closeEvent);
     expect(closed).toBe(true);
-    const updatedState = SlashMenuPluginKey.getState(view.state);
+    const updatedState = ContextMenuPluginKey.getState(view.state);
     expect(updatedState.open).toBe(false);
-    expect(editor.emit).toHaveBeenCalledWith('slashMenu:close');
+    expect(editor.emit).toHaveBeenCalledWith('contextMenu:close');
     expect(view.focus).toHaveBeenCalled();
 
     viewLifecycle?.destroy?.();
@@ -108,7 +108,7 @@ describe('SlashMenu extension', () => {
       view: null,
     };
 
-    const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+    const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
     state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
     const view = {
@@ -131,7 +131,7 @@ describe('SlashMenu extension', () => {
     expect(handled).toBe(false);
     expect(slashEvent.preventDefault).not.toHaveBeenCalled();
     expect(view.dispatch).not.toHaveBeenCalled();
-    expect(editor.emit).not.toHaveBeenCalledWith('slashMenu:open', expect.anything());
+    expect(editor.emit).not.toHaveBeenCalledWith('contextMenu:open', expect.anything());
   });
 
   it('closes the menu if disableContextMenu becomes true after opening', () => {
@@ -145,7 +145,7 @@ describe('SlashMenu extension', () => {
       view: null,
     };
 
-    const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+    const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
     state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
     const view = {
@@ -170,13 +170,13 @@ describe('SlashMenu extension', () => {
 
     const opened = plugin.props.handleKeyDown.call(plugin, view, openEvent);
     expect(opened).toBe(true);
-    expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+    expect(ContextMenuPluginKey.getState(view.state).open).toBe(true);
 
     editor.options.disableContextMenu = true;
     view.dispatch(view.state.tr);
 
-    expect(SlashMenuPluginKey.getState(view.state).open).toBe(false);
-    expect(editor.emit).toHaveBeenCalledWith('slashMenu:close');
+    expect(ContextMenuPluginKey.getState(view.state).open).toBe(false);
+    expect(editor.emit).toHaveBeenCalledWith('contextMenu:close');
   });
 
   describe('cooldown mechanism', () => {
@@ -191,7 +191,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -213,19 +213,19 @@ describe('SlashMenu extension', () => {
       const openEvent1 = { key: '/', preventDefault: vi.fn() };
       const opened1 = plugin.props.handleKeyDown.call(plugin, view, openEvent1);
       expect(opened1).toBe(true);
-      expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(true);
 
       // Close menu
       const closeEvent = { key: 'Escape', preventDefault: vi.fn() };
       plugin.props.handleKeyDown.call(plugin, view, closeEvent);
-      expect(SlashMenuPluginKey.getState(view.state).open).toBe(false);
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(false);
 
       // Try to open menu again immediately (should be blocked by cooldown)
       const openEvent2 = { key: '/', preventDefault: vi.fn() };
       const opened2 = plugin.props.handleKeyDown.call(plugin, view, openEvent2);
       expect(opened2).toBe(false); // Should return false during cooldown
       expect(openEvent2.preventDefault).not.toHaveBeenCalled();
-      expect(SlashMenuPluginKey.getState(view.state).open).toBe(false); // Should remain closed
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(false); // Should remain closed
     });
 
     it('allows reopening menu after cooldown expires', async () => {
@@ -241,7 +241,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -271,7 +271,7 @@ describe('SlashMenu extension', () => {
       const opened = plugin.props.handleKeyDown.call(plugin, view, openEvent);
       expect(opened).toBe(true);
       expect(openEvent.preventDefault).toHaveBeenCalled();
-      expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(true);
 
       vi.useRealTimers();
     });
@@ -289,7 +289,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -335,7 +335,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -353,7 +353,7 @@ describe('SlashMenu extension', () => {
 
       // Dispatch a transaction with clientX/clientY (context menu positioning)
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           clientX: 150,
           clientY: 200,
@@ -361,7 +361,7 @@ describe('SlashMenu extension', () => {
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(true);
       expect(pluginState.menuPosition).toEqual({
         left: '160px', // 150 + CONTEXT_MENU_OFFSET_X (10)
@@ -382,7 +382,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -402,15 +402,15 @@ describe('SlashMenu extension', () => {
 
       // This should not throw, but return unchanged state
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           pos: 1,
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(false); // Should remain closed due to error
-      expect(consoleWarnSpy).toHaveBeenCalledWith('SlashMenu: Failed to get surface bounds', expect.any(Error));
+      expect(consoleWarnSpy).toHaveBeenCalledWith('ContextMenu: Failed to get surface bounds', expect.any(Error));
 
       consoleWarnSpy.mockRestore();
     });
@@ -427,7 +427,7 @@ describe('SlashMenu extension', () => {
         presentationEditor: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -442,13 +442,13 @@ describe('SlashMenu extension', () => {
       editor.view = view;
 
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           pos: 1,
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       // Menu may not open if no surface is found, depending on implementation
       // At minimum, it should not throw
       expect(pluginState).toBeDefined();
@@ -467,7 +467,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -482,13 +482,13 @@ describe('SlashMenu extension', () => {
 
       // Dispatch select action
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'select',
           id: 'heading-1',
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.selected).toBe('heading-1');
     });
 
@@ -503,7 +503,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -518,13 +518,13 @@ describe('SlashMenu extension', () => {
 
       // Dispatch updatePosition action (currently a no-op that falls through to default)
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'updatePosition',
         }),
       );
 
       // Should not throw and state should be valid
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState).toBeDefined();
       expect(pluginState.disabled).toBe(false);
     });
@@ -543,7 +543,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -576,7 +576,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -611,7 +611,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -626,15 +626,15 @@ describe('SlashMenu extension', () => {
 
       // Try to open with invalid position
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           pos: 99999, // Way beyond doc size
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(false); // Should remain closed
-      expect(consoleWarnSpy).toHaveBeenCalledWith('SlashMenu: Invalid position', 99999);
+      expect(consoleWarnSpy).toHaveBeenCalledWith('ContextMenu: Invalid position', 99999);
 
       consoleWarnSpy.mockRestore();
     });
@@ -652,7 +652,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -673,7 +673,7 @@ describe('SlashMenu extension', () => {
 
       // Open menu
       plugin.props.handleKeyDown.call(plugin, view, { key: '/', preventDefault: vi.fn() });
-      expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(true);
 
       // Clear dispatch calls
       view.dispatch.mockClear();
@@ -684,7 +684,7 @@ describe('SlashMenu extension', () => {
       // Should dispatch updatePosition
       expect(view.dispatch).toHaveBeenCalled();
       const lastCall = view.dispatch.mock.calls[view.dispatch.mock.calls.length - 1];
-      const meta = lastCall[0].getMeta(SlashMenuPluginKey);
+      const meta = lastCall[0].getMeta(ContextMenuPluginKey);
       expect(meta?.type).toBe('updatePosition');
 
       viewLifecycle?.destroy?.();
@@ -701,7 +701,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -722,7 +722,7 @@ describe('SlashMenu extension', () => {
 
       // Open menu
       plugin.props.handleKeyDown.call(plugin, view, { key: '/', preventDefault: vi.fn() });
-      expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(true);
 
       // Clear dispatch calls
       view.dispatch.mockClear();
@@ -733,7 +733,7 @@ describe('SlashMenu extension', () => {
       // Should dispatch updatePosition
       expect(view.dispatch).toHaveBeenCalled();
       const lastCall = view.dispatch.mock.calls[view.dispatch.mock.calls.length - 1];
-      const meta = lastCall[0].getMeta(SlashMenuPluginKey);
+      const meta = lastCall[0].getMeta(ContextMenuPluginKey);
       expect(meta?.type).toBe('updatePosition');
 
       viewLifecycle?.destroy?.();
@@ -752,7 +752,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -789,7 +789,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -809,16 +809,16 @@ describe('SlashMenu extension', () => {
 
       // Open menu
       plugin.props.handleKeyDown.call(plugin, view, { key: '/', preventDefault: vi.fn() });
-      expect(SlashMenuPluginKey.getState(view.state).open).toBe(true);
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(true);
 
       // Close with ArrowLeft
       const closeEvent = { key: 'ArrowLeft', preventDefault: vi.fn() };
       const closed = plugin.props.handleKeyDown.call(plugin, view, closeEvent);
       expect(closed).toBe(true);
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(false);
-      expect(editor.emit).toHaveBeenCalledWith('slashMenu:close');
+      expect(editor.emit).toHaveBeenCalledWith('contextMenu:close');
       expect(view.focus).toHaveBeenCalled();
     });
   });
@@ -868,7 +868,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -884,7 +884,7 @@ describe('SlashMenu extension', () => {
 
       // Open menu with context menu positioning
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           clientX: 150,
           clientY: 200,
@@ -892,7 +892,7 @@ describe('SlashMenu extension', () => {
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(true);
 
       // Position should be adjusted for containing block position AND scroll offset
@@ -923,7 +923,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -938,7 +938,7 @@ describe('SlashMenu extension', () => {
       editor.view = view;
 
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           clientX: 150,
           clientY: 200,
@@ -946,7 +946,7 @@ describe('SlashMenu extension', () => {
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(true);
 
       // Expected: clientY (200) - containingBlock.top (100) + scrollTop (75) + offset (10) = 185px
@@ -976,7 +976,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -991,7 +991,7 @@ describe('SlashMenu extension', () => {
       editor.view = view;
 
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           clientX: 180,
           clientY: 220,
@@ -999,7 +999,7 @@ describe('SlashMenu extension', () => {
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(true);
 
       // Left: clientX (180) - containingBlock.left (50) + scrollLeft (30) + offset (10) = 170px
@@ -1031,7 +1031,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -1046,7 +1046,7 @@ describe('SlashMenu extension', () => {
       editor.view = view;
 
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           clientX: 150,
           clientY: 200,
@@ -1054,7 +1054,7 @@ describe('SlashMenu extension', () => {
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(true);
 
       // With no scroll offsets, only containingBlock position and menu offset are applied
@@ -1088,7 +1088,7 @@ describe('SlashMenu extension', () => {
         view: null,
       };
 
-      const [plugin] = SlashMenu.config.addPmPlugins.call({ editor });
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
       state = EditorState.create({ schema, doc: baseDoc, selection: initialSelection, plugins: [plugin] });
 
       const view = {
@@ -1103,7 +1103,7 @@ describe('SlashMenu extension', () => {
       editor.view = view;
 
       view.dispatch(
-        view.state.tr.setMeta(SlashMenuPluginKey, {
+        view.state.tr.setMeta(ContextMenuPluginKey, {
           type: 'open',
           clientX: 150,
           clientY: 200,
@@ -1111,7 +1111,7 @@ describe('SlashMenu extension', () => {
         }),
       );
 
-      const pluginState = SlashMenuPluginKey.getState(view.state);
+      const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(true);
 
       // Should treat null/undefined as 0
@@ -1446,7 +1446,7 @@ describe('findContainingBlockAncestor', () => {
     const result = findContainingBlockAncestor(child);
     expect(result).toBe(null);
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      'SlashMenu: Failed to get computed style for element',
+      'ContextMenu: Failed to get computed style for element',
       expect.any(Object),
       expect.any(Error),
     );
@@ -1484,7 +1484,7 @@ describe('findContainingBlockAncestor', () => {
     const result = findContainingBlockAncestor(child);
     expect(result).toBe(grandparent);
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      'SlashMenu: Failed to get computed style for element',
+      'ContextMenu: Failed to get computed style for element',
       parent,
       expect.any(Error),
     );

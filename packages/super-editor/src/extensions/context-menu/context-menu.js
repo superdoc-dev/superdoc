@@ -69,7 +69,7 @@ export function findContainingBlockAncestor(element) {
       }
     } catch (error) {
       // Element may be detached from DOM or otherwise invalid
-      console.warn('SlashMenu: Failed to get computed style for element', current, error);
+      console.warn('ContextMenu: Failed to get computed style for element', current, error);
       // Continue checking parent elements
     }
 
@@ -80,17 +80,17 @@ export function findContainingBlockAncestor(element) {
 }
 
 /**
- * Configuration options for SlashMenu
- * @typedef {Object} SlashMenuOptions
- * @property {boolean} [disabled] - Disable the slash menu entirely (inherited from editor.options.disableContextMenu)
+ * Configuration options for ContextMenu
+ * @typedef {Object} ContextMenuOptions
+ * @property {boolean} [disabled] - Disable the context menu entirely (inherited from editor.options.disableContextMenu)
  * @property {number} [cooldownMs=5000] - Cooldown duration in milliseconds to prevent rapid re-opening
  * @category Options
  */
 
 /**
- * Plugin state structure for SlashMenu
- * @typedef {Object} SlashMenuState
- * @property {boolean} open - Whether the slash menu is currently visible
+ * Plugin state structure for ContextMenu
+ * @typedef {Object} ContextMenuState
+ * @property {boolean} open - Whether the context menu is currently visible
  * @property {string|null} selected - ID of the currently selected menu item
  * @property {number|null} anchorPos - Document position where the menu was anchored
  * @property {Object|null} menuPosition - CSS positioning {left: string, top: string}
@@ -100,8 +100,8 @@ export function findContainingBlockAncestor(element) {
  */
 
 /**
- * Transaction metadata for SlashMenu actions
- * @typedef {Object} SlashMenuMeta
+ * Transaction metadata for ContextMenu actions
+ * @typedef {Object} ContextMenuMeta
  * @property {'open'|'select'|'close'|'updatePosition'} type - Action type
  * @property {number} [pos] - Document position (for 'open' action)
  * @property {number} [clientX] - X coordinate for context menu positioning (for 'open' action)
@@ -109,29 +109,32 @@ export function findContainingBlockAncestor(element) {
  * @property {string} [id] - Menu item ID (for 'select' action)
  */
 
-export const SlashMenuPluginKey = new PluginKey('slashMenu');
+export const ContextMenuPluginKey = new PluginKey('contextMenu');
+
+/** @deprecated Use ContextMenuPluginKey instead */
+export const SlashMenuPluginKey = ContextMenuPluginKey;
 
 // Menu positioning constants (in pixels)
-const MENU_OFFSET_X = 0; // Horizontal offset for slash menu (aligned with cursor)
-const MENU_OFFSET_Y = 28; // Vertical offset for slash menu
+const MENU_OFFSET_X = 0; // Horizontal offset for slash trigger (aligned with cursor)
+const MENU_OFFSET_Y = 28; // Vertical offset for slash trigger
 const CONTEXT_MENU_OFFSET_X = 10; // Small offset for right-click
 const CONTEXT_MENU_OFFSET_Y = 10; // Small offset for right-click
 const SLASH_COOLDOWN_MS = 5000; // Cooldown period to prevent rapid re-opening
 
 /**
- * @module SlashMenu
- * @sidebarTitle Slash Menu
- * @snippetPath /snippets/extensions/slash-menu.mdx
+ * @module ContextMenu
+ * @sidebarTitle Context Menu
+ * @snippetPath /snippets/extensions/context-menu.mdx
  *
- * @fires slashMenu:open - Emitted when menu opens, payload: {menuPosition: {left, top}}
- * @fires slashMenu:close - Emitted when menu closes, no payload
+ * @fires contextMenu:open - Emitted when menu opens, payload: {menuPosition: {left, top}}
+ * @fires contextMenu:close - Emitted when menu closes, no payload
  */
-export const SlashMenu = Extension.create({
-  name: 'slashMenu',
+export const ContextMenu = Extension.create({
+  name: 'contextMenu',
 
   /**
-   * Initialize default options for the SlashMenu extension
-   * @returns {SlashMenuOptions} Empty options object (configuration is inherited from editor options)
+   * Initialize default options for the ContextMenu extension
+   * @returns {ContextMenuOptions} Empty options object (configuration is inherited from editor options)
    */
   addOptions() {
     return {};
@@ -143,7 +146,7 @@ export const SlashMenu = Extension.create({
       return [];
     }
 
-    // Cooldown flag and timeout for slash menu
+    // Cooldown flag and timeout for slash trigger
     let slashCooldown = false;
     let slashCooldownTimeout = null;
 
@@ -155,8 +158,8 @@ export const SlashMenu = Extension.create({
 
     /**
      * Ensures plugin state has the correct shape with all required properties
-     * @param {Partial<SlashMenuState>} [value={}] - Partial state to merge with defaults
-     * @returns {SlashMenuState} Complete state object with all properties
+     * @param {Partial<ContextMenuState>} [value={}] - Partial state to merge with defaults
+     * @returns {ContextMenuState} Complete state object with all properties
      */
     const ensureStateShape = (value = {}) => ({
       open: false,
@@ -167,8 +170,8 @@ export const SlashMenu = Extension.create({
       ...value,
     });
 
-    const slashMenuPlugin = new Plugin({
-      key: SlashMenuPluginKey,
+    const contextMenuPlugin = new Plugin({
+      key: ContextMenuPluginKey,
 
       state: {
         init: () => ensureStateShape(),
@@ -182,16 +185,16 @@ export const SlashMenu = Extension.create({
          * - 'updatePosition': Triggers menu position recalculation (no-op in apply)
          *
          * @param {import('prosemirror-state').Transaction} tr - The transaction
-         * @param {SlashMenuState} value - Previous plugin state
-         * @returns {SlashMenuState} New plugin state
+         * @param {ContextMenuState} value - Previous plugin state
+         * @returns {ContextMenuState} New plugin state
          */
         apply(tr, value) {
-          const meta = tr.getMeta(SlashMenuPluginKey);
+          const meta = tr.getMeta(ContextMenuPluginKey);
           const disabled = isMenuDisabled();
 
           if (disabled) {
             if (value.open) {
-              editor.emit('slashMenu:close');
+              editor.emit('contextMenu:close');
             }
             return ensureStateShape({ disabled: true });
           }
@@ -207,21 +210,21 @@ export const SlashMenu = Extension.create({
             case 'open': {
               // Validate position
               if (typeof meta.pos !== 'number' || meta.pos < 0 || meta.pos > tr.doc.content.size) {
-                console.warn('SlashMenu: Invalid position', meta.pos);
+                console.warn('ContextMenu: Invalid position', meta.pos);
                 return ensureStateShape(value);
               }
 
               // For position: fixed menu, use viewport coordinates directly
               let left = 0;
               let top = 0;
-              let isContextMenu = false;
+              let isRightClick = false;
 
               if (typeof meta.clientX === 'number' && typeof meta.clientY === 'number') {
                 left = meta.clientX;
                 top = meta.clientY;
-                isContextMenu = true; // Right-click triggered
+                isRightClick = true; // Right-click triggered
               } else {
-                // Fallback to selection-based positioning (slash menu)
+                // Fallback to selection-based positioning (slash trigger)
                 const relativePoint = getSurfaceRelativePoint(editor, meta);
                 const surface = editor.presentationEditor?.element ?? editor.view?.dom ?? editor.options?.element;
                 if (relativePoint && surface) {
@@ -230,7 +233,7 @@ export const SlashMenu = Extension.create({
                     left = rect.left + relativePoint.left;
                     top = rect.top + relativePoint.top;
                   } catch (error) {
-                    console.warn('SlashMenu: Failed to get surface bounds', error);
+                    console.warn('ContextMenu: Failed to get surface bounds', error);
                     return ensureStateShape(value);
                   }
                 } else if (surface) {
@@ -241,7 +244,7 @@ export const SlashMenu = Extension.create({
                     left = rect.left;
                     top = rect.top;
                   } catch (error) {
-                    console.warn('SlashMenu: Failed to get surface bounds for fallback', error);
+                    console.warn('ContextMenu: Failed to get surface bounds for fallback', error);
                     return ensureStateShape(value);
                   }
                 }
@@ -291,13 +294,13 @@ export const SlashMenu = Extension.create({
                   left += containingBlock.scrollLeft || 0;
                   top += containingBlock.scrollTop || 0;
                 } catch (error) {
-                  console.warn('SlashMenu: Failed to adjust for containing block', error);
+                  console.warn('ContextMenu: Failed to adjust for containing block', error);
                 }
               }
 
-              // Use smaller offsets for context menu, larger for slash menu
-              const offsetX = isContextMenu ? CONTEXT_MENU_OFFSET_X : MENU_OFFSET_X;
-              const offsetY = isContextMenu ? CONTEXT_MENU_OFFSET_Y : MENU_OFFSET_Y;
+              // Use smaller offsets for right-click, larger for slash trigger
+              const offsetX = isRightClick ? CONTEXT_MENU_OFFSET_X : MENU_OFFSET_X;
+              const offsetY = isRightClick ? CONTEXT_MENU_OFFSET_Y : MENU_OFFSET_Y;
 
               const menuPosition = {
                 left: `${left + offsetX}px`,
@@ -313,7 +316,7 @@ export const SlashMenu = Extension.create({
               };
 
               // Emit event after state update
-              editor.emit('slashMenu:open', { menuPosition });
+              editor.emit('contextMenu:open', { menuPosition });
 
               return ensureStateShape(newState);
             }
@@ -323,7 +326,7 @@ export const SlashMenu = Extension.create({
             }
 
             case 'close': {
-              editor.emit('slashMenu:close');
+              editor.emit('contextMenu:close');
               return ensureStateShape({ ...value, open: false, anchorPos: null });
             }
 
@@ -345,10 +348,10 @@ export const SlashMenu = Extension.create({
          */
         const updatePosition = () => {
           if (isMenuDisabled()) return;
-          const state = SlashMenuPluginKey.getState(editorView.state);
+          const state = ContextMenuPluginKey.getState(editorView.state);
           if (state.open) {
             editorView.dispatch(
-              editorView.state.tr.setMeta(SlashMenuPluginKey, {
+              editorView.state.tr.setMeta(ContextMenuPluginKey, {
                 type: 'updatePosition',
               }),
             );
@@ -373,7 +376,7 @@ export const SlashMenu = Extension.create({
 
       props: {
         /**
-         * Handle keyboard events to open/close the slash menu
+         * Handle keyboard events to open/close the context menu
          * - '/': Opens menu at cursor if conditions are met (in paragraph, after space/start)
          * - 'Escape' or 'ArrowLeft': Closes menu and restores cursor position
          *
@@ -415,7 +418,7 @@ export const SlashMenu = Extension.create({
 
             // Only dispatch state update - event will be emitted in apply()
             view.dispatch(
-              view.state.tr.setMeta(SlashMenuPluginKey, {
+              view.state.tr.setMeta(ContextMenuPluginKey, {
                 type: 'open',
                 pos: $cursor.pos,
               }),
@@ -429,7 +432,7 @@ export const SlashMenu = Extension.create({
 
             // Close menu
             view.dispatch(
-              view.state.tr.setMeta(SlashMenuPluginKey, {
+              view.state.tr.setMeta(ContextMenuPluginKey, {
                 type: 'close',
               }),
             );
@@ -450,6 +453,9 @@ export const SlashMenu = Extension.create({
       },
     });
 
-    return [slashMenuPlugin];
+    return [contextMenuPlugin];
   },
 });
+
+/** @deprecated Use ContextMenu instead */
+export const SlashMenu = ContextMenu;

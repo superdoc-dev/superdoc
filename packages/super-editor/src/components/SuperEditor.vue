@@ -5,7 +5,7 @@ import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, compute
 import { Editor } from '@superdoc/super-editor';
 import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getStarterExtensions } from '@extensions/index.js';
-import SlashMenu from './slash-menu/SlashMenu.vue';
+import ContextMenu from './context-menu/ContextMenu.vue';
 import { onMarginClickCursorChange } from './cursor-helpers.js';
 import Ruler from './rulers/Ruler.vue';
 import GenericPopover from './popovers/GenericPopover.vue';
@@ -1001,7 +1001,7 @@ const handleMarginClick = (event) => {
   if (target?.classList?.contains('ProseMirror')) return;
 
   // Causes issues with node selection.
-  if (target?.closest?.('.presentation-editor, .superdoc-layout, .slash-menu')) {
+  if (target?.closest?.('.presentation-editor, .superdoc-layout, .context-menu')) {
     return;
   }
 
@@ -1089,8 +1089,8 @@ onBeforeUnmount(() => {
       @mouseleave="handleOverlayHide"
     >
       <div ref="editorElem" class="editor-element super-editor__element" role="presentation"></div>
-      <!-- Single SlashMenu component, no Teleport needed -->
-      <SlashMenu
+      <!-- Single ContextMenu component, no Teleport needed -->
+      <ContextMenu
         v-if="!contextMenuDisabled && editorReady && activeEditor"
         :editor="activeEditor"
         :popoverControls="popoverControls"

@@ -3,8 +3,8 @@ import { mount } from '@vue/test-utils';
 import { TRIGGERS } from '../constants.js';
 
 /**
- * Test helper utilities for slash menu components
- * Extracts shared patterns from utils.test.js, SlashMenu.test.js, and menuItems.test.js
+ * Test helper utilities for context menu components
+ * Extracts shared patterns from utils.test.js, ContextMenu.test.js, and menuItems.test.js
  */
 
 /**
@@ -122,7 +122,7 @@ export function createMockEditor(options = {}) {
     documentMode: 'editing',
     isEditable: true,
     isAiEnabled: false,
-    slashMenuConfig: null,
+    contextMenuConfig: null,
     aiApiKey: null,
     aiEndpoint: null,
   };
@@ -141,7 +141,7 @@ export function createMockEditor(options = {}) {
     options: {
       documentMode: config.documentMode,
       isAiEnabled: config.isAiEnabled,
-      slashMenuConfig: config.slashMenuConfig,
+      contextMenuConfig: config.contextMenuConfig,
       aiApiKey: config.aiApiKey,
       aiEndpoint: config.aiEndpoint,
     },
@@ -154,7 +154,7 @@ export function createMockEditor(options = {}) {
 }
 
 /**
- * Creates a mock editor context object for slash menu utilities
+ * Creates a mock editor context object for context menu utilities
  */
 export function createMockContext(options = {}) {
   const defaults = {
@@ -244,7 +244,7 @@ export function createBeforeEachSetup(customSetup = () => {}) {
 /**
  * Mounts a Vue component with common props and returns wrapper with helper methods
  */
-export function mountSlashMenuComponent(component, options = {}) {
+export function mountContextMenuComponent(component, options = {}) {
   const defaults = {
     editor: createMockEditor(),
     openPopover: vi.fn(),
@@ -261,24 +261,24 @@ export function mountSlashMenuComponent(component, options = {}) {
     props,
 
     async openMenu(menuPosition = { left: '100px', top: '200px' }) {
-      const onSlashMenuOpen = props.editor.on.mock.calls.find((call) => call[0] === 'slashMenu:open')?.[1];
+      const onContextMenuOpen = props.editor.on.mock.calls.find((call) => call[0] === 'contextMenu:open')?.[1];
 
-      if (onSlashMenuOpen) {
-        await onSlashMenuOpen({ menuPosition });
+      if (onContextMenuOpen) {
+        await onContextMenuOpen({ menuPosition });
         await wrapper.vm.$nextTick();
       }
     },
 
     async closeMenu() {
-      const onSlashMenuClose = props.editor.on.mock.calls.find((call) => call[0] === 'slashMenu:close')?.[1];
+      const onContextMenuClose = props.editor.on.mock.calls.find((call) => call[0] === 'contextMenu:close')?.[1];
 
-      if (onSlashMenuClose) {
-        onSlashMenuClose();
+      if (onContextMenuClose) {
+        onContextMenuClose();
         await wrapper.vm.$nextTick();
       }
     },
 
-    async triggerKeydown(key, target = '.slash-menu-hidden-input') {
+    async triggerKeydown(key, target = '.context-menu-hidden-input') {
       const element = wrapper.find(target);
       await element.trigger('keydown', { key });
       await wrapper.vm.$nextTick();
@@ -406,8 +406,8 @@ export function assertEventListenersSetup(editor, documentSpies) {
 
   // Check editor listeners
   expect(editor.on).toHaveBeenCalledWith('update', expect.any(Function));
-  expect(editor.on).toHaveBeenCalledWith('slashMenu:open', expect.any(Function));
-  expect(editor.on).toHaveBeenCalledWith('slashMenu:close', expect.any(Function));
+  expect(editor.on).toHaveBeenCalledWith('contextMenu:open', expect.any(Function));
+  expect(editor.on).toHaveBeenCalledWith('contextMenu:close', expect.any(Function));
 
   // Check DOM listeners
   const domTarget = editor.presentationEditor?.element || editor.view.dom;
@@ -427,8 +427,8 @@ export function assertEventListenersCleanup(editor, documentSpies) {
   expect(docRemoveEventListener).toHaveBeenCalledWith('pointerdown', expect.any(Function));
 
   // Check editor listeners cleanup (now with specific handlers to prevent leaks)
-  expect(editor.off).toHaveBeenCalledWith('slashMenu:open', expect.any(Function));
-  expect(editor.off).toHaveBeenCalledWith('slashMenu:close', expect.any(Function));
+  expect(editor.off).toHaveBeenCalledWith('contextMenu:open', expect.any(Function));
+  expect(editor.off).toHaveBeenCalledWith('contextMenu:close', expect.any(Function));
   expect(editor.off).toHaveBeenCalledWith('update', expect.any(Function));
 
   // Check DOM listeners cleanup
@@ -437,9 +437,9 @@ export function assertEventListenersCleanup(editor, documentSpies) {
 }
 
 /**
- * Creates common slash menu configurations for testing
+ * Creates common context menu configurations for testing
  */
-export const SlashMenuConfigs = {
+export const ContextMenuConfigs = {
   /**
    * Default configuration with AI enabled
    */

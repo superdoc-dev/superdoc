@@ -101,6 +101,7 @@ describe('AIActionsService', () => {
           };
         }),
       },
+      dispatch: vi.fn(),
       exportDocx: vi.fn(),
       options: {
         documentId: 'doc-123',
@@ -267,7 +268,7 @@ describe('AIActionsService', () => {
       const result = await actions.replace('replace old with new');
 
       expect(result.success).toBe(true);
-      expect(mockEditor.view?.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
 
     it('should validate input', async () => {
@@ -326,7 +327,7 @@ describe('AIActionsService', () => {
       expect(result.success).toBe(true);
       expect(result.results).toHaveLength(2);
       expect(result.results[0].originalText).toBe('A');
-      expect(mockEditor.view?.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
       expect(trackedSpy).not.toHaveBeenCalled();
     });
 
@@ -658,7 +659,7 @@ describe('AIActionsService', () => {
       const result = await actions.insertContent('generate introduction');
 
       expect(result.success).toBe(true);
-      expect(mockEditor.view?.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
     });
 
     it('should validate input', async () => {
@@ -765,7 +766,7 @@ describe('AIActionsService', () => {
       const result = await actions.insertContent('generate introduction');
 
       expect(result.success).toBe(true);
-      expect(mockEditor.view?.dispatch).toHaveBeenCalled();
+      expect(mockEditor.dispatch).toHaveBeenCalled();
       expect(onStreamChunk).toHaveBeenCalledWith('Generated content');
     });
 

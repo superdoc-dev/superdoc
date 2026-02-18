@@ -157,7 +157,7 @@
                   "extensions/search",
                   "extensions/shape-container",
                   "extensions/shape-textbox",
-                  "extensions/slash-menu",
+                  "extensions/context-menu",
                   "extensions/strike",
                   "extensions/structured-content",
                   "extensions/tab",
@@ -392,6 +392,10 @@
     {
       "source": "/modules/collaboration/self-hosted/overview",
       "destination": "/guides/collaboration/self-hosted-overview"
+    },
+    {
+      "source": "/extensions/slash-menu",
+      "destination": "/extensions/context-menu"
     },
     {
       "source": "/guides/breaking-changes-v1",

@@ -177,21 +177,15 @@ function resolveTableFrame(
 /**
  * Calculate minimum width for a table column.
  *
- * The resize overlay uses this value to enforce drag constraints.
- * We derive it from the measured column width and clamp to a practical range.
+ * Uses a conservative minimum of 10px per column to match PM's
+ * columnResizing behavior.
  *
- * @param measuredWidth - Current measured column width in pixels
- * @returns Minimum width in pixels, clamped to [25, 200]
+ * @returns Minimum width in pixels (10px)
  */
-function calculateColumnMinWidth(measuredWidth: number): number {
-  const MIN_WIDTH = 25;
-  const MAX_WIDTH = 200;
+function calculateColumnMinWidth(): number {
+  const DEFAULT_MIN_WIDTH = 10; // Minimum usable column width in pixels
 
-  if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
-    return MIN_WIDTH;
-  }
-
-  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, measuredWidth));
+  return DEFAULT_MIN_WIDTH;
 }
 
 /**
@@ -210,7 +204,7 @@ function calculateColumnMinWidth(measuredWidth: number): number {
  * Edge cases handled:
  * - Empty columnWidths array: Returns empty array (no boundaries)
  * - Single column: Returns one boundary with proper min/max constraints
- * - Very wide/narrow columns: Handled by calculateColumnMinWidth
+ * - Very wide/narrow columns: Supported with a fixed resize floor
  *
  * @param measure - Table measurement containing column widths
  * @returns Array of column boundary metadata, one per column
@@ -221,7 +215,7 @@ function generateColumnBoundaries(measure: TableMeasure): TableColumnBoundary[] 
 
   for (let i = 0; i < measure.columnWidths.length; i++) {
     const width = measure.columnWidths[i];
-    const minWidth = calculateColumnMinWidth(width);
+    const minWidth = calculateColumnMinWidth();
 
     const boundary = {
       index: i,

@@ -244,9 +244,9 @@ describe('layoutTableBlock', () => {
       const boundaries = fragments[0].metadata?.columnBoundaries;
       expect(boundaries).toBeDefined();
 
-      // All columns should have minWidth >= 25 (absolute minimum)
+      // Keep a fixed floor so resize constraints always allow shrinking.
       boundaries?.forEach((boundary) => {
-        expect(boundary.minWidth).toBeGreaterThanOrEqual(25);
+        expect(boundary.minWidth).toBe(10);
       });
     });
 
@@ -602,8 +602,7 @@ describe('layoutTableBlock', () => {
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
       expect(boundaries).toHaveLength(1);
-      expect(boundaries![0].minWidth).toBeGreaterThanOrEqual(25);
-      expect(boundaries![0].minWidth).toBeLessThanOrEqual(200);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle very wide column (> 200px)', () => {
@@ -628,8 +627,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Min width should be capped at 200px
-      expect(boundaries![0].minWidth).toBe(200);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle very narrow column (< 25px)', () => {
@@ -654,8 +652,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Min width should be at least 25px
-      expect(boundaries![0].minWidth).toBe(25);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle empty columnWidths array', () => {
@@ -707,8 +704,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Should default to minimum 25px for negative widths
-      expect(boundaries![0].minWidth).toBe(25);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle zero measured width', () => {
@@ -733,8 +729,7 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Should default to minimum 25px for zero width
-      expect(boundaries![0].minWidth).toBe(25);
+      expect(boundaries![0].minWidth).toBe(10);
     });
 
     it('should handle multiple columns with varying widths', () => {
@@ -760,12 +755,9 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Column 0: 10px -> should be 25px (minimum)
-      expect(boundaries![0].minWidth).toBe(25);
-      // Column 1: 100px -> should be 100px (within range)
-      expect(boundaries![1].minWidth).toBe(100);
-      // Column 2: 500px -> should be 200px (capped)
-      expect(boundaries![2].minWidth).toBe(200);
+      boundaries?.forEach((boundary) => {
+        expect(boundary.minWidth).toBe(10);
+      });
     });
   });
 

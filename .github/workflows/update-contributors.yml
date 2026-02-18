@@ -64,10 +64,13 @@ jobs:
           fi
 
           # Check if author is a repo collaborator (team member)
-          if gh api "repos/${{ github.repository }}/collaborators/$AUTHOR" --silent 2>/dev/null; then
+          # Requires the GitHub App to have Contents: write permission (push access)
+          if gh api "repos/${{ github.repository }}/collaborators/$AUTHOR" --silent; then
             echo "$AUTHOR is a repo collaborator"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
+          else
+            echo "Collaborator check returned non-204 for $AUTHOR (not a collaborator, or insufficient app permissions)"
           fi
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -112,6 +115,7 @@ jobs:
           BRANCH="docs/add-contributor-$AUTHOR"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git checkout -b "$BRANCH"
           git add README.md
           git commit -m "docs: add $AUTHOR to community contributors"

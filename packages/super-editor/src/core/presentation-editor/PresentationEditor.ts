@@ -2270,6 +2270,15 @@ export class PresentationEditor extends EventEmitter {
       if (transaction) {
         this.#epochMapper.recordTransaction(transaction);
         this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
+
+        // Detect Y.js-origin transactions (remote collaboration changes).
+        // These bypass the blockNodePlugin's sdBlockRev increment to prevent
+        // feedback loops, so the FlowBlockCache's fast revision comparison
+        // cannot be trusted — signal it to fall through to JSON comparison.
+        const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
+        if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
+          this.#flowBlockCache?.setHasExternalChanges(true);
+        }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
         this.#pendingDocChange = true;
@@ -3662,7 +3671,13 @@ export class PresentationEditor extends EventEmitter {
     // Keep selection visible when context menu (SlashMenu) is open
     const slashMenuOpen = activeEditor?.state ? !!SlashMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    if (!hasFocus && !slashMenuOpen) {
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns).
+    // Naive-UI portals dropdown content under .v-binder-follower-content at <body> level,
+    // so it won't be inside [data-editor-ui-surface]. Check both.
+    const activeEl = document.activeElement;
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.('[data-editor-ui-surface], .v-binder-follower-content');
+
+    if (!hasFocus && !slashMenuOpen && !isOnEditorUi) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';

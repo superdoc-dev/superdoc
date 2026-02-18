@@ -687,7 +687,7 @@ describe('findAdapter — text selectors', () => {
     expect(capturedOptions!.caseSensitive).toBe(true);
   });
 
-  it('does not cap maxMatches so pagination and scoping see the full result set', () => {
+  it('passes maxMatches: Infinity so pagination and scoping see the full result set', () => {
     let capturedOptions: Record<string, unknown> | undefined;
     const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
     const search: SearchFn = (_pattern, options) => {
@@ -700,7 +700,7 @@ describe('findAdapter — text selectors', () => {
     findAdapter(editor, query);
 
     expect(capturedOptions).toBeDefined();
-    expect(capturedOptions!.maxMatches).toBeUndefined();
+    expect(capturedOptions!.maxMatches).toBe(Infinity);
   });
 
   it('throws when editor has no search command', () => {
@@ -769,6 +769,36 @@ describe('findAdapter — text selectors', () => {
     );
     const search: SearchFn = (_pattern, options) => {
       const max = (options as { maxMatches?: number })?.maxMatches ?? Infinity;
+      return allMatches.slice(0, max);
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = {
+      select: { type: 'text', pattern: 'test' },
+      offset: 1001,
+      limit: 2,
+    };
+
+    const result = findAdapter(editor, query);
+
+    expect(result.total).toBe(totalMatches);
+    expect(result.matches).toHaveLength(2);
+  });
+
+  it('supports paginating beyond 1000 matches when search default max is applied', () => {
+    const totalMatches = 1205;
+    const allMatches = Array.from({ length: totalMatches }, (_, index) => ({
+      from: 8,
+      to: 9,
+      text: `m-${index}`,
+    }));
+    const doc = buildDoc(
+      'a'.repeat(102),
+      { typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 },
+      { typeName: 'paragraph', attrs: { sdBlockId: 'p2' }, nodeSize: 50, offset: 52 },
+    );
+    const search: SearchFn = (_pattern, options) => {
+      // Mirror editor.commands.search default behavior when maxMatches is omitted.
+      const max = (options as { maxMatches?: number })?.maxMatches ?? 1000;
       return allMatches.slice(0, max);
     };
     const editor = makeEditor(doc, search);

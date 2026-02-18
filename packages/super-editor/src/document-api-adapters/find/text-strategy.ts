@@ -90,6 +90,7 @@ export function executeTextSelector(
   const rawResult = search(pattern, {
     highlight: false,
     caseSensitive: selector.caseSensitive ?? false,
+    maxMatches: Infinity,
   });
 
   if (!Array.isArray(rawResult)) {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
-import { createParagraphAdapter } from './create-adapter.js';
+import { createParagraphAdapter, createHeadingAdapter } from './create-adapter.js';
 import * as trackedChangeResolver from './helpers/tracked-change-resolver.js';
 
 type MockNode = ProseMirrorNode & {
@@ -383,5 +383,305 @@ describe('createParagraphAdapter', () => {
     expect(() => createParagraphAdapter(editor, { text: 'Tracked' }, { changeMode: 'tracked' })).toThrow(
       'requires a user to be configured',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createHeadingAdapter
+// ---------------------------------------------------------------------------
+
+function createHeadingNode(
+  id: string,
+  level: number,
+  text = '',
+  tracked = false,
+  extraAttrs: Record<string, unknown> = {},
+): MockNode {
+  const marks =
+    tracked && text.length > 0
+      ? [
+          {
+            type: { name: 'trackInsert' },
+            attrs: { id: `tc-${id}` },
+          },
+        ]
+      : [];
+  const children = text.length > 0 ? [createTextNode(text, marks)] : [];
+  const contentSize = children.reduce((sum, child) => sum + child.nodeSize, 0);
+
+  return {
+    type: { name: 'paragraph' },
+    attrs: {
+      sdBlockId: id,
+      paragraphProperties: { styleId: `Heading${level}` },
+      ...extraAttrs,
+    },
+    _children: children,
+    nodeSize: contentSize + 2,
+    isText: false,
+    isInline: false,
+    isBlock: true,
+    isLeaf: false,
+    inlineContent: true,
+    isTextblock: true,
+    childCount: children.length,
+    child(index: number) {
+      return children[index] as unknown as ProseMirrorNode;
+    },
+    descendants(callback: (node: ProseMirrorNode, pos: number) => void) {
+      let offset = 1;
+      for (const child of children) {
+        callback(child as unknown as ProseMirrorNode, offset);
+        offset += child.nodeSize;
+      }
+      return undefined;
+    },
+  } as unknown as MockNode;
+}
+
+function makeHeadingEditor({
+  withTrackedCommand = true,
+  insertReturns = true,
+  insertedHeadingAttrs,
+  user,
+}: {
+  withTrackedCommand?: boolean;
+  insertReturns?: boolean;
+  insertedHeadingAttrs?: Record<string, unknown>;
+  user?: { name: string };
+} = {}): {
+  editor: Editor;
+  insertHeadingAt: ReturnType<typeof vi.fn>;
+} {
+  const doc = createDocNode([createParagraphNode('p1', 'Hello')]);
+
+  const insertHeadingAt = vi.fn(
+    (options: { pos: number; level: number; text?: string; sdBlockId?: string; tracked?: boolean }) => {
+      if (!insertReturns) return false;
+      const nodeId = options.sdBlockId ?? 'new-heading';
+      const heading = createHeadingNode(
+        nodeId,
+        options.level,
+        options.text ?? '',
+        options.tracked === true,
+        insertedHeadingAttrs,
+      );
+      return insertChildAtPos(doc, heading, options.pos);
+    },
+  );
+
+  const editor = {
+    state: {
+      doc,
+    },
+    commands: {
+      insertHeadingAt,
+      insertTrackedChange: withTrackedCommand ? vi.fn(() => true) : undefined,
+    },
+    can: () => ({
+      insertHeadingAt: (opts: { pos: number; level: number }) => {
+        if (!insertReturns) return false;
+        return opts.level >= 1 && opts.level <= 6;
+      },
+    }),
+    options: { user },
+  } as unknown as Editor;
+
+  return { editor, insertHeadingAt };
+}
+
+describe('createHeadingAdapter', () => {
+  it('creates a heading at the document end by default', () => {
+    const { editor, insertHeadingAt } = makeHeadingEditor();
+
+    const result = createHeadingAdapter(editor, { level: 2, text: 'New heading' }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.heading.kind).toBe('block');
+      expect(result.heading.nodeType).toBe('heading');
+      expect(result.insertionPoint.kind).toBe('text');
+      expect(result.insertionPoint.range).toEqual({ start: 0, end: 0 });
+    }
+
+    expect(insertHeadingAt).toHaveBeenCalledTimes(1);
+    expect(insertHeadingAt.mock.calls[0]?.[0]).toMatchObject({
+      level: 2,
+      text: 'New heading',
+      tracked: false,
+    });
+  });
+
+  it('creates a heading before a target block', () => {
+    const { editor, insertHeadingAt } = makeHeadingEditor();
+
+    const result = createHeadingAdapter(
+      editor,
+      {
+        level: 1,
+        at: {
+          kind: 'before',
+          target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+        },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(insertHeadingAt.mock.calls[0]?.[0]?.pos).toBe(0);
+  });
+
+  it('throws TARGET_NOT_FOUND when a before/after target cannot be resolved', () => {
+    const { editor } = makeHeadingEditor();
+
+    expect(() =>
+      createHeadingAdapter(
+        editor,
+        {
+          level: 1,
+          at: {
+            kind: 'after',
+            target: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing' },
+          },
+        },
+        { changeMode: 'direct' },
+      ),
+    ).toThrow('target block was not found');
+  });
+
+  it('throws CAPABILITY_UNAVAILABLE when tracked create is requested without tracked capability', () => {
+    const { editor } = makeHeadingEditor({ withTrackedCommand: false });
+
+    expect(() => createHeadingAdapter(editor, { level: 1, text: 'Tracked' }, { changeMode: 'tracked' })).toThrow(
+      'requires the insertTrackedChange command',
+    );
+  });
+
+  it('creates tracked headings and returns trackedChangeRefs', () => {
+    const resolverSpy = vi.spyOn(trackedChangeResolver, 'buildTrackedChangeCanonicalIdMap').mockReturnValue(new Map());
+
+    const { editor } = makeHeadingEditor({ user: { name: 'Test' } });
+
+    const result = createHeadingAdapter(editor, { level: 1, text: 'Tracked heading' }, { changeMode: 'tracked' });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.trackedChangeRefs?.length).toBeGreaterThan(0);
+    expect(result.trackedChangeRefs?.[0]).toMatchObject({
+      kind: 'entity',
+      entityType: 'trackedChange',
+    });
+    expect(resolverSpy).toHaveBeenCalledTimes(1);
+    resolverSpy.mockRestore();
+  });
+
+  it('returns INVALID_TARGET failure when command cannot apply the insertion', () => {
+    const { editor } = makeHeadingEditor({ insertReturns: false });
+
+    const result = createHeadingAdapter(editor, { level: 1, text: 'No-op' }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('INVALID_TARGET');
+    }
+  });
+
+  it('dry-run returns placeholder success without mutating the document', () => {
+    const { editor, insertHeadingAt } = makeHeadingEditor();
+
+    const result = createHeadingAdapter(
+      editor,
+      { level: 1, text: 'Dry run text' },
+      { changeMode: 'direct', dryRun: true },
+    );
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.heading).toEqual({ kind: 'block', nodeType: 'heading', nodeId: '(dry-run)' });
+    expect(result.insertionPoint).toEqual({ kind: 'text', blockId: '(dry-run)', range: { start: 0, end: 0 } });
+    expect(insertHeadingAt).not.toHaveBeenCalled();
+  });
+
+  it('dry-run returns INVALID_TARGET when insertion cannot be applied', () => {
+    const { editor } = makeHeadingEditor({ insertReturns: false });
+
+    const result = createHeadingAdapter(
+      editor,
+      { level: 1, text: 'Dry run text' },
+      { changeMode: 'direct', dryRun: true },
+    );
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.failure.code).toBe('INVALID_TARGET');
+  });
+
+  it('dry-run still throws TARGET_NOT_FOUND when target block does not exist', () => {
+    const { editor } = makeHeadingEditor();
+
+    expect(() =>
+      createHeadingAdapter(
+        editor,
+        {
+          level: 1,
+          at: {
+            kind: 'before',
+            target: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing' },
+          },
+        },
+        { changeMode: 'direct', dryRun: true },
+      ),
+    ).toThrow('target block was not found');
+  });
+
+  it('dry-run still throws CAPABILITY_UNAVAILABLE when tracked capability is missing', () => {
+    const { editor } = makeHeadingEditor({ withTrackedCommand: false });
+
+    expect(() =>
+      createHeadingAdapter(editor, { level: 1, text: 'Tracked dry run' }, { changeMode: 'tracked', dryRun: true }),
+    ).toThrow('requires the insertTrackedChange command');
+  });
+
+  it('returns success with generated ID when post-apply heading resolution fails', () => {
+    const { editor } = makeHeadingEditor({
+      insertedHeadingAttrs: {
+        sdBlockId: undefined,
+        paragraphProperties: {},
+      },
+    });
+
+    const result = createHeadingAdapter(editor, { level: 1, text: 'Inserted heading' }, { changeMode: 'direct' });
+
+    // Contract: success:false means no mutation was applied.
+    // The mutation DID apply, so we must return success with the generated ID.
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.heading.nodeType).toBe('heading');
+    expect(typeof result.heading.nodeId).toBe('string');
+    expect(result.heading.nodeId).not.toBe('(dry-run)');
+  });
+
+  it('throws CAPABILITY_UNAVAILABLE for tracked dry-run without a configured user', () => {
+    const { editor } = makeHeadingEditor();
+
+    expect(() =>
+      createHeadingAdapter(editor, { level: 1, text: 'Tracked' }, { changeMode: 'tracked', dryRun: true }),
+    ).toThrow('requires a user to be configured');
+  });
+
+  it('throws same error for tracked non-dry-run without a configured user', () => {
+    const { editor } = makeHeadingEditor();
+
+    expect(() => createHeadingAdapter(editor, { level: 1, text: 'Tracked' }, { changeMode: 'tracked' })).toThrow(
+      'requires a user to be configured',
+    );
+  });
+
+  it('passes level through to the insertHeadingAt command', () => {
+    const { editor, insertHeadingAt } = makeHeadingEditor();
+
+    createHeadingAdapter(editor, { level: 3 }, { changeMode: 'direct' });
+
+    expect(insertHeadingAt.mock.calls[0]?.[0]).toMatchObject({ level: 3 });
   });
 });

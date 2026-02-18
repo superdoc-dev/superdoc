@@ -4,6 +4,9 @@ import type {
   CreateParagraphInput,
   CreateParagraphResult,
   CreateParagraphSuccessResult,
+  CreateHeadingInput,
+  CreateHeadingResult,
+  CreateHeadingSuccessResult,
   MutationOptions,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from './helpers/index-cache.js';
@@ -20,6 +23,16 @@ type InsertParagraphAtCommandOptions = {
 };
 
 type InsertParagraphAtCommand = (options: InsertParagraphAtCommandOptions) => boolean;
+
+type InsertHeadingAtCommandOptions = {
+  pos: number;
+  level: number;
+  text?: string;
+  sdBlockId?: string;
+  tracked?: boolean;
+};
+
+type InsertHeadingAtCommand = (options: InsertHeadingAtCommandOptions) => boolean;
 
 function resolveParagraphInsertPosition(editor: Editor, input: CreateParagraphInput): number {
   const location = input.at ?? { kind: 'documentEnd' };
@@ -164,5 +177,153 @@ export function createParagraphAdapter(
     // Mutation already applied — contract requires success: true.
     // Fall back to the generated ID we assigned to the command.
     return buildParagraphCreateSuccess(paragraphId);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// create.heading
+// ---------------------------------------------------------------------------
+
+function resolveHeadingInsertPosition(editor: Editor, input: CreateHeadingInput): number {
+  const location = input.at ?? { kind: 'documentEnd' };
+
+  if (location.kind === 'documentStart') return 0;
+  if (location.kind === 'documentEnd') return editor.state.doc.content.size;
+
+  const index = getBlockIndex(editor);
+  const target = findBlockById(index, location.target);
+  if (!target) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Create heading target block was not found.', {
+      target: location.target,
+    });
+  }
+
+  return location.kind === 'before' ? target.pos : target.end;
+}
+
+function resolveCreatedHeading(editor: Editor, headingId: string): BlockCandidate {
+  const index = getBlockIndex(editor);
+  const resolved = index.byId.get(`heading:${headingId}`);
+
+  if (resolved) return resolved;
+
+  const bySdBlockId = index.candidates.find((candidate) => {
+    if (candidate.nodeType !== 'heading') return false;
+    const attrs = (candidate.node as { attrs?: { sdBlockId?: unknown } }).attrs;
+    return typeof attrs?.sdBlockId === 'string' && attrs.sdBlockId === headingId;
+  });
+  if (bySdBlockId) return bySdBlockId;
+
+  const fallback = index.candidates.find(
+    (candidate) => candidate.nodeType === 'heading' && candidate.nodeId === headingId,
+  );
+  if (fallback) return fallback;
+
+  throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Created heading could not be resolved after insertion.', {
+    headingId,
+  });
+}
+
+function buildHeadingCreateSuccess(
+  headingNodeId: string,
+  trackedChangeRefs?: CreateHeadingSuccessResult['trackedChangeRefs'],
+): CreateHeadingSuccessResult {
+  return {
+    success: true,
+    heading: {
+      kind: 'block',
+      nodeType: 'heading',
+      nodeId: headingNodeId,
+    },
+    insertionPoint: {
+      kind: 'text',
+      blockId: headingNodeId,
+      range: { start: 0, end: 0 },
+    },
+    trackedChangeRefs,
+  };
+}
+
+export function createHeadingAdapter(
+  editor: Editor,
+  input: CreateHeadingInput,
+  options?: MutationOptions,
+): CreateHeadingResult {
+  const insertHeadingAt = requireEditorCommand(
+    editor.commands?.insertHeadingAt,
+    'create.heading',
+  ) as InsertHeadingAtCommand;
+  const mode = options?.changeMode ?? 'direct';
+
+  if (mode === 'tracked') {
+    ensureTrackedCapability(editor, { operation: 'create.heading' });
+  }
+
+  const insertAt = resolveHeadingInsertPosition(editor, input);
+
+  if (options?.dryRun) {
+    const canInsert = editor.can().insertHeadingAt?.({
+      pos: insertAt,
+      level: input.level,
+      text: input.text,
+      tracked: mode === 'tracked',
+    });
+
+    if (!canInsert) {
+      return {
+        success: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Heading creation could not be applied at the requested location.',
+        },
+      };
+    }
+
+    return {
+      success: true,
+      heading: {
+        kind: 'block',
+        nodeType: 'heading',
+        nodeId: '(dry-run)',
+      },
+      insertionPoint: {
+        kind: 'text',
+        blockId: '(dry-run)',
+        range: { start: 0, end: 0 },
+      },
+    };
+  }
+
+  const headingId = uuidv4();
+
+  const didApply = insertHeadingAt({
+    pos: insertAt,
+    level: input.level,
+    text: input.text,
+    sdBlockId: headingId,
+    tracked: mode === 'tracked',
+  });
+
+  if (!didApply) {
+    return {
+      success: false,
+      failure: {
+        code: 'INVALID_TARGET',
+        message: 'Heading creation could not be applied at the requested location.',
+      },
+    };
+  }
+
+  clearIndexCache(editor);
+  try {
+    const heading = resolveCreatedHeading(editor, headingId);
+    const trackedChangeRefs =
+      mode === 'tracked' ? collectTrackInsertRefsInRange(editor, heading.pos, heading.end) : undefined;
+
+    return buildHeadingCreateSuccess(heading.nodeId, trackedChangeRefs);
+  } catch {
+    // Mutation already applied — contract requires success: true.
+    // Fall back to the generated ID we assigned to the command.
+    return buildHeadingCreateSuccess(headingId);
   }
 }

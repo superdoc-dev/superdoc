@@ -16,6 +16,7 @@
     "apps/docs/document-api/reference/comments/set-active.mdx",
     "apps/docs/document-api/reference/comments/set-internal.mdx",
     "apps/docs/document-api/reference/core/index.mdx",
+    "apps/docs/document-api/reference/create/heading.mdx",
     "apps/docs/document-api/reference/create/index.mdx",
     "apps/docs/document-api/reference/create/paragraph.mdx",
     "apps/docs/document-api/reference/delete.mdx",
@@ -65,7 +66,7 @@
     },
     {
       "key": "create",
-      "operationIds": ["create.paragraph"],
+      "operationIds": ["create.paragraph", "create.heading"],
       "pagePath": "apps/docs/document-api/reference/create/index.mdx",
       "title": "Create"
     },
@@ -123,5 +124,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "9f6796429b2a5ee8e11fe0cf9e482e59be289d0f0efed98f1c74766a6d1199d1"
+  "sourceHash": "3e7edc551feb80b42bfa59f928a0ce1f34ecb7cf71952d5a489107089105d543"
 }

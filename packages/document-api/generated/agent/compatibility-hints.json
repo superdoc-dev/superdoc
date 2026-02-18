@@ -109,6 +109,15 @@
       "supportsDryRun": false,
       "supportsTrackedMode": false
     },
+    "create.heading": {
+      "deterministicTargetResolution": true,
+      "memberPath": "create.heading",
+      "mutates": true,
+      "postApplyThrowForbidden": true,
+      "requiresPreflightCapabilitiesCheck": true,
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
     "create.paragraph": {
       "deterministicTargetResolution": true,
       "memberPath": "create.paragraph",
@@ -353,5 +362,5 @@
       "supportsTrackedMode": false
     }
   },
-  "sourceHash": "9f6796429b2a5ee8e11fe0cf9e482e59be289d0f0efed98f1c74766a6d1199d1"
+  "sourceHash": "3e7edc551feb80b42bfa59f928a0ce1f34ecb7cf71952d5a489107089105d543"
 }

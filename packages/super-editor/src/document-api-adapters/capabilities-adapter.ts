@@ -16,6 +16,7 @@ type EditorCommandName = string;
 // Read-only operations (find, getNode, getText, info, etc.) similarly need no commands.
 const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[]>> = {
   'create.paragraph': ['insertParagraphAt'],
+  'create.heading': ['insertHeadingAt'],
   'lists.insert': ['insertListItemAt'],
   'lists.setType': ['setListTypeAt'],
   'lists.indent': ['setTextSelection', 'increaseListIndent'],

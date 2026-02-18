@@ -253,6 +253,18 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
   },
+  'create.heading': {
+    memberPath: 'create.heading',
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_NOT_FOUND_COMMAND_TRACKED,
+    }),
+    referenceDocPath: 'create/heading.mdx',
+    referenceGroup: 'create',
+  },
 
   'lists.list': {
     memberPath: 'lists.list',

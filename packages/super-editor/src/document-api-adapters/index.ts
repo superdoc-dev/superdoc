@@ -14,7 +14,7 @@ import type {
 import type { Editor } from '../core/Editor.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsAdapter } from './comments-adapter.js';
-import { createParagraphAdapter } from './create-adapter.js';
+import { createParagraphAdapter, createHeadingAdapter } from './create-adapter.js';
 import { findAdapter } from './find-adapter.js';
 import {
   formatBoldAdapter,
@@ -90,6 +90,7 @@ export function getDocumentApiAdapters(editor: Editor): DocumentApiAdapters {
     },
     create: {
       paragraph: (input, options) => createParagraphAdapter(editor, input, options),
+      heading: (input, options) => createHeadingAdapter(editor, input, options),
     },
     lists: {
       list: (query) => listsListAdapter(editor, query),

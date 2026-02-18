@@ -15,6 +15,7 @@
         "comments.resolve",
         "comments.setActive",
         "comments.setInternal",
+        "create.heading",
         "create.paragraph",
         "delete",
         "format.bold",
@@ -44,6 +45,7 @@
         "comments.resolve",
         "comments.setActive",
         "comments.setInternal",
+        "create.heading",
         "create.paragraph",
         "delete",
         "format.bold",
@@ -78,6 +80,7 @@
         "comments.resolve",
         "comments.setActive",
         "comments.setInternal",
+        "create.heading",
         "create.paragraph",
         "format.bold",
         "format.italic",
@@ -104,6 +107,7 @@
         "comments.resolve",
         "comments.setActive",
         "comments.setInternal",
+        "create.heading",
         "create.paragraph",
         "format.bold",
         "format.italic",
@@ -130,6 +134,7 @@
         "comments.reply",
         "comments.setActive",
         "comments.setInternal",
+        "create.heading",
         "create.paragraph",
         "format.bold",
         "format.italic",
@@ -150,6 +155,7 @@
         "comments.reply",
         "comments.setActive",
         "comments.setInternal",
+        "create.heading",
         "create.paragraph",
         "format.bold",
         "format.italic",
@@ -224,6 +230,7 @@
         "comments.resolve",
         "comments.setActive",
         "comments.setInternal",
+        "create.heading",
         "create.paragraph",
         "delete",
         "format.bold",
@@ -257,6 +264,7 @@
         "comments.resolve",
         "comments.setActive",
         "comments.setInternal",
+        "create.heading",
         "create.paragraph",
         "delete",
         "format.bold",
@@ -285,6 +293,7 @@
       "message": "Verify track-changes support via capabilities.get before requesting tracked mode.",
       "nonAppliedOperations": [],
       "operations": [
+        "create.heading",
         "create.paragraph",
         "delete",
         "format.bold",
@@ -301,6 +310,7 @@
         "replace"
       ],
       "preApplyOperations": [
+        "create.heading",
         "create.paragraph",
         "delete",
         "format.bold",
@@ -318,5 +328,5 @@
       ]
     }
   ],
-  "sourceHash": "9f6796429b2a5ee8e11fe0cf9e482e59be289d0f0efed98f1c74766a6d1199d1"
+  "sourceHash": "3e7edc551feb80b42bfa59f928a0ce1f34ecb7cf71952d5a489107089105d543"
 }

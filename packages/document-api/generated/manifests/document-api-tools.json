@@ -2,7 +2,7 @@
   "contractVersion": "0.1.0",
   "generatedAt": null,
   "sourceCommit": null,
-  "sourceHash": "9f6796429b2a5ee8e11fe0cf9e482e59be289d0f0efed98f1c74766a6d1199d1",
+  "sourceHash": "3e7edc551feb80b42bfa59f928a0ce1f34ecb7cf71952d5a489107089105d543",
   "tools": [
     {
       "description": "Read Document API data via `find`.",
@@ -5790,6 +5790,309 @@
           }
         },
         "required": ["success", "paragraph", "insertionPoint"],
+        "type": "object"
+      },
+      "supportsDryRun": true,
+      "supportsTrackedMode": true
+    },
+    {
+      "description": "Apply Document API mutation `create.heading`.",
+      "deterministicTargetResolution": true,
+      "failureSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "failure": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": ["INVALID_TARGET"]
+              },
+              "details": {},
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["code", "message"],
+            "type": "object"
+          },
+          "success": {
+            "const": false
+          }
+        },
+        "required": ["success", "failure"],
+        "type": "object"
+      },
+      "idempotency": "non-idempotent",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "documentStart"
+                  }
+                },
+                "required": ["kind"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "documentEnd"
+                  }
+                },
+                "required": ["kind"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "before"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "block"
+                      },
+                      "nodeId": {
+                        "type": "string"
+                      },
+                      "nodeType": {
+                        "enum": ["paragraph", "heading", "listItem", "table", "tableRow", "tableCell", "image", "sdt"]
+                      }
+                    },
+                    "required": ["kind", "nodeType", "nodeId"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "target"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "after"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "block"
+                      },
+                      "nodeId": {
+                        "type": "string"
+                      },
+                      "nodeType": {
+                        "enum": ["paragraph", "heading", "listItem", "table", "tableRow", "tableCell", "image", "sdt"]
+                      }
+                    },
+                    "required": ["kind", "nodeType", "nodeId"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "target"],
+                "type": "object"
+              }
+            ]
+          },
+          "level": {
+            "maximum": 6,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["level"],
+        "type": "object"
+      },
+      "memberPath": "create.heading",
+      "mutates": true,
+      "name": "create.heading",
+      "outputSchema": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "heading": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "block"
+                  },
+                  "nodeId": {
+                    "type": "string"
+                  },
+                  "nodeType": {
+                    "const": "heading"
+                  }
+                },
+                "required": ["kind", "nodeType", "nodeId"],
+                "type": "object"
+              },
+              "insertionPoint": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "text"
+                  },
+                  "range": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "type": "integer"
+                      },
+                      "start": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["start", "end"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind", "blockId", "range"],
+                "type": "object"
+              },
+              "success": {
+                "const": true
+              },
+              "trackedChangeRefs": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "entityType": {
+                      "const": "trackedChange"
+                    },
+                    "kind": {
+                      "const": "entity"
+                    }
+                  },
+                  "required": ["kind", "entityType", "entityId"],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["success", "heading", "insertionPoint"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "failure": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": ["INVALID_TARGET"]
+                  },
+                  "details": {},
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["code", "message"],
+                "type": "object"
+              },
+              "success": {
+                "const": false
+              }
+            },
+            "required": ["success", "failure"],
+            "type": "object"
+          }
+        ]
+      },
+      "possibleFailureCodes": ["INVALID_TARGET"],
+      "preApplyThrows": [
+        "TARGET_NOT_FOUND",
+        "COMMAND_UNAVAILABLE",
+        "TRACK_CHANGE_COMMAND_UNAVAILABLE",
+        "CAPABILITY_UNAVAILABLE"
+      ],
+      "remediationHints": [],
+      "successSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "block"
+              },
+              "nodeId": {
+                "type": "string"
+              },
+              "nodeType": {
+                "const": "heading"
+              }
+            },
+            "required": ["kind", "nodeType", "nodeId"],
+            "type": "object"
+          },
+          "insertionPoint": {
+            "additionalProperties": false,
+            "properties": {
+              "blockId": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "text"
+              },
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "type": "integer"
+                  },
+                  "start": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["start", "end"],
+                "type": "object"
+              }
+            },
+            "required": ["kind", "blockId", "range"],
+            "type": "object"
+          },
+          "success": {
+            "const": true
+          },
+          "trackedChangeRefs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "entityId": {
+                  "type": "string"
+                },
+                "entityType": {
+                  "const": "trackedChange"
+                },
+                "kind": {
+                  "const": "entity"
+                }
+              },
+              "required": ["kind", "entityType", "entityId"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["success", "heading", "insertionPoint"],
         "type": "object"
       },
       "supportsDryRun": true,
@@ -11949,6 +12252,34 @@
                 "required": ["available", "tracked", "dryRun"],
                 "type": "object"
               },
+              "create.heading": {
+                "additionalProperties": false,
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "reasons": {
+                    "items": {
+                      "enum": [
+                        "COMMAND_UNAVAILABLE",
+                        "OPERATION_UNAVAILABLE",
+                        "TRACKED_MODE_UNAVAILABLE",
+                        "DRY_RUN_UNAVAILABLE",
+                        "NAMESPACE_UNAVAILABLE"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "tracked": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["available", "tracked", "dryRun"],
+                "type": "object"
+              },
               "create.paragraph": {
                 "additionalProperties": false,
                 "properties": {
@@ -12720,6 +13051,7 @@
               "format.underline",
               "format.strikethrough",
               "create.paragraph",
+              "create.heading",
               "lists.list",
               "lists.get",
               "lists.insert",

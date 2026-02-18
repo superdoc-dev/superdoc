@@ -7,6 +7,7 @@ import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 function makeEditor(overrides: Partial<Editor> = {}): Editor {
   const defaultCommands = {
     insertParagraphAt: vi.fn(() => true),
+    insertHeadingAt: vi.fn(() => true),
     insertListItemAt: vi.fn(() => true),
     setListTypeAt: vi.fn(() => true),
     setTextSelection: vi.fn(() => true),
@@ -116,6 +117,9 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations['lists.setType'].dryRun).toBe(true);
     expect(capabilities.operations['trackChanges.accept'].dryRun).toBe(false);
     expect(capabilities.operations['create.paragraph'].dryRun).toBe(true);
+    expect(capabilities.operations['create.heading'].available).toBe(true);
+    expect(capabilities.operations['create.heading'].tracked).toBe(true);
+    expect(capabilities.operations['create.heading'].dryRun).toBe(true);
   });
 
   it('advertises dryRun for list mutators that implement dry-run behavior', () => {
@@ -146,6 +150,8 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations.insert.reasons).toContain('TRACKED_MODE_UNAVAILABLE');
     expect(capabilities.operations['create.paragraph'].tracked).toBe(false);
     expect(capabilities.operations['create.paragraph'].reasons).toContain('TRACKED_MODE_UNAVAILABLE');
+    expect(capabilities.operations['create.heading'].tracked).toBe(false);
+    expect(capabilities.operations['create.heading'].reasons).toContain('TRACKED_MODE_UNAVAILABLE');
   });
 
   it('never reports tracked=true when the operation is unavailable', () => {
@@ -160,6 +166,20 @@ describe('getDocumentApiCapabilities', () => {
 
     expect(capabilities.operations['create.paragraph'].available).toBe(false);
     expect(capabilities.operations['create.paragraph'].tracked).toBe(false);
+  });
+
+  it('marks create.heading as unavailable when insertHeadingAt command is missing', () => {
+    const capabilities = getDocumentApiCapabilities(
+      makeEditor({
+        commands: {
+          insertHeadingAt: undefined,
+        } as unknown as Editor['commands'],
+      }),
+    );
+
+    expect(capabilities.operations['create.heading'].available).toBe(false);
+    expect(capabilities.operations['create.heading'].tracked).toBe(false);
+    expect(capabilities.operations['create.heading'].reasons).toContain('COMMAND_UNAVAILABLE');
   });
 
   it('does not emit unavailable reasons for modes that are unsupported by design', () => {

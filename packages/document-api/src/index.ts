@@ -96,7 +96,8 @@ import {
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
-import { executeCreateParagraph } from './create/create.js';
+import { executeCreateParagraph, executeCreateHeading } from './create/create.js';
+import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
 import type {
   TrackChangesAcceptAllInput,
   TrackChangesAcceptInput,
@@ -410,6 +411,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     create: {
       paragraph(input: CreateParagraphInput, options?: MutationOptions): CreateParagraphResult {
         return executeCreateParagraph(adapters.create, input, options);
+      },
+      heading(input: CreateHeadingInput, options?: MutationOptions): CreateHeadingResult {
+        return executeCreateHeading(adapters.create, input, options);
       },
     },
     capabilities,

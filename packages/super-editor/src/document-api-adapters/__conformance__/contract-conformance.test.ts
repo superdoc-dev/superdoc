@@ -15,7 +15,7 @@ import {
 } from '../../extensions/track-changes/constants.js';
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsAdapter } from '../comments-adapter.js';
-import { createParagraphAdapter } from '../create-adapter.js';
+import { createParagraphAdapter, createHeadingAdapter } from '../create-adapter.js';
 import {
   formatBoldAdapter,
   formatItalicAdapter,
@@ -174,6 +174,7 @@ function makeTextEditor(
     acceptAllTrackedChanges: vi.fn(() => true),
     rejectAllTrackedChanges: vi.fn(() => true),
     insertParagraphAt: vi.fn(() => true),
+    insertHeadingAt: vi.fn(() => true),
     insertListItemAt: vi.fn(() => true),
     setListTypeAt: vi.fn(() => true),
     increaseListIndent: vi.fn(() => true),
@@ -216,6 +217,7 @@ function makeTextEditor(
     },
     can: vi.fn(() => ({
       insertParagraphAt: vi.fn(() => true),
+      insertHeadingAt: vi.fn(() => true),
       insertListItemAt: vi.fn(() => true),
       setListTypeAt: vi.fn(() => true),
       increaseListIndent: vi.fn(() => true),
@@ -602,6 +604,32 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const { editor } = makeTextEditor('Hello', { commands: { insertParagraphAt: vi.fn(() => true) } });
       return createParagraphAdapter(editor, { at: { kind: 'documentEnd' }, text: 'X' }, { changeMode: 'direct' });
+    },
+  },
+  'create.heading': {
+    throwCase: () => {
+      const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt: undefined } });
+      return createHeadingAdapter(
+        editor,
+        { level: 1, at: { kind: 'documentEnd' }, text: 'X' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt: vi.fn(() => false) } });
+      return createHeadingAdapter(
+        editor,
+        { level: 1, at: { kind: 'documentEnd' }, text: 'X' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt: vi.fn(() => true) } });
+      return createHeadingAdapter(
+        editor,
+        { level: 2, at: { kind: 'documentEnd' }, text: 'X' },
+        { changeMode: 'direct' },
+      );
     },
   },
   'lists.insert': {
@@ -1051,6 +1079,17 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     expect(insertParagraphAt).not.toHaveBeenCalled();
+    return result;
+  },
+  'create.heading': () => {
+    const insertHeadingAt = vi.fn(() => true);
+    const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt } });
+    const result = createHeadingAdapter(
+      editor,
+      { level: 1, at: { kind: 'documentEnd' }, text: 'Dry run heading' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(insertHeadingAt).not.toHaveBeenCalled();
     return result;
   },
   'lists.insert': () => {

@@ -100,6 +100,15 @@ const paragraphAddressSchema = objectSchema(
   ['kind', 'nodeType', 'nodeId'],
 );
 
+const headingAddressSchema = objectSchema(
+  {
+    kind: { const: 'block' },
+    nodeType: { const: 'heading' },
+    nodeId: { type: 'string' },
+  },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
 const listItemAddressSchema = objectSchema(
   {
     kind: { const: 'block' },
@@ -265,6 +274,34 @@ function createParagraphResultSchemaFor(operationId: OperationId): JsonSchema {
     oneOf: [createParagraphSuccessSchema, createParagraphFailureSchemaFor(operationId)],
   };
 }
+
+const createHeadingSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    heading: headingAddressSchema,
+    insertionPoint: textAddressSchema,
+    trackedChangeRefs: arraySchema(trackChangeRefSchema),
+  },
+  ['success', 'heading', 'insertionPoint'],
+);
+
+function createHeadingFailureSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: receiptFailureSchemaFor(operationId),
+    },
+    ['success', 'failure'],
+  );
+}
+
+function createHeadingResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [createHeadingSuccessSchema, createHeadingFailureSchemaFor(operationId)],
+  };
+}
+
+const headingLevelSchema: JsonSchema = { type: 'integer', minimum: 1, maximum: 6 };
 
 const listsInsertSuccessSchema = objectSchema(
   {
@@ -715,6 +752,38 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: createParagraphResultSchemaFor('create.paragraph'),
     success: createParagraphSuccessSchema,
     failure: createParagraphFailureSchemaFor('create.paragraph'),
+  },
+  'create.heading': {
+    input: objectSchema(
+      {
+        level: headingLevelSchema,
+        at: {
+          oneOf: [
+            objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+            objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+            objectSchema(
+              {
+                kind: { const: 'before' },
+                target: blockNodeAddressSchema,
+              },
+              ['kind', 'target'],
+            ),
+            objectSchema(
+              {
+                kind: { const: 'after' },
+                target: blockNodeAddressSchema,
+              },
+              ['kind', 'target'],
+            ),
+          ],
+        },
+        text: { type: 'string' },
+      },
+      ['level'],
+    ),
+    output: createHeadingResultSchemaFor('create.heading'),
+    success: createHeadingSuccessSchema,
+    failure: createHeadingFailureSchemaFor('create.heading'),
   },
   'lists.list': {
     input: objectSchema({

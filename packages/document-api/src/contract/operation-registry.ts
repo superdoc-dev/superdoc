@@ -11,7 +11,12 @@ import type { OperationId } from './types.js';
 import type { NodeAddress, NodeInfo, QueryResult, Selector, Query } from '../types/index.js';
 import type { TextMutationReceipt, Receipt } from '../types/receipt.js';
 import type { DocumentInfo } from '../types/info.types.js';
-import type { CreateParagraphInput, CreateParagraphResult } from '../types/create.types.js';
+import type {
+  CreateParagraphInput,
+  CreateParagraphResult,
+  CreateHeadingInput,
+  CreateHeadingResult,
+} from '../types/create.types.js';
 
 import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
@@ -84,6 +89,7 @@ export interface OperationRegistry {
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };
+  'create.heading': { input: CreateHeadingInput; options: MutationOptions; output: CreateHeadingResult };
 
   // --- lists.* ---
   'lists.list': { input: ListsListQuery | undefined; options: never; output: ListsListResult };

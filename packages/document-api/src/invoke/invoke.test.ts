@@ -98,6 +98,11 @@ function makeAdapters() {
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'new-p' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-p', range: { start: 0, end: 0 } },
     })),
+    heading: vi.fn(() => ({
+      success: true as const,
+      heading: { kind: 'block' as const, nodeType: 'heading' as const, nodeId: 'new-h' },
+      insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
+    })),
   };
   const listsAdapter: ListsAdapter = {
     list: vi.fn(() => ({ matches: [], total: 0, items: [] })),
@@ -258,6 +263,15 @@ describe('invoke', () => {
       const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } } };
       const direct = api.format.strikethrough(input);
       const invoked = api.invoke({ operationId: 'format.strikethrough', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('create.heading: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { level: 1 as const, at: { kind: 'documentEnd' as const }, text: 'Title' };
+      const direct = api.create.heading(input);
+      const invoked = api.invoke({ operationId: 'create.heading', input });
       expect(invoked).toEqual(direct);
     });
   });

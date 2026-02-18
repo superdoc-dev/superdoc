@@ -151,6 +151,11 @@ function makeCreateAdapter(): CreateAdapter {
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'new-p' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-p', range: { start: 0, end: 0 } },
     })),
+    heading: vi.fn(() => ({
+      success: true as const,
+      heading: { kind: 'block' as const, nodeType: 'heading' as const, nodeId: 'new-h' },
+      insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
+    })),
   };
 }
 
@@ -622,6 +627,41 @@ describe('createDocumentApi', () => {
       {
         at: { kind: 'documentEnd' },
         text: 'Created paragraph',
+      },
+      { changeMode: 'tracked', dryRun: false },
+    );
+  });
+
+  it('delegates create.heading to the create adapter', () => {
+    const createAdpt = makeCreateAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: makeFormatAdapter(),
+      trackChanges: makeTrackChangesAdapter(),
+      create: createAdpt,
+      lists: makeListsAdapter(),
+    });
+
+    const result = api.create.heading(
+      {
+        level: 2,
+        at: { kind: 'documentEnd' },
+        text: 'Created heading',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(createAdpt.heading).toHaveBeenCalledWith(
+      {
+        level: 2,
+        at: { kind: 'documentEnd' },
+        text: 'Created heading',
       },
       { changeMode: 'tracked', dryRun: false },
     );

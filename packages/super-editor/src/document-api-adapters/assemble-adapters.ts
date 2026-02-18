@@ -21,7 +21,7 @@ import {
   trackChangesAcceptAllAdapter,
   trackChangesRejectAllAdapter,
 } from './track-changes-adapter.js';
-import { createParagraphAdapter } from './create-adapter.js';
+import { createParagraphAdapter, createHeadingAdapter } from './create-adapter.js';
 import {
   listsListAdapter,
   listsGetAdapter,
@@ -77,6 +77,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     create: {
       paragraph: (input, options) => createParagraphAdapter(editor, input, options),
+      heading: (input, options) => createHeadingAdapter(editor, input, options),
     },
     lists: {
       list: (query) => listsListAdapter(editor, query),

@@ -7489,7 +7489,7 @@
         "idempotency": "conditional",
         "mutates": true,
         "possibleFailureCodes": ["INVALID_TARGET"],
-        "supportsDryRun": false,
+        "supportsDryRun": true,
         "supportsTrackedMode": false,
         "throws": {
           "postApplyForbidden": true,
@@ -7718,7 +7718,7 @@
         "idempotency": "conditional",
         "mutates": true,
         "possibleFailureCodes": ["NO_OP", "INVALID_TARGET"],
-        "supportsDryRun": false,
+        "supportsDryRun": true,
         "supportsTrackedMode": false,
         "throws": {
           "postApplyForbidden": true,
@@ -7871,7 +7871,7 @@
         "idempotency": "non-idempotent",
         "mutates": true,
         "possibleFailureCodes": ["INVALID_TARGET"],
-        "supportsDryRun": false,
+        "supportsDryRun": true,
         "supportsTrackedMode": true,
         "throws": {
           "postApplyForbidden": true,
@@ -8236,7 +8236,7 @@
         "idempotency": "conditional",
         "mutates": true,
         "possibleFailureCodes": ["NO_OP", "INVALID_TARGET"],
-        "supportsDryRun": false,
+        "supportsDryRun": true,
         "supportsTrackedMode": false,
         "throws": {
           "postApplyForbidden": true,
@@ -8383,7 +8383,7 @@
         "idempotency": "conditional",
         "mutates": true,
         "possibleFailureCodes": ["NO_OP", "INVALID_TARGET"],
-        "supportsDryRun": false,
+        "supportsDryRun": true,
         "supportsTrackedMode": false,
         "throws": {
           "postApplyForbidden": true,
@@ -8533,7 +8533,7 @@
         "idempotency": "conditional",
         "mutates": true,
         "possibleFailureCodes": ["NO_OP", "INVALID_TARGET"],
-        "supportsDryRun": false,
+        "supportsDryRun": true,
         "supportsTrackedMode": false,
         "throws": {
           "postApplyForbidden": true,
@@ -10774,5 +10774,5 @@
     }
   },
   "sourceCommit": null,
-  "sourceHash": "50a44d02c22957a93c8ce085776af0197e3200f02d3b402f2625dad31a0dc756"
+  "sourceHash": "8d875ceb279d213c1e779882f103d39fa2106545ce94c6b1553ae06b6c321e03"
 }

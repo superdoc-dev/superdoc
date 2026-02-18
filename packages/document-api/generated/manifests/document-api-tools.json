@@ -2,7 +2,7 @@
   "contractVersion": "0.1.0",
   "generatedAt": null,
   "sourceCommit": null,
-  "sourceHash": "50a44d02c22957a93c8ce085776af0197e3200f02d3b402f2625dad31a0dc756",
+  "sourceHash": "8d875ceb279d213c1e779882f103d39fa2106545ce94c6b1553ae06b6c321e03",
   "tools": [
     {
       "description": "Read Document API data via `find`.",
@@ -4268,7 +4268,7 @@
         "required": ["success", "item", "insertionPoint"],
         "type": "object"
       },
-      "supportsDryRun": false,
+      "supportsDryRun": true,
       "supportsTrackedMode": true
     },
     {
@@ -4416,7 +4416,7 @@
         "required": ["success", "item"],
         "type": "object"
       },
-      "supportsDryRun": false,
+      "supportsDryRun": true,
       "supportsTrackedMode": false
     },
     {
@@ -4561,7 +4561,7 @@
         "required": ["success", "item"],
         "type": "object"
       },
-      "supportsDryRun": false,
+      "supportsDryRun": true,
       "supportsTrackedMode": false
     },
     {
@@ -4706,7 +4706,7 @@
         "required": ["success", "item"],
         "type": "object"
       },
-      "supportsDryRun": false,
+      "supportsDryRun": true,
       "supportsTrackedMode": false
     },
     {
@@ -4851,7 +4851,7 @@
         "required": ["success", "item"],
         "type": "object"
       },
-      "supportsDryRun": false,
+      "supportsDryRun": true,
       "supportsTrackedMode": false
     },
     {
@@ -4996,7 +4996,7 @@
         "required": ["success", "paragraph"],
         "type": "object"
       },
-      "supportsDryRun": false,
+      "supportsDryRun": true,
       "supportsTrackedMode": false
     },
     {

@@ -113,9 +113,25 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations.insert.tracked).toBe(true);
     expect(capabilities.operations.insert.dryRun).toBe(true);
     expect(capabilities.operations['lists.setType'].tracked).toBe(false);
-    expect(capabilities.operations['lists.setType'].dryRun).toBe(false);
+    expect(capabilities.operations['lists.setType'].dryRun).toBe(true);
     expect(capabilities.operations['trackChanges.accept'].dryRun).toBe(false);
     expect(capabilities.operations['create.paragraph'].dryRun).toBe(true);
+  });
+
+  it('advertises dryRun for list mutators that implement dry-run behavior', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const listMutations = [
+      'lists.insert',
+      'lists.setType',
+      'lists.indent',
+      'lists.outdent',
+      'lists.restart',
+      'lists.exit',
+    ] as const;
+
+    for (const operationId of listMutations) {
+      expect(capabilities.operations[operationId].dryRun, `${operationId} should advertise dryRun support`).toBe(true);
+    }
   });
 
   it('reports tracked mode unavailable when no editor user is configured', () => {

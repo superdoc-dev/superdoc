@@ -928,6 +928,77 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(insertParagraphAt).not.toHaveBeenCalled();
     return result;
   },
+  'lists.insert': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'decimal' })]);
+    const insertListItemAt = editor.commands!.insertListItemAt as ReturnType<typeof vi.fn>;
+    const result = listsInsertAdapter(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, position: 'after', text: 'X' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(insertListItemAt).not.toHaveBeenCalled();
+    return result;
+  },
+  'lists.setType': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'bullet' })]);
+    const setListTypeAt = editor.commands!.setListTypeAt as ReturnType<typeof vi.fn>;
+    const result = listsSetTypeAdapter(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(setListTypeAt).not.toHaveBeenCalled();
+    return result;
+  },
+  'lists.indent': () => {
+    const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const increaseListIndent = editor.commands!.increaseListIndent as ReturnType<typeof vi.fn>;
+    const result = listsIndentAdapter(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(increaseListIndent).not.toHaveBeenCalled();
+    hasDefinitionSpy.mockRestore();
+    return result;
+  },
+  'lists.outdent': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 1, numberingType: 'decimal' })]);
+    const decreaseListIndent = editor.commands!.decreaseListIndent as ReturnType<typeof vi.fn>;
+    const result = listsOutdentAdapter(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(decreaseListIndent).not.toHaveBeenCalled();
+    return result;
+  },
+  'lists.restart': () => {
+    const editor = makeListEditor([
+      makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal', markerText: '1.', path: [1] }),
+      makeListParagraph({ id: 'li-2', numId: 1, ilvl: 0, numberingType: 'decimal', markerText: '2.', path: [2] }),
+    ]);
+    const restartNumbering = editor.commands!.restartNumbering as ReturnType<typeof vi.fn>;
+    const result = listsRestartAdapter(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(restartNumbering).not.toHaveBeenCalled();
+    return result;
+  },
+  'lists.exit': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const exitListItemAt = editor.commands!.exitListItemAt as ReturnType<typeof vi.fn>;
+    const result = listsExitAdapter(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(exitListItemAt).not.toHaveBeenCalled();
+    return result;
+  },
 };
 
 beforeEach(() => {

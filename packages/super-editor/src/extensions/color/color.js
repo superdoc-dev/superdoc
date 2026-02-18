@@ -49,7 +49,7 @@ export const Color = Extension.create({
         attributes: {
           color: {
             default: null,
-            parseDOM: (el) => cssColorToHex(el.style.color?.replace(/['"]+/g, '')),
+            parseDOM: (el) => cssColorToHex(el.style.color),
             renderDOM: (attrs) => {
               if (!attrs.color) return {};
               return { style: `color: ${attrs.color}` };

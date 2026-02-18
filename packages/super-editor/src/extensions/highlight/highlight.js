@@ -35,7 +35,7 @@ export const Highlight = Mark.create({
     return {
       color: {
         default: null,
-        parseDOM: (element) => element.getAttribute('data-color') || cssColorToHex(element.style.backgroundColor),
+        parseDOM: (element) => cssColorToHex(element.getAttribute('data-color') || element.style.backgroundColor),
         renderDOM: (attributes) => {
           if (!attributes.color) {
             return {};
@@ -55,8 +55,9 @@ export const Highlight = Mark.create({
       {
         style: 'background-color',
         getAttrs: (value) => {
-          if (!value || value === 'transparent' || value === 'inherit') return false;
-          return { color: cssColorToHex(value) };
+          if (!value) return false;
+          const color = cssColorToHex(value);
+          return color ? { color } : false;
         },
       },
     ];

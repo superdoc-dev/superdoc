@@ -80,3 +80,76 @@ Use the tables below to see what operations are available and where each one is 
 | `editor.doc.trackChanges.rejectAll(...)` | [`trackChanges.rejectAll`](/document-api/reference/track-changes/reject-all) |
 | `editor.doc.capabilities()` | [`capabilities.get`](/document-api/reference/capabilities/get) |
 {/* DOC_API_OPERATIONS_END */}
+
+## Common workflows
+
+These patterns show how operations compose to cover typical tasks.
+
+### Find and mutate
+
+Locate text in the document, then replace it:
+
+```ts
+const result = editor.doc.find({ type: 'text', text: 'foo' });
+const target = result.context?.[0]?.textRanges?.[0];
+if (target) {
+  editor.doc.replace({ target, text: 'bar' });
+}
+```
+
+### Tracked-mode insert
+
+Insert text as a tracked change so reviewers can accept or reject it:
+
+```ts
+const receipt = editor.doc.insert(
+  { text: 'new content' },
+  { changeMode: 'tracked' },
+);
+```
+
+The receipt includes a `resolution` with the resolved insertion point and `inserted` entries with tracked-change IDs.
+
+### Check capabilities before acting
+
+Use `capabilities()` to branch on what the editor supports:
+
+```ts
+const caps = editor.doc.capabilities();
+
+if (caps.operations['format.bold'].available) {
+  editor.doc.format.bold({ target });
+}
+
+if (caps.global.trackChanges.enabled) {
+  editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+}
+```
+
+### Dry-run preview
+
+Pass `dryRun: true` to validate an operation without applying it:
+
+```ts
+const preview = editor.doc.insert(
+  { target, text: 'hello' },
+  { dryRun: true },
+);
+// preview.success tells you whether the insert would succeed
+// preview.resolution shows the resolved target range
+```
+
+## Programmatic invocation
+
+Every operation is also available through a dynamic `invoke` method on the Document API instance. It accepts an `operationId` string and dispatches to the corresponding method. This is useful when the operation to run is determined at runtime (for example, from a tool-use payload).
+
+```ts
+// doc is the DocumentApi instance (editor.doc)
+const result = doc.invoke({
+  operationId: 'insert',
+  input: { text: 'hello' },
+  options: { changeMode: 'tracked' },
+});
+```
+
+`invoke` delegates to the same direct methods — there is no separate execution path. Type safety is available through `InvokeRequest<T>` for callers who know the operation at compile time, and `DynamicInvokeRequest` for dynamic dispatch.

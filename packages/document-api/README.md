@@ -60,6 +60,17 @@ operation-definitions.ts    types.ts (re-exports + CommandCatalog, guards)
 - `operation-registry.ts` is the single source of truth for type signatures (input/options/output per operation).
 - `TypedDispatchTable` (in `invoke.ts`) validates at compile time that dispatch wiring conforms to the registry.
 
+## OperationRegistry and invoke
+
+`operation-registry.ts` is the canonical type-level mapping from `OperationId` to `{ input, options, output }`. Bidirectional `Assert` checks guarantee every `OperationId` has a registry entry and vice versa.
+
+The invoke system (`invoke.ts`) builds a `TypedDispatchTable` that maps each operation to its direct API method. This provides:
+
+- **`InvokeRequest<T>`** — typed invoke request, narrowed by `operationId`. Use when the operation is known at compile time.
+- **`DynamicInvokeRequest`** — loose invoke request for dynamic callers (AI tool-use, runtime dispatch). Adapter-level validation catches invalid inputs.
+
+`TypedDispatchTable` is a mapped type that fails to compile if any dispatch entry doesn't match the registry. This is a compile-time parity check — there is no separate runtime script for it.
+
 ## Related docs
 
 - `packages/document-api/src/README.md` for contract semantics and invariants

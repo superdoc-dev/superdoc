@@ -46,6 +46,10 @@ Do not hand-edit generated output files. Regenerate instead.
 | `check-contract-parity.ts` | check | Enforce parity between operation IDs, command catalog, maps, and runtime API member paths | `packages/document-api/src/index.js` exports + runtime API shape | None | Contract surface integrity gate |
 | `generate-internal-schemas.ts` | generate | Generate internal-only operation schema snapshot | Contract snapshot + schema dialect | `packages/document-api/.generated-internal/contract-schemas/index.json` | Local tooling/debugging |
 
+## Compile-time parity checks
+
+Not all parity checks are runtime scripts. `TypedDispatchTable` in `invoke.ts` is a mapped type that validates at compile time that every `OperationId` has a matching dispatch entry. If you add an operation to `operation-definitions.ts` and `operation-registry.ts` but forget the dispatch entry, `tsc` will fail before any script runs.
+
 ## Recommended usage
 
 1. Change contract/docs sources.

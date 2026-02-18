@@ -39,6 +39,9 @@ pre-commit:
       root: "apps/docs/"
       glob: "apps/docs/**/*.mdx"
       run: pnpm run test:examples
+    docapi-sync:
+      glob: "{packages/document-api,apps/docs/document-api}/**"
+      run: pnpm run docapi:sync && git add packages/document-api/generated apps/docs/document-api/reference apps/docs/document-api/overview.mdx
 
 commit-msg:
   commands:

@@ -25,9 +25,14 @@ Generated marker block in overview:
 From repo root:
 
 ```bash
-pnpm exec tsx packages/document-api/scripts/generate-contract-outputs.ts
-pnpm exec tsx packages/document-api/scripts/check-contract-outputs.ts
+pnpm run docapi:sync          # regenerate all generated outputs
+pnpm run docapi:check         # verify parity + output drift (CI runs this)
+pnpm run docapi:sync:check    # sync then check in one step
 ```
+
+These are also enforced automatically:
+- **Pre-commit hook** runs `docapi:sync` when document-api sources change and restages generated files.
+- **CI workflow** (`ci-document-api.yml`) runs `docapi:check` on every PR touching relevant paths.
 
 ## Related docs
 

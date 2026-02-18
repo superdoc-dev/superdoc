@@ -6,8 +6,12 @@ This folder contains deterministic generator/check entry points for the Document
 
 - `generate-*` scripts write generated artifacts.
 - `check-*` scripts validate generated artifacts or docs and fail with non-zero exit code on drift.
-- In this repository snapshot, these scripts are not directly referenced from root `package.json` scripts or `.github/workflows`.
-- Typical caller today: local ad-hoc invocations or higher-level wrappers in feature branches/CI jobs.
+- Root `package.json` exposes three canonical entry points:
+  - `pnpm run docapi:sync` — runs `generate-contract-outputs.ts`
+  - `pnpm run docapi:check` — runs `check-contract-parity.ts` + `check-contract-outputs.ts`
+  - `pnpm run docapi:sync:check` — sync then check
+- Pre-commit hook (`lefthook.yml`) auto-runs `docapi:sync` when document-api source files are staged.
+- CI workflow (`ci-document-api.yml`) runs `docapi:check` on PRs touching document-api paths.
 
 ## Manual vs generated boundaries
 
@@ -45,5 +49,9 @@ Do not hand-edit generated output files. Regenerate instead.
 ## Recommended usage
 
 1. Change contract/docs sources.
-2. Run the relevant `generate-*` script (or the all-in-one `generate-contract-outputs.ts`).
-3. Run the matching `check-*` script (or the all-in-one `check-contract-outputs.ts`) to verify zero drift.
+2. Run `pnpm run docapi:sync` (or the individual `generate-*` script for focused work).
+3. Run `pnpm run docapi:check` to verify zero drift.
+
+Or combine: `pnpm run docapi:sync:check`
+
+The pre-commit hook handles step 2 automatically when document-api files are staged. CI enforces step 3.

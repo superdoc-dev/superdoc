@@ -325,6 +325,10 @@ const onEditorSelectionChange = ({ editor }) => {
   // processSelectionChange already reads editor.state.selection as the primary source.
   selectionUpdateRafId = requestAnimationFrame(() => {
     selectionUpdateRafId = null;
+    if (isViewingMode()) {
+      resetSelection();
+      return;
+    }
     processSelectionChange(editor);
   });
 };

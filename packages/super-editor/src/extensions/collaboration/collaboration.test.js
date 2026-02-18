@@ -448,6 +448,26 @@ describe('collaboration extension', () => {
       vi.advanceTimersByTime(1);
       expect(updateSpy).toHaveBeenCalledTimes(1);
     });
+
+    it('does not starve docx metadata sync during sustained local edits', () => {
+      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
+      Collaboration.config.addPmPlugins.call(context);
+
+      const transaction = {
+        local: true,
+        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
+      };
+
+      const sustainedEditIntervalMs = 5000;
+      const sustainedEditDurationMs = 2 * 60 * 1000;
+
+      for (let elapsedMs = 0; elapsedMs < sustainedEditDurationMs; elapsedMs += sustainedEditIntervalMs) {
+        ydoc._listeners.afterTransaction(transaction);
+        vi.advanceTimersByTime(sustainedEditIntervalMs);
+      }
+
+      expect(updateSpy).toHaveBeenCalled();
+    });
   });
 
   it('creates sync plugin fragment via helper', () => {

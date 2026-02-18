@@ -170,9 +170,13 @@ const initDocumentListener = ({ ydoc, editor }) => {
   // large Y.js updates (full DOCX XML) that accumulate as Y.Map
   // tombstones, gradually growing the room's stored data until
   // Liveblocks rejects connections with code 1011.
-  const debouncedUpdate = debounce((editor) => {
-    updateYdocDocxData(editor);
-  }, 30000);
+  const debouncedUpdate = debounce(
+    (editor) => {
+      updateYdocDocxData(editor);
+    },
+    30000,
+    { maxWait: 60000 },
+  );
 
   const afterTransactionHandler = (transaction) => {
     const { local } = transaction;
@@ -192,16 +196,38 @@ const initDocumentListener = ({ ydoc, editor }) => {
   };
 };
 
-const debounce = (fn, wait) => {
+const debounce = (fn, wait, { maxWait } = {}) => {
   let timeout = null;
-  const debounced = (...args) => {
+  let maxTimeout = null;
+  let latestArgs = null;
+
+  const invoke = () => {
     clearTimeout(timeout);
-    timeout = setTimeout(() => fn(...args), wait);
+    clearTimeout(maxTimeout);
+    timeout = null;
+    maxTimeout = null;
+    const args = latestArgs;
+    latestArgs = null;
+    if (args !== null) fn(...args);
   };
+
+  const debounced = (...args) => {
+    latestArgs = args;
+    clearTimeout(timeout);
+    timeout = setTimeout(invoke, wait);
+    if (maxWait != null && maxTimeout == null) {
+      maxTimeout = setTimeout(invoke, maxWait);
+    }
+  };
+
   debounced.cancel = () => {
     clearTimeout(timeout);
+    clearTimeout(maxTimeout);
     timeout = null;
+    maxTimeout = null;
+    latestArgs = null;
   };
+
   return debounced;
 };
 

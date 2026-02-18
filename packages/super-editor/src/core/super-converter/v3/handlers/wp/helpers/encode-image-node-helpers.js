@@ -72,6 +72,41 @@ const extractEffectExtent = (node) => {
   return { left, top, right, bottom };
 };
 
+const buildClipPathFromSrcRect = (srcRectAttrs = {}) => {
+  const edges = {
+    left: srcRectAttrs.l,
+    top: srcRectAttrs.t,
+    right: srcRectAttrs.r,
+    bottom: srcRectAttrs.b,
+  };
+
+  let hasValue = false;
+  let hasPositive = false;
+  const percentEdges = {};
+
+  for (const [edge, value] of Object.entries(edges)) {
+    if (value == null) continue;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    hasValue = true;
+    if (numeric < 0) {
+      return null;
+    }
+    const percent = Math.max(0, Math.min(100, numeric / 1000));
+    if (percent > 0) hasPositive = true;
+    percentEdges[edge] = percent;
+  }
+
+  if (!hasValue || !hasPositive) return null;
+
+  const top = percentEdges.top ?? 0;
+  const right = percentEdges.right ?? 0;
+  const bottom = percentEdges.bottom ?? 0;
+  const left = percentEdges.left ?? 0;
+
+  return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
+};
+
 /**
  * Encodes image XML into Editor node.
  *
@@ -278,12 +313,13 @@ export function handleImageNode(node, params, isAnchor) {
   // - Negative values (e.g., b="-3978"): Word extended the mapping (image doesn't need clipping)
   // - Empty/no srcRect: no pre-adjustment, use cover+clip for aspect ratio mismatch
   //
-  // Since we don't implement actual srcRect cropping, we still need cover mode for positive values.
-  // Only skip cover mode when srcRect has negative values (Word already adjusted the mapping).
+  // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
+  // negative values (Word already adjusted the mapping).
   const stretch = blipFill?.elements?.find((el) => el.name === 'a:stretch');
   const fillRect = stretch?.elements?.find((el) => el.name === 'a:fillRect');
   const srcRect = blipFill?.elements?.find((el) => el.name === 'a:srcRect');
   const srcRectAttrs = srcRect?.attributes || {};
+  const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
 
   // Check if srcRect has negative values (indicating Word extended/adjusted the image mapping)
   const srcRectHasNegativeValues = ['l', 't', 'r', 'b'].some((attr) => {
@@ -292,8 +328,9 @@ export function handleImageNode(node, params, isAnchor) {
   });
 
   const shouldStretch = Boolean(stretch && fillRect);
-  // Use cover mode when stretching, unless srcRect has negative values (Word already adjusted)
-  const shouldCover = shouldStretch && !srcRectHasNegativeValues;
+  // Use cover mode when stretching, unless srcRect already produced an explicit clipPath
+  // or srcRect has negative values (Word already adjusted mapping).
+  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
@@ -397,6 +434,8 @@ export function handleImageNode(node, params, isAnchor) {
       : {}),
     wrapTopAndBottom: wrap.type === 'TopAndBottom',
     shouldCover,
+    ...(clipPath ? { clipPath } : {}),
+    rawSrcRect: srcRect,
     originalPadding: {
       distT: attributes['distT'],
       distB: attributes['distB'],

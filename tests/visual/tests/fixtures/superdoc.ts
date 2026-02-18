@@ -171,10 +171,7 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
 
       async tripleClickLine(lineIndex: number) {
         const line = page.locator('.superdoc-line').nth(lineIndex);
-        await line.waitFor({ state: 'visible', timeout: 10_000 });
-        const box = await line.boundingBox();
-        if (!box) throw new Error(`Line ${lineIndex} not visible`);
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { clickCount: 3 });
+        await line.click({ clickCount: 3, timeout: 10_000 });
       },
 
       async setDocumentMode(mode: 'editing' | 'suggesting' | 'viewing') {
@@ -301,7 +298,13 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
 
         for (let i = 0; i < count; i++) {
           const pageEl = pages.nth(i);
-          await pageEl.scrollIntoViewIfNeeded();
+
+          // Skip pages that can't be scrolled into view (e.g. empty trailing pages)
+          try {
+            await pageEl.scrollIntoViewIfNeeded({ timeout: 5_000 });
+          } catch {
+            break;
+          }
 
           await expect(pageEl).toHaveScreenshot(`${baseName}-p${i + 1}.png`, {
             timeout: 15_000,

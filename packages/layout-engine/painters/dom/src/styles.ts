@@ -1,3 +1,5 @@
+import { DOM_CLASS_NAMES } from './constants.js';
+
 export const CLASS_NAMES = {
   container: 'superdoc-layout',
   page: 'superdoc-page',
@@ -562,7 +564,12 @@ const IMAGE_SELECTION_STYLES = `
 }
 
 /* Ensure inline images can be targeted */
-.superdoc-inline-image.superdoc-image-selected {
+.${DOM_CLASS_NAMES.INLINE_IMAGE}.superdoc-image-selected {
+  outline-offset: 2px;
+}
+
+/* Selection on clip wrapper so outline matches the visible cropped portion, not the scaled image */
+.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}.superdoc-image-selected {
   outline-offset: 2px;
 }
 `;

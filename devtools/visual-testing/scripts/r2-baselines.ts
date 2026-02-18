@@ -23,6 +23,9 @@ const CONTENT_TYPES: Record<string, string> = {
 /** Default local cache directory for downloaded baselines. */
 const DEFAULT_BASELINES_CACHE_DIR = path.join(os.tmpdir(), 'superdoc-baselines-cache');
 
+/** Default local cache directory for downloaded Word baselines. */
+const DEFAULT_WORD_BASELINES_CACHE_DIR = path.join(os.tmpdir(), 'superdoc-word-baselines-cache');
+
 /** Maximum concurrent S3 operations for downloads/uploads. */
 const S3_CONCURRENCY_LIMIT = 6;
 
@@ -746,4 +749,138 @@ export async function uploadDirectoryToR2(options: { localDir: string; remotePre
 
   client.destroy();
   return uploaded;
+}
+
+/**
+ * Create an R2 S3 client configured for the Word baselines bucket.
+ * Uses SD_TESTING_R2_WORD_BUCKET_NAME for the bucket, with shared credentials.
+ *
+ * @returns Object with S3 client and bucket name
+ * @throws {Error} If required environment variables are missing
+ */
+export function createWordR2Client(): { client: S3Client; bucketName: string } {
+  const accountId = process.env.SD_TESTING_R2_ACCOUNT_ID ?? '';
+  const bucketName = process.env.SD_TESTING_R2_WORD_BUCKET_NAME ?? '';
+  const accessKeyId = process.env.SD_TESTING_R2_ACCESS_KEY_ID ?? '';
+  const secretAccessKey = process.env.SD_TESTING_R2_SECRET_ACCESS_KEY ?? '';
+
+  if (!accountId) throw new Error('Missing SD_TESTING_R2_ACCOUNT_ID');
+  if (!bucketName) throw new Error('Missing SD_TESTING_R2_WORD_BUCKET_NAME');
+  if (!accessKeyId) throw new Error('Missing SD_TESTING_R2_ACCESS_KEY_ID');
+  if (!secretAccessKey) throw new Error('Missing SD_TESTING_R2_SECRET_ACCESS_KEY');
+
+  const client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+
+  return { client, bucketName };
+}
+
+/**
+ * Check whether all environment variables required for Word R2 baselines are set.
+ *
+ * @returns True if SD_TESTING_R2_ACCOUNT_ID, SD_TESTING_R2_WORD_BUCKET_NAME,
+ *   SD_TESTING_R2_ACCESS_KEY_ID, and SD_TESTING_R2_SECRET_ACCESS_KEY are all set.
+ */
+export function isWordR2Available(): boolean {
+  return Boolean(
+    process.env.SD_TESTING_R2_ACCOUNT_ID &&
+      process.env.SD_TESTING_R2_WORD_BUCKET_NAME &&
+      process.env.SD_TESTING_R2_ACCESS_KEY_ID &&
+      process.env.SD_TESTING_R2_SECRET_ACCESS_KEY,
+  );
+}
+
+/**
+ * Read cached Word baseline page PNGs from a directory, sorted by name.
+ *
+ * @param dir - Directory containing page_NNNN.png files
+ * @returns Sorted array of absolute paths to page PNG files
+ */
+function readCachedWordPages(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((name) => /^page_\d+\.png$/i.test(name))
+    .sort()
+    .map((name) => path.join(dir, name));
+}
+
+/**
+ * Download Word baselines from R2 for a set of documents.
+ *
+ * For each document, downloads page_NNNN.png files from the R2 bucket under
+ * the document's relative path prefix. Results are cached locally with an
+ * `.r2complete` marker to avoid re-downloading.
+ *
+ * @param options.docPaths - Map of docKey -> relativePath (e.g., "rendering/sd-1679.docx")
+ * @param options.cacheRoot - Optional custom cache root directory
+ * @param options.force - If true, re-download even if already cached
+ * @returns Map of docKey -> { relativePath, pages: [absolutePaths sorted by name] }
+ */
+export async function downloadWordBaselines(options: {
+  docPaths: Map<string, string>;
+  cacheRoot?: string;
+  force?: boolean;
+}): Promise<Map<string, { relativePath: string; pages: string[] }>> {
+  const { client, bucketName } = createWordR2Client();
+  const cacheRoot = options.cacheRoot ?? DEFAULT_WORD_BASELINES_CACHE_DIR;
+  const force = options.force ?? false;
+  const result = new Map<string, { relativePath: string; pages: string[] }>();
+
+  const entries = Array.from(options.docPaths.entries());
+  let downloadedDocs = 0;
+
+  await runWithConcurrency(entries, S3_CONCURRENCY_LIMIT, async ([docKey, relativePath]) => {
+    const localDir = path.join(cacheRoot, relativePath);
+    const markerPath = path.join(localDir, '.r2complete');
+
+    if (!force && fs.existsSync(markerPath)) {
+      const pages = readCachedWordPages(localDir);
+      if (pages.length > 0) {
+        result.set(docKey, { relativePath, pages });
+        return;
+      }
+    }
+
+    const remotePrefix = `${relativePath}/`;
+    const objects = await listObjects(remotePrefix, client, bucketName);
+    const pngObjects = objects.filter((obj) => obj.key.endsWith('.png'));
+
+    if (pngObjects.length === 0) {
+      return;
+    }
+
+    ensureDir(localDir);
+
+    await runWithConcurrency(pngObjects, 4, async (obj) => {
+      const fileName = path.posix.basename(obj.key);
+      const destination = path.join(localDir, fileName);
+      await downloadObject(client, bucketName, obj.key, destination);
+    });
+
+    fs.writeFileSync(
+      markerPath,
+      JSON.stringify({
+        relativePath,
+        downloadedAt: new Date().toISOString(),
+        files: pngObjects.length,
+      }),
+    );
+
+    const pages = readCachedWordPages(localDir);
+    if (pages.length > 0) {
+      result.set(docKey, { relativePath, pages });
+      downloadedDocs += 1;
+    }
+  });
+
+  if (downloadedDocs > 0) {
+    console.log(`Downloaded Word baselines for ${downloadedDocs} document(s) from R2.`);
+  }
+
+  client.destroy();
+  return result;
 }

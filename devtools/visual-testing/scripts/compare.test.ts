@@ -4,6 +4,7 @@ import {
   findLatestResultsFolder,
   findPngFiles,
   matchesFilterWithBrowserPrefix,
+  docPathToScreenshotFilter,
 } from './compare.js';
 
 describe('extractVersionFromFolder', () => {
@@ -110,5 +111,31 @@ describe('matchesFilterWithBrowserPrefix', () => {
     const value = 'tables/doc/p001.png';
     const result = matchesFilterWithBrowserPrefix(value, undefined, ['tables'], [], []);
     expect(result).toBe(true);
+  });
+});
+
+describe('docPathToScreenshotFilter', () => {
+  it('converts a nested .docx path to its screenshot filter', () => {
+    expect(docPathToScreenshotFilter('comments-tcs/basic-comments.docx')).toBe('comments-tcs/basic-comments');
+  });
+
+  it('converts a flat .docx path to a bare name', () => {
+    expect(docPathToScreenshotFilter('simple.docx')).toBe('simple');
+  });
+
+  it('sanitizes special characters in the filename', () => {
+    expect(docPathToScreenshotFilter('folder/My Doc (v2).docx')).toBe('folder/my-doc-v2');
+  });
+
+  it('strips the test-docs/ prefix', () => {
+    expect(docPathToScreenshotFilter('test-docs/basic/simple.docx')).toBe('basic/simple');
+  });
+
+  it('strips leading ./ and backslashes', () => {
+    expect(docPathToScreenshotFilter('./basic\\nested.docx')).toBe('basic/nested');
+  });
+
+  it('handles a path with no extension', () => {
+    expect(docPathToScreenshotFilter('folder/readme')).toBe('folder/readme');
   });
 });

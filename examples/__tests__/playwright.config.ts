@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // EXAMPLE can be:
-//   "react", "vue", "vanilla", "cdn"  (getting-started)
+//   "react", "vue", "vanilla", "cdn", "angular"  (getting-started)
 //   "collaboration/superdoc-yjs", "collaboration/hocuspocus", etc.
 const example = process.env.EXAMPLE || 'react';
 

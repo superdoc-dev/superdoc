@@ -8,6 +8,10 @@ beforeAll(() => {
 });
 
 describe('encodeMarksFromRPr', () => {
+  it('returns empty marks for undefined run properties', () => {
+    expect(encodeMarksFromRPr(undefined, {})).toEqual([]);
+  });
+
   it('should encode bold, italic, and strike properties', () => {
     const rPr = { bold: true, italic: true, strike: true };
     const marks = encodeMarksFromRPr(rPr, {});

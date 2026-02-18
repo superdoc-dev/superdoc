@@ -16,6 +16,7 @@ function extractVersion(args: string[]): string | undefined {
     '--filter',
     '--match',
     '--exclude',
+    '--doc',
     '--parallel',
     '--output',
     '--browser',
@@ -34,8 +35,22 @@ function extractVersion(args: string[]): string | undefined {
   return undefined;
 }
 
+function stripDocSelectors(args: string[]): string[] {
+  const output: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--doc') {
+      i += 1;
+      continue;
+    }
+    output.push(arg);
+  }
+  return output;
+}
+
 async function main(): Promise<void> {
   const passThrough = process.argv.slice(2);
+  const interactionPassThrough = stripDocSelectors(passThrough);
   const version = extractVersion(passThrough);
 
   if (version) {
@@ -49,7 +64,7 @@ async function main(): Promise<void> {
   }
 
   await runCommand(['exec', 'tsx', 'scripts/baseline-visual.ts', ...passThrough]);
-  await runCommand(['exec', 'tsx', 'scripts/baseline-interactions.ts', ...passThrough]);
+  await runCommand(['exec', 'tsx', 'scripts/baseline-interactions.ts', ...interactionPassThrough]);
 }
 
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;

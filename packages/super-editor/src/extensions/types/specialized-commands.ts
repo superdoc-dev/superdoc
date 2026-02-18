@@ -15,6 +15,8 @@ type SearchMatch = {
 
 export type SearchCommandOptions = {
   highlight?: boolean;
+  maxMatches?: number;
+  caseSensitive?: boolean;
 };
 
 type DocumentSectionCreateOptions = {

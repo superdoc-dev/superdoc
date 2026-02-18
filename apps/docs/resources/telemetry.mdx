@@ -91,6 +91,10 @@ const editor = await Editor.open(file, {
   Custom key-value pairs included with every event. Use this to attach your own identifiers (customer ID, environment, etc.).
 </ParamField>
 
+<ParamField path="telemetry.licenseKey" type="string" deprecated>
+  **Deprecated.** Use the root-level `licenseKey` instead. If both are provided, the root-level key takes priority.
+</ParamField>
+
 ### Disabling telemetry
 
 Set `enabled: false` to turn telemetry off entirely:
@@ -106,6 +110,28 @@ const superdoc = new SuperDoc({
 ```
 
 No network requests will be made. Document metadata (GUID and timestamp) is still generated locally so files export correctly.
+
+### Self-reporting
+
+You can route telemetry through your own server using `telemetry.endpoint`. SuperDoc sends the same JSON payload to whatever URL you provide — inspect it, store it, forward it, or drop it.
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  licenseKey: 'your-license-key',
+  telemetry: {
+    enabled: true,
+    endpoint: 'https://your-server.com/superdoc/telemetry',
+  },
+});
+```
+
+Your server receives a `POST` with the payload described in [Payload example](#payload-example). From there you can aggregate usage on your side — count document opens per customer, track adoption across teams, or feed the data into your own billing pipeline.
+
+<Note>
+A dedicated self-reporting API with dashboards and usage summaries is under development and will be available by Feb 28, 2026. In the meantime, proxying via `telemetry.endpoint` gives you full control over the raw data.
+</Note>
 
 ## License key
 

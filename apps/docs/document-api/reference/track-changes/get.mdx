@@ -1,0 +1,105 @@
+---
+title: trackChanges.get
+sidebarTitle: trackChanges.get
+description: Generated reference for trackChanges.get
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `trackChanges.get`
+- API member path: `editor.doc.trackChanges.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "additionalProperties": false,
+      "properties": {
+        "entityId": {
+          "type": "string"
+        },
+        "entityType": {
+          "const": "trackedChange"
+        },
+        "kind": {
+          "const": "entity"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "entityId"
+      ],
+      "type": "object"
+    },
+    "author": {
+      "type": "string"
+    },
+    "authorEmail": {
+      "type": "string"
+    },
+    "authorImage": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string"
+    },
+    "excerpt": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "insert",
+        "delete",
+        "format"
+      ]
+    }
+  },
+  "required": [
+    "address",
+    "id",
+    "type"
+  ],
+  "type": "object"
+}
+```

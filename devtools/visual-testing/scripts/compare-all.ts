@@ -217,7 +217,7 @@ async function runGenerateVisualResultsForDocs(
   const args = ['exec', 'tsx', 'scripts/generate-refs.ts', '--output', outputFolder];
   args.push('--append');
   for (const doc of docs) {
-    args.push('--filter', doc);
+    args.push('--doc', doc);
   }
   for (const exclude of excludes) {
     args.push('--exclude', exclude);

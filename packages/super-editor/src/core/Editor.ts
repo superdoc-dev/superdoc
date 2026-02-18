@@ -1,4 +1,5 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
+import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
@@ -339,8 +340,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
 
-    // License key (defaults to community license)
-    licenseKey: COMMUNITY_LICENSE_KEY,
+    // License key (resolved in #initTelemetry; undefined means "not explicitly set")
+    licenseKey: undefined,
 
     // Telemetry configuration
     telemetry: { enabled: true },
@@ -488,16 +489,24 @@ export class Editor extends EventEmitter<EditorEventMap> {
       return;
     }
 
-    if (!telemetryConfig?.enabled) {
-      console.debug('[super-editor] Telemetry: disabled');
+    // Skip for sub-editors that are not primary document editors
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
       return;
     }
+
+    if (!telemetryConfig?.enabled) {
+      return;
+    }
+
+    // Root-level licenseKey has a priority; fall back to deprecated telemetry.licenseKey
+    const resolvedLicenseKey =
+      licenseKey !== undefined ? licenseKey : (telemetryConfig.licenseKey ?? COMMUNITY_LICENSE_KEY);
 
     try {
       this.#telemetry = new Telemetry({
         enabled: true,
         endpoint: telemetryConfig.endpoint,
-        licenseKey: licenseKey === undefined ? COMMUNITY_LICENSE_KEY : licenseKey,
+        licenseKey: resolvedLicenseKey,
         metadata: telemetryConfig.metadata,
       });
       console.debug('[super-editor] Telemetry: enabled');
@@ -1321,25 +1330,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get viewport coordinates for a document position. Falls back to the PresentationEditor
-   * when running without a ProseMirror view (layout mode).
+   * Get viewport coordinates for a document position.
+   * In presentation mode the ProseMirror view is hidden off-screen, so we
+   * delegate to PresentationEditor which uses visual layout coordinates.
    */
   coordsAtPos(pos: number): ReturnType<PmEditorView['coordsAtPos']> | null {
-    if (this.view) {
-      return this.view.coordsAtPos(pos);
+    if (this.presentationEditor) {
+      return this.presentationEditor.coordsAtPos(pos);
     }
 
-    const layoutRects = this.presentationEditor?.getRangeRects?.(pos, pos);
-    if (Array.isArray(layoutRects) && layoutRects.length > 0) {
-      const rect = layoutRects[0];
-      return {
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-        width: rect.width,
-        height: rect.height,
-      } as ReturnType<PmEditorView['coordsAtPos']>;
+    if (this.view) {
+      return this.view.coordsAtPos(pos);
     }
 
     return null;
@@ -2089,23 +2090,29 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
 
-      transactionToApply =
-        isTrackChangesActive && !skipTrackChanges
-          ? trackedTransaction({
-              tr: transactionToApply,
-              state: prevState,
-              user: this.options.user!,
-            })
-          : transactionToApply;
+      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      if (shouldTrack && forceTrackChanges && !this.options.user) {
+        throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
+      }
+
+      transactionToApply = shouldTrack
+        ? trackedTransaction({
+            tr: transactionToApply,
+            state: prevState,
+            user: this.options.user!,
+          })
+        : transactionToApply;
 
       const { state: appliedState } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
     } catch (error) {
+      if (forceTrackChanges) throw error;
       // just in case
       nextState = prevState.apply(transactionToApply);
       console.log(error);
@@ -2119,6 +2126,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     const end = perfNow();
+
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
@@ -2494,17 +2502,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @returns The updated document in JSON
    */
   #prepareDocumentForExport(comments: Comment[] = []): ProseMirrorJSON {
-    const newState = PmEditorState.create({
-      schema: this.schema,
-      doc: this.state.doc,
-      plugins: this.state.plugins,
-    });
-
-    const { tr, doc } = newState;
-
+    // Use Transform directly instead of creating a throwaway EditorState.
+    // EditorState.create() calls Plugin.init() for every plugin, and
+    // yUndoPlugin.init() registers persistent observers on the shared ydoc
+    // that are never cleaned up — causing an observer leak that degrades
+    // collaboration performance over time.
+    const doc = this.state.doc;
+    const tr = new Transform(doc);
     prepareCommentsForExport(doc, tr, this.schema, comments);
-    const updatedState = newState.apply(tr);
-    return updatedState.doc.toJSON();
+    return tr.doc.toJSON();
   }
 
   getUpdatedJson(): ProseMirrorJSON {

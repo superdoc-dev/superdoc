@@ -68,6 +68,7 @@ import { DOM_CLASS_NAMES } from './constants.js';
 import { sanitizeHref, encodeTooltip } from '@superdoc/url-validation';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { assertPmPositions, assertFragmentPmPositions } from './pm-position-validation.js';
+import { applyImageClipPath } from './utils/image-clip-path.js';
 import {
   applySdtContainerStyling,
   getSdtContainerKey,
@@ -109,6 +110,7 @@ type WordLayoutMarker = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    vanish?: boolean;
   };
 };
 
@@ -1068,7 +1070,7 @@ export class DomPainter {
     applyStyles(mount, containerStyles);
 
     if (this.virtualEnabled) {
-      // Keep container gap at 0 so spacers don't introduce extra offsets.
+      // Keep container gap at 0 so spacer elements don't introduce extra offsets.
       mount.style.gap = '0px';
       this.renderVirtualized(layout, mount);
       this.currentLayout = layout;
@@ -1129,14 +1131,14 @@ export class DomPainter {
     this.configureSpacerElement(this.topSpacerEl, 'top');
     this.configureSpacerElement(this.bottomSpacerEl, 'bottom');
 
-    // Create and configure pages container (handles the inter-page gap)
-    // Use pageGap for visual consistency with non-virtualized mode.
+    // Create and configure pages container (handles the inter-page gap).
+    // Virtualized rendering uses its own gap setting independent from normal pageGap.
     this.virtualPagesEl = this.doc.createElement('div');
     this.virtualPagesEl.style.display = 'flex';
     this.virtualPagesEl.style.flexDirection = 'column';
     this.virtualPagesEl.style.alignItems = 'center';
     this.virtualPagesEl.style.width = '100%';
-    this.virtualPagesEl.style.gap = `${this.pageGap}px`;
+    this.virtualPagesEl.style.gap = `${this.virtualGap}px`;
 
     mount.appendChild(this.topSpacerEl);
     mount.appendChild(this.virtualPagesEl);
@@ -1193,12 +1195,12 @@ export class DomPainter {
     if (N !== this.virtualHeights.length) {
       this.virtualHeights = this.currentLayout.pages.map((p) => p.size?.h ?? this.currentLayout!.pageSize.h);
     }
-    // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap)
-    // Use pageGap for consistency with CSS gap on virtualPagesEl
+    // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap).
+    // Use virtualGap to match CSS gap on virtualPagesEl.
     const offsets: number[] = new Array(this.virtualHeights.length + 1);
     offsets[0] = 0;
     for (let i = 0; i < this.virtualHeights.length; i += 1) {
-      offsets[i + 1] = offsets[i] + this.virtualHeights[i] + this.pageGap;
+      offsets[i + 1] = offsets[i] + this.virtualHeights[i] + this.virtualGap;
     }
     this.virtualOffsets = offsets;
   }
@@ -1213,7 +1215,7 @@ export class DomPainter {
     // Total content height without trailing gap after last page
     const n = this.virtualHeights.length;
     if (n <= 0) return 0;
-    return this.virtualOffsets[n] - this.pageGap;
+    return this.virtualOffsets[n] - this.virtualGap;
   }
 
   private getMountPaddingTopPx(): number {
@@ -1352,7 +1354,7 @@ export class DomPainter {
         gap.dataset.gapFrom = String(prevIndex);
         gap.dataset.gapTo = String(idx);
         const gapHeight =
-          this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.pageGap * 2;
+          this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.virtualGap * 2;
         gap.style.height = `${Math.max(0, Math.floor(gapHeight))}px`;
         this.virtualGapSpacers.push(gap);
         this.virtualPagesEl.appendChild(gap);
@@ -1392,7 +1394,7 @@ export class DomPainter {
     const clampedLast = Math.max(0, Math.min(last, Math.max(0, n - 1)));
 
     const top = this.topOfIndex(clampedFirst);
-    const bottom = this.topOfIndex(n) - this.topOfIndex(clampedLast + 1) - this.pageGap;
+    const bottom = this.topOfIndex(n) - this.topOfIndex(clampedLast + 1) - this.virtualGap;
     this.topSpacerEl.style.height = `${Math.max(0, Math.floor(top))}px`;
     this.bottomSpacerEl.style.height = `${Math.max(0, Math.floor(bottom))}px`;
   }
@@ -2285,66 +2287,69 @@ export class DomPainter {
           const marker = wordLayout.marker!;
           lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`; // HERE CONTROLS WHERE TAB STARTS - I think this will vary with justification
 
-          const markerContainer = this.doc!.createElement('span');
-          markerContainer.style.display = 'inline-block';
-          // Justification is implemented via `word-spacing` on the line element. The list marker (and its
-          // tab/space suffix) must not inherit this spacing or it will shift the text start and can
-          // cause overflow for justified list paragraphs.
-          markerContainer.style.wordSpacing = '0px';
+          // Skip marker rendering when hidden by vanish property (preserves list indentation)
+          if (!marker.run.vanish) {
+            const markerContainer = this.doc!.createElement('span');
+            markerContainer.style.display = 'inline-block';
+            // Justification is implemented via `word-spacing` on the line element. The list marker (and its
+            // tab/space suffix) must not inherit this spacing or it will shift the text start and can
+            // cause overflow for justified list paragraphs.
+            markerContainer.style.wordSpacing = '0px';
 
-          const markerEl = this.doc!.createElement('span');
-          markerEl.classList.add('superdoc-paragraph-marker');
-          markerEl.textContent = marker.markerText ?? '';
-          markerEl.style.pointerEvents = 'none';
+            const markerEl = this.doc!.createElement('span');
+            markerEl.classList.add('superdoc-paragraph-marker');
+            markerEl.textContent = marker.markerText ?? '';
+            markerEl.style.pointerEvents = 'none';
 
-          // Left-justified markers stay inline to share flow with the tab spacer.
-          // Other justifications use absolute positioning.
-          const markerJustification = marker.justification ?? 'left';
+            // Left-justified markers stay inline to share flow with the tab spacer.
+            // Other justifications use absolute positioning.
+            const markerJustification = marker.justification ?? 'left';
 
-          markerContainer.style.position = 'relative';
-          if (markerJustification === 'right') {
-            markerContainer.style.position = 'absolute';
-            markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
-          } else if (markerJustification === 'center') {
-            markerContainer.style.position = 'absolute';
-            markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
-            lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+            markerContainer.style.position = 'relative';
+            if (markerJustification === 'right') {
+              markerContainer.style.position = 'absolute';
+              markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+            } else if (markerJustification === 'center') {
+              markerContainer.style.position = 'absolute';
+              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+            }
+
+            // Apply marker run styling with font fallback chain
+            markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
+            markerEl.style.fontSize = `${marker.run.fontSize}px`;
+            markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
+            markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
+            if (marker.run.color) {
+              markerEl.style.color = marker.run.color;
+            }
+            if (marker.run.letterSpacing != null) {
+              markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
+            }
+            markerContainer.appendChild(markerEl);
+
+            const suffix = marker.suffix ?? 'tab';
+            if (suffix === 'tab') {
+              const tabEl = this.doc!.createElement('span');
+              tabEl.className = 'superdoc-tab';
+              tabEl.innerHTML = '&nbsp;';
+              tabEl.style.display = 'inline-block';
+              tabEl.style.wordSpacing = '0px';
+              tabEl.style.width = `${listTabWidth}px`;
+
+              lineEl.prepend(tabEl);
+            } else if (suffix === 'space') {
+              // Insert a non-breaking space in the inline flow to separate marker and text.
+              // Wrap it so it can opt out of inherited `word-spacing` used for justification.
+              const spaceEl = this.doc!.createElement('span');
+              spaceEl.classList.add('superdoc-marker-suffix-space');
+              spaceEl.style.wordSpacing = '0px';
+              spaceEl.textContent = '\u00A0';
+
+              lineEl.prepend(spaceEl);
+            }
+            lineEl.prepend(markerContainer);
           }
-
-          // Apply marker run styling with font fallback chain
-          markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-          markerEl.style.fontSize = `${marker.run.fontSize}px`;
-          markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
-          markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
-          if (marker.run.color) {
-            markerEl.style.color = marker.run.color;
-          }
-          if (marker.run.letterSpacing != null) {
-            markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-          }
-          markerContainer.appendChild(markerEl);
-
-          const suffix = marker.suffix ?? 'tab';
-          if (suffix === 'tab') {
-            const tabEl = this.doc!.createElement('span');
-            tabEl.className = 'superdoc-tab';
-            tabEl.innerHTML = '&nbsp;';
-            tabEl.style.display = 'inline-block';
-            tabEl.style.wordSpacing = '0px';
-            tabEl.style.width = `${listTabWidth}px`;
-
-            lineEl.prepend(tabEl);
-          } else if (suffix === 'space') {
-            // Insert a non-breaking space in the inline flow to separate marker and text.
-            // Wrap it so it can opt out of inherited `word-spacing` used for justification.
-            const spaceEl = this.doc!.createElement('span');
-            spaceEl.classList.add('superdoc-marker-suffix-space');
-            spaceEl.style.wordSpacing = '0px';
-            spaceEl.textContent = '\u00A0';
-
-            lineEl.prepend(spaceEl);
-          }
-          lineEl.prepend(markerContainer);
         }
         fragmentEl.appendChild(lineEl);
       });
@@ -2584,7 +2589,7 @@ export class DomPainter {
       const block = lookup.block as ImageBlock;
 
       const fragmentEl = this.doc.createElement('div');
-      fragmentEl.classList.add(CLASS_NAMES.fragment, 'superdoc-image-fragment');
+      fragmentEl.classList.add(CLASS_NAMES.fragment, DOM_CLASS_NAMES.IMAGE_FRAGMENT);
       applyStyles(fragmentEl, fragmentStyles);
       this.applyFragmentFrame(fragmentEl, fragment, context.section);
       fragmentEl.style.height = `${fragment.height}px`;
@@ -2628,6 +2633,8 @@ export class DomPainter {
       if (block.objectFit === 'cover') {
         img.style.objectPosition = 'left top';
       }
+      const imageClipPath = resolveBlockClipPath(block);
+      applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
@@ -2755,6 +2762,8 @@ export class DomPainter {
     if (drawing.objectFit === 'cover') {
       img.style.objectPosition = 'left top';
     }
+    const imageClipPath = resolveBlockClipPath(drawing);
+    applyImageClipPath(img, imageClipPath);
     img.style.display = 'block';
     return img;
   }
@@ -3404,12 +3413,14 @@ export class DomPainter {
       const attrs = child.attrs as PositionedDrawingGeometry & {
         src: string;
         alt?: string;
+        clipPath?: string;
       };
       const img = this.doc!.createElement('img');
       img.src = attrs.src;
       img.alt = attrs.alt ?? '';
       img.style.objectFit = 'contain';
       img.style.display = 'block';
+      applyImageClipPath(img, attrs.clipPath);
       return img;
     }
     return this.createDrawingPlaceholder();
@@ -3892,9 +3903,11 @@ export class DomPainter {
       return null;
     }
 
+    const hasClipPath = typeof run.clipPath === 'string' && run.clipPath.trim().length > 0;
+
     // Create img element
     const img = this.doc.createElement('img');
-    img.classList.add('superdoc-inline-image');
+    img.classList.add(DOM_CLASS_NAMES.INLINE_IMAGE);
 
     // Set source - validate data URLs with strict format and size checks
     // Note: data: URLs are blocked by sanitizeUrl for hyperlinks (XSS risk),
@@ -3921,9 +3934,22 @@ export class DomPainter {
       }
     }
 
-    // Set dimensions
-    img.width = run.width;
-    img.height = run.height;
+    // Set dimensions: when we have clipPath we put img in a wrapper that has the layout size and overflow:hidden; img fills wrapper so cropped portion stays within after resize
+    if (!hasClipPath) {
+      img.width = run.width;
+      img.height = run.height;
+    } else {
+      Object.assign(img.style, {
+        width: '100%',
+        height: '100%',
+        maxWidth: '100%',
+        maxHeight: '100%',
+        boxSizing: 'border-box',
+        minWidth: '0',
+        minHeight: '0',
+      });
+    }
+    applyImageClipPath(img, run.clipPath);
 
     // Add metadata for interactive image resizing (inline images)
     // Only add metadata if dimensions are valid (positive, non-zero values)
@@ -3956,31 +3982,65 @@ export class DomPainter {
     // Apply inline-block display
     img.style.display = 'inline-block';
 
-    // Apply vertical alignment (bottom-aligned to text baseline)
-    img.style.verticalAlign = run.verticalAlign ?? 'bottom';
+    // When we use a wrapper (clipPath + positive dimensions), margins/verticalAlign/position/zIndex go on the wrapper only.
+    // When we don't use a wrapper (no clipPath, or clipPath with width/height 0), apply them on the img so layout is correct.
+    const useWrapper = hasClipPath && run.width > 0 && run.height > 0;
+    if (!useWrapper) {
+      // Apply vertical alignment (bottom-aligned to text baseline)
+      img.style.verticalAlign = run.verticalAlign ?? 'bottom';
 
-    // Apply spacing as CSS margins
-    if (run.distTop) {
-      img.style.marginTop = `${run.distTop}px`;
-    }
-    if (run.distBottom) {
-      img.style.marginBottom = `${run.distBottom}px`;
-    }
-    if (run.distLeft) {
-      img.style.marginLeft = `${run.distLeft}px`;
-    }
-    if (run.distRight) {
-      img.style.marginRight = `${run.distRight}px`;
-    }
+      // Apply spacing as CSS margins
+      if (run.distTop) {
+        img.style.marginTop = `${run.distTop}px`;
+      }
+      if (run.distBottom) {
+        img.style.marginBottom = `${run.distBottom}px`;
+      }
+      if (run.distLeft) {
+        img.style.marginLeft = `${run.distLeft}px`;
+      }
+      if (run.distRight) {
+        img.style.marginRight = `${run.distRight}px`;
+      }
 
-    // Position and z-index on the image only (not the line) so resize overlay can stack above.
-    img.style.position = 'relative';
-    img.style.zIndex = '1';
+      // Position and z-index on the image only (not the line) so resize overlay can stack above.
+      img.style.position = 'relative';
+      img.style.zIndex = '1';
+    }
 
     // Assert PM positions are present for cursor fallback
     assertPmPositions(run, 'inline image run');
 
-    // Apply PM position tracking for cursor placement
+    // When clipPath is set, scale makes the img paint outside its box;
+    // wrap in a clip container so only the cropped portion occupies space in the document.
+    // Wrapper size is the only layout box (position calculation uses run.width/run.height).
+    // PM position attributes go on the wrapper only so selection highlight and selection rects use the wrapper, not the scaled img.
+    // Skip wrapper when width or height is 0 (no layout box); img already has margins/verticalAlign/position/zIndex from above.
+    if (useWrapper) {
+      const wrapper = this.doc.createElement('span');
+      wrapper.classList.add(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER);
+      wrapper.style.display = 'inline-block';
+      wrapper.style.width = `${run.width}px`;
+      wrapper.style.height = `${run.height}px`;
+      wrapper.style.boxSizing = 'border-box';
+      wrapper.style.overflow = 'hidden';
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
+      if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
+      if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
+      if (run.distRight) wrapper.style.marginRight = `${run.distRight}px`;
+      wrapper.style.position = 'relative';
+      wrapper.style.zIndex = '1';
+      if (run.pmStart != null) wrapper.dataset.pmStart = String(run.pmStart);
+      if (run.pmEnd != null) wrapper.dataset.pmEnd = String(run.pmEnd);
+      wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
+      this.applySdtDataset(wrapper, run.sdt);
+      if (run.dataAttrs) applyRunDataAttributes(wrapper, run.dataAttrs);
+      wrapper.appendChild(img);
+      return wrapper;
+    }
+
+    // Apply PM position tracking for cursor placement (only on img when not wrapped)
     if (run.pmStart != null) {
       img.dataset.pmStart = String(run.pmStart);
     }
@@ -3995,6 +4055,44 @@ export class DomPainter {
     // Apply data attributes
     if (run.dataAttrs) {
       applyRunDataAttributes(img, run.dataAttrs);
+    }
+
+    const runClipPath = readClipPathValue((run as { clipPath?: unknown }).clipPath);
+    if (runClipPath && this.doc) {
+      img.style.clipPath = runClipPath;
+      img.style.display = 'block';
+      img.style.marginTop = '';
+      img.style.marginBottom = '';
+      img.style.marginLeft = '';
+      img.style.marginRight = '';
+      img.style.verticalAlign = '';
+      img.style.position = 'static';
+      img.style.zIndex = '';
+
+      const wrapper = this.doc.createElement('span');
+      wrapper.classList.add('superdoc-inline-image-clip-wrapper');
+      wrapper.style.display = 'inline-block';
+      wrapper.style.width = `${run.width}px`;
+      wrapper.style.height = `${run.height}px`;
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      wrapper.style.position = 'relative';
+      wrapper.style.zIndex = '1';
+      if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
+      if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
+      if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
+      if (run.distRight) wrapper.style.marginRight = `${run.distRight}px`;
+
+      if (run.pmStart != null) {
+        wrapper.dataset.pmStart = String(run.pmStart);
+      }
+      if (run.pmEnd != null) {
+        wrapper.dataset.pmEnd = String(run.pmEnd);
+      }
+      wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
+      this.applySdtDataset(wrapper, run.sdt);
+
+      wrapper.appendChild(img);
+      return wrapper;
     }
 
     return img;
@@ -5568,10 +5666,12 @@ const deriveBlockVersion = (block: FlowBlock): string => {
             imgRun.height,
             imgRun.alt ?? '',
             imgRun.title ?? '',
+            imgRun.clipPath ?? '',
             imgRun.distTop ?? '',
             imgRun.distBottom ?? '',
             imgRun.distLeft ?? '',
             imgRun.distRight ?? '',
+            readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
             // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           ].join(',');
         }
@@ -5676,7 +5776,14 @@ const deriveBlockVersion = (block: FlowBlock): string => {
   }
 
   if (block.kind === 'image') {
-    return [block.src ?? '', block.width ?? '', block.height ?? '', block.alt ?? '', block.title ?? ''].join('|');
+    return [
+      block.src ?? '',
+      block.width ?? '',
+      block.height ?? '',
+      block.alt ?? '',
+      block.title ?? '',
+      resolveBlockClipPath(block),
+    ].join('|');
   }
 
   if (block.kind === 'drawing') {
@@ -5689,6 +5796,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         imageLike.width ?? '',
         imageLike.height ?? '',
         imageLike.alt ?? '',
+        resolveBlockClipPath(imageLike),
       ].join('|');
     }
     if (block.drawingKind === 'vectorShape') {
@@ -5940,6 +6048,29 @@ interface CommentHighlightResult {
   hasNestedComments?: boolean;
 }
 
+const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
+
+const readClipPathValue = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim();
+  if (normalized.length === 0) return '';
+  const lower = normalized.toLowerCase();
+  if (!CLIP_PATH_PREFIXES.some((prefix) => lower.startsWith(prefix))) return '';
+  return normalized;
+};
+
+const resolveClipPathFromAttrs = (attrs: unknown): string => {
+  if (!attrs || typeof attrs !== 'object') return '';
+  const record = attrs as Record<string, unknown>;
+  return readClipPathValue(record.clipPath);
+};
+
+const resolveBlockClipPath = (block: unknown): string => {
+  if (!block || typeof block !== 'object') return '';
+  const record = block as Record<string, unknown>;
+  return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
+};
+
 const getCommentHighlight = (run: TextRun, activeCommentId: string | null): CommentHighlightResult => {
   const comments = run.comments;
   if (!comments || comments.length === 0) return {};
@@ -5965,10 +6096,8 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
         hasNestedComments: nestedComments.length > 0,
       };
     }
-    // This run doesn't contain the active comment - still show light highlight for its own comments
-    const primary = comments[0];
-    const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-    return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
+    // Active comment is set but this run does not belong to it - do not highlight.
+    return {};
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)

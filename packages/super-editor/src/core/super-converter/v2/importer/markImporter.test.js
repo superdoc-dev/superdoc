@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   parseMarks,
   handleStyleChangeMarks,
+  handleStyleChangeMarksV2,
   createImportMarks,
   getMarkValue,
   getFontFamilyValue,
@@ -148,6 +149,44 @@ describe('handleStyleChangeMarks', () => {
   it('returns empty array when no style change element is present', () => {
     const result = handleStyleChangeMarks({ elements: [] }, [{ type: 'bold' }]);
     expect(result).toEqual([]);
+  });
+});
+
+describe('handleStyleChangeMarksV2', () => {
+  it('handles empty rPr in rPrChange without throwing', () => {
+    const currentMarks = [{ type: 'bold', attrs: { value: true } }];
+    const rPrChange = {
+      name: 'w:rPrChange',
+      attributes: {
+        'w:id': '2',
+        'w:date': '2024-09-04T09:29:00Z',
+        'w:author': 'author@example.com',
+      },
+      elements: [{ name: 'w:rPr', elements: [] }],
+    };
+
+    const result = handleStyleChangeMarksV2(rPrChange, currentMarks, { docx: {} });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe(TrackFormatMarkName);
+    expect(result[0].attrs.before).toEqual([]);
+    expect(result[0].attrs.after).toEqual(currentMarks);
+  });
+
+  it('handles missing rPrChange attributes defensively', () => {
+    const result = handleStyleChangeMarksV2(
+      {
+        name: 'w:rPrChange',
+        elements: [{ name: 'w:rPr', elements: [] }],
+      },
+      [],
+      { docx: {} },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe(TrackFormatMarkName);
+    expect(result[0].attrs.before).toEqual([]);
+    expect(result[0].attrs.after).toEqual([]);
   });
 });
 

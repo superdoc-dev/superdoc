@@ -115,7 +115,13 @@ describe('DomPainter virtualization (vertical)', () => {
     const layout = makeLayout(3);
     painter.paint(layout, mount);
 
-    expect(mount.style.gap).toBe('72px');
+    // Outer container keeps gap at 0 because it includes spacer elements.
+    expect(mount.style.gap).toBe('0px');
+    // The inner virtual pages container carries the effective inter-page gap.
+    const pagesContainer = mount.querySelector('[data-virtual-spacer="top"]')?.nextElementSibling as
+      | HTMLElement
+      | undefined;
+    expect(pagesContainer?.style.gap).toBe('72px');
   });
 
   it('updates the window on scroll', () => {

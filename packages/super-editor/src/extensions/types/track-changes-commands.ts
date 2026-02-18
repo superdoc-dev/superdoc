@@ -32,6 +32,8 @@ export type InsertTrackedChangeOptions = {
   to?: number;
   /** Replacement text */
   text?: string;
+  /** Explicit change ID for deterministic callers (defaults to a new UUID) */
+  id?: string;
   /** Author override for the tracked change (defaults to editor user if not provided) */
   user?: Partial<User>;
   /** Optional comment reply to attach to the tracked change */

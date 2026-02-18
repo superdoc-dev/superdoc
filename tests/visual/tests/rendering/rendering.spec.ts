@@ -14,7 +14,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
 
 const docs = fs.existsSync(DOCS_DIR)
-  ? fs.readdirSync(DOCS_DIR).filter((f) => f.endsWith('.docx')).sort()
+  ? fs
+      .readdirSync(DOCS_DIR)
+      .filter((f) => f.endsWith('.docx'))
+      .sort()
   : [];
 
 for (const doc of docs) {

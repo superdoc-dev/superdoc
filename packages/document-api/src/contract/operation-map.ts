@@ -1,23 +1,20 @@
-import { OPERATION_IDS, type OperationId } from './types.js';
+import {
+  OPERATION_DEFINITIONS,
+  OPERATION_IDS,
+  projectFromDefinitions,
+  type OperationId,
+} from './operation-definitions.js';
 
-/**
- * Overrides for operation IDs whose public DocumentApi member path
- * differs from the canonical operation ID.
- */
-const MEMBER_PATH_OVERRIDES: Partial<Record<OperationId, string>> = {
-  // capabilities() is exposed as a top-level getter-like method on DocumentApi.
-  // The canonical operationId remains capabilities.get for catalog consistency.
-  'capabilities.get': 'capabilities',
-};
+export type DocumentApiMemberPath = (typeof OPERATION_DEFINITIONS)[OperationId]['memberPath'];
 
-export function memberPathForOperation(operationId: OperationId): string {
-  return MEMBER_PATH_OVERRIDES[operationId] ?? operationId;
+export function memberPathForOperation(operationId: OperationId): DocumentApiMemberPath {
+  return OPERATION_DEFINITIONS[operationId].memberPath;
 }
 
-export const DOCUMENT_API_MEMBER_PATHS = [...new Set(OPERATION_IDS.map(memberPathForOperation))] as const;
+export const OPERATION_MEMBER_PATH_MAP: Record<OperationId, DocumentApiMemberPath> = projectFromDefinitions(
+  (_id, entry) => entry.memberPath as DocumentApiMemberPath,
+);
 
-export type DocumentApiMemberPath = (typeof DOCUMENT_API_MEMBER_PATHS)[number];
-
-export const OPERATION_MEMBER_PATH_MAP = Object.fromEntries(
-  OPERATION_IDS.map((operationId) => [operationId, memberPathForOperation(operationId)]),
-) as Record<OperationId, DocumentApiMemberPath>;
+export const DOCUMENT_API_MEMBER_PATHS: readonly DocumentApiMemberPath[] = [
+  ...new Set(OPERATION_IDS.map((id) => OPERATION_DEFINITIONS[id].memberPath)),
+];

@@ -34,6 +34,32 @@ These are also enforced automatically:
 - **Pre-commit hook** runs `docapi:sync` when document-api sources change and restages generated files.
 - **CI workflow** (`ci-document-api.yml`) runs `docapi:check` on every PR touching relevant paths.
 
+## Adding a new operation
+
+The contract uses a single-source-of-truth pattern. Adding a new operation touches 4 files:
+
+1. **`src/contract/operation-definitions.ts`** — add an entry to `OPERATION_DEFINITIONS` with `memberPath`, `metadata` (use `readOperation()` or `mutationOperation()`), `referenceDocPath`, and `referenceGroup`.
+2. **`src/contract/operation-registry.ts`** — add a type entry (`input`, `options`, `output`). The bidirectional `Assert` checks will fail until this is done.
+3. **`src/invoke/invoke.ts`** (`buildDispatchTable`) — add a one-line dispatch entry calling the API method. The `TypedDispatchTable` mapped type will fail until this is done.
+4. **Implement** — the API method on `DocumentApi` in `src/index.ts` + its adapter.
+
+The catalog (`COMMAND_CATALOG`), member-path map (`OPERATION_MEMBER_PATH_MAP`), and reference-doc map (`OPERATION_REFERENCE_DOC_PATH_MAP`) are all derived automatically from `OPERATION_DEFINITIONS` — do not edit them by hand.
+
+## Contract architecture
+
+```
+metadata-types.ts           (leaf — CommandStaticMetadata, throw codes, idempotency)
+    ↑                   ↑
+operation-definitions.ts    types.ts (re-exports + CommandCatalog, guards)
+    ↑                       ↑
+    +--- command-catalog.ts, operation-map.ts, reference-doc-map.ts,
+         operation-registry.ts, schemas.ts
+```
+
+- `operation-definitions.ts` is the single source of truth for operation keys, metadata, paths, and grouping.
+- `operation-registry.ts` is the single source of truth for type signatures (input/options/output per operation).
+- `TypedDispatchTable` (in `invoke.ts`) validates at compile time that dispatch wiring conforms to the registry.
+
 ## Related docs
 
 - `packages/document-api/src/README.md` for contract semantics and invariants

@@ -1,83 +1,26 @@
-import type { ReceiptFailureCode } from '../types/receipt.js';
+export {
+  OPERATION_IDEMPOTENCY_VALUES,
+  type OperationIdempotency,
+  PRE_APPLY_THROW_CODES,
+  type PreApplyThrowCode,
+  type CommandThrowPolicy,
+  type CommandStaticMetadata,
+} from './metadata-types.js';
+
+export {
+  type OperationId,
+  OPERATION_IDS,
+  SINGLETON_OPERATION_IDS,
+  NAMESPACED_OPERATION_IDS,
+} from './operation-definitions.js';
+
+import type { OperationId } from './operation-definitions.js';
+import { OPERATION_IDS } from './operation-definitions.js';
+import type { CommandStaticMetadata } from './metadata-types.js';
 
 export const CONTRACT_VERSION = '0.1.0';
 
 export const JSON_SCHEMA_DIALECT = 'https://json-schema.org/draft/2020-12/schema';
-
-export const SINGLETON_OPERATION_IDS = [
-  'find',
-  'getNode',
-  'getNodeById',
-  'getText',
-  'info',
-  'insert',
-  'replace',
-  'delete',
-] as const;
-
-export const NAMESPACED_OPERATION_IDS = [
-  'format.bold',
-  'create.paragraph',
-  'lists.list',
-  'lists.get',
-  'lists.insert',
-  'lists.setType',
-  'lists.indent',
-  'lists.outdent',
-  'lists.restart',
-  'lists.exit',
-  'comments.add',
-  'comments.edit',
-  'comments.reply',
-  'comments.move',
-  'comments.resolve',
-  'comments.remove',
-  'comments.setInternal',
-  'comments.setActive',
-  'comments.goTo',
-  'comments.get',
-  'comments.list',
-  'trackChanges.list',
-  'trackChanges.get',
-  'trackChanges.accept',
-  'trackChanges.reject',
-  'trackChanges.acceptAll',
-  'trackChanges.rejectAll',
-  'capabilities.get',
-] as const;
-
-export const OPERATION_IDS = [...SINGLETON_OPERATION_IDS, ...NAMESPACED_OPERATION_IDS] as const;
-
-export type OperationId = (typeof OPERATION_IDS)[number];
-
-export const OPERATION_IDEMPOTENCY_VALUES = ['idempotent', 'conditional', 'non-idempotent'] as const;
-export type OperationIdempotency = (typeof OPERATION_IDEMPOTENCY_VALUES)[number];
-
-export const PRE_APPLY_THROW_CODES = [
-  'TARGET_NOT_FOUND',
-  'COMMAND_UNAVAILABLE',
-  'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-  'CAPABILITY_UNAVAILABLE',
-  'INVALID_TARGET',
-] as const;
-
-export type PreApplyThrowCode = (typeof PRE_APPLY_THROW_CODES)[number];
-
-export interface CommandThrowPolicy {
-  preApply: readonly PreApplyThrowCode[];
-  postApplyForbidden: true;
-}
-
-export interface CommandStaticMetadata {
-  mutates: boolean;
-  idempotency: OperationIdempotency;
-  supportsDryRun: boolean;
-  supportsTrackedMode: boolean;
-  possibleFailureCodes: readonly ReceiptFailureCode[];
-  throws: CommandThrowPolicy;
-  deterministicTargetResolution: boolean;
-  remediationHints?: readonly string[];
-}
 
 export type CommandCatalog = {
   readonly [K in OperationId]: CommandStaticMetadata;

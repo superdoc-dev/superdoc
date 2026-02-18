@@ -14,6 +14,8 @@ import {
   isValidOperationIdFormat,
   type DocumentApiAdapters,
 } from '../src/index.js';
+import { OPERATION_DEFINITIONS } from '../src/contract/operation-definitions.js';
+import { OPERATION_REFERENCE_DOC_PATH_MAP } from '../src/contract/reference-doc-map.js';
 import { buildDispatchTable } from '../src/invoke/invoke.js';
 
 /**
@@ -235,6 +237,29 @@ function run(): void {
     }
     if (!runtimeMemberPaths.includes(memberPath)) {
       errors.push(`operationId "${operationId}" maps to runtime-missing member path "${memberPath}".`);
+    }
+  }
+
+  // Verify OPERATION_DEFINITIONS keys match OPERATION_IDS exactly.
+  const definitionKeys = Object.keys(OPERATION_DEFINITIONS).sort();
+  const sortedOperationIds = [...operationIds].sort();
+  if (definitionKeys.join('|') !== sortedOperationIds.join('|')) {
+    errors.push(
+      `OPERATION_DEFINITIONS keys do not match OPERATION_IDS (definitions: ${definitionKeys.length}, ops: ${sortedOperationIds.length})`,
+    );
+  }
+
+  // Value-level projection checks — catches projection bugs, not just key bugs.
+  for (const id of operationIds) {
+    const defEntry = OPERATION_DEFINITIONS[id];
+    if (COMMAND_CATALOG[id] !== defEntry.metadata) {
+      errors.push(`COMMAND_CATALOG['${id}'] is not the same object as OPERATION_DEFINITIONS['${id}'].metadata`);
+    }
+    if (OPERATION_MEMBER_PATH_MAP[id] !== defEntry.memberPath) {
+      errors.push(`OPERATION_MEMBER_PATH_MAP['${id}'] !== OPERATION_DEFINITIONS['${id}'].memberPath`);
+    }
+    if (OPERATION_REFERENCE_DOC_PATH_MAP[id] !== defEntry.referenceDocPath) {
+      errors.push(`OPERATION_REFERENCE_DOC_PATH_MAP['${id}'] !== OPERATION_DEFINITIONS['${id}'].referenceDocPath`);
     }
   }
 

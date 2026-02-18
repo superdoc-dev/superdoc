@@ -1,4 +1,5 @@
 import { assertOperationId, isOperationId, isValidOperationIdFormat, OPERATION_IDS } from './types.js';
+import type { DocumentApiMemberPath } from './operation-map.js';
 
 describe('isValidOperationIdFormat', () => {
   it('accepts simple camelCase identifiers', () => {
@@ -69,5 +70,13 @@ describe('assertOperationId', () => {
 
   it('throws for invalid format strings', () => {
     expect(() => assertOperationId('BAD FORMAT')).toThrow(/Unknown operationId/);
+  });
+});
+
+describe('DocumentApiMemberPath type safety', () => {
+  it('is narrower than string', () => {
+    type IsWideString = string extends DocumentApiMemberPath ? true : false;
+    const isWideString: IsWideString = false;
+    expect(isWideString).toBe(false);
   });
 });

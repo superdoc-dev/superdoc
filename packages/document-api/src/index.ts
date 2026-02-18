@@ -416,7 +416,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       if (!Object.prototype.hasOwnProperty.call(dispatch, request.operationId)) {
         throw new Error(`Unknown operationId: "${request.operationId}"`);
       }
-      const handler = dispatch[request.operationId];
+      // Safe: InvokeRequest<T> provides caller-side type safety.
+      // Dynamic callers accept adapter-level validation.
+      const handler = dispatch[request.operationId] as unknown as (input: unknown, options?: unknown) => unknown;
       return handler(request.input, request.options);
     },
   };

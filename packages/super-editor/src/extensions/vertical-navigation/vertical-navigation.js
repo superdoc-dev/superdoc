@@ -2,6 +2,7 @@ import { Extension } from '@core/Extension.js';
 import { Plugin, PluginKey, TextSelection, NodeSelection } from 'prosemirror-state';
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
 import { CellSelection } from 'prosemirror-tables';
+import { ContextMenuPluginKey } from '../context-menu/context-menu.js';
 
 export const VerticalNavigationPluginKey = new PluginKey('verticalNavigation');
 
@@ -92,6 +93,11 @@ export const VerticalNavigation = Extension.create({
             return false;
           }
           if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return false;
+
+          // Yield to context menu plugin when menu is open — it handles
+          // ArrowUp/Down for item navigation, not cursor movement.
+          const contextMenuState = ContextMenuPluginKey.getState(view.state);
+          if (contextMenuState?.open) return false;
 
           if (!isPresenting(editor)) {
             return false;

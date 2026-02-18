@@ -81,9 +81,9 @@ describe('ContextMenu extension', () => {
     const pluginState = ContextMenuPluginKey.getState(view.state);
     expect(pluginState.open).toBe(true);
     expect(pluginState.anchorPos).toBe(1);
-    expect(pluginState.menuPosition).toEqual({ left: '120px', top: '58px' });
+    expect(pluginState.menuPosition).toEqual({ left: '20px', top: '58px' });
     expect(editor.emit).toHaveBeenCalledWith('contextMenu:open', {
-      menuPosition: { left: '120px', top: '58px' },
+      menuPosition: { left: '20px', top: '58px' },
     });
 
     const closeEvent = { key: 'Escape', preventDefault: vi.fn() };

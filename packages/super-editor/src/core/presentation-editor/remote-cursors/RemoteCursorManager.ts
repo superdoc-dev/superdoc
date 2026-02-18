@@ -319,35 +319,6 @@ export class RemoteCursorManager {
   }
 
   /**
-   * Schedule a remote cursor re-render without re-normalizing awareness states.
-   * Performance optimization: avoids expensive Yjs position conversions on layout changes.
-   * Used when layout geometry changes but cursor positions haven't (e.g., zoom, scroll, reflow).
-   */
-  scheduleReRender(): void {
-    if (this.#options.presence?.enabled === false) return;
-    if (this.#remoteCursorUpdateScheduled) return;
-    this.#remoteCursorUpdateScheduled = true;
-
-    // Use RAF for re-renders since they're triggered by layout/scroll events
-    const win = this.#options.visibleHost.ownerDocument?.defaultView ?? window;
-    win.requestAnimationFrame(() => {
-      this.#remoteCursorUpdateScheduled = false;
-      this.#lastRemoteCursorRenderTime = performance.now();
-      this.#pendingReRenderCallback?.();
-    });
-  }
-
-  /** Callback to invoke when scheduled re-render fires */
-  #pendingReRenderCallback: (() => void) | null = null;
-
-  /**
-   * Set the callback to invoke when a scheduled re-render fires.
-   */
-  setReRenderCallback(callback: (() => void) | null): void {
-    this.#pendingReRenderCallback = callback;
-  }
-
-  /**
    * Update remote cursor state by normalizing awareness states and rendering.
    * Call this when awareness state has changed.
    */
@@ -516,7 +487,6 @@ export class RemoteCursorManager {
 
     // Clear callbacks
     this.#pendingUpdateCallback = null;
-    this.#pendingReRenderCallback = null;
     this.#onTelemetry = null;
     this.#onCursorsUpdate = null;
 

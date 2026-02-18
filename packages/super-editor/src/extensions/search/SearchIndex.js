@@ -45,6 +45,9 @@ export class SearchIndex {
   /** @type {number} */
   docSize = 0;
 
+  /** @type {import('prosemirror-model').Node | null} */
+  doc = null;
+
   /**
    * Build the search index from a ProseMirror document.
    * Uses doc.textBetween for the flattened string and walks
@@ -57,6 +60,7 @@ export class SearchIndex {
     this.text = doc.textBetween(0, doc.content.size, BLOCK_SEPARATOR, ATOM_PLACEHOLDER);
     this.segments = [];
     this.docSize = doc.content.size;
+    this.doc = doc;
 
     // Walk the document to build the segment map
     // Note: doc node's content starts at position 0 (doc has no opening tag)
@@ -174,7 +178,7 @@ export class SearchIndex {
    * @returns {boolean} True if index is stale and needs rebuilding
    */
   isStale(doc) {
-    return !this.valid || doc.content.size !== this.docSize;
+    return !this.valid || this.doc !== doc;
   }
 
   /**

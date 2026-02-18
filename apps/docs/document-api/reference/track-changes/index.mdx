@@ -1,0 +1,22 @@
+---
+title: Track Changes operations
+sidebarTitle: Track Changes
+description: Generated Track Changes operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+Tracked-change inspection and review operations.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| [`trackChanges.list`](./list) | `trackChanges.list` | No | `idempotent` | No | No |
+| [`trackChanges.get`](./get) | `trackChanges.get` | No | `idempotent` | No | No |
+| [`trackChanges.accept`](./accept) | `trackChanges.accept` | Yes | `conditional` | No | No |
+| [`trackChanges.reject`](./reject) | `trackChanges.reject` | Yes | `conditional` | No | No |
+| [`trackChanges.acceptAll`](./accept-all) | `trackChanges.acceptAll` | Yes | `conditional` | No | No |
+| [`trackChanges.rejectAll`](./reject-all) | `trackChanges.rejectAll` | Yes | `conditional` | No | No |

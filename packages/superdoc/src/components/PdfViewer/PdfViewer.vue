@@ -1,193 +1,202 @@
 <script setup>
-import { NSpin } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { onMounted, onUnmounted, ref } from 'vue';
-import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
-import { PDFAdapterFactory, createPDFConfig } from './pdf/pdf-adapter.js';
-import { readFileAsArrayBuffer } from './helpers/read-file.js';
-import useSelection from '@superdoc/helpers/use-selection';
-import './pdf/pdf-viewer.css';
+import { ref, computed, watch, markRaw } from 'vue';
+import { floor } from '../../core/pdf/helpers/floor';
+import { readFileAsArrayBuffer } from '../../core/pdf/helpers/read-file';
+import { OUTPUT_SCALE } from '../../core/pdf/helpers/constants';
+import { PDFAdapterFactory, createPDFConfig } from '../../core/pdf/pdf-adapter';
+import PdfViewerDocument from './PdfViewerDocument.vue';
 
-const emit = defineEmits(['page-loaded', 'page-ready', 'ready', 'selection-change', 'bypass-selection']);
+const emit = defineEmits([
+  'page-rendered',
+  'pages-loaded',
+  'document-loaded',
+  'document-ready',
+  'document-error',
+  'selection-raw',
+  'bypass-selection',
+]);
 
 const props = defineProps({
-  documentData: {
-    type: Object,
-    required: true,
-  },
   config: {
     type: Object,
     required: true,
   },
+  file: {
+    type: Object,
+    required: true,
+  },
+  fileId: {
+    type: String,
+  },
 });
-
-const superdocStore = useSuperdocStore();
-const { activeZoom } = storeToRefs(superdocStore);
-
-const viewer = ref(null);
-const isReady = ref(false);
-
-const id = props.documentData.id;
-const pdfData = props.documentData.data;
 
 const pdfConfig = createPDFConfig({
-  pdfLib: props.config.pdfLib,
-  pdfViewer: props.config.pdfViewer,
+  pdfLib: markRaw(props.config.pdfLib),
   workerSrc: props.config.workerSrc,
   setWorker: props.config.setWorker,
-  textLayerMode: props.config.textLayerMode,
 });
+
 const pdfAdapter = PDFAdapterFactory.create(pdfConfig);
 
-const loadPDF = async (file) => {
-  try {
-    const result = await readFileAsArrayBuffer(file);
-    const document = await pdfAdapter.getDocument(result);
-    await pdfAdapter.renderPages({
-      documentId: id,
-      pdfDocument: document,
-      viewerContainer: viewer.value,
-      emit,
-    });
-    isReady.value = true;
-  } catch {}
-};
+const rootRef = ref(null);
+const documentRef = ref(null);
 
-function getSelectedTextBoundingBox(container) {
-  const selection = window.getSelection();
-  if (selection.rangeCount === 0) {
-    return null;
-  }
+const pdf = ref(null);
+const pages = ref([]);
+const scale = ref(1); // zoom scale
+const totalPages = ref(0);
+const renderedPages = ref(0);
 
-  const range = selection.getRangeAt(0);
-  const boundingRects = range.getClientRects();
+const hasTextLayer = computed(() => props.config?.textLayer === true);
+const outputScale = computed(() => props.config?.outputScale ?? OUTPUT_SCALE);
 
-  if (boundingRects.length === 0) {
-    return null;
-  }
-
-  // Initialize bounding box with the first bounding rectangle
-  const firstRect = boundingRects[0];
-  let boundingBox = {
-    top: firstRect.top,
-    left: firstRect.left,
-    bottom: firstRect.bottom,
-    right: firstRect.right,
-  };
-
-  for (let i = 1; i < boundingRects.length; i++) {
-    const rect = boundingRects[i];
-    if (rect.width === 0 || rect.height === 0) {
-      continue;
-    }
-    boundingBox.top = Math.min(boundingBox.top, rect.top);
-    boundingBox.left = Math.min(boundingBox.left, rect.left);
-    boundingBox.bottom = Math.max(boundingBox.bottom, rect.bottom);
-    boundingBox.right = Math.max(boundingBox.right, rect.right);
-  }
-
-  // Get the bounding box of the container
-  const containerRect = container.getBoundingClientRect();
-  const viewerRect = viewer.value.getBoundingClientRect();
-
-  // Adjust the bounding box relative to the page
-  boundingBox.top = (boundingBox.top - containerRect.top) / (activeZoom.value / 100) + container.scrollTop;
-  boundingBox.left = (boundingBox.left - containerRect.left) / (activeZoom.value / 100) + container.scrollLeft;
-  boundingBox.bottom = (boundingBox.bottom - containerRect.top) / (activeZoom.value / 100) + container.scrollTop;
-  boundingBox.right = (boundingBox.right - containerRect.left) / (activeZoom.value / 100) + container.scrollLeft;
-
-  return boundingBox;
+function onPageRendered(payload) {
+  const page = payload?.page;
+  if (page) page.pageIsRendered = true;
+  checkDocumentReady();
+  emit('page-rendered', payload);
 }
 
-const handlePdfClick = (e) => {
-  const { target } = e;
-  if (target.tagName !== 'SPAN') {
-    emit('bypass-selection', e);
-  }
-};
+function onSelectionRaw(payload) {
+  emit('selection-raw', payload);
+}
 
-const handleMouseUp = (e) => {
-  const selection = window.getSelection();
-  if (selection.toString().length > 0) {
-    const selectionBounds = getSelectedTextBoundingBox(viewer.value);
-    const sel = useSelection({
-      selectionBounds,
-      documentId: id,
+function onBypassSelection(event) {
+  emit('bypass-selection', event);
+}
+
+function checkDocumentReady() {
+  if (totalPages.value <= 0) return;
+  renderedPages.value += 1;
+  if (renderedPages.value >= totalPages.value) {
+    emit('document-ready', {
+      documentId: pdf.value?.documentId,
+      viewerContainer: rootRef.value,
     });
-    emit('selection-change', sel);
   }
-};
+}
 
-onMounted(async () => {
-  await loadPDF(pdfData);
+function updatePages(nextPages) {
+  pages.value = nextPages;
+  totalPages.value = nextPages.length;
+  renderedPages.value = 0;
+}
+
+function updateScale(nextScale) {
+  const roundedScale = floor(nextScale, 2);
+  scale.value = roundedScale;
+}
+
+defineExpose({
+  updateScale,
 });
 
-onUnmounted(() => {
-  pdfAdapter.destroy();
+async function getDocument(file) {
+  if (!file) return;
+
+  try {
+    const result = await readFileAsArrayBuffer(file);
+    const documentId = props.fileId || generateDocumentId('document');
+    const pdfjsDocument = await pdfAdapter.getDocument(result);
+
+    pdf.value = {
+      documentId,
+      pdfjsDocument: markRaw(pdfjsDocument),
+    };
+
+    emit('document-loaded', file);
+  } catch (e) {
+    emit('document-error', e);
+    console.error(e);
+  }
+}
+
+async function getPages() {
+  if (!pdf.value) return;
+
+  const { pdfjsDocument } = pdf.value;
+  const firstPageNum = 1;
+  const lastPageNum = pdfjsDocument.numPages;
+
+  try {
+    const pdfjsPages = await pdfAdapter.getPages(pdfjsDocument, firstPageNum, lastPageNum);
+
+    const mapPages = (pdfjsPage) => {
+      return {
+        documentId: pdf.value.documentId,
+        pageId: generatePageId(pdf.value.documentId, pdfjsPage.pageNumber),
+        pageNumber: pdfjsPage.pageNumber,
+        pageIsRendered: false,
+        pdfjsPage: markRaw(pdfjsPage),
+      };
+    };
+    const pages = pdfjsPages.map(mapPages);
+
+    updatePages(pages);
+    emit('pages-loaded', pages);
+  } catch (e) {
+    emit('document-error', e);
+    console.error(e);
+  }
+}
+
+function resetValues() {
+  pages.value = [];
+  scale.value = 1;
+}
+
+function generateDocumentId(fileName) {
+  return `pdf-${fileName.replace(/\W/g, '')}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+}
+
+function generatePageId(documentId, pageNumber) {
+  return `${documentId}-page-${pageNumber}`;
+}
+
+watch(
+  () => props.file,
+  (file) => {
+    getDocument(file);
+  },
+  { immediate: true },
+);
+
+watch(pdf, (nextPdf, oldPdf) => {
+  if (!nextPdf) return;
+  if (oldPdf) resetValues();
+  getPages();
 });
 </script>
 
 <template>
-  <div class="superdoc-pdf-viewer-container" @mousedown="handlePdfClick" @mouseup="handleMouseUp">
-    <div class="superdoc-pdf-viewer" ref="viewer" id="viewerId"></div>
-
-    <div v-if="!isReady" class="superdoc-pdf-viewer__loader">
-      <n-spin class="superdoc-pdf-viewer__spin" size="large" />
+  <div class="sd-pdf-viewer" ref="rootRef">
+    <div class="sd-pdf-viewer__main">
+      <PdfViewerDocument
+        v-bind="{
+          pdf,
+          pages,
+          scale,
+          config,
+          hasTextLayer,
+          outputScale,
+        }"
+        @page-rendered="onPageRendered"
+        @selection-raw="onSelectionRaw"
+        @bypass-selection="onBypassSelection"
+        ref="documentRef"
+      >
+      </PdfViewerDocument>
     </div>
   </div>
 </template>
 
-<style lang="postcss" scoped>
-.superdoc-pdf-viewer-container {
-  width: 100%;
-}
-
-.superdoc-pdf-viewer {
-  display: flex;
-  flex-direction: column;
+<style scoped>
+.sd-pdf-viewer {
   width: 100%;
   position: relative;
 }
 
-.superdoc-pdf-viewer__loader {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.sd-pdf-viewer__main {
   width: 100%;
-  min-width: 150px;
-  min-height: 150px;
-}
-
-.superdoc-pdf-viewer__loader :deep(.n-spin) {
-  --n-color: #1354ff !important;
-  --n-text-color: #1354ff !important;
-}
-
-.superdoc-pdf-viewer :deep(.pdf-page) {
-  border-top: 1px solid #dfdfdf;
-  border-bottom: 1px solid #dfdfdf;
-  margin: 0 0 20px 0;
-  position: relative;
-  overflow: hidden;
-}
-
-.superdoc-pdf-viewer :deep(.pdf-page):first-child {
-  border-radius: 16px 16px 0 0;
-  border-top: none;
-}
-
-.superdoc-pdf-viewer :deep(.pdf-page):last-child {
-  border-radius: 0 0 16px 16px;
-  border-bottom: none;
-}
-
-.superdoc-pdf-viewer :deep(.textLayer) {
-  z-index: 2;
-  position: absolute;
-}
-
-.superdoc-pdf-viewer :deep(.textLayer)::selection {
-  background-color: #1355ff66;
-  mix-blend-mode: difference;
 }
 </style>

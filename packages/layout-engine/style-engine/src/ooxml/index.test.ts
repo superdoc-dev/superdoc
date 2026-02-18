@@ -159,7 +159,7 @@ describe('ooxml - resolveRunProperties', () => {
     expect(result).toHaveProperty('fontSize', 22);
   });
 
-  it('prefers defaults over Normal when Normal is not default', () => {
+  it('uses Normal style when paragraph style is not specified', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
@@ -170,7 +170,7 @@ describe('ooxml - resolveRunProperties', () => {
       },
     });
     const result = resolveRunProperties(params, null, null);
-    expect(result).toEqual({ fontSize: 20, color: { val: 'AAAAAA' } });
+    expect(result).toEqual({ fontSize: 22, color: { val: 'BBBBBB' } });
   });
 
   it('skips run style props for TOC paragraphs', () => {
@@ -341,7 +341,7 @@ describe('ooxml - resolveParagraphProperties', () => {
     expect(result.indent?.left).toBe(800);
   });
 
-  it('overrides tabStops across the cascade', () => {
+  it('accumulates tabStops across the cascade', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
@@ -352,7 +352,7 @@ describe('ooxml - resolveParagraphProperties', () => {
       },
     });
     const result = resolveParagraphProperties(params, { tabStops: [{ pos: 2160 }] });
-    expect(result.tabStops).toEqual([{ pos: 2160 }]);
+    expect(result.tabStops).toEqual([{ pos: 720 }, { pos: 1440 }, { pos: 2160 }]);
   });
 
   it('applies table cell paragraph properties over table style props', () => {

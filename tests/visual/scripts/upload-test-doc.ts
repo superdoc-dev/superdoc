@@ -1,37 +1,43 @@
 /**
- * Upload a test document to R2.
+ * Upload a test document to R2 for rendering tests.
  *
  * Usage:
- *   pnpm docs:upload <file> <category>
+ *   pnpm docs:upload <file>
+ *
+ * Prompts for an optional Linear issue ID and a short description,
+ * then uploads to rendering/<issue-id>-<description>.docx in the shared corpus.
  *
  * Examples:
- *   pnpm docs:upload ~/Downloads/bug-repro.docx behavior/comments-tcs
- *   pnpm docs:upload ~/Downloads/table.docx rendering
- *
- * The file will be uploaded to: documents/<category>/<filename>
+ *   pnpm docs:upload ~/Downloads/bug-repro.docx
  */
+import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { createR2Client, DOCUMENTS_PREFIX } from './r2.js';
+import process from 'node:process';
+import { intro, outro, text, confirm, cancel, isCancel, log } from '@clack/prompts';
+
+const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
+
+function toKebab(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function exitIfCancelled<T>(value: T | symbol): T {
+  if (isCancel(value)) {
+    cancel('Upload cancelled.');
+    process.exit(0);
+  }
+  return value;
+}
 
 async function main() {
-  const [filePath, category] = process.argv.slice(2);
+  const filePath = process.argv[2];
 
-  if (!filePath || !category) {
-    console.error('Usage: pnpm docs:upload <file> <category>');
-    console.error('');
-    console.error('Categories match the test folder structure:');
-    console.error('  behavior/basic-commands');
-    console.error('  behavior/formatting');
-    console.error('  behavior/comments-tcs');
-    console.error('  behavior/lists');
-    console.error('  behavior/field-annotations');
-    console.error('  behavior/headers');
-    console.error('  behavior/search');
-    console.error('  behavior/importing');
-    console.error('  behavior/structured-content');
-    console.error('  rendering');
+  if (!filePath) {
+    console.error('Usage: pnpm docs:upload <file>');
     process.exit(1);
   }
 
@@ -41,27 +47,79 @@ async function main() {
     process.exit(1);
   }
 
-  const fileName = path.basename(resolved);
-  const key = `${DOCUMENTS_PREFIX}/${category}/${fileName}`;
+  intro(`Upload: ${path.basename(resolved)}`);
 
-  const { client, bucket } = createR2Client();
-
-  const body = fs.readFileSync(resolved);
-
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  const issueId = exitIfCancelled(
+    await text({
+      message: 'Linear issue ID',
+      placeholder: 'SD-1679 (press Enter to skip)',
+      validate: (v) => {
+        if (!v) return;
+        if (!/^[A-Za-z]{2,}-\d+$/.test(v)) return 'Format: SD-1679';
+      },
     }),
   );
 
-  console.log(`Uploaded: ${key}`);
-  console.log(`\nUse in your test:`);
-  console.log(`  const DOC_PATH = path.join(DOCS_DIR, '${category}/${fileName}');`);
+  const description = exitIfCancelled(
+    await text({
+      message: 'Short description',
+      placeholder: 'anchor-table-overlap',
+      validate: (v) => {
+        if (!v) return 'Description is required';
+        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(v)) return 'Use kebab-case (e.g. anchor-table-overlap)';
+      },
+    }),
+  );
 
-  client.destroy();
+  const parts = [issueId ? toKebab(issueId) : null, description].filter(Boolean);
+  const fileName = `${parts.join('-')}.docx`;
+  const targetRelativePath = `rendering/${fileName}`;
+
+  const confirmed = exitIfCancelled(await confirm({ message: `Upload as ${targetRelativePath}?` }));
+
+  if (!confirmed) {
+    cancel('Upload cancelled.');
+    process.exit(0);
+  }
+
+  const uploadArgs = ['run', 'corpus:push', '--', '--path', targetRelativePath, resolved];
+  const uploadChild = spawn('pnpm', uploadArgs, {
+    cwd: REPO_ROOT,
+    env: process.env,
+    stdio: 'inherit',
+  });
+  const uploadExitCode = await new Promise<number>((resolve) => {
+    uploadChild.on('close', (code) => resolve(code ?? 1));
+    uploadChild.on('error', (err) => {
+      console.error(`Failed to spawn corpus:push: ${err.message}`);
+      resolve(1);
+    });
+  });
+  if (uploadExitCode !== 0) {
+    throw new Error(`Corpus upload failed with exit code ${uploadExitCode}.`);
+  }
+
+  // Trigger baseline generation if gh CLI is available
+  let triggered = false;
+  try {
+    execSync('gh auth status', { stdio: 'ignore' });
+    const trigger = exitIfCancelled(await confirm({ message: 'Trigger baseline generation in CI?' }));
+    if (trigger) {
+      execSync('gh workflow run visual-baseline.yml --repo superdoc-dev/superdoc', { stdio: 'inherit' });
+      triggered = true;
+    }
+  } catch {
+    log.info('Tip: run `gh auth login` to auto-trigger baseline generation after upload.');
+  }
+
+  outro(
+    `Uploaded! Next:\n` +
+      `  1. pnpm docs:download          # pull the new file locally\n` +
+      `  2. pnpm test                    # verify it loads and renders\n` +
+      (triggered
+        ? `  Baselines are being generated in CI from the stable branch.`
+        : `  Baselines: trigger manually via gh workflow run visual-baseline.yml`),
+  );
 }
 
 main().catch((err) => {

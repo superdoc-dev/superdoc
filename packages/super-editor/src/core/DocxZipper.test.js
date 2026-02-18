@@ -257,3 +257,45 @@ describe('DocxZipper - updateContentTypes', () => {
     expect(updatedContentTypes).toContain('/word/footer1.xml');
   });
 });
+
+describe('DocxZipper - exportFromCollaborativeDocx media handling', () => {
+  it('handles both base64 string and ArrayBuffer media values', async () => {
+    const zipper = new DocxZipper();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Default Extension="png" ContentType="image/png"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+
+    const docx = [
+      { name: '[Content_Types].xml', content: contentTypes },
+      { name: 'word/document.xml', content: '<w:document/>' },
+    ];
+
+    // base64 for bytes [72, 101, 108, 108, 111] ("Hello")
+    const base64Media = 'SGVsbG8=';
+    // ArrayBuffer for bytes [87, 111, 114, 108, 100] ("World")
+    const binaryMedia = new Uint8Array([87, 111, 114, 108, 100]).buffer;
+
+    const result = await zipper.updateZip({
+      docx,
+      updatedDocs: {},
+      media: {
+        'word/media/image1.png': base64Media,
+        'word/media/image2.png': binaryMedia,
+      },
+      fonts: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const img1 = await readBack.file('word/media/image1.png').async('uint8array');
+    const img2 = await readBack.file('word/media/image2.png').async('uint8array');
+
+    expect(Array.from(img1)).toEqual([72, 101, 108, 108, 111]);
+    expect(Array.from(img2)).toEqual([87, 111, 114, 108, 100]);
+  });
+});

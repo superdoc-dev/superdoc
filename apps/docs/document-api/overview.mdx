@@ -5,122 +5,151 @@ description: A stable, engine-agnostic interface for programmatic document acces
 keywords: "document api, programmatic access, query documents, document manipulation, headless docx"
 ---
 
-The Document API is a new way to interact with documents programmatically. Query content, make changes, and build automations — all without touching editor internals.
+Document API gives you a consistent way to read and edit documents without relying on editor internals.
 
 <Info>
-**Coming Soon** — The Document API is currently in development. This page previews what's coming.
+Document API is in <strong>alpha</strong> and subject to breaking changes while the contract and adapters continue to evolve. The current API is not yet comprehensive, and more commands and namespaces are being added on an ongoing basis.
 </Info>
 
-## Why Document API?
+## Why use Document API
 
-Today, programmatic access requires using internal editor methods:
+- Build automations without editor-specific code.
+- Work with predictable inputs and outputs defined per operation.
+- Check capabilities up front and branch safely when features are unavailable.
 
-```javascript
-// Current approach - uses internal APIs
-editor.commands.insertContent(content);
-editor.state.doc.descendants((node) => { ... });
+## Reference
+
+- Full operation reference: [/document-api/reference/index](/document-api/reference/index)
+- Machine-readable files are available for automation use (contract schema, tool manifest, and agent compatibility artifacts).
+
+{/* DOC_API_OPERATIONS_START */}
+### Available operations
+
+Use the tables below to see what operations are available and where each one is documented.
+
+| Namespace | Operations | Reference |
+| --- | --- | --- |
+| Core | 8 | [Reference](/document-api/reference/core/index) |
+| Capabilities | 1 | [Reference](/document-api/reference/capabilities/index) |
+| Create | 2 | [Reference](/document-api/reference/create/index) |
+| Format | 4 | [Reference](/document-api/reference/format/index) |
+| Lists | 8 | [Reference](/document-api/reference/lists/index) |
+| Comments | 11 | [Reference](/document-api/reference/comments/index) |
+| Track Changes | 6 | [Reference](/document-api/reference/track-changes/index) |
+
+| Editor method | Operation ID |
+| --- | --- |
+| `editor.doc.find(...)` | [`find`](/document-api/reference/find) |
+| `editor.doc.getNode(...)` | [`getNode`](/document-api/reference/get-node) |
+| `editor.doc.getNodeById(...)` | [`getNodeById`](/document-api/reference/get-node-by-id) |
+| `editor.doc.getText(...)` | [`getText`](/document-api/reference/get-text) |
+| `editor.doc.info(...)` | [`info`](/document-api/reference/info) |
+| `editor.doc.insert(...)` | [`insert`](/document-api/reference/insert) |
+| `editor.doc.replace(...)` | [`replace`](/document-api/reference/replace) |
+| `editor.doc.delete(...)` | [`delete`](/document-api/reference/delete) |
+| `editor.doc.format.bold(...)` | [`format.bold`](/document-api/reference/format/bold) |
+| `editor.doc.format.italic(...)` | [`format.italic`](/document-api/reference/format/italic) |
+| `editor.doc.format.underline(...)` | [`format.underline`](/document-api/reference/format/underline) |
+| `editor.doc.format.strikethrough(...)` | [`format.strikethrough`](/document-api/reference/format/strikethrough) |
+| `editor.doc.create.paragraph(...)` | [`create.paragraph`](/document-api/reference/create/paragraph) |
+| `editor.doc.create.heading(...)` | [`create.heading`](/document-api/reference/create/heading) |
+| `editor.doc.lists.list(...)` | [`lists.list`](/document-api/reference/lists/list) |
+| `editor.doc.lists.get(...)` | [`lists.get`](/document-api/reference/lists/get) |
+| `editor.doc.lists.insert(...)` | [`lists.insert`](/document-api/reference/lists/insert) |
+| `editor.doc.lists.setType(...)` | [`lists.setType`](/document-api/reference/lists/set-type) |
+| `editor.doc.lists.indent(...)` | [`lists.indent`](/document-api/reference/lists/indent) |
+| `editor.doc.lists.outdent(...)` | [`lists.outdent`](/document-api/reference/lists/outdent) |
+| `editor.doc.lists.restart(...)` | [`lists.restart`](/document-api/reference/lists/restart) |
+| `editor.doc.lists.exit(...)` | [`lists.exit`](/document-api/reference/lists/exit) |
+| `editor.doc.comments.add(...)` | [`comments.add`](/document-api/reference/comments/add) |
+| `editor.doc.comments.edit(...)` | [`comments.edit`](/document-api/reference/comments/edit) |
+| `editor.doc.comments.reply(...)` | [`comments.reply`](/document-api/reference/comments/reply) |
+| `editor.doc.comments.move(...)` | [`comments.move`](/document-api/reference/comments/move) |
+| `editor.doc.comments.resolve(...)` | [`comments.resolve`](/document-api/reference/comments/resolve) |
+| `editor.doc.comments.remove(...)` | [`comments.remove`](/document-api/reference/comments/remove) |
+| `editor.doc.comments.setInternal(...)` | [`comments.setInternal`](/document-api/reference/comments/set-internal) |
+| `editor.doc.comments.setActive(...)` | [`comments.setActive`](/document-api/reference/comments/set-active) |
+| `editor.doc.comments.goTo(...)` | [`comments.goTo`](/document-api/reference/comments/go-to) |
+| `editor.doc.comments.get(...)` | [`comments.get`](/document-api/reference/comments/get) |
+| `editor.doc.comments.list(...)` | [`comments.list`](/document-api/reference/comments/list) |
+| `editor.doc.trackChanges.list(...)` | [`trackChanges.list`](/document-api/reference/track-changes/list) |
+| `editor.doc.trackChanges.get(...)` | [`trackChanges.get`](/document-api/reference/track-changes/get) |
+| `editor.doc.trackChanges.accept(...)` | [`trackChanges.accept`](/document-api/reference/track-changes/accept) |
+| `editor.doc.trackChanges.reject(...)` | [`trackChanges.reject`](/document-api/reference/track-changes/reject) |
+| `editor.doc.trackChanges.acceptAll(...)` | [`trackChanges.acceptAll`](/document-api/reference/track-changes/accept-all) |
+| `editor.doc.trackChanges.rejectAll(...)` | [`trackChanges.rejectAll`](/document-api/reference/track-changes/reject-all) |
+| `editor.doc.capabilities()` | [`capabilities.get`](/document-api/reference/capabilities/get) |
+{/* DOC_API_OPERATIONS_END */}
+
+## Common workflows
+
+These patterns show how operations compose to cover typical tasks.
+
+### Find and mutate
+
+Locate text in the document, then replace it:
+
+```ts
+const result = editor.doc.find({ type: 'text', text: 'foo' });
+const target = result.context?.[0]?.textRanges?.[0];
+if (target) {
+  editor.doc.replace({ target, text: 'bar' });
+}
 ```
 
-This works, but:
-- Internal APIs can change between versions
-- Requires understanding ProseMirror internals
-- Tightly coupled to the editor implementation
+### Tracked-mode insert
 
-## What's coming
+Insert text as a tracked change so reviewers can accept or reject it:
 
-The Document API provides a stable, high-level interface:
-
-```javascript
-// Document API - stable public interface
-const paragraphs = doc.query({ type: 'paragraph' });
-const tables = doc.query({ type: 'table', contains: 'Revenue' });
-
-doc.replace(paragraphs[0], { text: 'New content' });
+```ts
+const receipt = editor.doc.insert(
+  { text: 'new content' },
+  { changeMode: 'tracked' },
+);
 ```
 
-<CardGroup cols={2}>
-  <Card title="Query DSL" icon="search">
-    Find content by type, attributes, or text. Filter tables, paragraphs, lists — anything in the document.
-  </Card>
-  <Card title="Stable Interface" icon="shield-check">
-    Public API that won't break between versions. Build with confidence.
-  </Card>
-  <Card title="Engine Agnostic" icon="repeat">
-    Works the same whether you're in the browser, Node.js, or headless mode.
-  </Card>
-  <Card title="Type Safe" icon="code">
-    Full TypeScript support with autocomplete and type checking.
-  </Card>
-</CardGroup>
+The receipt includes a `resolution` with the resolved insertion point and `inserted` entries with tracked-change IDs.
 
-## Feature preview
+### Check capabilities before acting
 
-### Querying content
+Use `capabilities()` to branch on what the editor supports:
 
-Find any content in your document:
+```ts
+const caps = editor.doc.capabilities();
 
-```javascript
-// Find all paragraphs
-const paragraphs = doc.query({ type: 'paragraph' });
+if (caps.operations['format.bold'].available) {
+  editor.doc.format.bold({ target });
+}
 
-// Find tables containing specific text
-const tables = doc.query({
-  type: 'table',
-  contains: 'Q4 Revenue'
+if (caps.global.trackChanges.enabled) {
+  editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+}
+```
+
+### Dry-run preview
+
+Pass `dryRun: true` to validate an operation without applying it:
+
+```ts
+const preview = editor.doc.insert(
+  { target, text: 'hello' },
+  { dryRun: true },
+);
+// preview.success tells you whether the insert would succeed
+// preview.resolution shows the resolved target range
+```
+
+## Programmatic invocation
+
+Every operation is also available through a dynamic `invoke` method on the Document API instance. It accepts an `operationId` string and dispatches to the corresponding method. This is useful when the operation to run is determined at runtime (for example, from a tool-use payload).
+
+```ts
+// doc is the DocumentApi instance (editor.doc)
+const result = doc.invoke({
+  operationId: 'insert',
+  input: { text: 'hello' },
+  options: { changeMode: 'tracked' },
 });
-
-// Find content by attributes
-const signatures = doc.query({
-  type: 'field-annotation',
-  attrs: { fieldType: 'signature' }
-});
 ```
 
-### Making changes
-
-Modify documents with a clean API:
-
-```javascript
-// Replace content
-doc.replace(address, { text: 'Updated text' });
-
-// Insert at position
-doc.insert(address, { type: 'paragraph', text: 'New paragraph' });
-
-// Delete content
-doc.delete(address);
-```
-
-### Working with tables
-
-First-class table operations:
-
-```javascript
-// Add a row
-doc.table(tableAddress).addRow({ after: 2 });
-
-// Update a cell
-doc.table(tableAddress).cell(1, 2).replace({ text: 'New value' });
-```
-
-## Timeline
-
-<Steps>
-  <Step title="v0 — Read-only API">
-    Query DSL for finding and reading document content
-  </Step>
-  <Step title="v1 — Mutations">
-    Insert, replace, and delete operations
-  </Step>
-  <Step title="v2 — Advanced Operations">
-    Table operations, list manipulation, track changes integration
-  </Step>
-</Steps>
-
-## Stay updated
-
-Join Discord to get notified when Document API launches:
-
-<Card title="Join Discord" icon="discord" href="https://discord.com/invite/b9UuaZRyaB">
-  Get early access and share feedback
-</Card>
+`invoke` delegates to the same direct methods — there is no separate execution path. Type safety is available through `InvokeRequest<T>` for callers who know the operation at compile time, and `DynamicInvokeRequest` for dynamic dispatch.

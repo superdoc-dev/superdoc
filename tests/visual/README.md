@@ -1,6 +1,6 @@
 # Visual Testing
 
-Playwright-based visual regression tests for SuperDoc. Everything lives in a single R2 bucket (`superdoc-visual-testing`) with two prefixes: `documents/` for test files and `baselines/` for screenshots.
+Playwright-based visual regression tests for SuperDoc. Test DOCX files are synced from the shared R2 corpus into the repo-level `test-corpus/` mirror (and linked into `tests/visual/test-data`). Baselines are stored in R2.
 
 ## Quick Start
 
@@ -43,7 +43,7 @@ pnpm report
 - `importing/` — document import edge cases
 - `structured-content/` — SDT lock modes
 
-**Rendering** (`tests/rendering/`) — Load `.docx` documents and screenshot each page. Tagged with `@rendering` for baseline filtering.
+**Rendering** (`tests/rendering/`) — Auto-discovers all `.docx` files in `test-data/rendering/` and screenshots each page. Tagged with `@rendering` for baseline filtering. Drop a file in the folder = new test.
 
 ## Adding a Test
 
@@ -60,67 +60,39 @@ test('@behavior description of what it tests', async ({ superdoc }) => {
 });
 ```
 
-### Behavior test with a document
+### Rendering test (no code needed)
+
+Rendering tests are auto-discovered from `test-data/rendering/`. Just upload a document:
 
 ```bash
-# 1. Upload your document to R2 (path mirrors the test folder)
-pnpm docs:upload ~/Downloads/my-bug-repro.docx behavior/comments-tcs
+pnpm docs:upload ~/Downloads/my-doc.docx
+# Prompts for: Linear issue ID, short description
+# → uploads as rendering/sd-1679-anchor-table-overlap.docx in the shared corpus
+
+pnpm docs:download        # pull the new file locally
+pnpm test                 # verify it loads and renders
 ```
 
-```ts
-// 2. Reference it in your test — path matches the category
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'behavior/comments-tcs/my-bug-repro.docx');
-
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
-
-test('@behavior my document test', async ({ superdoc }) => {
-  await superdoc.loadDocument(DOC_PATH);
-  await superdoc.screenshot('my-test');
-});
-```
-
-### Rendering test
-
-```bash
-# 1. Upload your document
-pnpm docs:upload ~/Downloads/my-doc.docx rendering
-```
-
-```ts
-// 2. Write the test
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
-
-test('@rendering my-doc renders correctly', async ({ superdoc }) => {
-  await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
-  await superdoc.screenshotPages('rendering/my-doc');
-});
-```
+No spec file needed — `rendering.spec.ts` auto-discovers all `.docx` files. Baselines are generated in CI from the `stable` branch (not locally — macOS font rendering differs from Linux).
 
 ## R2 Storage
 
-Everything lives in one bucket. The folder structure mirrors the test structure:
+Corpus files are stored in a shared R2 bucket as plain relative keys (plus `registry.json`), for example:
 
 ```
-superdoc-visual-testing/
-  documents/                    Test .docx files
-    behavior/
-      comments-tcs/             Documents for comments-tcs tests
-      formatting/               Documents for formatting tests
-      ...
-    rendering/                  Documents for rendering tests
-  baselines/                    Screenshot baselines (auto-generated)
+registry.json
+basic/advanced-tables.docx
+comments-tcs/tracked-changes.docx
+rendering/sd-1679-anchor-table-overlap.docx
+...
+```
+
+`pnpm docs:download` syncs that corpus into repo-local `test-corpus/` and links `tests/visual/test-data` to it.
+
+Screenshot baselines remain in R2 and are auto-generated in CI:
+
+```
+baselines/
     behavior/
       basic-commands/
         type-basic-text.spec.ts-snapshots/
@@ -134,10 +106,8 @@ superdoc-visual-testing/
 
 | Command | What it does |
 |---------|-------------|
-| `pnpm docs:download` | Download all documents from R2 → `test-data/` |
-| `pnpm docs:upload <file> <category>` | Upload a document to R2 |
-| `pnpm baseline:download` | Download baselines from R2 |
-| `pnpm baseline:upload` | Upload baselines to R2 |
+| `pnpm docs:download` | Sync shared corpus from R2 → `test-corpus/` and link `test-data/` |
+| `pnpm docs:upload <file>` | Upload a rendering test document to the shared corpus (prompts for issue ID and description) |
 
 ## Fixture Helpers
 
@@ -157,9 +127,10 @@ superdoc-visual-testing/
 | `clickOnLine(index, xOffset?)` | Single click on a line |
 | `clickOnCommentedText(text)` | Click on comment highlight |
 | `pressTimes(key, count)` | Press a key multiple times |
-| `waitForStable(ms?)` | Wait for layout to settle |
+| `waitForStable(ms?)` | Wait for layout to settle (default 1500ms) |
 | `screenshot(name)` | Full-page screenshot |
 | `loadDocument(path)` | Load a .docx file |
+| `assertPageCount(n)` | Assert number of rendered pages |
 | `screenshotPages(baseName)` | Screenshot each rendered page |
 
 ## Fixture Config
@@ -181,8 +152,8 @@ test.use({
 
 ## Baselines & CI
 
-- **PR validation**: `visual-test.yml` downloads baselines + documents from R2, runs tests
-- **Baseline update**: `visual-baseline.yml` (manual trigger) builds from `stable`, generates new baselines, uploads to R2
+- **Visual tests** (`pnpm test`) — pixel-diff screenshots. Soft gate in CI — failures post a PR comment with a link to the HTML report for review.
+- **Baseline update**: `visual-baseline.yml` (manual trigger) builds from `stable` on Linux, generates new baselines, uploads to R2. Never generate baselines locally — macOS font rendering differs from CI (Linux).
 - Baselines and test documents are never committed to git
 
 ## Local Setup
@@ -191,11 +162,11 @@ test.use({
 # Install deps (auto-installs Playwright browsers via postinstall)
 pnpm install
 
-# Copy .env for R2 access
-cp .env.example .env
-# Fill in: SD_VISUAL_TESTING_R2_ACCOUNT_ID, SD_VISUAL_TESTING_R2_ACCESS_KEY_ID,
-# SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY, SD_VISUAL_TESTING_R2_BUCKET
+# Authenticate with Cloudflare R2 (one-time)
+npx wrangler login
 
 # Download test documents
 pnpm docs:download
 ```
+
+R2 auth is automatic via your Cloudflare account — no `.env` needed for local dev. CI uses S3 API credentials instead (see `.env.example`).

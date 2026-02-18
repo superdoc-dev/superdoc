@@ -27,29 +27,38 @@ tests/
     search/              Search and navigation
     importing/           Document import edge cases
     structured-content/  SDT lock modes
-  rendering/             Load .docx files, screenshot each page
+  rendering/             Auto-discovers all .docx in test-data/rendering/
   fixtures/superdoc.ts   Shared fixture with helpers
-test-data/               Downloaded from R2 (gitignored), mirrors R2 documents/ prefix
+test-data/               Symlink to shared repo corpus mirror (`<repo>/test-corpus`)
 scripts/
   download-test-docs.ts  Auto-discover and download all documents from R2
-  upload-test-doc.ts     Upload a document to R2
+  upload-test-doc.ts     Upload rendering doc — prompts for issue ID and description
   download-baselines.ts  Download screenshot baselines from R2
   upload-baselines.ts    Upload screenshot baselines to R2
 ```
 
 ## R2 Storage
 
-Single bucket with two prefixes. Local `test-data/` mirrors the `documents/` prefix exactly:
+DOCX files are stored in a shared corpus bucket as plain relative keys plus `registry.json`.
+`pnpm docs:download` syncs corpus files into `<repo>/test-corpus` and links `tests/visual/test-data` to that shared root.
+Visual baseline images are stored separately under the `baselines/` prefix.
 
+## Adding a Rendering Test
+
+Rendering tests are auto-discovered. Just upload a document:
+
+```bash
+pnpm docs:upload ~/Downloads/my-file.docx
+# Prompts: Linear issue ID, short description
+# → uploads to rendering/sd-1679-anchor-table-overlap.docx
+
+pnpm docs:download        # pull the new file locally
+pnpm test                 # verify it loads and renders
 ```
-superdoc-visual-testing/
-  documents/                    → downloads to test-data/
-    behavior/
-      comments-tcs/doc.docx     → test-data/behavior/comments-tcs/doc.docx
-      formatting/doc.docx       → test-data/behavior/formatting/doc.docx
-    rendering/doc.docx          → test-data/rendering/doc.docx
-  baselines/                    → downloads to tests/ (snapshot dirs)
-```
+
+Baselines are generated in CI from the `stable` branch — never locally (macOS font rendering differs from Linux).
+
+**Naming convention**: `<issue-id>-<description>.docx` for regressions (e.g. `sd-1679-anchor-table-overlap.docx`). General coverage docs can skip the issue ID.
 
 ## Writing a Behavior Test
 
@@ -70,7 +79,7 @@ Place the file in the matching category folder. Use `@behavior` tag in the test 
 
 ## Loading Test Documents
 
-Test documents are stored in R2 (`documents/` prefix). Download with `pnpm docs:download`. Upload new ones with `pnpm docs:upload <file> <category>`.
+Test documents are stored in the shared corpus bucket. Download with `pnpm docs:download`. Upload rendering docs with `pnpm docs:upload <file>`.
 
 ```ts
 import fs from 'node:fs';
@@ -92,23 +101,9 @@ test('@behavior my doc test', async ({ superdoc }) => {
 
 Document paths mirror the test folder structure. A test in `tests/behavior/comments-tcs/` uses documents from `test-data/behavior/comments-tcs/`.
 
-## Writing a Rendering Test
+## CI Behavior
 
-```ts
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../test-data/rendering');
-
-test('@rendering my-doc renders correctly', async ({ superdoc }) => {
-  await superdoc.loadDocument(path.join(DOCS_DIR, 'my-doc.docx'));
-  await superdoc.screenshotPages('rendering/my-doc');
-});
-```
-
-Use `@rendering` tag.
+Visual tests run as a **soft gate** in CI — pixel diff failures post a PR comment with a link to the HTML report artifact but don't block the PR. This allows rendering improvements to land without being blocked by expected pixel changes.
 
 ## Fixture Helpers
 
@@ -128,9 +123,10 @@ Use `@rendering` tag.
 | `clickOnLine(index, xOffset?)` | Single click on a line |
 | `clickOnCommentedText(text)` | Click on comment highlight containing text |
 | `pressTimes(key, count)` | Press a key multiple times |
-| `waitForStable(ms?)` | Wait for layout to settle (default 500ms) |
+| `waitForStable(ms?)` | Wait for layout to settle (default 1500ms) |
 | `screenshot(name)` | Full-page screenshot with baseline comparison |
 | `loadDocument(path)` | Load a .docx file into the editor |
+| `assertPageCount(n)` | Assert number of rendered pages |
 | `screenshotPages(baseName)` | Screenshot each rendered page |
 
 ## Config Overrides

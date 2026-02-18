@@ -1,7 +1,7 @@
 <script setup>
 import '@superdoc/common/styles/common-styles.css';
 import '../dev-styles.css';
-import { nextTick, onMounted, onBeforeUnmount, provide, ref, shallowRef, computed } from 'vue';
+import { nextTick, onMounted, onBeforeUnmount, provide, ref, shallowRef, computed, watch } from 'vue';
 
 import { SuperDoc } from '@superdoc/index.js';
 import { DOCX, PDF, HTML } from '@superdoc/common';
@@ -12,19 +12,15 @@ import { fieldAnnotationHelpers } from '@superdoc/super-editor';
 import { toolbarIcons } from '../../../../super-editor/src/components/toolbar/toolbarIcons';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
-import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
-import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.js';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
+import SidebarLayout from './sidebar/SidebarLayout.vue';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 
 // note:
 // Or set worker globally outside the component.
-// pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-//   'pdfjs-dist/build/pdf.worker.min.mjs',
-//   import.meta.url,
-// ).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 /* For local dev */
 const superdoc = shallowRef(null);
@@ -37,6 +33,9 @@ const showCommentsPanel = ref(true);
 const sidebarInstanceKey = ref(0);
 
 const urlParams = new URLSearchParams(window.location.search);
+const wordBaselineServiceUrl = 'http://127.0.0.1:9185';
+const clampOpacity = (v) => Math.min(1, Math.max(0, v));
+const overlayOpacityFromUrl = Number.parseFloat(urlParams.get('wordOverlayOpacity') ?? '0.45');
 const isInternal = urlParams.has('internal');
 const testUserEmail = urlParams.get('email') || 'user@superdoc.com';
 const testUserName = urlParams.get('name') || `SuperDoc ${Math.floor(1000 + Math.random() * 9000)}`;
@@ -44,6 +43,18 @@ const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
 const useWebLayout = ref(urlParams.get('view') === 'web');
 const useCollaboration = urlParams.get('collab') === '1';
+const useWordOverlay = ref(urlParams.get('wordOverlay') !== '0');
+const wordOverlayOpacity = ref(Number.isFinite(overlayOpacityFromUrl) ? clampOpacity(overlayOpacityFromUrl) : 0.45);
+const wordOverlayBlendMode = ref(urlParams.get('wordOverlayBlend') || 'difference');
+const generatedWordScreenshots = ref([]);
+const isGeneratingWordBaseline = ref(false);
+const wordBaselineStatus = ref('');
+const wordBaselineError = ref('');
+const wordOverlayOpacityLabel = computed(() => `${Math.round(wordOverlayOpacity.value * 100)}%`);
+const wordOverlayAvailable = computed(
+  () => useLayoutEngine.value && !useWebLayout.value && generatedWordScreenshots.value.length > 0,
+);
+let wordOverlayLayoutUnsubscribe = null;
 
 // Collaboration state
 const ydocRef = shallowRef(null);
@@ -79,6 +90,87 @@ const user = {
   email: testUserEmail,
 };
 
+const getSuperdocRoot = () => document.getElementById('superdoc');
+
+const removeWordOverlay = () => {
+  const root = getSuperdocRoot();
+  if (!root) return;
+  root.querySelectorAll('.dev-word-overlay-image').forEach((node) => node.remove());
+  root.querySelectorAll('.dev-word-overlay-page-host').forEach((node) => {
+    node.classList.remove('dev-word-overlay-page-host');
+  });
+};
+
+const applyWordOverlay = () => {
+  const root = getSuperdocRoot();
+  if (!root) return;
+
+  if (!useWordOverlay.value || !wordOverlayAvailable.value) {
+    removeWordOverlay();
+    return;
+  }
+
+  const pageNodes = Array.from(root.querySelectorAll('.superdoc-page[data-page-index]'));
+  pageNodes.forEach((pageNode, index) => {
+    const pageIndexRaw = Number.parseInt(pageNode.getAttribute('data-page-index') ?? String(index), 10);
+    const pageNumber = Number.isFinite(pageIndexRaw) ? pageIndexRaw + 1 : index + 1;
+    const screenshotUrl = generatedWordScreenshots.value[pageNumber - 1];
+    let overlayNode = pageNode.querySelector(':scope > .dev-word-overlay-image');
+
+    if (!screenshotUrl) {
+      overlayNode?.remove();
+      pageNode.classList.remove('dev-word-overlay-page-host');
+      return;
+    }
+
+    if (!overlayNode) {
+      overlayNode = document.createElement('img');
+      overlayNode.className = 'dev-word-overlay-image';
+      overlayNode.setAttribute('alt', `Word screenshot page ${pageNumber}`);
+      overlayNode.setAttribute('draggable', 'false');
+      pageNode.appendChild(overlayNode);
+    }
+
+    pageNode.classList.add('dev-word-overlay-page-host');
+    overlayNode.setAttribute('src', screenshotUrl);
+    overlayNode.style.opacity = String(wordOverlayOpacity.value);
+    overlayNode.style.mixBlendMode = wordOverlayBlendMode.value;
+  });
+};
+
+const scheduleWordOverlayApply = () => {
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      applyWordOverlay();
+    });
+  });
+};
+
+const detachWordOverlayListener = () => {
+  if (typeof wordOverlayLayoutUnsubscribe === 'function') {
+    wordOverlayLayoutUnsubscribe();
+  }
+  wordOverlayLayoutUnsubscribe = null;
+};
+
+const bindWordOverlayListener = (editor) => {
+  detachWordOverlayListener();
+  const presentationEditor = editor?.presentationEditor;
+  if (presentationEditor?.onLayoutUpdated) {
+    wordOverlayLayoutUnsubscribe = presentationEditor.onLayoutUpdated(() => {
+      scheduleWordOverlayApply();
+    });
+  }
+  scheduleWordOverlayApply();
+};
+
+const clearGeneratedWordBaseline = () => {
+  generatedWordScreenshots.value = [];
+  wordBaselineStatus.value = '';
+  wordBaselineError.value = '';
+  scheduleWordOverlayApply();
+};
+
 const commentPermissionResolver = ({ permission, comment, defaultDecision, currentUser }) => {
   if (!comment) return defaultDecision;
 
@@ -96,6 +188,7 @@ const commentPermissionResolver = ({ permission, comment, defaultDecision, curre
 };
 
 const handleNewFile = async (file) => {
+  clearGeneratedWordBaseline();
   uploadedFileName.value = file?.name || '';
   // Generate a file url
   const url = URL.createObjectURL(file);
@@ -144,6 +237,8 @@ const readFileAsText = (file) => {
 
 const init = async () => {
   // If the dev shell re-initializes (e.g. on file upload), tear down the previous instance first.
+  detachWordOverlayListener();
+  removeWordOverlay();
   superdoc.value?.destroy?.();
   superdoc.value = null;
   activeEditor.value = null;
@@ -178,9 +273,12 @@ const init = async () => {
     toolbarGroups: ['center'],
     role: userRole,
     documentMode: 'editing',
-    licenseKey: 'community-and-eval-agplv3',
+    licenseKey: 'public_license_key_superdocinternal_ad7035140c4b',
     telemetry: {
-      enabled: false,
+      enabled: true,
+      metadata: {
+        source: 'superdoc-dev',
+      },
     },
     comments: {
       visible: true,
@@ -362,14 +460,14 @@ const init = async () => {
       },
       pdf: {
         pdfLib: pdfjsLib,
-        pdfViewer: pdfjsViewer,
-        setWorker: true,
-        workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
-        textLayerMode: 0,
+        setWorker: false,
+        // workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
+        // textLayer: true,
+        // outputScale: 1.5,
       },
-      whiteboard: {
-        enabled: false,
-      },
+      // whiteboard: {
+      //   enabled: true,
+      // },
     },
     onEditorCreate,
     onContentError,
@@ -447,6 +545,99 @@ const exportDocxBlob = async () => {
   console.debug(blob);
 };
 
+const blobToBase64 = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('Unable to encode DOCX export'));
+        return;
+      }
+
+      const commaIndex = result.indexOf(',');
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+    reader.onerror = () => {
+      reject(reader.error || new Error('Failed to read DOCX export blob'));
+    };
+    reader.readAsDataURL(blob);
+  });
+
+const getWordBaselineFileName = () => {
+  const source = uploadedFileName.value || currentFile.value?.name || title.value || 'document';
+  const trimmedSource = String(source).trim() || 'document';
+  const withoutExtension = trimmedSource.replace(/\.[^.]+$/, '') || 'document';
+  return `${withoutExtension}.docx`;
+};
+
+const generateWordBaseline = async () => {
+  if (!superdoc.value) {
+    wordBaselineError.value = 'SuperDoc is not ready yet.';
+    return;
+  }
+
+  isGeneratingWordBaseline.value = true;
+  wordBaselineError.value = '';
+  wordBaselineStatus.value = 'Exporting current document...';
+
+  try {
+    const exportBlob = await superdoc.value.export({
+      commentsType: 'external',
+      triggerDownload: false,
+    });
+
+    if (!(exportBlob instanceof Blob)) {
+      throw new Error('SuperDoc export did not return a DOCX blob');
+    }
+
+    const response = await fetch(`${wordBaselineServiceUrl}/api/word-baseline`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileName: getWordBaselineFileName(),
+        docxBase64: await blobToBase64(exportBlob),
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || `Word reference request failed (${response.status})`);
+    }
+
+    if (!Array.isArray(payload?.pages) || payload.pages.length === 0) {
+      throw new Error('Word reference request completed but returned no page images');
+    }
+
+    generatedWordScreenshots.value = payload.pages;
+    useWordOverlay.value = true;
+    wordBaselineStatus.value = `Generated ${payload.pages.length} Word reference page(s).`;
+    scheduleWordOverlayApply();
+  } catch (error) {
+    wordBaselineStatus.value = '';
+    wordBaselineError.value = error instanceof Error ? error.message : String(error);
+    console.error('[SuperDoc Dev] Failed to generate Word reference:', error);
+  } finally {
+    isGeneratingWordBaseline.value = false;
+  }
+};
+
+const toggleWordOverlay = () => {
+  useWordOverlay.value = !useWordOverlay.value;
+};
+
+const setWordOverlayOpacity = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return;
+  wordOverlayOpacity.value = clampOpacity(numericValue);
+};
+
+const setWordOverlayBlendMode = (value) => {
+  wordOverlayBlendMode.value = String(value || 'difference');
+};
+
 const downloadBlob = (blob, fileName) => {
   if (!blob) return;
   const url = URL.createObjectURL(blob);
@@ -476,6 +667,7 @@ const getActiveDocumentEntry = () => {
 const onEditorCreate = ({ editor }) => {
   activeEditor.value = editor;
   window.editor = editor;
+  bindWordOverlayListener(editor);
 
   editor.on('fieldAnnotationClicked', (params) => {
     console.log('fieldAnnotationClicked', { params });
@@ -489,6 +681,13 @@ const onEditorCreate = ({ editor }) => {
     console.log('fieldAnnotationDoubleClicked', { params });
   });
 };
+
+watch(
+  [useWordOverlay, wordOverlayOpacity, wordOverlayBlendMode, generatedWordScreenshots, useLayoutEngine, useWebLayout],
+  () => {
+    scheduleWordOverlayApply();
+  },
+);
 
 const handleTitleChange = (e) => {
   title.value = e.target.innerText;
@@ -542,6 +741,9 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  detachWordOverlayListener();
+  removeWordOverlay();
+
   // Ensure SuperDoc tears down global listeners (e.g., PresentationEditor input bridge)
   superdoc.value?.destroy?.();
   superdoc.value = null;
@@ -590,13 +792,32 @@ const sidebarOptions = [
     label: 'Field Annotations',
     component: SidebarFieldAnnotations,
   },
+  {
+    id: 'layout',
+    label: 'Layout',
+    component: SidebarLayout,
+  },
 ];
-const activeSidebarId = ref('off');
+const activeSidebarId = ref('layout');
 const activeSidebar = computed(
   () => sidebarOptions.find((option) => option.id === activeSidebarId.value) ?? sidebarOptions[0],
 );
 const activeSidebarComponent = computed(() => activeSidebar.value?.component ?? null);
 const activeSidebarLabel = computed(() => activeSidebar.value?.label ?? 'None');
+const activeSidebarProps = computed(() => {
+  if (activeSidebarId.value !== 'layout') return {};
+  return {
+    useWordOverlay: useWordOverlay.value,
+    isGeneratingWordBaseline: isGeneratingWordBaseline.value,
+    generatedCount: generatedWordScreenshots.value.length,
+    wordOverlayOpacity: wordOverlayOpacity.value,
+    wordOverlayOpacityLabel: wordOverlayOpacityLabel.value,
+    wordOverlayBlendMode: wordOverlayBlendMode.value,
+    wordBaselineStatus: wordBaselineStatus.value,
+    wordBaselineError: wordBaselineError.value,
+    wordOverlayAvailable: wordOverlayAvailable.value,
+  };
+});
 const showSidebarMenu = ref(false);
 const closeSidebarMenu = () => {
   showSidebarMenu.value = false;
@@ -798,7 +1019,13 @@ if (scrollTestMode.value) {
           <component
             :is="activeSidebarComponent"
             :key="`${activeSidebarId}-${sidebarInstanceKey}`"
+            v-bind="activeSidebarProps"
             @close="setActiveSidebar('off')"
+            @toggle-overlay="toggleWordOverlay"
+            @generate-baseline="generateWordBaseline"
+            @clear-generated-baseline="clearGeneratedWordBaseline"
+            @update:word-overlay-opacity="setWordOverlayOpacity"
+            @update:word-overlay-blend-mode="setWordOverlayBlendMode"
           />
         </div>
       </div>
@@ -1168,15 +1395,21 @@ if (scrollTestMode.value) {
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
 }
 
-.dev-app__header-export-btn:hover {
+.dev-app__header-export-btn:hover:not(:disabled) {
   background: rgba(148, 163, 184, 0.2);
   border-color: rgba(148, 163, 184, 0.35);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
 }
 
-.dev-app__header-export-btn:active {
+.dev-app__header-export-btn:active:not(:disabled) {
   transform: translateY(1px);
   background: rgba(148, 163, 184, 0.28);
+}
+
+.dev-app__header-export-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .dev-app__dropdown {
@@ -1299,6 +1532,21 @@ if (scrollTestMode.value) {
 
 .dev-app__main:has(.dev-app__content-container--web-layout) {
   overflow-x: hidden;
+}
+
+:deep(.dev-word-overlay-page-host) {
+  position: relative;
+  overflow: hidden;
+}
+
+:deep(.dev-word-overlay-image) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 120;
 }
 
 .dev-app__inputs-panel {

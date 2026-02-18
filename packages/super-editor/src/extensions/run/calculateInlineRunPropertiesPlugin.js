@@ -1,5 +1,6 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
 import { Fragment } from 'prosemirror-model';
+import { TableMap } from 'prosemirror-tables';
 import { decodeRPrFromMarks, encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
 import {
   calculateResolvedParagraphProperties,
@@ -24,11 +25,11 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
 ]);
 
 /**
- * ProseMirror plugin that recalculates inline `runProperties` whenever marks change on run nodes,
- * ensuring run attributes stay aligned with decoded mark styles and resolved paragraph styles.
+ * ProseMirror plugin that recalculates inline `runProperties` for changed runs,
+ * keeping run attributes aligned with decoded mark styles and resolved paragraph styles.
  *
  * @param {object} editor Editor instance containing schema, converter data, and paragraph helpers.
- * @returns {Plugin} Plugin that updates run node attributes when mark changes occur.
+ * @returns {Plugin} Plugin that updates run node attributes when changed runs are re-evaluated.
  */
 export const calculateInlineRunPropertiesPlugin = (editor) =>
   new Plugin({
@@ -70,20 +71,10 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         if (!runNode || runNode.type !== runType) return;
 
         const $pos = tr.doc.resolve(mappedPos);
-        let paragraphNode = null;
-        let paragraphDepth = -1;
-        for (let depth = $pos.depth; depth >= 0; depth--) {
-          const node = $pos.node(depth);
-          if (node.type.name === 'paragraph') {
-            paragraphNode = node;
-            paragraphDepth = depth;
-            break;
-          }
-        }
-        if (!paragraphNode || paragraphDepth < 0) return;
-        const paragraphPos = $pos.before(paragraphDepth);
+        const { paragraphNode, paragraphPos, tableInfo } = getRunContext($pos);
+        if (!paragraphNode || paragraphPos === undefined) return;
 
-        const { segments, firstInlineProps } = segmentRunByInlineProps(runNode, paragraphNode, $pos, editor);
+        const { segments, firstInlineProps } = segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor);
         const runProperties = firstInlineProps ?? null;
 
         let firstRunPos = firstRunPosByParagraph.get(paragraphPos);
@@ -132,6 +123,88 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
   });
 
 /**
+ * Find paragraph and table context for a resolved position.
+ *
+ * @param {import('prosemirror-model').ResolvedPos} $pos
+ * @returns {{
+ *   paragraphNode?: import('prosemirror-model').Node,
+ *   paragraphPos?: number,
+ *   tableInfo?: {
+ *     tableProperties: Record<string, any>|null,
+ *     rowIndex: number,
+ *     cellIndex: number,
+ *     numCells: number,
+ *     numRows: number,
+ *   }|null,
+ * }}
+ */
+function getRunContext($pos) {
+  let paragraphNode = null;
+  let paragraphDepth = -1;
+  let tableInfo = null;
+
+  for (let depth = $pos.depth; depth >= 0; depth--) {
+    const node = $pos.node(depth);
+    if (node.type.name === 'paragraph') {
+      paragraphNode = node;
+      paragraphDepth = depth;
+    } else if (node.type.name === 'tableCell') {
+      tableInfo = extractTableInfo($pos, depth);
+      break;
+    }
+  }
+  if (!paragraphNode || paragraphDepth < 0) return {};
+  const paragraphPos = $pos.before(paragraphDepth);
+  return { paragraphNode, paragraphPos, tableInfo };
+}
+
+/**
+ * Extract table context information from a resolved position, if available.
+ *
+ * @param {import('prosemirror-model').ResolvedPos} $pos
+ * @param {number} depth Depth at which to look for table cell context (e.g., run node depth + 1)
+ * @returns {{
+ *   tableProperties: Record<string, any>|null,
+ *   rowIndex: number,
+ *   cellIndex: number,
+ *   numCells: number,
+ *   numRows: number,
+ * }|null}
+ */
+export function extractTableInfo($pos, depth) {
+  const rowNode = $pos.node(depth - 1);
+  const tableNode = $pos.node(depth - 2);
+  if (rowNode.type.name !== 'tableRow' || tableNode.type.name !== 'table') {
+    return null;
+  }
+
+  const fallbackInfo = {
+    tableProperties: tableNode.attrs.tableProperties || null,
+    rowIndex: $pos.index(depth - 2),
+    cellIndex: $pos.index(depth - 1),
+    numCells: rowNode.childCount,
+    numRows: tableNode.childCount,
+  };
+
+  try {
+    const tableMap = TableMap.get(tableNode);
+    const tableStart = $pos.before(depth - 2) + 1;
+    const cellStart = $pos.before(depth);
+    const cellRect = tableMap.findCell(cellStart - tableStart);
+
+    return {
+      tableProperties: tableNode.attrs.tableProperties || null,
+      rowIndex: cellRect.top,
+      cellIndex: cellRect.left,
+      numCells: tableMap.width,
+      numRows: tableMap.height,
+    };
+  } catch {
+    // Fall back to physical positions for malformed tables where TableMap cannot be built.
+    return fallbackInfo;
+  }
+}
+/**
  * Find the absolute document position of the first run node inside a paragraph.
  *
  * @param {import('prosemirror-model').Node} paragraphNode
@@ -155,11 +228,18 @@ function findFirstRunPosInParagraph(paragraphNode, paragraphPos, runType) {
  *
  * @param {import('prosemirror-model').Node} runNode
  * @param {import('prosemirror-model').Node} paragraphNode
+ * @param {{
+ *   tableProperties: Record<string, any>|null,
+ *   rowIndex: number,
+ *   cellIndex: number,
+ *   numCells: number,
+ *   numRows: number,
+ * }|null} tableInfo
  * @param {import('prosemirror-model').ResolvedPos} $pos
  * @param {object} editor
  * @returns {{ segments: Array<{ inlineProps: Record<string, any>|null, inlineKey: string, content: import('prosemirror-model').Node[] }>, firstInlineProps: Record<string, any>|null }}
  */
-function segmentRunByInlineProps(runNode, paragraphNode, $pos, editor) {
+function segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor) {
   const segments = [];
   let lastKey = null;
   let boundaryCounter = 0;
@@ -170,6 +250,7 @@ function segmentRunByInlineProps(runNode, paragraphNode, $pos, editor) {
         child.marks,
         runNode.attrs?.runProperties,
         paragraphNode,
+        tableInfo,
         $pos,
         editor,
       );
@@ -194,16 +275,23 @@ function segmentRunByInlineProps(runNode, paragraphNode, $pos, editor) {
 }
 
 /**
- * Compute the inline runProperties for a set of marks at a paragraph position.
+ * Compute the inline runProperties for a set of marks using paragraph/table style context.
  *
  * @param {import('prosemirror-model').Mark[]} marks
  * @param {Record<string, any>|null} existingRunProperties
  * @param {import('prosemirror-model').Node} paragraphNode
+ * @param {{
+ *   tableProperties: Record<string, any>|null,
+ *   rowIndex: number,
+ *   cellIndex: number,
+ *   numCells: number,
+ *   numRows: number,
+ * }|null} tableInfo
  * @param {import('prosemirror-model').ResolvedPos} $pos
  * @param {object} editor
  * @returns {{ inlineProps: Record<string, any>|null, inlineKey: string }}
  */
-function computeInlineRunProps(marks, existingRunProperties, paragraphNode, $pos, editor) {
+function computeInlineRunProps(marks, existingRunProperties, paragraphNode, tableInfo, $pos, editor) {
   const runPropertiesFromMarks = decodeRPrFromMarks(marks);
   const paragraphProperties =
     getResolvedParagraphProperties(paragraphNode) || calculateResolvedParagraphProperties(editor, paragraphNode, $pos);
@@ -214,6 +302,7 @@ function computeInlineRunProps(marks, existingRunProperties, paragraphNode, $pos
     },
     existingRunProperties?.styleId != null ? { styleId: existingRunProperties?.styleId } : {},
     paragraphProperties,
+    tableInfo,
     false,
     Boolean(paragraphNode.attrs.paragraphProperties?.numberingProperties),
   );
@@ -229,11 +318,12 @@ function computeInlineRunProps(marks, existingRunProperties, paragraphNode, $pos
 }
 
 /**
- * Picks only the run properties that differ from resolved styles so they can be stored inline.
+ * Keep run properties that differ from resolved styles, while preserving non-mark-derived existing fields.
  *
  * @param {Record<string, any>} runPropertiesFromMarks Properties decoded from marks.
  * @param {Record<string, any>} runPropertiesFromStyles Properties resolved from styles and paragraphs.
  * @param {Record<string, any>|null} existingRunProperties Existing runProperties on the run node.
+ * @param {object} editor Editor instance used to normalize mark-level font-family comparisons.
  * @returns {Record<string, any>} Inline run properties that override styled defaults.
  */
 function getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles, existingRunProperties, editor) {

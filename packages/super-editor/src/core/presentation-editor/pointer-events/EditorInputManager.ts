@@ -36,6 +36,7 @@ import {
   hitTestTable as hitTestTableFromHelper,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
+import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/painter-dom';
 
 // =============================================================================
 // Constants
@@ -66,6 +67,13 @@ export type LayoutState = {
   layout: Layout | null;
   blocks: FlowBlock[];
   measures: Measure[];
+};
+
+type StructuredContentSelection = {
+  node: ProseMirrorNode;
+  pos: number;
+  start: number;
+  end: number;
 };
 
 /**
@@ -889,6 +897,43 @@ export class EditorInputManager {
       event.preventDefault();
     }
 
+    const inlineStructuredContentLabel = target?.closest?.(
+      '.superdoc-structured-content-inline__label',
+    ) as HTMLElement | null;
+    if (inlineStructuredContentLabel && doc) {
+      const resolved = this.#resolveStructuredContentInlineFromElement(doc, inlineStructuredContentLabel);
+      if (resolved) {
+        try {
+          const tr = editor.state.tr.setSelection(TextSelection.create(doc, resolved.start, resolved.end));
+          editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return;
+      }
+    }
+
+    const structuredContentLabel = target?.closest?.('.superdoc-structured-content__label') as HTMLElement | null;
+    if (structuredContentLabel && doc) {
+      const resolved = this.#resolveStructuredContentBlockFromElement(doc, structuredContentLabel);
+      if (resolved) {
+        try {
+          const contentRange = this.#findStructuredContentBlockContentRange(resolved);
+          const selection =
+            contentRange != null
+              ? TextSelection.create(doc, contentRange.from, contentRange.to)
+              : NodeSelection.create(editor.state.doc, resolved.pos);
+          const tr = editor.state.tr.setSelection(selection);
+          editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return;
+      }
+    }
+
     // Handle click outside text content
     if (!rawHit) {
       this.#focusEditorAtFirstPosition();
@@ -993,9 +1038,16 @@ export class EditorInputManager {
     // Set selection for single click
     if (!handledByDepth) {
       try {
-        let nextSelection: Selection = TextSelection.create(doc, hit.pos);
-        if (!nextSelection.$from.parent.inlineContent) {
-          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+        // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
+        const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
+        let nextSelection: Selection;
+        if (sdtBlock) {
+          nextSelection = NodeSelection.create(doc, sdtBlock.pos);
+        } else {
+          nextSelection = TextSelection.create(doc, hit.pos);
+          if (!nextSelection.$from.parent.inlineContent) {
+            nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+          }
         }
         const tr = editor.state.tr.setSelection(nextSelection);
         // Preserve stored marks (e.g., formatting selected from toolbar before clicking)
@@ -1267,6 +1319,148 @@ export class EditorInputManager {
     }
   }
 
+  #findStructuredContentBlockAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
+    if (!Number.isFinite(pos)) return null;
+
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type?.name === 'structuredContentBlock') {
+        return {
+          node,
+          pos: $pos.before(depth),
+          start: $pos.start(depth),
+          end: $pos.end(depth),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #findStructuredContentBlockById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
+    let found: StructuredContentSelection | null = null;
+    doc.descendants((node, pos) => {
+      if (node.type?.name !== 'structuredContentBlock') return true;
+      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+      if (String(nodeId ?? '') !== id) return true;
+
+      found = {
+        node,
+        pos,
+        start: pos + 1,
+        end: pos + node.nodeSize - 1,
+      };
+      return false;
+    });
+    return found;
+  }
+
+  #findStructuredContentInlineAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
+    if (!Number.isFinite(pos)) return null;
+
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type?.name === 'structuredContent') {
+        return {
+          node,
+          pos: $pos.before(depth),
+          start: $pos.start(depth),
+          end: $pos.end(depth),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #findStructuredContentInlineById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
+    let found: StructuredContentSelection | null = null;
+    doc.descendants((node, pos) => {
+      if (node.type?.name !== 'structuredContent') return true;
+      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+      if (String(nodeId ?? '') !== id) return true;
+
+      found = {
+        node,
+        pos,
+        start: pos + 1,
+        end: pos + node.nodeSize - 1,
+      };
+      return false;
+    });
+    return found;
+  }
+
+  #resolveStructuredContentBlockFromElement(
+    doc: ProseMirrorNode,
+    element: HTMLElement,
+  ): StructuredContentSelection | null {
+    const container = element.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+    if (!container) return null;
+
+    const sdtId = container.dataset?.sdtId;
+    if (sdtId) {
+      const match = this.#findStructuredContentBlockById(doc, sdtId);
+      if (match) return match;
+    }
+
+    const containerSdtId = container.dataset?.sdtContainerId;
+    if (containerSdtId) {
+      const match = this.#findStructuredContentBlockById(doc, containerSdtId);
+      if (match) return match;
+    }
+
+    const pmStartRaw = container.dataset?.pmStart;
+    const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
+    if (Number.isFinite(pmStart)) {
+      return this.#findStructuredContentBlockAtPos(doc, pmStart);
+    }
+
+    return null;
+  }
+
+  #resolveStructuredContentInlineFromElement(
+    doc: ProseMirrorNode,
+    element: HTMLElement,
+  ): StructuredContentSelection | null {
+    const container = element.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+    if (!container) return null;
+
+    const sdtId = container.dataset?.sdtId;
+    if (sdtId) {
+      const match = this.#findStructuredContentInlineById(doc, sdtId);
+      if (match) return match;
+    }
+
+    const pmStartRaw = container.dataset?.pmStart;
+    const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
+    if (Number.isFinite(pmStart)) {
+      return this.#findStructuredContentInlineAtPos(doc, pmStart);
+    }
+
+    return null;
+  }
+
+  #findStructuredContentBlockContentRange(resolved: StructuredContentSelection): { from: number; to: number } | null {
+    let from: number | null = null;
+    let to: number | null = null;
+    resolved.node.descendants((child, pos) => {
+      if (!child.isTextblock) return true;
+      const basePos = resolved.pos + 1 + pos;
+      const childFrom = basePos + 1;
+      const childTo = basePos + child.nodeSize - 1;
+      if (from == null) {
+        from = childFrom;
+      }
+      to = childTo;
+      return true;
+    });
+    if (from == null || to == null) return null;
+    return { from, to };
+  }
+
   #handleClickWithoutLayout(event: PointerEvent, isDraggableAnnotation: boolean): void {
     if (!isDraggableAnnotation) {
       event.preventDefault();
@@ -1308,10 +1502,13 @@ export class EditorInputManager {
   ): boolean {
     if (!targetImg) return false;
 
-    const imgPmStart = targetImg.dataset?.pmStart ? Number(targetImg.dataset.pmStart) : null;
+    // When image has clipPath it is wrapped in a clip-wrapper; pm-start is on the wrapper
+    const wrapper = targetImg.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
+    const pmStartSource = wrapper ?? targetImg;
+    const imgPmStart = pmStartSource?.dataset?.pmStart ? Number(pmStartSource.dataset.pmStart) : null;
     if (Number.isNaN(imgPmStart) || imgPmStart == null) return false;
 
-    const imgLayoutEpochRaw = targetImg.dataset?.layoutEpoch;
+    const imgLayoutEpochRaw = pmStartSource?.dataset?.layoutEpoch;
     const imgLayoutEpoch = imgLayoutEpochRaw != null ? Number(imgLayoutEpochRaw) : NaN;
     const rawLayoutEpoch = Number.isFinite(rawHit.layoutEpoch) ? rawHit.layoutEpoch : NaN;
     const effectiveEpoch =
@@ -1343,11 +1540,14 @@ export class EditorInputManager {
       const tr = editor!.state.tr.setSelection(NodeSelection.create(doc, clampedImgPos));
       editor!.view?.dispatch(tr);
 
-      const selector = `.superdoc-inline-image[data-pm-start="${imgPmStart}"]`;
+      // Prefer wrapper (clip container) so selection outline is on the visible cropped box only, not the full image.
+      // The compound selector lists wrapper before inline-image; querySelector returns the first DOM-order
+      // match, and the wrapper is always an ancestor of the image, so it is found first when present.
       const viewportHost = this.#deps?.getViewportHost();
-      const targetElement = viewportHost?.querySelector(selector);
+      const targetElement = viewportHost?.querySelector(buildInlineImagePmSelector(imgPmStart));
+      const elementForHighlight = (wrapper ?? targetElement ?? targetImg) as HTMLElement;
       this.#callbacks.emit?.('imageSelected', {
-        element: targetElement ?? targetImg,
+        element: elementForHighlight,
         blockId: null,
         pmStart: clampedImgPos,
       });
@@ -1383,7 +1583,7 @@ export class EditorInputManager {
       if (fragmentHit.fragment.kind === 'image') {
         const viewportHost = this.#deps?.getViewportHost();
         const targetElement = viewportHost?.querySelector(
-          `.superdoc-image-fragment[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
         );
         if (targetElement) {
           this.#callbacks.emit?.('imageSelected', {

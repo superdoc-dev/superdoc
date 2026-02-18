@@ -68,3 +68,65 @@ describe('r-translator integration with w:b (marks-only import, bold inline)', a
     });
   });
 });
+
+describe('r-translator integration with table style run properties', () => {
+  const runNode = {
+    name: 'w:r',
+    elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Cell text' }] }],
+  };
+
+  const nodeListHandler = defaultNodeListHandler();
+  const sharedParams = {
+    translatedNumbering: {},
+    translatedLinkedStyles: {
+      docDefaults: { runProperties: {} },
+      styles: {
+        TableBold: {
+          runProperties: { bold: true },
+        },
+      },
+    },
+  };
+
+  it('applies bold mark from table style when table context is provided', () => {
+    const encoded = r_translator.encode({
+      nodes: [runNode],
+      nodeListHandler,
+      docx: {},
+      ...sharedParams,
+      extraParams: {
+        paragraphProperties: {},
+        rowIndex: 0,
+        columnIndex: 0,
+        tableProperties: { tableStyleId: 'TableBold' },
+        totalColumns: 1,
+        totalRows: 1,
+      },
+    });
+
+    const textChild = encoded?.content?.find((child) => child?.type === 'text');
+    expect(textChild).toBeTruthy();
+    expect((textChild.marks || []).some((mark) => mark.type === 'bold')).toBe(true);
+  });
+
+  it('does not apply table-style bold mark without complete table context', () => {
+    const encoded = r_translator.encode({
+      nodes: [runNode],
+      nodeListHandler,
+      docx: {},
+      ...sharedParams,
+      extraParams: {
+        paragraphProperties: {},
+        rowIndex: 0,
+        columnIndex: 0,
+        tableProperties: { tableStyleId: 'TableBold' },
+        totalColumns: 1,
+        // totalRows missing on purpose
+      },
+    });
+
+    const textChild = encoded?.content?.find((child) => child?.type === 'text');
+    expect(textChild).toBeTruthy();
+    expect((textChild.marks || []).some((mark) => mark.type === 'bold')).toBe(false);
+  });
+});

@@ -392,9 +392,12 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
         continue;
       }
 
-      // Remove linebreaktype here - we don't want it when pasting HTML
+      // Internal/runtime-only attributes must not be preserved across paste.
       if (child.hasAttribute('linebreaktype')) {
         child.removeAttribute('linebreaktype');
+      }
+      if (child.hasAttribute('data-sd-block-id')) {
+        child.removeAttribute('data-sd-block-id');
       }
 
       walkAndClean(child);

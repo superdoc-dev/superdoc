@@ -1,0 +1,143 @@
+---
+title: comments.get
+sidebarTitle: comments.get
+description: Generated reference for comments.get
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `comments.get`
+- API member path: `editor.doc.comments.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "commentId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "commentId"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "additionalProperties": false,
+      "properties": {
+        "entityId": {
+          "type": "string"
+        },
+        "entityType": {
+          "const": "comment"
+        },
+        "kind": {
+          "const": "entity"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "entityId"
+      ],
+      "type": "object"
+    },
+    "commentId": {
+      "type": "string"
+    },
+    "createdTime": {
+      "type": "number"
+    },
+    "creatorEmail": {
+      "type": "string"
+    },
+    "creatorName": {
+      "type": "string"
+    },
+    "importedId": {
+      "type": "string"
+    },
+    "isInternal": {
+      "type": "boolean"
+    },
+    "parentCommentId": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "open",
+        "resolved"
+      ]
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "blockId": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "text"
+        },
+        "range": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "type": "integer"
+            },
+            "start": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "blockId",
+        "range"
+      ],
+      "type": "object"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "address",
+    "commentId",
+    "status"
+  ],
+  "type": "object"
+}
+```

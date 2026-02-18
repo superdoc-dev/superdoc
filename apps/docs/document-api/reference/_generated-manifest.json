@@ -1,0 +1,128 @@
+{
+  "contractVersion": "0.1.0",
+  "files": [
+    "apps/docs/document-api/reference/capabilities/get.mdx",
+    "apps/docs/document-api/reference/capabilities/index.mdx",
+    "apps/docs/document-api/reference/comments/add.mdx",
+    "apps/docs/document-api/reference/comments/edit.mdx",
+    "apps/docs/document-api/reference/comments/get.mdx",
+    "apps/docs/document-api/reference/comments/go-to.mdx",
+    "apps/docs/document-api/reference/comments/index.mdx",
+    "apps/docs/document-api/reference/comments/list.mdx",
+    "apps/docs/document-api/reference/comments/move.mdx",
+    "apps/docs/document-api/reference/comments/remove.mdx",
+    "apps/docs/document-api/reference/comments/reply.mdx",
+    "apps/docs/document-api/reference/comments/resolve.mdx",
+    "apps/docs/document-api/reference/comments/set-active.mdx",
+    "apps/docs/document-api/reference/comments/set-internal.mdx",
+    "apps/docs/document-api/reference/core/index.mdx",
+    "apps/docs/document-api/reference/create/heading.mdx",
+    "apps/docs/document-api/reference/create/index.mdx",
+    "apps/docs/document-api/reference/create/paragraph.mdx",
+    "apps/docs/document-api/reference/delete.mdx",
+    "apps/docs/document-api/reference/find.mdx",
+    "apps/docs/document-api/reference/format/bold.mdx",
+    "apps/docs/document-api/reference/format/index.mdx",
+    "apps/docs/document-api/reference/format/italic.mdx",
+    "apps/docs/document-api/reference/format/strikethrough.mdx",
+    "apps/docs/document-api/reference/format/underline.mdx",
+    "apps/docs/document-api/reference/get-node-by-id.mdx",
+    "apps/docs/document-api/reference/get-node.mdx",
+    "apps/docs/document-api/reference/get-text.mdx",
+    "apps/docs/document-api/reference/index.mdx",
+    "apps/docs/document-api/reference/info.mdx",
+    "apps/docs/document-api/reference/insert.mdx",
+    "apps/docs/document-api/reference/lists/exit.mdx",
+    "apps/docs/document-api/reference/lists/get.mdx",
+    "apps/docs/document-api/reference/lists/indent.mdx",
+    "apps/docs/document-api/reference/lists/index.mdx",
+    "apps/docs/document-api/reference/lists/insert.mdx",
+    "apps/docs/document-api/reference/lists/list.mdx",
+    "apps/docs/document-api/reference/lists/outdent.mdx",
+    "apps/docs/document-api/reference/lists/restart.mdx",
+    "apps/docs/document-api/reference/lists/set-type.mdx",
+    "apps/docs/document-api/reference/replace.mdx",
+    "apps/docs/document-api/reference/track-changes/accept-all.mdx",
+    "apps/docs/document-api/reference/track-changes/accept.mdx",
+    "apps/docs/document-api/reference/track-changes/get.mdx",
+    "apps/docs/document-api/reference/track-changes/index.mdx",
+    "apps/docs/document-api/reference/track-changes/list.mdx",
+    "apps/docs/document-api/reference/track-changes/reject-all.mdx",
+    "apps/docs/document-api/reference/track-changes/reject.mdx"
+  ],
+  "generatedBy": "packages/document-api/scripts/generate-reference-docs.ts",
+  "groups": [
+    {
+      "key": "core",
+      "operationIds": ["find", "getNode", "getNodeById", "getText", "info", "insert", "replace", "delete"],
+      "pagePath": "apps/docs/document-api/reference/core/index.mdx",
+      "title": "Core"
+    },
+    {
+      "key": "capabilities",
+      "operationIds": ["capabilities.get"],
+      "pagePath": "apps/docs/document-api/reference/capabilities/index.mdx",
+      "title": "Capabilities"
+    },
+    {
+      "key": "create",
+      "operationIds": ["create.paragraph", "create.heading"],
+      "pagePath": "apps/docs/document-api/reference/create/index.mdx",
+      "title": "Create"
+    },
+    {
+      "key": "format",
+      "operationIds": ["format.bold", "format.italic", "format.underline", "format.strikethrough"],
+      "pagePath": "apps/docs/document-api/reference/format/index.mdx",
+      "title": "Format"
+    },
+    {
+      "key": "lists",
+      "operationIds": [
+        "lists.list",
+        "lists.get",
+        "lists.insert",
+        "lists.setType",
+        "lists.indent",
+        "lists.outdent",
+        "lists.restart",
+        "lists.exit"
+      ],
+      "pagePath": "apps/docs/document-api/reference/lists/index.mdx",
+      "title": "Lists"
+    },
+    {
+      "key": "comments",
+      "operationIds": [
+        "comments.add",
+        "comments.edit",
+        "comments.reply",
+        "comments.move",
+        "comments.resolve",
+        "comments.remove",
+        "comments.setInternal",
+        "comments.setActive",
+        "comments.goTo",
+        "comments.get",
+        "comments.list"
+      ],
+      "pagePath": "apps/docs/document-api/reference/comments/index.mdx",
+      "title": "Comments"
+    },
+    {
+      "key": "trackChanges",
+      "operationIds": [
+        "trackChanges.list",
+        "trackChanges.get",
+        "trackChanges.accept",
+        "trackChanges.reject",
+        "trackChanges.acceptAll",
+        "trackChanges.rejectAll"
+      ],
+      "pagePath": "apps/docs/document-api/reference/track-changes/index.mdx",
+      "title": "Track Changes"
+    }
+  ],
+  "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
+  "sourceHash": "3e7edc551feb80b42bfa59f928a0ce1f34ecb7cf71952d5a489107089105d543"
+}

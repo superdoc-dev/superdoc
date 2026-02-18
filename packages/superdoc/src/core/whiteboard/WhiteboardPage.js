@@ -2,6 +2,8 @@ import { flattenPoints } from './helpers/flattenPoints';
 import { getRandomId } from './helpers/getRandomId';
 import { createTextarea } from './helpers/createTextarea';
 
+const DEFAULT_TEXT_FONT_SIZE = 18;
+
 /**
  * @typedef {{ width: number, height: number, originalWidth?: number, originalHeight?: number }} WhiteboardPageSize
  * @typedef {{ x: number, y: number }} Point
@@ -51,11 +53,15 @@ export class WhiteboardPage {
 
   #containerEl = null;
 
+  #pendingImageIds = new Set();
+
   #isDrawing = false;
 
   #currentLine = null;
 
   #currentPoints = [];
+
+  #currentStrokeWidth = null;
 
   #currentTool = 'select';
 
@@ -91,6 +97,181 @@ export class WhiteboardPage {
 
     this.#onChange = props.onChange;
     this.#onToolChange = props.onToolChange;
+  }
+
+  /**
+   * @private
+   * Convert px -> normalized (0..1) using current page size.
+   * @param {number} x
+   * @param {number} y
+   * @returns {{ xN: number, yN: number }}
+   */
+  #toNormalizedPoint(x, y) {
+    const width = this.size?.width || 1;
+    const height = this.size?.height || 1;
+    return {
+      xN: x / width,
+      yN: y / height,
+    };
+  }
+
+  /**
+   * @private
+   * Convert normalized (0..1) -> px using current page size.
+   * @param {number} xN
+   * @param {number} yN
+   * @returns {{ x: number, y: number }}
+   */
+  #fromNormalizedPoint(xN, yN) {
+    const width = this.size?.width || 1;
+    const height = this.size?.height || 1;
+    return {
+      x: xN * width,
+      y: yN * height,
+    };
+  }
+
+  /**
+   * @private
+   * Convert px -> normalized size.
+   * @param {number} width
+   * @param {number} height
+   * @returns {{ wN: number, hN: number }}
+   */
+  #toNormalizedSize(width, height) {
+    const pageWidth = this.size?.width || 1;
+    const pageHeight = this.size?.height || 1;
+    return {
+      wN: width / pageWidth,
+      hN: height / pageHeight,
+    };
+  }
+
+  /**
+   * @private
+   * Convert normalized size -> px.
+   * @param {number} wN
+   * @param {number} hN
+   * @returns {{ width: number, height: number }}
+   */
+  #fromNormalizedSize(wN, hN) {
+    const pageWidth = this.size?.width || 1;
+    const pageHeight = this.size?.height || 1;
+    return {
+      width: wN * pageWidth,
+      height: hN * pageHeight,
+    };
+  }
+
+  /**
+   * @private
+   * Convert normalized stroke (0..1) -> px using current page size.
+   * `widthN` is normalized by average page size.
+   * @param {WhiteboardStroke} stroke
+   * @returns {{ points: number[][], strokeWidth: number }}
+   */
+  #fromNormalizedStroke(stroke) {
+    const { width: pageWidth = 1, height: pageHeight = 1 } = this.size || {};
+    const pointsN = Array.isArray(stroke.pointsN) ? stroke.pointsN : [];
+    const points = pointsN.map((pair) => {
+      return [pair[0] * pageWidth, pair[1] * pageHeight];
+    });
+    const strokeWidth = Number.isFinite(stroke.widthN)
+      ? stroke.widthN * ((pageWidth + pageHeight) / 2)
+      : this.#strokeWidth;
+    return { points, strokeWidth };
+  }
+
+  /**
+   * @private
+   * Convert stroke from px -> normalized (0..1).
+   * `widthN` is normalized by average page size.
+   * @param {WhiteboardStroke} stroke
+   * @returns {{ pointsN: number[][], widthN: number | undefined }}
+   */
+  #toNormalizedStroke(stroke) {
+    const { width: pageWidth = 1, height: pageHeight = 1 } = this.size || {};
+    const points = Array.isArray(stroke.points) ? stroke.points : [];
+    const pointsN = points.map((pair) => [pair[0] / pageWidth, pair[1] / pageHeight]);
+    const widthN = Number.isFinite(stroke.width) ? stroke.width / ((pageWidth + pageHeight) / 2) : undefined;
+    return { pointsN, widthN };
+  }
+
+  /**
+   * @private
+   * Convert normalized text (0..1) -> px using current page size.
+   * `fontSizeN` is normalized by original page height.
+   * @param {WhiteboardTextItem} item
+   * @returns {{ x: number, y: number, width: number | undefined, fontSize: number }}
+   */
+  #fromNormalizedText(item) {
+    const { width: pageWidth = 1, height: pageHeight = 1 } = this.size || {};
+    const x = (item.xN ?? 0) * pageWidth;
+    const y = (item.yN ?? 0) * pageHeight;
+    const width = Number.isFinite(item.widthN) ? item.widthN * pageWidth : undefined;
+    const fontSize = Number.isFinite(item.fontSizeN) ? item.fontSizeN * pageHeight : DEFAULT_TEXT_FONT_SIZE;
+    return { x, y, width, fontSize };
+  }
+
+  /**
+   * @private
+   * Convert text from px -> normalized (0..1).
+   * `fontSizeN` is normalized by original page height.
+   * @param {WhiteboardTextItem} item
+   * @returns {{ xN: number, yN: number, widthN: number | null, fontSizeN: number }}
+   */
+  #toNormalizedText(item) {
+    const { width: pageWidth = 1, height: pageHeight = 1 } = this.size || {};
+    const originalHeight = this.originalSize?.height ?? pageHeight;
+    const xN = (item.x ?? 0) / pageWidth;
+    const yN = (item.y ?? 0) / pageHeight;
+    const widthN = Number.isFinite(item.width) ? item.width / pageWidth : null;
+    const fontSizeN = Number.isFinite(item.fontSize)
+      ? item.fontSize / originalHeight
+      : DEFAULT_TEXT_FONT_SIZE / originalHeight;
+    return { xN, yN, widthN, fontSizeN };
+  }
+
+  /**
+   * @private
+   * Convert normalized image (0..1) -> px using current page size.
+   * @param {WhiteboardImageItem} item
+   * @returns {{ x: number, y: number, width: number | undefined, height: number | undefined }}
+   */
+  #fromNormalizedImage(item) {
+    const { width: pageWidth = 1, height: pageHeight = 1 } = this.size || {};
+    const x = (item.xN ?? 0) * pageWidth;
+    const y = (item.yN ?? 0) * pageHeight;
+    const width = Number.isFinite(item.widthN) ? item.widthN * pageWidth : undefined;
+    const height = Number.isFinite(item.heightN) ? item.heightN * pageHeight : undefined;
+    return { x, y, width, height };
+  }
+
+  /**
+   * @private
+   * Convert image from px -> normalized (0..1).
+   * @param {WhiteboardImageItem} item
+   * @returns {{ xN: number, yN: number, widthN: number | null, heightN: number | null }}
+   */
+  #toNormalizedImage(item) {
+    const { width: pageWidth = 1, height: pageHeight = 1 } = this.size || {};
+    const xN = (item.x ?? 0) / pageWidth;
+    const yN = (item.y ?? 0) / pageHeight;
+    const widthN = Number.isFinite(item.width) ? item.width / pageWidth : null;
+    const heightN = Number.isFinite(item.height) ? item.height / pageHeight : null;
+    return { xN, yN, widthN, heightN };
+  }
+
+  /**
+   * @private
+   * Get current page scale relative to the original width.
+   * @returns {number}
+   */
+  #getCurrentScale() {
+    const current = this.size?.width;
+    const original = this.originalSize?.width ?? current;
+    if (!Number.isFinite(current) || !Number.isFinite(original) || !original) return 1;
+    return current / original;
   }
 
   /**
@@ -178,6 +359,7 @@ export class WhiteboardPage {
     if (!this.#stage) return;
     this.#stage.size({ width, height });
     this.#applyPixelRatio();
+    this.render();
   }
 
   /**
@@ -269,10 +451,11 @@ export class WhiteboardPage {
    */
   renderStrokes() {
     this.strokes.forEach((stroke) => {
+      const { points, strokeWidth } = this.#fromNormalizedStroke(stroke);
       const line = new this.#Renderer.Line({
-        points: flattenPoints(stroke.points || []),
+        points: flattenPoints(points),
         stroke: stroke.color || this.#strokeColor,
-        strokeWidth: stroke.width || this.#strokeWidth,
+        strokeWidth,
         lineCap: 'round',
         lineJoin: 'round',
         globalCompositeOperation: stroke.type === 'erase' ? 'destination-out' : 'source-over',
@@ -287,15 +470,16 @@ export class WhiteboardPage {
    */
   renderText() {
     this.text.forEach((item) => {
+      const { x, y, width, fontSize } = this.#fromNormalizedText(item);
       const textNode = new this.#Renderer.Text({
-        x: item.x,
-        y: item.y,
+        x,
+        y,
         text: item.content,
-        fontSize: item.fontSize ?? 18,
+        fontSize,
         fontFamily: 'Arial, sans-serif',
         fill: '#2293fb',
         draggable: this.#currentTool === 'select',
-        width: item.width ?? undefined,
+        width,
       });
 
       textNode.name('wb-text');
@@ -320,8 +504,14 @@ export class WhiteboardPage {
     });
 
     textNode.on('dragend', () => {
-      item.x = textNode.x();
-      item.y = textNode.y();
+      const { xN, yN } = this.#toNormalizedText({
+        x: textNode.x(),
+        y: textNode.y(),
+        fontSize: item.fontSizeN ? item.fontSizeN * (this.size?.height || 1) : DEFAULT_TEXT_FONT_SIZE,
+        width: item.widthN ? item.widthN * (this.size?.width || 1) : null,
+      });
+      item.xN = xN;
+      item.yN = yN;
       this.#triggerChanged();
     });
 
@@ -340,9 +530,10 @@ export class WhiteboardPage {
         scaleY: 1,
       });
       const nextWidth = textNode.width();
-      item.width = nextWidth;
-      item.x = textNode.x();
-      item.y = textNode.y();
+      const pageWidth = this.size?.width || 1;
+      item.widthN = nextWidth / pageWidth;
+      item.xN = textNode.x() / pageWidth;
+      item.yN = textNode.y() / (this.size?.height || 1);
       this.#triggerChanged();
     });
 
@@ -374,26 +565,40 @@ export class WhiteboardPage {
     });
 
     const renderImageItem = (item, name) => {
+      const { x, y, width, height } = this.#fromNormalizedImage(item);
       const existing = existingById.get(item.id);
 
       if (existing) {
-        if (Number.isFinite(item.x)) existing.x(item.x);
-        if (Number.isFinite(item.y)) existing.y(item.y);
-        if (Number.isFinite(item.width)) existing.width(item.width);
-        if (Number.isFinite(item.height)) existing.height(item.height);
+        if (Number.isFinite(x)) existing.x(x);
+        if (Number.isFinite(y)) existing.y(y);
+        if (Number.isFinite(width)) existing.width(width);
+        if (Number.isFinite(height)) existing.height(height);
         existing.draggable(this.#currentTool === 'select');
         return;
       }
 
+      if (this.#pendingImageIds.has(item.id)) {
+        return;
+      }
+
+      this.#pendingImageIds.add(item.id);
       const imageObj = new window.Image();
       imageObj.crossOrigin = 'Anonymous';
       imageObj.onload = () => {
+        if (existingById.get(item.id)) {
+          this.#pendingImageIds.delete(item.id);
+          return;
+        }
+        if (!this.#layer) {
+          this.#pendingImageIds.delete(item.id);
+          return;
+        }
         const imageNode = new this.#Renderer.Image({
-          x: item.x,
-          y: item.y,
+          x,
+          y,
           image: imageObj,
-          width: item.width ?? imageObj.width,
-          height: item.height ?? imageObj.height,
+          width: width ?? imageObj.width,
+          height: height ?? imageObj.height,
           draggable: this.#currentTool === 'select',
         });
 
@@ -403,6 +608,10 @@ export class WhiteboardPage {
 
         this.#layer.add(imageNode);
         this.#layer.batchDraw();
+        this.#pendingImageIds.delete(item.id);
+      };
+      imageObj.onerror = () => {
+        this.#pendingImageIds.delete(item.id);
       };
       imageObj.src = item.src;
     };
@@ -424,8 +633,10 @@ export class WhiteboardPage {
     });
 
     imageNode.on('dragend', () => {
-      item.x = imageNode.x();
-      item.y = imageNode.y();
+      const pageWidth = this.size?.width || 1;
+      const pageHeight = this.size?.height || 1;
+      item.xN = imageNode.x() / pageWidth;
+      item.yN = imageNode.y() / pageHeight;
       this.#triggerChanged();
     });
 
@@ -437,10 +648,12 @@ export class WhiteboardPage {
       imageNode.scale({ x: 1, y: 1 });
       imageNode.width(nextWidth);
       imageNode.height(nextHeight);
-      item.width = nextWidth;
-      item.height = nextHeight;
-      item.x = imageNode.x();
-      item.y = imageNode.y();
+      const pageWidth = this.size?.width || 1;
+      const pageHeight = this.size?.height || 1;
+      item.widthN = nextWidth / pageWidth;
+      item.heightN = nextHeight / pageHeight;
+      item.xN = imageNode.x() / pageWidth;
+      item.yN = imageNode.y() / pageHeight;
       this.#triggerChanged();
     });
   }
@@ -512,7 +725,13 @@ export class WhiteboardPage {
     if (!stroke || !Array.isArray(stroke.points)) {
       return;
     }
-    this.strokes.push(stroke);
+    const { pointsN, widthN } = this.#toNormalizedStroke(stroke);
+    this.strokes.push({
+      pointsN,
+      widthN,
+      color: stroke.color,
+      type: stroke.type,
+    });
   }
 
   /**
@@ -524,13 +743,14 @@ export class WhiteboardPage {
       return;
     }
 
+    const { xN, yN, widthN, fontSizeN } = this.#toNormalizedText(item);
     this.text.push({
       id: item.id ?? getRandomId('text'),
-      x: item.x,
-      y: item.y,
+      xN,
+      yN,
       content: item.content,
-      fontSize: item.fontSize ?? 18,
-      width: item.width ?? null,
+      fontSizeN,
+      widthN,
     });
 
     this.render();
@@ -546,14 +766,15 @@ export class WhiteboardPage {
       return;
     }
 
+    const { xN, yN, widthN, heightN } = this.#toNormalizedImage(item);
     const imageItem = {
       id: item.id ?? getRandomId('image'),
       stickerId: item.stickerId ?? (item.type === 'sticker' ? (item.id ?? null) : null),
-      x: item.x,
-      y: item.y,
+      xN,
+      yN,
       src: item.src,
-      width: item.width ?? null,
-      height: item.height ?? null,
+      widthN,
+      heightN,
       type: item.type ?? 'image',
     };
     this.images.push(imageItem);
@@ -715,15 +936,17 @@ export class WhiteboardPage {
     const pos = this.#stage.getPointerPosition();
     if (!pos) return;
     const isErase = this.#currentTool === 'erase';
+    const strokeWidth = this.#strokeWidth * this.#getCurrentScale();
     this.#currentPoints = [pos.x, pos.y];
     this.#currentLine = new this.#Renderer.Line({
       points: this.#currentPoints,
       stroke: this.#strokeColor,
-      strokeWidth: isErase ? this.#strokeWidth * 3 : this.#strokeWidth,
+      strokeWidth: isErase ? strokeWidth * 3 : strokeWidth,
       lineCap: 'round',
       lineJoin: 'round',
       globalCompositeOperation: isErase ? 'destination-out' : 'source-over',
     });
+    this.#currentStrokeWidth = strokeWidth;
     this.#strokesLayer.add(this.#currentLine);
   }
 
@@ -762,15 +985,17 @@ export class WhiteboardPage {
       pairs.push([this.#currentPoints[i], this.#currentPoints[i + 1]]);
     }
     const isErase = this.#currentTool === 'erase';
+    const baseWidth = this.#currentStrokeWidth ?? this.#strokeWidth;
     this.addStroke({
       points: pairs,
       color: this.#strokeColor,
-      width: isErase ? this.#strokeWidth * 3 : this.#strokeWidth,
+      width: isErase ? baseWidth * 3 : baseWidth,
       type: isErase ? 'erase' : 'draw',
     });
     this.#triggerChanged();
     this.#currentLine = null;
     this.#currentPoints = [];
+    this.#currentStrokeWidth = null;
   }
 
   /**
@@ -785,12 +1010,14 @@ export class WhiteboardPage {
       return;
     }
 
+    const scale = this.#getCurrentScale();
+    const fontSize = DEFAULT_TEXT_FONT_SIZE * scale;
     const textarea = createTextarea({
       left: x,
       top: y,
-      height: 24,
+      height: Math.ceil(fontSize * 1.4),
       background: 'transparent',
-      fontSize: 18,
+      fontSize,
       color: '#2293fb',
     });
     this.#containerEl.append(textarea);

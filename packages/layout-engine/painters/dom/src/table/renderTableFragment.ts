@@ -47,6 +47,8 @@ export type TableRenderDependencies = {
   applyFragmentFrame: (el: HTMLElement, fragment: Fragment) => void;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
+  /** Function to apply container SDT metadata as data attributes */
+  applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Function to apply CSS styles to an element */
   applyStyles: ApplyStylesFn;
 };
@@ -123,6 +125,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     renderDrawingContent,
     applyFragmentFrame,
     applySdtDataset,
+    applyContainerSdtDataset,
     applyStyles,
   } = deps;
 
@@ -174,6 +177,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   applyFragmentFrame(container, fragment);
   container.style.height = `${fragment.height}px`;
   applySdtDataset(container, block.attrs?.sdt);
+  applyContainerSdtDataset?.(container, block.attrs?.containerSdt);
 
   // Apply SDT container styling (document sections, structured content blocks)
   applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);

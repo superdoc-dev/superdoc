@@ -1683,6 +1683,7 @@ export async function incrementalLayout(
       // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
       if (reserves.some((h) => h > 0)) {
         let reservesStabilized = false;
+        const seenReserveKeys = new Set<string>([reserves.join(',')]);
         for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
           layout = relayout(reserves);
           ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
@@ -1698,6 +1699,13 @@ export async function incrementalLayout(
             reservesStabilized = true;
             break;
           }
+          // Detect oscillation: if we've produced a reserve vector we already tried,
+          // the loop will never converge. Break early to avoid wasted relayout passes.
+          const nextKey = nextReserves.join(',');
+          if (seenReserveKeys.has(nextKey)) {
+            break;
+          }
+          seenReserveKeys.add(nextKey);
           // Only update reserves when we will do another layout pass; otherwise layout
           // would be built with the previous reserves while reserves would be nextReserves,
           // and the plan/injection phase could place footnotes in the wrong band.
@@ -1707,7 +1715,7 @@ export async function incrementalLayout(
         }
         if (!reservesStabilized) {
           console.warn(
-            `[incrementalLayout] Footnote reserve loop hit max passes (${MAX_FOOTNOTE_LAYOUT_PASSES}) without stabilizing; layout may have suboptimal footnote placement.`,
+            `[incrementalLayout] Footnote reserve loop did not converge (max ${MAX_FOOTNOTE_LAYOUT_PASSES} passes); layout may have suboptimal footnote placement.`,
           );
         }
 

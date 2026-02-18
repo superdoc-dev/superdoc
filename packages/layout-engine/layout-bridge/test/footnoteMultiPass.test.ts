@@ -145,4 +145,66 @@ describe('Footnote multi-pass reserve loop', () => {
       expect(fragBottom).toBeLessThanOrEqual(footnoteBandTop + 1);
     }
   });
+
+  it('does not exhaust max reserve passes when reserves oscillate between pages', async () => {
+    const BODY_LINE_HEIGHT = 20;
+    const FOOTNOTE_LINE_HEIGHT = 12;
+    const LINES_ON_PAGE_1_WITHOUT_RESERVE = 12;
+    const FOOTNOTE_LINES = 5;
+
+    let pos = 0;
+    const bodyBlocks: FlowBlock[] = [];
+    for (let i = 0; i < LINES_ON_PAGE_1_WITHOUT_RESERVE; i += 1) {
+      const text = `Line ${i + 1}.`;
+      bodyBlocks.push(makeParagraph(`body-${i}`, text, pos));
+      pos += text.length + 1;
+    }
+
+    const refPos = pos - 2;
+    const footnoteBlock = makeParagraph(
+      'footnote-1-0-paragraph',
+      'Footnote content that spans multiple lines here.',
+      0,
+    );
+
+    const measureBlock = vi.fn(async (block: FlowBlock) => {
+      if (block.id.startsWith('footnote-')) {
+        return makeMultiLineMeasure(FOOTNOTE_LINE_HEIGHT, FOOTNOTE_LINES);
+      }
+      const textLength = block.kind === 'paragraph' ? (block.runs?.[0]?.text?.length ?? 1) : 1;
+      return makeMeasure(BODY_LINE_HEIGHT, textLength);
+    });
+
+    const contentHeight = 240;
+    const margins = { top: 72, right: 72, bottom: 72, left: 72 };
+    const pageHeight = contentHeight + margins.top + margins.bottom;
+
+    const layoutDocSpy = vi.spyOn(layoutEngine, 'layoutDocument');
+
+    await incrementalLayout(
+      [],
+      null,
+      bodyBlocks,
+      {
+        pageSize: { w: 612, h: pageHeight },
+        margins,
+        footnotes: {
+          refs: [{ id: '1', pos: refPos }],
+          blocksById: new Map([['1', [footnoteBlock]]]),
+          topPadding: 4,
+          dividerHeight: 2,
+        },
+      },
+      measureBlock,
+    );
+
+    const footnoteReserveCalls = layoutDocSpy.mock.calls.filter((call) =>
+      (call[2] as { footnoteReservedByPageIndex?: number[] })?.footnoteReservedByPageIndex?.some((h) => h > 0),
+    );
+    layoutDocSpy.mockRestore();
+
+    // Current regression: this scenario oscillates A -> B -> A and runs all passes (+ final relayout).
+    // Desired behavior: detect oscillation and stop early.
+    expect(footnoteReserveCalls.length).toBeLessThanOrEqual(3);
+  });
 });

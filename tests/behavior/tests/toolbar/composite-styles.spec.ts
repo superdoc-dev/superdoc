@@ -2,7 +2,7 @@ import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
 
 test.use({ config: { toolbar: 'full', showSelection: true } });
 
-async function typeAndSelect(superdoc: SuperDocFixture): Promise<number> {
+async function typeAndSelect(superdoc: SuperDocFixture): Promise<void> {
   await superdoc.type('This is a sentence');
   await superdoc.newLine();
   await superdoc.type('Hello tests');
@@ -11,7 +11,6 @@ async function typeAndSelect(superdoc: SuperDocFixture): Promise<number> {
   const pos = await superdoc.findTextPos('is a sentence');
   await superdoc.setTextSelection(pos, pos + 'is a sentence'.length);
   await superdoc.waitForStable();
-  return pos;
 }
 
 async function clickToolbarButton(superdoc: SuperDocFixture, dataItem: string): Promise<void> {
@@ -46,8 +45,7 @@ test('bold + italic', async ({ superdoc }) => {
   await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/active/);
   await superdoc.snapshot('bold + italic applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['bold', 'italic']);
+  await superdoc.assertTextHasMarks('is a sentence', ['bold', 'italic']);
 });
 
 test('bold + underline', async ({ superdoc }) => {
@@ -61,8 +59,7 @@ test('bold + underline', async ({ superdoc }) => {
   await expect(superdoc.page.locator('[data-item="btn-underline"]')).toHaveClass(/active/);
   await superdoc.snapshot('bold + underline applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['bold', 'underline']);
+  await superdoc.assertTextHasMarks('is a sentence', ['bold', 'underline']);
 });
 
 test('italic + strikethrough', async ({ superdoc }) => {
@@ -76,8 +73,7 @@ test('italic + strikethrough', async ({ superdoc }) => {
   await expect(superdoc.page.locator('[data-item="btn-strike"]')).toHaveClass(/active/);
   await superdoc.snapshot('italic + strikethrough applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['italic', 'strike']);
+  await superdoc.assertTextHasMarks('is a sentence', ['italic', 'strike']);
 });
 
 // --- All toggles stacked ---
@@ -97,8 +93,7 @@ test('bold + italic + underline + strikethrough', async ({ superdoc }) => {
   await expect(superdoc.page.locator('[data-item="btn-strike"]')).toHaveClass(/active/);
   await superdoc.snapshot('all four toggles applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['bold', 'italic', 'underline', 'strike']);
+  await superdoc.assertTextHasMarks('is a sentence', ['bold', 'italic', 'underline', 'strike']);
 });
 
 // --- Toggle + value styles ---
@@ -116,10 +111,9 @@ test('bold + font family + font size', async ({ superdoc }) => {
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('24');
   await superdoc.snapshot('bold + Georgia 24pt applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['bold']);
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontFamily: 'Georgia' });
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontSize: '24pt' });
+  await superdoc.assertTextHasMarks('is a sentence', ['bold']);
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontSize: '24pt' });
 });
 
 test('italic + color', async ({ superdoc }) => {
@@ -134,9 +128,8 @@ test('italic + color', async ({ superdoc }) => {
   await expect(colorBar).toHaveCSS('background-color', 'rgb(210, 0, 63)');
   await superdoc.snapshot('italic + red color applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['italic']);
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { color: '#D2003F' });
+  await superdoc.assertTextHasMarks('is a sentence', ['italic']);
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { color: '#D2003F' });
 });
 
 // --- Multiple value styles ---
@@ -155,10 +148,9 @@ test('font family + font size + color', async ({ superdoc }) => {
   await expect(colorBar).toHaveCSS('background-color', 'rgb(134, 0, 40)');
   await superdoc.snapshot('Georgia 18pt dark red applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontFamily: 'Georgia' });
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontSize: '18pt' });
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { color: '#860028' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontSize: '18pt' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { color: '#860028' });
 });
 
 // --- Kitchen sink ---
@@ -194,9 +186,28 @@ test('all styles combined', async ({ superdoc }) => {
   await superdoc.snapshot('all styles applied');
 
   // Assert all PM marks
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['bold', 'italic', 'underline', 'strike', 'highlight']);
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontFamily: 'Courier New' });
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontSize: '24pt' });
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { color: '#D2003F' });
+  await superdoc.assertTextHasMarks('is a sentence', ['bold', 'italic', 'underline', 'strike', 'highlight']);
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Courier New' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontSize: '24pt' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { color: '#D2003F' });
+});
+
+test('textStyle attr checks require one run to satisfy all attrs', async ({ superdoc }) => {
+  await superdoc.type('Split attrs');
+  await superdoc.waitForStable();
+
+  const splitPos = await superdoc.findTextPos('Split');
+  await superdoc.setTextSelection(splitPos, splitPos + 'Split'.length);
+  await selectDropdownOption(superdoc, 'fontFamily', 'Georgia');
+
+  const attrsPos = await superdoc.findTextPos('attrs');
+  await superdoc.setTextSelection(attrsPos, attrsPos + 'attrs'.length);
+  await selectColorSwatch(superdoc, 'color', 'red');
+
+  await superdoc.assertTextMarkAttrs('Split', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('attrs', 'textStyle', { color: '#D2003F' });
+
+  await expect(
+    superdoc.assertTextMarkAttrs('Split attrs', 'textStyle', { fontFamily: 'Georgia', color: '#D2003F' }),
+  ).rejects.toThrow();
 });

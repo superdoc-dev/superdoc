@@ -1,5 +1,6 @@
 import 'superdoc/style.css';
 import { SuperDoc } from 'superdoc';
+import { getRequestedCustomExtensionNames, resolveCustomExtensions } from './custom-extensions.js';
 
 const params = new URLSearchParams(location.search);
 const layout = params.get('layout') !== '0';
@@ -8,6 +9,7 @@ const hideSelection = params.get('hideSelection') !== '0';
 const toolbar = params.get('toolbar');
 const comments = params.get('comments');
 const trackChanges = params.get('trackChanges') === '1';
+const customExtensionNames = getRequestedCustomExtensionNames(params);
 
 if (hideCaret) {
   document.documentElement.style.setProperty('caret-color', 'transparent', 'important');
@@ -55,6 +57,11 @@ function init(file?: File) {
   // Track changes
   if (trackChanges) {
     config.trackChanges = { visible: true };
+  }
+
+  const customExtensions = resolveCustomExtensions(customExtensionNames);
+  if (customExtensions.length > 0) {
+    config.editorExtensions = customExtensions;
   }
 
   instance = new SuperDoc(config);

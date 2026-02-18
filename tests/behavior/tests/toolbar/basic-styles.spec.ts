@@ -3,9 +3,9 @@ import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
 test.use({ config: { toolbar: 'full', showSelection: true } });
 
 /**
- * Select "is a sentence" from the typed text and return the PM position.
+ * Select "is a sentence" from the typed text.
  */
-async function typeAndSelect(superdoc: SuperDocFixture): Promise<number> {
+async function typeAndSelect(superdoc: SuperDocFixture): Promise<void> {
   await superdoc.type('This is a sentence');
   await superdoc.newLine();
   await superdoc.type('Hello tests');
@@ -18,8 +18,6 @@ async function typeAndSelect(superdoc: SuperDocFixture): Promise<number> {
   // Verify selection rectangles are visible
   const selectionRect = superdoc.page.locator('.presentation-editor__selection-rect');
   await expect(selectionRect.first()).toBeVisible();
-
-  return pos;
 }
 
 test('bold button applies bold', async ({ superdoc }) => {
@@ -33,8 +31,7 @@ test('bold button applies bold', async ({ superdoc }) => {
   await expect(boldButton).toHaveClass(/active/);
   await superdoc.snapshot('bold applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['bold']);
+  await superdoc.assertTextHasMarks('is a sentence', ['bold']);
 });
 
 test('italic button applies italic', async ({ superdoc }) => {
@@ -48,8 +45,7 @@ test('italic button applies italic', async ({ superdoc }) => {
   await expect(italicButton).toHaveClass(/active/);
   await superdoc.snapshot('italic applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['italic']);
+  await superdoc.assertTextHasMarks('is a sentence', ['italic']);
 });
 
 test('underline button applies underline', async ({ superdoc }) => {
@@ -63,8 +59,7 @@ test('underline button applies underline', async ({ superdoc }) => {
   await expect(underlineButton).toHaveClass(/active/);
   await superdoc.snapshot('underline applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['underline']);
+  await superdoc.assertTextHasMarks('is a sentence', ['underline']);
 });
 
 test('strikethrough button applies strike', async ({ superdoc }) => {
@@ -78,8 +73,7 @@ test('strikethrough button applies strike', async ({ superdoc }) => {
   await expect(strikeButton).toHaveClass(/active/);
   await superdoc.snapshot('strikethrough applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['strike']);
+  await superdoc.assertTextHasMarks('is a sentence', ['strike']);
 });
 
 test('font family dropdown changes font', async ({ superdoc }) => {
@@ -101,8 +95,7 @@ test('font family dropdown changes font', async ({ superdoc }) => {
   await expect(fontButton.locator('.button-label')).toHaveText('Georgia');
   await superdoc.snapshot('Georgia font applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Georgia' });
 });
 
 test('font size dropdown changes size', async ({ superdoc }) => {
@@ -125,8 +118,7 @@ test('font size dropdown changes size', async ({ superdoc }) => {
   await expect(sizeInput).toHaveValue('18');
   await superdoc.snapshot('font size 18 applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontSize: '18pt' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontSize: '18pt' });
 });
 
 test('color dropdown changes text color', async ({ superdoc }) => {
@@ -149,8 +141,7 @@ test('color dropdown changes text color', async ({ superdoc }) => {
   await expect(colorBar).toHaveCSS('background-color', 'rgb(210, 0, 63)');
   await superdoc.snapshot('red color applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { color: '#D2003F' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { color: '#D2003F' });
 });
 
 test('highlight dropdown changes background color', async ({ superdoc }) => {
@@ -173,6 +164,5 @@ test('highlight dropdown changes background color', async ({ superdoc }) => {
   await expect(highlightBar).toHaveCSS('background-color', 'rgb(236, 207, 53)');
   await superdoc.snapshot('yellow highlight applied');
 
-  const pos = await superdoc.findTextPos('is a sentence');
-  await superdoc.assertMarksAtPos(pos, ['highlight']);
+  await superdoc.assertTextHasMarks('is a sentence', ['highlight']);
 });

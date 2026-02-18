@@ -38,10 +38,9 @@ test('insert link on selected text', async ({ superdoc }) => {
   await applyLink(superdoc, 'https://example.com');
   await superdoc.snapshot('link applied');
 
-  // Assert link mark exists (re-find position — it shifts after mark application)
-  const linkPos = await superdoc.findTextPos('website');
-  await superdoc.assertMarksAtPos(linkPos, ['link']);
-  await superdoc.assertMarkAttrsAtPos(linkPos, 'link', { href: 'https://example.com' });
+  // Assert link mark exists
+  await superdoc.assertTextHasMarks('website', ['link']);
+  await superdoc.assertTextMarkAttrs('website', 'link', { href: 'https://example.com' });
 });
 
 test('edit existing link', async ({ superdoc }) => {
@@ -78,8 +77,7 @@ test('edit existing link', async ({ superdoc }) => {
   await superdoc.snapshot('link updated');
 
   // Assert updated href
-  const updatedPos = await superdoc.findTextPos('website');
-  await superdoc.assertMarkAttrsAtPos(updatedPos, 'link', { href: 'https://updated.com' });
+  await superdoc.assertTextMarkAttrs('website', 'link', { href: 'https://updated.com' });
 });
 
 test('remove link', async ({ superdoc }) => {
@@ -95,7 +93,7 @@ test('remove link', async ({ superdoc }) => {
 
   // Verify link exists
   const linkPos = await superdoc.findTextPos('website');
-  await superdoc.assertMarksAtPos(linkPos, ['link']);
+  await superdoc.assertTextHasMarks('website', ['link']);
   await superdoc.snapshot('link exists');
 
   // Re-select and open link dropdown, click Remove
@@ -116,9 +114,7 @@ test('remove link', async ({ superdoc }) => {
   await superdoc.snapshot('after link removed');
 
   // Assert link mark is gone — re-find position after removal
-  const posAfterRemove = await superdoc.findTextPos('website');
-  const marks = await superdoc.getMarksAtPos(posAfterRemove);
-  expect(marks).not.toContain('link');
+  await superdoc.assertTextLacksMarks('website', ['link']);
 
   // Assert the text itself is still there
   await superdoc.assertTextContains('website');

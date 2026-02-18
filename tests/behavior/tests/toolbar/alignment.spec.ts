@@ -1,28 +1,6 @@
-import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
+import { test, type SuperDocFixture } from '../../fixtures/superdoc.js';
 
 test.use({ config: { toolbar: 'full', showSelection: true } });
-
-async function assertTextAlign(superdoc: SuperDocFixture, pos: number, expected: string): Promise<void> {
-  await expect
-    .poll(() =>
-      superdoc.page.evaluate(
-        ({ p, align }: { p: number; align: string }) => {
-          const doc = (window as any).editor.state.doc;
-          const resolved = doc.resolve(p);
-          // Walk up to find the paragraph node
-          for (let depth = resolved.depth; depth > 0; depth--) {
-            const node = resolved.node(depth);
-            if (node.type.name === 'paragraph') {
-              return node.attrs.paragraphProperties?.justification === align;
-            }
-          }
-          return false;
-        },
-        { p: pos, align: expected },
-      ),
-    )
-    .toBe(true);
-}
 
 async function clickAlignment(superdoc: SuperDocFixture, ariaLabel: string): Promise<void> {
   // Open alignment dropdown
@@ -46,7 +24,7 @@ test('align text center', async ({ superdoc }) => {
   await clickAlignment(superdoc, 'Align center');
   await superdoc.snapshot('after align center');
 
-  await assertTextAlign(superdoc, pos, 'center');
+  await superdoc.assertTextAlignment('Center this text', 'center');
 });
 
 test('align text right', async ({ superdoc }) => {
@@ -61,7 +39,7 @@ test('align text right', async ({ superdoc }) => {
   await clickAlignment(superdoc, 'Align right');
   await superdoc.snapshot('after align right');
 
-  await assertTextAlign(superdoc, pos, 'right');
+  await superdoc.assertTextAlignment('Right aligned text', 'right');
 });
 
 test('justify text', async ({ superdoc }) => {
@@ -78,7 +56,7 @@ test('justify text', async ({ superdoc }) => {
   await clickAlignment(superdoc, 'Justify');
   await superdoc.snapshot('after justify');
 
-  await assertTextAlign(superdoc, pos, 'justify');
+  await superdoc.assertTextAlignment('Justified text needs', 'justify');
 });
 
 test('cycle through alignments', async ({ superdoc }) => {
@@ -93,17 +71,17 @@ test('cycle through alignments', async ({ superdoc }) => {
   // Center
   await clickAlignment(superdoc, 'Align center');
   await superdoc.snapshot('centered');
-  await assertTextAlign(superdoc, pos, 'center');
+  await superdoc.assertTextAlignment('Cycling alignment', 'center');
 
   // Right
   await clickAlignment(superdoc, 'Align right');
   await superdoc.snapshot('right aligned');
-  await assertTextAlign(superdoc, pos, 'right');
+  await superdoc.assertTextAlignment('Cycling alignment', 'right');
 
   // Back to left
   await clickAlignment(superdoc, 'Align left');
   await superdoc.snapshot('back to left');
-  await assertTextAlign(superdoc, pos, 'left');
+  await superdoc.assertTextAlignment('Cycling alignment', 'left');
 });
 
 test('alignment inside a table cell', async ({ superdoc }) => {
@@ -121,5 +99,5 @@ test('alignment inside a table cell', async ({ superdoc }) => {
   await clickAlignment(superdoc, 'Align center');
   await superdoc.snapshot('cell text centered');
 
-  await assertTextAlign(superdoc, pos, 'center');
+  await superdoc.assertTextAlignment('Cell text', 'center');
 });

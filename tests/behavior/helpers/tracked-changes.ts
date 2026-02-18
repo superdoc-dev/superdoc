@@ -11,6 +11,15 @@ interface TextNodeLike {
 }
 
 interface EditorLike {
+  doc?: {
+    trackChanges?: {
+      list?: (input?: Record<string, never>) => {
+        matches?: Array<{ entityId?: string }>;
+        changes?: Array<{ id?: string }>;
+      };
+      reject?: (input: { id: string }) => void;
+    };
+  };
   state?: {
     doc?: {
       descendants: (cb: (node: TextNodeLike) => void) => void;
@@ -32,6 +41,37 @@ type WindowWithEditor = Window & typeof globalThis & { editor?: EditorLike };
 export async function rejectAllTrackedChanges(page: Page): Promise<void> {
   await page.evaluate(() => {
     const editor = (window as WindowWithEditor).editor;
+    const docApi = editor?.doc;
+    const trackChangesApi = docApi?.trackChanges;
+    const listTrackedChanges = trackChangesApi?.list;
+    const rejectTrackedChange = trackChangesApi?.reject;
+
+    if (typeof listTrackedChanges === 'function' && typeof rejectTrackedChange === 'function') {
+      try {
+        const listed = listTrackedChanges({});
+        const ids = new Set<string>();
+
+        if (Array.isArray(listed?.changes)) {
+          for (const change of listed.changes) {
+            if (change?.id) ids.add(change.id);
+          }
+        }
+
+        if (Array.isArray(listed?.matches)) {
+          for (const match of listed.matches) {
+            if (match?.entityId) ids.add(match.entityId);
+          }
+        }
+
+        for (const id of ids) {
+          rejectTrackedChange({ id });
+        }
+        return;
+      } catch {
+        // Fall through to PM-state fallback if doc-api rejects.
+      }
+    }
+
     const doc = editor?.state?.doc;
     const rejectById = editor?.commands?.rejectTrackedChangeById;
     if (!doc || typeof rejectById !== 'function') return;

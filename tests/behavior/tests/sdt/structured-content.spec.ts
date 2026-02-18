@@ -65,15 +65,27 @@ async function hasClass(page: Page, selector: string, className: string): Promis
   );
 }
 
-/** Check whether the PM cursor is positioned inside a structuredContentBlock node. */
-async function isCursorInsideBlockSdt(page: Page): Promise<boolean> {
+/** Check whether the PM selection targets or is inside a structuredContentBlock node. */
+async function isSelectionOnBlockSdt(page: Page): Promise<boolean> {
   return page.evaluate(() => {
     const { state } = (window as any).editor;
-    const $pos = state.selection.$from;
+    const { selection } = state;
+    // NodeSelection wrapping the block SDT
+    if (selection.node?.type.name === 'structuredContentBlock') return true;
+    // TextSelection inside the block SDT
+    const $pos = selection.$from;
     for (let d = $pos.depth; d > 0; d--) {
       if ($pos.node(d).type.name === 'structuredContentBlock') return true;
     }
     return false;
+  });
+}
+
+/** Deselect the SDT by placing the cursor on the first line via PM command. */
+async function deselectSdt(page: Page) {
+  await page.evaluate(() => {
+    const editor = (window as any).editor;
+    editor.commands.setTextSelection({ from: 5, to: 5 });
   });
 }
 
@@ -109,6 +121,10 @@ test.describe('block structured content', () => {
   });
 
   test('block SDT shows hover state on mouse enter', async ({ superdoc }) => {
+    // Deselect the SDT first — hover is suppressed while ProseMirror-selectednode is active
+    await deselectSdt(superdoc.page);
+    await superdoc.waitForStable();
+
     const center = await getCenter(superdoc.page, BLOCK_SDT);
 
     // Move mouse over the block SDT
@@ -132,6 +148,10 @@ test.describe('block structured content', () => {
   });
 
   test('block SDT removes hover state on mouse leave', async ({ superdoc }) => {
+    // Deselect first so hover class can apply
+    await deselectSdt(superdoc.page);
+    await superdoc.waitForStable();
+
     const center = await getCenter(superdoc.page, BLOCK_SDT);
 
     // Hover over the SDT
@@ -158,26 +178,22 @@ test.describe('block structured content', () => {
     await superdoc.waitForStable();
 
     // Cursor should be inside the structuredContentBlock node
-    expect(await isCursorInsideBlockSdt(superdoc.page)).toBe(true);
+    expect(await isSelectionOnBlockSdt(superdoc.page)).toBe(true);
 
     await superdoc.snapshot('block SDT cursor placed');
   });
 
-  test('clicking outside block SDT moves cursor out of the block', async ({ superdoc }) => {
-    const center = await getCenter(superdoc.page, BLOCK_SDT);
-
-    // Click inside the block SDT
-    await superdoc.page.mouse.click(center.x, center.y);
-    await superdoc.waitForStable();
-    expect(await isCursorInsideBlockSdt(superdoc.page)).toBe(true);
+  test('moving cursor outside block SDT leaves the block', async ({ superdoc }) => {
+    // SDT is auto-selected after insertion
+    expect(await isSelectionOnBlockSdt(superdoc.page)).toBe(true);
     await superdoc.snapshot('cursor inside block SDT');
 
-    // Click on the text before the SDT (outside the block)
-    await superdoc.clickOnLine(0, 10);
+    // Move cursor to the text before the SDT
+    await deselectSdt(superdoc.page);
     await superdoc.waitForStable();
 
     // Cursor should no longer be inside the block SDT
-    expect(await isCursorInsideBlockSdt(superdoc.page)).toBe(false);
+    expect(await isSelectionOnBlockSdt(superdoc.page)).toBe(false);
 
     await superdoc.snapshot('cursor outside block SDT');
   });
@@ -188,7 +204,7 @@ test.describe('block structured content', () => {
     // Click inside the block SDT
     await superdoc.page.mouse.click(center.x, center.y);
     await superdoc.waitForStable();
-    expect(await isCursorInsideBlockSdt(superdoc.page)).toBe(true);
+    expect(await isSelectionOnBlockSdt(superdoc.page)).toBe(true);
     await superdoc.snapshot('block SDT cursor before hover cycle');
 
     // Move mouse away and back — cursor should stay inside the block
@@ -196,7 +212,7 @@ test.describe('block structured content', () => {
     await superdoc.waitForStable();
 
     // Cursor should still be inside (mouse move doesn't change selection)
-    expect(await isCursorInsideBlockSdt(superdoc.page)).toBe(true);
+    expect(await isSelectionOnBlockSdt(superdoc.page)).toBe(true);
 
     await superdoc.snapshot('block SDT cursor after hover cycle');
   });
@@ -246,29 +262,32 @@ test.describe('inline structured content', () => {
   });
 
   test('inline SDT shows hover highlight', async ({ superdoc }) => {
+    // Deselect the inline SDT so hover styles can apply
+    await deselectSdt(superdoc.page);
+    await superdoc.waitForStable();
+
     const center = await getCenter(superdoc.page, INLINE_SDT);
 
     // Hover over the inline SDT
     await superdoc.page.mouse.move(center.x, center.y);
     await superdoc.waitForStable();
 
-    // Inline uses CSS :hover (not a class), so check computed background
+    // Inline uses CSS :hover — check that background changes to indicate hover
     const hasBg = await superdoc.page.evaluate((sel) => {
       const el = document.querySelector(sel);
       if (!el) return false;
       const bg = getComputedStyle(el).backgroundColor;
-      // Should have a non-transparent background on hover
       return bg !== '' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
     }, INLINE_SDT);
     expect(hasBg).toBe(true);
 
-    // Label should appear on hover
-    const labelVisible = await superdoc.page.evaluate((sel) => {
+    // Inline label stays hidden on hover (display: none) — it only shows on selection
+    const labelHidden = await superdoc.page.evaluate((sel) => {
       const label = document.querySelector(sel);
-      if (!label) return false;
-      return getComputedStyle(label).display !== 'none';
+      if (!label) return true;
+      return getComputedStyle(label).display === 'none';
     }, INLINE_LABEL);
-    expect(labelVisible).toBe(true);
+    expect(labelHidden).toBe(true);
 
     await superdoc.snapshot('inline SDT hovered');
   });

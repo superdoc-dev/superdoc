@@ -3,9 +3,9 @@ import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
 test.use({ config: { toolbar: 'full', showSelection: true } });
 
 /**
- * Insert a 2x2 table, type text in the first cell, select it, and return the position.
+ * Insert a 2x2 table, type text in the first cell, and select it.
  */
-async function insertTableAndTypeInCell(superdoc: SuperDocFixture, text: string): Promise<number> {
+async function insertTableAndTypeInCell(superdoc: SuperDocFixture, text: string): Promise<void> {
   await superdoc.executeCommand('insertTable', { rows: 2, cols: 2, withHeaderRow: false });
   await superdoc.waitForStable();
 
@@ -15,8 +15,6 @@ async function insertTableAndTypeInCell(superdoc: SuperDocFixture, text: string)
   const pos = await superdoc.findTextPos(text);
   await superdoc.setTextSelection(pos, pos + text.length);
   await superdoc.waitForStable();
-
-  return pos;
 }
 
 test('bold inside a table cell', async ({ superdoc }) => {
@@ -30,8 +28,7 @@ test('bold inside a table cell', async ({ superdoc }) => {
   await expect(boldButton).toHaveClass(/active/);
   await superdoc.snapshot('bold applied in cell');
 
-  const pos = await superdoc.findTextPos('table text');
-  await superdoc.assertMarksAtPos(pos, ['bold']);
+  await superdoc.assertTextHasMarks('table text', ['bold']);
 });
 
 test('multiple styles in one cell', async ({ superdoc }) => {
@@ -59,10 +56,9 @@ test('multiple styles in one cell', async ({ superdoc }) => {
   await expect(colorBar).toHaveCSS('background-color', 'rgb(210, 0, 63)');
   await superdoc.snapshot('bold + italic + red color applied');
 
-  // Assert all PM marks
-  const pos = await superdoc.findTextPos('styled cell');
-  await superdoc.assertMarksAtPos(pos, ['bold', 'italic']);
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { color: '#D2003F' });
+  // Assert all marks
+  await superdoc.assertTextHasMarks('styled cell', ['bold', 'italic']);
+  await superdoc.assertTextMarkAttrs('styled cell', 'textStyle', { color: '#D2003F' });
 });
 
 test('different styles in different cells', async ({ superdoc }) => {
@@ -95,16 +91,12 @@ test('different styles in different cells', async ({ superdoc }) => {
   await superdoc.snapshot('second cell italicized');
 
   // Assert first cell is bold (not italic)
-  pos1 = await superdoc.findTextPos('bold cell');
-  await superdoc.assertMarksAtPos(pos1, ['bold']);
-  const marks1 = await superdoc.getMarksAtPos(pos1);
-  expect(marks1).not.toContain('italic');
+  await superdoc.assertTextHasMarks('bold cell', ['bold']);
+  await superdoc.assertTextLacksMarks('bold cell', ['italic']);
 
   // Assert second cell is italic (not bold)
-  pos2 = await superdoc.findTextPos('italic cell');
-  await superdoc.assertMarksAtPos(pos2, ['italic']);
-  const marks2 = await superdoc.getMarksAtPos(pos2);
-  expect(marks2).not.toContain('bold');
+  await superdoc.assertTextHasMarks('italic cell', ['italic']);
+  await superdoc.assertTextLacksMarks('italic cell', ['bold']);
 });
 
 test('font family and size in a table cell', async ({ superdoc }) => {
@@ -129,10 +121,9 @@ test('font family and size in a table cell', async ({ superdoc }) => {
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('24');
   await superdoc.snapshot('Georgia 24pt applied in cell');
 
-  // Assert PM marks
-  const pos = await superdoc.findTextPos('fancy text');
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontFamily: 'Georgia' });
-  await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontSize: '24pt' });
+  // Assert text style
+  await superdoc.assertTextMarkAttrs('fancy text', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('fancy text', 'textStyle', { fontSize: '24pt' });
 });
 
 test('styles survive cell navigation', async ({ superdoc }) => {
@@ -163,6 +154,5 @@ test('styles survive cell navigation', async ({ superdoc }) => {
   await superdoc.snapshot('navigated back to first cell');
 
   // Assert bold still present on first cell text
-  pos = await superdoc.findTextPos('persist me');
-  await superdoc.assertMarksAtPos(pos, ['bold']);
+  await superdoc.assertTextHasMarks('persist me', ['bold']);
 });

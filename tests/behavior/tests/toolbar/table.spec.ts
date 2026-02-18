@@ -2,6 +2,30 @@ import { test, expect } from '../../fixtures/superdoc.js';
 
 test.use({ config: { toolbar: 'full', showSelection: true } });
 
+async function countTableCells(superdoc: { page: import('@playwright/test').Page }): Promise<number> {
+  return superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    const docApi = editor?.doc;
+    if (docApi?.find) {
+      const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
+      const tableAddress = tableResult?.matches?.[0];
+      if (!tableAddress) return 0;
+      const countCellsByType = (nodeType: 'tableCell' | 'tableHeader'): number => {
+        const result = docApi.find({ select: { type: 'node', nodeType }, within: tableAddress });
+        return Array.isArray(result?.matches) ? result.matches.length : 0;
+      };
+      return countCellsByType('tableCell') + countCellsByType('tableHeader');
+    }
+
+    const doc = editor.state.doc;
+    let cells = 0;
+    doc.descendants((node: any) => {
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') cells++;
+    });
+    return cells;
+  });
+}
+
 test('insert table via toolbar grid', async ({ superdoc }) => {
   await superdoc.type('Text before table');
   await superdoc.newLine();
@@ -22,6 +46,15 @@ test('insert table via toolbar grid', async ({ superdoc }) => {
 
   // Assert table exists with 3 rows and 3 columns
   await superdoc.assertTableExists(3, 3);
+});
+
+test('header-row tables count headers as cells', async ({ superdoc }) => {
+  await superdoc.executeCommand('insertTable', { rows: 2, cols: 3, withHeaderRow: true });
+  await superdoc.waitForStable();
+  await superdoc.snapshot('2x3 header-row table inserted');
+
+  await superdoc.assertTableExists(2, 3);
+  await expect.poll(() => countTableCells(superdoc)).toBe(6);
 });
 
 test('type and navigate between cells with Tab', async ({ superdoc }) => {
@@ -139,14 +172,7 @@ test('merge and split cells', async ({ superdoc }) => {
   await superdoc.snapshot('cells merged');
 
   // Count cells — first row should have 1 cell instead of 2
-  const cellCount = await superdoc.page.evaluate(() => {
-    const doc = (window as any).editor.state.doc;
-    let cells = 0;
-    doc.descendants((node: any) => {
-      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') cells++;
-    });
-    return cells;
-  });
+  const cellCount = await countTableCells(superdoc);
   // 2x2 table with first row merged = 3 cells (1 merged + 2 in second row)
   expect(cellCount).toBe(3);
 
@@ -155,13 +181,6 @@ test('merge and split cells', async ({ superdoc }) => {
   await superdoc.waitForStable();
   await superdoc.snapshot('cells split back');
 
-  const cellCountAfterSplit = await superdoc.page.evaluate(() => {
-    const doc = (window as any).editor.state.doc;
-    let cells = 0;
-    doc.descendants((node: any) => {
-      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') cells++;
-    });
-    return cells;
-  });
+  const cellCountAfterSplit = await countTableCells(superdoc);
   expect(cellCountAfterSplit).toBe(4);
 });

@@ -64,7 +64,7 @@ test('my feature works', async ({ superdoc }) => {
   await superdoc.bold();
   await superdoc.waitForStable();
 
-  await superdoc.assertMarksAtPos(pos, ['bold']);
+  await superdoc.assertTextHasMarks('Hello', ['bold']);
   await superdoc.snapshot('bold applied');  // only captured when SCREENSHOTS=1
 });
 ```
@@ -90,7 +90,7 @@ Pass via `test.use({ config: { ... } })`:
 `type()`, `press()`, `newLine()`, `shortcut()`, `bold()`, `italic()`, `underline()`, `undo()`, `redo()`, `selectAll()`, `tripleClickLine()`, `clickOnLine()`, `setTextSelection()`, `executeCommand()`, `setDocumentMode()`, `loadDocument()`, `waitForStable()`
 
 **Assert:**
-`assertTextContent()`, `assertTextContains()`, `assertLineText()`, `assertLineCount()`, `assertPageCount()`, `assertMarksAtPos()`, `assertMarkActive()`, `assertMarkAttrsAtPos()`, `assertTableExists()`, `assertElementExists()`, `assertElementVisible()`, `assertElementHidden()`, `assertElementCount()`, `assertSelection()`, `assertLinkExists()`, `assertTrackedChangeExists()`, `assertDocumentMode()`
+`assertTextContent()`, `assertTextContains()`, `assertLineText()`, `assertLineCount()`, `assertPageCount()`, `assertTextHasMarks()`, `assertTextLacksMarks()`, `assertTextMarkAttrs()`, `assertTextAlignment()`, `assertMarksAtPos()`, `assertMarkActive()`, `assertMarkAttrsAtPos()`, `assertTableExists()`, `assertElementExists()`, `assertElementVisible()`, `assertElementHidden()`, `assertElementCount()`, `assertSelection()`, `assertLinkExists()`, `assertTrackedChangeExists()`, `assertDocumentMode()`
 
 **Get (for custom assertions):**
 `getTextContent()`, `getSelection()`, `getMarksAtPos()`, `getMarkAttrsAtPos()`, `findTextPos()`
@@ -110,5 +110,6 @@ test('renders imported doc', async ({ superdoc }) => {
 
 - Call `waitForStable()` after interactions that mutate the DOM before making assertions.
 - Use `findTextPos()` + `setTextSelection()` instead of clicking to select text — it's deterministic.
+- Prefer text-based assertions (`assertTextHasMarks`, `assertTextMarkAttrs`, `assertTextAlignment`) to avoid PM position coupling.
 - Use `executeCommand()` to call ProseMirror commands directly (e.g. `insertTable`).
 - Access `superdoc.page` for any raw Playwright API when the fixture methods aren't enough.

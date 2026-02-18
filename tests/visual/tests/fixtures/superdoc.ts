@@ -12,6 +12,7 @@ interface HarnessConfig {
   toolbar?: 'none' | 'minimal' | 'full';
   comments?: 'off' | 'on' | 'panel' | 'readonly';
   trackChanges?: boolean;
+  extensions?: string[];
   hideCaret?: boolean;
   hideSelection?: boolean;
   width?: number;
@@ -24,6 +25,7 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   if (config.toolbar) params.set('toolbar', config.toolbar);
   if (config.comments) params.set('comments', config.comments);
   if (config.trackChanges) params.set('trackChanges', '1');
+  if (config.extensions?.length) params.set('extensions', config.extensions.join(','));
   if (config.hideCaret !== undefined) params.set('hideCaret', config.hideCaret ? '1' : '0');
   if (config.hideSelection !== undefined) params.set('hideSelection', config.hideSelection ? '1' : '0');
   if (config.width) params.set('width', String(config.width));

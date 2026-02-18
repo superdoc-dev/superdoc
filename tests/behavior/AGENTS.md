@@ -1,9 +1,14 @@
 # Writing Behavior Tests — Agent Guide
 
+## Explicit: Run and Debug with Playwright CLI
+
+While creating tests, agents are encouraged to run the harness and tests directly with Playwright CLI to iterate quickly, inspect behavior, and debug issues in real time. Use modes like headed/UI/trace as needed (`playwright test --headed`, `playwright test --ui`, `TRACE=1 playwright test`).
+
 ## Core Rule
 
 SuperDoc uses a custom rendering pipeline (DomPainter), NOT ProseMirror's DOM output.
-**Assert against ProseMirror state**, not rendered DOM, for document content, marks, and structure.
+**Prefer Document API assertions (`editor.doc.*`) for content, structure, and formatting.**
+Use ProseMirror state only when the behavior under test is selection-specific or not yet exposed by document-api.
 
 ## Imports
 
@@ -80,13 +85,19 @@ const pos = await superdoc.findTextPos('website');
 await superdoc.setTextSelection(pos, pos + 'website'.length);
 await applyLink(superdoc, 'https://example.com');
 
-// Bad — pos is stale, PM may have shifted positions
-await superdoc.assertMarksAtPos(pos, ['link']);
+// Bad — reusing stale positions for another selection can target the wrong span
+await superdoc.setTextSelection(pos, pos + 'website'.length);
 
 // Good — re-find after the mark was applied
 const freshPos = await superdoc.findTextPos('website');
-await superdoc.assertMarksAtPos(freshPos, ['link']);
+await superdoc.setTextSelection(freshPos, freshPos + 'website'.length);
+
+// Prefer text-based assertions so no position refresh is needed for assertions
+await superdoc.assertTextHasMarks('website', ['link']);
 ```
+
+This is mainly relevant for selection workflows. For formatting assertions, prefer text-based fixture helpers
+(`assertTextHasMarks`, `assertTextMarkAttrs`) so tests do not depend on PM positions.
 
 ## Selecting Text
 
@@ -101,12 +112,13 @@ await superdoc.waitForStable();
 
 ## Asserting Marks and Styles
 
-Use PM state assertions, not DOM inspection:
+Use document-api-backed text assertions from the fixture, not DOM inspection:
 
 ```ts
-// Good — asserts against PM state
-await superdoc.assertMarksAtPos(pos, ['bold', 'italic']);
-await superdoc.assertMarkAttrsAtPos(pos, 'textStyle', { fontFamily: 'Georgia' });
+// Good — text-targeted assertions (doc-api first, PM fallback)
+await superdoc.assertTextHasMarks('target text', ['bold', 'italic']);
+await superdoc.assertTextMarkAttrs('target text', 'textStyle', { fontFamily: 'Georgia' });
+await superdoc.assertTextMarkAttrs('target text', 'link', { href: 'https://example.com' });
 
 // Bad — fragile, depends on DomPainter's rendering implementation
 const el = superdoc.page.locator('.some-rendered-span');
@@ -147,15 +159,15 @@ Dropdown workflow: click the button to open, then click the option, with `waitFo
 
 ## Tables
 
-DomPainter renders tables as flat divs, not `<table>/<tr>/<td>`. Always use PM state for
-table assertions:
+DomPainter renders tables as flat divs, not `<table>/<tr>/<td>`. Use fixture assertions for
+table structure (document-api first, PM fallback):
 
 ```ts
 // Insert via command, not toolbar (faster, more reliable)
 await superdoc.executeCommand('insertTable', { rows: 2, cols: 2, withHeaderRow: false });
 await superdoc.waitForStable();
 
-// Assert structure via PM state
+// Assert structure
 await superdoc.assertTableExists(2, 2);
 
 // Navigate between cells
@@ -163,10 +175,13 @@ await superdoc.press('Tab');       // next cell
 await superdoc.press('Shift+Tab'); // previous cell
 ```
 
+`assertTableExists()` is document-api-first and falls back to PM in harnesses without `editor.doc`.
+
 ## Using page.evaluate()
 
 For anything the fixture doesn't cover, use `superdoc.page.evaluate()` to run code in the
 browser. The editor is on `window.editor` and the SuperDoc instance on `window.superdoc`.
+If exposed, document-api is on `window.editor.doc`.
 
 ```ts
 const result = await superdoc.page.evaluate(() => {
@@ -235,7 +250,8 @@ Use `test.describe()` + `test.beforeEach()` when a group of tests shares identic
    state (e.g. `waitFor({ state: 'hidden' })`) instead.
 3. **Using stale positions after mark changes** — PM re-indexes after marks are applied.
    Always call `findTextPos()` again after applying/removing marks.
-4. **Asserting DOM for content** — DomPainter's output differs from PM's DOM. Use PM state.
+4. **Asserting DOM for content** — DomPainter's output differs from the editor model.
+   Prefer document-api fixture helpers for content/format assertions.
 5. **Clicking to select text** — fragile across browsers. Use `findTextPos()` + `setTextSelection()`.
 6. **Writing custom settle helpers** — use the fixture's `waitForStable()`.
 7. **Importing from `@playwright/test`** — the fixture re-exports `test` and `expect` with

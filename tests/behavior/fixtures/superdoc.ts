@@ -17,6 +17,26 @@ interface HarnessConfig {
 
 type DocumentMode = 'editing' | 'suggesting' | 'viewing';
 
+type TextRange = {
+  blockId: string;
+  start: number;
+  end: number;
+};
+
+type InlineSpan = {
+  blockId: string;
+  start: number;
+  end: number;
+  properties: Record<string, unknown>;
+};
+
+type DocTextSnapshot = {
+  ranges: TextRange[];
+  blockAddress: unknown;
+  runs: InlineSpan[];
+  hyperlinks: InlineSpan[];
+};
+
 function buildHarnessUrl(config: HarnessConfig = {}): string {
   const params = new URLSearchParams();
   if (config.layout !== undefined) params.set('layout', config.layout ? '1' : '0');
@@ -80,7 +100,198 @@ async function waitForStable(page: Page, ms?: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function createFixture(page: Page, editor: Locator, modKey: string) {
-  return {
+  const hasDocumentApiMethod = async (methodName: string): Promise<boolean> =>
+    page.evaluate((name) => typeof (window as any).editor?.doc?.[name] === 'function', methodName);
+
+  const normalizeHexColor = (value: unknown): string | null => {
+    if (typeof value !== 'string') return null;
+    const normalized = value.replace(/^#/, '').trim().toUpperCase();
+    return normalized || null;
+  };
+
+  const matchesTextStyleAttr = (props: Record<string, unknown>, key: string, expectedValue: unknown): boolean => {
+    if (key === 'fontFamily') {
+      return props.font === expectedValue;
+    }
+
+    if (key === 'color') {
+      const expectedColor = normalizeHexColor(expectedValue);
+      return expectedColor ? normalizeHexColor(props.color) === expectedColor : false;
+    }
+
+    if (key === 'fontSize') {
+      const parsed =
+        typeof expectedValue === 'number'
+          ? expectedValue
+          : Number.parseFloat(String(expectedValue).replace(/pt$/i, ''));
+      if (!Number.isFinite(parsed)) return false;
+      const sizeValue = props.size;
+      if (typeof sizeValue !== 'number') return false;
+      return [parsed, parsed * 2, parsed / 2].some((candidate) => Math.abs(sizeValue - candidate) < 0.01);
+    }
+
+    return false;
+  };
+
+  const getTextContentWithFallback = async (): Promise<string> =>
+    page.evaluate(() => {
+      const editor = (window as any).editor;
+      const docApi = editor?.doc;
+      if (docApi?.getText) {
+        try {
+          return docApi.getText({});
+        } catch {
+          // Fall back to PM state for harnesses that do not expose doc-api.
+        }
+      }
+      return editor.state.doc.textContent;
+    });
+
+  const getDocTextSnapshot = async (text: string, occurrence = 0): Promise<DocTextSnapshot | null> =>
+    page.evaluate(
+      ({ searchText, matchIndex }) => {
+        const docApi = (window as any).editor?.doc;
+        if (!docApi?.find) return null;
+
+        const textResult = docApi.find({
+          select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
+        });
+        const contexts = Array.isArray(textResult?.context) ? textResult.context : [];
+        const context = contexts[matchIndex];
+        if (!context) return null;
+
+        const ranges = Array.isArray(context.textRanges)
+          ? context.textRanges.map((range: any) => ({
+              blockId: range.blockId,
+              start: range.range.start,
+              end: range.range.end,
+            }))
+          : [];
+        if (!ranges.length) return null;
+
+        const blockAddress = context.address;
+        if (!blockAddress) return null;
+
+        const toInlineSpans = (result: any): InlineSpan[] => {
+          const matches = Array.isArray(result?.matches) ? result.matches : [];
+          const nodes = Array.isArray(result?.nodes) ? result.nodes : [];
+          const spans: InlineSpan[] = [];
+
+          for (let i = 0; i < matches.length; i++) {
+            const address = matches[i];
+            if (address?.kind !== 'inline') continue;
+            const start = address.anchor?.start;
+            const end = address.anchor?.end;
+            if (!start || !end) continue;
+            spans.push({
+              blockId: start.blockId,
+              start: start.offset,
+              end: end.offset,
+              properties:
+                nodes[i] &&
+                typeof nodes[i] === 'object' &&
+                nodes[i].properties &&
+                typeof nodes[i].properties === 'object'
+                  ? nodes[i].properties
+                  : {},
+            });
+          }
+
+          return spans;
+        };
+
+        const runResult = docApi.find({
+          select: { type: 'node', nodeType: 'run', kind: 'inline' },
+          within: blockAddress,
+          includeNodes: true,
+        });
+
+        const hyperlinkResult = docApi.find({
+          select: { type: 'node', nodeType: 'hyperlink', kind: 'inline' },
+          within: blockAddress,
+          includeNodes: true,
+        });
+
+        return {
+          ranges,
+          blockAddress,
+          runs: toInlineSpans(runResult),
+          hyperlinks: toInlineSpans(hyperlinkResult),
+        } satisfies DocTextSnapshot;
+      },
+      { searchText: text, matchIndex: occurrence },
+    );
+
+  const overlapsRange = (span: InlineSpan, ranges: TextRange[]): boolean =>
+    ranges.some((range) => {
+      if (range.blockId !== span.blockId) return false;
+      return Math.max(span.start, range.start) < Math.min(span.end, range.end);
+    });
+
+  const getDocMarksByText = async (text: string, occurrence = 0): Promise<string[] | null> => {
+    const snapshot = await getDocTextSnapshot(text, occurrence);
+    if (!snapshot) return null;
+
+    const marks = new Set<string>();
+    for (const run of snapshot.runs) {
+      if (!overlapsRange(run, snapshot.ranges)) continue;
+      if (run.properties.bold === true) marks.add('bold');
+      if (run.properties.italic === true) marks.add('italic');
+      if (run.properties.underline === true) marks.add('underline');
+      if (run.properties.highlight) marks.add('highlight');
+    }
+    for (const link of snapshot.hyperlinks) {
+      if (overlapsRange(link, snapshot.ranges)) marks.add('link');
+    }
+
+    return [...marks];
+  };
+
+  const getDocRunPropertiesByText = async (
+    text: string,
+    occurrence = 0,
+  ): Promise<Array<Record<string, unknown>> | null> => {
+    const snapshot = await getDocTextSnapshot(text, occurrence);
+    if (!snapshot) return null;
+    const runs = snapshot.runs.filter((run) => overlapsRange(run, snapshot.ranges));
+    return runs.map((run) => run.properties);
+  };
+
+  const getDocLinkHrefsByText = async (text: string, occurrence = 0): Promise<string[] | null> => {
+    const snapshot = await getDocTextSnapshot(text, occurrence);
+    if (!snapshot) return null;
+
+    const hrefs = snapshot.hyperlinks
+      .filter((link) => overlapsRange(link, snapshot.ranges))
+      .map((link) => link.properties.href)
+      .filter((href): href is string => typeof href === 'string');
+
+    return hrefs;
+  };
+
+  const assertAlignmentViaPm = async (text: string, expectedAlignment: string, occurrence = 0): Promise<void> => {
+    const pos = await fixture.findTextPos(text, occurrence);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ p, alignment }) => {
+            const doc = (window as any).editor.state.doc;
+            const resolved = doc.resolve(p);
+            for (let depth = resolved.depth; depth > 0; depth--) {
+              const node = resolved.node(depth);
+              if (node.type.name === 'paragraph') {
+                return node.attrs.paragraphProperties?.justification === alignment;
+              }
+            }
+            return false;
+          },
+          { p: pos, alignment: expectedAlignment },
+        ),
+      )
+      .toBe(true);
+  };
+
+  const fixture = {
     page,
 
     // ----- Interaction methods -----
@@ -231,15 +442,15 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     // ----- Assertion methods -----
 
     async assertTextContent(expected: string) {
-      await expect.poll(() => page.evaluate(() => (window as any).editor.state.doc.textContent)).toBe(expected);
+      await expect.poll(() => fixture.getTextContent()).toBe(expected);
     },
 
     async assertTextContains(sub: string) {
-      await expect.poll(() => page.evaluate(() => (window as any).editor.state.doc.textContent)).toContain(sub);
+      await expect.poll(() => fixture.getTextContent()).toContain(sub);
     },
 
     async assertTextNotContains(sub: string) {
-      await expect.poll(() => page.evaluate(() => (window as any).editor.state.doc.textContent)).not.toContain(sub);
+      await expect.poll(() => fixture.getTextContent()).not.toContain(sub);
     },
 
     async assertLineText(lineIndex: number, expected: string) {
@@ -311,8 +522,76 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
         .toEqual(expect.arrayContaining(expectedNames));
     },
 
+    async assertTextHasMarks(text: string, expectedNames: string[], occurrence = 0) {
+      const supportedByDocApi = expectedNames.every((name) =>
+        ['bold', 'italic', 'underline', 'highlight', 'link'].includes(name),
+      );
+
+      if (supportedByDocApi && (await hasDocumentApiMethod('find'))) {
+        const marks = await getDocMarksByText(text, occurrence);
+        if (marks && expectedNames.every((name) => marks.includes(name))) return;
+      }
+
+      const pos = await fixture.findTextPos(text, occurrence);
+      await fixture.assertMarksAtPos(pos, expectedNames);
+    },
+
+    async assertTextLacksMarks(text: string, disallowedNames: string[], occurrence = 0) {
+      const supportedByDocApi = disallowedNames.every((name) =>
+        ['bold', 'italic', 'underline', 'highlight', 'link'].includes(name),
+      );
+
+      if (supportedByDocApi && (await hasDocumentApiMethod('find'))) {
+        const marks = await getDocMarksByText(text, occurrence);
+        if (marks && disallowedNames.every((name) => !marks.includes(name))) return;
+      }
+
+      const pos = await fixture.findTextPos(text, occurrence);
+      const marks = await fixture.getMarksAtPos(pos);
+      for (const markName of disallowedNames) {
+        expect(marks).not.toContain(markName);
+      }
+    },
+
     async assertTableExists(rows?: number, cols?: number) {
-      // DomPainter renders tables as flat divs, not <tr>/<td>. Use PM state.
+      if (await hasDocumentApiMethod('find')) {
+        await expect
+          .poll(() =>
+            page.evaluate(
+              ({ expectedRows, expectedCols }) => {
+                const docApi = (window as any).editor?.doc;
+                if (!docApi?.find) return 'doc api unavailable';
+
+                const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
+                const tableAddress = tableResult?.matches?.[0];
+                if (!tableAddress) return 'no table found in document';
+
+                const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
+                const rowCount = Array.isArray(rowResult?.matches) ? rowResult.matches.length : 0;
+
+                let firstRowCols = 0;
+                if (rowCount > 0) {
+                  const firstRowAddress = rowResult.matches[0];
+                  const countCellsByType = (nodeType: 'tableCell' | 'tableHeader'): number => {
+                    const result = docApi.find({ select: { type: 'node', nodeType }, within: firstRowAddress });
+                    return Array.isArray(result?.matches) ? result.matches.length : 0;
+                  };
+                  firstRowCols = countCellsByType('tableCell') + countCellsByType('tableHeader');
+                }
+
+                if (expectedRows !== undefined && rowCount !== expectedRows)
+                  return `expected ${expectedRows} rows, got ${rowCount}`;
+                if (expectedCols !== undefined && firstRowCols !== expectedCols)
+                  return `expected ${expectedCols} columns, got ${firstRowCols}`;
+                return 'ok';
+              },
+              { expectedRows: rows, expectedCols: cols },
+            ),
+          )
+          .toBe('ok');
+        return;
+      }
+
       await expect
         .poll(() =>
           page.evaluate(
@@ -447,10 +726,64 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
         .toEqual(expect.objectContaining(attrs));
     },
 
+    async assertTextMarkAttrs(text: string, markName: string, attrs: Record<string, unknown>, occurrence = 0) {
+      if (markName === 'link' && (await hasDocumentApiMethod('find'))) {
+        const hrefs = await getDocLinkHrefsByText(text, occurrence);
+        if (hrefs && typeof attrs.href === 'string') {
+          expect(hrefs).toContain(attrs.href);
+          return;
+        }
+      }
+
+      if (markName === 'textStyle' && (await hasDocumentApiMethod('find'))) {
+        const runProperties = await getDocRunPropertiesByText(text, occurrence);
+        if (runProperties && runProperties.length > 0) {
+          const entries = Object.entries(attrs);
+          const allMatched = runProperties.some((props) =>
+            entries.every(([key, expectedValue]) => matchesTextStyleAttr(props, key, expectedValue)),
+          );
+
+          if (allMatched) return;
+        }
+      }
+
+      const pos = await fixture.findTextPos(text, occurrence);
+      await fixture.assertMarkAttrsAtPos(pos, markName, attrs);
+    },
+
+    async assertTextAlignment(text: string, expectedAlignment: string, occurrence = 0) {
+      if ((await hasDocumentApiMethod('find')) && (await hasDocumentApiMethod('getNode'))) {
+        const alignment = await page.evaluate(
+          ({ searchText, matchIndex }) => {
+            const docApi = (window as any).editor?.doc;
+            if (!docApi?.find || !docApi?.getNode) return null;
+
+            const textResult = docApi.find({
+              select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
+            });
+            const contexts = Array.isArray(textResult?.context) ? textResult.context : [];
+            const context = contexts[matchIndex];
+            if (!context?.address) return null;
+
+            const node = docApi.getNode(context.address);
+            return node?.properties?.alignment ?? null;
+          },
+          { searchText: text, matchIndex: occurrence },
+        );
+
+        if (typeof alignment === 'string') {
+          expect(alignment).toBe(expectedAlignment);
+          return;
+        }
+      }
+
+      await assertAlignmentViaPm(text, expectedAlignment, occurrence);
+    },
+
     // ----- Getter methods -----
 
     async getTextContent(): Promise<string> {
-      return page.evaluate(() => (window as any).editor.state.doc.textContent);
+      return getTextContentWithFallback();
     },
 
     async getSelection(): Promise<{ from: number; to: number }> {
@@ -476,21 +809,39 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
       }, pos);
     },
 
-    async findTextPos(text: string): Promise<number> {
-      return page.evaluate((search) => {
-        const doc = (window as any).editor.state.doc;
-        let found = -1;
-        doc.descendants((node: any, pos: number) => {
-          if (found !== -1) return false;
-          if (node.isText && node.text && node.text.includes(search)) {
-            found = pos + node.text.indexOf(search);
-          }
-        });
-        if (found === -1) throw new Error(`Text "${search}" not found in document`);
-        return found;
-      }, text);
+    async findTextPos(text: string, occurrence = 0): Promise<number> {
+      return page.evaluate(
+        ({ search, targetOccurrence }) => {
+          const doc = (window as any).editor.state.doc;
+          let found = -1;
+          let seen = 0;
+
+          doc.descendants((node: any, pos: number) => {
+            if (found !== -1) return false;
+            if (!node.isText || !node.text) return;
+
+            let fromIndex = 0;
+            while (fromIndex <= node.text.length) {
+              const hit = node.text.indexOf(search, fromIndex);
+              if (hit === -1) break;
+              if (seen === targetOccurrence) {
+                found = pos + hit;
+                return false;
+              }
+              seen++;
+              fromIndex = hit + 1;
+            }
+          });
+
+          if (found === -1) throw new Error(`Text "${search}" (occurrence ${targetOccurrence}) not found in document`);
+          return found;
+        },
+        { search: text, targetOccurrence: occurrence },
+      );
     },
   };
+
+  return fixture;
 }
 
 export type SuperDocFixture = ReturnType<typeof createFixture>;

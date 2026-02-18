@@ -1,3 +1,4 @@
+import type { SuperDoc } from 'superdoc';
 import type { TemplateField, SuperDocTemplateBuilderProps, ToolbarConfig } from './types';
 
 export const areTemplateFieldsEqual = (a: TemplateField[], b: TemplateField[]): boolean => {
@@ -51,6 +52,12 @@ export const resolveToolbar = (toolbar: SuperDocTemplateBuilderProps['toolbar'])
     config,
     renderDefaultContainer: selector === undefined,
   };
+};
+
+export const getPresentationEditor = (superdoc: SuperDoc | null) => {
+  const docs = (superdoc as any)?.superdocStore?.documents;
+  if (!Array.isArray(docs) || docs.length === 0) return null;
+  return docs[0].getPresentationEditor?.() ?? null;
 };
 
 export const MENU_VIEWPORT_PADDING = 10;

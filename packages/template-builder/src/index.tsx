@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback, useMemo, forwardRef, useImper
 import type { SuperDoc } from 'superdoc';
 import type * as Types from './types';
 import { FieldMenu, FieldList } from './defaults';
-import { areTemplateFieldsEqual, resolveToolbar, clampToViewport } from './utils';
+import { areTemplateFieldsEqual, resolveToolbar, clampToViewport, getPresentationEditor } from './utils';
 
 export * from './types';
 export { FieldMenu, FieldList };
@@ -348,8 +348,9 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
                 const text = state.doc.textBetween(triggerStart, from);
 
                 if (text === trigger) {
-                  const coords = e.view.coordsAtPos(from);
-                  const bounds = clampToViewport(new DOMRect(coords.left, coords.top, 0, 0));
+                  const pe = getPresentationEditor(instance);
+                  const coords = pe?.coordsAtPos(from) ?? e.view.coordsAtPos(from);
+                  const bounds = clampToViewport(new DOMRect(coords.left, coords.bottom ?? coords.top, 0, 0));
 
                   const cleanup = () => {
                     const editor = superdocRef.current?.activeEditor;
@@ -395,8 +396,9 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               const queryText = state.doc.textBetween(menuTriggerFromRef.current, from);
               updateMenuFilter(queryText);
 
-              const coords = e.view.coordsAtPos(from);
-              const bounds = clampToViewport(new DOMRect(coords.left, coords.top, 0, 0));
+              const pe = getPresentationEditor(instance);
+              const coords = pe?.coordsAtPos(from) ?? e.view.coordsAtPos(from);
+              const bounds = clampToViewport(new DOMRect(coords.left, coords.bottom ?? coords.top, 0, 0));
               setMenuPosition(bounds);
             });
 

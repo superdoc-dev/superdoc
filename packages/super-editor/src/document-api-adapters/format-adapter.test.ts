@@ -135,6 +135,19 @@ describe('formatBoldAdapter', () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
+  it('sets skipTrackChanges meta in direct mode to preserve operation-scoped semantics', () => {
+    const { editor, tr } = makeEditor();
+    const receipt = formatBoldAdapter(
+      editor,
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(tr.setMeta).toHaveBeenCalledWith('skipTrackChanges', true);
+    expect(tr.setMeta).not.toHaveBeenCalledWith('forceTrackChanges', true);
+  });
+
   it('sets forceTrackChanges meta in tracked mode', () => {
     const { editor, tr } = makeEditor('Hello', { user: { name: 'Test' } });
     const receipt = formatBoldAdapter(

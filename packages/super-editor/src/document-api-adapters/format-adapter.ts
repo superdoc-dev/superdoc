@@ -3,6 +3,7 @@ import type { FormatBoldInput, MutationOptions, TextMutationReceipt } from '@sup
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { requireSchemaMark, ensureTrackedCapability } from './helpers/mutation-helpers.js';
+import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { resolveTextTarget } from './helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
 
@@ -46,8 +47,9 @@ export function formatBoldAdapter(
     return { success: true, resolution };
   }
 
-  const tr = editor.state.tr.addMark(range.from, range.to, boldMark.create()).setMeta('inputType', 'programmatic');
-  if (mode === 'tracked') tr.setMeta('forceTrackChanges', true);
+  const tr = editor.state.tr.addMark(range.from, range.to, boldMark.create());
+  if (mode === 'tracked') applyTrackedMutationMeta(tr);
+  else applyDirectMutationMeta(tr);
 
   editor.dispatch(tr);
   return { success: true, resolution };

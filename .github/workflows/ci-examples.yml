@@ -10,6 +10,7 @@ jobs:
   getting-started:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         example: [react, vue, vanilla, cdn, angular]
     steps:
@@ -36,6 +37,7 @@ jobs:
   collaboration:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         example: [superdoc-yjs, hocuspocus, liveblocks]
     steps:
@@ -68,6 +70,7 @@ jobs:
   features:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         example: [track-changes, ai-redlining, comments, custom-toolbar]
     steps:

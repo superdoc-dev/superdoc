@@ -1887,9 +1887,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           : undefined,
       );
 
-      // Register and place anchored tables after the paragraph. Anchor base is paragraph start (OOXML-style).
+      // Register and place anchored tables after the paragraph. Anchor base is paragraph-relative
+      // (OOXML-style), clamped to paragraph bottom to avoid overlap, then offsetV is applied.
       // Full-width floating tables are treated as inline and laid out when we hit the table block.
-      // Only vRelativeFrom=paragraph is supported. Position = max(paragraphStartY + offsetV, paragraphBottom) so the table never overlaps the paragraph.
+      // Only vRelativeFrom=paragraph is supported.
       if (tablesForPara) {
         const state = paginator.ensurePage();
         const columnWidthForTable = getCurrentColumns().width;
@@ -1899,10 +1900,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           const totalWidth = tableMeasure.totalWidth ?? 0;
           if (columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO) continue;
 
-          // OOXML: position = paragraph start + tblpY (offsetV). Clamp so table top is never above paragraph
-          // bottom, ensuring no overlap when offsetV is 0 or small.
+          // OOXML anchor base is paragraph-relative. Clamp to paragraph bottom so the table never overlaps
+          // paragraph text, then apply offsetV from that resolved anchor position.
           const offsetV = tableBlock.anchor?.offsetV ?? 0;
-          const anchorY = Math.max(paragraphStartY + offsetV, state.cursorY);
+          const anchorBaseY = Math.max(paragraphStartY, state.cursorY);
+          const anchorY = anchorBaseY + offsetV;
           floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
 
           const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
@@ -1937,7 +1939,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         Number.isFinite(preRegPos.pageNumber)
       ) {
         // Use pre-computed position for page-relative anchors
-        const state = paginator.ensurePage();
+        const state = paginator.getPageByNumber(preRegPos.pageNumber);
         const imgBlock = block as ImageBlock;
         const imgMeasure = measure as ImageMeasure;
 
@@ -2003,6 +2005,45 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (measure.kind !== 'drawing') {
         throw new Error(`layoutDocument: expected drawing measure for block ${block.id}`);
       }
+
+      // Check if this is a pre-registered page-relative anchor
+      const preRegPos = preRegisteredPositions.get(block.id);
+      if (
+        preRegPos &&
+        Number.isFinite(preRegPos.anchorX) &&
+        Number.isFinite(preRegPos.anchorY) &&
+        Number.isFinite(preRegPos.pageNumber)
+      ) {
+        // Use pre-computed position for page-relative anchored drawings
+        const state = paginator.getPageByNumber(preRegPos.pageNumber);
+        const drawBlock = block as DrawingBlock;
+        const drawMeasure = measure as DrawingMeasure;
+
+        const fragment: DrawingFragment = {
+          kind: 'drawing',
+          blockId: drawBlock.id,
+          drawingKind: drawBlock.drawingKind,
+          x: preRegPos.anchorX,
+          y: preRegPos.anchorY,
+          width: drawMeasure.width,
+          height: drawMeasure.height,
+          geometry: drawMeasure.geometry,
+          scale: drawMeasure.scale,
+          isAnchored: true,
+          behindDoc: drawBlock.anchor?.behindDoc === true,
+          zIndex: getFragmentZIndex(drawBlock),
+          drawingContentId: drawBlock.drawingContentId,
+        };
+
+        const attrs = drawBlock.attrs as Record<string, unknown> | undefined;
+        if (attrs?.pmStart != null) fragment.pmStart = attrs.pmStart as number;
+        if (attrs?.pmEnd != null) fragment.pmEnd = attrs.pmEnd as number;
+
+        state.page.fragments.push(fragment);
+        placedAnchoredIds.add(drawBlock.id);
+        continue;
+      }
+
       layoutDrawingBlock({
         block: block as DrawingBlock,
         measure: measure as DrawingMeasure,

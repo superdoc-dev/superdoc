@@ -696,9 +696,29 @@ body {
     font-size: 12px;
 }
 
-.superdoc-pdf-viewer-container {
+.sd-pdf-viewer {
     border: 1px solid #DBDBDB;
     border-radius: 8px;
+    overflow: hidden;
+}
+
+.sd-pdf-viewer-page {
+    border-bottom: 1px solid #DBDBDB;
+}
+
+.sd-pdf-viewer-page  {
+    border-top: 1px solid #dfdfdf;
+    border-bottom: 1px solid #dfdfdf;
+}
+
+.sd-pdf-viewer-page:first-child {
+    border-radius: 16px 16px 0 0;
+    border-top: none;
+}
+
+.sd-pdf-viewer-page:last-child {
+    border-radius: 0 0 16px 16px;
+    border-bottom: none;
 }
 
 .hiddenCanvasElement{

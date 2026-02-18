@@ -56,7 +56,7 @@
     "prosemirror-state": "catalog:",
     "prosemirror-view": "catalog:",
     "superdoc": "workspace:",
-    "tsup": "^8.5.1",
+    "tsup": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "vue": "catalog:"

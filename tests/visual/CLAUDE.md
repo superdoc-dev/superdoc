@@ -29,7 +29,7 @@ tests/
     structured-content/  SDT lock modes
   rendering/             Auto-discovers all .docx in test-data/rendering/
   fixtures/superdoc.ts   Shared fixture with helpers
-test-data/               Downloaded from R2 (gitignored), mirrors R2 documents/ prefix
+test-data/               Symlink to shared repo corpus mirror (`<repo>/test-corpus`)
 scripts/
   download-test-docs.ts  Auto-discover and download all documents from R2
   upload-test-doc.ts     Upload rendering doc — prompts for issue ID and description
@@ -39,17 +39,9 @@ scripts/
 
 ## R2 Storage
 
-Single bucket with two prefixes. Local `test-data/` mirrors the `documents/` prefix exactly:
-
-```
-superdoc-visual-testing/
-  documents/                    → downloads to test-data/
-    behavior/
-      comments-tcs/doc.docx     → test-data/behavior/comments-tcs/doc.docx
-      formatting/doc.docx       → test-data/behavior/formatting/doc.docx
-    rendering/doc.docx          → test-data/rendering/doc.docx
-  baselines/                    → downloads to tests/ (snapshot dirs)
-```
+DOCX files are stored in a shared corpus bucket as plain relative keys plus `registry.json`.
+`pnpm docs:download` syncs corpus files into `<repo>/test-corpus` and links `tests/visual/test-data` to that shared root.
+Visual baseline images are stored separately under the `baselines/` prefix.
 
 ## Adding a Rendering Test
 
@@ -58,7 +50,7 @@ Rendering tests are auto-discovered. Just upload a document:
 ```bash
 pnpm docs:upload ~/Downloads/my-file.docx
 # Prompts: Linear issue ID, short description
-# → uploads to documents/rendering/sd-1679-anchor-table-overlap.docx
+# → uploads to rendering/sd-1679-anchor-table-overlap.docx
 
 pnpm docs:download        # pull the new file locally
 pnpm test                 # verify it loads and renders
@@ -87,7 +79,7 @@ Place the file in the matching category folder. Use `@behavior` tag in the test 
 
 ## Loading Test Documents
 
-Test documents are stored in R2 (`documents/` prefix). Download with `pnpm docs:download`. Upload rendering docs with `pnpm docs:upload <file>`.
+Test documents are stored in the shared corpus bucket. Download with `pnpm docs:download`. Upload rendering docs with `pnpm docs:upload <file>`.
 
 ```ts
 import fs from 'node:fs';

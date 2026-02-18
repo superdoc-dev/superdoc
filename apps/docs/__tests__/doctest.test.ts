@@ -65,6 +65,7 @@ for (const [file, fileExamples] of byFile) {
         const editor = await Editor.open(Buffer.from(fixtureBuffer), {
           extensions: getStarterExtensions(),
           suppressDefaultDocxStyles: true,
+          telemetry: { enabled: false },
         });
 
         try {

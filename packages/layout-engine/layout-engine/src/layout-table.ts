@@ -204,7 +204,7 @@ function calculateColumnMinWidth(): number {
  * Edge cases handled:
  * - Empty columnWidths array: Returns empty array (no boundaries)
  * - Single column: Returns one boundary with proper min/max constraints
- * - Very wide/narrow columns: Handled by calculateColumnMinWidth
+ * - Very wide/narrow columns: Supported with a fixed resize floor
  *
  * @param measure - Table measurement containing column widths
  * @returns Array of column boundary metadata, one per column
@@ -376,8 +376,8 @@ type CellPadding = { top: number; bottom: number; left: number; right: number };
 function getCellPadding(cellIdx: number, blockRow?: TableRow): CellPadding {
   const padding = blockRow?.cells?.[cellIdx]?.attrs?.padding ?? {};
   return {
-    top: padding.top ?? 2,
-    bottom: padding.bottom ?? 2,
+    top: padding.top ?? 0,
+    bottom: padding.bottom ?? 0,
     left: padding.left ?? 4,
     right: padding.right ?? 4,
   };

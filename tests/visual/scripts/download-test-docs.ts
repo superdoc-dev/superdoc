@@ -1,73 +1,38 @@
 /**
- * Downloads all test documents from R2.
- * Auto-discovers everything under the documents/ prefix — no hardcoded list.
- * Downloads to test-data/ preserving the folder structure.
+ * Proxy to the repo-level corpus downloader.
+ *
+ * This keeps `pnpm docs:download` stable for tests/visual while using the
+ * shared corpus root consumed by layout snapshots.
  */
-import fs from 'node:fs';
 import path from 'node:path';
-import { createR2Client, ensureR2Auth, DOCUMENTS_PREFIX } from './r2.js';
+import process from 'node:process';
+import { spawn } from 'node:child_process';
 
-const TEST_DATA_DIR = path.resolve(import.meta.dirname, '../test-data');
+const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 
 async function main() {
-  ensureR2Auth();
+  const passthroughArgs = process.argv.slice(2).filter((arg) => arg !== '--');
+  const commandArgs = ['run', 'corpus:pull', '--', '--link-visual', ...passthroughArgs];
 
-  const client = await createR2Client();
+  const child = spawn('pnpm', commandArgs, {
+    cwd: REPO_ROOT,
+    env: process.env,
+    stdio: 'inherit',
+  });
 
-  console.log('Listing documents in R2...');
-  const keys = await client.listObjects(DOCUMENTS_PREFIX);
+  const exitCode = await new Promise<number>((resolve) => {
+    child.on('close', (code) => resolve(code ?? 1));
+    child.on('error', (err) => {
+      console.error(`Failed to spawn corpus:pull: ${err.message}`);
+      resolve(1);
+    });
+  });
 
-  if (keys.length === 0) {
-    console.log('No documents found in R2.');
-    process.exit(0);
-  }
-
-  const quiet = !!process.env.CI;
-  console.log(`Found ${keys.length} documents.`);
-
-  const toDownload: { key: string; relative: string; dest: string }[] = [];
-  let skipped = 0;
-
-  for (const key of keys) {
-    const relative = key.slice(`${DOCUMENTS_PREFIX}/`.length);
-    const dest = path.join(TEST_DATA_DIR, relative);
-
-    if (fs.existsSync(dest)) {
-      skipped++;
-    } else {
-      toDownload.push({ key, relative, dest });
-    }
-  }
-
-  console.log(`Downloading ${toDownload.length} files (${skipped} cached)...`);
-
-  const CONCURRENCY = 10;
-  let downloaded = 0;
-  let failed = 0;
-
-  for (let i = 0; i < toDownload.length; i += CONCURRENCY) {
-    const batch = toDownload.slice(i, i + CONCURRENCY);
-    const results = await Promise.allSettled(
-      batch.map(async ({ key, relative, dest }) => {
-        await client.getObject(key, dest);
-        downloaded++;
-        if (!quiet) console.log(`  ✓ ${relative}`);
-      }),
-    );
-
-    for (let j = 0; j < results.length; j++) {
-      if (results[j].status === 'rejected') {
-        failed++;
-        if (!quiet) console.error(`  ✗ ${batch[j].relative}: ${(results[j] as PromiseRejectedResult).reason?.message}`);
-      }
-    }
-  }
-
-  console.log(`\nDone. Downloaded: ${downloaded}, Cached: ${skipped}, Failed: ${failed}`);
-  client.destroy();
+  process.exit(Number(exitCode));
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[docs:download] Fatal: ${message}`);
   process.exit(1);
 });

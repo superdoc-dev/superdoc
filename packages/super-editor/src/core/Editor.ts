@@ -1,4 +1,5 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
+import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
@@ -494,7 +495,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     if (!telemetryConfig?.enabled) {
-      console.debug('[super-editor] Telemetry: disabled');
       return;
     }
 
@@ -2090,23 +2090,29 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
 
-      transactionToApply =
-        isTrackChangesActive && !skipTrackChanges
-          ? trackedTransaction({
-              tr: transactionToApply,
-              state: prevState,
-              user: this.options.user!,
-            })
-          : transactionToApply;
+      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      if (shouldTrack && forceTrackChanges && !this.options.user) {
+        throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
+      }
+
+      transactionToApply = shouldTrack
+        ? trackedTransaction({
+            tr: transactionToApply,
+            state: prevState,
+            user: this.options.user!,
+          })
+        : transactionToApply;
 
       const { state: appliedState } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
     } catch (error) {
+      if (forceTrackChanges) throw error;
       // just in case
       nextState = prevState.apply(transactionToApply);
       console.log(error);
@@ -2120,6 +2126,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     const end = perfNow();
+
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
@@ -2495,17 +2502,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @returns The updated document in JSON
    */
   #prepareDocumentForExport(comments: Comment[] = []): ProseMirrorJSON {
-    const newState = PmEditorState.create({
-      schema: this.schema,
-      doc: this.state.doc,
-      plugins: this.state.plugins,
-    });
-
-    const { tr, doc } = newState;
-
+    // Use Transform directly instead of creating a throwaway EditorState.
+    // EditorState.create() calls Plugin.init() for every plugin, and
+    // yUndoPlugin.init() registers persistent observers on the shared ydoc
+    // that are never cleaned up — causing an observer leak that degrades
+    // collaboration performance over time.
+    const doc = this.state.doc;
+    const tr = new Transform(doc);
     prepareCommentsForExport(doc, tr, this.schema, comments);
-    const updatedState = newState.apply(tr);
-    return updatedState.doc.toJSON();
+    return tr.doc.toJSON();
   }
 
   getUpdatedJson(): ProseMirrorJSON {

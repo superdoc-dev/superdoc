@@ -39,7 +39,12 @@ export class SdtGroupedHover {
       this.hoveredSdtId = sdtId;
 
       if (sdtId) {
-        sdtElementsById(mount, sdtId).forEach((el) => el.classList.add(HOVER_CLASS));
+        sdtElementsById(mount, sdtId).forEach((el) => {
+          // Suppress hover styling when the node is selected (SD-1584).
+          if (!el.classList.contains('ProseMirror-selectednode')) {
+            el.classList.add(HOVER_CLASS);
+          }
+        });
       }
     };
 
@@ -57,7 +62,11 @@ export class SdtGroupedHover {
   /** Re-apply hover class after render. New/rebuilt elements lose the class. */
   reapply(): void {
     if (this.hoveredSdtId && this.mount) {
-      sdtElementsById(this.mount, this.hoveredSdtId).forEach((el) => el.classList.add(HOVER_CLASS));
+      sdtElementsById(this.mount, this.hoveredSdtId).forEach((el) => {
+        if (!el.classList.contains('ProseMirror-selectednode')) {
+          el.classList.add(HOVER_CLASS);
+        }
+      });
     }
   }
 

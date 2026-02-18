@@ -1,17 +1,16 @@
 import vue from '@vitejs/plugin-vue';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { defineConfig } from 'vite';
 import { version } from './package.json';
 import { getAliases } from './vite.config.js';
 
 export default defineConfig(({ command }) => {
-  const plugins = [vue(), nodePolyfills()];
+  const plugins = [vue()];
   const isDev = command === 'serve';
 
   return {
     define: {
       __APP_VERSION__: JSON.stringify(version),
-      process: JSON.stringify({ env: { NODE_ENV: 'production' } }),
+      'process.env.NODE_ENV': JSON.stringify('production'),
     },
     plugins,
     resolve: {

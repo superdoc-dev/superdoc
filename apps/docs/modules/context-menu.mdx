@@ -24,7 +24,7 @@ new SuperDoc({
 new SuperDoc({
   selector: '#editor',
   modules: {
-    slashMenu: {
+    contextMenu: {
       includeDefaultItems: true,
       customItems: [],
       menuProvider: null
@@ -37,15 +37,15 @@ new SuperDoc({
   Top-level option to disable the context menu entirely
 </ParamField>
 
-<ParamField path="modules.slashMenu.includeDefaultItems" type="boolean" default="true">
+<ParamField path="modules.contextMenu.includeDefaultItems" type="boolean" default="true">
   Whether to include the built-in menu items
 </ParamField>
 
-<ParamField path="modules.slashMenu.customItems" type="Array" default="[]">
+<ParamField path="modules.contextMenu.customItems" type="Array" default="[]">
   Custom menu sections to add or merge. See [Custom Items](#custom-items).
 </ParamField>
 
-<ParamField path="modules.slashMenu.menuProvider" type="function">
+<ParamField path="modules.contextMenu.menuProvider" type="function">
   Advanced: function to fully control menu contents. See [Menu Provider](#menu-provider).
 </ParamField>
 
@@ -72,7 +72,7 @@ Add custom items by defining sections in `customItems`. Each section has an `id`
 
 ```javascript
 modules: {
-  slashMenu: {
+  contextMenu: {
     customItems: [{
       id: 'my-actions',
       items: [
@@ -129,7 +129,7 @@ If a custom section has the same `id` as a default section, the items are merged
 
 ```javascript
 modules: {
-  slashMenu: {
+  contextMenu: {
     customItems: [{
       // Adds items to the existing 'general' section
       id: 'general',
@@ -151,7 +151,7 @@ For full control over menu contents, use `menuProvider`. It receives the context
 
 ```javascript
 modules: {
-  slashMenu: {
+  contextMenu: {
     menuProvider: (context, sections) => {
       // Filter out clipboard section in editing mode
       if (context.documentMode === 'editing') {

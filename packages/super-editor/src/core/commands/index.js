@@ -33,6 +33,8 @@ export * from './selectTextblockStart.js';
 export * from './selectTextblockEnd.js';
 export * from './insertContent.js';
 export * from './insertContentAt.js';
+export * from './insertParagraphAt.js';
+export * from './insertHeadingAt.js';
 export * from './undoInputRule.js';
 export * from './setBodyHeaderFooter.js';
 export * from './setSectionHeaderFooterAtSelection.js';
@@ -57,6 +59,9 @@ export * from './increaseListIndent.js';
 export * from './decreaseListIndent.js';
 export * from './changeListLevel.js';
 export * from './removeNumberingProperties.js';
+export * from './insertListItemAt.js';
+export * from './setListTypeAt.js';
+export * from './exitListItemAt.js';
 
 // Selection
 export * from './restoreSelection.js';

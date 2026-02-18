@@ -3,6 +3,11 @@ import { getItems } from '../menuItems.js';
 import { createMockEditor, createMockContext, assertMenuSectionsStructure, SlashMenuConfigs } from './testHelpers.js';
 import { TRIGGERS } from '../constants.js';
 
+const clipboardMocks = vi.hoisted(() => ({
+  readClipboardRaw: vi.fn(),
+  handleClipboardPaste: vi.fn(() => true),
+}));
+
 vi.mock('../../cursor-helpers.js', async () => {
   const actual = await vi.importActual('../../cursor-helpers.js');
   return {
@@ -47,8 +52,12 @@ vi.mock('../../toolbar/AIWriter.vue', () => ({ default: { template: '<div>AIWrit
 vi.mock('../../toolbar/TableActions.vue', () => ({ default: { template: '<div>TableActions</div>' } }));
 vi.mock('../../toolbar/LinkInput.vue', () => ({ default: { template: '<div>LinkInput</div>' } }));
 
-vi.mock('../../core/InputRule.js', () => ({
-  handleClipboardPaste: vi.fn(() => true),
+vi.mock('../../../core/utilities/clipboardUtils.js', () => ({
+  readClipboardRaw: clipboardMocks.readClipboardRaw,
+}));
+
+vi.mock('../../../core/InputRule.js', () => ({
+  handleClipboardPaste: clipboardMocks.handleClipboardPaste,
 }));
 
 vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
@@ -219,6 +228,17 @@ describe('menuItems.js', () => {
   });
 
   describe('getItems - custom configuration', () => {
+    it('should keep default items when slashMenuConfig is an empty object', () => {
+      mockEditor.options.slashMenuConfig = {};
+      mockContext.editor = mockEditor;
+
+      const sections = getItems(mockContext);
+      const sectionIds = sections.map((section) => section.id);
+
+      expect(sectionIds).toContain('general');
+      expect(sections.length).toBeGreaterThan(0);
+    });
+
     it('should add custom items when customItems is provided', () => {
       mockEditor.options.slashMenuConfig = SlashMenuConfigs.customOnly;
       mockContext.editor = mockEditor;
@@ -255,6 +275,31 @@ describe('menuItems.js', () => {
       // Should only have custom sections
       expect(sections).toHaveLength(1);
       expect(sections[0].id).toBe('custom-section');
+    });
+
+    it('should support slashMenuConfig.items as an alias for customItems', () => {
+      mockEditor.options.slashMenuConfig = {
+        includeDefaultItems: false,
+        items: [
+          {
+            id: 'items-alias-section',
+            items: [
+              {
+                id: 'items-alias-item',
+                label: 'Items Alias Item',
+                showWhen: (context) => [TRIGGERS.slash, TRIGGERS.click].includes(context.trigger),
+                action: vi.fn(),
+              },
+            ],
+          },
+        ],
+      };
+      mockContext.editor = mockEditor;
+
+      const sections = getItems(mockContext);
+      expect(sections).toHaveLength(1);
+      expect(sections[0].id).toBe('items-alias-section');
+      expect(sections[0].items[0].id).toBe('items-alias-item');
     });
 
     it('should apply menuProvider function', () => {
@@ -433,6 +478,101 @@ describe('menuItems.js', () => {
       const removeItem = docSection?.items.find((item) => item.id === 'remove-section');
 
       expect(removeItem).toBeDefined();
+    });
+  });
+
+  describe('getItems - paste action behavior', () => {
+    it('should not force plain-text insert when HTML paste is unhandled', async () => {
+      const insertContent = vi.fn();
+      mockEditor = createMockEditor({
+        commands: { insertContent },
+      });
+      mockEditor.view.dom.focus = vi.fn();
+      mockEditor.view.pasteHTML = vi.fn();
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+      });
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({
+        html: '<p>word html</p>',
+        text: 'word html',
+      });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const sections = getItems(mockContext);
+      const pasteAction = sections
+        .find((section) => section.id === 'clipboard')
+        ?.items.find((item) => item.id === 'paste')?.action;
+
+      expect(pasteAction).toBeTypeOf('function');
+      await pasteAction(mockEditor);
+
+      expect(clipboardMocks.handleClipboardPaste).toHaveBeenCalledWith(
+        { editor: mockEditor, view: mockEditor.view },
+        '<p>word html</p>',
+      );
+      expect(mockEditor.view.pasteHTML).toHaveBeenCalledWith('<p>word html</p>', expect.any(Object));
+      expect(insertContent).not.toHaveBeenCalled();
+    });
+
+    it('should use pasteText when clipboard has text but no HTML', async () => {
+      const insertContent = vi.fn();
+      mockEditor = createMockEditor({
+        commands: { insertContent },
+      });
+      mockEditor.view.dom.focus = vi.fn();
+      mockEditor.view.pasteText = vi.fn();
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+      });
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({
+        html: '',
+        text: 'plain text content',
+      });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const sections = getItems(mockContext);
+      const pasteAction = sections
+        .find((section) => section.id === 'clipboard')
+        ?.items.find((item) => item.id === 'paste')?.action;
+
+      await pasteAction(mockEditor);
+
+      expect(mockEditor.view.pasteText).toHaveBeenCalledWith('plain text content', expect.any(Object));
+      expect(insertContent).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to insertContent when view has no pasteHTML or pasteText', async () => {
+      const insertContent = vi.fn();
+      mockEditor = createMockEditor({
+        commands: { insertContent },
+      });
+      mockEditor.view.dom.focus = vi.fn();
+      // No pasteHTML or pasteText on view
+      delete mockEditor.view.pasteHTML;
+      delete mockEditor.view.pasteText;
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+      });
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({
+        html: '',
+        text: 'fallback text',
+      });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const sections = getItems(mockContext);
+      const pasteAction = sections
+        .find((section) => section.id === 'clipboard')
+        ?.items.find((item) => item.id === 'paste')?.action;
+
+      await pasteAction(mockEditor);
+
+      expect(insertContent).toHaveBeenCalledWith('fallback text', { contentType: 'text' });
     });
   });
 });

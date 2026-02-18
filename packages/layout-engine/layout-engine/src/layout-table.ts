@@ -13,6 +13,12 @@ import type {
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
 
+/**
+ * Ratio of column width (0..1). An anchored table with totalWidth >= columnWidth * this value
+ * is treated as full-width and laid out inline instead of as a floating fragment.
+ */
+export const ANCHORED_TABLE_FULL_WIDTH_RATIO = 0.99;
+
 export type TableLayoutContext = {
   block: TableBlock;
   measure: TableMeasure;
@@ -169,35 +175,17 @@ function resolveTableFrame(
 }
 
 /**
- * Calculate minimum width for a table column based on cell content.
+ * Calculate minimum width for a table column.
  *
- * For now, uses a conservative minimum of 25px per column as the layout engine
- * doesn't yet track word-level measurements. Future enhancement: scan cell
- * paragraph measures for longest unbreakable word or image width.
+ * Uses a conservative minimum of 10px per column to match PM's
+ * columnResizing behavior.
  *
- * Edge cases handled:
- * - Out of bounds column index: Returns DEFAULT_MIN_WIDTH (25px)
- * - Negative or zero widths: Returns DEFAULT_MIN_WIDTH (25px)
- * - Very wide columns (>200px): Capped at 200px for better UX
- * - Empty columnWidths array: Returns DEFAULT_MIN_WIDTH (25px)
- *
- * @param columnIndex - Column index to calculate minimum for (0-based)
- * @param measure - Table measurement data containing columnWidths array
- * @returns Minimum width in pixels, guaranteed to be between 25px and 200px
+ * @returns Minimum width in pixels (10px)
  */
-function calculateColumnMinWidth(columnIndex: number, measure: TableMeasure): number {
-  const DEFAULT_MIN_WIDTH = 25; // Minimum usable column width in pixels
+function calculateColumnMinWidth(): number {
+  const DEFAULT_MIN_WIDTH = 10; // Minimum usable column width in pixels
 
-  // Future enhancement: compute actual minimum based on cell content
-  // For now, use measured width but constrain to reasonable minimum
-  const measuredWidth = measure.columnWidths[columnIndex] || DEFAULT_MIN_WIDTH;
-
-  // Don't allow columns to shrink below absolute minimum, but cap at reasonable max
-  // The 200px cap prevents overly wide minimum widths from making columns too rigid.
-  // This allows columns that are initially wide to still be resizable down to more
-  // reasonable widths. For example, a 500px column can be resized down to 200px minimum
-  // rather than being locked at 500px. This provides better UX for table editing.
-  return Math.max(DEFAULT_MIN_WIDTH, Math.min(measuredWidth, 200));
+  return DEFAULT_MIN_WIDTH;
 }
 
 /**
@@ -216,7 +204,7 @@ function calculateColumnMinWidth(columnIndex: number, measure: TableMeasure): nu
  * Edge cases handled:
  * - Empty columnWidths array: Returns empty array (no boundaries)
  * - Single column: Returns one boundary with proper min/max constraints
- * - Very wide/narrow columns: Handled by calculateColumnMinWidth
+ * - Very wide/narrow columns: Supported with a fixed resize floor
  *
  * @param measure - Table measurement containing column widths
  * @returns Array of column boundary metadata, one per column
@@ -227,7 +215,7 @@ function generateColumnBoundaries(measure: TableMeasure): TableColumnBoundary[] 
 
   for (let i = 0; i < measure.columnWidths.length; i++) {
     const width = measure.columnWidths[i];
-    const minWidth = calculateColumnMinWidth(i, measure);
+    const minWidth = calculateColumnMinWidth();
 
     const boundary = {
       index: i,
@@ -388,8 +376,8 @@ type CellPadding = { top: number; bottom: number; left: number; right: number };
 function getCellPadding(cellIdx: number, blockRow?: TableRow): CellPadding {
   const padding = blockRow?.cells?.[cellIdx]?.attrs?.padding ?? {};
   return {
-    top: padding.top ?? 2,
-    bottom: padding.bottom ?? 2,
+    top: padding.top ?? 0,
+    bottom: padding.bottom ?? 0,
     left: padding.left ?? 4,
     right: padding.right ?? 4,
   };
@@ -1035,12 +1023,20 @@ export function layoutTableBlock({
   advanceColumn,
   columnX,
 }: TableLayoutContext): void {
-  // Skip anchored/floating tables handled by the float manager
+  // Anchored/floating tables are normally placed by the float manager when we layout their anchor
+  // paragraph. Treat full-width floating tables as inline so they flow like normal tables and
+  // don't create overlap or extra pages.
+  let treatAsInline = false;
   if (block.anchor?.isAnchored) {
-    return;
+    const totalWidth = measure.totalWidth ?? 0;
+    treatAsInline = columnWidth > 0 && totalWidth >= columnWidth * ANCHORED_TABLE_FULL_WIDTH_RATIO;
+    if (!treatAsInline) {
+      return;
+    }
   }
 
-  // 1. Detect floating tables - use monolithic layout
+  // 1. Detect floating tables - use monolithic layout so the table stays one unit (no split across pages).
+  // This applies even when treatAsInline (full-width anchored): we still flow the table here but render it as one fragment.
   const tableProps = block.attrs?.tableProperties as Record<string, unknown> | undefined;
   const floatingProps = tableProps?.floatingTableProperties as Record<string, unknown> | undefined;
   if (floatingProps && Object.keys(floatingProps).length > 0) {

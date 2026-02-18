@@ -11,7 +11,7 @@ import type {
  */
 export interface StylesDocumentProperties {
   /** Default run and paragraph properties for the document. */
-  docDefaults: DocDefaults | undefined;
+  docDefaults: DocDefaults;
   /** Latent style definitions and defaults. */
   latentStyles: LatentStyles;
   /** Styles keyed by styleId. */

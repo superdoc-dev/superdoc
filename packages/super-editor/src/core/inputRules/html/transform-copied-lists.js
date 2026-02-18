@@ -38,7 +38,7 @@ export const transformListsInCopiedContent = (html) => {
 
       const li = child.cloneNode(true);
       li.setAttribute('aria-level', level + 1);
-      li.style['list-style-type'] = getListStyleType(numFmt, lvlText);
+      li.style.setProperty('list-style-type', getListStyleType(numFmt, lvlText));
 
       // if current level not open, create new list
       if (!stack.length || stack[stack.length - 1].level < level) {

@@ -745,6 +745,66 @@ export const DEFAULT_LINKED_STYLES = {
       },
     ],
   },
+  Hyperlink: {
+    type: 'element',
+    name: 'w:style',
+    attributes: {
+      'w:styleId': 'Hyperlink',
+      'w:type': 'character',
+    },
+    elements: [
+      {
+        type: 'element',
+        name: 'w:name',
+        attributes: {
+          'w:val': 'Hyperlink',
+        },
+      },
+      {
+        type: 'element',
+        name: 'w:basedOn',
+        attributes: {
+          'w:val': 'DefaultParagraphFont',
+        },
+      },
+      {
+        type: 'element',
+        name: 'w:uiPriority',
+        attributes: {
+          'w:val': '99',
+        },
+      },
+      { type: 'element', name: 'w:unhideWhenUsed' },
+      {
+        type: 'element',
+        name: 'w:rsid',
+        attributes: {
+          'w:val': '00D87CC4',
+        },
+      },
+      {
+        type: 'element',
+        name: 'w:rPr',
+        elements: [
+          {
+            type: 'element',
+            name: 'w:color',
+            attributes: {
+              'w:themeColor': 'hyperlink',
+              'w:val': '467886',
+            },
+          },
+          {
+            type: 'element',
+            name: 'w:u',
+            attributes: {
+              'w:val': 'single',
+            },
+          },
+        ],
+      },
+    ],
+  },
 };
 
 export const COMMENTS_XML_DEF = {

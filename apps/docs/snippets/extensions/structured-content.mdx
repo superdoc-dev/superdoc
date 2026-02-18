@@ -1,0 +1,130 @@
+Native Word SDT (w:sdt) fields for documents. Supports inline and block structured content tags for dynamic templates with full Word compatibility.
+
+## Use case
+
+- Form templates — Create fillable documents with inline text fields and block content areas
+- Contract generation — Dynamic clauses and terms that map to Word content controls
+- Document automation — Programmatically update specific sections while preserving structure
+- Protected fields — Lock modes control which fields users can edit or delete (ECMA-376 `w:lock`)
+
+import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
+
+<SuperDocEditor
+  html={`<p><b>Service Agreement</b></p><p>This agreement is entered into by and between <i>Acme Corp</i> ("Company") and the client identified below.</p><p>Client name: ________</p><p>The Company agrees to provide consulting services under the following terms:</p><p>________</p>`}
+  height="350px"
+  onReady={(superdoc) => {
+    const editor = superdoc?.activeEditor || superdoc?.editor
+    if (!editor?.commands) return
+
+    // Find "________" in "Client name:" paragraph and replace with inline field
+    let inlinePos = null
+    editor.state.doc.descendants((node, pos) => {
+      if (node.isText && node.text.includes('________') && inlinePos === null) {
+        inlinePos = pos + node.text.indexOf('________')
+      }
+    })
+    if (inlinePos !== null) {
+      editor.commands.setTextSelection({ from: inlinePos, to: inlinePos + 8 })
+      editor.commands.insertStructuredContentInline({
+        attrs: { id: '1', alias: 'Client Name' },
+        text: 'John Doe',
+      })
+    }
+
+    // Find the second "________" paragraph and replace with block field
+    let blockPos = null
+    editor.state.doc.descendants((node, pos) => {
+      if (node.isText && node.text.includes('________')) {
+        blockPos = pos + node.text.indexOf('________')
+      }
+    })
+    if (blockPos !== null) {
+      editor.commands.setTextSelection({ from: blockPos, to: blockPos + 8 })
+      editor.commands.insertStructuredContentBlock({
+        attrs: { id: '2', alias: 'Payment Terms' },
+        json: { type: 'paragraph', content: [{ type: 'text', text: 'Payment is due within 30 days of invoice date. Late payments incur a 1.5% monthly fee.' }] },
+      })
+    }
+  }}
+  customButtons={[
+    [
+      {
+        label: 'Update client name',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.updateStructuredContentById('1', { text: 'Jane Smith' });
+        }
+      },
+      {
+        label: 'Update payment terms',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          editor.commands.updateStructuredContentById('2', {
+            json: { type: 'paragraph', content: [{ type: 'text', text: 'Net-15 payment terms apply. A 2% early payment discount is available for invoices settled within 7 days.' }] }
+          });
+        }
+      },
+    ],
+    [
+      {
+        label: 'Delete all fields',
+        onClick: (superdoc) => {
+          const editor = superdoc?.activeEditor || superdoc?.editor
+          if (!editor?.commands) return
+          const fields = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
+          editor.commands.deleteStructuredContent(fields);
+        }
+      },
+    ]
+  ]}
+/>
+
+## Quick start
+
+```javascript
+// Insert inline field with sdtLocked — users can edit content but not delete the field
+editor.commands.insertStructuredContentInline({
+  attrs: {
+    id: '1',
+    alias: 'Customer Name',
+    lockMode: 'sdtLocked',
+  },
+  text: 'John Doe'
+});
+
+// Insert a read-only system field
+editor.commands.insertStructuredContentInline({
+  attrs: {
+    id: '3',
+    alias: 'Account ID',
+    lockMode: 'sdtContentLocked', // fully protected — no edits, no deletion
+  },
+  text: 'ACC-00042'
+});
+
+// Insert block field with sdtLocked — content is editable, wrapper is protected
+editor.commands.insertStructuredContentBlock({
+  attrs: {
+    id: '2',
+    alias: 'Terms & Conditions',
+    lockMode: 'sdtLocked',
+  },
+  html: '<p>Please review the terms...</p>'
+});
+
+// Update field content
+editor.commands.updateStructuredContentById('1', {
+  text: 'Jane Smith'
+});
+
+// Change lock mode without changing content
+editor.commands.updateStructuredContentById('1', {
+  attrs: { lockMode: 'contentLocked' }
+});
+
+// Get all structured content tags
+const allTags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
+console.log(`Document contains ${allTags.length} SDT fields`);
+```

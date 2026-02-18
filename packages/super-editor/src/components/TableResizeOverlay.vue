@@ -1,6 +1,12 @@
 <template>
   <!-- Prevent mousedown from propagating to editor - critical for clean resize handle drags -->
-  <div v-if="visible && tableMetadata" class="superdoc-table-resize-overlay" :style="overlayStyle" @mousedown.stop>
+  <div
+    ref="overlayEl"
+    v-if="visible && tableMetadata"
+    class="superdoc-table-resize-overlay"
+    :style="overlayStyle"
+    @mousedown.stop
+  >
     <!-- Resize handles for each column boundary segment -->
     <template
       v-for="(boundary, resizableBoundaryIndex) in resizableBoundaries"
@@ -54,6 +60,7 @@ const props = defineProps({
 
 const emit = defineEmits(['resize-start', 'resize-move', 'resize-end', 'resize-success', 'resize-error']);
 
+const overlayEl = ref(null);
 const overlayRect = ref(null);
 /**
  * Parsed table metadata from data-table-boundaries attribute
@@ -248,7 +255,7 @@ const overlayStyle = computed(() => {
 });
 
 /**
- * Recompute overlay position/size relative to the table's offset parent.
+ * Recompute overlay position/size relative to the overlay's own offset parent.
  * Keeps handles aligned when the table moves (scroll, relayout, pagination shifts).
  */
 function updateOverlayRect() {
@@ -257,7 +264,6 @@ function updateOverlayRect() {
     return;
   }
 
-  const parent = props.tableElement.offsetParent;
   const tableRect = props.tableElement.getBoundingClientRect();
 
   // Validate rect has non-zero dimensions
@@ -266,10 +272,16 @@ function updateOverlayRect() {
     return;
   }
 
-  if (parent) {
-    const parentRect = parent.getBoundingClientRect();
-    const left = tableRect.left - parentRect.left + (parent.scrollLeft || 0);
-    const top = tableRect.top - parentRect.top + (parent.scrollTop || 0);
+  // Position overlay relative to its own offset parent (the element that
+  // position:absolute resolves against), NOT the table's offset parent.
+  // The table's offsetParent is its .superdoc-page, but the overlay is rendered
+  // as a child of .super-editor — a different coordinate space. Using the table's
+  // page as reference caused the overlay to be mispositioned on pages after the first.
+  const referenceEl = overlayEl.value?.offsetParent;
+  if (referenceEl) {
+    const referenceRect = referenceEl.getBoundingClientRect();
+    const left = tableRect.left - referenceRect.left + (referenceEl.scrollLeft || 0);
+    const top = tableRect.top - referenceRect.top + (referenceEl.scrollTop || 0);
     overlayRect.value = {
       left,
       top,
@@ -277,7 +289,7 @@ function updateOverlayRect() {
       height: tableRect.height,
     };
   } else {
-    // Fallback to offsets if no positioned parent is found
+    // Fallback: use table's own offset position
     overlayRect.value = {
       left: props.tableElement.offsetLeft,
       top: props.tableElement.offsetTop,

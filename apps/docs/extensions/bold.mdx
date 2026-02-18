@@ -1,0 +1,97 @@
+---
+title: Bold extension
+sidebarTitle: "Bold"
+keywords: "Bold extension, superdoc Bold, word Bold, document Bold, docx Bold"
+---
+
+import Description from '/snippets/extensions/bold.mdx'
+
+<Description />
+
+## Commands
+
+### `setBold`
+
+Apply bold formatting to the current selection.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setBold()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setBold();
+  },
+});
+```
+</CodeGroup>
+
+### `unsetBold`
+
+Remove bold formatting from the current selection.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.unsetBold()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetBold();
+  },
+});
+```
+</CodeGroup>
+
+### `toggleBold`
+
+Toggle bold formatting on the current selection.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleBold()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleBold();
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleBold() | `⌘/Ctrl-b` | Toggle bold formatting |
+| toggleBold() | `⌘/Ctrl-B` | Toggle bold formatting (uppercase) |
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/bold/bold.js" />

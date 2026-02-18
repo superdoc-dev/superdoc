@@ -1,0 +1,54 @@
+---
+title: Permission Ranges extension
+sidebarTitle: "Permission Ranges"
+keywords: "Permission Ranges extension, superdoc Permission Ranges, word Permission Ranges, document protection, docx permission"
+---
+
+import Description from '/snippets/extensions/permission-ranges.mdx'
+
+<Description />
+
+## How it works
+
+Permission ranges define editable regions within a protected Word document. The extension:
+
+1. Parses `permStart` and `permEnd` markers from the document
+2. Matches the current user's email against the `ed` (specific editor) or `edGrp` (editor group) attributes
+3. Allows edits only within matched permission ranges
+4. Blocks edits outside permitted regions
+
+When a document is in viewing mode and has permission ranges matching the current user, the extension automatically enables editing within those ranges.
+
+## Permission matching
+
+Ranges can target specific users or groups:
+
+```xml
+<!-- Allow everyone to edit -->
+<w:permStart w:id="0" w:edGrp="everyone"/>
+<w:permEnd w:id="0"/>
+
+<!-- Allow a specific user -->
+<w:permStart w:id="1" w:ed="domain\username"/>
+<w:permEnd w:id="1"/>
+```
+
+The `ed` attribute uses the format `domain\username`, matched against the user email configured in SuperDoc.
+
+## Word export
+
+Permission ranges export as native Word permission markers:
+
+```xml
+<w:permStart w:id="0" w:edGrp="everyone"/>
+<w:r>
+  <w:t>Editable content here</w:t>
+</w:r>
+<w:permEnd w:id="0"/>
+```
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/permission-ranges/permission-ranges.js" />

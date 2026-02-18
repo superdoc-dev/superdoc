@@ -1,4 +1,5 @@
 import { ReplaceStep } from 'prosemirror-transform';
+import { findChildren } from '@core/helpers/findChildren';
 
 export function findRemovedFieldAnnotations(tr) {
   let removedNodes = [];
@@ -33,6 +34,17 @@ export function findRemovedFieldAnnotations(tr) {
       });
     }
   });
+
+  if (removedNodes.length) {
+    const removedNodesIds = removedNodes.map((item) => item.node.attrs.fieldId);
+    const found = findChildren(
+      tr.doc,
+      (node) => node.type.name === 'fieldAnnotation' && removedNodesIds.includes(node.attrs.fieldId),
+    );
+    const foundSet = new Set(found.map((item) => item.node.attrs.fieldId));
+    const removedNodesFiltered = removedNodes.filter((item) => !foundSet.has(item.node.attrs.fieldId));
+    removedNodes = removedNodesFiltered;
+  }
 
   return removedNodes;
 }

@@ -70,7 +70,7 @@ import {
   DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
   SPACE_SUFFIX_GAP_PX,
 } from '@superdoc/common/layout-constants';
-import { resolveListTextStartPx } from '@superdoc/common/list-marker-utils';
+import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
 export { installNodeCanvasPolyfill } from './setup.js';
@@ -391,14 +391,7 @@ function calculateTypographyMetrics(
     descent = roundValue(resolvedFontSize * 0.2);
   }
 
-  // Calculate base line height using Word's default 1.15 line spacing multiplier.
-  // Word 2007+ uses 1.15× font size as "single" line spacing, not just ascent+descent.
-  // The Canvas TextMetrics API doesn't expose lineGap, so we use this multiplier.
-  // For 12pt (16px) font: 16 * 1.15 = 18.4px - matches Word exactly.
-  // Also clamp to actual glyph bounds (ascent + descent) to prevent overlap/clipping
-  // for fonts with unusually tall glyphs that exceed the 1.15 multiplier.
-  const baseLineHeight = Math.max(resolvedFontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER, ascent + descent);
-  const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
+  const lineHeight = resolveLineHeight(spacing, fontSize, ascent + descent);
 
   return {
     ascent,
@@ -456,8 +449,8 @@ function calculateEmptyParagraphMetrics(
   }
 
   // Word treats empty paragraphs as a single font-sized line unless line spacing is explicitly set.
-  const baseLineHeight = Math.max(resolvedFontSize, ascent + descent);
-  const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
+  const maxLineHeight = Math.max(resolvedFontSize, ascent + descent);
+  const lineHeight = roundValue(resolveLineHeight(spacing, resolvedFontSize, maxLineHeight));
 
   return {
     ascent,
@@ -895,7 +888,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     indentLeft,
     firstLine,
     hanging,
-    (markerText, marker) => {
+    (markerText: string, marker: MinimalMarker) => {
       const markerRun = {
         fontFamily: toCssFontFamily(marker.run?.fontFamily) ?? marker.run?.fontFamily ?? 'Arial',
         fontSize: marker.run?.fontSize ?? fallbackFontSize,
@@ -906,7 +899,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       return measureText(markerText, markerFont, ctx);
     },
   );
-  const effectiveTextStartPx = resolvedTextStartPx ?? textStartPx;
+  // Keep precedence aligned with the painter:
+  // explicit producer-provided starts (marker.textStartX/textStartPx) win over inferred values.
+  const effectiveTextStartPx = textStartPx ?? resolvedTextStartPx;
 
   if (typeof effectiveTextStartPx === 'number' && effectiveTextStartPx > indentLeft) {
     // textStartPx indicates where text actually starts on the first line (after marker + tab/space).
@@ -2461,7 +2456,6 @@ function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number
 
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
-
   // Resolve percentage or explicit pixel table width
   const resolvedTableWidth = resolveTableWidth(block.attrs, maxWidth);
 
@@ -2550,9 +2544,17 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
     // For tables with explicit/percentage width or fixed layout, scale to target width
     if (hasExplicitWidth || hasFixedLayout) {
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
+      const tableWidthType = (block.attrs?.tableWidth as TableWidthAttr | undefined)?.type;
+      const shouldScaleDown = totalWidth > effectiveTargetWidth;
+      const shouldScaleUp =
+        totalWidth < effectiveTargetWidth &&
+        effectiveTargetWidth > 0 &&
+        (tableWidthType === 'pct' || (hasExplicitWidth && !hasFixedLayout));
+
       // Scale to effectiveTargetWidth (resolved percentage or explicit width)
-      // This handles both scaling down (too wide) and scaling up (percentage-based)
-      if (totalWidth !== effectiveTargetWidth && effectiveTargetWidth > 0) {
+      // - Always scale down if too wide
+      // - Only scale up for percentage widths or auto-layout tables
+      if ((shouldScaleDown || shouldScaleUp) && effectiveTargetWidth > 0 && totalWidth > 0) {
         const scale = effectiveTargetWidth / totalWidth;
         columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
         // Normalize to exact target width (handle rounding errors)
@@ -2644,9 +2646,9 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
       }
 
       // Get cell padding for height calculation
-      const cellPadding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
-      const paddingTop = cellPadding.top ?? 2;
-      const paddingBottom = cellPadding.bottom ?? 2;
+      const cellPadding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
+      const paddingTop = cellPadding.top ?? 0;
+      const paddingBottom = cellPadding.bottom ?? 0;
       const paddingLeft = cellPadding.left ?? 4;
       const paddingRight = cellPadding.right ?? 4;
 
@@ -2674,7 +2676,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
        * ```
        * cell.blocks = [paragraph1, paragraph2, paragraph3]
        * contentHeight = para1.height + para2.height + para3.height
-       * totalCellHeight = contentHeight + 2 (top) + 2 (bottom)
+       * totalCellHeight = contentHeight;
        * ```
        */
       const blockMeasures: Measure[] = [];
@@ -3260,28 +3262,17 @@ const appendSegment = (
   segments.push({ runIndex, fromChar, toChar, width, x });
 };
 
-const resolveLineHeight = (spacing: ParagraphSpacing | undefined, baseLineHeight: number): number => {
-  if (!spacing || spacing.line == null || spacing.line <= 0) {
-    return baseLineHeight;
+const resolveLineHeight = (spacing: ParagraphSpacing | undefined, fontSize: number, maxHeight: number = -1): number => {
+  let computedHeight = spacing?.line ?? WORD_SINGLE_LINE_SPACING_MULTIPLIER;
+  if (spacing?.lineUnit === 'multiplier') {
+    computedHeight = computedHeight * fontSize;
   }
 
-  const raw = spacing.line;
-  const isAuto = spacing.lineRule === 'auto';
-  const treatAsMultiplier = (isAuto || spacing.lineRule == null) && raw > 0 && (isAuto || raw <= 10);
-
-  if (treatAsMultiplier) {
-    return raw * baseLineHeight;
+  const lineRule = spacing?.lineRule ?? 'auto';
+  if (['atLeast', 'auto'].includes(lineRule)) {
+    return Math.max(computedHeight, maxHeight, WORD_SINGLE_LINE_SPACING_MULTIPLIER * fontSize);
   }
-
-  if (spacing.lineRule === 'exact') {
-    return raw;
-  }
-
-  if (spacing.lineRule === 'atLeast') {
-    return Math.max(baseLineHeight, raw);
-  }
-
-  return Math.max(baseLineHeight, raw);
+  return computedHeight;
 };
 
 const sanitizePositive = (value: number | undefined): number =>
@@ -3348,8 +3339,8 @@ const measureDropCap = (
 
   // Calculate height based on the number of lines the drop cap should span
   // This uses the base line height calculation from the paragraph's spacing
-  const baseLineHeight = resolveLineHeight(spacing, run.fontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER);
-  const height = roundValue(baseLineHeight * lines);
+  const lineHeight = resolveLineHeight(spacing, run.fontSize);
+  const height = roundValue(lineHeight * lines);
 
   return {
     width,

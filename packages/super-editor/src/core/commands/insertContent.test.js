@@ -166,6 +166,11 @@ describe('insertContent', () => {
 // Integration-style tests that use a real Editor instance to
 // insert markdown/HTML lists and verify exported OOXML has list numbering.
 describe('insertContent (integration) list export', () => {
+  // Cache loaded DOCX data and helpers to avoid repeated file loading
+  let cachedDocxData = null;
+  let helpers = null;
+  let exportHelpers = null;
+
   const getListParagraphs = (result) => {
     const body = result.elements?.find((el) => el.name === 'w:body');
     const paragraphs = (body?.elements || []).filter((el) => el.name === 'w:p');
@@ -189,16 +194,25 @@ describe('insertContent (integration) list export', () => {
     vi.resetModules();
     vi.doUnmock('../helpers/contentProcessor.js');
 
-    const { loadTestDataForEditorTests, initTestEditor } = await import('../../tests/helpers/helpers.js');
-    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
-    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    // Cache helpers and DOCX data on first call
+    if (!helpers) {
+      helpers = await import('../../tests/helpers/helpers.js');
+    }
+    if (!cachedDocxData) {
+      cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+    }
+    if (!exportHelpers) {
+      exportHelpers = await import('../../tests/export/export-helpers/index.js');
+    }
+
+    const { docx, media, mediaFiles, fonts } = cachedDocxData;
+    const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
     return editor;
   };
 
   const exportFromEditorContent = async (editor) => {
-    const { getExportedResultWithDocContent } = await import('../../tests/export/export-helpers/index.js');
     const content = editor.getJSON().content || [];
-    return await getExportedResultWithDocContent(content);
+    return await exportHelpers.getExportedResultWithDocContent(content);
   };
 
   it('exports ordered list from markdown with numId/ilvl', async () => {

@@ -85,14 +85,18 @@ export const fillPlaceholderColumns = ({
  */
 export const isPlaceholderCell = (cell) => {
   if (!cell) return false;
-  if (cell.attrs?.__placeholder) return true;
+  if (cell.attrs?.__placeholder) {
+    return true;
+  }
 
   const widths = cell.attrs?.colwidth;
   if (Array.isArray(widths) && widths.length > 0) {
     const hasMeaningfulWidth = widths.some(
       (value) => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) > 1,
     );
-    if (!hasMeaningfulWidth) return true;
+    if (!hasMeaningfulWidth) {
+      return true;
+    }
   }
 
   return false;

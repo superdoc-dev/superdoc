@@ -360,16 +360,16 @@ describe('textbox-content-helpers', () => {
   });
 
   describe('extractBodyPrProperties', () => {
-    it('should return defaults for null input', () => {
+    it('should return defaults for null input (verticalAlign defaults to top per OOXML spec)', () => {
       const result = extractBodyPrProperties(null);
-      expect(result.verticalAlign).toBe('center');
+      expect(result.verticalAlign).toBe('top');
       expect(result.wrap).toBe('square');
       expect(result.insets).toBeDefined();
     });
 
-    it('should return defaults for empty bodyPr', () => {
+    it('should return defaults for empty bodyPr (verticalAlign defaults to top per OOXML spec)', () => {
       const result = extractBodyPrProperties({});
-      expect(result.verticalAlign).toBe('center');
+      expect(result.verticalAlign).toBe('top');
       expect(result.wrap).toBe('square');
     });
 

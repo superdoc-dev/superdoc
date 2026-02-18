@@ -70,6 +70,7 @@ import { Search } from './search/index.js';
 import { NodeResizer } from './noderesizer/index.js';
 import { CustomSelection } from './custom-selection/index.js';
 import { PermissionRanges } from './permission-ranges/index.js';
+import { VerticalNavigation } from './vertical-navigation/index.js';
 
 // Permissions
 import { PermStart } from './perm-start/index.js';
@@ -194,6 +195,7 @@ const getStarterExtensions = () => {
     PermStart,
     PermEnd,
     PermissionRanges,
+    VerticalNavigation,
     PassthroughInline,
     PassthroughBlock,
   ];

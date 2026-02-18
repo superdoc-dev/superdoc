@@ -5,6 +5,7 @@ import { replaceStep } from './replaceStep.js';
 import { addMarkStep } from './addMarkStep.js';
 import { removeMarkStep } from './removeMarkStep.js';
 import { TrackDeleteMarkName } from '../constants.js';
+import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 
@@ -96,6 +97,9 @@ export const trackedTransaction = ({ tr, state, user }) => {
     newTr.setMeta('addToHistory', tr.getMeta('addToHistory'));
   }
 
+  // Get the track changes meta to check if we have an adjusted insertion position (SD-1624).
+  const trackMeta = newTr.getMeta(TrackChangesBasePluginKey);
+
   if (tr.selectionSet) {
     const deletionMarkSchema = state.schema.marks[TrackDeleteMarkName];
     const deletionMark = findMark(state, deletionMarkSchema, false);
@@ -106,6 +110,10 @@ export const trackedTransaction = ({ tr, state, user }) => {
     ) {
       const caretPos = map.map(tr.selection.from, -1);
       newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
+    } else if (trackMeta?.insertedTo !== undefined) {
+      // SD-1624: When content was inserted after a deletion span, position cursor after the insertion.
+      // This must be checked before the deletionMark branch to handle fully-deleted content correctly.
+      newTr.setSelection(new TextSelection(newTr.doc.resolve(trackMeta.insertedTo)));
     } else if (tr.selection.from > state.selection.from && deletionMark) {
       const caretPos = map.map(deletionMark.to + 1, 1);
       newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));

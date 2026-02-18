@@ -1,0 +1,651 @@
+---
+title: Comments
+keywords: "word comments api, document annotations, threaded discussions, comment resolution, docx comments"
+---
+
+Add Word-style commenting to documents with threaded discussions, replies, and resolution workflows.
+
+## Quick start
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: "#editor",
+  document: "contract.docx",
+  user: {
+    name: "John Smith",
+    email: "john@company.com",
+  },
+  modules: {
+    comments: {
+      allowResolve: true,
+      element: "#comments",
+    },
+  },
+  onCommentsUpdate: ({ type, comment }) => {
+    console.log("Comment event:", type);
+  },
+});
+```
+
+<Note>
+The comments module is **enabled by default**. To disable it entirely, set `modules.comments` to `false`:
+
+```javascript
+modules: {
+  comments: false;
+}
+```
+
+</Note>
+
+## Configuration
+
+<ParamField path="modules.comments.readOnly" type="boolean" default="false">
+  View-only mode, prevents new comments
+</ParamField>
+
+<ParamField path="modules.comments.allowResolve" type="boolean" default="true">
+  Allow marking comments as resolved
+</ParamField>
+
+<ParamField path="modules.comments.element" type="string | HTMLElement">
+  Container for comments sidebar
+</ParamField>
+
+<ParamField
+  path="modules.comments.useInternalExternalComments"
+  type="boolean"
+  default="false"
+>
+  Enable dual internal/external comment system
+</ParamField>
+
+<ParamField
+  path="modules.comments.suppressInternalExternal"
+  type="boolean"
+  default="false"
+>
+  Hide internal comments from view
+</ParamField>
+
+<ParamField path="modules.comments.showResolved" type="boolean" default="false">
+  Show resolved comments in the comments list
+</ParamField>
+
+<ParamField path="modules.comments.permissionResolver" type="function">
+  Comments-only override for permission checks. See [Permission Resolver](#permission-resolver).
+</ParamField>
+
+<ParamField path="modules.comments.highlightColors" type="Object">
+  Custom colors for comment highlights.
+
+  <Expandable title="Properties">
+    <ParamField path="external" type="string" default="#B1124B">
+      Highlight color for external comments
+    </ParamField>
+    <ParamField path="internal" type="string" default="#078383">
+      Highlight color for internal comments
+    </ParamField>
+    <ParamField path="activeExternal" type="string">
+      Active highlight color override for external comments
+    </ParamField>
+    <ParamField path="activeInternal" type="string">
+      Active highlight color override for internal comments
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.comments.highlightOpacity" type="Object">
+  Opacity values for comment highlights (0–1).
+
+  <Expandable title="Properties">
+    <ParamField path="active" type="number">
+      Opacity for the active comment highlight
+    </ParamField>
+    <ParamField path="inactive" type="number">
+      Opacity for inactive comment highlights
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.comments.highlightHoverColor" type="string">
+  Hover highlight color for comment marks
+</ParamField>
+
+<ParamField path="modules.comments.trackChangeHighlightColors" type="Object">
+  Colors for tracked change highlights.
+
+  <Expandable title="Properties">
+    <ParamField path="insertBorder" type="string">
+      Border color for inserted text
+    </ParamField>
+    <ParamField path="insertBackground" type="string">
+      Background color for inserted text
+    </ParamField>
+    <ParamField path="deleteBorder" type="string">
+      Border color for deleted text
+    </ParamField>
+    <ParamField path="deleteBackground" type="string">
+      Background color for deleted text
+    </ParamField>
+    <ParamField path="formatBorder" type="string">
+      Border color for format changes
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.comments.trackChangeActiveHighlightColors" type="Object">
+  Colors for the active tracked change highlight. Same properties as `trackChangeHighlightColors`. Defaults to `trackChangeHighlightColors` values when not set.
+</ParamField>
+
+## Viewing mode visibility
+
+Comments are hidden by default when `documentMode` is `viewing`. Use the
+top-level `comments.visible` and `trackChanges.visible` flags to control what
+renders in read-only mode.
+
+```javascript
+new SuperDoc({
+  selector: "#viewer",
+  document: "contract.docx",
+  documentMode: "viewing",
+  comments: { visible: true },      // Standard comment threads
+  trackChanges: { visible: false }, // Tracked-change markup + threads
+});
+```
+
+## Setting up the comments UI
+
+During initialization:
+
+```javascript
+modules: {
+  comments: {
+    element: "#comments-sidebar";
+  }
+}
+```
+
+After initialization:
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.on("ready", () => {
+  superdoc.addCommentsList("#comments-sidebar");
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.addCommentsList("#comments-sidebar");
+  },
+});
+```
+
+</CodeGroup>
+
+## Permission resolver
+
+Customize who can resolve comments or accept tracked changes. The resolver receives the permission type, current user, and any tracked-change metadata. Return `false` to block the action.
+
+```javascript
+modules: {
+  comments: {
+    permissionResolver: ({
+      permission,
+      trackedChange,
+      currentUser,
+      defaultDecision,
+    }) => {
+      if (
+        permission === "RESOLVE_OTHER" &&
+        trackedChange?.attrs?.authorEmail !== currentUser?.email
+      ) {
+        return false; // Block accepting suggestions from other authors
+      }
+      return defaultDecision;
+    },
+  },
+}
+```
+
+<Note>
+  You can set a global resolver with the top-level `permissionResolver` config.
+  Module-level resolvers take precedence when both are defined.
+</Note>
+
+## Word import/export
+
+Word comments are automatically imported with the document and marked with `importedId`. When exporting, use the `commentsType` option:
+
+<CodeGroup>
+
+```javascript Usage
+// Include comments in export
+const blob = await superdoc.export({ commentsType: "external" });
+
+// Remove all comments
+const cleanBlob = await superdoc.export({ commentsType: "clean" });
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: async (superdoc) => {
+    // Include comments in export
+    const blob = await superdoc.export({ commentsType: "external" });
+
+    // Remove all comments
+    const cleanBlob = await superdoc.export({ commentsType: "clean" });
+  },
+});
+```
+
+</CodeGroup>
+
+## API methods
+
+These methods are available on the active editor's commands:
+
+### `addComment`
+
+Add a comment to the current text selection. Requires a text selection.
+
+<CodeGroup>
+
+```javascript Usage
+// Simple usage
+superdoc.activeEditor.commands.addComment("Review this section");
+
+// With options
+superdoc.activeEditor.commands.addComment({
+  content: "Please clarify this section",
+  author: "John Smith",
+  authorEmail: "john@company.com",
+  isInternal: true,
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    // Simple usage
+    superdoc.activeEditor.commands.addComment("Review this section");
+
+    // With options
+    superdoc.activeEditor.commands.addComment({
+      content: "Please clarify this section",
+      author: "John Smith",
+      authorEmail: "john@company.com",
+      isInternal: true,
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+<ParamField path="contentOrOptions" type="string | Object">
+  Comment content as a string, or an options object with:
+
+  <Expandable title="Options">
+    <ParamField path="content" type="string">
+      The comment text (text or HTML)
+    </ParamField>
+    <ParamField path="author" type="string">
+      Author name (defaults to `user.name` from config)
+    </ParamField>
+    <ParamField path="authorEmail" type="string">
+      Author email (defaults to `user.email` from config)
+    </ParamField>
+    <ParamField path="authorImage" type="string">
+      Author image URL
+    </ParamField>
+    <ParamField path="isInternal" type="boolean" default="false">
+      Whether the comment is internal/private
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### `addCommentReply`
+
+Add a reply to an existing comment or tracked change.
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.activeEditor.commands.addCommentReply({
+  parentId: "comment-123",
+  content: "I agree with this suggestion",
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.addCommentReply({
+      parentId: "comment-123",
+      content: "I agree with this suggestion",
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+<ParamField path="options" type="Object" required>
+  <Expandable title="Options">
+    <ParamField path="parentId" type="string" required>
+      The ID of the parent comment to reply to
+    </ParamField>
+    <ParamField path="content" type="string">
+      Reply content (text or HTML)
+    </ParamField>
+    <ParamField path="author" type="string">
+      Author name (defaults to `user.name` from config)
+    </ParamField>
+    <ParamField path="authorEmail" type="string">
+      Author email (defaults to `user.email` from config)
+    </ParamField>
+    <ParamField path="authorImage" type="string">
+      Author image URL
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### `removeComment`
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.activeEditor.commands.removeComment({
+  commentId: "comment-123",
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.removeComment({
+      commentId: "comment-123",
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+### `setActiveComment`
+
+Highlight and focus a comment.
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.activeEditor.commands.setActiveComment({
+  commentId: "comment-123",
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.setActiveComment({
+      commentId: "comment-123",
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+### `resolveComment`
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.activeEditor.commands.resolveComment({
+  commentId: "comment-123",
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.resolveComment({
+      commentId: "comment-123",
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+### `setCommentInternal`
+
+Toggle a comment between internal and external visibility.
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.activeEditor.commands.setCommentInternal({
+  commentId: "comment-123",
+  isInternal: true,
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.setCommentInternal({
+      commentId: "comment-123",
+      isInternal: true,
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+### `setCursorById`
+
+Navigate the cursor to a comment's position in the document.
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.activeEditor.commands.setCursorById("comment-123");
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  user: { name: 'John Smith', email: 'john@company.com' },
+  modules: { comments: { allowResolve: true } },
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.setCursorById("comment-123");
+  },
+});
+```
+
+</CodeGroup>
+
+## Events
+
+### `onCommentsUpdate`
+
+Fired for all comment changes.
+
+<ParamField path="type" type="string" required>
+  Event type: `pending`, `add`, `update`, `deleted`, `resolved`, `selected`, `change-accepted`, or `change-rejected`
+</ParamField>
+
+<ParamField path="comment" type="Comment" required>
+  The [Comment](#comment-data-structure) object
+</ParamField>
+
+<ParamField path="meta" type="Object">
+  Additional metadata
+</ParamField>
+
+```javascript
+onCommentsUpdate: ({ type, comment, meta }) => {
+  switch(type) {
+    case 'add':
+      await saveComment(comment);
+      break;
+    case 'resolved':
+      await markResolved(comment.id);
+      break;
+  }
+}
+```
+
+## Comment data structure
+
+<ResponseField name="comment" type="Object">
+  <Expandable title="properties" defaultOpen>
+    ### Core
+    <ResponseField name="commentId" type="string">
+      Unique identifier
+    </ResponseField>
+    <ResponseField name="commentText" type="string">
+      HTML content
+    </ResponseField>
+    <ResponseField name="parentCommentId" type="string | null">
+      Parent comment ID for threaded replies
+    </ResponseField>
+    <ResponseField name="mentions" type="array">
+      Mentioned users
+    </ResponseField>
+
+    ### Author
+    <ResponseField name="creatorName" type="string">
+      Author display name
+    </ResponseField>
+    <ResponseField name="creatorEmail" type="string">
+      Author email
+    </ResponseField>
+    <ResponseField name="createdTime" type="number">
+      Unix timestamp
+    </ResponseField>
+
+    ### Position
+    <ResponseField name="fileId" type="string">
+      Document ID
+    </ResponseField>
+    <ResponseField name="fileType" type="string">
+      Document type
+    </ResponseField>
+    <ResponseField name="selection" type="Object">
+      Position data including `selectionBounds`, `page`, and `documentId`
+    </ResponseField>
+
+    ### State
+    <ResponseField name="isInternal" type="boolean">
+      Internal/external flag (when dual comments enabled)
+    </ResponseField>
+    <ResponseField name="resolvedTime" type="number | null">
+      Resolution timestamp
+    </ResponseField>
+    <ResponseField name="resolvedByEmail" type="string | null">
+      Resolver email
+    </ResponseField>
+    <ResponseField name="resolvedByName" type="string | null">
+      Resolver name
+    </ResponseField>
+
+    ### Track Changes
+    <ResponseField name="trackedChange" type="boolean | null">
+      Whether this is a tracked change comment
+    </ResponseField>
+    <ResponseField name="trackedChangeType" type="string | null">
+      `'trackInsert'`, `'trackDelete'`, `'trackFormat'`, or `'both'`
+    </ResponseField>
+    <ResponseField name="trackedChangeText" type="string | null">
+      The text content of the tracked change
+    </ResponseField>
+    <ResponseField name="deletedText" type="string | null">
+      The deleted text (for delete tracked changes)
+    </ResponseField>
+
+    ### Import
+    <ResponseField name="importedId" type="string | null">
+      Original Word comment ID (from DOCX import)
+    </ResponseField>
+    <ResponseField name="importedAuthor" type="Object | null">
+      Original author info (from DOCX import)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Full example
+
+<Card
+  title="Comments Example"
+  icon="github"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/features/comments"
+>
+  Runnable example: threaded comments with resolve workflow and event log
+</Card>

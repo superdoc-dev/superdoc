@@ -1,0 +1,98 @@
+---
+title: Next.js
+keywords: "nextjs docx editor, next word editor, superdoc nextjs, ssr document editor, dynamic import docx"
+---
+
+SuperDoc works seamlessly with Next.js. The recommended approach is using `@superdoc-dev/react`, which handles SSR automatically.
+
+## Recommended: Using @superdoc-dev/react
+
+The React wrapper is the simplest way to integrate SuperDoc with Next.js:
+
+```bash
+npm install @superdoc-dev/react
+```
+
+### App Router (Next.js 13+)
+
+```jsx
+// app/editor/page.jsx
+'use client';
+
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+export default function EditorPage() {
+  return (
+    <SuperDocEditor
+      document="/sample.docx"
+      documentMode="editing"
+      onReady={() => console.log('Editor ready!')}
+      style={{ height: '100vh' }}
+    />
+  );
+}
+```
+
+### Pages Router
+
+```jsx
+// pages/editor.jsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+export default function EditorPage() {
+  return (
+    <SuperDocEditor
+      document="/sample.docx"
+      documentMode="editing"
+      style={{ height: '100vh' }}
+    />
+  );
+}
+```
+
+<Tip>
+The React wrapper is SSR-safe — it renders container divs on the server (hidden until initialized) and starts SuperDoc after hydration. Use `renderLoading` for custom loading UI, or Next.js dynamic imports if you prefer to skip SSR entirely.
+</Tip>
+
+---
+
+## CSS Import
+
+Import styles in your layout or page:
+
+```jsx
+// app/layout.jsx
+import '@superdoc-dev/react/style.css';
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="React Integration" icon="react" href="/getting-started/frameworks/react">
+  Full React wrapper documentation
+</Card>
+<Card title="Configuration" icon="gear" href="/core/superdoc/configuration">
+  Configuration options
+</Card>
+<Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
+  Real-time collaboration
+</Card>
+<Card title="React Example" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/getting-started/react">
+  React + TypeScript example
+</Card>
+<Card title="Next.js Example" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/integrations/nextjs-ssr">
+  Next.js SSR integration
+</Card>
+</CardGroup>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { toFlowBlocks as baseToFlowBlocks, toFlowBlocksMap as baseToFlowBlocksMap } from './index.js';
-import type { PMNode, PMMark, AdapterOptions, BatchAdapterOptions, PMDocumentMap } from './index.js';
+import { toFlowBlocks as baseToFlowBlocks } from './index.js';
+import type { PMNode, PMMark, AdapterOptions } from './index.js';
 import type { FlowBlock, ImageBlock, TableBlock } from '@superdoc/contracts';
 import basicParagraphFixture from './fixtures/basic-paragraph.json';
 import edgeCasesFixture from './fixtures/edge-cases.json';
@@ -9,7 +9,7 @@ import imageFixture from './fixtures/image-inline-and-block.json';
 import hummingbirdFixture from './fixtures/hummingbird.json';
 import boldDemoFixture from './fixtures/bold-demo.json';
 
-const DEFAULT_CONVERTER_CONTEXT = {
+const createDefaultConverterContext = () => ({
   docx: {},
   translatedLinkedStyles: {
     docDefaults: {},
@@ -20,13 +20,10 @@ const DEFAULT_CONVERTER_CONTEXT = {
     abstracts: {},
     definitions: {},
   },
-};
+});
 
 const toFlowBlocks = (pmDoc: PMNode | object, options: AdapterOptions = {}) =>
-  baseToFlowBlocks(pmDoc, { converterContext: DEFAULT_CONVERTER_CONTEXT, ...options });
-
-const toFlowBlocksMap = (docs: PMDocumentMap, options: BatchAdapterOptions = {}) =>
-  baseToFlowBlocksMap(docs, { converterContext: DEFAULT_CONVERTER_CONTEXT, ...options });
+  baseToFlowBlocks(pmDoc, { converterContext: createDefaultConverterContext(), ...options });
 
 const createTestBodySectPr = () => ({
   type: 'element',
@@ -73,11 +70,11 @@ describe('toFlowBlocks', () => {
         runs: [
           {
             text: 'Hello world',
-            fontFamily: 'Arial',
-            fontSize: 16,
+            fontFamily: 'Times New Roman, sans-serif',
           },
         ],
       });
+      expect(blocks[0].runs[0]?.fontSize).toBeCloseTo((10 * 96) / 72, 5);
     });
 
     it('generates unique BlockIds based on position', () => {
@@ -117,9 +114,9 @@ describe('toFlowBlocks', () => {
       });
 
       expect(blocks[0].runs[0]).toMatchObject({
-        fontFamily: 'Times New Roman',
-        fontSize: 14,
+        fontFamily: 'Times New Roman, sans-serif',
       });
+      expect(blocks[0].runs[0]?.fontSize).toBeCloseTo(14, 5);
     });
   });
 
@@ -328,7 +325,7 @@ describe('toFlowBlocks', () => {
 
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
-        spacing: { before: 10, after: 6, line: 22, lineRule: 'exact' },
+        spacing: { before: 10, after: 6, line: 22, lineUnit: 'px', lineRule: 'exact' },
         indent: { left: 12, firstLine: 24 },
       });
     });
@@ -1206,41 +1203,23 @@ describe('toFlowBlocks', () => {
         expect(block.id.startsWith('header-default-')).toBe(true);
       });
     });
-  });
 
-  describe('batch conversion', () => {
-    it('converts a map of documents with unique prefixes', () => {
-      const docs = {
-        default: {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Default' }] }],
-        },
-        first: {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First' }] }],
-        },
-        empty: null,
+    it('applies blockIdPrefix to stable paragraph ids', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { sdBlockId: 'ABC123' },
+            content: [{ type: 'text', text: 'Alpha' }],
+          },
+        ],
       };
 
-      const result = toFlowBlocksMap(docs, {
-        blockIdPrefixFactory: (key) => `header-${key}-`,
-      });
+      const { blocks } = toFlowBlocks(pmDoc, { blockIdPrefix: 'doc-' });
+      const paragraph = blocks.find((block) => block.kind === 'paragraph');
 
-      expect(Object.keys(result)).toEqual(['default', 'first']);
-      expect(result.default[0].id.startsWith('header-default-')).toBe(true);
-      expect(result.first[0].id.startsWith('header-first-')).toBe(true);
-    });
-
-    it('falls back to key-based prefixes when factory is absent', () => {
-      const docs = {
-        default: {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Default' }] }],
-        },
-      };
-
-      const result = toFlowBlocksMap(docs);
-      expect(result.default[0].id.startsWith('default-')).toBe(true);
+      expect(paragraph?.id).toBe('doc-ABC123');
     });
   });
 

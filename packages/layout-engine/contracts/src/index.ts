@@ -16,6 +16,12 @@ export {
   type CalculateJustifySpacingParams,
 } from './justify-utils.js';
 
+export {
+  parseInsetClipPathForScale,
+  formatInsetClipPathTransform,
+  type InsetClipPathScale,
+} from './clip-path-inset.js';
+
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
@@ -56,12 +62,15 @@ export type FieldAnnotationMetadata = {
   marks?: Record<string, unknown>;
 };
 
+export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
+
 export type StructuredContentMetadata = {
   type: 'structuredContent';
   scope: 'inline' | 'block';
   id?: string | null;
   tag?: string | null;
   alias?: string | null;
+  lockMode?: StructuredContentLockMode;
   sdtPr?: unknown;
 };
 
@@ -162,7 +171,7 @@ export type RunMarks = {
     style?: 'single' | 'double' | 'dotted' | 'dashed' | 'wavy';
     /** Underline color as hex string (defaults to text color). */
     color?: string;
-  };
+  } | null;
   /** Strikethrough text decoration. */
   strike?: boolean;
   /** Highlight (background) color as hex string. */
@@ -216,6 +225,8 @@ export type TabRun = RunMarks & {
   indent?: ParagraphIndent;
   pmStart?: number;
   pmEnd?: number;
+  /** SDT metadata if tab is inside a structured document tag. */
+  sdt?: SdtMetadata;
 };
 
 export type LineBreakRun = {
@@ -262,6 +273,8 @@ export type ImageRun = {
   alt?: string;
   /** Image title (tooltip). */
   title?: string;
+  /** Clip-path value for cropped images. */
+  clipPath?: string;
 
   /**
    * Spacing around the image (from DOCX distT/distB/distL/distR attributes).
@@ -529,6 +542,8 @@ export type ImageBlock = {
   margin?: BoxSpacing;
   anchor?: ImageAnchor;
   wrap?: ImageWrap;
+  /** Stacking order from OOXML relativeHeight (same formula as editor: Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE)) */
+  zIndex?: number;
   attrs?: ImageBlockAttrs;
   // VML image adjustments for watermark effects
   gain?: string | number; // Brightness/washout (VML hex string or number)
@@ -695,6 +710,7 @@ export type ShapeGroupImageChild = {
   attrs: PositionedDrawingGeometry & {
     src: string;
     alt?: string;
+    clipPath?: string;
     imageId?: string;
     imageName?: string;
   };
@@ -946,6 +962,7 @@ export type ParagraphSpacing = {
   before?: number;
   after?: number;
   line?: number;
+  lineUnit?: 'px' | 'multiplier';
   lineRule?: 'auto' | 'exact' | 'atLeast';
   beforeAutospacing?: boolean;
   afterAutospacing?: boolean;
@@ -1076,6 +1093,7 @@ export type WordLayoutMarker = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    vanish?: boolean;
   };
 };
 
@@ -1586,6 +1604,7 @@ export type ImageFragment = {
   width: number;
   height: number;
   isAnchored?: boolean;
+  behindDoc?: boolean;
   zIndex?: number;
   pmStart?: number;
   pmEnd?: number;
@@ -1601,6 +1620,7 @@ export type DrawingFragment = {
   width: number;
   height: number;
   isAnchored?: boolean;
+  behindDoc?: boolean;
   zIndex?: number;
   geometry: DrawingGeometry;
   scale: number;

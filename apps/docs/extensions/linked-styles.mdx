@@ -1,0 +1,215 @@
+---
+title: Linked Styles extension
+sidebarTitle: "Linked Styles"
+keywords: "linked styles, superdoc linked styles, word styles, document styles, docx styles"
+---
+
+import Description from '/snippets/extensions/linked-styles.mdx'
+
+<Description />
+
+## Commands
+
+### `setLinkedStyle`
+
+Apply a linked style to the selected paragraphs.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+editor.commands.setLinkedStyle(style);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+    editor.commands.setLinkedStyle(style);
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="style" type="LinkedStyle" required>
+  The style object to apply
+</ParamField>
+
+### `toggleLinkedStyle`
+
+Toggle a linked style on the current selection. Removes the style if already applied, applies it if not.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+editor.commands.toggleLinkedStyle(style)
+editor.commands.toggleLinkedStyle(style, 'paragraph')
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const style = editor.helpers.linkedStyles.getStyleById('Heading1');
+    editor.commands.toggleLinkedStyle(style)
+    editor.commands.toggleLinkedStyle(style, 'paragraph')
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="style" type="LinkedStyle" required>
+  The linked style to apply (with id property)
+</ParamField>
+<ParamField path="nodeType" type="string">
+  Node type to restrict toggle to (e.g., 'paragraph')
+</ParamField>
+
+### `setStyleById`
+
+Apply a linked style by its ID.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setStyleById('Heading1')
+editor.commands.setStyleById('Normal')
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setStyleById('Heading1')
+    editor.commands.setStyleById('Normal')
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="styleId" type="string" required>
+  The style ID to apply (e.g., 'Heading1')
+</ParamField>
+
+## Helpers
+
+### `getStyles`
+
+Get all available linked styles from the document.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const styles = editor.helpers.linkedStyles.getStyles();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const styles = editor.helpers.linkedStyles.getStyles();
+  },
+});
+```
+</CodeGroup>
+
+**Returns:**
+
+<ResponseField name="return" type="Array" required>
+  Array of linked style objects
+</ResponseField>
+
+### `getStyleById`
+
+Get a specific style by ID.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const headingStyle = editor.helpers.linkedStyles.getStyleById('Heading1');
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="styleId" type="string" required>
+  The style ID to find
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="Object" required>
+  The style object or undefined
+</ResponseField>
+
+## Types
+
+### `LinkedStyle`
+
+Style definition from a Word document.
+
+<Expandable title="Properties">
+<ResponseField name="id" type="string" required>
+  Style ID (e.g., 'Heading1', 'Normal')
+</ResponseField>
+<ResponseField name="type" type="string" required>
+  Style type ('paragraph' or 'character')
+</ResponseField>
+<ResponseField name="definition" type="Object" required>
+  Style definition from Word
+</ResponseField>
+</Expandable>
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/linked-styles/linked-styles.js" />

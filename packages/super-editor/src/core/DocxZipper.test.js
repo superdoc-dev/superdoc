@@ -109,6 +109,97 @@ describe('DocxZipper - UTF-16 XML handling', () => {
   });
 });
 
+describe('DocxZipper - updateZip compression', () => {
+  it('uses DEFLATE compression by default', async () => {
+    const zipper = new DocxZipper();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+
+    const documentXml = `<?xml version="1.0" encoding="UTF-8"?>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body><w:p><w:r><w:t>${'Hello world. '.repeat(100)}</w:t></w:r></w:p></w:body>
+      </w:document>`;
+
+    const docx = [
+      { name: '[Content_Types].xml', content: contentTypes },
+      { name: 'word/document.xml', content: documentXml },
+    ];
+
+    const result = await zipper.updateZip({
+      docx,
+      updatedDocs: {},
+      media: {},
+      fonts: {},
+      isHeadless: true,
+    });
+
+    // Verify the output is compressed by checking DEFLATE produces smaller output than STORE
+    const storeResult = await new DocxZipper().updateZip({
+      docx,
+      updatedDocs: {},
+      media: {},
+      fonts: {},
+      isHeadless: true,
+      compression: 'STORE',
+    });
+
+    expect(result.length).toBeLessThan(storeResult.length);
+
+    // Verify the compressed output is a valid zip that can be read back
+    const readBack = await new JSZip().loadAsync(result);
+    const docXml = await readBack.file('word/document.xml').async('string');
+    expect(docXml).toContain('Hello world.');
+  });
+
+  it('respects STORE compression when explicitly requested', async () => {
+    const zipper = new DocxZipper();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+
+    const documentXml = `<?xml version="1.0" encoding="UTF-8"?>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body><w:p><w:r><w:t>${'Hello world. '.repeat(100)}</w:t></w:r></w:p></w:body>
+      </w:document>`;
+
+    const docx = [
+      { name: '[Content_Types].xml', content: contentTypes },
+      { name: 'word/document.xml', content: documentXml },
+    ];
+
+    const result = await zipper.updateZip({
+      docx,
+      updatedDocs: {},
+      media: {},
+      fonts: {},
+      isHeadless: true,
+      compression: 'STORE',
+    });
+
+    // STORE should produce output roughly the size of the uncompressed content
+    // (plus ZIP overhead), so it should be larger than DEFLATE
+    const deflateResult = await new DocxZipper().updateZip({
+      docx,
+      updatedDocs: {},
+      media: {},
+      fonts: {},
+      isHeadless: true,
+      compression: 'DEFLATE',
+    });
+
+    expect(result.length).toBeGreaterThan(deflateResult.length);
+  });
+});
+
 describe('DocxZipper - updateContentTypes', () => {
   it('adds header/footer overrides for newly added parts', async () => {
     const zipper = new DocxZipper();
@@ -164,5 +255,47 @@ describe('DocxZipper - updateContentTypes', () => {
     const updatedContentTypes = await zip.file('[Content_Types].xml').async('string');
     expect(updatedContentTypes).toContain('/word/header1.xml');
     expect(updatedContentTypes).toContain('/word/footer1.xml');
+  });
+});
+
+describe('DocxZipper - exportFromCollaborativeDocx media handling', () => {
+  it('handles both base64 string and ArrayBuffer media values', async () => {
+    const zipper = new DocxZipper();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Default Extension="png" ContentType="image/png"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+
+    const docx = [
+      { name: '[Content_Types].xml', content: contentTypes },
+      { name: 'word/document.xml', content: '<w:document/>' },
+    ];
+
+    // base64 for bytes [72, 101, 108, 108, 111] ("Hello")
+    const base64Media = 'SGVsbG8=';
+    // ArrayBuffer for bytes [87, 111, 114, 108, 100] ("World")
+    const binaryMedia = new Uint8Array([87, 111, 114, 108, 100]).buffer;
+
+    const result = await zipper.updateZip({
+      docx,
+      updatedDocs: {},
+      media: {
+        'word/media/image1.png': base64Media,
+        'word/media/image2.png': binaryMedia,
+      },
+      fonts: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const img1 = await readBack.file('word/media/image1.png').async('uint8array');
+    const img2 = await readBack.file('word/media/image2.png').async('uint8array');
+
+    expect(Array.from(img1)).toEqual([72, 101, 108, 108, 111]);
+    expect(Array.from(img2)).toEqual([87, 111, 114, 108, 100]);
   });
 });

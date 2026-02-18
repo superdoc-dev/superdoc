@@ -36,6 +36,7 @@ import {
   hitTestTable as hitTestTableFromHelper,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
+import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/painter-dom';
 
 // =============================================================================
 // Constants
@@ -43,6 +44,17 @@ import { debugLog } from '../selection/SelectionDebug.js';
 
 const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
 const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
+const AUTO_SCROLL_EDGE_PX = 32;
+const AUTO_SCROLL_MAX_SPEED_PX = 24;
+/** Tolerance for detecting scrollability to handle sub-pixel rounding in browsers */
+const SCROLL_DETECTION_TOLERANCE_PX = 1;
+
+const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+
+/** Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder). */
+function isFootnoteBlockId(blockId: string): boolean {
+  return typeof blockId === 'string' && blockId.startsWith('footnote-');
+}
 
 // =============================================================================
 // Types
@@ -55,6 +67,13 @@ export type LayoutState = {
   layout: Layout | null;
   blocks: FlowBlock[];
   measures: Measure[];
+};
+
+type StructuredContentSelection = {
+  node: ProseMirrorNode;
+  pos: number;
+  start: number;
+  end: number;
 };
 
 /**
@@ -73,6 +92,8 @@ export type EditorInputDependencies = {
   getViewportHost: () => HTMLElement;
   /** Get visible host element (for scroll) */
   getVisibleHost: () => HTMLElement;
+  /** Get current layout mode */
+  getLayoutMode: () => 'vertical' | 'horizontal' | 'book';
   /** Get header/footer session manager */
   getHeaderFooterSession: () => HeaderFooterSessionManager | null;
   /** Get page geometry helper */
@@ -169,6 +190,10 @@ export class EditorInputManager {
   #dragLastPointer: SelectionDebugHudState['lastPointer'] = null;
   #dragLastRawHit: PositionHit | null = null;
   #dragUsedPageNotMountedFallback = false;
+  #autoScrollActive = false;
+  #autoScrollTimer: { id: number; kind: 'raf' | 'timeout' } | null = null;
+  #autoScrollVelocity: { x: number; y: number } = { x: 0, y: 0 };
+  #lastPointerClient: { clientX: number; clientY: number } | null = null;
 
   // Click tracking for multi-click detection
   #clickCount = 0;
@@ -206,6 +231,8 @@ export class EditorInputManager {
   #boundHandleClick: ((e: MouseEvent) => void) | null = null;
   #boundHandleKeyDown: ((e: KeyboardEvent) => void) | null = null;
   #boundHandleFocusIn: ((e: FocusEvent) => void) | null = null;
+  #boundHandleEditorFocus: ((payload: unknown) => void) | null = null;
+  #boundHandleEditorBlur: ((payload: unknown) => void) | null = null;
 
   // ==========================================================================
   // Constructor
@@ -252,6 +279,8 @@ export class EditorInputManager {
     this.#boundHandleClick = this.#handleClick.bind(this);
     this.#boundHandleKeyDown = this.#handleKeyDown.bind(this);
     this.#boundHandleFocusIn = this.#handleFocusIn.bind(this);
+    this.#boundHandleEditorFocus = this.#handleEditorFocus.bind(this);
+    this.#boundHandleEditorBlur = this.#handleEditorBlur.bind(this);
 
     // Attach pointer event listeners
     viewportHost.addEventListener('pointerdown', this.#boundHandlePointerDown);
@@ -269,6 +298,9 @@ export class EditorInputManager {
 
     // Focus events on visible host
     visibleHost.addEventListener('focusin', this.#boundHandleFocusIn);
+    const editor = this.#deps.getEditor();
+    editor.on?.('focus', this.#boundHandleEditorFocus);
+    editor.on?.('blur', this.#boundHandleEditorBlur);
   }
 
   /**
@@ -307,6 +339,12 @@ export class EditorInputManager {
     if (this.#boundHandleFocusIn) {
       visibleHost.removeEventListener('focusin', this.#boundHandleFocusIn);
     }
+    if (this.#boundHandleEditorFocus) {
+      this.#deps.getEditor().off?.('focus', this.#boundHandleEditorFocus);
+    }
+    if (this.#boundHandleEditorBlur) {
+      this.#deps.getEditor().off?.('blur', this.#boundHandleEditorBlur);
+    }
 
     // Clear bound handlers
     this.#boundHandlePointerDown = null;
@@ -317,6 +355,8 @@ export class EditorInputManager {
     this.#boundHandleClick = null;
     this.#boundHandleKeyDown = null;
     this.#boundHandleFocusIn = null;
+    this.#boundHandleEditorFocus = null;
+    this.#boundHandleEditorBlur = null;
   }
 
   /**
@@ -414,6 +454,8 @@ export class EditorInputManager {
     this.#dragLastPointer = null;
     this.#dragLastRawHit = null;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#lastPointerClient = null;
+    this.#stopAutoScroll();
   }
 
   #clearCellAnchor(): void {
@@ -489,6 +531,235 @@ export class EditorInputManager {
 
   #hitTestTable(x: number, y: number): TableHitResult | null {
     return this.#callbacks.hitTestTable?.(x, y) ?? null;
+  }
+
+  #getAutoScrollWindow(): Window | null {
+    const host = this.#deps?.getVisibleHost();
+    return host?.ownerDocument?.defaultView ?? (typeof window !== 'undefined' ? window : null);
+  }
+
+  #getScrollTarget(): {
+    kind: 'element' | 'window';
+    rect: { top: number; bottom: number; left: number; right: number };
+    canScrollX: boolean;
+    canScrollY: boolean;
+    win: Window | null;
+    element?: HTMLElement;
+    scrollWidth?: number;
+    scrollHeight?: number;
+  } | null {
+    if (!this.#deps) return null;
+    const visibleHost = this.#deps.getVisibleHost();
+    const doc = visibleHost.ownerDocument ?? document;
+    const win = doc.defaultView ?? (typeof window !== 'undefined' ? window : null);
+    if (!win) return null;
+
+    const scrollContainer = this.#findScrollableAncestor(visibleHost);
+    if (scrollContainer) {
+      const elementCanScrollX =
+        scrollContainer.scrollWidth > scrollContainer.clientWidth + SCROLL_DETECTION_TOLERANCE_PX;
+      const elementCanScrollY =
+        scrollContainer.scrollHeight > scrollContainer.clientHeight + SCROLL_DETECTION_TOLERANCE_PX;
+      const rect = scrollContainer.getBoundingClientRect();
+      return {
+        kind: 'element',
+        rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
+        canScrollX: elementCanScrollX,
+        canScrollY: elementCanScrollY,
+        win,
+        element: scrollContainer,
+      };
+    }
+
+    const docEl = doc.documentElement;
+    const body = doc.body;
+    const scrollWidth = Math.max(docEl?.scrollWidth ?? 0, body?.scrollWidth ?? 0);
+    const scrollHeight = Math.max(docEl?.scrollHeight ?? 0, body?.scrollHeight ?? 0);
+    const clientWidth = win.innerWidth;
+    const clientHeight = win.innerHeight;
+    const canScrollX = scrollWidth > clientWidth + SCROLL_DETECTION_TOLERANCE_PX;
+    const canScrollY = scrollHeight > clientHeight + SCROLL_DETECTION_TOLERANCE_PX;
+
+    return {
+      kind: 'window',
+      rect: { top: 0, bottom: clientHeight, left: 0, right: clientWidth },
+      canScrollX,
+      canScrollY,
+      win,
+      scrollWidth,
+      scrollHeight,
+    };
+  }
+
+  #findScrollableAncestor(host: HTMLElement): HTMLElement | null {
+    const doc = host.ownerDocument ?? document;
+    const win = doc.defaultView ?? (typeof window !== 'undefined' ? window : null);
+    let node: HTMLElement | null = host;
+    while (node && node !== doc.body) {
+      const style = win?.getComputedStyle ? win.getComputedStyle(node) : null;
+      const overflowY = style?.overflowY ?? style?.overflow ?? '';
+      const overflowX = style?.overflowX ?? style?.overflow ?? '';
+      const canScrollY = node.scrollHeight > node.clientHeight + SCROLL_DETECTION_TOLERANCE_PX;
+      const canScrollX = node.scrollWidth > node.clientWidth + SCROLL_DETECTION_TOLERANCE_PX;
+      const allowsY = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+      const allowsX = overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay';
+
+      if ((canScrollY && allowsY) || (canScrollX && allowsX)) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  #scheduleAutoScrollTick(): void {
+    if (this.#autoScrollTimer) return;
+    const win = this.#getAutoScrollWindow();
+    if (win?.requestAnimationFrame) {
+      const id = win.requestAnimationFrame(() => this.#tickAutoScroll());
+      this.#autoScrollTimer = { id, kind: 'raf' };
+      return;
+    }
+
+    const timeoutId = (
+      win?.setTimeout ? win.setTimeout(() => this.#tickAutoScroll(), 16) : setTimeout(() => this.#tickAutoScroll(), 16)
+    ) as number;
+    this.#autoScrollTimer = { id: timeoutId, kind: 'timeout' };
+  }
+
+  #startAutoScroll(): void {
+    if (this.#autoScrollActive) return;
+    this.#autoScrollActive = true;
+    this.#scheduleAutoScrollTick();
+  }
+
+  #stopAutoScroll(): void {
+    this.#autoScrollActive = false;
+    this.#autoScrollVelocity = { x: 0, y: 0 };
+    if (!this.#autoScrollTimer) return;
+    const win = this.#getAutoScrollWindow();
+    if (this.#autoScrollTimer.kind === 'raf') {
+      const cancel =
+        win?.cancelAnimationFrame ?? (typeof cancelAnimationFrame !== 'undefined' ? cancelAnimationFrame : undefined);
+      cancel?.(this.#autoScrollTimer.id);
+    } else {
+      clearTimeout(this.#autoScrollTimer.id);
+    }
+    this.#autoScrollTimer = null;
+  }
+
+  #updateAutoScrollFromPointer(clientX: number, clientY: number): void {
+    if (!this.#deps || !this.#isDragging) {
+      this.#stopAutoScroll();
+      return;
+    }
+
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionMode !== 'body' || this.#deps.isViewLocked()) {
+      this.#stopAutoScroll();
+      return;
+    }
+
+    const target = this.#getScrollTarget();
+    if (!target || (!target.canScrollX && !target.canScrollY)) {
+      this.#stopAutoScroll();
+      return;
+    }
+
+    const { rect } = target;
+    const topDist = clientY - rect.top;
+    const bottomDist = rect.bottom - clientY;
+    const leftDist = clientX - rect.left;
+    const rightDist = rect.right - clientX;
+
+    let vx = 0;
+    let vy = 0;
+
+    if (target.canScrollY) {
+      const topFactor = clamp((AUTO_SCROLL_EDGE_PX - topDist) / AUTO_SCROLL_EDGE_PX, 0, 1);
+      const bottomFactor = clamp((AUTO_SCROLL_EDGE_PX - bottomDist) / AUTO_SCROLL_EDGE_PX, 0, 1);
+      if (topFactor > 0) {
+        vy = -AUTO_SCROLL_MAX_SPEED_PX * topFactor;
+      } else if (bottomFactor > 0) {
+        vy = AUTO_SCROLL_MAX_SPEED_PX * bottomFactor;
+      }
+    }
+
+    const layoutMode = this.#deps.getLayoutMode();
+    if (layoutMode !== 'vertical' && target.canScrollX) {
+      const leftFactor = clamp((AUTO_SCROLL_EDGE_PX - leftDist) / AUTO_SCROLL_EDGE_PX, 0, 1);
+      const rightFactor = clamp((AUTO_SCROLL_EDGE_PX - rightDist) / AUTO_SCROLL_EDGE_PX, 0, 1);
+      if (leftFactor > 0) {
+        vx = -AUTO_SCROLL_MAX_SPEED_PX * leftFactor;
+      } else if (rightFactor > 0) {
+        vx = AUTO_SCROLL_MAX_SPEED_PX * rightFactor;
+      }
+    }
+
+    if (vx === 0 && vy === 0) {
+      this.#stopAutoScroll();
+      return;
+    }
+
+    this.#autoScrollVelocity = { x: vx, y: vy };
+    this.#startAutoScroll();
+  }
+
+  #tickAutoScroll(): void {
+    this.#autoScrollTimer = null;
+    if (!this.#autoScrollActive || !this.#deps || !this.#isDragging) {
+      this.#stopAutoScroll();
+      return;
+    }
+
+    const target = this.#getScrollTarget();
+    if (!target || (!target.canScrollX && !target.canScrollY)) {
+      this.#stopAutoScroll();
+      return;
+    }
+
+    const { x, y } = this.#autoScrollVelocity;
+    if (x === 0 && y === 0) {
+      this.#stopAutoScroll();
+      return;
+    }
+
+    let didScroll = false;
+    if (target.kind === 'element' && target.element) {
+      const maxScrollTop = Math.max(0, target.element.scrollHeight - target.element.clientHeight);
+      const maxScrollLeft = Math.max(0, target.element.scrollWidth - target.element.clientWidth);
+      const nextTop = clamp(target.element.scrollTop + y, 0, maxScrollTop);
+      const nextLeft = clamp(target.element.scrollLeft + x, 0, maxScrollLeft);
+      didScroll = nextTop !== target.element.scrollTop || nextLeft !== target.element.scrollLeft;
+      if (didScroll) {
+        target.element.scrollTop = nextTop;
+        target.element.scrollLeft = nextLeft;
+      }
+    } else if (target.kind === 'window' && target.win) {
+      const scrollWidth = target.scrollWidth ?? 0;
+      const scrollHeight = target.scrollHeight ?? 0;
+      const maxScrollTop = Math.max(0, scrollHeight - target.win.innerHeight);
+      const maxScrollLeft = Math.max(0, scrollWidth - target.win.innerWidth);
+      const currentTop = target.win.scrollY ?? 0;
+      const currentLeft = target.win.scrollX ?? 0;
+      const nextTop = clamp(currentTop + y, 0, maxScrollTop);
+      const nextLeft = clamp(currentLeft + x, 0, maxScrollLeft);
+      didScroll = nextTop !== currentTop || nextLeft !== currentLeft;
+      if (didScroll) {
+        target.win.scrollTo(nextLeft, nextTop);
+      }
+    }
+
+    if (didScroll) {
+      const lastPointer = this.#lastPointerClient;
+      if (lastPointer) {
+        this.#handleDragSelectionAt(lastPointer.clientX, lastPointer.clientY);
+      }
+      this.#scheduleAutoScrollTick();
+      return;
+    }
+
+    this.#stopAutoScroll();
   }
 
   // ==========================================================================
@@ -568,6 +839,15 @@ export class EditorInputManager {
     const { x, y } = normalizedPoint;
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
+    // Disallow cursor placement in footnote lines: keep current selection and only focus editor.
+    const fragmentEl = target?.closest?.('[data-block-id]') as HTMLElement | null;
+    const clickedBlockId = fragmentEl?.getAttribute?.('data-block-id') ?? '';
+    if (isFootnoteBlockId(clickedBlockId)) {
+      if (!isDraggableAnnotation) event.preventDefault();
+      this.#focusEditor();
+      return;
+    }
+
     // Check header/footer session state
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
@@ -617,9 +897,53 @@ export class EditorInputManager {
       event.preventDefault();
     }
 
+    const inlineStructuredContentLabel = target?.closest?.(
+      '.superdoc-structured-content-inline__label',
+    ) as HTMLElement | null;
+    if (inlineStructuredContentLabel && doc) {
+      const resolved = this.#resolveStructuredContentInlineFromElement(doc, inlineStructuredContentLabel);
+      if (resolved) {
+        try {
+          const tr = editor.state.tr.setSelection(TextSelection.create(doc, resolved.start, resolved.end));
+          editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return;
+      }
+    }
+
+    const structuredContentLabel = target?.closest?.('.superdoc-structured-content__label') as HTMLElement | null;
+    if (structuredContentLabel && doc) {
+      const resolved = this.#resolveStructuredContentBlockFromElement(doc, structuredContentLabel);
+      if (resolved) {
+        try {
+          const contentRange = this.#findStructuredContentBlockContentRange(resolved);
+          const selection =
+            contentRange != null
+              ? TextSelection.create(doc, contentRange.from, contentRange.to)
+              : NodeSelection.create(editor.state.doc, resolved.pos);
+          const tr = editor.state.tr.setSelection(selection);
+          editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return;
+      }
+    }
+
     // Handle click outside text content
     if (!rawHit) {
       this.#focusEditorAtFirstPosition();
+      return;
+    }
+
+    // Disallow cursor placement in footnote lines (footnote content is read-only in the layout).
+    // Keep the current selection unchanged instead of moving caret to document start.
+    if (isFootnoteBlockId(rawHit.blockId)) {
+      this.#focusEditor();
       return;
     }
 
@@ -677,6 +1001,7 @@ export class EditorInputManager {
     this.#dragLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
     this.#dragLastRawHit = hit;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#lastPointerClient = { clientX: event.clientX, clientY: event.clientY };
 
     this.#isDragging = true;
     if (clickDepth >= 3) {
@@ -705,14 +1030,30 @@ export class EditorInputManager {
       }
     }
 
+    const hasFocus = editor.view?.hasFocus?.() ?? false;
+    if (!hasFocus) {
+      this.#focusEditor();
+    }
+
     // Set selection for single click
     if (!handledByDepth) {
       try {
-        let nextSelection: Selection = TextSelection.create(doc, hit.pos);
-        if (!nextSelection.$from.parent.inlineContent) {
-          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+        // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
+        const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
+        let nextSelection: Selection;
+        if (sdtBlock) {
+          nextSelection = NodeSelection.create(doc, sdtBlock.pos);
+        } else {
+          nextSelection = TextSelection.create(doc, hit.pos);
+          if (!nextSelection.$from.parent.inlineContent) {
+            nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+          }
         }
         const tr = editor.state.tr.setSelection(nextSelection);
+        // Preserve stored marks (e.g., formatting selected from toolbar before clicking)
+        if (nextSelection instanceof TextSelection && nextSelection.empty && editor.state.storedMarks) {
+          tr.setStoredMarks(editor.state.storedMarks);
+        }
         editor.view?.dispatch(tr);
       } catch {
         // Position may be invalid during layout updates
@@ -720,7 +1061,6 @@ export class EditorInputManager {
     }
 
     this.#callbacks.scheduleSelectionUpdate?.();
-    this.#focusEditor();
   }
 
   #handlePointerMove(event: PointerEvent): void {
@@ -729,16 +1069,17 @@ export class EditorInputManager {
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) return;
 
-    const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
-    if (!normalized) return;
-
     // Handle drag selection
     if (this.#isDragging && this.#dragAnchor !== null && event.buttons & 1) {
-      this.#handleDragSelection(event, normalized);
+      this.#lastPointerClient = { clientX: event.clientX, clientY: event.clientY };
+      this.#handleDragSelectionAt(event.clientX, event.clientY);
+      this.#updateAutoScrollFromPointer(event.clientX, event.clientY);
       return;
     }
 
     // Handle header/footer hover
+    const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
+    if (!normalized) return;
     this.#handleHover(normalized);
   }
 
@@ -747,7 +1088,10 @@ export class EditorInputManager {
 
     this.#suppressFocusInFromDraggable = false;
 
-    if (!this.#isDragging) return;
+    if (!this.#isDragging) {
+      this.#stopAutoScroll();
+      return;
+    }
 
     // Release pointer capture
     const viewportHost = this.#deps.getViewportHost();
@@ -768,6 +1112,7 @@ export class EditorInputManager {
     const dragPointer = this.#dragLastPointer;
 
     this.#isDragging = false;
+    this.#stopAutoScroll();
 
     // Reset cell drag mode
     if (this.#cellDragMode !== 'none') {
@@ -788,6 +1133,7 @@ export class EditorInputManager {
       this.#dragLastPointer = null;
       this.#dragLastRawHit = null;
       this.#dragUsedPageNotMountedFallback = false;
+      this.#lastPointerClient = null;
       return;
     }
 
@@ -796,12 +1142,25 @@ export class EditorInputManager {
   }
 
   #handlePointerLeave(): void {
+    if (!this.#isDragging) {
+      this.#stopAutoScroll();
+    }
     this.#callbacks.clearHoverRegion?.();
   }
 
   #handleDoubleClick(event: MouseEvent): void {
     if (!this.#deps) return;
     if (event.button !== 0) return;
+
+    const target = event.target as HTMLElement | null;
+    const annotationEl = target?.closest?.('.annotation[data-pm-start]') as HTMLElement | null;
+
+    if (annotationEl) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.#handleAnnotationDoubleClick(event, annotationEl);
+      return;
+    }
 
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) return;
@@ -831,6 +1190,27 @@ export class EditorInputManager {
       this.#callbacks.activateHeaderFooterRegion?.(region);
     } else if ((this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body') !== 'body') {
       this.#callbacks.exitHeaderFooterMode?.();
+    }
+  }
+
+  #handleAnnotationDoubleClick(event: MouseEvent, annotationEl: HTMLElement): void {
+    const editor = this.#deps?.getEditor();
+    if (!editor?.isEditable) return;
+
+    const resolved = this.#callbacks.resolveFieldAnnotationSelectionFromElement?.(annotationEl);
+    if (resolved) {
+      try {
+        const tr = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, resolved.pos));
+        editor.view?.dispatch(tr);
+      } catch {}
+
+      editor.emit('fieldAnnotationDoubleClicked', {
+        editor,
+        node: resolved.node,
+        nodePos: resolved.pos,
+        event,
+        currentTarget: annotationEl,
+      });
     }
   }
 
@@ -869,6 +1249,17 @@ export class EditorInputManager {
     } catch {
       // Ignore focus failures
     }
+    this.#callbacks.scheduleSelectionUpdate?.();
+  }
+
+  #handleEditorFocus(): void {
+    if (!this.#deps) return;
+    this.#callbacks.scheduleSelectionUpdate?.();
+  }
+
+  #handleEditorBlur(): void {
+    if (!this.#deps) return;
+    this.#callbacks.scheduleSelectionUpdate?.();
   }
 
   // ==========================================================================
@@ -928,6 +1319,148 @@ export class EditorInputManager {
     }
   }
 
+  #findStructuredContentBlockAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
+    if (!Number.isFinite(pos)) return null;
+
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type?.name === 'structuredContentBlock') {
+        return {
+          node,
+          pos: $pos.before(depth),
+          start: $pos.start(depth),
+          end: $pos.end(depth),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #findStructuredContentBlockById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
+    let found: StructuredContentSelection | null = null;
+    doc.descendants((node, pos) => {
+      if (node.type?.name !== 'structuredContentBlock') return true;
+      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+      if (String(nodeId ?? '') !== id) return true;
+
+      found = {
+        node,
+        pos,
+        start: pos + 1,
+        end: pos + node.nodeSize - 1,
+      };
+      return false;
+    });
+    return found;
+  }
+
+  #findStructuredContentInlineAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
+    if (!Number.isFinite(pos)) return null;
+
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type?.name === 'structuredContent') {
+        return {
+          node,
+          pos: $pos.before(depth),
+          start: $pos.start(depth),
+          end: $pos.end(depth),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #findStructuredContentInlineById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
+    let found: StructuredContentSelection | null = null;
+    doc.descendants((node, pos) => {
+      if (node.type?.name !== 'structuredContent') return true;
+      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+      if (String(nodeId ?? '') !== id) return true;
+
+      found = {
+        node,
+        pos,
+        start: pos + 1,
+        end: pos + node.nodeSize - 1,
+      };
+      return false;
+    });
+    return found;
+  }
+
+  #resolveStructuredContentBlockFromElement(
+    doc: ProseMirrorNode,
+    element: HTMLElement,
+  ): StructuredContentSelection | null {
+    const container = element.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+    if (!container) return null;
+
+    const sdtId = container.dataset?.sdtId;
+    if (sdtId) {
+      const match = this.#findStructuredContentBlockById(doc, sdtId);
+      if (match) return match;
+    }
+
+    const containerSdtId = container.dataset?.sdtContainerId;
+    if (containerSdtId) {
+      const match = this.#findStructuredContentBlockById(doc, containerSdtId);
+      if (match) return match;
+    }
+
+    const pmStartRaw = container.dataset?.pmStart;
+    const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
+    if (Number.isFinite(pmStart)) {
+      return this.#findStructuredContentBlockAtPos(doc, pmStart);
+    }
+
+    return null;
+  }
+
+  #resolveStructuredContentInlineFromElement(
+    doc: ProseMirrorNode,
+    element: HTMLElement,
+  ): StructuredContentSelection | null {
+    const container = element.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+    if (!container) return null;
+
+    const sdtId = container.dataset?.sdtId;
+    if (sdtId) {
+      const match = this.#findStructuredContentInlineById(doc, sdtId);
+      if (match) return match;
+    }
+
+    const pmStartRaw = container.dataset?.pmStart;
+    const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
+    if (Number.isFinite(pmStart)) {
+      return this.#findStructuredContentInlineAtPos(doc, pmStart);
+    }
+
+    return null;
+  }
+
+  #findStructuredContentBlockContentRange(resolved: StructuredContentSelection): { from: number; to: number } | null {
+    let from: number | null = null;
+    let to: number | null = null;
+    resolved.node.descendants((child, pos) => {
+      if (!child.isTextblock) return true;
+      const basePos = resolved.pos + 1 + pos;
+      const childFrom = basePos + 1;
+      const childTo = basePos + child.nodeSize - 1;
+      if (from == null) {
+        from = childFrom;
+      }
+      to = childTo;
+      return true;
+    });
+    if (from == null || to == null) return null;
+    return { from, to };
+  }
+
   #handleClickWithoutLayout(event: PointerEvent, isDraggableAnnotation: boolean): void {
     if (!isDraggableAnnotation) {
       event.preventDefault();
@@ -969,10 +1502,13 @@ export class EditorInputManager {
   ): boolean {
     if (!targetImg) return false;
 
-    const imgPmStart = targetImg.dataset?.pmStart ? Number(targetImg.dataset.pmStart) : null;
+    // When image has clipPath it is wrapped in a clip-wrapper; pm-start is on the wrapper
+    const wrapper = targetImg.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
+    const pmStartSource = wrapper ?? targetImg;
+    const imgPmStart = pmStartSource?.dataset?.pmStart ? Number(pmStartSource.dataset.pmStart) : null;
     if (Number.isNaN(imgPmStart) || imgPmStart == null) return false;
 
-    const imgLayoutEpochRaw = targetImg.dataset?.layoutEpoch;
+    const imgLayoutEpochRaw = pmStartSource?.dataset?.layoutEpoch;
     const imgLayoutEpoch = imgLayoutEpochRaw != null ? Number(imgLayoutEpochRaw) : NaN;
     const rawLayoutEpoch = Number.isFinite(rawHit.layoutEpoch) ? rawHit.layoutEpoch : NaN;
     const effectiveEpoch =
@@ -1004,11 +1540,14 @@ export class EditorInputManager {
       const tr = editor!.state.tr.setSelection(NodeSelection.create(doc, clampedImgPos));
       editor!.view?.dispatch(tr);
 
-      const selector = `.superdoc-inline-image[data-pm-start="${imgPmStart}"]`;
+      // Prefer wrapper (clip container) so selection outline is on the visible cropped box only, not the full image.
+      // The compound selector lists wrapper before inline-image; querySelector returns the first DOM-order
+      // match, and the wrapper is always an ancestor of the image, so it is found first when present.
       const viewportHost = this.#deps?.getViewportHost();
-      const targetElement = viewportHost?.querySelector(selector);
+      const targetElement = viewportHost?.querySelector(buildInlineImagePmSelector(imgPmStart));
+      const elementForHighlight = (wrapper ?? targetElement ?? targetImg) as HTMLElement;
       this.#callbacks.emit?.('imageSelected', {
-        element: targetElement ?? targetImg,
+        element: elementForHighlight,
         blockId: null,
         pmStart: clampedImgPos,
       });
@@ -1044,7 +1583,7 @@ export class EditorInputManager {
       if (fragmentHit.fragment.kind === 'image') {
         const viewportHost = this.#deps?.getViewportHost();
         const targetElement = viewportHost?.querySelector(
-          `.superdoc-image-fragment[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
         );
         if (targetElement) {
           this.#callbacks.emit?.('imageSelected', {
@@ -1083,29 +1622,36 @@ export class EditorInputManager {
     this.#focusEditor();
   }
 
-  #handleDragSelection(event: PointerEvent, normalized: { x: number; y: number }): void {
+  #handleDragSelectionAt(clientX: number, clientY: number): void {
     if (!this.#deps) return;
 
-    this.#pendingMarginClick = null;
-    const prevPointer = this.#dragLastPointer;
-    this.#dragLastPointer = { clientX: event.clientX, clientY: event.clientY, x: normalized.x, y: normalized.y };
-
     const layoutState = this.#deps.getLayoutState();
+    if (!layoutState.layout) return;
+
+    const normalized = this.#callbacks.normalizeClientPoint?.(clientX, clientY);
+    if (!normalized) return;
+
+    this.#pendingMarginClick = null;
+    this.#dragLastPointer = { clientX, clientY, x: normalized.x, y: normalized.y };
+
     const viewportHost = this.#deps.getViewportHost();
     const pageGeometryHelper = this.#deps.getPageGeometryHelper();
 
     const rawHit = clickToPosition(
-      layoutState.layout!,
+      layoutState.layout,
       layoutState.blocks,
       layoutState.measures,
       { x: normalized.x, y: normalized.y },
       viewportHost,
-      event.clientX,
-      event.clientY,
+      clientX,
+      clientY,
       pageGeometryHelper ?? undefined,
     );
 
     if (!rawHit) return;
+
+    // Don't extend selection into footnote lines
+    if (isFootnoteBlockId(rawHit.blockId)) return;
 
     const editor = this.#deps.getEditor();
     const doc = editor.state?.doc;
@@ -1336,6 +1882,8 @@ export class EditorInputManager {
     this.#dragLastPointer = null;
     this.#dragLastRawHit = null;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#lastPointerClient = null;
+    this.#stopAutoScroll();
   }
 
   #focusHeaderFooterShortcut(kind: 'header' | 'footer'): void {

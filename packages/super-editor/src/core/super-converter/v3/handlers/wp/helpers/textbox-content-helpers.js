@@ -182,7 +182,9 @@ export function extractBodyPrProperties(bodyPr) {
   const bodyPrAttrs = bodyPr?.attributes || {};
 
   // Extract vertical alignment from anchor attribute (t=top, ctr=center, b=bottom)
-  let verticalAlign = 'center'; // Default to center
+  // Per OOXML spec, when anchor is not specified, text box defaults to top alignment
+  // (confirmed by Word's VML fallback which shows v-text-anchor:top)
+  let verticalAlign = 'top'; // Default to top (OOXML spec default)
   const anchorAttr = bodyPrAttrs['anchor'];
   if (anchorAttr === 't') verticalAlign = 'top';
   else if (anchorAttr === 'ctr') verticalAlign = 'center';

@@ -9,126 +9,143 @@
 </h1>
 
 <div align="center">
-  <a href="https://www.superdoc.dev" target="_blank"><img src="https://img.shields.io/badge/Official%20Site-1355ff.svg" height="22px"></a>
-  <a href="https://docs.superdoc.dev" target="_blank"><img src="https://img.shields.io/badge/docs-available-1355ff.svg" height="22px"></a>
-  <a href="https://www.gnu.org/licenses/agpl-3.0" target="_blank"><img src="https://img.shields.io/badge/License-AGPL%20v3-1355ff.svg?color=1355ff" height="22px"></a>
   <a href="https://www.npmjs.com/package/superdoc" target="_blank"><img src="https://img.shields.io/npm/v/superdoc.svg?color=1355ff" height="22px"></a>
-  <a href="https://www.discord.com/invite/b9UuaZRyaB" target="_blank"><img src="https://img.shields.io/badge/discord-join-1355ff" height="22px"></a>
+  <a href="https://www.npmjs.com/package/superdoc" target="_blank"><img src="https://img.shields.io/npm/dm/superdoc.svg?color=1355ff" height="22px"></a>
+  <a href="https://www.gnu.org/licenses/agpl-3.0" target="_blank"><img src="https://img.shields.io/badge/License-AGPL%20v3-1355ff.svg?color=1355ff" height="22px"></a>
+  <a href="https://github.com/superdoc-dev/superdoc" target="_blank"><img src="https://img.shields.io/github/stars/superdoc-dev/superdoc?style=flat&color=1355ff" height="22px"></a>
+  <a href="https://discord.com/invite/b9UuaZRyaB" target="_blank"><img src="https://img.shields.io/badge/discord-join-1355ff" height="22px"></a>
 </div>
 
-<div>
-  <BR />
-  <strong>SuperDoc</strong> (<a href="https://www.superdoc.dev" target="_blank">online demo</a>) is an open source document editor bringing Microsoft Word capabilities to the web with real-time collaboration, extensive formatting options, and easy integration. Self-hostable with Vanilla JS, React, Vue, and more (<a href="https://github.com/superdoc-dev/superdoc/tree/main/examples" target="_blank">code examples</a>).
-  <BR />
-</div>
-
-## 🖼️ Screenshot
+<p align="center">
+  <strong>A JavaScript library that renders and edits DOCX files in the browser, headless on the server, and within agentic workflows.</strong><br>
+  Tracked changes, complex tables, headers/footers, real-time collaboration — the features your users actually need.<br>
+  Self-hosted. Open source. Works with React, Vue, and vanilla JS.
+</p>
 
 <div align="center">
   <a href="https://www.superdoc.dev" target="_blank">
-    <img alt="SuperDoc editor screenshot" src="https://storage.googleapis.com/public_statichosting/SuperDocHomepage/screeenshot.png" width="600px" height="auto" />
+   <img width="800px" height="auto" alt="SuperDoc" src="https://github.com/user-attachments/assets/0d349b23-2fde-4bd2-adf4-e1ce4ace6526" />
   </a>
 </div>
 
-## ✨ Features
-
-- **📝 Microsoft Word compatible**: View and edit DOCX documents with great import/export, advanced formatting, comments, and tracked changes
-- **🛠️ Easy to integrate**: Open source, can be self-hosted, seamlessly integrates with React, Vue, vanilla JavaScript, and more
-- **👥 Real-time collaboration**: Features multiplayer editing, live updates, commenting, sharing, and revision history
-- **📐 Extensible architecture**: Modular design makes it easy to extend, brand, and customize
-- **✅ Dual licensed**: Available under AGPLv3 for community use and Commercial license for enterprise deployments
-
-## 💡 Quick start
-
-### Installation
+## Quick start
 
 ```bash
 npm install superdoc
 ```
 
-Or install with CDN
+### React
+
+```bash
+npm install @superdoc-dev/react
+```
+
+```tsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function App() {
+  return (
+    <SuperDocEditor
+      document={file}
+      documentMode="editing"
+      onReady={() => console.log('Ready!')}
+    />
+  );
+}
+```
+
+See the [@superdoc-dev/react README](packages/react/README.md) for full React documentation.
+
+### Vanilla JavaScript
+
+```javascript
+import 'superdoc/style.css';
+import { SuperDoc } from 'superdoc';
+
+const superdoc = new SuperDoc({
+  selector: '#superdoc',
+  toolbar: '#superdoc-toolbar',
+  document: '/sample.docx',
+  documentMode: 'editing',
+});
+```
+
+Or use the CDN:
 
 ```html
 <link rel="stylesheet" href="https://unpkg.com/superdoc/dist/style.css" />
 <script type="module" src="https://unpkg.com/superdoc/dist/superdoc.umd.js"></script>
 ```
 
-### Basic usage
+For all available options and events, see the [documentation](https://docs.superdoc.dev) or [SuperDoc.js](packages/superdoc/src/core/SuperDoc.js).
 
-```javascript
-import 'superdoc/style.css';
-import { SuperDoc } from 'superdoc';
+## Features
 
-// For CDN use - `SuperDocLibrary.SuperDoc`
-const superdoc = new SuperDoc({
-  selector: '#superdoc',
-  toolbar: '#superdoc-toolbar',
-  document: '/sample.docx', // URL, File or document config
-  documentMode: 'editing',
-  rulers: true,
-  onReady: (event) => {
-    console.log('SuperDoc is ready', event);
-  },
-  onEditorCreate: (event) => {
-    console.log('Editor is created', event);
-  },
-});
-```
+- **Real DOCX, not rich text** — Built on OOXML. Real pagination, section breaks, headers/footers. Not a contenteditable wrapper with export bolted on.
+- **Self-hosted** — Runs entirely in the browser. Your documents never leave your servers.
+- **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
+- **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
+- **Agentic tooling** — Runs headless in Node.js. Bring your own LLM for document automation, redlining, and template workflows.
+- **Extensible** — 60+ built-in extensions. Write custom plugins with full ProseMirror access.
+- **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
-SuperDoc now uses the layout-engine powered `PresentationEditor` under the hood, so pages/zoom/error events are always available—no pagination flag required.
+## Examples
 
-For a list of all available properties and events, see the documentation or refer to [SuperDoc.js](packages/superdoc/src/core/SuperDoc.js)
+Starter projects to get you running quickly:
 
-## 📖 Documentation
+| Example | |
+|---------|--|
+| [React](examples/getting-started/react) | [Vue](examples/getting-started/vue) |
+| [Angular](examples/getting-started/angular) | [Next.js](examples/getting-started/nextjs) |
+| [Vanilla JS](examples/getting-started/vanilla) | [CDN](examples/getting-started/cdn) |
+| [Comments](examples/features/comments) | [Track changes](examples/features/track-changes) |
+| [Custom toolbar](examples/features/custom-toolbar) | [AI redlining](examples/features/ai-redlining) |
+| [Headless AI redlining](examples/headless/ai-redlining) | |
 
-Visit our <a href="https://docs.superdoc.dev" target="_blank">documentation site</a> and <a href="https://github.com/superdoc-dev/superdoc/tree/main/examples" target="_blank">code examples</a>. Key topics include:
+[Browse all examples](examples/)
 
-- Installation
-- Integration guides
-- Collaboration setup
-- Advanced customization
-- Best practices
+## Documentation
 
-## 🎯️ Roadmap
+[docs.superdoc.dev](https://docs.superdoc.dev) — installation, integration guides, collaboration setup, API reference, and more.
 
-We keep our big work-in-progress items here:
+## Roadmap
 
-- Check out our [SuperDoc roadmap](https://github.com/superdoc-dev/superdoc/wiki/%F0%9F%8E%AF%EF%B8%8F-SuperDoc-Roadmap)
-- We prioritize the solving of big DOCX import/export/formatting needs
+See the [SuperDoc roadmap](https://github.com/superdoc-dev/superdoc/issues/1982) for what's coming next. DOCX import/export fidelity is always a top priority.
 
-## 🤝 Contribute
+## Contributing
 
-We love contributions! Here's how you can help:
+Check the [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for open issues, or read the [Contributing Guide](CONTRIBUTING.md) to get started. Bug reports with reproduction .docx files are especially valuable.
 
-1. Check our [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for open issues
-2. Fork the repository and create a feature/bugfix branch
-3. Write clear, documented code following our style guidelines
-4. Submit a PR with detailed description of your changes
+## Community
 
-See our [Contributing Guide](CONTRIBUTING.md) for more details.
+- [Discord](https://discord.com/invite/b9UuaZRyaB) — Chat with the team and other contributors
+- [Email](mailto:q@superdoc.dev) — Reach the team directly
 
-## 💬 Community
+## License
 
-- [Discord](https://discord.com/invite/b9UuaZRyaB) - Join our community chat
-- [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions) - Ask questions and share ideas
-- [Team email](mailto:q@superdoc.dev) - Get help from our team
+- Open source: [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)
+- Commercial: [Enterprise License](https://www.superdocportal.dev/get-in-touch)
 
-## 📄 License
+## Acknowledgments
 
-- Open Source: [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)
-- Commercial: [Enterprise License](https://www.harbourshare.com/get-in-touch)
+Built on <a href="https://prosemirror.net" target="_blank">ProseMirror</a>, <a href="https://github.com/yjs/yjs" target="_blank">Yjs</a>, <a href="https://stuk.github.io/jszip/" target="_blank">JSZip</a>, and <a href="https://vite.dev" target="_blank">Vite</a>.
 
-## 🙌 Shout-outs
+## Community Contributors
 
-- Marijn Haverbeke and the community behind <a href="https://prosemirror.net" target="_blank">ProseMirror</a> - which we built on top of to make SuperDoc possible
-- Tiptap and the <a href="https://github.com/JefMari/awesome-wysiwyg-editors" target="_blank">many amazing editors of the web</a> - from which we draw inspiration
-- These wonderful projects that SuperDoc uses: <a href="https://github.com/yjs/yjs" target="_blank">Yjs</a>, <a href="https://fontawesome.com/" target="_blank">FontAwesome</a>, <a href="https://stuk.github.io/jszip/" target="_blank">JSZip</a>, and <a href="https://vite.dev" target="_blank">Vite</a>
+Special thanks to these community members who have contributed code to SuperDoc:
 
-## 📱 Contact
+<a href="https://github.com/financialvice"><img src="https://github.com/financialvice.png" width="50" height="50" alt="financialvice" title="financialvice" /></a>
+<a href="https://github.com/luciorubeens"><img src="https://github.com/luciorubeens.png" width="50" height="50" alt="luciorubeens" title="Lúcio Caetano" /></a>
+<a href="https://github.com/Dannyhvv"><img src="https://github.com/Dannyhvv.png" width="50" height="50" alt="Dannyhvv" title="Dannyhvv" /></a>
+<a href="https://github.com/henriquedevelops"><img src="https://github.com/henriquedevelops.png" width="50" height="50" alt="henriquedevelops" title="henriquedevelops" /></a>
+<a href="https://github.com/ybrodsky"><img src="https://github.com/ybrodsky.png" width="50" height="50" alt="ybrodsky" title="Yael Brodsky" /></a>
+<a href="https://github.com/icaroharry"><img src="https://github.com/icaroharry.png" width="50" height="50" alt="icaroharry" title="Ícaro Harry" /></a>
+<a href="https://github.com/asumaran"><img src="https://github.com/asumaran.png" width="50" height="50" alt="asumaran" title="Alfredo Sumaran" /></a>
+<a href="https://github.com/J-Michalek"><img src="https://github.com/J-Michalek.png" width="50" height="50" alt="J-Michalek" title="Jakub Michálek" /></a>
 
-- [✉️ Email](mailto:q@superdoc.dev?subject=[SuperDoc]%20Project%20inquiry)
-- [⛵️ Website](https://superdoc.dev)
+Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 
 ---
 
-Created and actively maintained by <a href="https://www.superdoc.dev" target="_blank">Harbour</a> and the SuperDoc community
+Created and maintained by <a href="https://www.superdoc.dev" target="_blank">Harbour</a> and the SuperDoc community

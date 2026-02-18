@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { collapseWhitespaceNextToInlinePassthrough, filterOutRootInlineNodes } from './docxImporter.js';
+import {
+  collapseWhitespaceNextToInlinePassthrough,
+  filterOutRootInlineNodes,
+  normalizeTableBookmarksInContent,
+} from './docxImporter.js';
 
 const n = (type, attrs = {}) => ({ type, attrs, marks: [] });
 
@@ -176,5 +180,139 @@ describe('collapseWhitespaceNextToInlinePassthrough', () => {
     expect(tree[0].content[0].content[0].text).toBe('Foo ');
     expect(tree[0].content[2].content).toHaveLength(1);
     expect(tree[0].content[2].content[0].text).toBe('bar');
+  });
+});
+
+describe('normalizeTableBookmarksInContent', () => {
+  const table = (content) => ({ type: 'table', content, attrs: {}, marks: [] });
+  const row = (cells) => ({ type: 'tableRow', content: cells, attrs: {}, marks: [] });
+  const cell = (content) => ({ type: 'tableCell', content, attrs: {}, marks: [] });
+  const paragraph = (content) => ({ type: 'paragraph', content, attrs: {}, marks: [] });
+  const text = (value) => ({ type: 'text', text: value, marks: [] });
+  const bookmarkStart = (id, attrs = {}) => ({ type: 'bookmarkStart', attrs: { id, ...attrs } });
+  const bookmarkEnd = (id, attrs = {}) => ({ type: 'bookmarkEnd', attrs: { id, ...attrs } });
+
+  it('moves leading bookmarkStart into the first cell paragraph', () => {
+    const input = [table([bookmarkStart('b1'), row([cell([paragraph([text('Cell')])])])])];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+
+    expect(normalizedTable.content.some((node) => node.type === 'bookmarkStart')).toBe(false);
+    const paraContent = normalizedTable.content[0].content[0].content[0].content;
+    expect(paraContent[0]).toMatchObject({ type: 'bookmarkStart', attrs: { id: 'b1' } });
+    expect(paraContent[1]).toMatchObject({ type: 'text', text: 'Cell' });
+  });
+
+  it('moves trailing bookmarkEnd into the last cell paragraph', () => {
+    const input = [table([row([cell([paragraph([text('Cell')])])]), bookmarkEnd('b1')])];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+
+    expect(normalizedTable.content.some((node) => node.type === 'bookmarkEnd')).toBe(false);
+    const paraContent = normalizedTable.content[0].content[0].content[0].content;
+    expect(paraContent[0]).toMatchObject({ type: 'text', text: 'Cell' });
+    expect(paraContent[1]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'b1' } });
+  });
+
+  it('moves bookmarkStart and bookmarkEnd into the same cell when no textblocks exist', () => {
+    const input = [table([bookmarkStart('b1'), row([cell([])]), bookmarkEnd('b1')])];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+
+    expect(normalizedTable.content.some((node) => node.type === 'bookmarkStart')).toBe(false);
+    expect(normalizedTable.content.some((node) => node.type === 'bookmarkEnd')).toBe(false);
+
+    const paraContent = normalizedTable.content[0].content[0].content[0].content;
+    expect(paraContent).toEqual([
+      { type: 'bookmarkStart', attrs: { id: 'b1' } },
+      { type: 'bookmarkEnd', attrs: { id: 'b1' } },
+    ]);
+  });
+
+  it('anchors bookmark boundaries to adjacent rows when markers appear between rows', () => {
+    const input = [
+      table([
+        bookmarkStart('b1'),
+        row([cell([paragraph([text('R1')])])]),
+        bookmarkEnd('b1'),
+        row([cell([paragraph([text('R2')])])]),
+      ]),
+    ];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+
+    const row1Content = normalizedTable.content[0].content[0].content[0].content;
+    expect(row1Content).toEqual([
+      { type: 'bookmarkStart', attrs: { id: 'b1' } },
+      { type: 'text', text: 'R1', marks: [] },
+      { type: 'bookmarkEnd', attrs: { id: 'b1' } },
+    ]);
+
+    const row2Content = normalizedTable.content[1].content[0].content[0].content;
+    expect(row2Content).toEqual([{ type: 'text', text: 'R2', marks: [] }]);
+  });
+
+  it('creates a cell when a row is empty', () => {
+    const input = [table([bookmarkStart('b1'), row([]), bookmarkEnd('b1')])];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+
+    const rowContent = normalizedTable.content[0].content;
+    expect(rowContent).toHaveLength(1);
+    expect(rowContent[0].type).toBe('tableCell');
+
+    const paraContent = rowContent[0].content[0].content;
+    expect(paraContent).toEqual([
+      { type: 'bookmarkStart', attrs: { id: 'b1' } },
+      { type: 'bookmarkEnd', attrs: { id: 'b1' } },
+    ]);
+  });
+
+  it('places bookmarkStart in the cell indicated by colFirst when present; bookmarkEnd uses first/last cell only', () => {
+    const twoCells = row([cell([paragraph([text('A')])]), cell([paragraph([text('B')])])]);
+    const input = [table([bookmarkStart('b1', { colFirst: '1' }), twoCells, bookmarkEnd('b1')])];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const normalizedTable = result[0];
+    const rowContent = normalizedTable.content[0].content;
+
+    expect(normalizedTable.content.some((node) => node.type === 'bookmarkStart')).toBe(false);
+    expect(normalizedTable.content.some((node) => node.type === 'bookmarkEnd')).toBe(false);
+
+    const firstCellContent = rowContent[0].content[0].content;
+    expect(firstCellContent).toEqual([{ type: 'text', text: 'A', marks: [] }]);
+
+    const secondCellContent = rowContent[1].content[0].content;
+    expect(secondCellContent[0]).toMatchObject({ type: 'bookmarkStart', attrs: { id: 'b1', colFirst: '1' } });
+    expect(secondCellContent[1]).toMatchObject({ type: 'text', text: 'B', marks: [] });
+    expect(secondCellContent[2]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'b1' } });
+  });
+
+  it('normalizes bookmarks in a nested table (table inside a cell with bookmarks as direct children of inner table)', () => {
+    const innerTableWithBookmarks = table([
+      bookmarkStart('n1'),
+      row([cell([paragraph([text('Nested')])])]),
+      bookmarkEnd('n1'),
+    ]);
+    const outerTable = table([row([cell([innerTableWithBookmarks])])]);
+    const input = [outerTable];
+
+    const result = normalizeTableBookmarksInContent(input);
+    const outer = result[0];
+    const inner = outer.content[0].content[0].content[0];
+
+    expect(inner.type).toBe('table');
+    expect(inner.content.some((node) => node.type === 'bookmarkStart')).toBe(false);
+    expect(inner.content.some((node) => node.type === 'bookmarkEnd')).toBe(false);
+
+    const innerCellParagraphContent = inner.content[0].content[0].content[0].content;
+    expect(innerCellParagraphContent[0]).toMatchObject({ type: 'bookmarkStart', attrs: { id: 'n1' } });
+    expect(innerCellParagraphContent[1]).toMatchObject({ type: 'text', text: 'Nested', marks: [] });
+    expect(innerCellParagraphContent[2]).toMatchObject({ type: 'bookmarkEnd', attrs: { id: 'n1' } });
   });
 });

@@ -90,6 +90,16 @@ describe('paragraph-hash-utils', () => {
       const run: Run = { kind: 'lineBreak' };
       expect(getRunUnderlineStyle(run)).toBe('');
     });
+
+    it('returns "single" when underline is boolean true', () => {
+      const run = { text: 'hello', fontFamily: 'Arial', fontSize: 12, underline: true } as Run;
+      expect(getRunUnderlineStyle(run)).toBe('single');
+    });
+
+    it('returns empty string when underline is boolean false', () => {
+      const run = { text: 'hello', fontFamily: 'Arial', fontSize: 12, underline: false } as Run;
+      expect(getRunUnderlineStyle(run)).toBe('');
+    });
   });
 
   describe('getRunUnderlineColor', () => {

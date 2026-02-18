@@ -1,6 +1,6 @@
 import * as xmljs from 'xml-js';
 import JSZip from 'jszip';
-import { getContentTypesFromXml } from './super-converter/helpers.js';
+import { getContentTypesFromXml, base64ToUint8Array } from './super-converter/helpers.js';
 import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
 
 /**
@@ -262,7 +262,7 @@ class DocxZipper {
     return zip;
   }
 
-  async updateZip({ docx, updatedDocs, originalDocxFile, media, fonts, isHeadless }) {
+  async updateZip({ docx, updatedDocs, originalDocxFile, media, fonts, isHeadless, compression = 'DEFLATE' }) {
     // We use a different re-zip process if we have the original docx vs the docx xml metadata
     let zip;
 
@@ -274,7 +274,11 @@ class DocxZipper {
 
     // If we are headless we don't have 'blob' support, so export as 'nodebuffer'
     const exportType = isHeadless ? 'nodebuffer' : 'blob';
-    return await zip.generateAsync({ type: exportType });
+    return await zip.generateAsync({
+      type: exportType,
+      compression,
+      compressionOptions: compression === 'DEFLATE' ? { level: 6 } : undefined,
+    });
   }
 
   /**
@@ -299,7 +303,8 @@ class DocxZipper {
     });
 
     Object.keys(media).forEach((path) => {
-      const binaryData = Buffer.from(media[path], 'base64');
+      const value = media[path];
+      const binaryData = typeof value === 'string' ? base64ToUint8Array(value) : value;
       zip.file(path, binaryData);
     });
 

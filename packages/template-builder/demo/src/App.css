@@ -1,0 +1,283 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background: #f5f5f7;
+}
+
+.demo {
+  min-height: 100vh;
+}
+
+/* Header */
+header {
+  background: white;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #e5e5e7;
+}
+
+.header-content {
+  max-width: 1600px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-left h1 {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.header-left h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.header-left h1 a:hover {
+  color: #007aff;
+}
+
+.header-left p {
+  color: #86868b;
+  margin: 0.25rem 0 0 0;
+}
+
+.header-nav {
+  display: flex;
+  gap: 2rem;
+}
+
+.header-nav a {
+  color: #1d1d1f;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition: color 0.2s;
+}
+
+.header-nav a:hover {
+  color: #007aff;
+}
+
+/* Container */
+.container {
+  max-width: 1600px;
+  margin: 2rem auto;
+  padding: 0 2rem;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.hint {
+  color: #86868b;
+  font-size: 0.875rem;
+}
+
+.divider {
+  color: #d2d2d7;
+}
+
+.export-button {
+  padding: 0.5rem 1.25rem;
+  background: #007aff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.export-button:hover {
+  background: #0051d5;
+}
+
+.export-button:disabled,
+.import-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.import-button {
+  padding: 0.5rem 1.25rem;
+  background: white;
+  color: #007aff;
+  border: 1px solid #b0d4ff;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+
+.import-button:hover {
+  background: #e8f2ff;
+  border-color: #007aff;
+}
+
+.toolbar-error {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+/* Template Builder Container */
+.superdoc-template-builder {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.superdoc-template-builder-editor {
+  border: 2px solid #007aff;
+  border-radius: 8px;
+  overflow: auto;
+  background: white;
+}
+
+/* Event Log */
+.event-log {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.8125rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.event-log-header {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  letter-spacing: 0.05em;
+}
+
+.event-log-item {
+  padding: 0.125rem 0;
+  color: #374151;
+}
+
+/* Export Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modal h2 {
+  margin-bottom: 1.5rem;
+}
+
+.modal h3 {
+  margin: 1.5rem 0 0.75rem 0;
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+.export-content pre {
+  background: #f5f5f7;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 0.8125rem;
+  max-height: 300px;
+}
+
+.modal-close {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: #dc2626;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .toolbar-left {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .superdoc-template-builder > div {
+    flex-direction: column !important;
+  }
+
+  .superdoc-field-list {
+    width: 100% !important;
+  }
+}

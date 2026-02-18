@@ -1,0 +1,373 @@
+---
+title: Configuration
+keywords: "superdoc configuration, editor config options, document settings, word editor setup, api configuration"
+---
+
+Configuration is passed when creating a SuperDoc instance. Only two fields are required.
+
+## Quick start
+
+```javascript
+new SuperDoc({
+  selector: "#editor", // Required: Where to render
+  document: "contract.docx", // Required: What to load
+});
+```
+
+## Core parameters
+
+<ParamField path="selector" type="string | HTMLElement" required>
+  DOM selector or element where SuperDoc will mount.
+
+  ```javascript
+  selector: '#editor'
+  // or
+  selector: document.querySelector('.my-editor')
+  ```
+</ParamField>
+
+<ParamField path="document" type="Document | string | File" required>
+  Document to load.
+  
+  Can be a `Document (Object)`, `string` or `File`
+  
+  <Expandable title="Supported formats">
+    - `Document` Object
+    ```json
+    {
+      id: 'doc-123', // string
+      type: 'docx', // string, can be 'docx' or 'pdf'
+      data: File // File or Blob
+    }
+    ```
+    - `string` - URL to fetch
+    - `File` - From file input
+  </Expandable>
+  
+  <Note>Use `documents` array for multiple documents instead</Note>
+</ParamField>
+
+<ParamField path="documents" type="Document[]">
+  Multiple documents to load (alternative to single `document`)
+  
+  ```javascript
+  documents: [
+    { id: 'doc-1', type: 'docx', data: fileObject },
+    { id: 'doc-2', type: 'pdf', url: 'report.pdf' }
+  ]
+  ```
+  
+  <Expandable title="Supported formats">
+    - `File` - From file input (e.g., from `<input type="file">`)
+    - `string` (URL) - To fetch the document
+  </Expandable>
+</ParamField>
+
+<ParamField path="superdocId" type="string">
+  Unique identifier for this SuperDoc instance
+  <Note>Auto-generated UUID if not provided</Note>
+</ParamField>
+
+## User & permissions
+
+<ParamField path="user" type="Object">
+  Current user information
+  <Expandable title="User properties">
+    <ParamField path="name" type="string" required>
+      Display name
+    </ParamField>
+    <ParamField path="email" type="string" required>
+      Email address
+    </ParamField>
+    <ParamField path="image" type="string">
+      Avatar URL
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="users" type="User[]" default="[]">
+  All users with document access. Used for @mentions and collaboration.
+</ParamField>
+
+<ParamField path="role" type="string" default="'editor'">
+  User permission level
+  <Expandable title="Available roles">
+    - `editor` - Full editing capabilities
+    - `viewer` - Read-only access
+    - `suggester` - Can only suggest changes
+  </Expandable>
+  <Warning>Role overrides documentMode when more restrictive</Warning>
+</ParamField>
+
+<ParamField path="documentMode" type="string" default="'editing'">
+  Initial document mode
+  <Expandable title="Document modes">
+    - `editing` - Normal editing
+    - `viewing` - Read-only display
+    - `suggesting` - Track changes enabled
+  </Expandable>
+  <Info>See the [Track Changes extension](/extensions/track-changes) for accept/reject commands, and the [runnable example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/track-changes) for a complete workflow.</Info>
+</ParamField>
+
+<ParamField path="comments" type="Object">
+  Viewing-mode visibility controls for standard comments
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="comments.visible" type="boolean" default="false">
+      Show comment highlights and threads when `documentMode` is `viewing`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="trackChanges" type="Object">
+  Viewing-mode visibility controls for tracked changes
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="trackChanges.visible" type="boolean" default="false">
+      Show tracked-change markup and threads when `documentMode` is `viewing`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="permissionResolver" type="function">
+  Override permission checks for comments and tracked changes
+  
+  ```javascript
+  const superdoc = new SuperDoc({
+    user: { name: 'Alex Editor', email: 'alex@example.com' },
+    permissionResolver: ({ permission, trackedChange, defaultDecision }) => {
+      if (permission === 'RESOLVE_OTHER' && trackedChange) {
+        return false; // Block accepting suggestions from other authors
+      }
+      return defaultDecision;
+    },
+  });
+  ```
+  
+  <Note>Return `false` to block an action. Return `true` or `undefined` to fall back to the built-in permission matrix.</Note>
+</ParamField>
+
+## Modules
+
+<ParamField path="modules" type="Object">
+  Configure optional modules
+</ParamField>
+
+### Collaboration module
+
+<ParamField path="modules.collaboration" type="Object">
+  Real-time collaboration settings
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="url" type="string" required>
+      WebSocket server URL
+    </ParamField>
+    <ParamField path="providerType" type="string" default="'hocuspocus'">
+      Provider implementation
+    </ParamField>
+    <ParamField path="token" type="string">
+      Authentication token
+    </ParamField>
+    <ParamField path="params" type="Object">
+      Additional connection parameters
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Comments module
+
+<ParamField path="modules.comments" type="Object">
+  Comments system configuration
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="element" type="string | HTMLElement">
+      DOM element for comments list
+    </ParamField>
+    <ParamField path="allowResolve" type="boolean" default="true">
+      Allow resolving comments
+    </ParamField>
+    <ParamField path="useInternalExternalComments" type="boolean">
+      Dual comment system
+    </ParamField>
+    <ParamField path="permissionResolver" type="function">
+      Comments-only override for the permission resolver
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Toolbar module
+
+<ParamField path="modules.toolbar" type="Object">
+  Toolbar configuration
+  
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="selector" type="string">
+      CSS selector for the toolbar container (e.g. `'#toolbar'`)
+    </ParamField>
+    <ParamField path="groups" type="string[]" default="['left', 'center', 'right']">
+      Layout groups
+    </ParamField>
+    <ParamField path="icons" type="Object">
+      Custom icon overrides
+    </ParamField>
+    <ParamField path="texts" type="Object">
+      Text label overrides
+    </ParamField>
+    <ParamField path="fonts" type="string[]">
+      Available font families. See [Toolbar fonts](/modules/toolbar#font-configuration) for details.
+
+      <Info>Custom fonts from DOCX files will display in the toolbar but won't be selectable unless loaded in your app and added here.</Info>
+    </ParamField>
+    <ParamField path="hideButtons" type="boolean" default="true">
+      Hide when inactive
+    </ParamField>
+    <ParamField path="responsiveToContainer" type="boolean" default="false">
+      Container-based responsive sizing
+    </ParamField>
+
+  </Expandable>
+</ParamField>
+
+## Appearance
+
+<ParamField path="title" type="string" default="'SuperDoc'">
+  Document title for exports and display
+</ParamField>
+
+<ParamField path="colors" type="string[]">
+  Colors for user awareness and highlighting
+  <Note>Built-in palette provided by default</Note>
+</ParamField>
+
+<ParamField path="viewOptions" type="Object">
+  Document view options for controlling layout
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="viewOptions.layout" type="string" default="'print'">
+      Document view layout mode
+      - `'print'` - Fixed page width, displays document as it prints (default)
+      - `'web'` - Content reflows to fit container width
+    </ParamField>
+  </Expandable>
+  <Note>Use `'web'` for mobile devices and WCAG AA reflow compliance (Success Criterion 1.4.10). When set to `'web'`, the layout engine is automatically disabled.</Note>
+
+  ```javascript
+  viewOptions: { layout: 'web' }
+  ```
+</ParamField>
+
+<ParamField path="layoutMode" type="string" deprecated>
+  <Warning>**Removed in v1.0** — Use `viewOptions.layout` instead. `'paginated'` → `'print'`, `'responsive'` → `'web'`.</Warning>
+</ParamField>
+
+<ParamField path="layoutMargins" type="Object" deprecated>
+  <Warning>**Removed in v1.0** — Use CSS to control margins in web layout mode.</Warning>
+</ParamField>
+
+<ParamField path="rulers" type="boolean" default="false">
+  Show document rulers
+</ParamField>
+
+<ParamField path="toolbar" type="string">
+  CSS selector for the toolbar container (e.g. `'#toolbar'`). Shorthand for `modules.toolbar.selector`.
+</ParamField>
+
+## Advanced options
+
+<ParamField path="editorExtensions" type="Extension[]" default="[]">
+  Additional SuperDoc extensions
+</ParamField>
+
+<ParamField path="handleImageUpload" type="function">
+  Custom image upload handler
+  
+  ```javascript
+  handleImageUpload: async (file) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    const response = await fetch('/upload', { 
+      method: 'POST', 
+      body: formData 
+    });
+    const { url } = await response.json();
+    return url;
+  }
+  ```
+</ParamField>
+
+<ParamField path="telemetry" type="Object" deprecated>
+  <Warning>**Deprecated since v1.8** — This option is no longer supported and will be ignored.</Warning>
+</ParamField>
+
+<ParamField path="jsonOverride" type="Object">
+  Override document content with a JSON schema. Used to load documents from a previously exported JSON representation instead of a DOCX file.
+
+  ```javascript
+  jsonOverride: { type: 'doc', content: [...] }
+  ```
+</ParamField>
+
+<ParamField path="uiDisplayFallbackFont" type="string" default="'Arial, Helvetica, sans-serif'">
+  Font family used for all SuperDoc UI elements (toolbar, comments, etc.)
+</ParamField>
+
+<ParamField path="suppressDefaultDocxStyles" type="boolean" default="false">
+  Prevent default DOCX styles from being applied
+</ParamField>
+
+<ParamField path="disableContextMenu" type="boolean" default="false">
+  Disable custom context menus
+</ParamField>
+
+<ParamField path="cspNonce" type="string">
+  Content Security Policy nonce
+</ParamField>
+
+## Event handlers
+
+All handlers are optional functions in the configuration:
+
+<ParamField path="onReady" type="function">
+  Called when SuperDoc is ready
+  
+  ```javascript
+  onReady: ({ superdoc }) => {
+    console.log('Ready');
+  }
+  ```
+</ParamField>
+
+<ParamField path="onEditorBeforeCreate" type="function">
+  Called before an editor is created
+</ParamField>
+
+<ParamField path="onEditorCreate" type="function">
+  Called when editor is created
+
+  ```javascript
+  onEditorCreate: ({ editor }) => {
+    editor.focus();
+  }
+  ```
+</ParamField>
+
+<ParamField path="onEditorUpdate" type="function">
+  Called on content changes
+  
+  ```javascript
+  onEditorUpdate: ({ editor }) => {
+    autoSave(editor.getJSON());
+  }
+  ```
+</ParamField>
+
+<ParamField path="onSidebarToggle" type="function">
+  Called when the comments sidebar is toggled
+</ParamField>
+
+<ParamField path="onException" type="function">
+  Called when an error occurs
+
+  ```javascript
+  onException: ({ error }) => {
+    console.error('SuperDoc error:', error);
+  }
+  ```
+</ParamField>
+
+See [Events](/core/superdoc/events) for complete list.

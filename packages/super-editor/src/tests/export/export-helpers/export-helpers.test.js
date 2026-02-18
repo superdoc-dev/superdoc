@@ -124,7 +124,7 @@ describe('export-helpers', () => {
       expect(getCommentDefinitionMock).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'c1',
-          commentJSON: { type: 'paragraph', text: 'converted text' },
+          commentJSON: [{ type: 'paragraph', text: 'converted text' }],
         }),
         0,
         comments,

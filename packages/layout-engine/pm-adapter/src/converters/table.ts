@@ -24,13 +24,12 @@ import type {
   NodeHandlerContext,
   BlockIdGenerator,
   PositionMap,
-  StyleContext,
   TrackedChangesConfig,
   HyperlinkConfig,
   ThemeColorPalette,
   ConverterContext,
-  TableNodeToBlockOptions,
   NestedConverters,
+  TableNodeToBlockParams,
 } from '../types.js';
 import { extractTableBorders, extractCellBorders, extractCellPadding } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
@@ -42,35 +41,18 @@ import {
   applySdtMetadataToParagraphBlocks,
   applySdtMetadataToTableBlock,
 } from '../sdt/index.js';
-import { TableProperties } from '@superdoc/style-engine/ooxml';
-
-type ParagraphConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  converterContext?: ConverterContext,
-) => FlowBlock[];
+import { TableProperties, resolveTableCellProperties } from '@superdoc/style-engine/ooxml';
 
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  defaultFont: string;
-  defaultSize: number;
-  styleContext: StyleContext;
-  trackedChanges?: TrackedChangesConfig;
-  bookmarks?: Map<string, number>;
-  hyperlinkConfig?: HyperlinkConfig;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
+  hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
-  paragraphToFlowBlocks?: ParagraphConverter;
-  converterContext?: ConverterContext;
-  converters?: NestedConverters;
+  converterContext: ConverterContext;
+  converters: NestedConverters;
+  enableComments: boolean;
 };
 
 type ParseTableCellArgs = {
@@ -203,7 +185,17 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Table cells can contain paragraphs, images/drawings, structured content blocks, and nested tables.
   const blocks: (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[] = [];
 
+  // Resolve table cell properties from the style cascade (wholeTable → bands → conditional → inline)
+  const inlineTcProps = cellNode.attrs?.tableCellProperties as Record<string, unknown> | undefined;
+  const tableInfo = tableProperties ? { tableProperties, rowIndex, cellIndex, numCells, numRows } : undefined;
+  const resolvedTcProps = resolveTableCellProperties(
+    inlineTcProps as Parameters<typeof resolveTableCellProperties>[0],
+    tableInfo,
+    context.converterContext?.translatedLinkedStyles,
+  );
+
   // Extract cell background color for auto text color resolution
+  // Priority: inline background attr > resolved style shading
   const cellBackground = cellNode.attrs?.background as { color?: string } | undefined;
   let cellBackgroundColor: string | undefined;
   if (cellBackground && typeof cellBackground.color === 'string') {
@@ -216,11 +208,18 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       }
     }
   }
+  // Fall back to resolved style shading if no inline background
+  if (!cellBackgroundColor && resolvedTcProps?.shading?.fill) {
+    const fill = resolvedTcProps.shading.fill;
+    if (fill !== 'auto') {
+      cellBackgroundColor = fill.startsWith('#') ? fill : `#${fill}`;
+    }
+  }
 
   // Create enhanced converter context with table style paragraph props for the style cascade
   // This allows paragraphs inside table cells to inherit table style's pPr
   // Also includes backgroundColor for auto text color resolution
-  const cellConverterContext: ConverterContext | undefined =
+  const cellConverterContext: ConverterContext =
     tableProperties || cellBackgroundColor
       ? ({
           ...context.converterContext,
@@ -229,7 +228,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         } as ConverterContext)
       : context.converterContext;
 
-  const paragraphToFlowBlocks = context.converters?.paragraphToFlowBlocks ?? context.paragraphToFlowBlocks;
+  const paragraphToFlowBlocks = context.converters.paragraphToFlowBlocks;
   const tableNodeToBlock = context.converters?.tableNodeToBlock;
 
   /**
@@ -261,19 +260,18 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   for (const childNode of cellNode.content) {
     if (childNode.type === 'paragraph') {
       if (!paragraphToFlowBlocks) continue;
-      const paragraphBlocks = paragraphToFlowBlocks(
-        childNode,
-        context.nextBlockId,
-        context.positions,
-        context.defaultFont,
-        context.defaultSize,
-        context.styleContext,
-        context.trackedChanges,
-        context.bookmarks,
-        context.hyperlinkConfig,
-        context.themeColors,
-        cellConverterContext,
-      );
+      const paragraphBlocks = paragraphToFlowBlocks({
+        para: childNode,
+        nextBlockId: context.nextBlockId,
+        positions: context.positions,
+        trackedChangesConfig: context.trackedChangesConfig,
+        bookmarks: context.bookmarks,
+        hyperlinkConfig: context.hyperlinkConfig,
+        themeColors: context.themeColors,
+        converterContext: cellConverterContext,
+        converters: context.converters,
+        enableComments: context.enableComments,
+      });
       appendParagraphBlocks(paragraphBlocks);
       continue;
     }
@@ -283,38 +281,33 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       for (const nestedNode of childNode.content) {
         if (nestedNode.type === 'paragraph') {
           if (!paragraphToFlowBlocks) continue;
-          const paragraphBlocks = paragraphToFlowBlocks(
-            nestedNode,
-            context.nextBlockId,
-            context.positions,
-            context.defaultFont,
-            context.defaultSize,
-            context.styleContext,
-            context.trackedChanges,
-            context.bookmarks,
-            context.hyperlinkConfig,
-            context.themeColors,
-            cellConverterContext,
-          );
+          const paragraphBlocks = paragraphToFlowBlocks({
+            para: nestedNode,
+            nextBlockId: context.nextBlockId,
+            positions: context.positions,
+            trackedChangesConfig: context.trackedChangesConfig,
+            bookmarks: context.bookmarks,
+            hyperlinkConfig: context.hyperlinkConfig,
+            themeColors: context.themeColors,
+            converterContext: cellConverterContext,
+            converters: context.converters,
+            enableComments: context.enableComments,
+          });
           appendParagraphBlocks(paragraphBlocks, structuredContentMetadata);
           continue;
         }
         if (nestedNode.type === 'table' && tableNodeToBlock) {
-          const tableBlock = tableNodeToBlock(
-            nestedNode,
-            context.nextBlockId,
-            context.positions,
-            context.defaultFont,
-            context.defaultSize,
-            context.styleContext,
-            context.trackedChanges,
-            context.bookmarks,
-            context.hyperlinkConfig,
-            context.themeColors,
-            paragraphToFlowBlocks,
-            context.converterContext,
-            { converters: context.converters },
-          );
+          const tableBlock = tableNodeToBlock(nestedNode, {
+            nextBlockId: context.nextBlockId,
+            positions: context.positions,
+            trackedChangesConfig: context.trackedChangesConfig,
+            bookmarks: context.bookmarks,
+            hyperlinkConfig: context.hyperlinkConfig,
+            themeColors: context.themeColors,
+            converterContext: context.converterContext,
+            converters: context.converters,
+            enableComments: context.enableComments,
+          });
           if (tableBlock && tableBlock.kind === 'table') {
             applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
             blocks.push(tableBlock);
@@ -326,21 +319,17 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     }
 
     if (childNode.type === 'table' && tableNodeToBlock) {
-      const tableBlock = tableNodeToBlock(
-        childNode,
-        context.nextBlockId,
-        context.positions,
-        context.defaultFont,
-        context.defaultSize,
-        context.styleContext,
-        context.trackedChanges,
-        context.bookmarks,
-        context.hyperlinkConfig,
-        context.themeColors,
-        paragraphToFlowBlocks,
-        context.converterContext,
-        { converters: context.converters },
-      );
+      const tableBlock = tableNodeToBlock(childNode, {
+        nextBlockId: context.nextBlockId,
+        positions: context.positions,
+        trackedChangesConfig: context.trackedChangesConfig,
+        bookmarks: context.bookmarks,
+        hyperlinkConfig: context.hyperlinkConfig,
+        themeColors: context.themeColors,
+        converterContext: context.converterContext,
+        converters: context.converters,
+        enableComments: context.enableComments,
+      });
       if (tableBlock && tableBlock.kind === 'table') {
         blocks.push(tableBlock);
       }
@@ -349,8 +338,8 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
     if (childNode.type === 'image' && context.converters?.imageNodeToBlock) {
       const mergedMarks = [...(childNode.marks ?? [])];
-      const trackedMeta = context.trackedChanges ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
-      if (shouldHideTrackedNode(trackedMeta, context.trackedChanges)) {
+      const trackedMeta = context.trackedChangesConfig ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
+      if (shouldHideTrackedNode(trackedMeta, context.trackedChangesConfig)) {
         continue;
       }
       const imageBlock = context.converters.imageNodeToBlock(
@@ -358,10 +347,10 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.nextBlockId,
         context.positions,
         trackedMeta,
-        context.trackedChanges,
+        context.trackedChangesConfig,
       );
       if (imageBlock && imageBlock.kind === 'image') {
-        annotateBlockWithTrackedChange(imageBlock, trackedMeta, context.trackedChanges);
+        annotateBlockWithTrackedChange(imageBlock, trackedMeta, context.trackedChangesConfig);
         blocks.push(imageBlock);
       }
       continue;
@@ -444,6 +433,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (background && typeof background.color === 'string') {
     const bgColor = background.color;
     cellAttrs.background = bgColor.startsWith('#') ? bgColor : `#${bgColor}`;
+  } else if (cellBackgroundColor) {
+    // Use resolved style background when no inline background is set
+    cellAttrs.background = cellBackgroundColor;
   }
 
   const tableCellProperties = cellNode.attrs?.tableCellProperties;
@@ -671,8 +663,6 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
  * @param node - Table node to convert
  * @param nextBlockId - Block ID generator
  * @param positions - Position map for PM node tracking
- * @param defaultFont - Default font family
- * @param defaultSize - Default font size
  * @param _styleContext - Style context (unused in current implementation)
  * @param trackedChanges - Optional tracked changes configuration
  * @param bookmarks - Optional bookmark position map
@@ -682,48 +672,32 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
  */
 export function tableNodeToBlock(
   node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  _styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  paragraphToFlowBlocks?: (
-    node: PMNode,
-    nextBlockId: BlockIdGenerator,
-    positions: PositionMap,
-    defaultFont: string,
-    defaultSize: number,
-    styleContext: StyleContext,
-    trackedChanges?: TrackedChangesConfig,
-    bookmarks?: Map<string, number>,
-    hyperlinkConfig?: HyperlinkConfig,
-    themeColors?: ThemeColorPalette,
-    converterContext?: ConverterContext,
-  ) => FlowBlock[],
-  converterContext?: ConverterContext,
-  options?: TableNodeToBlockOptions,
+  {
+    nextBlockId,
+    positions,
+    trackedChangesConfig,
+    bookmarks,
+    hyperlinkConfig,
+    themeColors,
+    converterContext,
+    converters,
+    enableComments,
+  }: TableNodeToBlockParams,
 ): FlowBlock | null {
   if (!Array.isArray(node.content) || node.content.length === 0) return null;
-  const paragraphConverter = paragraphToFlowBlocks ?? options?.converters?.paragraphToFlowBlocks;
+  const paragraphConverter = converters.paragraphToFlowBlocks;
   if (!paragraphConverter) return null;
 
   const parserDeps: TableParserDependencies = {
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext: _styleContext,
-    trackedChanges,
+    trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     themeColors,
-    paragraphToFlowBlocks: paragraphConverter,
     converterContext,
-    converters: options?.converters,
+    converters,
+    enableComments,
   };
 
   const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext);
@@ -782,6 +756,10 @@ export function tableNodeToBlock(
     tableAttrs.tableWidth = node.attrs.tableWidth;
   } else if (hydratedTableStyle?.tableWidth) {
     tableAttrs.tableWidth = hydratedTableStyle.tableWidth;
+  }
+
+  if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
+    tableAttrs.tableIndent = { ...node.attrs.tableIndent };
   }
 
   // Pass tableLayout through (extracted by tblLayout-translator.js)
@@ -900,33 +878,27 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     converters,
     converterContext,
+    enableComments,
   } = context;
 
-  const tableBlock = tableNodeToBlock(
-    node,
+  const tableBlock = tableNodeToBlock(node, {
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
-    undefined, // themeColors
-    converters?.paragraphToFlowBlocks,
+    themeColors: undefined,
     converterContext,
-    { converters },
-  );
+    converters,
+    enableComments,
+  });
   if (tableBlock) {
     blocks.push(tableBlock);
-    recordBlockKind(tableBlock.kind);
+    recordBlockKind?.(tableBlock.kind);
   }
 }

@@ -18,6 +18,43 @@ describe('w:tblW translator', () => {
       expect(result.value).toBe(150);
     });
 
+    // SD-1633: ECMA-376 percentage string handling
+    it('converts percentage string "100%" with type="pct" to fiftieths (5000)', () => {
+      const result = translator.encode({
+        nodes: [{ attributes: { 'w:w': '100%', 'w:type': 'pct' } }],
+      });
+      expect(result).toEqual({ value: 5000, type: 'pct' });
+    });
+
+    it('converts percentage string "50%" with type="pct" to fiftieths (2500)', () => {
+      const result = translator.encode({
+        nodes: [{ attributes: { 'w:w': '50%', 'w:type': 'pct' } }],
+      });
+      expect(result).toEqual({ value: 2500, type: 'pct' });
+    });
+
+    it('handles decimal percentage strings like "62.5%"', () => {
+      const result = translator.encode({
+        nodes: [{ attributes: { 'w:w': '62.5%', 'w:type': 'pct' } }],
+      });
+      expect(result).toEqual({ value: 3125, type: 'pct' });
+    });
+
+    it('does not convert percentage string when type is not "pct"', () => {
+      const result = translator.encode({
+        nodes: [{ attributes: { 'w:w': '100%', 'w:type': 'dxa' } }],
+      });
+      // parseInt("100%") = 100, kept as-is for non-pct types
+      expect(result).toEqual({ value: 100, type: 'dxa' });
+    });
+
+    it('handles numeric fiftieths format (5000 = 100%) unchanged', () => {
+      const result = translator.encode({
+        nodes: [{ attributes: { 'w:w': '5000', 'w:type': 'pct' } }],
+      });
+      expect(result).toEqual({ value: 5000, type: 'pct' });
+    });
+
     it('returns undefined if w:w is missing', () => {
       const result = translator.encode({ nodes: [{ attributes: { 'w:type': 'dxa' } }] });
       expect(result).toBeUndefined();

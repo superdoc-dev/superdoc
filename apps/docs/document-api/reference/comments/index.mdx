@@ -1,0 +1,27 @@
+---
+title: Comments operations
+sidebarTitle: Comments
+description: Generated Comments operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+Comment authoring and thread lifecycle operations.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| [`comments.add`](./add) | `comments.add` | Yes | `non-idempotent` | No | No |
+| [`comments.edit`](./edit) | `comments.edit` | Yes | `conditional` | No | No |
+| [`comments.reply`](./reply) | `comments.reply` | Yes | `non-idempotent` | No | No |
+| [`comments.move`](./move) | `comments.move` | Yes | `conditional` | No | No |
+| [`comments.resolve`](./resolve) | `comments.resolve` | Yes | `conditional` | No | No |
+| [`comments.remove`](./remove) | `comments.remove` | Yes | `conditional` | No | No |
+| [`comments.setInternal`](./set-internal) | `comments.setInternal` | Yes | `conditional` | No | No |
+| [`comments.setActive`](./set-active) | `comments.setActive` | Yes | `conditional` | No | No |
+| [`comments.goTo`](./go-to) | `comments.goTo` | No | `conditional` | No | No |
+| [`comments.get`](./get) | `comments.get` | No | `idempotent` | No | No |
+| [`comments.list`](./list) | `comments.list` | No | `idempotent` | No | No |

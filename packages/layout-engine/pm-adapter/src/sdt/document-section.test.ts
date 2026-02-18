@@ -32,10 +32,6 @@ describe('document-section', () => {
   describe('processDocumentSectionChildren', () => {
     const mockBlockIdGenerator = vi.fn((kind: string) => `${kind}-test-id`);
     const mockPositionMap = new Map();
-    const mockStyleContext = {
-      styles: new Map(),
-      numbering: new Map(),
-    };
     const mockHyperlinkConfig = {
       enableRichHyperlinks: false,
     };
@@ -65,7 +61,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -107,7 +102,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -137,11 +131,11 @@ describe('document-section', () => {
         const blocks: FlowBlock[] = [];
         const recordBlockKind = vi.fn();
 
-        const mockParagraphConverter = vi.fn((para) => [
+        const mockParagraphConverter = vi.fn((params) => [
           {
             kind: 'paragraph',
-            id: `p-${para.content[0].text}`,
-            runs: [{ text: para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
+            id: `p-${params.para.content[0].text}`,
+            runs: [{ text: params.para.content[0].text, fontFamily: 'Arial', fontSize: 12 }],
           } as ParagraphBlock,
         ]);
 
@@ -153,7 +147,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -191,7 +184,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -224,7 +216,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -258,7 +249,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -270,15 +260,12 @@ describe('document-section', () => {
         );
 
         expect(mockParagraphConverter).toHaveBeenCalledWith(
-          children[0],
-          mockBlockIdGenerator,
-          mockPositionMap,
-          'Arial',
-          12,
-          mockStyleContext,
-          undefined,
-          undefined,
-          mockHyperlinkConfig,
+          expect.objectContaining({
+            para: children[0],
+            nextBlockId: mockBlockIdGenerator,
+            positions: mockPositionMap,
+            hyperlinkConfig: mockHyperlinkConfig,
+          }),
         );
       });
 
@@ -302,7 +289,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -336,7 +322,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -369,7 +354,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -404,7 +388,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -453,7 +436,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -466,14 +448,11 @@ describe('document-section', () => {
 
         expect(mockTableConverter).toHaveBeenCalledWith(
           children[0],
-          mockBlockIdGenerator,
-          mockPositionMap,
-          'Arial',
-          12,
-          mockStyleContext,
-          undefined,
-          undefined,
-          mockHyperlinkConfig,
+          expect.objectContaining({
+            nextBlockId: mockBlockIdGenerator,
+            positions: mockPositionMap,
+            hyperlinkConfig: mockHyperlinkConfig,
+          }),
         );
         expect(metadataModule.applySdtMetadataToTableBlock).toHaveBeenCalledWith(mockTableBlock, sectionMetadata);
         expect(blocks).toHaveLength(1);
@@ -496,7 +475,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -528,7 +506,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -563,7 +540,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -596,7 +572,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -627,7 +602,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -675,7 +649,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -722,7 +695,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -768,7 +740,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -810,7 +781,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -844,7 +814,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -890,7 +859,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -937,7 +905,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -989,7 +956,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1046,7 +1012,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1102,7 +1067,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1139,7 +1103,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1179,7 +1142,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1220,7 +1182,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1242,11 +1203,10 @@ describe('document-section', () => {
           expect.objectContaining({
             nextBlockId: mockBlockIdGenerator,
             positions: mockPositionMap,
-            defaultFont: 'Arial',
-            defaultSize: 12,
+            converters: expect.any(Object),
+            hyperlinkConfig: mockHyperlinkConfig,
           }),
           { blocks, recordBlockKind },
-          mockParagraphConverter,
         );
       });
 
@@ -1275,7 +1235,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1324,7 +1283,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1373,7 +1331,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1416,7 +1373,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1433,7 +1389,6 @@ describe('document-section', () => {
             docPartObjectId: 'custom-toc-id',
             tocInstruction: 'TOC \\o "2-4" \\h \\z',
           }),
-          expect.anything(),
           expect.anything(),
           expect.anything(),
         );
@@ -1459,7 +1414,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             bookmarks: mockBookmarks,
             hyperlinkConfig: mockHyperlinkConfig,
           },
@@ -1472,15 +1426,13 @@ describe('document-section', () => {
         );
 
         expect(mockParagraphConverter).toHaveBeenCalledWith(
-          children[0],
-          mockBlockIdGenerator,
-          mockPositionMap,
-          'Arial',
-          12,
-          mockStyleContext,
-          undefined,
-          mockBookmarks,
-          mockHyperlinkConfig,
+          expect.objectContaining({
+            para: children[0],
+            nextBlockId: mockBlockIdGenerator,
+            positions: mockPositionMap,
+            bookmarks: mockBookmarks,
+            hyperlinkConfig: mockHyperlinkConfig,
+          }),
         );
       });
 
@@ -1503,7 +1455,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1537,7 +1488,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1577,7 +1527,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },
@@ -1612,7 +1561,6 @@ describe('document-section', () => {
             positions: mockPositionMap,
             defaultFont: 'Arial',
             defaultSize: 12,
-            styleContext: mockStyleContext,
             hyperlinkConfig: mockHyperlinkConfig,
           },
           { blocks, recordBlockKind },

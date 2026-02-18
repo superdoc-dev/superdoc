@@ -1,16 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@liveblocks/client';
 import { LiveblocksYjsProvider } from '@liveblocks/yjs';
-import * as Y from 'yjs';
-import 'superdoc/style.css';
+import { CSSProperties, useEffect, useRef, useState } from 'react';
 import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+import * as Y from 'yjs';
 
 const PUBLIC_KEY = import.meta.env.VITE_LIVEBLOCKS_PUBLIC_KEY as string;
 const ROOM_ID = (import.meta.env.VITE_ROOM_ID as string) || 'superdoc-room';
 
-export default function App() {
+// ---------------------------------------------------------------------------
+// Hook: useSuperdocCollaboration
+// ---------------------------------------------------------------------------
+
+interface CollaborationState {
+  users: any[];
+  synced: boolean;
+}
+
+function useSuperdocCollaboration(userName: string): CollaborationState {
   const superdocRef = useRef<any>(null);
   const [users, setUsers] = useState<any[]>([]);
+  const [synced, setSynced] = useState(false);
 
   useEffect(() => {
     if (!PUBLIC_KEY) return;
@@ -20,29 +30,62 @@ export default function App() {
     const ydoc = new Y.Doc();
     const provider = new LiveblocksYjsProvider(room, ydoc);
 
-    provider.on('sync', (synced: boolean) => {
-      if (!synced) return;
+    provider.on('sync', (isSynced: boolean) => {
+      if (!isSynced) return;
+      // Guard: only create SuperDoc once. Liveblocks fires 'sync' again on
+      // reconnect, which would create duplicate editors writing to the same
+      // Y.js doc — corrupting the room state (code 1011).
+      if (superdocRef.current) return;
+      setSynced(true);
 
       superdocRef.current = new SuperDoc({
         selector: '#superdoc',
         documentMode: 'editing',
-        user: { name: `User ${Math.floor(Math.random() * 1000)}`, email: 'user@example.com' },
+        user: { name: userName, email: `${userName.toLowerCase().replace(' ', '-')}@example.com` },
         modules: {
           collaboration: { ydoc, provider },
         },
-        onAwarenessUpdate: ({ states }: any) => setUsers(states.filter((s: any) => s.user)),
+        onAwarenessUpdate: ({ states }: any) => setUsers(states),
+        onEditorCreate: ({ editor }: any) => {
+          if (import.meta.env.DEV) {
+            (window as any).editor = editor;
+          }
+        },
       });
     });
 
     return () => {
       superdocRef.current?.destroy();
+      superdocRef.current = null;
+      setSynced(false);
       provider.destroy();
       leave();
     };
-  }, []);
+  }, [userName]);
+
+  return { users, synced };
+}
+
+// ---------------------------------------------------------------------------
+// Component: App
+// ---------------------------------------------------------------------------
+
+const connectingStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: 200,
+  color: '#888',
+};
+
+const missingKeyStyle: CSSProperties = { padding: '2rem' };
+
+export default function App() {
+  const [userName] = useState(() => `User ${Math.floor(Math.random() * 1000)}`);
+  const { users, synced } = useSuperdocCollaboration(userName);
 
   if (!PUBLIC_KEY) {
-    return <div style={{ padding: '2rem' }}>Add VITE_LIVEBLOCKS_PUBLIC_KEY to .env</div>;
+    return <div style={missingKeyStyle}>Add VITE_LIVEBLOCKS_PUBLIC_KEY to .env</div>;
   }
 
   return (
@@ -50,14 +93,15 @@ export default function App() {
       <header>
         <h1>SuperDoc + Liveblocks</h1>
         <div className='users'>
-          {users.map((u, i) => (
-            <span key={i} className='user' style={{ background: u.user?.color || '#666' }}>
-              {u.user?.name}
+          {users.map((u) => (
+            <span key={u.clientId} className='user' style={{ background: u.color || '#666' }}>
+              {u.name || u.email}
             </span>
           ))}
         </div>
       </header>
       <main>
+        {!synced && <div style={connectingStyle}>Connecting…</div>}
         <div id='superdoc' className='superdoc-container' />
       </main>
     </div>

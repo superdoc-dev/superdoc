@@ -110,7 +110,7 @@ export const getMinimalTranslatedLinkedStyles = () => ({
 const createMinimalConverter = () => {
   const converter = new SuperConverter();
   converter.translatedLinkedStyles = getMinimalTranslatedLinkedStyles();
-  converter.translatedNumbering = {};
+  converter.translatedNumbering = { definitions: {}, abstracts: {} };
   return converter;
 };
 
@@ -132,6 +132,18 @@ const ensureTranslatedLinkedStyles = (converter) => {
   translated.styles ??= {};
   translated.styles.Normal ??= { ...fallback.styles.Normal };
   translated.styles.Normal.styleId ??= 'Normal';
+};
+
+const ensureTranslatedNumbering = (converter) => {
+  if (!converter) return;
+
+  if (!converter.translatedNumbering || typeof converter.translatedNumbering !== 'object') {
+    converter.translatedNumbering = { definitions: {}, abstracts: {} };
+    return;
+  }
+
+  converter.translatedNumbering.definitions ??= {};
+  converter.translatedNumbering.abstracts ??= {};
 };
 
 /**
@@ -198,6 +210,7 @@ export const initTestEditor = (options = {}) => {
     editor.converter = restOptions.converter;
   }
   ensureTranslatedLinkedStyles(editor.converter);
+  ensureTranslatedNumbering(editor.converter);
 
   return {
     editor,

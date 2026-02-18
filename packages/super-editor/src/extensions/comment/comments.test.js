@@ -115,7 +115,9 @@ describe('comment helpers', () => {
 
     const positions = getCommentPositionsById('comment-123', state.doc);
 
-    expect(positions).toEqual([{ from: 1, to: 6 }]);
+    expect(positions).toEqual([expect.objectContaining({ from: 1, to: 6 })]);
+    expect(positions[0].mark).toBeDefined();
+    expect(positions[0].mark.type.name).toBe(CommentMarkName);
   });
 
   it('removes comments by id and dispatches transaction', () => {
@@ -127,7 +129,11 @@ describe('comment helpers', () => {
 
     removeCommentsById({ commentId: 'comment-123', state, tr, dispatch });
 
-    expect(removeSpy).toHaveBeenCalledWith(1, 6, schema.marks[CommentMarkName]);
+    expect(removeSpy).toHaveBeenCalledWith(
+      1,
+      6,
+      expect.objectContaining({ type: expect.objectContaining({ name: CommentMarkName }) }),
+    );
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
 

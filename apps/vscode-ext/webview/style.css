@@ -1,0 +1,87 @@
+/* SuperDoc VS Code Extension Styles */
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  font-weight: var(--vscode-font-weight);
+  color: var(--vscode-foreground);
+  background-color: white;
+}
+
+#superdoc-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background-color: white;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+#superdoc {
+  position: absolute;
+  top: 50px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+}
+
+/* Override SuperDoc theme */
+.superdoc-container {
+  background-color: white;
+}
+
+.superdoc-page {
+  background-color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Adjust toolbar styling */
+.superdoc-toolbar {
+  background-color: white !important;
+  border-bottom: 1px solid #e0e0e0 !important;
+}
+
+.superdoc-toolbar button {
+  color: var(--vscode-button-foreground);
+  background-color: var(--vscode-button-background);
+  border: 1px solid var(--vscode-button-border);
+}
+
+.superdoc-toolbar button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.superdoc-toolbar button:active {
+  background-color: var(--vscode-button-background);
+}
+
+/* Selection and focus styles */
+::selection {
+  background-color: var(--vscode-editor-selectionBackground);
+  color: var(--vscode-editor-selectionForeground);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--vscode-scrollbarSlider-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-activeBackground);
+}

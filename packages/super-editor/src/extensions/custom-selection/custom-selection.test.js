@@ -267,6 +267,32 @@ describe('CustomSelection plugin', () => {
     expect(firstDeco?.to).toBe(6);
   });
 
+  it('does not call preventDefault on right-click mousedown to preserve Firefox selection', () => {
+    const { plugin, view, editor } = createEnvironment();
+
+    const mouseDownEvent = {
+      button: 2,
+      preventDefault: vi.fn(),
+      target: editor.options.element,
+      type: 'mousedown',
+    };
+
+    plugin.props.handleDOMEvents.mousedown(view, mouseDownEvent);
+
+    // preventDefault should NOT be called for right-click mousedown
+    // because Firefox clears native selection when preventDefault is called
+    expect(mouseDownEvent.preventDefault).not.toHaveBeenCalled();
+
+    // But selection should still be preserved in plugin state
+    expect(view.dispatch).toHaveBeenCalled();
+    const dispatchedTr = view.dispatch.mock.calls[0][0];
+    expect(dispatchedTr.getMeta(CustomSelectionPluginKey)).toMatchObject({
+      focused: true,
+      preservedSelection: expect.any(Object),
+      showVisualSelection: true,
+    });
+  });
+
   it('keeps selection visible when toolbar elements retain focus', () => {
     const { plugin, view, editor } = createEnvironment();
 

@@ -1,0 +1,59 @@
+---
+title: Bullet list
+sidebarTitle: "Bullet List"
+keywords: "bullet list, superdoc bullet list, word bullet list, document bullet list, docx bullet list"
+---
+
+import Description from '/snippets/extensions/bullet-list.mdx'
+
+<Description />
+
+<Info>
+Bullet list functionality is part of the [Paragraph extension](/extensions/paragraph). There is no separate bullet list extension.
+</Info>
+
+## Commands
+
+### `toggleBulletList`
+
+Toggle bullet list formatting on the current selection. Converts selected paragraphs to list items or removes list formatting.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleBulletList()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleBulletList()
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleBulletList() | `⌘/Ctrl-Shift-8` | Toggle bullet list |
+| (indent) | `Tab` | Increase list indentation |
+| (outdent) | `Shift-Tab` | Decrease list indentation |
+
+## Input rules
+
+Type `- `, `* `, or `+ ` followed by a space to start a bullet list automatically.
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/paragraph/paragraph.js" />

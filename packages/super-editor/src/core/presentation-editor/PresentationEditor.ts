@@ -1,7 +1,7 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { SlashMenuPluginKey } from '@extensions/slash-menu/slash-menu.js';
 import { CellSelection } from 'prosemirror-tables';
-import { DecorationSet } from 'prosemirror-view';
+import { DecorationBridge } from './dom/DecorationBridge.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -102,6 +102,7 @@ import type {
   Fragment,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
+// TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 
 // Collaboration cursor imports
@@ -291,10 +292,10 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
-  /** Cached list of plugins that provide decorations (plugins don't change after init) */
-  #decorationPlugins: Array<{
-    props: { decorations: (state: EditorState) => DecorationSet | null | undefined };
-  }> | null = null;
+  /** Bridges external PM plugin decorations onto painted DOM elements. */
+  #decorationBridge = new DecorationBridge();
+  /** RAF handle for coalesced decoration sync scheduling. */
+  #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
@@ -427,7 +428,7 @@ export class PresentationEditor extends EventEmitter {
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
         this.#rebuildDomPositionIndex();
-        this.#syncDecorationAttributes();
+        this.#syncDecorations();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -2178,6 +2179,16 @@ export class PresentationEditor extends EventEmitter {
       }, 'Layout RAF');
     }
 
+    // Cancel pending decoration sync RAF
+    if (this.#decorationSyncRafHandle != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#decorationSyncRafHandle!);
+        this.#decorationSyncRafHandle = null;
+      }, 'Decoration sync RAF');
+    }
+    this.#decorationBridge.destroy();
+
     // Cancel pending cursor awareness update
     if (this.#cursorUpdateTimer !== null) {
       clearTimeout(this.#cursorUpdateTimer);
@@ -2271,53 +2282,51 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Syncs decoration classes/attributes from PM plugins to painted elements.
-   * Skips internal plugins (like track-changes) whose decorations the painter handles.
+   * Runs a full decoration bridge sync: reads external plugin decorations and
+   * reconciles them onto painted DOM elements (add/update/remove).
+   *
+   * Called synchronously from post-paint and observer-rebuild paths where the
+   * DOM index is guaranteed to be fresh.
    */
-  #syncDecorationAttributes(): void {
-    const view = this.#editor?.view;
-    if (!view?.state) return;
-
-    const { state } = view;
-
-    // Cache plugins with decorations, excluding painter-handled ones (plugins don't change after init)
-    if (this.#decorationPlugins === null) {
-      this.#decorationPlugins = state.plugins.filter(
-        (p) => p.props.decorations && p.spec.key !== TrackChangesBasePluginKey,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ) as any;
-    }
-    if (this.#decorationPlugins.length === 0) return;
+  #syncDecorations(): void {
+    const state = this.#editor?.view?.state;
+    if (!state) return;
 
     try {
-      for (const plugin of this.#decorationPlugins) {
-        const decorationSet = plugin.props.decorations.call(plugin, state);
-        if (!(decorationSet instanceof DecorationSet)) continue;
-
-        for (const decoration of decorationSet.find(0, state.doc.content.size)) {
-          // @ts-expect-error - inline property exists but not in types
-          if (!decoration.inline) continue;
-
-          const { from, to } = decoration;
-          // @ts-expect-error - type.attrs holds DOM attributes for inline decorations
-          const decorationAttrs = decoration.type?.attrs || {};
-
-          const classes = (decorationAttrs.class?.split(/\s+/) || []).filter((c: string) => c);
-          const attrs = Object.entries(decorationAttrs)
-            .filter(([k, v]) => k !== 'class' && (k.startsWith('data-') || k === 'style') && typeof v === 'string')
-            .map(([name, value]) => ({ name, value: value as string }));
-
-          if (classes.length === 0 && attrs.length === 0) continue;
-
-          for (const entry of this.#domPositionIndex.findEntriesInRange(from, to)) {
-            classes.forEach((cls: string) => entry.el.classList.add(cls));
-            attrs.forEach((attr) => entry.el.setAttribute(attr.name, attr.value));
-          }
-        }
-      }
+      this.#decorationBridge.sync(state, this.#domPositionIndex);
     } catch (error) {
-      debugLog('warn', 'Decoration sync failed', { error: String(error) });
+      debugLog('warn', 'Decoration bridge sync failed', { error: String(error) });
     }
+  }
+
+  /**
+   * Schedules a decoration sync on the next animation frame, coalesced so
+   * rapid transactions (cursor movement, selection changes) don't cause
+   * redundant work.
+   *
+   * Skips scheduling when:
+   * - A rerender is already pending (post-paint will sync).
+   * - No DecorationSet references have actually changed (identity check).
+   */
+  #scheduleDecorationSync(): void {
+    // If a full rerender is pending, the post-paint path will sync. Skip.
+    if (this.#renderScheduled || this.#isRerendering) return;
+
+    // Cheap identity check: bail if no DecorationSet references changed.
+    const state = this.#editor?.view?.state;
+    if (!state || !this.#decorationBridge.hasChanges(state)) return;
+
+    // Already scheduled — RAF will handle it.
+    if (this.#decorationSyncRafHandle != null) return;
+
+    const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+    this.#decorationSyncRafHandle = win.requestAnimationFrame(() => {
+      this.#decorationSyncRafHandle = null;
+      // Re-check: a rerender may have been scheduled between when we queued
+      // this RAF and when it fires. The post-paint path will sync instead.
+      if (this.#renderScheduled || this.#isRerendering) return;
+      this.#syncDecorations();
+    });
   }
 
   #setupEditorListeners() {
@@ -2368,10 +2377,26 @@ export class PresentationEditor extends EventEmitter {
       this.#updateLocalAwarenessCursor();
       this.#scheduleA11ySelectionAnnouncement();
     };
+
+    // The 'transaction' event fires for ALL transactions (doc changes,
+    // selection changes, meta-only). The 'update' event only fires for
+    // docChanged transactions, and 'selectionUpdate' only for selection
+    // changes. A meta-only transaction (e.g., a custom command that sets
+    // plugin state without editing text) fires neither.
+    //
+    // We listen on 'transaction' so the decoration bridge picks up changes
+    // from any transaction type. The bridge's own identity check + RAF
+    // coalescing prevent unnecessary work.
+    const handleTransaction = () => {
+      this.#scheduleDecorationSync();
+    };
+
     this.#editor.on('update', handleUpdate);
     this.#editor.on('selectionUpdate', handleSelection);
+    this.#editor.on('transaction', handleTransaction);
     this.#editorListeners.push({ event: 'update', handler: handleUpdate as (...args: unknown[]) => void });
     this.#editorListeners.push({ event: 'selectionUpdate', handler: handleSelection as (...args: unknown[]) => void });
+    this.#editorListeners.push({ event: 'transaction', handler: handleTransaction as (...args: unknown[]) => void });
 
     // Listen for page style changes (e.g., margin adjustments via ruler).
     // These changes don't modify document content (docChanged === false),
@@ -3219,7 +3244,7 @@ export class PresentationEditor extends EventEmitter {
       const painterPostStart = perfNow();
       this.#applyVertAlignToLayout();
       this.#rebuildDomPositionIndex();
-      this.#syncDecorationAttributes();
+      this.#syncDecorations();
       this.#domIndexObserverManager?.resume();
       const painterPostEnd = perfNow();
       perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);

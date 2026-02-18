@@ -58,6 +58,25 @@ const createMockHighlightPlugin = (
 };
 
 /**
+ * Creates a mutable mock plugin whose decoration set can be swapped at runtime.
+ * Simulates the real customer flow: a command dispatches a setMeta transaction,
+ * the plugin's apply() returns a new DecorationSet, and the bridge picks it up.
+ */
+const createMutableMockPlugin = () => {
+  let currentSet: ReturnType<typeof createMockDecorationSet> = createMockDecorationSet([]);
+  const plugin = {
+    spec: { key: testHighlightPluginKey },
+    props: { decorations: () => currentSet },
+  };
+  const setDecorations = (
+    items: Array<{ from: number; to: number; class?: string; attrs?: Record<string, string> }>,
+  ) => {
+    currentSet = items.length > 0 ? createMockDecorationSet(items) : DecorationSet.empty;
+  };
+  return { plugin, setDecorations };
+};
+
+/**
  * PresentationEditor requires extensive mocking due to its many dependencies.
  * This follows the established testing pattern used across other PresentationEditor
  * test files (e.g., getElementAtPos, zoom, collaboration tests).
@@ -72,6 +91,7 @@ const {
   mockEditorConverterStore,
   mockEditorOverlayManager,
   mockPlugins,
+  mockEditorOn,
 } = vi.hoisted(() => {
   const createDefaultConverter = () => ({
     headers: {},
@@ -99,6 +119,9 @@ const {
 
   // Plugins array that tests can modify
   const plugins: Array<unknown> = [];
+
+  // Shared mock for editor.on() — lets tests extract registered event handlers.
+  const editorOn = vi.fn();
 
   return {
     createDefaultConverter,
@@ -129,6 +152,7 @@ const {
       destroy: vi.fn(),
     })),
     mockPlugins: plugins,
+    mockEditorOn: editorOn,
   };
 });
 
@@ -161,7 +185,7 @@ vi.mock('../../Editor.js', () => {
       return {
         setDocumentMode: vi.fn(),
         setOptions: vi.fn(),
-        on: vi.fn(),
+        on: mockEditorOn,
         off: vi.fn(),
         destroy: vi.fn(),
         getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
@@ -244,13 +268,18 @@ vi.mock('../../header-footer/EditorOverlayManager.js', () => ({
 }));
 
 /**
- * Tests for #syncDecorationAttributes() - syncs ProseMirror plugin decorations to painted DOM.
+ * Integration tests for decoration bridge sync via PresentationEditor.
+ *
+ * These tests verify that DecorationBridge is wired correctly into PresentationEditor's
+ * lifecycle (observer-triggered rebuild → sync). For unit-level tests of bridge reconciliation
+ * logic, see DecorationBridge.test.ts.
  *
  * Coverage:
  * - Class syncing: single class, multiple classes, multiple elements, range boundaries
- * - Attribute syncing: data-* attributes, style attribute, combined class + attrs
+ * - Attribute syncing: data-* attributes, combined class + attrs
  * - Multiple decorations: non-overlapping ranges, overlapping ranges
  * - Edge cases: empty sets, plugins without decorations, empty decorations, attribute filtering
+ * - Style properties applied at the property level (setProperty/removeProperty)
  */
 describe('PresentationEditor.decorationSync', () => {
   let container: HTMLElement;
@@ -388,15 +417,13 @@ describe('PresentationEditor.decorationSync', () => {
       expect(span.getAttribute('data-clause-type')).toBe('important');
     });
 
-    it('applies style attribute from decorations', async () => {
-      setupWithDecorations([
-        { from: 5, to: 15, attrs: { style: 'background-color: yellow; border: 1px solid orange;' } },
-      ]);
+    it('applies style properties from decoration style attribute', async () => {
+      setupWithDecorations([{ from: 5, to: 15, attrs: { style: 'background-color: yellow;' } }]);
       const span = addSpan(5, 15);
 
       await waitForSync();
 
-      expect(span.getAttribute('style')).toBe('background-color: yellow; border: 1px solid orange;');
+      expect(span.style.getPropertyValue('background-color')).toBe('yellow');
     });
 
     it('applies both classes and data attributes together', async () => {
@@ -490,6 +517,67 @@ describe('PresentationEditor.decorationSync', () => {
       expect(span.getAttribute('data-valid')).toBe('yes');
       expect(span.getAttribute('id')).toBeNull();
       expect(span.getAttribute('onclick')).toBeNull();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Transaction-driven sync (the real customer flow)
+  // -----------------------------------------------------------------------
+
+  describe('transaction-driven decoration sync', () => {
+    /**
+     * Extracts the 'transaction' event handler that PresentationEditor registered
+     * on the mock editor. This simulates the real customer flow: a command dispatches
+     * a setMeta transaction → Editor fires 'transaction' → bridge syncs.
+     */
+    const getTransactionHandler = (): (() => void) => {
+      const onCalls: Array<[string, () => void]> = mockEditorOn.mock.calls;
+      const match = onCalls.find(([event]) => event === 'transaction');
+      if (!match) throw new Error('No transaction handler registered on mock editor');
+      return match[1];
+    };
+
+    it('syncs decorations when a transaction fires (setMeta customer flow)', async () => {
+      const { plugin, setDecorations } = createMutableMockPlugin();
+      mockPlugins.push(plugin);
+
+      editor = new PresentationEditor({ element: container, documentId: 'test-doc' });
+      painterHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const span = addSpan(5, 15);
+
+      // Wait for initial MutationObserver sync (no decorations yet).
+      await waitForSync();
+      expect(span.classList.contains('highlight-selection')).toBe(false);
+
+      // Simulate the customer command: plugin state updates, then transaction fires.
+      setDecorations([{ from: 5, to: 15, class: 'highlight-selection' }]);
+      const fireTransaction = getTransactionHandler();
+      fireTransaction();
+
+      await waitForSync();
+      expect(span.classList.contains('highlight-selection')).toBe(true);
+    });
+
+    it('clears decorations when plugin state is emptied via transaction', async () => {
+      const { plugin, setDecorations } = createMutableMockPlugin();
+      setDecorations([{ from: 5, to: 15, class: 'highlight-selection' }]);
+      mockPlugins.push(plugin);
+
+      editor = new PresentationEditor({ element: container, documentId: 'test-doc' });
+      painterHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const span = addSpan(5, 15);
+
+      // Wait for initial sync — highlight should be applied.
+      await waitForSync();
+      expect(span.classList.contains('highlight-selection')).toBe(true);
+
+      // Clear decorations and fire transaction (simulates clearHighlight command).
+      setDecorations([]);
+      const fireTransaction = getTransactionHandler();
+      fireTransaction();
+
+      await waitForSync();
+      expect(span.classList.contains('highlight-selection')).toBe(false);
     });
   });
 });

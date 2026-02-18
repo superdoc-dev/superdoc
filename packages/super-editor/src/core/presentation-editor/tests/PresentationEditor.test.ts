@@ -2266,7 +2266,7 @@ describe('PresentationEditor', () => {
 
   describe('Selection update mechanisms', () => {
     describe('#scheduleSelectionUpdate race condition guards', () => {
-      it('should skip scheduling when already scheduled', async () => {
+      it('should render synchronously with immediate mode when safe', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2294,12 +2294,13 @@ describe('PresentationEditor', () => {
         expect(selectionUpdateCall).toBeDefined();
         const handleSelection = selectionUpdateCall![1] as () => void;
 
-        // Call twice - should only schedule once
+        // Call twice - with immediate mode, renders synchronously when safe
+        // so no RAF scheduling is needed
         handleSelection();
         handleSelection();
 
-        // Should only call requestAnimationFrame once (second call is deduplicated)
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2388,7 +2389,7 @@ describe('PresentationEditor', () => {
         rafSpy.mockRestore();
       });
 
-      it('should successfully schedule when no guards are active', async () => {
+      it('should render synchronously when no guards are active', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2417,11 +2418,12 @@ describe('PresentationEditor', () => {
         // Clear RAF spy to track new calls
         rafSpy.mockClear();
 
-        // Schedule selection update with no guards active
+        // Selection update with no guards active — renders synchronously via
+        // immediate mode, bypassing RAF
         handleSelection();
 
-        // Should schedule RAF successfully
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });

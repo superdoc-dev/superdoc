@@ -5,6 +5,7 @@ import { mergeRanges, clampRange } from '@utils/rangeUtils.js';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { ReplaceStep, ReplaceAroundStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 import { v4 as uuidv4 } from 'uuid';
+import { ySyncPluginKey } from 'y-prosemirror';
 
 const { findChildren } = helpers;
 const SD_BLOCK_ID_ATTRIBUTE_NAME = 'sdBlockId';
@@ -276,6 +277,16 @@ export const BlockNode = Extension.create({
           let changed = false;
           const updatedPositions = new Set();
 
+          // Skip sdBlockRev increment for Y.js-origin transactions to prevent
+          // an infinite feedback loop in collaboration: Tab A increments rev →
+          // syncs to Y.js → Tab B receives → blockNode increments rev again →
+          // syncs back → Tab A increments again → forever.
+          // Still ensure unique sdBlockIds (split dedup) for all transactions.
+          const isYjsOrigin = transactions.some((transaction) => {
+            const meta = transaction.getMeta(ySyncPluginKey);
+            return meta?.isChangeOrigin;
+          });
+
           if (!hasInitialized) {
             // Initial pass: assign IDs to all block nodes in document
             const seenIds = new Set();
@@ -367,7 +378,7 @@ export const BlockNode = Extension.create({
                   if (updatedPositions.has(pos)) return;
                   const nextAttrs = { ...node.attrs };
                   let nodeChanged = ensureUniqueSdBlockId(node, nextAttrs, seenBlockIds);
-                  if (nodeAllowsSdBlockRevAttr(node)) {
+                  if (!isYjsOrigin && nodeAllowsSdBlockRevAttr(node)) {
                     nextAttrs.sdBlockRev = getNextBlockRev(node);
                     nodeChanged = true;
                   }
@@ -390,7 +401,7 @@ export const BlockNode = Extension.create({
                 if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
                 const nextAttrs = { ...node.attrs };
                 let nodeChanged = ensureUniqueSdBlockId(node, nextAttrs, fallbackSeenIds);
-                if (nodeAllowsSdBlockRevAttr(node)) {
+                if (!isYjsOrigin && nodeAllowsSdBlockRevAttr(node)) {
                   nextAttrs.sdBlockRev = getNextBlockRev(node);
                   nodeChanged = true;
                 }
@@ -402,9 +413,11 @@ export const BlockNode = Extension.create({
             }
           }
 
-          if (changed && !hasInitialized) {
+          if (!hasInitialized) {
             hasInitialized = true;
-            tr.setMeta('blockNodeInitialUpdate', true);
+            if (changed) {
+              tr.setMeta('blockNodeInitialUpdate', true);
+            }
           }
 
           // Restore marks since setNodeMarkup resets them

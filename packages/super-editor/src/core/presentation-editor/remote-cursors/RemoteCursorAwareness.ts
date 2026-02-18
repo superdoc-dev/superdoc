@@ -10,6 +10,8 @@ import type { RemoteCursorState } from '../types.js';
  */
 type AwarenessLike = {
   clientID?: number;
+  /** Liveblocks and some providers expose clientID on the underlying Y.Doc instead */
+  doc?: { clientID?: number };
   getStates?: () => Map<number, unknown>;
 };
 
@@ -63,9 +65,13 @@ export function normalizeAwarenessStates(options: {
   const states = provider.awareness?.getStates?.();
   const normalized = new Map<number, RemoteCursorState>();
 
+  // Resolve local client ID — standard Yjs awareness exposes it as awareness.clientID,
+  // but some providers (e.g. Liveblocks) only expose it on the underlying Y.Doc.
+  const localClientId = provider.awareness?.clientID ?? provider.awareness?.doc?.clientID;
+
   states?.forEach((aw, clientId) => {
     // Skip local client
-    if (clientId === provider.awareness?.clientID) return;
+    if (localClientId != null && clientId === localClientId) return;
 
     // Type assertion for awareness state properties
     const awState = aw as {

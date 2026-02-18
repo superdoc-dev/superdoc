@@ -1,4 +1,5 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
+import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
@@ -2125,6 +2126,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     const end = perfNow();
+
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
@@ -2500,17 +2502,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @returns The updated document in JSON
    */
   #prepareDocumentForExport(comments: Comment[] = []): ProseMirrorJSON {
-    const newState = PmEditorState.create({
-      schema: this.schema,
-      doc: this.state.doc,
-      plugins: this.state.plugins,
-    });
-
-    const { tr, doc } = newState;
-
+    // Use Transform directly instead of creating a throwaway EditorState.
+    // EditorState.create() calls Plugin.init() for every plugin, and
+    // yUndoPlugin.init() registers persistent observers on the shared ydoc
+    // that are never cleaned up — causing an observer leak that degrades
+    // collaboration performance over time.
+    const doc = this.state.doc;
+    const tr = new Transform(doc);
     prepareCommentsForExport(doc, tr, this.schema, comments);
-    const updatedState = newState.apply(tr);
-    return updatedState.doc.toJSON();
+    return tr.doc.toJSON();
   }
 
   getUpdatedJson(): ProseMirrorJSON {

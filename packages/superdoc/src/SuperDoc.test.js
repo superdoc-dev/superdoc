@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { h, defineComponent, ref, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
@@ -361,9 +361,19 @@ describe('SuperDoc.vue', () => {
     useSelectedTextMock.mockClear();
     mockState.instances.clear();
 
+    // Make RAF synchronous in tests — jsdom has no rendering loop, and
+    // SuperDoc.vue defers selection updates via requestAnimationFrame.
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(Date.now());
+      return 0;
+    });
+
     // Set up default mock presentation editor instances for common document IDs
     const mockPresentationEditor = {
-      getSelectionBounds: vi.fn(() => null),
+      getSelectionBounds: vi.fn(() => ({
+        bounds: { top: 100, left: 10, right: 80, bottom: 160 },
+        pageIndex: 0,
+      })),
       getCommentBounds: vi.fn((positions) => positions),
       getRangeRects: vi.fn(() => []),
       getPages: vi.fn(() => []),
@@ -384,6 +394,10 @@ describe('SuperDoc.vue', () => {
     }
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('wires editor lifecycle events and propagates updates', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);
@@ -402,14 +416,21 @@ describe('SuperDoc.vue', () => {
         search: vi.fn(),
         goToSearchResult: vi.fn(),
       },
+      state: {
+        doc: { content: { size: 100 } },
+        selection: { $from: { pos: 1 }, $to: { pos: 3 } },
+      },
       view: {
         coordsAtPos: vi.fn((pos) =>
           pos === 1 ? { top: 100, bottom: 120, left: 10, right: 20 } : { top: 130, bottom: 160, left: 60, right: 80 },
         ),
-        state: { selection: { empty: true } },
+        state: { selection: { $from: { pos: 1 }, $to: { pos: 3 } } },
       },
       getPageStyles: vi.fn(() => ({ pageMargins: {} })),
     };
+
+    // processSelectionChange needs layers to be non-null to proceed past the guard
+    wrapper.vm.$.setupState.layers = document.createElement('div');
 
     options.onBeforeCreate({ editor: editorMock });
     expect(superdocStub.broadcastEditorBeforeCreate).toHaveBeenCalled();
@@ -495,14 +516,22 @@ describe('SuperDoc.vue', () => {
         togglePagination: vi.fn(),
         insertAiMark: vi.fn(),
       },
+      state: {
+        doc: { content: { size: 100 } },
+        selection: { $from: { pos: 1 }, $to: { pos: 6 } },
+      },
       view: {
         coordsAtPos: vi.fn((pos) =>
           pos === 1 ? { top: 100, bottom: 140, left: 10, right: 30 } : { top: 120, bottom: 160, left: 70, right: 90 },
         ),
-        state: { selection: { empty: true } },
+        state: { selection: { $from: { pos: 1 }, $to: { pos: 6 } } },
       },
       getPageStyles: vi.fn(() => ({ pageMargins: {} })),
     };
+
+    // processSelectionChange needs layers to be non-null to proceed past the guard
+    wrapper.vm.$.setupState.layers = document.createElement('div');
+
     await nextTick();
     options.onSelectionUpdate({
       editor: editorMock,
@@ -512,7 +541,7 @@ describe('SuperDoc.vue', () => {
     const setupState = wrapper.vm.$.setupState;
     setupState.toolsMenuPosition.top = '12px';
     setupState.toolsMenuPosition.right = '0px';
-    setupState.selectionPosition.value = {
+    superdocStoreStub.selectionPosition.value = {
       left: 10,
       right: 40,
       top: 20,
@@ -782,6 +811,52 @@ describe('SuperDoc.vue', () => {
 
     expect(superdocStoreStub.selectionPosition.value).toBeNull();
     expect(setupState.toolsMenuPosition.top).toBeNull();
+    expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
+  });
+
+  it('ignores queued RAF selection work if mode switches to viewing before frame runs', async () => {
+    const rafQueue = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation((id) => {
+      rafQueue[id - 1] = null;
+    });
+
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = {
+      options: { documentId: 'doc-1' },
+      state: {
+        doc: { content: { size: 10 } },
+        selection: { $from: { pos: 1 }, $to: { pos: 6 } },
+      },
+      view: {
+        state: {
+          doc: { content: { size: 10 } },
+          selection: { $from: { pos: 1 }, $to: { pos: 6 } },
+        },
+        coordsAtPos: vi.fn((pos) =>
+          pos === 1 ? { top: 100, bottom: 140, left: 10, right: 30 } : { top: 120, bottom: 160, left: 70, right: 90 },
+        ),
+      },
+    };
+
+    useSelectionMock.mockClear();
+    options.onSelectionUpdate({ editor: editorMock });
+
+    expect(rafQueue).toHaveLength(1);
+
+    superdocStub.config.documentMode = 'viewing';
+    rafQueue[0](Date.now());
+    await nextTick();
+
+    expect(useSelectionMock).not.toHaveBeenCalled();
+    expect(superdocStoreStub.selectionPosition.value).toBeNull();
     expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
   });
 

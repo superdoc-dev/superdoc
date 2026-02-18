@@ -2,6 +2,7 @@ import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
+import { markRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
@@ -460,8 +461,56 @@ export class SuperDoc extends EventEmitter {
 
     if (externalYdoc && externalProvider) {
       // Use external provider - wire up awareness for SuperDoc events
-      this.ydoc = externalYdoc;
-      this.provider = externalProvider;
+      // Mark Y.js objects as raw to prevent Vue's deep reactive traversal
+      // from hitting circular references inside Y.js internals (causes stack overflow).
+      this.ydoc = markRaw(externalYdoc);
+      this.provider = markRaw(externalProvider);
+
+      // Assign a stable color to the local user so awareness broadcasts it.
+      // Without this, y-prosemirror's cursor plugin mutates user.color to '#ffa500'
+      // (orange) as a default, causing color flickering between that default and
+      // the fallback colors used by RemoteCursorAwareness.
+      // Use a hash of the user identity to pick a deterministic color from the
+      // palette so that different users get different colors.
+      if (!this.config.user.color) {
+        // 24 visually distinct hex colors — large enough palette to minimize
+        // collisions (~4% for two users) while staying within y-prosemirror's
+        // hex-only color format requirement.
+        const defaultPalette = [
+          '#FF6B6B',
+          '#4ECDC4',
+          '#45B7D1',
+          '#FFA07A',
+          '#98D8C8',
+          '#F7DC6F',
+          '#BB8FCE',
+          '#85C1E2',
+          '#F1948A',
+          '#82E0AA',
+          '#F8C471',
+          '#AED6F1',
+          '#D7BDE2',
+          '#A3E4D7',
+          '#F0B27A',
+          '#AEB6BF',
+          '#E74C3C',
+          '#2ECC71',
+          '#3498DB',
+          '#E67E22',
+          '#1ABC9C',
+          '#9B59B6',
+          '#34495E',
+          '#F39C12',
+        ];
+        const palette = this.colors.length > 0 ? this.colors : defaultPalette;
+        const userKey = this.config.user.email || this.config.user.name || '';
+        let hash = 5381;
+        for (let i = 0; i < userKey.length; i++) {
+          hash = ((hash << 5) + hash) ^ userKey.charCodeAt(i);
+        }
+        this.config.user.color = palette[Math.abs(hash) % palette.length];
+      }
+
       setupAwarenessHandler(externalProvider, this, this.config.user);
 
       // If no documents provided, create a default blank document
@@ -502,11 +551,11 @@ export class SuperDoc extends EventEmitter {
     // Optionally, initialize separate superdoc sync - for comments, view, etc.
     if (commentsConfig.useInternalExternalComments && !commentsConfig.suppressInternalExternalComments) {
       const { ydoc: sdYdoc, provider: sdProvider } = initSuperdocYdoc(this);
-      this.ydoc = sdYdoc;
-      this.provider = sdProvider;
+      this.ydoc = markRaw(sdYdoc);
+      this.provider = markRaw(sdProvider);
     } else {
-      this.ydoc = processedDocuments[0].ydoc;
-      this.provider = processedDocuments[0].provider;
+      this.ydoc = markRaw(processedDocuments[0].ydoc);
+      this.provider = markRaw(processedDocuments[0].provider);
     }
 
     // Initialize comments sync, if enabled
@@ -1148,20 +1197,19 @@ export class SuperDoc extends EventEmitter {
     // Mark as destroyed early to prevent in-flight init from mounting
     this.#destroyed = true;
 
-    this.#cleanupCollaboration();
-
-    if (!this.app) {
-      return;
+    // Unmount the app FIRST so editors are destroyed — this triggers each
+    // extension's onDestroy() which cancels debounced Y.js writes and
+    // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.
+    if (this.app) {
+      this.#log('[superdoc] Unmounting app');
+      this.superdocStore.reset();
+      this.app.unmount();
+      this.removeAllListeners();
+      delete this.app.config.globalProperties.$config;
+      delete this.app.config.globalProperties.$superdoc;
     }
 
-    this.#log('[superdoc] Unmounting app');
-
-    this.superdocStore.reset();
-
-    this.app.unmount();
-    this.removeAllListeners();
-    delete this.app.config.globalProperties.$config;
-    delete this.app.config.globalProperties.$superdoc;
+    this.#cleanupCollaboration();
 
     // Remove the internal wrapper element from the user's container
     if (this.#mountWrapper) {

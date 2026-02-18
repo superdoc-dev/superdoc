@@ -7,7 +7,7 @@
 export const updateYdocDocxData = async (editor, ydoc) => {
   try {
     ydoc = ydoc || editor?.options?.ydoc;
-    if (!ydoc) return;
+    if (!ydoc || ydoc.isDestroyed) return;
     if (!editor || editor.isDestroyed) return;
 
     const metaMap = ydoc.getMap('meta');
@@ -50,8 +50,10 @@ export const updateYdocDocxData = async (editor, ydoc) => {
       });
     });
 
-    // Only transact if there were actual changes OR this is initial setup
-    if (hasChanges || !docxValue) {
+    // Only transact if there were actual changes OR this is initial setup.
+    // Re-check ydoc/editor after the async export — they may have been
+    // destroyed while exportDocx was running.
+    if ((hasChanges || !docxValue) && !ydoc.isDestroyed && !editor.isDestroyed) {
       ydoc.transact(
         () => {
           metaMap.set('docx', docx);
@@ -87,7 +89,7 @@ export const pushHeaderFooterToYjs = (editor, type, sectionId, content) => {
   if (isApplyingRemoteChanges) return;
 
   const ydoc = editor?.options?.ydoc;
-  if (!ydoc) return;
+  if (!ydoc || ydoc.isDestroyed) return;
 
   const headerFooterMap = ydoc.getMap('headerFooterJson');
   const key = `${type}:${sectionId}`;

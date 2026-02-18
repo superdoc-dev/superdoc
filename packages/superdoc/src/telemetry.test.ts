@@ -7,10 +7,16 @@ function transformTelemetryConfig(superdocConfig: {
     enabled?: boolean;
     endpoint?: string;
     metadata?: Record<string, unknown>;
+    licenseKey?: string | null;
   } | null;
   licenseKey?: string | null;
 }): {
-  telemetry: { enabled: boolean; endpoint?: string; metadata?: Record<string, unknown> } | null;
+  telemetry: {
+    enabled: boolean;
+    endpoint?: string;
+    metadata?: Record<string, unknown>;
+    licenseKey?: string | null;
+  } | null;
   licenseKey?: string | null;
 } {
   return {
@@ -20,6 +26,7 @@ function transformTelemetryConfig(superdocConfig: {
           enabled: true,
           endpoint: superdocConfig.telemetry?.endpoint,
           metadata: superdocConfig.telemetry?.metadata,
+          licenseKey: superdocConfig.telemetry?.licenseKey,
         }
       : null,
   };
@@ -141,6 +148,31 @@ describe('SuperDoc Telemetry Configuration', () => {
       });
 
       expect(result.telemetry?.metadata).toEqual(metadata);
+    });
+  });
+
+  describe('deprecated telemetry.licenseKey passthrough', () => {
+    it('passes deprecated telemetry.licenseKey to editor config', () => {
+      const result = transformTelemetryConfig({
+        telemetry: { enabled: true, licenseKey: 'deprecated-key' },
+      });
+
+      expect(result.telemetry).toEqual({
+        enabled: true,
+        endpoint: undefined,
+        metadata: undefined,
+        licenseKey: 'deprecated-key',
+      });
+    });
+
+    it('passes both root licenseKey and deprecated telemetry.licenseKey', () => {
+      const result = transformTelemetryConfig({
+        telemetry: { enabled: true, licenseKey: 'deprecated-key' },
+        licenseKey: 'root-key',
+      });
+
+      expect(result.licenseKey).toBe('root-key');
+      expect(result.telemetry?.licenseKey).toBe('deprecated-key');
     });
   });
 

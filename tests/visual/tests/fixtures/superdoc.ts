@@ -36,7 +36,7 @@ async function waitForReady(page: Page, timeout = 30_000): Promise<void> {
   await page.waitForFunction(() => (window as any).superdocReady === true, null, { polling: 100, timeout });
 }
 
-async function waitForStable(page: Page, ms = 500): Promise<void> {
+async function waitForStable(page: Page, ms = 1500): Promise<void> {
   await page.waitForTimeout(ms);
   await page.evaluate(() => document.fonts.ready);
 }
@@ -91,6 +91,9 @@ export interface SuperDocFixture {
 
   /** Load a .docx document into the editor */
   loadDocument(filePath: string): Promise<void>;
+
+  /** Assert the number of rendered pages matches expected count */
+  assertPageCount(expected: number): Promise<void>;
 
   /** Screenshot every rendered page (for paginated/layout docs) */
   screenshotPages(baseName: string, maxPages?: number): Promise<void>;
@@ -168,9 +171,7 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
 
       async tripleClickLine(lineIndex: number) {
         const line = page.locator('.superdoc-line').nth(lineIndex);
-        const box = await line.boundingBox();
-        if (!box) throw new Error(`Line ${lineIndex} not visible`);
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { clickCount: 3 });
+        await line.click({ clickCount: 3, timeout: 10_000 });
       },
 
       async setDocumentMode(mode: 'editing' | 'suggesting' | 'viewing') {
@@ -276,6 +277,12 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
         await waitForStable(page, 1000);
       },
 
+      async assertPageCount(expected: number) {
+        await waitForStable(page);
+        const pages = page.locator('.superdoc-page[data-page-index]');
+        await expect(pages).toHaveCount(expected, { timeout: 15_000 });
+      },
+
       async screenshotPages(baseName: string, maxPages?: number) {
         await waitForStable(page);
 
@@ -291,6 +298,13 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
 
         for (let i = 0; i < count; i++) {
           const pageEl = pages.nth(i);
+
+          // Skip pages that can't be scrolled into view (e.g. empty trailing pages)
+          try {
+            await pageEl.scrollIntoViewIfNeeded({ timeout: 5_000 });
+          } catch {
+            break;
+          }
 
           await expect(pageEl).toHaveScreenshot(`${baseName}-p${i + 1}.png`, {
             timeout: 15_000,

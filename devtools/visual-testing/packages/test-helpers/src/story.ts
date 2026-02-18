@@ -63,6 +63,8 @@ export interface InteractionStory {
   includeComments?: boolean;
   /** Whether layout/pagination is enabled */
   layout?: boolean;
+  /** Whether layout virtualization is enabled. Default: false */
+  virtualization?: boolean;
   /** Comment panel display mode */
   comments?: CommentMode;
   /** Toolbar display mode */

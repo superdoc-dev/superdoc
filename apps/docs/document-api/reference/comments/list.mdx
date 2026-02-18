@@ -1,0 +1,156 @@
+---
+title: comments.list
+sidebarTitle: comments.list
+description: Generated reference for comments.list
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `comments.list`
+- API member path: `editor.doc.comments.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "includeResolved": {
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "matches": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "comment"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          "commentId": {
+            "type": "string"
+          },
+          "createdTime": {
+            "type": "number"
+          },
+          "creatorEmail": {
+            "type": "string"
+          },
+          "creatorName": {
+            "type": "string"
+          },
+          "importedId": {
+            "type": "string"
+          },
+          "isInternal": {
+            "type": "boolean"
+          },
+          "parentCommentId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "resolved"
+            ]
+          },
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "blockId": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "text"
+              },
+              "range": {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "type": "integer"
+                  },
+                  "start": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "blockId",
+              "range"
+            ],
+            "type": "object"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "commentId",
+          "status"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "total": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "matches",
+    "total"
+  ],
+  "type": "object"
+}
+```

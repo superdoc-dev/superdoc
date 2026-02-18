@@ -54,11 +54,15 @@ const handleDrop = (event) => {
   const rect = container.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
+  const currentWidth = props.pageSize?.width;
+  const originalWidth = props.pageSize?.originalWidth ?? currentWidth;
+  const scale =
+    Number.isFinite(currentWidth) && Number.isFinite(originalWidth) && originalWidth ? currentWidth / originalWidth : 1;
 
-  if (handleStickerDrop(event, x, y)) {
+  if (handleStickerDrop(event, x, y, scale)) {
     return;
   }
-  if (handleFileImageDrop(event, x, y)) {
+  if (handleFileImageDrop(event, x, y, scale)) {
     return;
   }
   if (handleCommentDrop(event, x, y)) {
@@ -68,7 +72,7 @@ const handleDrop = (event) => {
 };
 
 // Drop sticker by id (from registry).
-const handleStickerDrop = (event, x, y) => {
+const handleStickerDrop = (event, x, y, scale) => {
   const stickerId = event.dataTransfer.getData('application/sticker');
   if (!stickerId) return false;
   const stickers = props.whiteboard.getType('stickers') || [];
@@ -79,15 +83,15 @@ const handleStickerDrop = (event, x, y) => {
     x,
     y,
     src: sticker.src,
-    width: sticker.width,
-    height: sticker.height,
+    width: Number.isFinite(sticker.width) ? sticker.width * scale : sticker.width,
+    height: Number.isFinite(sticker.height) ? sticker.height * scale : sticker.height,
     type: 'sticker',
   });
   return true;
 };
 
 // Drop local image file (base64).
-const handleFileImageDrop = (event, x, y) => {
+const handleFileImageDrop = (event, x, y, scale) => {
   const files = Array.from(event.dataTransfer.files || []);
   const imageFile = files.find((file) => file.type.startsWith('image/'));
   if (!imageFile) return false;

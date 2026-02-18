@@ -1,0 +1,118 @@
+---
+title: Quick start
+keywords: "superdoc quickstart, docx editor tutorial, word editor setup, javascript docx quick start, 5 minute editor"
+---
+
+From zero to a working DOCX editor in under two minutes.
+
+<Steps>
+  <Step title="Install">
+    <Tabs>
+      <Tab title="npm">
+        ```bash
+        npm install superdoc
+        ```
+      </Tab>
+      <Tab title="CDN">
+        ```html
+        <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css" rel="stylesheet">
+        <script type="module">
+          import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
+        </script>
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Mount the editor">
+    ```html
+    <div id="editor" style="height: 100vh"></div>
+
+    <script type="module">
+      import { SuperDoc } from 'superdoc';
+      import 'superdoc/style.css';
+
+      const superdoc = new SuperDoc({
+        selector: '#editor',
+      });
+    </script>
+    ```
+    That's a blank editor. Now give it a file.
+  </Step>
+
+  <Step title="Load a document">
+    Pass a URL, a `File` from an input, or a `Blob` from your API.
+
+    <Tabs>
+      <Tab title="URL">
+        ```javascript
+        new SuperDoc({
+          selector: '#editor',
+          document: '/files/contract.docx',
+        });
+        ```
+      </Tab>
+      <Tab title="File input">
+        ```html
+        <input type="file" accept=".docx" id="file-input" />
+        <div id="editor" style="height: 100vh"></div>
+
+        <script type="module">
+          import { SuperDoc } from 'superdoc';
+          import 'superdoc/style.css';
+
+          document.getElementById('file-input').addEventListener('change', (e) => {
+            new SuperDoc({
+              selector: '#editor',
+              document: e.target.files[0],
+            });
+          });
+        </script>
+        ```
+      </Tab>
+      <Tab title="Fetch">
+        ```javascript
+        const response = await fetch('/api/documents/123');
+        const blob = await response.blob();
+
+        new SuperDoc({
+          selector: '#editor',
+          document: new File([blob], 'document.docx'),
+        });
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+You now have a fully functional DOCX editor — tracked changes, tables, images, headers/footers, all working.
+
+## Using React?
+
+```jsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function App() {
+  return <SuperDocEditor document={file} />;
+}
+```
+
+Install with `npm install @superdoc-dev/react`. See the full [React guide](/getting-started/frameworks/react).
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Framework guides" icon="code" href="/getting-started/frameworks/react">
+    React, Vue, Angular, Vanilla JS
+  </Card>
+  <Card title="Configuration" icon="gear" href="/core/superdoc/configuration">
+    Modes, roles, toolbar, and more
+  </Card>
+  <Card title="Import / Export" icon="file-export" href="/getting-started/import-export">
+    Load and save DOCX files
+  </Card>
+  <Card title="Examples" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples">
+    Working demos on GitHub
+  </Card>
+</CardGroup>

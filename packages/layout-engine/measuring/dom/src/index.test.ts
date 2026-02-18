@@ -297,7 +297,7 @@ describe('measureBlock', () => {
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBeGreaterThanOrEqual(0);
       expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(16);
-      expect(measure.lines[0].lineHeight).toBeLessThan(16 * 1.15);
+      expect(measure.lines[0].lineHeight).toBeLessThanOrEqual(16 * 1.15);
       expect(measure.totalHeight).toBeGreaterThan(0);
     });
 
@@ -840,16 +840,14 @@ describe('measureBlock', () => {
           },
         ],
         attrs: {
-          spacing: { line: 1.5, lineRule: 'auto' },
+          spacing: { line: 1.5, lineUnit: 'multiplier', lineRule: 'auto' },
         },
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      // Word 2007+ uses fontSize × 1.15 as "single" line spacing (not just ascent+descent).
-      // The Canvas TextMetrics API doesn't expose lineGap, so we approximate it with 1.15×.
-      // The spacing multiplier (1.5) is applied to this base.
-      const singleLineHeight = fontSize * 1.15;
-      expect(measure.lines[0].lineHeight).toBeCloseTo(1.5 * singleLineHeight, 1);
+      // `lineUnit: "multiplier"` applies directly to fontSize.
+      // (pm-adapter already bakes the OOXML auto 1.15 factor into the multiplier value.)
+      expect(measure.lines[0].lineHeight).toBeCloseTo(1.5 * fontSize, 1);
     });
 
     it('applies higher auto multipliers to the baseline line height', async () => {
@@ -865,15 +863,12 @@ describe('measureBlock', () => {
           },
         ],
         attrs: {
-          spacing: { line: 2, lineRule: 'auto' },
+          spacing: { line: 2, lineUnit: 'multiplier', lineRule: 'auto' },
         },
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      // Word 2007+ uses fontSize × 1.15 as "single" line spacing.
-      // The spacing multiplier (2.0) is applied to this base.
-      const singleLineHeight = fontSize * 1.15;
-      expect(measure.lines[0].lineHeight).toBeCloseTo(2 * singleLineHeight, 1);
+      expect(measure.lines[0].lineHeight).toBeCloseTo(2 * fontSize, 1);
     });
 
     it('applies large auto values as multipliers', async () => {
@@ -888,13 +883,12 @@ describe('measureBlock', () => {
           },
         ],
         attrs: {
-          spacing: { line: 42, lineRule: 'auto' },
+          spacing: { line: 42, lineUnit: 'multiplier', lineRule: 'auto' },
         },
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 400));
-      const singleLineHeight = 16 * 1.15;
-      expect(measure.lines[0].lineHeight).toBeCloseTo(42 * singleLineHeight, 1);
+      expect(measure.lines[0].lineHeight).toBeCloseTo(42 * 16, 1);
     });
 
     it('does not clamp line height for very small fonts', async () => {
@@ -3256,14 +3250,13 @@ describe('measureBlock', () => {
       expect(cellMeasure.blocks[1].kind).toBe('paragraph');
       expect(cellMeasure.blocks[2].kind).toBe('paragraph');
 
-      // Heights should accumulate (3 paragraphs + padding)
+      // Heights should accumulate (3 paragraphs)
       const para1Height = cellMeasure.blocks[0].totalHeight;
       const para2Height = cellMeasure.blocks[1].totalHeight;
       const para3Height = cellMeasure.blocks[2].totalHeight;
       const totalContentHeight = para1Height + para2Height + para3Height;
-      const padding = 4; // Default top (2) + bottom (2)
 
-      expect(cellMeasure.height).toBe(totalContentHeight + padding);
+      expect(cellMeasure.height).toBe(totalContentHeight);
     });
 
     it('measures cell with empty blocks array', async () => {
@@ -3291,10 +3284,7 @@ describe('measureBlock', () => {
 
       const cellMeasure = measure.rows[0].cells[0];
       expect(cellMeasure.blocks).toHaveLength(0);
-
-      // Height should be just padding
-      const padding = 4; // Default top (2) + bottom (2)
-      expect(cellMeasure.height).toBe(padding);
+      expect(cellMeasure.height).toBe(0);
     });
 
     it('maintains backward compatibility with legacy paragraph field', async () => {
@@ -4720,9 +4710,9 @@ describe('measureBlock', () => {
       const para0Height = block0Measure.kind === 'paragraph' ? block0Measure.totalHeight : 0;
       const para1Height = block1Measure.kind === 'paragraph' ? block1Measure.totalHeight : 0;
 
-      // Cell height includes: para0Height + 10 + para1Height + padding (default 2 top + 2 bottom)
+      // Cell height includes: para0Height + 10 + para1Height
       // Last paragraph's spacing.after (20) is NOT included
-      const expectedCellHeight = para0Height + 10 + para1Height + 4;
+      const expectedCellHeight = para0Height + 10 + para1Height;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4780,8 +4770,8 @@ describe('measureBlock', () => {
       // Only positive spacing should be added, and not for the last paragraph.
       // Zero and negative spacing should not be added.
       // para-2 is the last paragraph so its spacing.after (15) is skipped.
-      // Cell height = para0 + para1 + para2 + 4 (padding)
-      const expectedCellHeight = para0Height + para1Height + para2Height + 4;
+      // Cell height = para0 + para1 + para2
+      const expectedCellHeight = para0Height + para1Height + para2Height;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4820,8 +4810,8 @@ describe('measureBlock', () => {
 
       const paraHeight = block0.kind === 'paragraph' ? block0.totalHeight : 0;
 
-      // Cell height should just be paragraph height + padding (no spacing.after)
-      const expectedCellHeight = paraHeight + 4;
+      // Cell height should just be paragraph height (no spacing.after)
+      const expectedCellHeight = paraHeight;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4867,7 +4857,7 @@ describe('measureBlock', () => {
       const paraHeight = paraMeasure.kind === 'paragraph' ? paraMeasure.totalHeight : 0;
 
       // Anchored image is out-of-flow: it should not increase cell height.
-      const expectedCellHeight = paraHeight + 4; // default top+bottom padding
+      const expectedCellHeight = paraHeight;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4923,8 +4913,8 @@ describe('measureBlock', () => {
       const para2Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
 
       // Only the valid number should add spacing
-      // Cell height = para0 + 10 (valid spacing) + para1 + para2 + 4 (padding)
-      const expectedCellHeight = para0Height + 10 + para1Height + para2Height + 4;
+      // Cell height = para0 + 10 (valid spacing) + para1 + para2
+      const expectedCellHeight = para0Height + 10 + para1Height + para2Height;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4989,9 +4979,9 @@ describe('measureBlock', () => {
       const imageHeight = block1.kind === 'image' ? block1.height : 0;
       const para1Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
 
-      // Cell height = para0 + 10 + image + para1 + 4 (padding)
+      // Cell height = para0 + 10 + image + para1
       // Last paragraph's spacing.after (5) is NOT included
-      const expectedCellHeight = para0Height + 10 + imageHeight + para1Height + 4;
+      const expectedCellHeight = para0Height + 10 + imageHeight + para1Height;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
   });

@@ -24,6 +24,20 @@ export function normalizePath(value: string): string {
 }
 
 /**
+ * Normalize a document path for comparison and filtering.
+ * Extends {@link normalizePath} by stripping the `test-docs/` corpus prefix
+ * and collapsing repeated leading slashes.
+ *
+ * @param value - Raw document path (may contain backslashes, leading ./, or test-docs/ prefix)
+ * @returns Cleaned path suitable for matching against corpus-relative paths
+ */
+export function normalizeDocPath(value: string): string {
+  return normalizePath(value)
+    .replace(/^\/+/, '')
+    .replace(/^test-docs\//i, '');
+}
+
+/**
  * Creates a ring buffer for log output that keeps only the most recent content.
  *
  * @param limit - Maximum number of characters to retain

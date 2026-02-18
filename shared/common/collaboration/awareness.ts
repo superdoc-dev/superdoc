@@ -61,7 +61,14 @@ export const awarenessStatesToArray = (
 
       let color = context.userColorMap.get(email);
       if (!color) {
-        color = context.config.colors[context.colorIndex % context.config.colors.length];
+        // Prefer the color already set on the user's awareness state (e.g. hash-assigned by SuperDoc).
+        // Fall back to the configured palette if available.
+        const userColor = (value.user as Record<string, unknown>).color as HexColor | undefined;
+        color =
+          userColor ||
+          (context.config.colors.length > 0
+            ? context.config.colors[context.colorIndex % context.config.colors.length]
+            : (undefined as unknown as HexColor));
         context.userColorMap.set(email, color);
         context.colorIndex++;
       }

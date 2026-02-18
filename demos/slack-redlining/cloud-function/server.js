@@ -2,9 +2,8 @@ import fs from "fs";
 import { readFile, unlink } from "fs/promises";
 import express from "express";
 import https from "https";
-import path from "path";
+import path, { dirname } from "path";
 import { fileURLToPath } from "url";
-import { dirname } from "path";
 import {
   getAIResponse,
   generateUploadDownloadUrls,

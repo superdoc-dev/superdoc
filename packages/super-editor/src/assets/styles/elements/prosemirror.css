@@ -293,11 +293,6 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 .presentation-editor__remote-caret {
   position: absolute;
   pointer-events: none;
-  /* Smooth transitions for cursor movement */
-  transition:
-    left 0.1s ease-out,
-    top 0.1s ease-out,
-    height 0.1s ease-out;
 }
 
 .presentation-editor__remote-label {
@@ -322,13 +317,6 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   position: absolute;
   border-radius: 2px;
   pointer-events: none;
-  /* Smooth transitions for selection changes */
-  transition:
-    left 0.1s ease-out,
-    top 0.1s ease-out,
-    width 0.1s ease-out,
-    height 0.1s ease-out,
-    opacity 0.15s ease-out;
   /* Better color blending with text (multiply mode shows text more clearly through highlights) */
   mix-blend-mode: multiply;
 }

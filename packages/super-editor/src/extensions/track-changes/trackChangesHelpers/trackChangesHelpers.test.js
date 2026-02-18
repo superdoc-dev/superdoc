@@ -223,6 +223,39 @@ describe('trackChangesHelpers', () => {
     expect(newTr.getMeta(CommentsPluginKey)).toEqual({ type: 'force' });
   });
 
+  it('addMarkStep tracks textStyle attr changes on imported-like marks', () => {
+    const importedTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#112233',
+    });
+    const doc = createDocWithText('Format me', [importedTextStyle]);
+    const state = createState(doc);
+    const changedTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#FF0000',
+    });
+    const step = new AddMarkStep(1, 9, changedTextStyle);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.before).toEqual([{ type: 'textStyle', attrs: importedTextStyle.attrs }]);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'textStyle', attrs: changedTextStyle.attrs }]);
+  });
+
   it('removeMarkStep records previous formatting when mark removed', () => {
     const bold = schema.marks.bold.create();
     const doc = createDocWithText('Styled', [bold]);

@@ -312,10 +312,24 @@ export class PresentationEditor extends EventEmitter {
     element: HTMLElement;
     pmStart: number;
   } | null = null;
+  #lastSelectedStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastSelectedStructuredContentInline: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastHoveredStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
   #remoteCursorManager: RemoteCursorManager | null = null;
+  /** Debounce timer for local cursor awareness updates (avoids ~190ms Liveblocks overhead per keystroke) */
+  #cursorUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   /** DOM element for rendering remote cursor overlays */
   #remoteCursorOverlay: HTMLElement | null = null;
   /** DOM element for rendering local selection/caret (dual-layer overlay architecture) */
@@ -397,6 +411,11 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.className = 'presentation-editor__pages';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
+
+    // Add event listeners for structured content hover coordination
+    this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
+    this.#painterHost.addEventListener('mouseout', this.#handleStructuredContentBlockMouseLeave);
+
     const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
     this.#domIndexObserverManager = new DomPositionIndexObserverManager({
       windowRoot: win,
@@ -463,7 +482,6 @@ export class PresentationEditor extends EventEmitter {
 
     // Wire up manager callbacks to use PresentationEditor methods
     this.#remoteCursorManager.setUpdateCallback(() => this.#updateRemoteCursors());
-    this.#remoteCursorManager.setReRenderCallback(() => this.#renderRemoteCursors());
 
     this.#hoverOverlay = doc.createElement('div');
     this.#hoverOverlay.className = 'presentation-editor__hover-overlay';
@@ -1883,19 +1901,39 @@ export class PresentationEditor extends EventEmitter {
 
     // In body mode, use main document layout
     const rects = this.getRangeRects(pos, pos);
-    if (!rects || rects.length === 0) {
-      return null;
+    if (rects && rects.length > 0) {
+      const rect = rects[0];
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      };
     }
 
-    const rect = rects[0];
-    return {
-      top: rect.top,
-      bottom: rect.bottom,
-      left: rect.left,
-      right: rect.right,
-      width: rect.width,
-      height: rect.height,
-    };
+    // Fallback: getRangeRects returns empty for collapsed selections on empty
+    // lines (no painted inline content to measure). Use caret geometry which
+    // combines DOM position data with layout metrics for these cases.
+    const caretRect = this.#computeCaretLayoutRect(pos);
+    if (caretRect) {
+      // caretRect is in page-local layout units; convert to viewport pixels.
+      const viewport = this.denormalizeClientPoint(caretRect.x, caretRect.y, caretRect.pageIndex, caretRect.height);
+      if (viewport) {
+        const h = viewport.height ?? caretRect.height;
+        return {
+          top: viewport.y,
+          bottom: viewport.y + h,
+          left: viewport.x,
+          right: viewport.x + 1, // caret is zero-width; use 1px so callers get a valid rect
+          width: 1,
+          height: h,
+        };
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -2134,6 +2172,12 @@ export class PresentationEditor extends EventEmitter {
       }, 'Layout RAF');
     }
 
+    // Cancel pending cursor awareness update
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+      this.#cursorUpdateTimer = null;
+    }
+
     // Clean up remote cursor manager
     if (this.#remoteCursorManager) {
       safeCleanup(() => {
@@ -2256,7 +2300,13 @@ export class PresentationEditor extends EventEmitter {
       }
     };
     const handleSelection = () => {
-      this.#scheduleSelectionUpdate();
+      // Use immediate rendering for selection-only changes (clicks, arrow keys).
+      // Without immediate, the render is RAF-deferred — leaving a window where
+      // a remote collaborator's edit can cancel the pending render via
+      // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
+      // if layout is updating (due to a concurrent doc change), flushNow()
+      // is a no-op and the render will be picked up after layout completes.
+      this.#scheduleSelectionUpdate({ immediate: true });
       // Update local cursor in awareness for collaboration
       // This bypasses y-prosemirror's focus check which may fail for hidden PM views
       this.#updateLocalAwarenessCursor();
@@ -2350,16 +2400,18 @@ export class PresentationEditor extends EventEmitter {
    * @private
    */
   #updateLocalAwarenessCursor(): void {
-    this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
-  }
-
-  /**
-   * Schedule a remote cursor re-render without re-normalizing awareness states.
-   * Delegates to RemoteCursorManager.
-   * @private
-   */
-  #scheduleRemoteCursorReRender() {
-    this.#remoteCursorManager?.scheduleReRender();
+    // Debounce awareness cursor updates to avoid per-keystroke overhead.
+    // Collaboration providers (e.g. Liveblocks) can spend ~190ms encoding and
+    // syncing awareness state per setLocalStateField call. Batching rapid
+    // cursor movements into a single update every 100ms keeps typing responsive
+    // while maintaining real-time cursor sharing for other participants.
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+    }
+    this.#cursorUpdateTimer = setTimeout(() => {
+      this.#cursorUpdateTimer = null;
+      this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
+    }, 100);
   }
 
   /**
@@ -3150,11 +3202,13 @@ export class PresentationEditor extends EventEmitter {
 
       this.#selectionSync.requestRender({ immediate: true });
 
-      // Trigger cursor re-rendering on layout changes without re-normalizing awareness
-      // Layout reflow requires repositioning cursors in the DOM, but awareness states haven't changed
-      // This optimization avoids expensive Yjs position conversions on every layout update
+      // Re-normalize remote cursor positions after layout completes.
+      // Local document changes shift absolute positions, so Yjs relative positions
+      // must be re-resolved against the updated editor state. Without this,
+      // remote cursors appear offset by the number of characters the local user typed.
       if (this.#remoteCursorManager?.hasRemoteCursors()) {
-        this.#scheduleRemoteCursorReRender();
+        this.#remoteCursorManager.markDirty();
+        this.#remoteCursorManager.scheduleUpdate();
       }
     } finally {
       if (!layoutCompleted) {
@@ -3312,6 +3366,243 @@ export class PresentationEditor extends EventEmitter {
     this.#setSelectedFieldAnnotationClass(element, pmStart);
   }
 
+  #clearSelectedStructuredContentBlockClass() {
+    if (!this.#lastSelectedStructuredContentBlock) return;
+    this.#lastSelectedStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentBlock = null;
+  }
+
+  #setSelectedStructuredContentBlockClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentBlock &&
+      this.#lastSelectedStructuredContentBlock.id === id &&
+      this.#lastSelectedStructuredContentBlock.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentBlock.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentBlockClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentBlock = { id, elements };
+  }
+
+  #syncSelectedStructuredContentBlockClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContentBlock') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+      node = selection.node;
+    } else {
+      const $pos = selection.$from;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContentBlock') {
+          node = candidate;
+          break;
+        }
+      }
+      if (!node) {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentBlockClass(elements, id);
+  }
+
+  #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block');
+
+    if (!block || !(block instanceof HTMLElement)) return;
+
+    // Don't show hover effect if already selected
+    if (block.classList.contains('ProseMirror-selectednode')) return;
+
+    const rawId = block.dataset.sdtId;
+    if (!rawId) return;
+
+    this.#setHoveredStructuredContentBlockClass(rawId);
+  };
+
+  #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block') as HTMLElement | null;
+
+    if (!block) return;
+
+    const relatedTarget = event.relatedTarget as HTMLElement | null;
+    if (
+      relatedTarget &&
+      block.dataset.sdtId &&
+      relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)
+    ) {
+      return;
+    }
+
+    this.#clearHoveredStructuredContentBlockClass();
+  };
+
+  #clearHoveredStructuredContentBlockClass() {
+    if (!this.#lastHoveredStructuredContentBlock) return;
+    this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('sdt-group-hover');
+    });
+    this.#lastHoveredStructuredContentBlock = null;
+  }
+
+  #setHoveredStructuredContentBlockClass(id: string) {
+    if (this.#lastHoveredStructuredContentBlock?.id === id) return;
+
+    this.#clearHoveredStructuredContentBlockClass();
+
+    if (!this.#painterHost) return;
+
+    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+    const elements = Array.from(
+      this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+    ) as HTMLElement[];
+
+    if (elements.length === 0) return;
+
+    elements.forEach((element) => {
+      if (!element.classList.contains('ProseMirror-selectednode')) {
+        element.classList.add('sdt-group-hover');
+      }
+    });
+
+    this.#lastHoveredStructuredContentBlock = { id, elements };
+  }
+
+  #clearSelectedStructuredContentInlineClass() {
+    if (!this.#lastSelectedStructuredContentInline) return;
+    this.#lastSelectedStructuredContentInline.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentInline = null;
+  }
+
+  #setSelectedStructuredContentInlineClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentInline &&
+      this.#lastSelectedStructuredContentInline.id === id &&
+      this.#lastSelectedStructuredContentInline.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentInline.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentInlineClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentInline = { id, elements };
+  }
+
+  #syncSelectedStructuredContentInlineClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+    let pos: number | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContent') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+      node = selection.node;
+      pos = selection.from;
+    } else {
+      const $pos = selection.$from;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContent') {
+          node = candidate;
+          pos = $pos.before(depth);
+          break;
+        }
+      }
+      if (!node || pos == null) {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-inline[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentInlineClass(elements, id);
+  }
+
   /**
    * Updates the visual cursor/selection overlay to match the current editor selection.
    *
@@ -3386,6 +3677,8 @@ export class PresentationEditor extends EventEmitter {
     if (!selection) {
       try {
         this.#clearSelectedFieldAnnotationClass();
+        this.#clearSelectedStructuredContentBlockClass();
+        this.#clearSelectedStructuredContentInlineClass();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -3409,6 +3702,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#syncSelectedFieldAnnotationClass(selection);
+    this.#syncSelectedStructuredContentBlockClass(selection);
+    this.#syncSelectedStructuredContentInlineClass(selection);
 
     // Ensure selection endpoints remain mounted under virtualization so DOM-first
     // caret/selection rendering stays available during cross-page selection.

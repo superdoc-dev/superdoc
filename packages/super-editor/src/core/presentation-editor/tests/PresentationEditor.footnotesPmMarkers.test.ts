@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PresentationEditor } from '../PresentationEditor.js';
 
 let capturedLayoutOptions: any;
+let capturedBlocksForLayout: any[] | undefined;
 
 vi.mock('../../Editor', () => ({
   Editor: vi.fn().mockImplementation(() => ({
@@ -43,7 +44,9 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
     toFlowBlocks: vi.fn((_: unknown, opts?: any) => {
       if (typeof opts?.blockIdPrefix === 'string' && opts.blockIdPrefix.startsWith('footnote-')) {
         return {
-          blocks: [{ kind: 'paragraph', runs: [{ kind: 'text', text: 'Body', pmStart: 5, pmEnd: 9 }] }],
+          blocks: [
+            { kind: 'paragraph', id: 'footnote-body-1', runs: [{ kind: 'text', text: 'Body', pmStart: 5, pmEnd: 9 }] },
+          ],
           bookmarks: new Map(),
         };
       }
@@ -55,8 +58,11 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: vi.fn(async (...args: any[]) => {
     capturedLayoutOptions = args[3];
+    capturedBlocksForLayout = args[2];
     return { layout: { pages: [] }, measures: [] };
   }),
+  normalizeMargin: (value: number | undefined, fallback: number) =>
+    Number.isFinite(value) ? (value as number) : fallback,
   selectionToRects: vi.fn(() => []),
   clickToPosition: vi.fn(),
   getFragmentAtPosition: vi.fn(),
@@ -139,6 +145,7 @@ describe('PresentationEditor - footnote number marker PM position', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     capturedLayoutOptions = undefined;
+    capturedBlocksForLayout = undefined;
   });
 
   afterEach(() => {
@@ -160,5 +167,42 @@ describe('PresentationEditor - footnote number marker PM position', () => {
     expect(markerRun?.dataAttrs?.['data-sd-footnote-number']).toBe('true');
     expect(markerRun?.pmStart).toBe(5);
     expect(markerRun?.pmEnd).toBe(6);
+  });
+
+  it('appends semantic footnotes as end-of-document blocks in semantic flow mode', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      layoutEngineOptions: {
+        flowMode: 'semantic',
+      },
+    });
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(capturedLayoutOptions?.flowMode).toBe('semantic');
+    expect(capturedLayoutOptions?.footnotes).toBeUndefined();
+    expect(Array.isArray(capturedBlocksForLayout)).toBe(true);
+
+    const blockIds = (capturedBlocksForLayout ?? []).map((block) => block.id);
+    expect(blockIds).toContain('__sd_semantic_footnotes_heading');
+    expect(blockIds.some((id) => typeof id === 'string' && id.startsWith('__sd_semantic_footnote-1-'))).toBe(true);
+  });
+
+  it('does not expose PM ranges on synthetic semantic footnote blocks', async () => {
+    editor = new PresentationEditor({
+      element: container,
+      layoutEngineOptions: {
+        flowMode: 'semantic',
+      },
+    });
+    await new Promise((r) => setTimeout(r, 100));
+
+    const semanticBlocks = (capturedBlocksForLayout ?? []).filter((block) =>
+      typeof block?.id === 'string' ? block.id.startsWith('__sd_semantic_footnote-') : false,
+    );
+    expect(semanticBlocks.length).toBeGreaterThan(0);
+
+    const firstRun = semanticBlocks[0]?.runs?.[0];
+    expect(firstRun?.pmStart).toBeUndefined();
+    expect(firstRun?.pmEnd).toBeUndefined();
   });
 });

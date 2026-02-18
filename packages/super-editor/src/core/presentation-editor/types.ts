@@ -6,7 +6,7 @@
  */
 
 import type { Editor } from '../Editor.js';
-import type { TrackedChangesMode, FlowBlock, Layout, Measure } from '@superdoc/contracts';
+import type { TrackedChangesMode, FlowBlock, Layout, Measure, FlowMode, SectionMetadata } from '@superdoc/contracts';
 import type { LayoutMode, RulerOptions } from '@superdoc/painter-dom';
 import type * as Y from 'yjs';
 
@@ -90,6 +90,50 @@ export type TrackedChangesOverrides = {
   enabled?: boolean;
 };
 
+// FlowMode is re-exported from @superdoc/contracts
+export type { FlowMode } from '@superdoc/contracts';
+
+/**
+ * Internal semantic-layout tuning options.
+ * These options are intentionally not exposed as a stable public API.
+ */
+export type SemanticLayoutOptions = {
+  marginsMode?: 'firstSection' | 'none' | 'custom';
+  customMargins?: {
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  };
+  footnotesMode?: 'endOfDocument';
+};
+
+type ResolvedMarginsBase = Required<Pick<PageMargins, 'top' | 'right' | 'bottom' | 'left'>> &
+  Partial<Pick<PageMargins, 'header' | 'footer'>>;
+
+export type ResolvedLayoutOptions =
+  | {
+      flowMode: 'paginated';
+      pageSize: PageSize;
+      margins: ResolvedMarginsBase;
+      columns?: { count: number; gap: number };
+      sectionMetadata: SectionMetadata[];
+    }
+  | {
+      flowMode: 'semantic';
+      pageSize: PageSize;
+      margins: ResolvedMarginsBase;
+      columns: { count: 1; gap: 0 };
+      semantic: {
+        contentWidth: number;
+        marginLeft: number;
+        marginRight: number;
+        marginTop: number;
+        marginBottom: number;
+      };
+      sectionMetadata: SectionMetadata[];
+    };
+
 export type LayoutEngineOptions = {
   pageSize?: PageSize;
   margins?: PageMargins;
@@ -98,6 +142,9 @@ export type LayoutEngineOptions = {
   pageStyles?: Record<string, unknown>;
   debugLabel?: string;
   layoutMode?: LayoutMode;
+  flowMode?: FlowMode;
+  /** Internal-only semantic mode options (not a stable public API). */
+  semanticOptions?: SemanticLayoutOptions;
   trackedChanges?: TrackedChangesOverrides;
   /** Emit comment positions while in viewing mode (used to render comment highlights). */
   emitCommentPositionsInViewing?: boolean;

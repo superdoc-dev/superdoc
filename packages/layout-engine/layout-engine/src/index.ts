@@ -24,6 +24,7 @@ import type {
   DrawingMeasure,
   DrawingFragment,
   SectionNumbering,
+  FlowMode,
 } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
@@ -61,6 +62,12 @@ type NormalizedColumns = ColumnLayout & { width: number };
  * This is a fallback estimate for paragraph and list-item fragments.
  */
 const DEFAULT_PARAGRAPH_LINE_HEIGHT_PX = 20;
+
+/**
+ * Synthetic page height used in semantic flow mode to avoid pagination-driven clipping
+ * during measurement. A large finite value preserves stable measurement constraints.
+ */
+export const SEMANTIC_PAGE_HEIGHT_PX = 1_000_000;
 
 /**
  * Type guard to check if a fragment has a height property.
@@ -419,6 +426,14 @@ export type LayoutOptions = {
   pageSize?: PageSize;
   margins?: Margins;
   columns?: ColumnLayout;
+  flowMode?: FlowMode;
+  semantic?: {
+    contentWidth?: number;
+    marginLeft?: number;
+    marginRight?: number;
+    marginTop?: number;
+    marginBottom?: number;
+  };
   remeasureParagraph?: (block: ParagraphBlock, maxWidth: number, firstLineIndent?: number) => ParagraphMeasure;
   sectionMetadata?: SectionMetadata[];
   /**

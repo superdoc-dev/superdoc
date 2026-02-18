@@ -43,6 +43,7 @@ import type {
   TableAttrs,
   TableCellAttrs,
   PositionMapping,
+  FlowMode,
 } from '@superdoc/contracts';
 import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -262,6 +263,8 @@ function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
  * - 'book': Book-style layout with facing pages
  */
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
+// FlowMode is re-exported from @superdoc/contracts
+export type { FlowMode } from '@superdoc/contracts';
 
 type PageDecorationPayload = {
   fragments: Fragment[];
@@ -308,6 +311,7 @@ export type RulerOptions = {
 type PainterOptions = {
   pageStyles?: PageStyles;
   layoutMode?: LayoutMode;
+  flowMode?: FlowMode;
   /** Gap between pages in pixels (default: 24px for vertical, 20px for horizontal) */
   pageGap?: number;
   headerProvider?: PageDecorationProvider;
@@ -316,7 +320,7 @@ type PainterOptions = {
     enabled?: boolean;
     window?: number;
     overscan?: number;
-    /** Virtualization gap override (defaults to 72px; independent of pageGap) */
+    /** Virtualization gap override (defaults to 72px; independent of pageGap). */
     gap?: number;
     paddingTop?: number;
   };
@@ -786,6 +790,7 @@ export class DomPainter {
   private currentLayout: Layout | null = null;
   private changedBlocks = new Set<string>();
   private readonly layoutMode: LayoutMode;
+  private readonly isSemanticFlow: boolean;
   private headerProvider?: PageDecorationProvider;
   private footerProvider?: PageDecorationProvider;
   private totalPages = 0;
@@ -833,6 +838,7 @@ export class DomPainter {
   constructor(blocks: FlowBlock[], measures: Measure[], options: PainterOptions = {}) {
     this.options = options;
     this.layoutMode = options.layoutMode ?? 'vertical';
+    this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
     this.blockLookup = this.buildBlockLookup(blocks, measures);
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
@@ -845,11 +851,12 @@ export class DomPainter {
         : defaultGap;
 
     // Initialize virtualization config (feature-flagged)
-    if (this.layoutMode === 'vertical' && options.virtualization?.enabled) {
+    if (!this.isSemanticFlow && this.layoutMode === 'vertical' && options.virtualization?.enabled) {
       this.virtualEnabled = true;
       this.virtualWindow = Math.max(1, options.virtualization.window ?? 5);
       this.virtualOverscan = Math.max(0, options.virtualization.overscan ?? 0);
-      // Virtualization gap: use explicit virtualization.gap if provided, otherwise default to virtualized gap (72px)
+      // Virtualization gap: use explicit virtualization.gap if provided,
+      // otherwise default to legacy virtualized gap (72px).
       const maybeGap = options.virtualization.gap;
       if (typeof maybeGap === 'number' && Number.isFinite(maybeGap)) {
         this.virtualGap = Math.max(0, maybeGap);
@@ -1033,7 +1040,7 @@ export class DomPainter {
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
     ensureNativeSelectionStyles(doc);
-    if (this.options.ruler?.enabled) {
+    if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
     mount.classList.add(CLASS_NAMES.container);
@@ -1046,6 +1053,22 @@ export class DomPainter {
     this.mount = mount;
 
     this.totalPages = layout.pages.length;
+    if (this.isSemanticFlow) {
+      // Semantic mode always renders as a single continuous surface.
+      applyStyles(mount, containerStyles);
+      mount.style.gap = '0px';
+      mount.style.alignItems = 'stretch';
+      if (!this.currentLayout || this.pageStates.length === 0) {
+        this.fullRender(layout);
+      } else {
+        this.patchLayout(layout);
+      }
+      this.currentLayout = layout;
+      this.changedBlocks.clear();
+      this.currentMapping = null;
+      return;
+    }
+
     const mode = this.layoutMode;
     if (mode === 'horizontal') {
       applyStyles(mount, containerStylesHorizontal);
@@ -1467,10 +1490,11 @@ export class DomPainter {
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(width, height, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
 
-    // Render per-page ruler if enabled
-    if (this.options.ruler?.enabled) {
+    // Render per-page ruler if enabled (suppressed in semantic flow mode)
+    if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       const rulerEl = this.renderPageRuler(width, page);
       if (rulerEl) {
         el.appendChild(rulerEl);
@@ -1572,6 +1596,7 @@ export class DomPainter {
   }
 
   private renderDecorationsForPage(pageEl: HTMLElement, page: Page): void {
+    if (this.isSemanticFlow) return;
     this.renderDecorationSection(pageEl, page, 'header');
     this.renderDecorationSection(pageEl, page, 'footer');
   }
@@ -1790,6 +1815,7 @@ export class DomPainter {
   private patchPage(state: PageDomState, page: Page, pageSize: { w: number; h: number }): void {
     const pageEl = state.element;
     applyStyles(pageEl, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(pageEl);
     pageEl.dataset.pageNumber = String(page.number);
     pageEl.dataset.layoutEpoch = String(this.layoutEpoch);
     // pageIndex is already set during creation and doesn't change during patch
@@ -1934,6 +1960,7 @@ export class DomPainter {
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
 
     const contextBase: FragmentRenderContext = {
@@ -1960,7 +1987,25 @@ export class DomPainter {
     return { element: el, fragments: fragmentStates };
   }
 
+  private applySemanticPageOverrides(el: HTMLElement): void {
+    if (this.isSemanticFlow) {
+      el.style.overflow = 'visible';
+      el.style.width = '100%';
+      el.style.minWidth = '100%';
+    }
+  }
+
   private getEffectivePageStyles(): PageStyles | undefined {
+    if (this.isSemanticFlow) {
+      const base = this.options.pageStyles ?? {};
+      return {
+        ...base,
+        background: base.background ?? '#fff',
+        boxShadow: 'none',
+        border: 'none',
+        margin: '0',
+      };
+    }
     if (this.virtualEnabled && this.layoutMode === 'vertical') {
       // Remove top/bottom margins to avoid double-counting with container gap during virtualization
       const base = this.options.pageStyles ?? {};

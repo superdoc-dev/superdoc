@@ -225,6 +225,8 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: mockIncrementalLayout,
+  normalizeMargin: (value: number | undefined, fallback: number) =>
+    Number.isFinite(value) ? (value as number) : fallback,
   selectionToRects: mockSelectionToRects,
   clickToPosition: mockClickToPosition,
   createDragHandler: vi.fn(() => {
@@ -385,6 +387,356 @@ describe('PresentationEditor', () => {
       const didScroll = editor.scrollToPosition(50, { behavior: 'auto' });
       expect(didScroll).toBe(true);
       expect(pageEl.scrollIntoView).toHaveBeenCalled();
+    });
+  });
+
+  describe('semantic flow mode configuration', () => {
+    it('forces vertical layout and disables virtualization when flowMode is semantic', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-config-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+          layoutMode: 'book',
+          virtualization: { enabled: true, window: 7, overscan: 2 },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = editor.getLayoutOptions();
+      expect(layoutOptions.flowMode).toBe('semantic');
+      expect(layoutOptions.layoutMode).toBe('vertical');
+      expect(layoutOptions.virtualization?.enabled).toBe(false);
+
+      expect(mockCreateDomPainter).toHaveBeenCalled();
+      const painterOptions = mockCreateDomPainter.mock.calls[0]?.[0];
+      expect(painterOptions?.flowMode).toBe('semantic');
+      expect(painterOptions?.virtualization?.enabled).toBe(false);
+    });
+
+    it('ignores setLayoutMode requests while semantic flow mode is active', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-layout-mode-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+          layoutMode: 'vertical',
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      editor.setLayoutMode('book');
+      const layoutOptions = editor.getLayoutOptions();
+      expect(layoutOptions.layoutMode).toBe('vertical');
+    });
+
+    it('uses host width for semantic flow without forcing a wide minimum', async () => {
+      Object.defineProperty(container, 'clientWidth', {
+        configurable: true,
+        value: 120,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-width-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+          semanticOptions: { marginsMode: 'none' },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockIncrementalLayout).toHaveBeenCalled();
+      const layoutOptions = mockIncrementalLayout.mock.calls[0]?.[3] as {
+        flowMode?: string;
+        semantic?: { contentWidth?: number };
+        pageSize?: { w?: number };
+      };
+      expect(layoutOptions.flowMode).toBe('semantic');
+      expect(layoutOptions.semantic?.contentWidth).toBe(120);
+      expect(layoutOptions.pageSize?.w).toBe(120);
+    });
+
+    it('defaults semantic flow to zero vertical margins to avoid page seam gaps', async () => {
+      Object.defineProperty(container, 'clientWidth', {
+        configurable: true,
+        value: 420,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-default-margins-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        margins?: { top?: number; bottom?: number };
+        semantic?: { marginTop?: number; marginBottom?: number };
+      };
+
+      expect(layoutOptions.margins?.top).toBe(0);
+      expect(layoutOptions.margins?.bottom).toBe(0);
+      expect(layoutOptions.semantic?.marginTop).toBe(0);
+      expect(layoutOptions.semantic?.marginBottom).toBe(0);
+    });
+
+    it('clamps semantic custom margins to finite non-negative values', async () => {
+      Object.defineProperty(container, 'clientWidth', {
+        configurable: true,
+        value: 500,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-custom-margins-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+          semanticOptions: {
+            marginsMode: 'custom',
+            customMargins: {
+              left: -10,
+              right: Number.NaN,
+              top: 24,
+              bottom: -1,
+            },
+          },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        margins?: { left?: number; right?: number; top?: number; bottom?: number };
+        semantic?: { marginLeft?: number; marginRight?: number; marginTop?: number; marginBottom?: number };
+        pageSize?: { w?: number };
+      };
+
+      expect(layoutOptions.margins?.left).toBe(72);
+      expect(layoutOptions.margins?.right).toBe(72);
+      expect(layoutOptions.margins?.top).toBe(24);
+      expect(layoutOptions.margins?.bottom).toBe(72);
+
+      expect(layoutOptions.semantic?.marginLeft).toBe(72);
+      expect(layoutOptions.semantic?.marginRight).toBe(72);
+      expect(layoutOptions.semantic?.marginTop).toBe(24);
+      expect(layoutOptions.semantic?.marginBottom).toBe(72);
+      expect(layoutOptions.pageSize?.w).toBe(500);
+    });
+
+    it('relayouts semantic flow when host width changes', async () => {
+      const originalResizeObserver = window.ResizeObserver;
+      let resizeCallback: ResizeObserverCallback | null = null;
+      class ResizeObserverMock {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+        unobserve(): void {}
+      }
+
+      Object.defineProperty(window, 'ResizeObserver', {
+        configurable: true,
+        value: ResizeObserverMock,
+      });
+
+      try {
+        Object.defineProperty(container, 'clientWidth', {
+          configurable: true,
+          value: 240,
+        });
+
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'semantic-resize-doc',
+          mode: 'docx',
+          layoutEngineOptions: {
+            flowMode: 'semantic',
+            semanticOptions: { marginsMode: 'none' },
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        let layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+          semantic?: { contentWidth?: number };
+        };
+        expect(layoutOptions.semantic?.contentWidth).toBe(240);
+
+        Object.defineProperty(container, 'clientWidth', {
+          configurable: true,
+          value: 360,
+        });
+        resizeCallback?.([], {} as ResizeObserver);
+
+        await new Promise((resolve) => setTimeout(resolve, 180));
+
+        layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+          semantic?: { contentWidth?: number };
+        };
+        expect(mockIncrementalLayout.mock.calls.length).toBeGreaterThan(1);
+        expect(layoutOptions.semantic?.contentWidth).toBe(360);
+      } finally {
+        Object.defineProperty(window, 'ResizeObserver', {
+          configurable: true,
+          value: originalResizeObserver,
+        });
+      }
+    });
+
+    it('clears semantic debounce with the owner window when rescheduling', async () => {
+      const originalResizeObserver = window.ResizeObserver;
+      const ownerDocument = container.ownerDocument;
+      const originalDefaultView = ownerDocument.defaultView;
+      let resizeCallback: ResizeObserverCallback | null = null;
+
+      class ResizeObserverMock {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+        unobserve(): void {}
+      }
+
+      Object.defineProperty(window, 'ResizeObserver', {
+        configurable: true,
+        value: ResizeObserverMock,
+      });
+
+      const ownerSetTimeout = vi.fn(() => 1);
+      const ownerClearTimeout = vi.fn();
+      const ownerWindow = {
+        setTimeout: ownerSetTimeout,
+        clearTimeout: ownerClearTimeout,
+        requestAnimationFrame: (callback: FrameRequestCallback) => window.requestAnimationFrame(callback),
+        cancelAnimationFrame: (handle: number) => window.cancelAnimationFrame(handle),
+        getComputedStyle: window.getComputedStyle.bind(window),
+        addEventListener: window.addEventListener.bind(window),
+        removeEventListener: window.removeEventListener.bind(window),
+        performance: window.performance,
+      } as unknown as Window;
+
+      try {
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'semantic-resize-owner-window-clear-doc',
+          mode: 'docx',
+          layoutEngineOptions: {
+            flowMode: 'semantic',
+            semanticOptions: { marginsMode: 'none' },
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        expect(resizeCallback).toBeTypeOf('function');
+
+        Object.defineProperty(ownerDocument, 'defaultView', {
+          configurable: true,
+          value: ownerWindow,
+        });
+
+        resizeCallback?.([], {} as ResizeObserver);
+        resizeCallback?.([], {} as ResizeObserver);
+
+        expect(ownerSetTimeout).toHaveBeenCalledTimes(2);
+        expect(ownerClearTimeout).toHaveBeenCalledTimes(1);
+      } finally {
+        Object.defineProperty(ownerDocument, 'defaultView', {
+          configurable: true,
+          value: originalDefaultView,
+        });
+        Object.defineProperty(window, 'ResizeObserver', {
+          configurable: true,
+          value: originalResizeObserver,
+        });
+      }
+    });
+
+    it('clears semantic debounce with the owner window during destroy', async () => {
+      const originalResizeObserver = window.ResizeObserver;
+      const ownerDocument = container.ownerDocument;
+      const originalDefaultView = ownerDocument.defaultView;
+      let resizeCallback: ResizeObserverCallback | null = null;
+
+      class ResizeObserverMock {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+        unobserve(): void {}
+      }
+
+      Object.defineProperty(window, 'ResizeObserver', {
+        configurable: true,
+        value: ResizeObserverMock,
+      });
+
+      const ownerSetTimeout = vi.fn(() => 1);
+      const ownerClearTimeout = vi.fn();
+      const ownerWindow = {
+        setTimeout: ownerSetTimeout,
+        clearTimeout: ownerClearTimeout,
+        requestAnimationFrame: (callback: FrameRequestCallback) => window.requestAnimationFrame(callback),
+        cancelAnimationFrame: (handle: number) => window.cancelAnimationFrame(handle),
+        getComputedStyle: window.getComputedStyle.bind(window),
+        addEventListener: window.addEventListener.bind(window),
+        removeEventListener: window.removeEventListener.bind(window),
+        performance: window.performance,
+      } as unknown as Window;
+
+      try {
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'semantic-resize-owner-window-destroy-doc',
+          mode: 'docx',
+          layoutEngineOptions: {
+            flowMode: 'semantic',
+            semanticOptions: { marginsMode: 'none' },
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        expect(resizeCallback).toBeTypeOf('function');
+
+        Object.defineProperty(ownerDocument, 'defaultView', {
+          configurable: true,
+          value: ownerWindow,
+        });
+
+        resizeCallback?.([], {} as ResizeObserver);
+
+        expect(ownerSetTimeout).toHaveBeenCalledTimes(1);
+
+        editor.destroy();
+        editor = null as unknown as PresentationEditor;
+
+        expect(ownerClearTimeout).toHaveBeenCalledTimes(1);
+      } finally {
+        Object.defineProperty(ownerDocument, 'defaultView', {
+          configurable: true,
+          value: originalDefaultView,
+        });
+        Object.defineProperty(window, 'ResizeObserver', {
+          configurable: true,
+          value: originalResizeObserver,
+        });
+      }
     });
   });
 

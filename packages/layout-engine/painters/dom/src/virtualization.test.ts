@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter } from './index.js';
 import type { FlowBlock, Measure, Layout, Fragment, PageMargins } from '@superdoc/contracts';
 
@@ -391,5 +391,70 @@ describe('DomPainter virtualization (vertical)', () => {
     expect(firstPageAfter?.querySelector('.superdoc-drawing-fragment')).toBeTruthy();
     const firstIndexAfter = firstPageAfter ? Number(firstPageAfter.dataset.pageIndex) : -1;
     expect(firstIndexAfter).toBeGreaterThanOrEqual(firstIndexBefore);
+  });
+
+  it('disables virtualization rendering paths in semantic flow mode', () => {
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      flowMode: 'semantic',
+      virtualization: { enabled: true, window: 2, overscan: 0, gap: 72, paddingTop: 0 },
+    });
+
+    const layout = makeLayout(8);
+    painter.paint(layout, mount);
+
+    const pages = mount.querySelectorAll('.superdoc-page');
+    expect(pages.length).toBe(8);
+    expect(mount.querySelector('[data-virtual-spacer="top"]')).toBeNull();
+    expect(mount.querySelector('[data-virtual-spacer="bottom"]')).toBeNull();
+  });
+
+  it('skips header/footer decoration providers in semantic flow mode', () => {
+    const headerProvider = vi.fn(() => ({
+      height: 20,
+      offset: 0,
+      fragments: [
+        {
+          kind: 'para',
+          blockId: block.id,
+          fromLine: 0,
+          toLine: 1,
+          x: 0,
+          y: 0,
+          width: 50,
+        },
+      ],
+    }));
+    const footerProvider = vi.fn(() => ({
+      height: 20,
+      offset: 0,
+      fragments: [
+        {
+          kind: 'para',
+          blockId: block.id,
+          fromLine: 0,
+          toLine: 1,
+          x: 0,
+          y: 0,
+          width: 50,
+        },
+      ],
+    }));
+
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      flowMode: 'semantic',
+      headerProvider,
+      footerProvider,
+    });
+
+    painter.paint(makeLayout(2), mount);
+
+    expect(headerProvider).not.toHaveBeenCalled();
+    expect(footerProvider).not.toHaveBeenCalled();
+    expect(mount.querySelector('.superdoc-page-header')).toBeNull();
+    expect(mount.querySelector('.superdoc-page-footer')).toBeNull();
   });
 });

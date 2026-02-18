@@ -37,6 +37,7 @@ import {
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/painter-dom';
+import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 
 // =============================================================================
 // Constants
@@ -51,9 +52,13 @@ const SCROLL_DETECTION_TOLERANCE_PX = 1;
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
-/** Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder). */
+/**
+ * Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder).
+ * Semantic footnote blocks use the {@link isSemanticFootnoteBlockId} helper from
+ * shared constants — it matches both heading and body footnote block IDs.
+ */
 function isFootnoteBlockId(blockId: string): boolean {
-  return typeof blockId === 'string' && blockId.startsWith('footnote-');
+  return typeof blockId === 'string' && (blockId.startsWith('footnote-') || isSemanticFootnoteBlockId(blockId));
 }
 
 // =============================================================================

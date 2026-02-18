@@ -4700,19 +4700,19 @@ describe('measureBlock', () => {
       const block0Measure = cellMeasure.blocks[0];
       const block1Measure = cellMeasure.blocks[1];
 
-      // Content height should include first paragraph's spacing.after but NOT the last paragraph's.
-      // In Word, the last paragraph's spacing.after is absorbed by the cell's bottom padding.
+      // Content height should include first paragraph's spacing.after.
+      // The last paragraph contributes max(0, spacing.after - paddingBottom).
+      // With default paddingBottom=0 in this fixture, the full last spacing is included.
       // First paragraph: height + 10px spacing
-      // Last paragraph: height only (spacing.after=20 is skipped)
+      // Last paragraph: height + 20px spacing
       expect(block0Measure.kind).toBe('paragraph');
       expect(block1Measure.kind).toBe('paragraph');
 
       const para0Height = block0Measure.kind === 'paragraph' ? block0Measure.totalHeight : 0;
       const para1Height = block1Measure.kind === 'paragraph' ? block1Measure.totalHeight : 0;
 
-      // Cell height includes: para0Height + 10 + para1Height
-      // Last paragraph's spacing.after (20) is NOT included
-      const expectedCellHeight = para0Height + 10 + para1Height;
+      // Cell height includes: para0Height + 10 + para1Height + 20
+      const expectedCellHeight = para0Height + 10 + para1Height + 20;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4767,11 +4767,12 @@ describe('measureBlock', () => {
       const para1Height = block1.kind === 'paragraph' ? block1.totalHeight : 0;
       const para2Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
 
-      // Only positive spacing should be added, and not for the last paragraph.
+      // Only positive spacing should be added.
       // Zero and negative spacing should not be added.
-      // para-2 is the last paragraph so its spacing.after (15) is skipped.
-      // Cell height = para0 + para1 + para2
-      const expectedCellHeight = para0Height + para1Height + para2Height;
+      // para-2 is the last paragraph, so it contributes max(0, 15 - paddingBottom).
+      // paddingBottom is 0 in this fixture, so +15 is included.
+      // Cell height = para0 + para1 + para2 + 15
+      const expectedCellHeight = para0Height + para1Height + para2Height + 15;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4965,7 +4966,8 @@ describe('measureBlock', () => {
 
       // Should handle mixed block types correctly
       // Non-last paragraphs should have spacing.after applied, image should not
-      // Last paragraph's spacing.after is skipped
+      // Last paragraph contributes max(0, spacing.after - paddingBottom).
+      // paddingBottom is 0 in this fixture.
       expect(cellMeasure.blocks).toHaveLength(3);
       expect(cellMeasure.blocks[0].kind).toBe('paragraph');
       expect(cellMeasure.blocks[1].kind).toBe('image');
@@ -4979,9 +4981,8 @@ describe('measureBlock', () => {
       const imageHeight = block1.kind === 'image' ? block1.height : 0;
       const para1Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
 
-      // Cell height = para0 + 10 + image + para1
-      // Last paragraph's spacing.after (5) is NOT included
-      const expectedCellHeight = para0Height + 10 + imageHeight + para1Height;
+      // Cell height = para0 + 10 + image + para1 + 5
+      const expectedCellHeight = para0Height + 10 + imageHeight + para1Height + 5;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
   });

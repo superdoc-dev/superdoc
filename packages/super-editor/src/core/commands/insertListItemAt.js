@@ -10,7 +10,7 @@ import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPr
  * @returns {import('./types/index.js').Command}
  */
 export const insertListItemAt =
-  ({ pos, position, text = '', sdBlockId, tracked = false }) =>
+  ({ pos, position, text = '', sdBlockId, tracked }) =>
   ({ state, dispatch }) => {
     if (!Number.isInteger(pos) || pos < 0 || pos > state.doc.content.size) return false;
     if (position !== 'before' && position !== 'after') return false;
@@ -60,7 +60,8 @@ export const insertListItemAt =
 
     try {
       const tr = state.tr.insert(insertPos, paragraphNode).setMeta('inputType', 'programmatic');
-      if (tracked) tr.setMeta('forceTrackChanges', true);
+      if (tracked === true) tr.setMeta('forceTrackChanges', true);
+      else if (tracked === false) tr.setMeta('skipTrackChanges', true);
       dispatch(tr);
       return true;
     } catch {

@@ -124,6 +124,16 @@ describe('insertParagraphAt', () => {
     expect(metaCalls).not.toContain('forceTrackChanges');
   });
 
+  it('sets skipTrackChanges meta when tracked is false to preserve direct mode semantics', () => {
+    const { state, dispatch, paragraphType, tr } = createMockState();
+    const mockNode = { type: { name: 'paragraph' } };
+    paragraphType.createAndFill.mockReturnValue(mockNode);
+
+    insertParagraphAt({ pos: 0, tracked: false })({ state, dispatch });
+
+    expect(tr.setMeta).toHaveBeenCalledWith('skipTrackChanges', true);
+  });
+
   it('falls back to paragraphType.create when createAndFill returns null', () => {
     const { state, dispatch, paragraphType } = createMockState();
     const mockNode = { type: { name: 'paragraph' } };

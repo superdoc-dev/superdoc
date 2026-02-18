@@ -8,7 +8,7 @@
  * @returns {import('./types/index.js').Command}
  */
 export const insertParagraphAt =
-  ({ pos, text = '', sdBlockId, tracked = false }) =>
+  ({ pos, text = '', sdBlockId, tracked }) =>
   ({ state, dispatch }) => {
     const paragraphType = state.schema.nodes.paragraph;
     if (!paragraphType) return false;
@@ -35,9 +35,8 @@ export const insertParagraphAt =
       const tr = state.tr.insert(pos, paragraphNode);
       if (!dispatch) return true;
       tr.setMeta('inputType', 'programmatic');
-      if (tracked) {
-        tr.setMeta('forceTrackChanges', true);
-      }
+      if (tracked === true) tr.setMeta('forceTrackChanges', true);
+      else if (tracked === false) tr.setMeta('skipTrackChanges', true);
       dispatch(tr);
       return true;
     } catch {

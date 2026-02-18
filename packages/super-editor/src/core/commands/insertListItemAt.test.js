@@ -126,6 +126,14 @@ describe('insertListItemAt', () => {
     expect(state.tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
   });
 
+  it('sets skipTrackChanges meta when tracked is false to preserve direct mode semantics', () => {
+    const { state, dispatch } = createMockState();
+
+    insertListItemAt({ pos: 0, position: 'after', tracked: false })({ state, dispatch });
+
+    expect(state.tr.setMeta).toHaveBeenCalledWith('skipTrackChanges', true);
+  });
+
   it('sets inputType programmatic meta', () => {
     const { state, dispatch } = createMockState();
 

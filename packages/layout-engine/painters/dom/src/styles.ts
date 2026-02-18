@@ -368,7 +368,8 @@ const SDT_CONTAINER_STYLES = `
 }
 
 /* Group hover (JavaScript-coordinated) */
-.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) {
   background-color: #f2f2f2;
   border-color: transparent;
 }
@@ -410,7 +411,8 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label,
+.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) .superdoc-structured-content__label {
   display: inline-flex;
 }
 

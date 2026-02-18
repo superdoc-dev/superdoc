@@ -118,11 +118,11 @@ describe('renderTableCell', () => {
       cell: baseCell,
     });
 
-    // Default padding is top: 2, left: 4, right: 4, bottom: 2
-    expect(cellElement.style.paddingTop).toBe('2px');
+    // Default padding is top: 0, left: 4, right: 4, bottom: 0
+    expect(cellElement.style.paddingTop).toBe('0px');
     expect(cellElement.style.paddingLeft).toBe('4px');
     expect(cellElement.style.paddingRight).toBe('4px');
-    expect(cellElement.style.paddingBottom).toBe('2px');
+    expect(cellElement.style.paddingBottom).toBe('0px');
   });
 
   it('content fills cell with 100% width and height', () => {

@@ -1815,22 +1815,46 @@ describe('layoutTableBlock', () => {
       expect(fragmentsWithPartialRow.length).toBeGreaterThan(0);
     });
 
-    it('should maintain minimum line advancement across all cells', () => {
-      // Test that the minimum line advancement algorithm correctly identifies
-      // and applies the minimum advancement across all cells
+    it('should maintain monotonic per-cell advancement across continuation fragments', () => {
+      // Verify continuation fragments keep per-cell line progress monotonic
+      // when cells have different line heights.
       const block = createMockTableBlock(1);
 
-      // Create cells with different line heights where the minimum advancement
-      // will be determined by the cell with the tallest lines
-      const measure = createMockTableMeasure(
-        [100, 100, 100],
-        [120],
-        [
-          [10, 10, 10, 10, 10], // Cell 0: 5 lines of 10px (total 50px)
-          [20, 20, 20, 20, 20], // Cell 1: 5 lines of 20px (total 100px)
-          [40, 40, 40], // Cell 2: 3 lines of 40px (total 120px)
-        ],
-      );
+      // createMockTableMeasure applies line data per row (not per cell), so seed with
+      // row defaults then override each cell explicitly.
+      const measure = createMockTableMeasure([100, 100, 100], [120], [[10, 10, 10, 10, 10]]);
+      if (measure.rows[0].cells[1]) {
+        measure.rows[0].cells[1].paragraph = {
+          kind: 'paragraph',
+          lines: [20, 20, 20, 20, 20].map((lineHeight) => ({
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 1,
+            width: 100,
+            ascent: lineHeight * 0.75,
+            descent: lineHeight * 0.25,
+            lineHeight,
+          })),
+          totalHeight: 100,
+        };
+      }
+      if (measure.rows[0].cells[2]) {
+        measure.rows[0].cells[2].paragraph = {
+          kind: 'paragraph',
+          lines: [40, 40, 40].map((lineHeight) => ({
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 1,
+            width: 100,
+            ascent: lineHeight * 0.75,
+            descent: lineHeight * 0.25,
+            lineHeight,
+          })),
+          totalHeight: 120,
+        };
+      }
 
       const fragments: TableFragment[] = [];
       let cursorY = 0;
@@ -1861,24 +1885,21 @@ describe('layoutTableBlock', () => {
       // Should create multiple fragments
       expect(fragments.length).toBeGreaterThan(1);
 
-      // Verify line advancement consistency
-      for (const fragment of fragments) {
-        if ('partialRow' in fragment && fragment.partialRow && !fragment.partialRow.isLastPart) {
-          const { toLineByCell, fromLineByCell } = fragment.partialRow;
-          const advancements = toLineByCell.map((to, idx) => to - fromLineByCell[idx]);
+      const partialFragments = fragments.filter((f) => 'partialRow' in f && Boolean(f.partialRow));
+      expect(partialFragments.length).toBeGreaterThan(1);
 
-          // All cells that have remaining lines should advance by the same amount
-          // (this is the core of the line advancement algorithm)
-          const positiveAdvancements = advancements.filter((a) => a > 0);
-          if (positiveAdvancements.length > 0) {
-            const minAdvancement = Math.min(...positiveAdvancements);
-            // In the second pass, all cells should be normalized to minAdvancement
-            // (unless they've already completed)
-            positiveAdvancements.forEach((adv) => {
-              expect(adv).toBe(minAdvancement);
-            });
-          }
-        }
+      // First fragment should show uneven (independent) advancement.
+      const firstPartial = partialFragments[0].partialRow!;
+      const firstAdvancements = firstPartial.toLineByCell.map((to, idx) => to - firstPartial.fromLineByCell[idx]);
+      expect(new Set(firstAdvancements.filter((a) => a > 0)).size).toBeGreaterThan(1);
+
+      // Continuations must not regress per-cell line indices.
+      for (let i = 1; i < partialFragments.length; i += 1) {
+        const prev = partialFragments[i - 1].partialRow!;
+        const current = partialFragments[i].partialRow!;
+        current.fromLineByCell.forEach((fromLine, idx) => {
+          expect(fromLine).toBe(prev.toLineByCell[idx]);
+        });
       }
     });
 

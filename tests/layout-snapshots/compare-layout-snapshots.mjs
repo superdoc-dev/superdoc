@@ -49,7 +49,6 @@ Options:
       --pipeline <mode>               headless | presentation for auto-generation (default: headless)
       --installer <name>              auto | bun | npm for auto-generation (default: auto)
       --input-root <path>             Input docs root for auto-generation
-      --update-docs                   Auto-run corpus update (pnpm corpus:pull) for default corpus root
       --numeric-tolerance <value>     Number comparison tolerance (default: 0.001)
       --max-diff-entries <n>          Max diff entries per doc (default: 2000)
       --visual-on-change              Run visual compare for changed docs after layout compare (default: on)
@@ -123,7 +122,6 @@ function parseArgs(argv) {
     pipeline: 'headless',
     installer: 'auto',
     inputRoot: null,
-    updateDocs: false,
     numericTolerance: 0.001,
     maxDiffEntries: 2000,
     visualOnChange: true,
@@ -227,10 +225,6 @@ function parseArgs(argv) {
     if (arg === '--input-root' && next) {
       args.inputRoot = next;
       i += 1;
-      continue;
-    }
-    if (arg === '--update-docs') {
-      args.updateDocs = true;
       continue;
     }
     if (arg === '--numeric-tolerance' && next) {
@@ -342,45 +336,6 @@ async function pathExists(targetPath) {
   }
 }
 
-function canPromptUser() {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY && !process.env.CI);
-}
-
-async function promptYesNo(question, defaultValue = false, timeoutMs = 10000) {
-  if (!canPromptUser()) return defaultValue;
-
-  const suffix = defaultValue ? ' [Y/n] ' : ' [y/N] ';
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const ask = () => new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      console.log(`\n(no response after ${timeoutMs / 1000}s, defaulting to ${defaultValue ? 'yes' : 'no'})`);
-      resolve(null);
-    }, timeoutMs);
-    rl.question(`${question}${suffix}`, (answer) => {
-      clearTimeout(timer);
-      resolve(answer);
-    });
-  });
-
-  try {
-    while (true) {
-      const raw = await ask();
-      if (raw === null) return defaultValue;
-      const value = String(raw ?? '').trim().toLowerCase();
-      if (!value) return defaultValue;
-      if (value === 'y' || value === 'yes') return true;
-      if (value === 'n' || value === 'no') return false;
-      console.log('Please answer yes or no.');
-    }
-  } finally {
-    rl.close();
-  }
-}
-
 async function runCommand(command, commandArgs, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, commandArgs, {
@@ -435,16 +390,7 @@ async function ensureDefaultCorpusReady(args) {
     return;
   }
 
-  if (args.updateDocs) {
-    console.log('[layout-snapshots:compare] Updating corpus folder via `pnpm corpus:pull` (--update-docs)...');
-    await runCorpusPull();
-    return;
-  }
-
-  const shouldUpdate = await promptYesNo('[layout-snapshots:compare] Update corpus folder?', false);
-  if (!shouldUpdate) return;
-
-  console.log('[layout-snapshots:compare] Updating corpus folder via `pnpm corpus:pull`...');
+  console.log('[layout-snapshots:compare] Syncing corpus (downloading missing files)...');
   await runCorpusPull();
 }
 

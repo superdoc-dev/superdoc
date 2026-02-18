@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DocxExporter } from '@core/super-converter/exporter.js';
+import { mergeRelationshipElements } from '@core/super-converter/relationship-helpers.js';
 
 describe('DocxExporter', () => {
   // Helper to create a minimal converter stub
@@ -95,6 +96,39 @@ describe('DocxExporter', () => {
     // The two style names must remain distinct in the output XML
     expect(xml).toContain('w:val="Body First Line .5&quot;"');
     expect(xml).toContain('w:val="Body First Line .5&amp;quot;"');
+  });
+
+  it('does not double-escape pre-escaped relationship targets in attributes', () => {
+    const exporter = new DocxExporter(createConverterStub());
+
+    const relationships = mergeRelationshipElements(
+      [],
+      [
+        {
+          type: 'element',
+          name: 'Relationship',
+          attributes: {
+            Id: 'rId1',
+            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+            Target: 'https://example.com/page?x=1&y=2',
+            TargetMode: 'External',
+          },
+        },
+      ],
+    );
+
+    const data = {
+      name: 'Relationships',
+      attributes: {
+        xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships',
+      },
+      elements: relationships,
+    };
+
+    const xml = exporter.schemaToXml(data);
+
+    expect(xml).toContain('Target="https://example.com/page?x=1&amp;y=2"');
+    expect(xml).not.toContain('&amp;amp;');
   });
 
   describe('error handling for text elements', () => {

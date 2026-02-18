@@ -3662,7 +3662,13 @@ export class PresentationEditor extends EventEmitter {
     // Keep selection visible when context menu (SlashMenu) is open
     const slashMenuOpen = activeEditor?.state ? !!SlashMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    if (!hasFocus && !slashMenuOpen) {
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns).
+    // Naive-UI portals dropdown content under .v-binder-follower-content at <body> level,
+    // so it won't be inside [data-editor-ui-surface]. Check both.
+    const activeEl = document.activeElement;
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.('[data-editor-ui-surface], .v-binder-follower-content');
+
+    if (!hasFocus && !slashMenuOpen && !isOnEditorUi) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';

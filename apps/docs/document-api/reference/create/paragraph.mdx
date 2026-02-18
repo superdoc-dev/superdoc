@@ -1,0 +1,419 @@
+---
+title: create.paragraph
+sidebarTitle: create.paragraph
+description: Generated reference for create.paragraph
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `create.paragraph`
+- API member path: `editor.doc.create.paragraph(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `yes`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `COMMAND_UNAVAILABLE`
+- `TRACK_CHANGE_COMMAND_UNAVAILABLE`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "at": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentStart"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentEnd"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "before"
+            },
+            "target": {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "nodeType": {
+                  "enum": [
+                    "paragraph",
+                    "heading",
+                    "listItem",
+                    "table",
+                    "tableRow",
+                    "tableCell",
+                    "image",
+                    "sdt"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "after"
+            },
+            "target": {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "nodeType": {
+                  "enum": [
+                    "paragraph",
+                    "heading",
+                    "listItem",
+                    "table",
+                    "tableRow",
+                    "tableCell",
+                    "image",
+                    "sdt"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "insertionPoint": {
+          "additionalProperties": false,
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "text"
+            },
+            "range": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId",
+            "range"
+          ],
+          "type": "object"
+        },
+        "paragraph": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block"
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "paragraph"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "trackedChange"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success",
+        "paragraph",
+        "insertionPoint"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+
+## Success schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "insertionPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "blockId": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "text"
+        },
+        "range": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "type": "integer"
+            },
+            "start": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "blockId",
+        "range"
+      ],
+      "type": "object"
+    },
+    "paragraph": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "paragraph"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "entityId": {
+            "type": "string"
+          },
+          "entityType": {
+            "const": "trackedChange"
+          },
+          "kind": {
+            "const": "entity"
+          }
+        },
+        "required": [
+          "kind",
+          "entityType",
+          "entityId"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success",
+    "paragraph",
+    "insertionPoint"
+  ],
+  "type": "object"
+}
+```
+
+## Failure schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```

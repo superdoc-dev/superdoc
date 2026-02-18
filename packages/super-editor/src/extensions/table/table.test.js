@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { EditorState } from 'prosemirror-state';
 import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpers.js';
 import { createTable } from './tableHelpers/createTable.js';
 import { promises as fs } from 'fs';
+
+// Cache DOCX data to avoid repeated file loading
+let cachedBlankDoc = null;
+let cachedBordersDoc = null;
 
 /**
  * Find the first table position within the provided document.
@@ -29,8 +33,14 @@ describe('Table commands', async () => {
   let templateBlockAttrs;
   let table;
 
+  // Load DOCX data once before all tests
+  beforeAll(async () => {
+    cachedBlankDoc = await loadTestDataForEditorTests('blank-doc.docx');
+    cachedBordersDoc = await loadTestDataForEditorTests('SD-978-remove-table-borders.docx');
+  });
+
   const setupTestTable = async () => {
-    let { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
+    const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
     ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
     ({ schema } = editor);
 
@@ -600,7 +610,7 @@ describe('Table commands', async () => {
 
     describe('table imported from docx', async () => {
       beforeEach(async () => {
-        let { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('SD-978-remove-table-borders.docx');
+        const { docx, media, mediaFiles, fonts } = cachedBordersDoc;
         ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
 
         tablePos = findTablePos(editor.state.doc);

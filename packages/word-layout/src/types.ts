@@ -51,6 +51,7 @@ export type ResolvedRunProperties = {
   letterSpacing?: number;
   scale?: number;
   lang?: string;
+  vanish?: boolean;
 };
 
 export type NumberingProperties = {

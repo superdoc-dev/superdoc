@@ -6,47 +6,24 @@
  * duplication across rendering logic.
  */
 
-import type { SdtMetadata } from '@superdoc/contracts';
+import type { SdtMetadata, StructuredContentLockMode } from '@superdoc/contracts';
 
 /**
- * Type guard for StructuredContentMetadata with specific properties.
- *
- * Validates that the metadata object has the expected structure for structured content
- * and narrows the type to allow safe property access.
- *
- * @param sdt - The SDT metadata to check
- * @returns True if the metadata is a structured content object with valid properties
- *
- * @example
- * ```typescript
- * if (isStructuredContentMetadata(block.attrs?.sdt)) {
- *   console.log(sdt.alias); // Type-safe access
- * }
- * ```
+ * Type guard for StructuredContentMetadata.
  */
-export function isStructuredContentMetadata(
-  sdt: SdtMetadata | null | undefined,
-): sdt is { type: 'structuredContent'; scope: 'inline' | 'block'; alias?: string | null } {
+export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is {
+  type: 'structuredContent';
+  scope: 'inline' | 'block';
+  alias?: string | null;
+  lockMode?: StructuredContentLockMode;
+} {
   return (
     sdt !== null && sdt !== undefined && typeof sdt === 'object' && 'type' in sdt && sdt.type === 'structuredContent'
   );
 }
 
 /**
- * Type guard for DocumentSectionMetadata with specific properties.
- *
- * Validates that the metadata object has the expected structure for document sections
- * and narrows the type to allow safe property access.
- *
- * @param sdt - The SDT metadata to check
- * @returns True if the metadata is a document section object with valid properties
- *
- * @example
- * ```typescript
- * if (isDocumentSectionMetadata(block.attrs?.sdt)) {
- *   console.log(sdt.title); // Type-safe access
- * }
- * ```
+ * Type guard for DocumentSectionMetadata.
  */
 export function isDocumentSectionMetadata(
   sdt: SdtMetadata | null | undefined,
@@ -132,10 +109,7 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
 }
 
 /**
- * Return the SDT metadata that should drive container styling.
- *
- * Prefers the primary `sdt` when it resolves to a container type, otherwise
- * falls back to `containerSdt` (e.g., docPart paragraphs inside a documentSection).
+ * Returns the SDT metadata for container styling, preferring `sdt` over `containerSdt`.
  */
 export function getSdtContainerMetadata(
   sdt?: SdtMetadata | null,
@@ -147,9 +121,7 @@ export function getSdtContainerMetadata(
 }
 
 /**
- * Returns a stable key for a block-level SDT container, or null if unavailable.
- *
- * The key is used to detect consecutive fragments that belong to the same SDT.
+ * Returns a stable key for grouping consecutive fragments in the same SDT container.
  */
 export function getSdtContainerKey(sdt?: SdtMetadata | null, containerSdt?: SdtMetadata | null): string | null {
   const metadata = getSdtContainerMetadata(sdt, containerSdt);
@@ -187,6 +159,10 @@ export type SdtBoundaryOptions = {
   isEnd?: boolean;
   /** Optional width override for the SDT container element */
   widthOverride?: number;
+  /** Optional padding bottom override for filling gaps between fragments */
+  paddingBottomOverride?: number;
+  /** Whether to show the label (overrides isStart check if provided) */
+  showLabel?: boolean;
 };
 
 /**
@@ -208,6 +184,7 @@ export type SdtBoundaryOptions = {
  * - Data attributes for continuation detection (`data-sdt-container-start/end`)
  * - Overflow visible to allow labels to appear above content
  * - Label/tooltip element created and appended to container when isStart=true
+ * - Padding bottom applied if paddingBottomOverride is provided (for filling gaps)
  *
  * **Label Element Structure:**
  * ```html
@@ -241,7 +218,6 @@ export function applySdtContainerStyling(
   containerSdt?: SdtMetadata | null | undefined,
   boundaryOptions?: SdtBoundaryOptions,
 ): void {
-  // Try primary sdt first, fall back to containerSdt
   let config = getSdtContainerConfig(sdt);
   if (!config && containerSdt) {
     config = getSdtContainerConfig(containerSdt);
@@ -251,18 +227,28 @@ export function applySdtContainerStyling(
   const isStart = boundaryOptions?.isStart ?? config.isStart;
   const isEnd = boundaryOptions?.isEnd ?? config.isEnd;
 
-  // Apply container class and data attributes
   container.classList.add(config.className);
   container.dataset.sdtContainerStart = String(isStart);
   container.dataset.sdtContainerEnd = String(isEnd);
   container.style.overflow = 'visible'; // Allow label to show above
 
+  if (isStructuredContentMetadata(sdt)) {
+    container.dataset.lockMode = sdt.lockMode || 'unlocked';
+  } else if (isStructuredContentMetadata(containerSdt)) {
+    container.dataset.lockMode = containerSdt.lockMode || 'unlocked';
+  }
+
   if (boundaryOptions?.widthOverride != null) {
     container.style.width = `${boundaryOptions.widthOverride}px`;
   }
 
-  // Only create label on the first fragment of a multi-fragment container
-  if (isStart) {
+  if (boundaryOptions?.paddingBottomOverride != null && boundaryOptions.paddingBottomOverride > 0) {
+    container.style.paddingBottom = `${boundaryOptions.paddingBottomOverride}px`;
+  }
+
+  const shouldShowLabel = boundaryOptions?.showLabel ?? isStart;
+
+  if (shouldShowLabel) {
     const labelEl = doc.createElement('div');
     labelEl.className = config.labelClassName;
     const labelText = doc.createElement('span');
@@ -270,4 +256,26 @@ export function applySdtContainerStyling(
     labelEl.appendChild(labelText);
     container.appendChild(labelEl);
   }
+}
+
+/**
+ * Checks whether a fragment element needs rebuilding due to SDT boundary changes.
+ *
+ * Handles two cases:
+ * 1. Element was in an SDT but no longer is (stale attributes need removal)
+ * 2. Element's start/end boundary flags don't match expected values
+ */
+export function shouldRebuildForSdtBoundary(element: HTMLElement, boundary: SdtBoundaryOptions | undefined): boolean {
+  if (!boundary) {
+    // Rebuild if element has stale SDT container attributes that should be removed
+    return element.dataset.sdtContainerStart !== undefined;
+  }
+  const startAttr = element.dataset.sdtContainerStart;
+  const endAttr = element.dataset.sdtContainerEnd;
+  const expectedStart = String(boundary.isStart ?? true);
+  const expectedEnd = String(boundary.isEnd ?? true);
+  if (startAttr === undefined || endAttr === undefined) {
+    return true;
+  }
+  return startAttr !== expectedStart || endAttr !== expectedEnd;
 }

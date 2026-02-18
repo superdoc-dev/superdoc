@@ -1,0 +1,52 @@
+name: CI Demos
+
+on:
+  pull_request:
+    paths:
+      - 'demos/**'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        demo:
+          - cdn
+          - custom-mark
+          - custom-node
+          - docx-from-html
+          - docxtemplater
+          - fields
+          - grading-papers
+          # - html-editor  # broken: imports unpublished superdoc/super-editor/style.css subpath
+          - linked-sections
+          - loading-from-json
+          - nextjs-ssr
+          - react
+          # - replace-content  # broken: runtime nextSibling error in SuperDoc
+          - text-selection
+          - toolbar
+          - typescript
+          - vanilla
+          - vue
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install demo dependencies
+        working-directory: demos/${{ matrix.demo }}
+        run: npm install
+
+      - name: Install smoke test dependencies
+        working-directory: demos/__tests__
+        run: npm install && npx playwright install chromium
+
+      - name: Run smoke test
+        working-directory: demos/__tests__
+        run: DEMO=${{ matrix.demo }} npx playwright test

@@ -1,0 +1,213 @@
+---
+title: lists.exit
+sidebarTitle: lists.exit
+description: Generated reference for lists.exit
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `lists.exit`
+- API member path: `editor.doc.lists.exit(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `COMMAND_UNAVAILABLE`
+- `TRACK_CHANGE_COMMAND_UNAVAILABLE`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "listItem"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "paragraph": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block"
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "paragraph"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "paragraph"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+
+## Success schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "paragraph": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "paragraph"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "paragraph"
+  ],
+  "type": "object"
+}
+```
+
+## Failure schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```

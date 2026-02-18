@@ -114,6 +114,36 @@ export function createTrackChangesPropertyHandler(xmlName, sdName = null, extraA
 }
 
 /**
+ * Parses a measurement value, handling ECMA-376 percentage strings.
+ *
+ * Per ECMA-376 §17.18.90 (ST_TblWidth): when type="pct" and value contains "%",
+ * it should be interpreted as a whole percentage point (e.g., "100%" = 100%).
+ * Otherwise, percentages are in fiftieths (5000 = 100%).
+ *
+ * @param {any} value The raw value from w:w attribute
+ * @param {string|undefined} type The type from w:type attribute
+ * @returns {number|undefined} The parsed value, converted to fiftieths if needed
+ */
+export const parseMeasurementValue = (value, type) => {
+  if (value == null) return undefined;
+  const strValue = String(value);
+
+  // Per ECMA-376 §17.18.90: when type="pct" and value contains "%",
+  // interpret as whole percentage and convert to fiftieths format
+  if (type === 'pct' && strValue.includes('%')) {
+    const percent = parseFloat(strValue);
+    if (!isNaN(percent)) {
+      // Convert whole percentage to OOXML fiftieths (100% → 5000)
+      return Math.round(percent * 50);
+    }
+  }
+
+  // Standard integer parsing for numeric values
+  const intValue = parseInt(strValue, 10);
+  return isNaN(intValue) ? undefined : intValue;
+};
+
+/**
  * Helper to create property handlers for measurement attributes (CT_TblWidth => w:w and w:type)
  * @param {string} xmlName The XML attribute name (with namespace).
  * @param {string|null} sdName The SuperDoc attribute name (without namespace). If null, it will be derived from xmlName.
@@ -124,12 +154,14 @@ export function createMeasurementPropertyHandler(xmlName, sdName = null) {
   return {
     xmlName,
     sdNodeOrKeyName: sdName,
-    attributes: [
-      createAttributeHandler('w:w', 'value', parseInteger, integerToString),
-      createAttributeHandler('w:type'),
-    ],
-    encode: (_, encodedAttrs) => {
-      return encodedAttrs['value'] != null ? encodedAttrs : undefined;
+    attributes: [createAttributeHandler('w:w', 'value', (v) => v, integerToString), createAttributeHandler('w:type')],
+    encode: (params, encodedAttrs) => {
+      // Parse the value with type context for ECMA-376 percentage string handling
+      const rawValue = encodedAttrs['value'];
+      const type = encodedAttrs['type'];
+      const parsedValue = parseMeasurementValue(rawValue, type);
+      if (parsedValue == null) return undefined;
+      return { ...encodedAttrs, value: parsedValue };
     },
     decode: function ({ node }) {
       const decodedAttrs = this.decodeAttributes({ node: { ...node, attrs: node.attrs[sdName] || {} } });

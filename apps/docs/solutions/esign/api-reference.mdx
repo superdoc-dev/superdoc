@@ -4,9 +4,9 @@ title: API Reference
 
 Complete eSign component API
 
-## Component Props
+## Component props
 
-### Required Props
+### Required props
 
 <ParamField path="eventId" type="string" required>
   Unique identifier for this signing session
@@ -21,9 +21,31 @@ Complete eSign component API
     </ParamField>
     
     <ParamField path="mode" type="string">
-      Display mode: `'full'`
+      Display mode: `'full' | 'download'`
     </ParamField>
-    
+
+    <ParamField path="viewOptions" type="object">
+      View options for controlling document layout (recommended)
+
+      <Expandable title="Properties">
+        <ParamField path="viewOptions.layout" type="string">
+          Document layout: `'print'` (default) or `'web'`
+          - `print` - Fixed page width, displays document as it prints
+          - `web` - Content reflows to fit container (mobile/accessibility)
+        </ParamField>
+      </Expandable>
+    </ParamField>
+
+    <ParamField path="layoutMode" type="string" deprecated>
+      **Deprecated.** Use `viewOptions.layout` instead.
+      - `'paginated'` → `viewOptions: { layout: 'print' }`
+      - `'responsive'` → `viewOptions: { layout: 'web' }`
+    </ParamField>
+
+    <ParamField path="layoutMargins" type="object" deprecated>
+      **Deprecated.** No longer supported. Use CSS for margin control.
+    </ParamField>
+
     <ParamField path="validation.scroll.required" type="boolean">
       Require scrolling to bottom before signing
     </ParamField>
@@ -38,7 +60,7 @@ Complete eSign component API
   ```
 </ParamField>
 
-### Optional Props
+### Optional props
 
 <ParamField path="fields" type="object">
   Field configuration
@@ -144,7 +166,7 @@ Data passed to `onSubmit`:
 interface SubmitData {
   eventId: string;           // Your session ID
   timestamp: string;         // ISO timestamp
-  duration: number;          // Time spent in ms
+  duration: number;          // Time spent in seconds
   auditTrail: AuditEvent[];  // All events
   documentFields: DocumentField[];  // Injected values
   signerFields: SignerFieldValue[]; // User inputs
@@ -159,7 +181,11 @@ Data passed to `onDownload`:
 ```typescript
 interface DownloadData {
   eventId: string;                   // Your session ID
-  documentSource: string | File | Blob;  // Original .docx file
+  documentSource: string | File | Blob;  // Original document source
+  fields: {
+    document: DocumentField[];
+    signer: SignerFieldValue[];
+  };
   fileName: string;                  // Suggested filename
 }
 ```
@@ -169,11 +195,17 @@ interface DownloadData {
 Values injected into document:
 
 ```typescript
+type FieldValue = string | boolean | number | null | undefined;
+type TableFieldValue = string[][];
+
 interface DocumentField {
-  id: string;         // Unique field ID
-  value: FieldValue;  // The value
+  id: string;                        // Unique field ID
+  type?: 'text' | 'table';           // Field type (default: 'text')
+  value: FieldValue | TableFieldValue;  // The value
 }
 ```
+
+For table fields, the value is a 2D array where each inner array represents a row.
 
 ### SignerField
 
@@ -184,6 +216,7 @@ interface SignerField {
   id: string;                            // Required unique ID
   type: 'signature' | 'checkbox' | 'text';
   label?: string;                         // Display label
+  value?: FieldValue;                     // Initial value
   validation?: {
     required?: boolean;
   };
@@ -216,21 +249,63 @@ interface AuditEvent {
 }
 ```
 
-## Ref Methods
+### ViewOptions
+
+Document view options (recommended):
+
+```typescript
+interface ViewOptions {
+  layout?: 'web' | 'print';  // 'print' is default
+}
+```
+
+### LayoutMargins (Deprecated)
+
+<Warning>Deprecated since v2.0. Use CSS for margin control.</Warning>
+
+```typescript
+interface LayoutMargins {
+  top?: number;    // pixels
+  bottom?: number; // pixels
+  left?: number;   // pixels
+  right?: number;  // pixels
+}
+```
+
+### SuperDocESignHandle
+
+Ref type for accessing component methods:
+
+```typescript
+interface SuperDocESignHandle {
+  getState: () => SigningState;
+  getAuditTrail: () => AuditEvent[];
+  reset: () => void;
+  updateFieldInDocument: (field: DocumentField) => void;
+}
+```
+
+## Ref methods
 
 Access via ref:
 
-```jsx
-const ref = useRef();
+```tsx
+import { useRef } from 'react';
+import type { SuperDocESignHandle } from '@superdoc-dev/esign';
+
+const ref = useRef<SuperDocESignHandle>(null);
 
 // Get current state
-const state = ref.current.getState();
+const state = ref.current?.getState();
 
 // Get audit trail
-const audit = ref.current.getAuditTrail();
+const audit = ref.current?.getAuditTrail();
 
 // Reset everything
-ref.current.reset();
+ref.current?.reset();
+
+// Update field in the document programatically
+ref.current?.updateFieldInDocument({ id: '1', value: 'Updated value' });
 
 return <SuperDocESign ref={ref} ... />
 ```
@@ -240,10 +315,11 @@ return <SuperDocESign ref={ref} ... />
 - `getState()` - Returns current SigningState
 - `getAuditTrail()` - Returns audit events array
 - `reset()` - Clear all state and start over
+- `updateFieldInDocument()` - Update a document field by id
 
-## Field Components
+## Field components
 
-### Default Components
+### Default components
 
 The component provides default implementations for all field types. You can import and extend them:
 
@@ -259,7 +335,7 @@ import { SignatureInput, CheckboxInput } from '@superdoc-dev/esign';
 />
 ```
 
-### Custom Component Props
+### Custom component props
 
 All custom field components receive:
 
@@ -274,7 +350,7 @@ interface FieldComponentProps {
 }
 ```
 
-## CSS Classes
+## CSS classes
 
 Target these classes for styling:
 
@@ -285,20 +361,39 @@ Target these classes for styling:
 - `.superdoc-esign-actions` - Button container
 - `.superdoc-esign-btn` - Default buttons
 
-## Import Types
+## Import types
 
 All types are exported:
 
 ```typescript
 import type {
   SuperDocESignProps,
+  SuperDocESignHandle,
+  DocumentConfig,
   SubmitData,
   DownloadData,
   SigningState,
   DocumentField,
   SignerField,
+  FieldValue,
+  TableFieldValue,
   FieldChange,
   AuditEvent,
-  FieldComponentProps
+  FieldComponentProps,
+  LayoutMargins  // deprecated
 } from '@superdoc-dev/esign';
+```
+
+## Utils
+
+```typescript
+import { textToImageDataUrl } from '@superdoc-dev/esign';
+```
+
+### textToImageDataUrl
+
+Converts text to a base64 image data URL. This is useful if you want to generate the same base64 image that is created for typed signatures on the document.
+
+```typescript
+const imageDataUrl = textToImageDataUrl(text: string);
 ```

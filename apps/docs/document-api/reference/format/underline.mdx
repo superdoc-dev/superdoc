@@ -1,0 +1,854 @@
+---
+title: format.underline
+sidebarTitle: format.underline
+description: Generated reference for format.underline
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `format.underline`
+- API member path: `editor.doc.format.underline(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `yes`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `COMMAND_UNAVAILABLE`
+- `TRACK_CHANGE_COMMAND_UNAVAILABLE`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "blockId": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "text"
+        },
+        "range": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "type": "integer"
+            },
+            "start": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "blockId",
+        "range"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "inserted": {
+          "items": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "comment"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "trackedChange"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "removed": {
+          "items": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "comment"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "trackedChange"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "range": {
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "type": "integer"
+                },
+                "to": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ],
+              "type": "object"
+            },
+            "requestedTarget": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "text"
+                },
+                "range": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "type": "integer"
+                    },
+                    "start": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ],
+              "type": "object"
+            },
+            "target": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "text"
+                },
+                "range": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "type": "integer"
+                    },
+                    "start": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ],
+              "type": "object"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "range",
+            "text"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        },
+        "updated": {
+          "items": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "comment"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "trackedChange"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success",
+        "resolution"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "range": {
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "type": "integer"
+                },
+                "to": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ],
+              "type": "object"
+            },
+            "requestedTarget": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "text"
+                },
+                "range": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "type": "integer"
+                    },
+                    "start": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ],
+              "type": "object"
+            },
+            "target": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "text"
+                },
+                "range": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "type": "integer"
+                    },
+                    "start": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ],
+              "type": "object"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "range",
+            "text"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure",
+        "resolution"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+
+## Success schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "inserted": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "comment"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "trackedChange"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "removed": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "comment"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "trackedChange"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "range": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "requestedTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "text"
+            },
+            "range": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId",
+            "range"
+          ],
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "text"
+            },
+            "range": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId",
+            "range"
+          ],
+          "type": "object"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "range",
+        "text"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    },
+    "updated": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "comment"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "trackedChange"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success",
+    "resolution"
+  ],
+  "type": "object"
+}
+```
+
+## Failure schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "range": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "requestedTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "text"
+            },
+            "range": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId",
+            "range"
+          ],
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "text"
+            },
+            "range": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId",
+            "range"
+          ],
+          "type": "object"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "range",
+        "text"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure",
+    "resolution"
+  ],
+  "type": "object"
+}
+```

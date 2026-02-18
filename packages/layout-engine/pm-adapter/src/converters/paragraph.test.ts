@@ -12,9 +12,8 @@ import {
   mergeAdjacentRuns,
   dataAttrsCompatible,
   commentsCompatible,
-  isInlineImage,
-  imageNodeToRun,
 } from './paragraph.js';
+import { isInlineImage, imageNodeToRun } from './inline-converters/image.js';
 import type {
   PMNode,
   BlockIdGenerator,
@@ -25,13 +24,38 @@ import type {
   NestedConverters,
 } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
-import type { Run, TextRun, FlowBlock, ParagraphBlock, TrackedChangeMeta, ImageRun } from '@superdoc/contracts';
+import type {
+  Run,
+  TextRun,
+  FlowBlock,
+  ParagraphBlock,
+  TrackedChangeMeta,
+  ImageRun,
+  SdtMetadata,
+} from '@superdoc/contracts';
 
 // Mock external dependencies
-vi.mock('./text-run.js', () => ({
+vi.mock('./inline-converters/text-run.js', () => ({
   textNodeToRun: vi.fn(),
+}));
+
+vi.mock('./inline-converters/tab.js', () => ({
   tabNodeToRun: vi.fn(),
+}));
+
+vi.mock('./inline-converters/generic-token.js', () => ({
   tokenNodeToRun: vi.fn(),
+}));
+
+vi.mock('./table.js', () => ({
+  tableNodeToBlock: vi.fn(),
+}));
+
+vi.mock('./shapes.js', () => ({
+  vectorShapeNodeToDrawingBlock: vi.fn(),
+  shapeGroupNodeToDrawingBlock: vi.fn(),
+  shapeContainerNodeToDrawingBlock: vi.fn(),
+  shapeTextboxNodeToDrawingBlock: vi.fn(),
 }));
 
 vi.mock('../attributes/index.js', () => ({
@@ -70,7 +94,16 @@ vi.mock('../attributes/paragraph-styles.js', () => ({
 }));
 
 // Import mocked functions
-import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
+import { textNodeToRun } from './inline-converters/text-run.js';
+import { tabNodeToRun } from './inline-converters/tab.js';
+import { tokenNodeToRun } from './inline-converters/generic-token.js';
+import {
+  vectorShapeNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeContainerNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+} from './shapes.js';
+import { tableNodeToBlock } from './table.js';
 import { computeParagraphAttrs, cloneParagraphAttrs, deepClone, hasPageBreakBefore } from '../attributes/index.js';
 import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
 import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
@@ -110,6 +143,13 @@ const isConverters = (value: unknown): value is NestedConverters => {
   );
 };
 
+const hasImageNode = (node: PMNode | undefined): boolean => {
+  if (!node) return false;
+  if (node.type === 'image') return true;
+  const content = (node.content ?? []) as PMNode[];
+  return content.some(hasImageNode);
+};
+
 const paragraphToFlowBlocks = (
   para: PMNode,
   nextBlockId: BlockIdGenerator,
@@ -138,6 +178,10 @@ const paragraphToFlowBlocks = (
     converterContext = converterContextOrConverters as ConverterContext;
   }
 
+  const effectiveTrackedChangesConfig =
+    trackedChangesConfig ??
+    (hasImageNode(para) ? ({ mode: 'review', enabled: false } as TrackedChangesConfig) : undefined);
+
   const effectiveConverterContext =
     converterContext ??
     ({
@@ -162,7 +206,7 @@ const paragraphToFlowBlocks = (
     para,
     nextBlockId,
     positions,
-    trackedChangesConfig,
+    trackedChangesConfig: effectiveTrackedChangesConfig,
     bookmarks,
     hyperlinkConfig: hyperlinkConfig ?? DEFAULT_HYPERLINK_CONFIG,
     themeColors,
@@ -697,6 +741,7 @@ describe('paragraph converters', () => {
     let converterContext: ConverterContext;
 
     beforeEach(() => {
+      vi.restoreAllMocks();
       vi.clearAllMocks();
 
       // Setup default block ID generator
@@ -723,7 +768,7 @@ describe('paragraph converters', () => {
       vi.mocked(computeParagraphAttrs).mockReturnValue({ paragraphAttrs: {}, resolvedParagraphProperties: {} });
       vi.mocked(cloneParagraphAttrs).mockReturnValue({});
       vi.mocked(hasPageBreakBefore).mockReturnValue(false);
-      vi.mocked(textNodeToRun).mockImplementation((node) => ({
+      vi.mocked(textNodeToRun).mockImplementation(({ node }) => ({
         text: node.text || '',
         fontFamily: 'Arial',
         fontSize: 16,
@@ -861,14 +906,16 @@ describe('paragraph converters', () => {
         expect(paraBlock.runs).toHaveLength(1);
         expect(paraBlock.runs[0].text).toBe('Hello world');
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          textNode,
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          undefined,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            node: textNode,
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: { enableRichHyperlinks: false },
+            enableComments: true,
+          }),
         );
       });
 
@@ -941,26 +988,18 @@ describe('paragraph converters', () => {
         );
 
         expect(blocks).toHaveLength(1);
-        // textNodeToRun receives empty marks - marks are applied separately after linked styles
-        // This ensures marks override linked styles (correct priority order)
+        // textNodeToRun receives merged marks to apply after linked styles (correct priority order)
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: 'Bold text' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [], // Empty marks - marks applied separately after linked styles
-          undefined,
-          expect.any(Object),
-          undefined,
-        );
-        // Marks including bold are applied via applyMarksToRun after linked styles
-        expect(vi.mocked(applyMarksToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          expect.arrayContaining([{ type: 'bold' }]),
-          expect.any(Object),
-          undefined,
-          undefined,
-          true, // enableComments defaults to true
+          expect.objectContaining({
+            node: { type: 'text', text: 'Bold text' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [{ type: 'bold' }],
+            sdtMetadata: undefined,
+            hyperlinkConfig: { enableRichHyperlinks: false },
+            enableComments: true,
+          }),
         );
       });
 
@@ -1030,26 +1069,18 @@ describe('paragraph converters', () => {
           converterContext,
         );
 
-        // textNodeToRun receives empty marks - marks are applied separately after linked styles
+        // textNodeToRun receives merged marks so linked styles are resolved first
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: 'Bold italic' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [], // Empty marks - marks applied separately after linked styles
-          undefined,
-          { enableRichHyperlinks: false },
-          undefined,
-        );
-        // Marks are merged as [...nodeMarks, ...inheritedMarks] and applied via applyMarksToRun
-        // So italic (from inner run) comes first, then bold (from outer run)
-        expect(vi.mocked(applyMarksToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          expect.arrayContaining([{ type: 'italic' }, { type: 'bold' }]),
-          { enableRichHyperlinks: false },
-          undefined,
-          undefined,
-          true, // enableComments defaults to true
+          expect.objectContaining({
+            node: { type: 'text', text: 'Bold italic' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [{ type: 'italic' }, { type: 'bold' }],
+            sdtMetadata: undefined,
+            hyperlinkConfig: { enableRichHyperlinks: false },
+            enableComments: true,
+          }),
         );
       });
     });
@@ -1074,7 +1105,15 @@ describe('paragraph converters', () => {
 
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenCalledWith(tabNode, positions, 0, {}, []);
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenCalledWith(
+          expect.objectContaining({
+            node: tabNode,
+            positions,
+            tabOrdinal: 0,
+            paragraphAttrs: {},
+            inheritedMarks: [],
+          }),
+        );
         const paraBlock = blocks[0] as ParagraphBlock;
         expect(paraBlock.runs).toContain(mockTabRun);
       });
@@ -1087,9 +1126,18 @@ describe('paragraph converters', () => {
 
         paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(1, expect.any(Object), positions, 0, {}, []);
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(2, expect.any(Object), positions, 1, {}, []);
-        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(3, expect.any(Object), positions, 2, {}, []);
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ positions, tabOrdinal: 0 }),
+        );
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ positions, tabOrdinal: 1 }),
+        );
+        expect(vi.mocked(tabNodeToRun)).toHaveBeenNthCalledWith(
+          3,
+          expect.objectContaining({ positions, tabOrdinal: 2 }),
+        );
       });
 
       it('should skip tab when tabNodeToRun returns null', () => {
@@ -1128,14 +1176,13 @@ describe('paragraph converters', () => {
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(vi.mocked(tokenNodeToRun)).toHaveBeenCalledWith(
-          tokenNode,
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          'pageNumber',
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            node: tokenNode,
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+          }),
         );
         const paraBlock = blocks[0] as ParagraphBlock;
         expect(paraBlock.runs).toContain(mockTokenRun);
@@ -1156,14 +1203,13 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(tokenNodeToRun)).toHaveBeenCalledWith(
-          tokenNode,
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          'totalPageCount',
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            node: tokenNode,
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+          }),
         );
       });
 
@@ -1186,7 +1232,10 @@ describe('paragraph converters', () => {
           fontFamily: 'Arial',
           fontSize: 16,
         };
-        vi.mocked(tokenNodeToRun).mockReturnValue(mockTokenRun);
+        vi.mocked(tokenNodeToRun).mockImplementation(({ sdtMetadata }) => ({
+          ...mockTokenRun,
+          ...(sdtMetadata ? { sdt: sdtMetadata } : {}),
+        }));
 
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
@@ -1237,14 +1286,15 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          sdtMetadata,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
 
@@ -1274,6 +1324,32 @@ describe('paragraph converters', () => {
           variant: 'text',
           displayLabel: 'Field value',
         });
+      });
+
+      it('should preserve PM positions when fieldAnnotation has inner content', () => {
+        const fieldNode: PMNode = {
+          type: 'fieldAnnotation',
+          content: [{ type: 'text', text: 'Field value' }],
+        };
+        positions.set(fieldNode, { start: 12, end: 20 });
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [fieldNode],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+        );
+
+        expect(blocks).toHaveLength(1);
+        const para = blocks[0] as { kind: string; runs: unknown[] };
+        const run = para.runs[0] as { kind?: string; pmStart?: number; pmEnd?: number };
+        expect(run.kind).toBe('fieldAnnotation');
+        expect(run.pmStart).toBe(12);
+        expect(run.pmEnd).toBe(20);
       });
 
       it('should use displayLabel when fieldAnnotation has no content', () => {
@@ -1493,14 +1569,16 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: '42' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [],
-          undefined,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            node: { type: 'text', text: '42' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: { enableRichHyperlinks: false },
+            enableComments: true,
+          }),
         );
       });
 
@@ -1525,14 +1603,16 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: '??' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [],
-          undefined,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            node: { type: 'text', text: '??' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: { enableRichHyperlinks: false },
+            enableComments: true,
+          }),
         );
       });
 
@@ -1563,14 +1643,16 @@ describe('paragraph converters', () => {
         );
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          { type: 'text', text: 'fallback' },
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [],
-          undefined,
-          expect.any(Object),
-          undefined,
+          expect.objectContaining({
+            node: { type: 'text', text: 'fallback' },
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
 
@@ -1601,26 +1683,17 @@ describe('paragraph converters', () => {
           converterContext,
         );
 
-        // textNodeToRun is called with empty marks (marks are applied separately via applyMarksToRun)
+        // textNodeToRun is called with merged marks from marksAsAttrs
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          positions,
-          FALLBACK_FONT_FAMILY,
-          FALLBACK_FONT_SIZE_PX,
-          [], // Empty marks - applied separately to honor enableComments
-          undefined,
-          expect.any(Object),
-          undefined,
-        );
-
-        // Marks are applied via applyMarksToRun to honor enableComments flag
-        expect(vi.mocked(applyMarksToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          [{ type: 'bold' }, { type: 'italic' }],
-          expect.any(Object),
-          undefined,
-          undefined,
-          true, // enableComments defaults to true
+          expect.objectContaining({
+            positions,
+            defaultFont: FALLBACK_FONT_FAMILY,
+            defaultSize: FALLBACK_FONT_SIZE_PX,
+            inheritedMarks: [{ type: 'bold' }, { type: 'italic' }],
+            sdtMetadata: undefined,
+            hyperlinkConfig: expect.any(Object),
+            enableComments: true,
+          }),
         );
       });
     });
@@ -1685,37 +1758,20 @@ describe('paragraph converters', () => {
 
     describe('Block nodes', () => {
       it('should flush paragraph before image node', () => {
-        const imageNode: PMNode = { type: 'image' };
+        const imageNode: PMNode = {
+          type: 'image',
+          attrs: {
+            wrap: { type: 'Tight' },
+            src: 'image.jpg',
+            size: { width: 100, height: 100 },
+          },
+        };
         const para: PMNode = {
           type: 'paragraph',
           content: [{ type: 'text', text: 'Before' }, imageNode, { type: 'text', text: 'After' }],
         };
 
-        const mockImageBlock: FlowBlock = {
-          kind: 'image',
-          id: 'image-0',
-          src: 'image.jpg',
-          width: 100,
-          height: 100,
-          attrs: {},
-        };
-
-        const converters = {
-          imageNodeToBlock: vi.fn().mockReturnValue(mockImageBlock),
-        };
-
-        const blocks = paragraphToFlowBlocks(
-          para,
-          nextBlockId,
-          positions,
-          'Arial',
-          16,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          converters as never,
-        );
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
         expect(blocks).toHaveLength(3);
         expect(blocks[0].kind).toBe('paragraph');
@@ -1723,8 +1779,16 @@ describe('paragraph converters', () => {
         expect(blocks[2].kind).toBe('paragraph');
       });
 
-      it('should call imageNodeToBlock converter with correct parameters', () => {
-        const imageNode: PMNode = { type: 'image', marks: [{ type: 'trackInsert' }] };
+      it('should annotate tracked changes for image blocks', () => {
+        const imageNode: PMNode = {
+          type: 'image',
+          marks: [{ type: 'trackInsert' }],
+          attrs: {
+            wrap: { type: 'Tight' },
+            src: 'image.jpg',
+            size: { width: 100, height: 100 },
+          },
+        };
         const para: PMNode = {
           type: 'paragraph',
           content: [imageNode],
@@ -1741,34 +1805,11 @@ describe('paragraph converters', () => {
 
         vi.mocked(collectTrackedChangeFromMarks).mockReturnValue(trackedMeta);
 
-        const converters = {
-          imageNodeToBlock: vi.fn().mockReturnValue({
-            kind: 'image',
-            id: 'image-0',
-            src: 'image.jpg',
-            width: 100,
-            height: 100,
-            attrs: {},
-          }),
-        };
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
 
-        paragraphToFlowBlocks(
-          para,
-          nextBlockId,
-          positions,
-          'Arial',
-          16,
-          trackedChanges,
-          undefined,
-          undefined,
-          undefined,
-          converters as never,
-        );
-
-        expect(converters.imageNodeToBlock).toHaveBeenCalledWith(
-          imageNode,
-          nextBlockId,
-          positions,
+        expect(blocks.some((block) => block.kind === 'image')).toBe(true);
+        expect(vi.mocked(annotateBlockWithTrackedChange)).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'image' }),
           trackedMeta,
           trackedChanges,
         );
@@ -1816,9 +1857,7 @@ describe('paragraph converters', () => {
           attrs: {},
         };
 
-        const converters = {
-          vectorShapeNodeToDrawingBlock: vi.fn().mockReturnValue(mockDrawingBlock),
-        };
+        vi.mocked(vectorShapeNodeToDrawingBlock).mockReturnValue(mockDrawingBlock as never);
 
         const blocks = paragraphToFlowBlocks(
           para,
@@ -1830,24 +1869,21 @@ describe('paragraph converters', () => {
           undefined,
           undefined,
           undefined,
-          converters as never,
         );
 
-        expect(converters.vectorShapeNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
+        expect(vectorShapeNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
         expect(blocks.some((b) => b.kind === 'drawing')).toBe(true);
       });
 
       it('should handle shapeGroup node', () => {
         const shapeNode: PMNode = { type: 'shapeGroup' };
 
-        const converters = {
-          shapeGroupNodeToDrawingBlock: vi.fn().mockReturnValue({
-            kind: 'drawing',
-            id: 'drawing-0',
-            shapes: [],
-            attrs: {},
-          }),
-        };
+        vi.mocked(shapeGroupNodeToDrawingBlock).mockReturnValue({
+          kind: 'drawing',
+          id: 'drawing-0',
+          shapes: [],
+          attrs: {},
+        } as never);
 
         paragraphToFlowBlocks(
           {
@@ -1862,23 +1898,20 @@ describe('paragraph converters', () => {
           undefined,
           undefined,
           undefined,
-          converters as never,
         );
 
-        expect(converters.shapeGroupNodeToDrawingBlock).toHaveBeenCalled();
+        expect(shapeGroupNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
       it('should handle shapeContainer node', () => {
         const shapeNode: PMNode = { type: 'shapeContainer' };
 
-        const converters = {
-          shapeContainerNodeToDrawingBlock: vi.fn().mockReturnValue({
-            kind: 'drawing',
-            id: 'drawing-0',
-            shapes: [],
-            attrs: {},
-          }),
-        };
+        vi.mocked(shapeContainerNodeToDrawingBlock).mockReturnValue({
+          kind: 'drawing',
+          id: 'drawing-0',
+          shapes: [],
+          attrs: {},
+        } as never);
 
         paragraphToFlowBlocks(
           {
@@ -1893,23 +1926,20 @@ describe('paragraph converters', () => {
           undefined,
           undefined,
           undefined,
-          converters as never,
         );
 
-        expect(converters.shapeContainerNodeToDrawingBlock).toHaveBeenCalled();
+        expect(shapeContainerNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
       it('should handle shapeTextbox node', () => {
         const shapeNode: PMNode = { type: 'shapeTextbox' };
 
-        const converters = {
-          shapeTextboxNodeToDrawingBlock: vi.fn().mockReturnValue({
-            kind: 'drawing',
-            id: 'drawing-0',
-            shapes: [],
-            attrs: {},
-          }),
-        };
+        vi.mocked(shapeTextboxNodeToDrawingBlock).mockReturnValue({
+          kind: 'drawing',
+          id: 'drawing-0',
+          shapes: [],
+          attrs: {},
+        } as never);
 
         paragraphToFlowBlocks(
           {
@@ -1924,10 +1954,9 @@ describe('paragraph converters', () => {
           undefined,
           undefined,
           undefined,
-          converters as never,
         );
 
-        expect(converters.shapeTextboxNodeToDrawingBlock).toHaveBeenCalled();
+        expect(shapeTextboxNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
       it('should handle table node', () => {
@@ -1944,9 +1973,7 @@ describe('paragraph converters', () => {
           attrs: {},
         };
 
-        const converters = {
-          tableNodeToBlock: vi.fn().mockReturnValue(mockTableBlock),
-        };
+        vi.mocked(tableNodeToBlock).mockReturnValue(mockTableBlock as never);
 
         const bookmarks = new Map<string, number>();
         const hyperlinkConfig: HyperlinkConfig = { enableRichHyperlinks: false };
@@ -1962,12 +1989,11 @@ describe('paragraph converters', () => {
           bookmarks,
           hyperlinkConfig,
           undefined,
-          converters as never,
         );
 
-        expect(converters.tableNodeToBlock).toHaveBeenCalledWith(
+        expect(tableNodeToBlock).toHaveBeenCalledWith(
+          tableNode,
           expect.objectContaining({
-            node: tableNode,
             nextBlockId,
             positions,
             trackedChangesConfig: trackedChanges,
@@ -1993,6 +2019,26 @@ describe('paragraph converters', () => {
         expect(blocks).toHaveLength(3);
         expect(blocks[1].kind).toBe('pageBreak');
         expect(blocks[1].attrs).toEqual({ pageBreakType: 'page', customAttr: 'value' });
+      });
+
+      it('should assign unique IDs to page breaks inserted within a paragraph', () => {
+        const hardBreakNode: PMNode = {
+          type: 'hardBreak',
+          attrs: { pageBreakType: 'page' },
+        };
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Before' }, hardBreakNode, { type: 'text', text: 'After' }],
+        };
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
+
+        expect(blocks).toHaveLength(3);
+        const breakIndex = blocks.findIndex((block) => block.kind === 'pageBreak');
+        expect(breakIndex).toBe(1);
+        const afterBreak = blocks[breakIndex + 1] as FlowBlock;
+        expect(afterBreak.kind).toBe('paragraph');
+        expect(blocks[breakIndex].id).not.toBe(afterBreak.id);
       });
 
       it('should handle lineBreak with column break type', () => {
@@ -2300,14 +2346,15 @@ describe('paragraph converters', () => {
         paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, undefined, undefined, customHyperlinkConfig);
 
         expect(vi.mocked(textNodeToRun)).toHaveBeenCalledWith(
-          expect.any(Object),
-          positions,
-          DEFAULT_TEST_FONT_FAMILY,
-          DEFAULT_TEST_FONT_SIZE_PX,
-          [],
-          undefined,
-          customHyperlinkConfig,
-          undefined,
+          expect.objectContaining({
+            positions,
+            defaultFont: DEFAULT_TEST_FONT_FAMILY,
+            defaultSize: DEFAULT_TEST_FONT_SIZE_PX,
+            inheritedMarks: [],
+            sdtMetadata: undefined,
+            hyperlinkConfig: customHyperlinkConfig,
+            enableComments: true,
+          }),
         );
       });
 
@@ -2666,6 +2713,24 @@ describe('paragraph converters', () => {
 
   describe('imageNodeToRun', () => {
     let positions: PositionMap;
+    const buildImageParams = (node: PMNode, pos: PositionMap, sdtMetadata?: SdtMetadata) => ({
+      node,
+      positions: pos,
+      sdtMetadata,
+      defaultFont: 'Arial',
+      defaultSize: 16,
+      inheritedMarks: [],
+      hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+      themeColors: undefined,
+      enableComments: true,
+      runProperties: undefined,
+      paragraphProperties: undefined,
+      converterContext: defaultConverterContext,
+      visitNode: vi.fn(),
+      bookmarks: undefined,
+      tabOrdinal: 0,
+      paragraphAttrs: {},
+    });
 
     beforeEach(() => {
       positions = new WeakMap();
@@ -2680,6 +2745,7 @@ describe('paragraph converters', () => {
           alt: 'Test image',
           title: 'Test title',
           wrap: {
+            type: 'Inline',
             attrs: {
               distTop: 10,
               distBottom: 20,
@@ -2691,7 +2757,7 @@ describe('paragraph converters', () => {
       };
       positions.set(node, { start: 10, end: 11 });
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
 
       expect(result).toEqual({
         kind: 'image',
@@ -2714,11 +2780,12 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           size: { width: 100, height: 100 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result).toBeNull();
     });
 
@@ -2726,12 +2793,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: '',
           size: { width: 100, height: 100 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result).toBeNull();
     });
 
@@ -2739,11 +2807,12 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100);
       expect(result?.height).toBe(100);
     });
@@ -2752,12 +2821,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: NaN, height: Infinity },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100);
       expect(result?.height).toBe(100);
     });
@@ -2766,12 +2836,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: -10, height: 100 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100); // DEFAULT_IMAGE_DIMENSION_PX
       expect(result?.height).toBe(100);
     });
@@ -2780,12 +2851,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: 100, height: -10 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100);
       expect(result?.height).toBe(100); // DEFAULT_IMAGE_DIMENSION_PX
     });
@@ -2794,12 +2866,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: 0, height: 100 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100); // DEFAULT_IMAGE_DIMENSION_PX
       expect(result?.height).toBe(100);
     });
@@ -2808,12 +2881,13 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
           size: { width: 100, height: 0 },
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.width).toBe(100);
       expect(result?.height).toBe(100); // DEFAULT_IMAGE_DIMENSION_PX
     });
@@ -2824,6 +2898,7 @@ describe('paragraph converters', () => {
         attrs: {
           src: 'image.png',
           wrap: {
+            type: 'Inline',
             attrs: {
               distT: 5,
               distB: 10,
@@ -2834,7 +2909,7 @@ describe('paragraph converters', () => {
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.distTop).toBe(5);
       expect(result?.distBottom).toBe(10);
       expect(result?.distLeft).toBe(3);
@@ -2847,6 +2922,7 @@ describe('paragraph converters', () => {
         attrs: {
           src: 'image.png',
           wrap: {
+            type: 'Inline',
             attrs: {
               distTop: 12,
               distBottom: 14,
@@ -2857,7 +2933,7 @@ describe('paragraph converters', () => {
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.distTop).toBe(12);
       expect(result?.distBottom).toBe(14);
       expect(result?.distLeft).toBe(8);
@@ -2868,11 +2944,12 @@ describe('paragraph converters', () => {
       const node: PMNode = {
         type: 'image',
         attrs: {
+          inline: true,
           src: 'image.png',
         },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.distTop).toBeUndefined();
       expect(result?.distBottom).toBeUndefined();
       expect(result?.distLeft).toBeUndefined();
@@ -2882,22 +2959,22 @@ describe('paragraph converters', () => {
     it('includes SDT metadata when provided', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
       const sdt = { kind: 'field' as const };
 
-      const result = imageNodeToRun(node, positions, sdt);
+      const result = imageNodeToRun(buildImageParams(node, positions, sdt));
       expect(result?.sdt).toEqual(sdt);
     });
 
     it('includes PM positions when available', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
       positions.set(node, { start: 42, end: 43 });
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.pmStart).toBe(42);
       expect(result?.pmEnd).toBe(43);
     });
@@ -2905,10 +2982,10 @@ describe('paragraph converters', () => {
     it('omits PM positions when not in map', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.pmStart).toBeUndefined();
       expect(result?.pmEnd).toBeUndefined();
     });
@@ -2916,20 +2993,20 @@ describe('paragraph converters', () => {
     it('sets verticalAlign to bottom by default', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.verticalAlign).toBe('bottom');
     });
 
     it('omits alt and title when not present', () => {
       const node: PMNode = {
         type: 'image',
-        attrs: { src: 'image.png' },
+        attrs: { src: 'image.png', inline: true },
       };
 
-      const result = imageNodeToRun(node, positions);
+      const result = imageNodeToRun(buildImageParams(node, positions));
       expect(result?.alt).toBeUndefined();
       expect(result?.title).toBeUndefined();
     });
@@ -2949,7 +3026,7 @@ describe('paragraph converters', () => {
       vi.mocked(computeParagraphAttrs).mockReturnValue({ paragraphAttrs: {}, resolvedParagraphProperties: {} });
       vi.mocked(cloneParagraphAttrs).mockReturnValue({});
       vi.mocked(hasPageBreakBefore).mockReturnValue(false);
-      vi.mocked(textNodeToRun).mockImplementation((node) => ({
+      vi.mocked(textNodeToRun).mockImplementation(({ node }) => ({
         text: node.text || '',
         fontFamily: 'Arial',
         fontSize: 16,
@@ -3012,38 +3089,15 @@ describe('paragraph converters', () => {
         content: [{ type: 'text', text: 'Before' }, imageNode, { type: 'text', text: 'After' }],
       };
 
-      const mockImageBlock: FlowBlock = {
-        kind: 'image',
-        id: 'image-0',
-        src: 'image.png',
-        width: 100,
-        height: 100,
-        attrs: {},
-      };
-
-      const converters = {
-        imageNodeToBlock: vi.fn().mockReturnValue(mockImageBlock),
-      };
-
-      const blocks = paragraphToFlowBlocks(
-        para,
-        nextBlockId,
-        positions,
-        'Arial',
-        16,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        converters as never,
-      );
+      const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
       // Should split into: paragraph before, image block, paragraph after
       expect(blocks).toHaveLength(3);
       expect(blocks[0].kind).toBe('paragraph');
       expect(blocks[1].kind).toBe('image');
       expect(blocks[2].kind).toBe('paragraph');
-      expect(converters.imageNodeToBlock).toHaveBeenCalledWith(imageNode, nextBlockId, positions, undefined, undefined);
+      const imageBlock = blocks[1] as FlowBlock & { src?: string };
+      expect(imageBlock.src).toBe('image.png');
     });
 
     it('handles multiple inline images in same paragraph', () => {

@@ -160,7 +160,14 @@ vi.mock('../../Editor', () => {
       getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
       isEditable: true,
       state: {
-        selection: { from: 0, to: 0 },
+        selection: {
+          from: 0,
+          to: 0,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        },
         doc: {
           nodeSize: 100,
           content: {
@@ -207,9 +214,13 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: mockToFlowBlocks,
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: mockToFlowBlocks,
+  };
+});
 
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
@@ -2262,7 +2273,7 @@ describe('PresentationEditor', () => {
 
   describe('Selection update mechanisms', () => {
     describe('#scheduleSelectionUpdate race condition guards', () => {
-      it('should skip scheduling when already scheduled', async () => {
+      it('should render synchronously with immediate mode when safe', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2290,12 +2301,13 @@ describe('PresentationEditor', () => {
         expect(selectionUpdateCall).toBeDefined();
         const handleSelection = selectionUpdateCall![1] as () => void;
 
-        // Call twice - should only schedule once
+        // Call twice - with immediate mode, renders synchronously when safe
+        // so no RAF scheduling is needed
         handleSelection();
         handleSelection();
 
-        // Should only call requestAnimationFrame once (second call is deduplicated)
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2384,7 +2396,7 @@ describe('PresentationEditor', () => {
         rafSpy.mockRestore();
       });
 
-      it('should successfully schedule when no guards are active', async () => {
+      it('should render synchronously when no guards are active', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2413,11 +2425,12 @@ describe('PresentationEditor', () => {
         // Clear RAF spy to track new calls
         rafSpy.mockClear();
 
-        // Schedule selection update with no guards active
+        // Selection update with no guards active — renders synchronously via
+        // immediate mode, bypassing RAF
         handleSelection();
 
-        // Should schedule RAF successfully
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2441,6 +2454,7 @@ describe('PresentationEditor', () => {
         const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
           (Editor as unknown as MockedEditor).mock.results.length - 1
         ].value;
+        mockEditorInstance.view.hasFocus = vi.fn(() => true);
 
         // Mock editor state with valid selection at position 5
         mockEditorInstance.state = {
@@ -2963,7 +2977,14 @@ describe('PresentationEditor', () => {
         // Wait for initial render to complete so timers/RAF have settled.
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        mockEditorInstance.state.selection = { from: 5, to: 5 };
+        mockEditorInstance.state.selection = {
+          from: 5,
+          to: 5,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        };
 
         const onCalls = mockEditorInstance.on as unknown as Mock;
         const selectionUpdateCall = onCalls.mock.calls.find((call) => call[0] === 'selectionUpdate');
@@ -2996,7 +3017,14 @@ describe('PresentationEditor', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        mockEditorInstance.state.selection = { from: 1, to: 6 };
+        mockEditorInstance.state.selection = {
+          from: 1,
+          to: 6,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        };
         (mockEditorInstance.state.doc as unknown as { textBetween?: () => string }).textBetween = () => 'Hello world';
 
         const onCalls = mockEditorInstance.on as unknown as Mock;

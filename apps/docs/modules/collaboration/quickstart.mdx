@@ -15,19 +15,19 @@ This guide uses Liveblocks because it's the fastest way to get started. See [all
 - SuperDoc installed in your project
 - A [Liveblocks account](https://liveblocks.io/) (free tier available)
 
-## Step 1: Get Your API Key
+## Step 1: Get your API key
 
 1. Go to [liveblocks.io](https://liveblocks.io/) and create an account
 2. Create a new project
 3. Copy your **Public API Key** (starts with `pk_`)
 
-## Step 2: Install Dependencies
+## Step 2: Install dependencies
 
 ```bash
 npm install @liveblocks/client @liveblocks/yjs yjs
 ```
 
-## Step 3: Add the Code
+## Step 3: Add the code
 
 <Tabs>
   <Tab title="React">
@@ -185,7 +185,7 @@ npm install @liveblocks/client @liveblocks/yjs yjs
   </Tab>
 </Tabs>
 
-## Step 4: Test It!
+## Step 4: Test it
 
 1. Open your app in two browser windows
 2. Start typing in one window
@@ -195,7 +195,7 @@ npm install @liveblocks/client @liveblocks/yjs yjs
 You now have real-time collaboration working!
 </Check>
 
-## What's Happening?
+## What's happening?
 
 ```mermaid
 flowchart LR
@@ -207,7 +207,7 @@ flowchart LR
 2. **Yjs** manages the document state and conflict resolution
 3. **SuperDoc** renders the editor and syncs with Yjs
 
-## Adding User Presence
+## Adding user presence
 
 Show who's currently editing:
 
@@ -227,7 +227,7 @@ const superdoc = new SuperDoc({
 });
 ```
 
-## Environment Variables
+## Environment variables
 
 For production, use environment variables:
 
@@ -238,13 +238,13 @@ const client = createClient({
 });
 ```
 
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
   <Card
     title="Liveblocks Deep Dive"
     icon="cloud"
-    href="/modules/collaboration/cloud/liveblocks"
+    href="/guides/collaboration/liveblocks"
   >
     Room management, persistence, and advanced features
   </Card>
@@ -252,7 +252,7 @@ const client = createClient({
   <Card
     title="Self-Hosted Option"
     icon="server"
-    href="/modules/collaboration/self-hosted/overview"
+    href="/guides/collaboration/superdoc-yjs"
   >
     Run your own collaboration server
   </Card>
@@ -268,7 +268,7 @@ const client = createClient({
   <Card
     title="Working Example"
     icon="github"
-    href="https://github.com/Harbour-Enterprises/SuperDoc/tree/main/examples/collaboration/liveblocks"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/collaboration/liveblocks"
   >
     Complete source code on GitHub
   </Card>

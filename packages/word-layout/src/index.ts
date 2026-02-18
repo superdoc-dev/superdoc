@@ -5,13 +5,10 @@
  */
 
 import type { WordParagraphLayoutInput, WordParagraphLayoutOutput, WordListSuffix } from './types.js';
-import { DEFAULT_LIST_HANGING_PX, LIST_MARKER_GAP } from './marker-utils.js';
+import { DEFAULT_LIST_HANGING_PX } from './marker-utils.js';
 import { twipsToPixels } from './unit-conversions.js';
 
 export * from './types.js';
-
-export { createNumberingManager } from './numbering-manager.js';
-export type { NumberingManager } from './numbering-manager.js';
 
 export {
   TWIPS_PER_PIXEL,
@@ -28,6 +25,7 @@ export {
 
 export { LIST_MARKER_GAP, DEFAULT_LIST_HANGING_PX } from './marker-utils.js';
 export type { NumberingFormat } from './marker-utils.js';
+export { createNumberingManager } from './numbering-manager.js';
 
 /**
  * Computes the complete layout properties for a Word paragraph, including indentation,

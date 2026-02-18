@@ -1,0 +1,128 @@
+name: Update README Contributors
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to add contributor from'
+        required: true
+        type: number
+
+jobs:
+  update-contributors:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Resolve PR author
+        id: resolve
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            PR_NUMBER="${{ inputs.pr_number }}"
+            AUTHOR=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.user.login')
+          else
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+          fi
+          echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
+
+      - name: Check if author is a bot
+        id: check-bot
+        run: |
+          if [[ "${{ steps.resolve.outputs.author }}" == *"[bot]"* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if author should be excluded
+        if: steps.check-bot.outputs.skip == 'false'
+        id: check-excluded
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          EXCLUDED_CONTRIBUTORS: ${{ vars.EXCLUDED_CONTRIBUTORS }}
+        run: |
+          AUTHOR="${{ steps.resolve.outputs.author }}"
+
+          # Check if author is in the exclusion list (comma-separated GitHub variable)
+          if [[ -n "$EXCLUDED_CONTRIBUTORS" ]] && echo ",$EXCLUDED_CONTRIBUTORS," | grep -qi ",$AUTHOR,"; then
+            echo "$AUTHOR is in EXCLUDED_CONTRIBUTORS list"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check if author is a repo collaborator (team member)
+          # Requires the GitHub App to have Contents: write permission (push access)
+          if gh api "repos/${{ github.repository }}/collaborators/$AUTHOR" --silent; then
+            echo "$AUTHOR is a repo collaborator"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          else
+            echo "Collaborator check returned non-204 for $AUTHOR (not a collaborator, or insufficient app permissions)"
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.check-bot.outputs.skip == 'false' && steps.check-excluded.outputs.skip == 'false'
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Add contributor to README
+        if: steps.check-bot.outputs.skip == 'false' && steps.check-excluded.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          AUTHOR="${{ steps.resolve.outputs.author }}"
+
+          # Check if already in README
+          if grep -q "github.com/$AUTHOR" README.md; then
+            echo "$AUTHOR is already in README contributors section"
+            exit 0
+          fi
+
+          # Get display name
+          DISPLAY_NAME=$(gh api "users/$AUTHOR" --jq '.name // .login')
+
+          # Build the avatar HTML
+          AVATAR_HTML="<a href=\"https://github.com/$AUTHOR\"><img src=\"https://github.com/$AUTHOR.png\" width=\"50\" height=\"50\" alt=\"$AUTHOR\" title=\"$DISPLAY_NAME\" /></a>"
+
+          # Insert after the last existing avatar line
+          LAST_AVATAR_LINE=$(grep -n 'github.com/.*\.png' README.md | tail -1 | cut -d: -f1)
+          sed -i "${LAST_AVATAR_LINE}a\\${AVATAR_HTML}" README.md
+
+          # Check if anything changed
+          if git diff --quiet README.md; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          # Create a PR instead of pushing directly (branch protection)
+          BRANCH="docs/add-contributor-$AUTHOR"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git checkout -b "$BRANCH"
+          git add README.md
+          git commit -m "docs: add $AUTHOR to community contributors"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "docs: add $AUTHOR to community contributors" \
+            --body "Auto-generated: adds $AUTHOR to the README community contributors section."

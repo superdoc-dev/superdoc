@@ -1,4 +1,5 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
+import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
@@ -54,6 +55,7 @@ import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
+import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -138,6 +140,9 @@ export interface SaveOptions {
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
+
+  /** ZIP compression method for docx export. Defaults to 'DEFLATE'. Use 'STORE' for faster exports without compression. */
+  compression?: 'DEFLATE' | 'STORE';
 }
 
 /**
@@ -240,6 +245,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   setHighContrastMode?: (enabled: boolean) => void;
 
+  /**
+   * Telemetry instance for tracking document opens
+   */
+  #telemetry: Telemetry | null = null;
+
+  /**
+   * Guard flag to prevent double-tracking document open
+   */
+  #documentOpenTracked = false;
+
   options: EditorOptions = {
     element: null,
     selector: null,
@@ -324,6 +339,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
+
+    // License key (resolved in #initTelemetry; undefined means "not explicitly set")
+    licenseKey: undefined,
+
+    // Telemetry configuration
+    telemetry: { enabled: true },
   };
 
   /**
@@ -390,6 +411,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#checkHeadless(resolvedOptions);
     this.setOptions(resolvedOptions);
     this.#renderer = resolvedOptions.renderer ?? (domAvailable ? new ProseMirrorRenderer() : null);
+    this.#initTelemetry();
 
     const { setHighContrastMode } = useHighContrastMode();
     this.setHighContrastMode = setHighContrastMode;
@@ -451,6 +473,65 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
+  }
+
+  /**
+   * Initialize telemetry if configured
+   */
+  #initTelemetry(): void {
+    const { telemetry: telemetryConfig, licenseKey } = this.options;
+
+    // Skip in test environments and when telemetry is not enabled
+    if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
+      return;
+    }
+
+    // Skip for sub-editors that are not primary document editors
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+      return;
+    }
+
+    if (!telemetryConfig?.enabled) {
+      return;
+    }
+
+    // Root-level licenseKey has a priority; fall back to deprecated telemetry.licenseKey
+    const resolvedLicenseKey =
+      licenseKey !== undefined ? licenseKey : (telemetryConfig.licenseKey ?? COMMUNITY_LICENSE_KEY);
+
+    try {
+      this.#telemetry = new Telemetry({
+        enabled: true,
+        endpoint: telemetryConfig.endpoint,
+        licenseKey: resolvedLicenseKey,
+        metadata: telemetryConfig.metadata,
+      });
+      console.debug('[super-editor] Telemetry: enabled');
+    } catch {
+      // Fail silently - telemetry should never break the app
+    }
+  }
+
+  /**
+   * Ensure document metadata is generated and track telemetry if enabled
+   */
+  #trackDocumentOpen(): void {
+    // Always generate metadata (GUID, timestamp) regardless of telemetry
+    this.getDocumentIdentifier().then((documentId) => {
+      // Only track if telemetry enabled and not already tracked
+      if (!this.#telemetry || this.#documentOpenTracked) return;
+
+      try {
+        const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+        this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
+        this.#documentOpenTracked = true;
+      } catch {
+        // Fail silently - telemetry should never break the app
+      }
+    });
   }
 
   /**
@@ -989,6 +1070,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
   }
 
   unmount(): void {
@@ -1246,25 +1330,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get viewport coordinates for a document position. Falls back to the PresentationEditor
-   * when running without a ProseMirror view (layout mode).
+   * Get viewport coordinates for a document position.
+   * In presentation mode the ProseMirror view is hidden off-screen, so we
+   * delegate to PresentationEditor which uses visual layout coordinates.
    */
   coordsAtPos(pos: number): ReturnType<PmEditorView['coordsAtPos']> | null {
-    if (this.view) {
-      return this.view.coordsAtPos(pos);
+    if (this.presentationEditor) {
+      return this.presentationEditor.coordsAtPos(pos);
     }
 
-    const layoutRects = this.presentationEditor?.getRangeRects?.(pos, pos);
-    if (Array.isArray(layoutRects) && layoutRects.length > 0) {
-      const rect = layoutRects[0];
-      return {
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-        width: rect.width,
-        height: rect.height,
-      } as ReturnType<PmEditorView['coordsAtPos']>;
+    if (this.view) {
+      return this.view.coordsAtPos(pos);
     }
 
     return null;
@@ -1550,6 +1626,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         documentId: this.options.documentId,
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
+        isNewFile: this.options.isNewFile ?? false,
       });
     }
   }
@@ -2006,28 +2083,36 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #dispatchTransaction(transaction: Transaction): void {
     if (this.isDestroyed) return;
-    const start = Date.now();
+    const perf = this.view?.dom?.ownerDocument?.defaultView?.performance ?? globalThis.performance;
+    const perfNow = () => (perf?.now ? perf.now() : Date.now());
+    const perfStart = perfNow();
 
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
 
-      transactionToApply =
-        isTrackChangesActive && !skipTrackChanges
-          ? trackedTransaction({
-              tr: transactionToApply,
-              state: prevState,
-              user: this.options.user!,
-            })
-          : transactionToApply;
+      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      if (shouldTrack && forceTrackChanges && !this.options.user) {
+        throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
+      }
+
+      transactionToApply = shouldTrack
+        ? trackedTransaction({
+            tr: transactionToApply,
+            state: prevState,
+            user: this.options.user!,
+          })
+        : transactionToApply;
 
       const { state: appliedState } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
     } catch (error) {
+      if (forceTrackChanges) throw error;
       // just in case
       nextState = prevState.apply(transactionToApply);
       console.log(error);
@@ -2040,11 +2125,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.view.updateState(nextState);
     }
 
-    const end = Date.now();
+    const end = perfNow();
+
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
-      duration: end - start,
+      duration: end - perfStart,
     });
 
     if (selectionHasChanged) {
@@ -2072,23 +2158,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (!transactionToApply.docChanged) {
-      return;
-    }
-
-    // Track document modifications and promote to GUID if needed
-    if (transaction.docChanged && this.converter) {
-      if (!this.converter.documentGuid) {
-        this.converter.promoteToGuid();
-        console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+    if (transactionToApply.docChanged) {
+      // Track document modifications and promote to GUID if needed
+      if (transaction.docChanged && this.converter) {
+        if (!this.converter.documentGuid) {
+          this.converter.promoteToGuid();
+          console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+        }
+        this.converter.documentModified = true;
       }
-      this.converter.documentModified = true;
-    }
 
-    this.emit('update', {
-      editor: this,
-      transaction: transactionToApply,
-    });
+      this.emit('update', {
+        editor: this,
+        transaction: transactionToApply,
+      });
+    }
   }
 
   /**
@@ -2115,7 +2199,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get document identifier (async - may generate hash)
+   * Get document unique identifier (async)
+   * Returns a stable identifier for the document (identifierHash or contentHash)
    */
   async getDocumentIdentifier(): Promise<string | null> {
     return (await this.converter?.getDocumentIdentifier()) || null;
@@ -2417,17 +2502,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @returns The updated document in JSON
    */
   #prepareDocumentForExport(comments: Comment[] = []): ProseMirrorJSON {
-    const newState = PmEditorState.create({
-      schema: this.schema,
-      doc: this.state.doc,
-      plugins: this.state.plugins,
-    });
-
-    const { tr, doc } = newState;
-
+    // Use Transform directly instead of creating a throwaway EditorState.
+    // EditorState.create() calls Plugin.init() for every plugin, and
+    // yUndoPlugin.init() registers persistent observers on the shared ydoc
+    // that are never cleaned up — causing an observer leak that degrades
+    // collaboration performance over time.
+    const doc = this.state.doc;
+    const tr = new Transform(doc);
     prepareCommentsForExport(doc, tr, this.schema, comments);
-    const updatedState = newState.apply(tr);
-    return updatedState.doc.toJSON();
+    return tr.doc.toJSON();
   }
 
   getUpdatedJson(): ProseMirrorJSON {
@@ -2445,6 +2528,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments,
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
+    compression,
   }: {
     isFinalDoc?: boolean;
     commentsType?: string;
@@ -2453,16 +2537,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments?: Comment[];
     getUpdatedDocs?: boolean;
     fieldsHighlightColor?: string | null;
+    compression?: 'DEFLATE' | 'STORE';
   } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 
-      // Normalize commentJSON property (imported comments use textJson)
-      const preparedComments = effectiveComments.map((comment: Comment) => ({
-        ...comment,
-        commentJSON: comment.commentJSON ?? (comment as Record<string, unknown>).textJson,
-      }));
+      // Normalize commentJSON property (imported comments provide `elements`)
+      const preparedComments = effectiveComments.map((comment: Comment) => {
+        const elements = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : undefined;
+        return {
+          ...comment,
+          commentJSON: comment.commentJSON ?? elements,
+        };
+      });
 
       // Pre-process the document state to prepare for export
       const json = this.#prepareDocumentForExport(preparedComments);
@@ -2513,16 +2601,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
       const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+
+      // Export core.xml (contains dcterms:created timestamp)
+      const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
+      const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
+
       const updatedDocs: Record<string, string> = {
         ...this.options.customUpdatedFiles,
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
         'word/numbering.xml': String(numbering),
-
-        // Replace & with &amp; in styles.xml as DOCX viewers can't handle it
-        'word/styles.xml': String(styles).replace(/&/gi, '&amp;'),
+        'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
+        ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };
 
       if (hasCustomSettings) {
@@ -2581,6 +2673,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media,
         fonts: this.options.fonts,
         isHeadless: this.options.isHeadless,
+        compression,
       });
 
       return result;
@@ -2851,6 +2944,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       commentsType: options?.commentsType,
       comments: options?.comments,
       fieldsHighlightColor: options?.fieldsHighlightColor,
+      compression: options?.compression,
     });
 
     return result as Blob | Buffer;

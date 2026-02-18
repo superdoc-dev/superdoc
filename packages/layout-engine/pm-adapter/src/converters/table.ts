@@ -41,13 +41,13 @@ import {
   applySdtMetadataToParagraphBlocks,
   applySdtMetadataToTableBlock,
 } from '../sdt/index.js';
-import { TableProperties } from '@superdoc/style-engine/ooxml';
+import { TableProperties, resolveTableCellProperties } from '@superdoc/style-engine/ooxml';
 
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  trackedChangesConfig?: TrackedChangesConfig;
-  bookmarks?: Map<string, number>;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
   converterContext: ConverterContext;
@@ -185,7 +185,17 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Table cells can contain paragraphs, images/drawings, structured content blocks, and nested tables.
   const blocks: (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[] = [];
 
+  // Resolve table cell properties from the style cascade (wholeTable → bands → conditional → inline)
+  const inlineTcProps = cellNode.attrs?.tableCellProperties as Record<string, unknown> | undefined;
+  const tableInfo = tableProperties ? { tableProperties, rowIndex, cellIndex, numCells, numRows } : undefined;
+  const resolvedTcProps = resolveTableCellProperties(
+    inlineTcProps as Parameters<typeof resolveTableCellProperties>[0],
+    tableInfo,
+    context.converterContext?.translatedLinkedStyles,
+  );
+
   // Extract cell background color for auto text color resolution
+  // Priority: inline background attr > resolved style shading
   const cellBackground = cellNode.attrs?.background as { color?: string } | undefined;
   let cellBackgroundColor: string | undefined;
   if (cellBackground && typeof cellBackground.color === 'string') {
@@ -196,6 +206,13 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       if (/^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(normalized)) {
         cellBackgroundColor = normalized;
       }
+    }
+  }
+  // Fall back to resolved style shading if no inline background
+  if (!cellBackgroundColor && resolvedTcProps?.shading?.fill) {
+    const fill = resolvedTcProps.shading.fill;
+    if (fill !== 'auto') {
+      cellBackgroundColor = fill.startsWith('#') ? fill : `#${fill}`;
     }
   }
 
@@ -280,8 +297,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
           continue;
         }
         if (nestedNode.type === 'table' && tableNodeToBlock) {
-          const tableBlock = tableNodeToBlock({
-            node: nestedNode,
+          const tableBlock = tableNodeToBlock(nestedNode, {
             nextBlockId: context.nextBlockId,
             positions: context.positions,
             trackedChangesConfig: context.trackedChangesConfig,
@@ -303,8 +319,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     }
 
     if (childNode.type === 'table' && tableNodeToBlock) {
-      const tableBlock = tableNodeToBlock({
-        node: childNode,
+      const tableBlock = tableNodeToBlock(childNode, {
         nextBlockId: context.nextBlockId,
         positions: context.positions,
         trackedChangesConfig: context.trackedChangesConfig,
@@ -418,6 +433,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (background && typeof background.color === 'string') {
     const bgColor = background.color;
     cellAttrs.background = bgColor.startsWith('#') ? bgColor : `#${bgColor}`;
+  } else if (cellBackgroundColor) {
+    // Use resolved style background when no inline background is set
+    cellAttrs.background = cellBackgroundColor;
   }
 
   const tableCellProperties = cellNode.attrs?.tableCellProperties;
@@ -652,18 +670,20 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
  * @param paragraphToFlowBlocks - Paragraph converter function (injected to avoid circular deps)
  * @returns TableBlock or null if conversion fails
  */
-export function tableNodeToBlock({
-  node,
-  nextBlockId,
-  positions,
-  trackedChangesConfig,
-  bookmarks,
-  hyperlinkConfig,
-  themeColors,
-  converterContext,
-  converters,
-  enableComments,
-}: TableNodeToBlockParams): FlowBlock | null {
+export function tableNodeToBlock(
+  node: PMNode,
+  {
+    nextBlockId,
+    positions,
+    trackedChangesConfig,
+    bookmarks,
+    hyperlinkConfig,
+    themeColors,
+    converterContext,
+    converters,
+    enableComments,
+  }: TableNodeToBlockParams,
+): FlowBlock | null {
   if (!Array.isArray(node.content) || node.content.length === 0) return null;
   const paragraphConverter = converters.paragraphToFlowBlocks;
   if (!paragraphConverter) return null;
@@ -762,15 +782,16 @@ export function tableNodeToBlock({
   };
 
   /**
-   * Column width priority hierarchy (per plan Phase 3):
+   * Column width priority hierarchy:
    * 1. User-edited grid (userEdited flag + grid attribute)
-   * 2. PM colwidth attributes (fallback for PM-native edits)
-   * 3. Original OOXML grid (untouched documents)
+   * 2. Original OOXML grid (untouched documents — grid values sum to page width)
+   * 3. PM colwidth attributes (fallback for PM-native edits or missing grid)
    * 4. Auto-calculate from content (no explicit widths)
    *
-   * When both grid and colwidth are present:
-   * - If userEdited=true: use grid (Priority 1)
-   * - Otherwise: use colwidth (Priority 2) over grid (Priority 3)
+   * Grid values (from w:tblGrid) represent actual column positions on the page and
+   * sum to exactly the content width. Cell colwidth values may be scaled up from tcW
+   * (cell width hints) during import and require down-scaling in the measuring code,
+   * which introduces proportion changes that make columns narrower than they should be.
    */
 
   // Priority 1: User-edited grid (preserves resize operations)
@@ -791,7 +812,22 @@ export function tableNodeToBlock({
     }
   }
 
-  // Priority 2: PM colwidth attributes (higher priority than grid when userEdited !== true)
+  // Priority 2: Original OOXML grid (grid values are authoritative for column positions)
+  if (!columnWidths && Array.isArray(node.attrs?.grid) && node.attrs.grid.length > 0) {
+    columnWidths = (node.attrs.grid as Array<{ col?: number } | null | undefined>)
+      .filter((col): col is { col?: number } => col != null && typeof col === 'object')
+      .map((col) => {
+        const twips = typeof col.col === 'number' ? col.col : 0;
+        return twips > 0 ? twipsToPixels(twips) : 0;
+      })
+      .filter((width: number) => width > 0);
+
+    if (columnWidths.length === 0) {
+      columnWidths = undefined;
+    }
+  }
+
+  // Priority 3: PM colwidth attributes (fallback when no grid is available)
   if (!columnWidths && Array.isArray(node.content) && node.content.length > 0) {
     const firstRow = node.content[0];
     if (firstRow && isTableRowNode(firstRow) && Array.isArray(firstRow.content) && firstRow.content.length > 0) {
@@ -809,21 +845,6 @@ export function tableNodeToBlock({
       if (tempWidths.length > 0) {
         columnWidths = tempWidths;
       }
-    }
-  }
-
-  // Priority 3: Original OOXML grid (fallback when no colwidth)
-  if (!columnWidths && Array.isArray(node.attrs?.grid) && node.attrs.grid.length > 0) {
-    columnWidths = (node.attrs.grid as Array<{ col?: number } | null | undefined>)
-      .filter((col): col is { col?: number } => col != null && typeof col === 'object')
-      .map((col) => {
-        const twips = typeof col.col === 'number' ? col.col : 0;
-        return twips > 0 ? twipsToPixels(twips) : 0;
-      })
-      .filter((width: number) => width > 0);
-
-    if (columnWidths.length === 0) {
-      columnWidths = undefined;
     }
   }
 
@@ -866,8 +887,7 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     enableComments,
   } = context;
 
-  const tableBlock = tableNodeToBlock({
-    node,
+  const tableBlock = tableNodeToBlock(node, {
     nextBlockId,
     positions,
     trackedChangesConfig,
@@ -880,6 +900,6 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
   });
   if (tableBlock) {
     blocks.push(tableBlock);
-    recordBlockKind(tableBlock.kind);
+    recordBlockKind?.(tableBlock.kind);
   }
 }

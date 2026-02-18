@@ -11,7 +11,7 @@ vi.mock('@helpers/generateDocxRandomId.js', () => ({
 describe('preProcessHyperlinkInstruction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    generateDocxRandomId.mockReturnValue('rId123');
+    generateDocxRandomId.mockReturnValue('abc12345');
   });
 
   const mockNodesToCombine = [
@@ -36,7 +36,7 @@ describe('preProcessHyperlinkInstruction', () => {
       {
         name: 'w:hyperlink',
         type: 'element',
-        attributes: { 'r:id': 'rId123' },
+        attributes: { 'r:id': 'rIdabc12345' },
         elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
       },
     ]);
@@ -45,7 +45,7 @@ describe('preProcessHyperlinkInstruction', () => {
         type: 'element',
         name: 'Relationship',
         attributes: {
-          Id: 'rId123',
+          Id: 'rIdabc12345',
           Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
           Target: 'http://example.com',
           TargetMode: 'External',
@@ -77,7 +77,7 @@ describe('preProcessHyperlinkInstruction', () => {
           {
             type: 'link',
             attrs: {
-              rId: 'rId123',
+              rId: 'rIdabc12345',
               href: 'http://example.com',
             },
           },
@@ -130,6 +130,29 @@ describe('preProcessHyperlinkInstruction', () => {
         elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
       },
     ]);
+  });
+
+  it('should prefix relationship IDs with rId to ensure valid xsd:ID (SD-1661)', () => {
+    // When generateDocxRandomId returns a hex starting with a digit,
+    // the ID must still be prefixed with 'rId' to comply with xsd:ID/NCName requirements
+    generateDocxRandomId.mockReturnValue('0c7b8f2a');
+
+    const instruction = 'HYPERLINK "http://example.com"';
+    const mockDocx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+
+    const result = preProcessHyperlinkInstruction(mockNodesToCombine, instruction, mockDocx);
+
+    // The Relationship Id should start with 'rId', not with a digit
+    const relationshipId = mockDocx['word/_rels/document.xml.rels'].elements[0].elements[0].attributes.Id;
+    expect(relationshipId).toBe('rId0c7b8f2a');
+    expect(relationshipId).toMatch(/^[a-zA-Z_]/); // Must start with letter or underscore (NCName rule)
+
+    // The hyperlink r:id should match
+    expect(result[0].attributes['r:id']).toBe('rId0c7b8f2a');
   });
 
   it('should handle missing relationships gracefully for URL hyperlinks', () => {

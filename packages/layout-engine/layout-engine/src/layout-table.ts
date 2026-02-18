@@ -242,12 +242,13 @@ function calculateColumnMinWidth(): number {
  * @param measure - Table measurement containing column widths
  * @returns Array of column boundary metadata, one per column
  */
-function generateColumnBoundaries(measure: TableMeasure): TableColumnBoundary[] {
+function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: number[]): TableColumnBoundary[] {
   const boundaries: TableColumnBoundary[] = [];
   let xPosition = 0;
+  const widths = effectiveWidths ?? measure.columnWidths;
 
-  for (let i = 0; i < measure.columnWidths.length; i++) {
-    const width = measure.columnWidths[i];
+  for (let i = 0; i < widths.length; i++) {
+    const width = widths[i];
     const minWidth = calculateColumnMinWidth();
 
     const boundary = {
@@ -1009,9 +1010,10 @@ function generateFragmentMetadata(
   _fromRow: number,
   _toRow: number,
   _repeatHeaderCount: number,
+  effectiveWidths?: number[],
 ): TableFragmentMetadata {
   return {
-    columnBoundaries: generateColumnBoundaries(measure),
+    columnBoundaries: generateColumnBoundaries(measure, effectiveWidths),
     coordinateSystem: 'fragment',
   };
 }
@@ -1031,14 +1033,15 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
   state = context.ensurePage();
   const height = Math.min(context.measure.totalHeight, state.contentBottom - state.cursorY);
 
-  const metadata: TableFragmentMetadata = {
-    columnBoundaries: generateColumnBoundaries(context.measure),
-    coordinateSystem: 'fragment',
-  };
-
   const baseX = context.columnX(state.columnIndex);
   const baseWidth = Math.min(context.columnWidth, context.measure.totalWidth || context.columnWidth);
   const { x, width } = resolveTableFrame(baseX, context.columnWidth, baseWidth, context.block.attrs);
+  const columnWidths = rescaleColumnWidths(context.measure.columnWidths, context.measure.totalWidth, width);
+
+  const metadata: TableFragmentMetadata = {
+    columnBoundaries: generateColumnBoundaries(context.measure, columnWidths),
+    coordinateSystem: 'fragment',
+  };
 
   const fragment: TableFragment = {
     kind: 'table',
@@ -1050,7 +1053,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
     width,
     height,
     metadata,
-    columnWidths: rescaleColumnWidths(context.measure.columnWidths, context.measure.totalWidth, width),
+    columnWidths,
   };
   applyTableFragmentPmRange(fragment, context.block, context.measure);
   state.page.fragments.push(fragment);
@@ -1179,14 +1182,16 @@ export function layoutTableBlock({
   // This can occur in test scenarios or with placeholder tables
   if (block.rows.length === 0 && measure.totalHeight > 0) {
     const height = Math.min(measure.totalHeight, state.contentBottom - state.cursorY);
-    const metadata: TableFragmentMetadata = {
-      columnBoundaries: generateColumnBoundaries(measure),
-      coordinateSystem: 'fragment',
-    };
 
     const baseX = columnX(state.columnIndex);
     const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
+    const columnWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
+
+    const metadata: TableFragmentMetadata = {
+      columnBoundaries: generateColumnBoundaries(measure, columnWidths),
+      coordinateSystem: 'fragment',
+    };
 
     const fragment: TableFragment = {
       kind: 'table',
@@ -1198,7 +1203,7 @@ export function layoutTableBlock({
       width,
       height,
       metadata,
-      columnWidths: rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width),
+      columnWidths,
     };
     applyTableFragmentPmRange(fragment, block, measure);
     state.page.fragments.push(fragment);
@@ -1284,6 +1289,7 @@ export function layoutTableBlock({
         const baseX = columnX(state.columnIndex);
         const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
         const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
+        const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
         const fragment: TableFragment = {
           kind: 'table',
@@ -1298,8 +1304,8 @@ export function layoutTableBlock({
           continuesOnNext: hasRemainingLinesAfterContinuation || rowIndex + 1 < block.rows.length,
           repeatHeaderCount,
           partialRow: continuationPartialRow,
-          metadata: generateFragmentMetadata(measure, rowIndex, rowIndex + 1, repeatHeaderCount),
-          columnWidths: rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width),
+          metadata: generateFragmentMetadata(measure, rowIndex, rowIndex + 1, repeatHeaderCount, scaledWidths),
+          columnWidths: scaledWidths,
         };
 
         applyTableFragmentPmRange(fragment, block, measure);
@@ -1354,6 +1360,7 @@ export function layoutTableBlock({
       const baseX = columnX(state.columnIndex);
       const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
       const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
+      const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
       const fragment: TableFragment = {
         kind: 'table',
@@ -1368,8 +1375,8 @@ export function layoutTableBlock({
         continuesOnNext: !forcedPartialRow.isLastPart || forcedEndRow < block.rows.length,
         repeatHeaderCount,
         partialRow: forcedPartialRow,
-        metadata: generateFragmentMetadata(measure, bodyStartRow, forcedEndRow, repeatHeaderCount),
-        columnWidths: rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width),
+        metadata: generateFragmentMetadata(measure, bodyStartRow, forcedEndRow, repeatHeaderCount, scaledWidths),
+        columnWidths: scaledWidths,
       };
 
       applyTableFragmentPmRange(fragment, block, measure);
@@ -1396,6 +1403,7 @@ export function layoutTableBlock({
     const baseX = columnX(state.columnIndex);
     const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
+    const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
     const fragment: TableFragment = {
       kind: 'table',
@@ -1410,8 +1418,8 @@ export function layoutTableBlock({
       continuesOnNext: endRow < block.rows.length || (partialRow ? !partialRow.isLastPart : false),
       repeatHeaderCount,
       partialRow: partialRow || undefined,
-      metadata: generateFragmentMetadata(measure, bodyStartRow, endRow, repeatHeaderCount),
-      columnWidths: rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width),
+      metadata: generateFragmentMetadata(measure, bodyStartRow, endRow, repeatHeaderCount, scaledWidths),
+      columnWidths: scaledWidths,
     };
 
     applyTableFragmentPmRange(fragment, block, measure);

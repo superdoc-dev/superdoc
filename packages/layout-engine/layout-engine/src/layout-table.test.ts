@@ -3292,5 +3292,38 @@ describe('layoutTableBlock', () => {
         expect(sum).toBe(400);
       }
     });
+
+    it('should generate metadata boundaries from rescaled column widths when table is clamped', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([250, 200, 250], [30, 30]);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 450,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      const fragment = fragments[0];
+      const boundaries = fragment.metadata?.columnBoundaries;
+
+      expect(fragment.columnWidths).toBeDefined();
+      expect(boundaries).toBeDefined();
+      expect(boundaries!.map((boundary) => boundary.width)).toEqual(fragment.columnWidths);
+
+      const lastBoundary = boundaries![boundaries!.length - 1];
+      expect(lastBoundary.x + lastBoundary.width).toBe(fragment.width);
+    });
   });
 });

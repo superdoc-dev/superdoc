@@ -4,7 +4,7 @@
  * Named colors are returned as-is.
  *
  * @param {string|null|undefined} cssColor - A CSS color string
- * @returns {string|null} Hex color string or null
+ * @returns {string|null} Normalized color string or null
  */
 export function cssColorToHex(cssColor) {
   if (!cssColor) return null;

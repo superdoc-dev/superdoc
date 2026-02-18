@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { format as prettierFormat, resolveConfig as prettierResolveConfig } from 'prettier';
 
 export interface GeneratedFile {
   path: string;
@@ -40,15 +41,23 @@ export function normalizeFileContent(content: string): string {
   return content.endsWith('\n') ? content : `${content}\n`;
 }
 
+async function formatGeneratedContent(file: GeneratedFile): Promise<GeneratedFile> {
+  if (!file.path.endsWith('.json')) return file;
+  const config = await prettierResolveConfig(resolveWorkspacePath(file.path));
+  const formatted = await prettierFormat(file.content, { ...config, parser: 'json' });
+  return { ...file, content: formatted };
+}
+
 export function resolveWorkspacePath(path: string): string {
   return resolve(process.cwd(), path);
 }
 
 export async function writeGeneratedFiles(files: GeneratedFile[]): Promise<void> {
   for (const file of files) {
-    const absolutePath = resolveWorkspacePath(file.path);
+    const formatted = await formatGeneratedContent(file);
+    const absolutePath = resolveWorkspacePath(formatted.path);
     await mkdir(dirname(absolutePath), { recursive: true });
-    await writeFile(absolutePath, normalizeFileContent(file.content), 'utf8');
+    await writeFile(absolutePath, normalizeFileContent(formatted.content), 'utf8');
   }
 }
 
@@ -85,14 +94,16 @@ export async function checkGeneratedFiles(
   } = {},
 ): Promise<GeneratedCheckIssue[]> {
   const issues: GeneratedCheckIssue[] = [];
-  const expected = new Map(expectedFiles.map((file) => [file.path, normalizeFileContent(file.content)]));
+  const expected = new Map<string, GeneratedFile>(expectedFiles.map((file) => [file.path, file]));
 
-  for (const [path, expectedContent] of expected.entries()) {
+  for (const [path, file] of expected.entries()) {
     if (!(await pathExists(path))) {
       issues.push({ kind: 'missing', path });
       continue;
     }
 
+    const formatted = await formatGeneratedContent(file);
+    const expectedContent = normalizeFileContent(formatted.content);
     const actualContent = await readFile(resolveWorkspacePath(path), 'utf8');
     if (actualContent !== expectedContent) {
       issues.push({ kind: 'content', path });

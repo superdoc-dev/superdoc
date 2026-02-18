@@ -50,40 +50,25 @@
   "groups": [
     {
       "key": "core",
-      "operationIds": [
-        "find",
-        "getNode",
-        "getNodeById",
-        "getText",
-        "info",
-        "insert",
-        "replace",
-        "delete"
-      ],
+      "operationIds": ["find", "getNode", "getNodeById", "getText", "info", "insert", "replace", "delete"],
       "pagePath": "apps/docs/document-api/reference/core/index.mdx",
       "title": "Core"
     },
     {
       "key": "capabilities",
-      "operationIds": [
-        "capabilities.get"
-      ],
+      "operationIds": ["capabilities.get"],
       "pagePath": "apps/docs/document-api/reference/capabilities/index.mdx",
       "title": "Capabilities"
     },
     {
       "key": "create",
-      "operationIds": [
-        "create.paragraph"
-      ],
+      "operationIds": ["create.paragraph"],
       "pagePath": "apps/docs/document-api/reference/create/index.mdx",
       "title": "Create"
     },
     {
       "key": "format",
-      "operationIds": [
-        "format.bold"
-      ],
+      "operationIds": ["format.bold"],
       "pagePath": "apps/docs/document-api/reference/format/index.mdx",
       "title": "Format"
     },

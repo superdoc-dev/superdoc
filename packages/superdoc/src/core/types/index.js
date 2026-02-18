@@ -75,6 +75,12 @@
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services
+ * @property {Object} [pdf] PDF module configuration
+ * @property {Object} pdf.pdfLib Preloaded pdf.js library instance
+ * @property {string} [pdf.workerSrc] PDF.js worker source URL (falls back to CDN when omitted)
+ * @property {boolean} [pdf.setWorker] Whether to auto-configure pdf.js worker
+ * @property {boolean} [pdf.textLayer] Enable text layer rendering (default: false)
+ * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
  * @property {Object} [toolbar] Toolbar module configuration
  * @property {Object} [slashMenu] Slash menu module configuration
@@ -119,6 +125,9 @@
  * @property {ExportType[]} [exportType=['docx']] - File formats to export
  * @property {CommentsType} [commentsType='external'] - How to handle comments
  * @property {string} [exportedName] - Custom filename (without extension)
+ * @property {Blob[]} [additionalFiles] - Extra files to include in the export zip
+ * @property {string[]} [additionalFileNames] - Filenames for the additional files
+ * @property {boolean} [isFinalDoc=false] - Whether this is a final document export
  * @property {boolean} [triggerDownload=true] - Auto-download or return blob
  * @property {string} [fieldsHighlightColor] - Color for field highlights
  */
@@ -192,6 +201,9 @@
  * @property {string} [markdown] Markdown content to initialize the editor with
  * @property {boolean} [isDebug=false] Whether to enable debug mode
  * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
+ * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
+ * @property {string} [licenseKey] License key for organization identification
+ * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration
  */
 
 export {};

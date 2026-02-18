@@ -38,6 +38,9 @@ export type InsertTrackedChangeOptions = {
   comment?: string;
   /** Whether to add the change to the undo history (defaults to true) */
   addToHistory?: boolean;
+  /** Whether to emit commentsUpdate event for the tracked change (defaults to true).
+   * Set to false to apply the mark without creating a sidebar entry/bubble. */
+  emitCommentEvent?: boolean;
 };
 
 export interface TrackChangesCommands {

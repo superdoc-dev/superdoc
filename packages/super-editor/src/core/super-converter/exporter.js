@@ -165,6 +165,7 @@ export function exportSchemaToJson(params) {
     table: wTblNodeTranslator,
     tableRow: wTrNodeTranslator,
     tableCell: wTcNodeTranslator,
+    tableHeader: wTcNodeTranslator,
     bookmarkStart: wBookmarkStartTranslator,
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,
@@ -314,6 +315,20 @@ function translateHeadingNode(params) {
 }
 
 /**
+ * Merge mc:Ignorable lists from two attribute objects, deduplicating entries.
+ *
+ * @param {string} defaultIgnorable - The default mc:Ignorable string
+ * @param {string} originalIgnorable - The original mc:Ignorable string from import
+ * @returns {string} Merged and deduplicated mc:Ignorable string
+ */
+function mergeMcIgnorable(defaultIgnorable = '', originalIgnorable = '') {
+  const merged = [
+    ...new Set([...defaultIgnorable.split(/\s+/).filter(Boolean), ...originalIgnorable.split(/\s+/).filter(Boolean)]),
+  ];
+  return merged.join(' ');
+}
+
+/**
  * Translate a document node
  *
  * @param {ExportParams} params The parameters object
@@ -326,10 +341,24 @@ function translateDocumentNode(params) {
   };
 
   const translatedBodyNode = exportSchemaToJson({ ...params, node: bodyNode });
+
+  // Merge original document attributes with defaults to preserve custom namespaces
+  const originalAttrs = params.converter?.documentAttributes || {};
+  const attributes = {
+    ...DEFAULT_DOCX_DEFS,
+    ...originalAttrs,
+  };
+
+  // Merge mc:Ignorable lists - combine both default and original ignorable namespaces
+  const mergedIgnorable = mergeMcIgnorable(DEFAULT_DOCX_DEFS['mc:Ignorable'], originalAttrs['mc:Ignorable']);
+  if (mergedIgnorable) {
+    attributes['mc:Ignorable'] = mergedIgnorable;
+  }
+
   const node = {
     name: 'w:document',
     elements: [translatedBodyNode],
-    attributes: DEFAULT_DOCX_DEFS,
+    attributes,
   };
 
   return [node, params];
@@ -536,7 +565,7 @@ export class DocxExporter {
   #replaceSpecialCharacters(text) {
     if (text === undefined || text === null) return text;
     return String(text)
-      .replace(/&/g, '&amp;')
+      .replace(/&(?!#\d+;|#x[0-9a-fA-F]+;|(?:amp|lt|gt|quot|apos);)/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')

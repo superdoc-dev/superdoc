@@ -5,6 +5,8 @@ import {
   polygonUnitsToPixels,
   pixelsToPolygonUnits,
   getArrayBufferFromUrl,
+  computeCrc32Hex,
+  base64ToUint8Array,
 } from './helpers.js';
 
 describe('polygonToObj', () => {
@@ -337,5 +339,47 @@ describe('getArrayBufferFromUrl', () => {
     const result = await getArrayBufferFromUrl(base64);
 
     expect(Array.from(new Uint8Array(result))).toEqual(Array.from(bytes));
+  });
+});
+
+describe('computeCrc32Hex', () => {
+  it('matches buffer-crc32 output for known inputs', () => {
+    // Reference values verified against buffer-crc32 npm package
+    const cases = [
+      { input: 'hello world', expected: '0d4a1185' },
+      { input: '', expected: '00000000' },
+      { input: 'The quick brown fox jumps over the lazy dog', expected: '414fa339' },
+    ];
+
+    for (const { input, expected } of cases) {
+      const data = new TextEncoder().encode(input);
+      expect(computeCrc32Hex(data)).toBe(expected);
+    }
+  });
+
+  it('produces consistent output for binary data', () => {
+    const data = new Uint8Array([0, 1, 2, 3, 255, 254, 253, 128, 127, 64, 32, 16]);
+    // Reference: buffer-crc32(Buffer.from([0,1,2,3,255,254,253,128,127,64,32,16])).toString('hex')
+    expect(computeCrc32Hex(data)).toBe('463601ac');
+  });
+});
+
+describe('base64ToUint8Array', () => {
+  it('decodes a base64 string to Uint8Array', () => {
+    // "hello" in base64
+    const result = base64ToUint8Array('aGVsbG8=');
+    expect(Array.from(result)).toEqual([104, 101, 108, 108, 111]);
+  });
+
+  it('handles empty string', () => {
+    const result = base64ToUint8Array('');
+    expect(result).toBeInstanceOf(Uint8Array);
+    expect(result.length).toBe(0);
+  });
+
+  it('decodes binary data correctly', () => {
+    // Bytes [0, 1, 255] → base64 "AAH/"
+    const result = base64ToUint8Array('AAH/');
+    expect(Array.from(result)).toEqual([0, 1, 255]);
   });
 });

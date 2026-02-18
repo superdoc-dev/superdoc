@@ -40,6 +40,31 @@ describe('DocxExporter', () => {
     expect(xml).toContain('Format=&lt;&lt;NUM&gt;&gt;_&lt;&lt;VER&gt;&gt;');
   });
 
+  it('does not double-escape ampersands in text nodes', () => {
+    const exporter = new DocxExporter(createConverterStub());
+
+    const data = {
+      name: 'w:document',
+      attributes: {},
+      elements: [
+        {
+          name: 'w:t',
+          elements: [
+            {
+              type: 'text',
+              text: 'Rock & Roll &amp; Jazz',
+            },
+          ],
+        },
+      ],
+    };
+
+    const xml = exporter.schemaToXml(data);
+
+    expect(xml).toContain('Rock &amp; Roll &amp; Jazz');
+    expect(xml).not.toContain('&amp;amp;');
+  });
+
   describe('error handling for text elements', () => {
     it('handles missing elements array gracefully', () => {
       const exporter = new DocxExporter(createConverterStub());

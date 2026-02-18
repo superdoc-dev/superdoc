@@ -100,6 +100,22 @@ const buildSingleParagraphData = (blockId: string, runLength: number) => {
   return { paragraphMeasure, paragraphLayout };
 };
 
+const expectCssColor = (actual: string, expectedHex: string): void => {
+  const normalizedActual = actual.replace(/\s+/g, '').toLowerCase();
+  let normalizedHex = expectedHex.toLowerCase();
+  if (!normalizedHex.startsWith('#')) {
+    normalizedHex = `#${normalizedHex}`;
+  }
+  if (normalizedHex.length === 4) {
+    normalizedHex = `#${normalizedHex[1]}${normalizedHex[1]}${normalizedHex[2]}${normalizedHex[2]}${normalizedHex[3]}${normalizedHex[3]}`;
+  }
+  const r = Number.parseInt(normalizedHex.slice(1, 3), 16);
+  const g = Number.parseInt(normalizedHex.slice(3, 5), 16);
+  const b = Number.parseInt(normalizedHex.slice(5, 7), 16);
+  const rgb = `rgb(${r},${g},${b})`;
+  expect([normalizedHex, rgb]).toContain(normalizedActual);
+};
+
 const sdtBlock: FlowBlock = {
   kind: 'paragraph',
   id: 'sdt-block',
@@ -1239,7 +1255,7 @@ describe('DomPainter', () => {
     expect(lines.length).toBe(2);
 
     // First line should have negative word-spacing applied
-    expect(lines[0].style.wordSpacing).toBe('-3.3333333333333335px');
+    expect(Number.parseFloat(lines[0].style.wordSpacing)).toBeCloseTo(-3.3333333333333335, 5);
 
     // Last line should NOT be justified
     expect(lines[1].style.wordSpacing).toBe('');
@@ -2527,7 +2543,7 @@ describe('DomPainter', () => {
       height: 30,
     };
 
-    // behindDoc fragment has zIndex: 0 (set by layout engine)
+    // behindDoc routing should use explicit fragment metadata, not zIndex proxy.
     const behindDocFragment = {
       kind: 'image' as const,
       blockId: 'behind-doc-img',
@@ -2535,7 +2551,8 @@ describe('DomPainter', () => {
       y: 0,
       width: 200,
       height: 100,
-      zIndex: 0, // behindDoc images get zIndex: 0
+      behindDoc: true,
+      zIndex: 5, // deliberately non-zero to prove routing is metadata-driven
       isAnchored: true,
     };
 
@@ -2547,6 +2564,7 @@ describe('DomPainter', () => {
       y: 10,
       width: 50,
       height: 30,
+      behindDoc: false,
     };
 
     const painter = createDomPainter({
@@ -2563,8 +2581,6 @@ describe('DomPainter', () => {
     const headerEl = mount.querySelector('.superdoc-page-header');
     expect(headerEl).toBeTruthy();
 
-    // behindDoc image should NOT be inside header container
-    const behindDocInHeader = headerEl?.querySelector('img[src*="base64"]');
     // Normal image should be inside header container
     const normalInHeader = headerEl?.querySelectorAll('.superdoc-fragment');
 
@@ -2615,7 +2631,8 @@ describe('DomPainter', () => {
       y: 0,
       width: 200,
       height: 100,
-      zIndex: 0,
+      behindDoc: true,
+      zIndex: 5,
       isAnchored: true,
     };
 
@@ -3422,7 +3439,7 @@ describe('DomPainter', () => {
     expect(anchor).toBeTruthy();
     expect(anchor.getAttribute('href')).toBe('https://example.com');
     expect(anchor.style.textDecorationLine).toContain('underline');
-    expect(anchor.style.backgroundColor).toBe('rgb(255, 255, 0)');
+    expectCssColor(anchor.style.backgroundColor, '#ffff00');
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
     expect(fragment.style.textAlign).toBe('center');
@@ -3804,10 +3821,10 @@ describe('DomPainter', () => {
     expect(borderLayer).toBeTruthy();
     expect(borderLayer.style.borderTopStyle).toBe('solid');
     expect(borderLayer.style.borderTopWidth).toBe('2px');
-    expect(borderLayer.style.borderTopColor).toBe('rgb(255, 0, 0)');
+    expectCssColor(borderLayer.style.borderTopColor, '#ff0000');
     expect(borderLayer.style.borderLeftStyle).toBe('dashed');
     expect(borderLayer.style.borderLeftWidth).toBe('1px');
-    expect(borderLayer.style.borderLeftColor).toBe('rgb(0, 255, 0)');
+    expectCssColor(borderLayer.style.borderLeftColor, '#00ff00');
   });
 
   it('applies paragraph shading fill to fragment backgrounds', () => {
@@ -3852,7 +3869,7 @@ describe('DomPainter', () => {
     const fragment = mount.querySelector('[data-block-id="shaded-block"]') as HTMLElement;
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
     expect(shadingLayer).toBeTruthy();
-    expect(shadingLayer.style.backgroundColor).toBe('rgb(255, 238, 170)');
+    expectCssColor(shadingLayer.style.backgroundColor, '#ffeeaa');
   });
 
   it('strips indent padding when rendering list content', () => {
@@ -4525,6 +4542,77 @@ describe('DomPainter', () => {
 
       const img = mount.querySelector('img');
       expect(img).toBeNull();
+    });
+
+    it('renders cropped inline image with clipPath in wrapper (overflow hidden, img with clip-path and transform)', () => {
+      const clipPath = 'inset(10% 20% 30% 40%)';
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-block',
+        runs: [
+          {
+            kind: 'image',
+            src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            width: 80,
+            height: 60,
+            clipPath,
+          },
+        ],
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 0,
+            width: 80,
+            ascent: 60,
+            descent: 0,
+            lineHeight: 60,
+          },
+        ],
+        totalHeight: 60,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 80,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+
+      const wrapper = mount.querySelector('.superdoc-inline-image-clip-wrapper');
+      expect(wrapper).toBeTruthy();
+      expect((wrapper as HTMLElement).style.overflow).toBe('hidden');
+      expect((wrapper as HTMLElement).style.width).toBe('80px');
+      expect((wrapper as HTMLElement).style.height).toBe('60px');
+
+      const img = wrapper?.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.clipPath).toBe(clipPath);
+      expect((img as HTMLElement).style.transformOrigin).toBe('0 0');
+      expect((img as HTMLElement).style.transform).toMatch(
+        /translate\([-\d.]+%,\s*[-\d.]+%\)\s*scale\([-\d.]+,\s*[-\d.]+\)/,
+      );
     });
 
     it('returns null for data URLs exceeding MAX_DATA_URL_LENGTH (10MB)', () => {

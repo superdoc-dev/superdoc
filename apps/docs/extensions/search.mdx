@@ -1,0 +1,154 @@
+---
+title: Search extension
+sidebarTitle: "Search"
+keywords: "Search extension, superdoc Search, word Search, document Search, docx Search"
+---
+
+import Description from '/snippets/extensions/search.mdx'
+
+<Description />
+
+## Commands
+
+### `goToFirstMatch`
+
+Navigate to the first search match
+
+<Note>
+Scrolls editor to the first match from previous search
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.goToFirstMatch()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.goToFirstMatch()
+  },
+});
+```
+</CodeGroup>
+
+### `search`
+
+Search for string matches in editor content
+
+<Note>
+Returns array of SearchMatch objects with positions and IDs
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const matches = editor.commands.search('test string')
+const regexMatches = editor.commands.search(/test/i)
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const matches = editor.commands.search('test string')
+    const regexMatches = editor.commands.search(/test/i)
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="patternInput" type="String | RegExp" required>
+  Search string, regex, or regex shorthand (e.g., `'/pattern/flags'`)
+</ParamField>
+<ParamField path="options" type="Object">
+  Optional settings
+</ParamField>
+<ParamField path="options.highlight" type="boolean" default="true">
+  Apply CSS highlight classes to matches
+</ParamField>
+<ParamField path="options.maxMatches" type="number" default="1000">
+  Maximum number of matches to return
+</ParamField>
+
+### `goToSearchResult`
+
+Navigate to a specific search match
+
+<Note>
+Scrolls to match and selects it
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const searchResults = editor.commands.search('test string')
+editor.commands.goToSearchResult(searchResults[3])
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const searchResults = editor.commands.search('test string')
+    editor.commands.goToSearchResult(searchResults[3])
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="match" type="SearchMatch" required>
+  Match object to navigate to
+</ParamField>
+
+## Types
+
+### `SearchMatch`
+
+Search match object
+
+<Expandable title="Properties">
+<ResponseField name="text" type="string" required>
+  Found text
+</ResponseField>
+<ResponseField name="from" type="number" required>
+  From position
+</ResponseField>
+<ResponseField name="to" type="number" required>
+  To position
+</ResponseField>
+<ResponseField name="id" type="string" required>
+  ID of the search match
+</ResponseField>
+</Expandable>
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/search/search.js" />

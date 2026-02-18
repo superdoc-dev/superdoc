@@ -1,0 +1,97 @@
+---
+title: Italic extension
+sidebarTitle: "Italic"
+keywords: "Italic extension, superdoc Italic, word Italic, document Italic, docx Italic"
+---
+
+import Description from '/snippets/extensions/italic.mdx'
+
+<Description />
+
+## Commands
+
+### `setItalic`
+
+Apply italic formatting to the current selection.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setItalic()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setItalic();
+  },
+});
+```
+</CodeGroup>
+
+### `unsetItalic`
+
+Remove italic formatting from the current selection.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.unsetItalic()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetItalic();
+  },
+});
+```
+</CodeGroup>
+
+### `toggleItalic`
+
+Toggle italic formatting on the current selection.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleItalic()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleItalic();
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleItalic() | `⌘/Ctrl-i` | Toggle italic formatting |
+| toggleItalic() | `⌘/Ctrl-I` | Toggle italic formatting (uppercase) |
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/italic/italic.js" />

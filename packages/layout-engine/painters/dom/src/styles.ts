@@ -1,3 +1,5 @@
+import { DOM_CLASS_NAMES } from './constants.js';
+
 export const CLASS_NAMES = {
   container: 'superdoc-layout',
   page: 'superdoc-page',
@@ -76,6 +78,11 @@ export const fragmentStyles: Partial<CSSStyleDeclaration> = {
   boxSizing: 'border-box',
 };
 
+/**
+ * Line container styles. z-index is intentionally not set on the line so that
+ * the resize overlay (and other UI) can stack above content. Only the image
+ * element itself gets z-index for layering within the line (e.g. above tab leaders).
+ */
 export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => ({
   lineHeight: `${lineHeight}px`,
   height: `${lineHeight}px`,
@@ -87,7 +94,6 @@ export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => 
   // provides defense-in-depth against any remaining sub-pixel rendering
   // differences between measurement and display.
   overflow: 'visible',
-  zIndex: '10',
 });
 
 const PRINT_STYLES = `
@@ -374,21 +380,21 @@ const SDT_CONTAINER_STYLES = `
 
 /* Structured content drag handle/label - positioned above */
 .superdoc-structured-content__label {
-  font-size: 10px;
+  font-size: 11px;
   align-items: center;
   justify-content: center;
   position: absolute;
   left: 2px;
   top: -19px;
   width: calc(100% - 4px);
-  max-width: 110px;
+  max-width: 130px;
   min-width: 0;
   height: 18px;
   padding: 0 4px;
   border: 1px solid #629be7;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  background-color: #629be7dd;
+  background-color: #629be7ee;
   box-sizing: border-box;
   z-index: 10;
   display: none;
@@ -404,11 +410,12 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label,
+.superdoc-structured-content-block.sdt-hover .superdoc-structured-content__label {
   display: inline-flex;
 }
 
-.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover .superdoc-structured-content__label {
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):not(.sdt-hover):hover .superdoc-structured-content__label {
   display: none;
 }
 
@@ -437,6 +444,13 @@ const SDT_CONTAINER_STYLES = `
   border-bottom: none;
 }
 
+/* Collapse double borders between adjacent SDT blocks */
+.superdoc-structured-content-block + .superdoc-structured-content-block {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 /* Structured Content Inline - Inline wrapper with blue border */
 .superdoc-structured-content-inline {
   padding: 1px;
@@ -459,16 +473,15 @@ const SDT_CONTAINER_STYLES = `
   outline: none;
   background-color: transparent;
 }
-
 /* Inline structured content label - shown on hover */
 .superdoc-structured-content-inline__label {
   position: absolute;
   bottom: calc(100% + 2px);
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10px;
-  padding: 2px 6px;
-  background-color: #629be7dd;
+  font-size: 11px;
+  padding: 0 4px;
+  background-color: #629be7ee;
   color: white;
   border-radius: 4px;
   white-space: nowrap;
@@ -485,6 +498,17 @@ const SDT_CONTAINER_STYLES = `
 
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover .superdoc-structured-content-inline__label {
   display: none;
+}
+
+/* Hover highlight for SDT containers.
+ * Blue border is always visible (set in base rules above).
+ * Hover adds background highlight and z-index boost.
+ * Block SDTs use .sdt-hover class (event delegation for multi-fragment coordination).
+ * Inline SDTs use :hover (single element, no coordination needed). */
+.superdoc-structured-content-block[data-lock-mode].sdt-hover,
+.superdoc-structured-content-inline[data-lock-mode]:hover {
+  background-color: rgba(98, 155, 231, 0.08);
+  z-index: 9999999;
 }
 
 /* Viewing mode: remove structured content affordances */
@@ -538,7 +562,7 @@ const FIELD_ANNOTATION_STYLES = `
 .superdoc-layout .annotation *::selection {
   background: transparent;
 }
-  
+
 .superdoc-layout .annotation::-moz-selection,
 .superdoc-layout .annotation *::-moz-selection  {
   background: transparent;
@@ -583,7 +607,12 @@ const IMAGE_SELECTION_STYLES = `
 }
 
 /* Ensure inline images can be targeted */
-.superdoc-inline-image.superdoc-image-selected {
+.${DOM_CLASS_NAMES.INLINE_IMAGE}.superdoc-image-selected {
+  outline-offset: 2px;
+}
+
+/* Selection on clip wrapper so outline matches the visible cropped portion, not the scaled image */
+.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}.superdoc-image-selected {
   outline-offset: 2px;
 }
 `;

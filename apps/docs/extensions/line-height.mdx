@@ -1,0 +1,78 @@
+---
+title: Line Height
+sidebarTitle: "Line Height"
+keywords: "line height, superdoc line height, word line height, document line spacing, docx line height"
+---
+
+import Description from '/snippets/extensions/line-height.mdx'
+
+<Description />
+
+## Commands
+
+### `setLineHeight`
+
+Set line height as a multiplier (e.g., 1.5 for 1.5x line spacing).
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setLineHeight(1.5)
+editor.commands.setLineHeight(2)
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setLineHeight(1.5)
+    editor.commands.setLineHeight(2)
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="lineHeight" type="number" required>
+  Line height multiplier (e.g., 1.0 for single, 1.5, 2.0 for double)
+</ParamField>
+
+### `unsetLineHeight`
+
+Remove line height and revert to default line spacing.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.unsetLineHeight()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetLineHeight()
+  },
+});
+```
+</CodeGroup>
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/core/commands/lineHeight.js" />

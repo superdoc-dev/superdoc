@@ -424,6 +424,7 @@ export const CommentsPlugin = Extension.create({
             const { doc, tr } = state;
             const pluginState = CommentsPluginKey.getState(state);
             const currentActiveThreadId = pluginState.activeThreadId;
+            const layoutEngineActive = Boolean(editor.presentationEditor);
 
             const meta = tr.getMeta(CommentsPluginKey);
             if (meta?.type === 'setActiveComment' || meta?.forceUpdate) {
@@ -446,6 +447,10 @@ export const CommentsPlugin = Extension.create({
             if (!shouldUpdate) return;
             prevDoc = doc;
             shouldUpdate = false;
+
+            if (layoutEngineActive) {
+              return;
+            }
 
             const decorations = [];
             // Always rebuild positions fresh from the current document to avoid stale PM offsets
@@ -721,7 +726,7 @@ const findTrackedMark = ({
 };
 
 const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEditorState, editor) => {
-  const { insertedMark, deletionMark, formatMark, deletionNodes } = trackedChangeMeta;
+  const { insertedMark, deletionMark, formatMark, deletionNodes, emitCommentEvent = true } = trackedChangeMeta;
 
   if (!insertedMark && !deletionMark && !formatMark) {
     return;
@@ -772,7 +777,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     newEditorState,
   });
 
-  if (emitParams) editor.emit('commentsUpdate', emitParams);
+  if (emitParams && emitCommentEvent) editor.emit('commentsUpdate', emitParams);
 
   return newTrackedChanges;
 };
@@ -863,11 +868,22 @@ const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes
   // When isDeletionInsertion is true, nodesWithMark should contain both types
   let nodesToUse;
   if (isDeletionInsertion) {
-    // For replacements, use nodes found in document (which should include both insertion and deletion)
-    // Also include nodes from step.slice and deletionNodes if they exist (for newly created replacements)
-    const allNodes = [...nodesWithMark, ...nodes, ...(deletionNodes || [])];
-    // Remove duplicates by comparing node identity
-    nodesToUse = Array.from(new Set(allNodes));
+    // For replacements, prefer nodes found in the document to avoid duplicating text
+    // when step.slice/deletionNodes include overlapping content.
+    const hasInsertNode = nodesWithMark.some((node) =>
+      node.marks.find((nodeMark) => nodeMark.type.name === TrackInsertMarkName),
+    );
+    const hasDeleteNode = nodesWithMark.some((node) =>
+      node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName),
+    );
+
+    const fallbackNodes = [
+      ...(!hasInsertNode && nodes?.length ? nodes : []),
+      ...(!hasDeleteNode && deletionNodes?.length ? deletionNodes : []),
+    ];
+    // safety net for identity dedupe
+    // work is done above
+    nodesToUse = Array.from(new Set([...nodesWithMark, ...fallbackNodes]));
   } else {
     // For non-replacements, use nodes found in document or fall back to step nodes
     nodesToUse = nodesWithMark.length ? nodesWithMark : node ? [node] : [];

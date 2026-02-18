@@ -187,7 +187,9 @@ export const CustomSelection = Extension.create({
                 return false;
               }
 
-              event.preventDefault(); // Prevent default right-click behavior
+              // Note: Do NOT call event.preventDefault() here.
+              // Firefox clears native selection when preventDefault is called on mousedown.
+              // The contextmenu handler already prevents the native menu.
               const { selection } = view.state;
               if (!selection.empty) {
                 // Ensure selection stays visible for right-click/context menu

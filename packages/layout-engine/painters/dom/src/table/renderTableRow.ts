@@ -42,6 +42,8 @@ type TableRowRenderDependencies = {
   columnWidths: number[];
   /** All row heights for calculating rowspan cell heights */
   allRowHeights: number[];
+  /** Table indent in pixels (applied to table fragment positioning) */
+  tableIndent?: number;
   /** Rendering context */
   context: FragmentRenderContext;
   /** Function to render a line of paragraph content */
@@ -124,6 +126,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     tableBorders,
     columnWidths,
     allRowHeights,
+    tableIndent,
     context,
     renderLine,
     renderDrawingContent,
@@ -338,6 +341,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       tableSdt,
       fromLine,
       toLine,
+      tableIndent,
     });
 
     container.appendChild(cellElement);

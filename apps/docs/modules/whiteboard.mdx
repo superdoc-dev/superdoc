@@ -1,0 +1,177 @@
+---
+title: Whiteboard
+keywords: "whiteboard, pdf annotations, draw, erase, stickers, text"
+---
+
+Lightweight annotation layer for documents. Supports drawing, text, and stickers.
+
+<Note>
+Whiteboard currently works **only with PDF documents**. See [PDF](/modules/pdf) setup first.
+</Note>
+
+## Quick start
+
+```javascript
+const superdoc = new SuperDoc({
+  modules: {
+    whiteboard: {
+      enabled: true, // show whiteboard layer by default
+    },
+  },
+});
+```
+
+<Note>
+To disable the whiteboard layer entirely, set `modules.whiteboard` to `false`:
+
+```javascript
+modules: {
+  whiteboard: false;
+}
+```
+</Note>
+
+## Tools / modes
+
+- **select** — default; select/drag/resize, drop stickers/text
+- **draw** — draw strokes only
+- **erase** — erases strokes only
+- **text** — click to add text
+
+These modes are intentionally strict to avoid ambiguous interactions.
+
+## API methods
+
+All APIs are exposed via `superdoc.whiteboard`.
+
+### `register`
+
+Register palette items (e.g. stickers, comments).
+
+```javascript
+superdoc.whiteboard.register('stickers', [
+  { id: 'check-mark', label: 'Check', src: '/stickers/check-mark.svg', width: 100, height: 83 },
+]);
+
+superdoc.whiteboard.register('comments', [
+  { id: 'great-job', text: 'Great job!' },
+]);
+```
+
+### `getType`
+
+Get registered items by type.
+
+```javascript
+const stickers = superdoc.whiteboard.getType('stickers');
+```
+
+### `setTool`
+
+Set the current tool: `select`, `draw`, `erase`, `text`.
+
+```javascript
+superdoc.whiteboard.setTool('draw');
+```
+
+### `setEnabled`
+
+Enable or disable whiteboard interactivity.
+
+```javascript
+superdoc.whiteboard.setEnabled(true);
+```
+
+### `setOpacity`
+
+Set overlay opacity (0–1).
+
+```javascript
+superdoc.whiteboard.setOpacity(0.8);
+```
+
+### `getWhiteboardData`
+
+Export annotations (normalized coordinates).
+
+```javascript
+const data = superdoc.whiteboard.getWhiteboardData();
+```
+
+### `setWhiteboardData`
+
+Import annotations.
+
+```javascript
+superdoc.whiteboard.setWhiteboardData(json);
+```
+
+### `rerender`
+
+Force re-render for all pages.
+
+```javascript
+superdoc.whiteboard.rerender();
+```
+
+## Events
+
+### `whiteboard:init`
+
+Fired when the whiteboard instance is created.
+
+```javascript
+superdoc.on('whiteboard:init', ({ whiteboard }) => {
+  console.log('Whiteboard instance ready');
+});
+```
+
+### `whiteboard:ready`
+
+Fired when all whiteboard pages are ready.
+
+```javascript
+superdoc.on('whiteboard:ready', ({ whiteboard }) => {
+  console.log('Whiteboard pages ready');
+});
+```
+
+### `whiteboard:change`
+
+Fired on any data change. Receives full whiteboard JSON.
+
+```javascript
+superdoc.on('whiteboard:change', (data) => {
+  console.log(data);
+});
+```
+
+### `whiteboard:enabled`
+
+Fired when interactivity is toggled.
+
+```javascript
+superdoc.on('whiteboard:enabled', (enabled) => {
+  console.log(enabled);
+});
+```
+
+### `whiteboard:tool`
+
+Fired when the active tool changes.
+
+```javascript
+superdoc.on('whiteboard:tool', (tool) => {
+  console.log(tool);
+});
+```
+
+## Import / export
+
+Whiteboard data is stored in normalized coordinates so annotations stay stable across zoom levels.
+
+```javascript
+const saved = superdoc.whiteboard.getWhiteboardData();
+
+superdoc.whiteboard.setWhiteboardData(saved);
+```

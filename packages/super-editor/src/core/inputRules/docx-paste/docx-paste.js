@@ -31,6 +31,7 @@ export const handleDocxPaste = (html, editor, view) => {
 
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = cleanedHtml;
+  tempDiv.querySelectorAll('[data-sd-block-id]').forEach((node) => node.removeAttribute('data-sd-block-id'));
 
   const data = tempDiv.querySelectorAll('p, li, ' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `h${n}`).join(', '));
 
@@ -147,7 +148,7 @@ export const handleDocxPaste = (html, editor, view) => {
       Object.keys(textStyles).forEach((key) => {
         const styleValue = textStyles[key];
         if (styleValue) {
-          item.style[key] = styleValue;
+          item.style.setProperty(key, styleValue);
         }
       });
       item.setAttribute('data-text-styles', JSON.stringify(textStyles));
@@ -157,7 +158,7 @@ export const handleDocxPaste = (html, editor, view) => {
           Object.keys(textStyles).forEach((key) => {
             const styleValue = textStyles[key];
             if (styleValue) {
-              child.style[key] = styleValue;
+              child.style.setProperty(key, styleValue);
             }
           });
         }
@@ -166,10 +167,10 @@ export const handleDocxPaste = (html, editor, view) => {
 
     // Marks
     if (resolvedStyle['font-weight'] === 'bold') {
-      item.style.fontWeight = 'bold';
+      item.style.setProperty('font-weight', 'bold');
       for (const child of item.children) {
         if (child.style) {
-          child.style.fontWeight = 'bold';
+          child.style.setProperty('font-weight', 'bold');
         }
       }
     }
@@ -288,10 +289,10 @@ const transformWordLists = (container, editor) => {
       Object.keys(textStyles).forEach((key) => {
         const styleValue = textStyles[key];
         if (styleValue) {
-          pElement.style[key] = styleValue;
+          pElement.style.setProperty(key, styleValue);
           for (const child of pElement.children) {
             if (child.style) {
-              child.style[key] = styleValue;
+              child.style.setProperty(key, styleValue);
             }
           }
         }

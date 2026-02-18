@@ -212,6 +212,7 @@ import {
   pickTemplateRowForAppend,
   buildRowFromTemplateRow,
   insertRowsAtTableEnd,
+  insertRowAtIndex,
 } from './tableHelpers/appendRows.js';
 
 /**
@@ -679,42 +680,26 @@ export const Table = Node.create({
        */
       addRowBefore:
         () =>
-        ({ state, dispatch, chain }) => {
-          if (!originalAddRowBefore(state)) return false;
+        ({ state, dispatch, editor }) => {
+          if (!isInTable(state)) return false;
 
-          let { rect, attrs: currentCellAttrs } = getCurrentCellAttrs(state);
+          const { rect } = getCurrentCellAttrs(state);
+          const tablePos = rect.tableStart - 1;
+          const tableNode = state.doc.nodeAt(tablePos);
+          if (!tableNode) return false;
 
-          return chain()
-            .command(() => originalAddRowBefore(state, dispatch))
-            .command(({ tr }) => {
-              let table = tr.doc.nodeAt(rect.tableStart - 1);
-              if (!table) return false;
-              let updatedMap = TableMap.get(table);
-              let newRowIndex = rect.top;
+          const tr = state.tr;
+          const result = insertRowAtIndex({
+            tr,
+            tablePos,
+            tableNode,
+            sourceRowIndex: rect.top,
+            insertIndex: rect.top,
+            schema: editor.schema,
+          });
 
-              if (newRowIndex < 0 || newRowIndex >= updatedMap.height) {
-                return false;
-              }
-
-              for (let col = 0; col < updatedMap.width; col++) {
-                let cellIndex = newRowIndex * updatedMap.width + col;
-                let cellPos = updatedMap.map[cellIndex];
-                let cellAbsolutePos = rect.tableStart + cellPos;
-                let cell = tr.doc.nodeAt(cellAbsolutePos);
-                if (cell) {
-                  let attrs = {
-                    ...currentCellAttrs,
-                    colspan: cell.attrs.colspan,
-                    rowspan: cell.attrs.rowspan,
-                    colwidth: cell.attrs.colwidth,
-                  };
-                  tr.setNodeMarkup(cellAbsolutePos, null, attrs);
-                }
-              }
-
-              return true;
-            })
-            .run();
+          if (result && dispatch) dispatch(tr);
+          return result;
         },
 
       /**
@@ -727,40 +712,26 @@ export const Table = Node.create({
        */
       addRowAfter:
         () =>
-        ({ state, dispatch, chain }) => {
-          if (!originalAddRowAfter(state)) return false;
+        ({ state, dispatch, editor }) => {
+          if (!isInTable(state)) return false;
 
-          let { rect, attrs: currentCellAttrs } = getCurrentCellAttrs(state);
+          const { rect } = getCurrentCellAttrs(state);
+          const tablePos = rect.tableStart - 1;
+          const tableNode = state.doc.nodeAt(tablePos);
+          if (!tableNode) return false;
 
-          return chain()
-            .command(() => originalAddRowAfter(state, dispatch))
-            .command(({ tr }) => {
-              let table = tr.doc.nodeAt(rect.tableStart - 1);
-              if (!table) return false;
-              let updatedMap = TableMap.get(table);
-              let newRowIndex = rect.top + 1;
+          const tr = state.tr;
+          const result = insertRowAtIndex({
+            tr,
+            tablePos,
+            tableNode,
+            sourceRowIndex: rect.top,
+            insertIndex: rect.top + 1,
+            schema: editor.schema,
+          });
 
-              if (newRowIndex >= updatedMap.height) return false;
-
-              for (let col = 0; col < updatedMap.width; col++) {
-                let cellIndex = newRowIndex * updatedMap.width + col;
-                let cellPos = updatedMap.map[cellIndex];
-                let cellAbsolutePos = rect.tableStart + cellPos;
-                let cell = tr.doc.nodeAt(cellAbsolutePos);
-                if (cell) {
-                  let attrs = {
-                    ...currentCellAttrs,
-                    colspan: cell.attrs.colspan,
-                    rowspan: cell.attrs.rowspan,
-                    colwidth: cell.attrs.colwidth,
-                  };
-                  tr.setNodeMarkup(cellAbsolutePos, null, attrs);
-                }
-              }
-
-              return true;
-            })
-            .run();
+          if (result && dispatch) dispatch(tr);
+          return result;
         },
 
       /**

@@ -1,0 +1,302 @@
+---
+title: Import/Export
+sidebarTitle: Import/Export
+keywords: "import, export, docx export, html import, markdown import, document formats"
+---
+
+SuperDoc is a Word editor that accepts multiple content formats as input. All content is normalized into Word's document model internally.
+
+## Supported formats
+
+| Format | Import | Export | Round-Trip | Use Case |
+|---|---|---|---|---|
+| **DOCX** | Full | Full | Perfect | Word documents |
+| **JSON** | Full | Full | Perfect | Programmatic control |
+| **HTML** | Structure only | Structure only | Visual only | Web content, AI output |
+| **Markdown** | CommonMark | CommonMark | Visual only | Documentation, AI output |
+| **Text** | Plain text | Plain text | Perfect | Simple content |
+
+<Note>
+HTML and Markdown imports preserve structure (headings, lists, links, tables) but strip CSS styles.
+</Note>
+
+## Importing content
+
+### At initialization
+
+Pass content when creating the SuperDoc instance.
+
+```javascript
+// DOCX file — full fidelity
+new SuperDoc({
+  selector: '#editor',
+  document: docxFile  // File, Blob, URL string, or config object
+});
+
+// HTML content — requires a base DOCX for styles
+new SuperDoc({
+  selector: '#editor',
+  document: blankDocx,
+  html: '<h1>Title</h1><p>Content</p>'
+});
+
+// Markdown content
+new SuperDoc({
+  selector: '#editor',
+  document: blankDocx,
+  markdown: '# Title\n\nContent with **formatting**'
+});
+
+// JSON (ProseMirror schema)
+new SuperDoc({
+  selector: '#editor',
+  document: blankDocx,
+  jsonOverride: documentSchema
+});
+```
+
+<ParamField path="document" type="string | File | Blob | Object">
+  The document to load. Strings are treated as URLs. Files and Blobs are used directly.
+</ParamField>
+
+<ParamField path="html" type="string">
+  HTML content to initialize the editor with. Requires a `document` for styles.
+</ParamField>
+
+<ParamField path="markdown" type="string">
+  Markdown content to initialize the editor with. Requires a `document` for styles.
+</ParamField>
+
+<ParamField path="jsonOverride" type="Object">
+  ProseMirror JSON to override the document content with.
+</ParamField>
+
+### After initialization
+
+Insert content into an existing document using editor commands.
+
+<CodeGroup>
+```javascript Usage
+superdoc.activeEditor.commands.insertContent(content, {
+  contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.activeEditor.commands.insertContent(content, {
+      contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
+    });
+  },
+});
+```
+</CodeGroup>
+
+<ParamField path="value" type="string | Object" required>
+  The content to insert. String for `html`, `markdown`, and `text`. ProseMirror JSON object for `schema`.
+</ParamField>
+
+<ParamField path="options.contentType" type="string">
+  Content type: `'html'`, `'markdown'`, `'text'`, or `'schema'`
+</ParamField>
+
+## Exporting content
+
+### DOCX export
+
+<Note>
+  `superdoc.export()` **triggers a browser download by default**. If you need the raw `Blob` (e.g. to upload to a server), pass `triggerDownload: false` — otherwise you'll get a duplicate download.
+</Note>
+
+<CodeGroup>
+```javascript Usage
+// Download as .docx file
+await superdoc.export();
+
+// Get blob without triggering download
+const blob = await superdoc.export({ triggerDownload: false });
+
+// Export without comments
+await superdoc.export({ commentsType: 'clean' });
+
+// Export as final document (applies tracked changes)
+await superdoc.export({ isFinalDoc: true });
+
+// Custom filename
+await superdoc.export({ exportedName: 'Final Contract' });
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    // Download as .docx file
+    await superdoc.export();
+
+    // Get blob without triggering download
+    const blob = await superdoc.export({ triggerDownload: false });
+
+    // Export without comments
+    await superdoc.export({ commentsType: 'clean' });
+
+    // Export as final document (applies tracked changes)
+    await superdoc.export({ isFinalDoc: true });
+
+    // Custom filename
+    await superdoc.export({ exportedName: 'Final Contract' });
+  },
+});
+```
+</CodeGroup>
+
+<ParamField path="exportType" type="string[]" default="['docx']">
+  Formats to export
+</ParamField>
+
+<ParamField path="commentsType" type="string" default="'external'">
+  `'external'` to include comments, `'clean'` to remove all comments
+</ParamField>
+
+<ParamField path="exportedName" type="string">
+  Custom filename without extension
+</ParamField>
+
+<ParamField path="triggerDownload" type="boolean" default="true">
+  Whether to automatically trigger a file download. Set to `false` to get a `Blob` back instead.
+</ParamField>
+
+<ParamField path="isFinalDoc" type="boolean" default="false">
+  Export as final version (applies tracked change mode)
+</ParamField>
+
+<ParamField path="fieldsHighlightColor" type="string">
+  Color for field highlights in the exported document
+</ParamField>
+
+<ParamField path="additionalFiles" type="Blob[]" default="[]">
+  Additional files to bundle. When multiple files are exported, they are zipped together.
+</ParamField>
+
+<ParamField path="additionalFileNames" type="string[]" default="[]">
+  Filenames for additional files
+</ParamField>
+
+### HTML export
+
+<CodeGroup>
+```javascript Usage
+// Returns array of HTML strings (one per document)
+const htmlArray = superdoc.getHTML();
+
+// From the active editor (single string)
+const html = superdoc.activeEditor.getHTML();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    // Returns array of HTML strings (one per document)
+    const htmlArray = superdoc.getHTML();
+
+    // From the active editor (single string)
+    const html = superdoc.activeEditor.getHTML();
+  },
+});
+```
+</CodeGroup>
+
+<Note>
+HTML export is structure-only. Custom CSS styling and Word-specific formatting are not included.
+</Note>
+
+### JSON export
+
+<CodeGroup>
+```javascript Usage
+// From the active editor
+const json = superdoc.activeEditor.getJSON();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const json = superdoc.activeEditor.getJSON();
+  },
+});
+```
+</CodeGroup>
+
+JSON export preserves the full document structure and can be re-imported with `jsonOverride`.
+
+### Markdown export
+
+<CodeGroup>
+```javascript Usage
+// From the active editor
+const markdown = await superdoc.activeEditor.getMarkdown();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: async (superdoc) => {
+    const markdown = await superdoc.activeEditor.getMarkdown();
+  },
+});
+```
+</CodeGroup>
+
+## HTML element mapping
+
+| HTML Element | Imported As | Notes |
+|---|---|---|
+| `<h1>` to `<h6>` | Word heading styles | Requires styles in the base document |
+| `<p>`, `<div>` | Normal paragraph | |
+| `<strong>`, `<b>` | Bold | |
+| `<em>`, `<i>` | Italic | |
+| `<a href="...">` | Hyperlink | |
+| `<ul>`, `<ol>` | Word lists | Nesting supported |
+| `<table>` | Word table | Structure only |
+| `<img src="...">` | Image | URL preserved |
+| `<blockquote>` | Quote style | If style exists in document |
+| `style="text-align: ..."` | Alignment | Inline alignment is preserved |
+
+CSS classes, IDs, colors, fonts, margins, and other styling are stripped on import.
+
+## Markdown element mapping
+
+**Supported:**
+- Headings (`#` through `######`)
+- Bold/italic (`**bold**`, `*italic*`)
+- Ordered and unordered lists
+- Links `[text](url)`
+- Images `![alt](url)`
+- Code blocks
+- Blockquotes `>`
+
+**Not supported:**
+- Tables, footnotes, task lists, custom syntax extensions

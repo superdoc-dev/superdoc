@@ -214,9 +214,13 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: mockToFlowBlocks,
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: mockToFlowBlocks,
+  };
+});
 
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
@@ -2269,7 +2273,7 @@ describe('PresentationEditor', () => {
 
   describe('Selection update mechanisms', () => {
     describe('#scheduleSelectionUpdate race condition guards', () => {
-      it('should skip scheduling when already scheduled', async () => {
+      it('should render synchronously with immediate mode when safe', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2297,12 +2301,13 @@ describe('PresentationEditor', () => {
         expect(selectionUpdateCall).toBeDefined();
         const handleSelection = selectionUpdateCall![1] as () => void;
 
-        // Call twice - should only schedule once
+        // Call twice - with immediate mode, renders synchronously when safe
+        // so no RAF scheduling is needed
         handleSelection();
         handleSelection();
 
-        // Should only call requestAnimationFrame once (second call is deduplicated)
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2391,7 +2396,7 @@ describe('PresentationEditor', () => {
         rafSpy.mockRestore();
       });
 
-      it('should successfully schedule when no guards are active', async () => {
+      it('should render synchronously when no guards are active', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2420,11 +2425,12 @@ describe('PresentationEditor', () => {
         // Clear RAF spy to track new calls
         rafSpy.mockClear();
 
-        // Schedule selection update with no guards active
+        // Selection update with no guards active — renders synchronously via
+        // immediate mode, bypassing RAF
         handleSelection();
 
-        // Should schedule RAF successfully
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2448,6 +2454,7 @@ describe('PresentationEditor', () => {
         const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
           (Editor as unknown as MockedEditor).mock.results.length - 1
         ].value;
+        mockEditorInstance.view.hasFocus = vi.fn(() => true);
 
         // Mock editor state with valid selection at position 5
         mockEditorInstance.state = {
@@ -3039,6 +3046,7 @@ describe('PresentationEditor', () => {
   describe('Field annotation drag-and-drop handlers', () => {
     let mockHitTest: Mock;
     let mockGetActiveEditor: Mock;
+    let rafSpy: ReturnType<typeof vi.spyOn> | null = null;
     let mockActiveEditor: {
       isEditable: boolean;
       state: {
@@ -3099,6 +3107,12 @@ describe('PresentationEditor', () => {
     };
 
     beforeEach(() => {
+      // Mock requestAnimationFrame to execute immediately (for RAF-based dragover coalescing)
+      rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+
       // Create a container element for the presentation editor
       container = document.createElement('div');
       document.body.appendChild(container);
@@ -3148,6 +3162,10 @@ describe('PresentationEditor', () => {
       // Mock getActiveEditor method
       mockGetActiveEditor = vi.fn(() => mockActiveEditor);
       editor.getActiveEditor = mockGetActiveEditor;
+    });
+
+    afterEach(() => {
+      rafSpy?.mockRestore();
     });
 
     describe('#handleDragOver', () => {

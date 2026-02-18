@@ -5,18 +5,19 @@
  * This module is format-aware (docx), but translator-agnostic.
  */
 
-import {
-  combineIndentProperties,
-  combineProperties,
-  combineRunProperties,
-  orderDefaultsAndNormal,
-} from '../cascade.js';
+import { combineIndentProperties, combineProperties, combineRunProperties } from '../cascade.js';
 import type { PropertyObject } from '../cascade.js';
 import type { ParagraphProperties, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';
-import type { StylesDocumentProperties, TableStyleType, TableProperties, TableLookProperties } from './styles-types.ts';
+import type {
+  StylesDocumentProperties,
+  TableStyleType,
+  TableProperties,
+  TableLookProperties,
+  TableCellProperties,
+} from './styles-types.ts';
 
-export { combineIndentProperties, combineProperties, combineRunProperties, orderDefaultsAndNormal };
+export { combineIndentProperties, combineProperties, combineRunProperties };
 export type { PropertyObject };
 export type * from './types.ts';
 export type * from './numbering-types.ts';
@@ -43,7 +44,7 @@ export function resolveRunProperties(
   isListNumber = false,
   numberingDefinedInline = false,
 ): RunProperties {
-  if (!params.translatedLinkedStyles) {
+  if (!params.translatedLinkedStyles?.styles) {
     return inlineRpr ?? {};
   }
   if (!inlineRpr) {
@@ -57,7 +58,6 @@ export function resolveRunProperties(
   const defaultProps = params.translatedLinkedStyles.docDefaults?.runProperties ?? {};
   const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
   const normalProps = (normalStyleDef?.runProperties ?? {}) as RunProperties;
-  const isNormalDefault = normalStyleDef?.default ?? false;
 
   // Getting table style run properties
   const tableStyleProps = (
@@ -81,7 +81,12 @@ export function resolveRunProperties(
     ) as RunProperties;
   }
 
-  const defaultsChain = orderDefaultsAndNormal(defaultProps, normalProps, isNormalDefault);
+  let defaultsChain;
+  if (!paragraphStyleId) {
+    defaultsChain = [defaultProps, normalProps];
+  } else {
+    defaultsChain = [defaultProps];
+  }
   let styleChain: RunProperties[];
 
   if (isListNumber) {
@@ -128,7 +133,7 @@ export function resolveParagraphProperties(
   if (!inlineProps) {
     inlineProps = {} as ParagraphProperties;
   }
-  if (!params.translatedLinkedStyles) {
+  if (!params.translatedLinkedStyles?.styles) {
     return inlineProps;
   }
 
@@ -136,7 +141,6 @@ export function resolveParagraphProperties(
   const defaultProps = params.translatedLinkedStyles.docDefaults?.paragraphProperties ?? {};
   const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
   const normalProps = (normalStyleDef?.paragraphProperties ?? {}) as ParagraphProperties;
-  const isNormalDefault = normalStyleDef?.default ?? false;
 
   // Properties from styles
   let styleId = inlineProps.styleId as string | undefined;
@@ -187,7 +191,12 @@ export function resolveParagraphProperties(
 
   // Resolve property chain - regular properties are treated differently from indentation
   //   Chain for regular properties
-  const defaultsChain = orderDefaultsAndNormal(defaultProps, normalProps, isNormalDefault);
+  let defaultsChain;
+  if (!styleId) {
+    defaultsChain = [defaultProps, normalProps];
+  } else {
+    defaultsChain = [defaultProps];
+  }
   const propsChain = [...defaultsChain, tableProps, ...cellStyleProps, numberingProps, styleProps, inlineProps];
 
   //   Chain for indentation properties
@@ -256,7 +265,7 @@ export function resolveStyleChain<T extends PropertyObject>(
   return combineProperties(styleChain);
 }
 
-export function getNumberingProperties<T extends PropertyObject>(
+export function getNumberingProperties<T extends ParagraphProperties | RunProperties>(
   propertyType: 'paragraphProperties' | 'runProperties',
   params: OoxmlResolverParams,
   ilvl: number,
@@ -353,7 +362,7 @@ export function resolveDocxFontFamily(
 }
 
 export function resolveCellStyles<T extends PropertyObject>(
-  propertyType: 'paragraphProperties' | 'runProperties',
+  propertyType: 'paragraphProperties' | 'runProperties' | 'tableCellProperties',
   tableInfo: TableInfo | null | undefined,
   translatedLinkedStyles: StylesDocumentProperties,
 ): T[] {
@@ -385,6 +394,41 @@ export function resolveCellStyles<T extends PropertyObject>(
   return cellStyleProps;
 }
 
+/**
+ * Resolve table cell properties (shading, borders, margins) by cascading
+ * conditional table style properties with inline cell properties.
+ *
+ * Cascade order (low → high priority):
+ *   wholeTable → bands → firstRow/lastRow/firstCol/lastCol → corner cells → inline
+ */
+export function resolveTableCellProperties(
+  inlineProps: TableCellProperties | null | undefined,
+  tableInfo: TableInfo | null | undefined,
+  translatedLinkedStyles: StylesDocumentProperties | null | undefined,
+): TableCellProperties {
+  if (!translatedLinkedStyles) {
+    return (inlineProps ?? {}) as TableCellProperties;
+  }
+
+  const cellStyleProps = resolveCellStyles<TableCellProperties>(
+    'tableCellProperties',
+    tableInfo,
+    translatedLinkedStyles,
+  );
+
+  if (cellStyleProps.length === 0) {
+    return (inlineProps ?? {}) as TableCellProperties;
+  }
+
+  // Cascade: style properties (low→high) then inline wins last
+  const chain: TableCellProperties[] = [...cellStyleProps];
+  if (inlineProps && Object.keys(inlineProps).length > 0) {
+    chain.push(inlineProps);
+  }
+
+  return combineProperties(chain, { fullOverrideProps: ['shading'] });
+}
+
 function determineCellStyleTypes(
   tblLook: TableLookProperties | null | undefined,
   rowIndex: number,
@@ -398,8 +442,13 @@ function determineCellStyleTypes(
 
   const normalizedRowBandSize = rowBandSize > 0 ? rowBandSize : 1;
   const normalizedColBandSize = colBandSize > 0 ? colBandSize : 1;
-  const rowGroup = Math.floor(rowIndex / normalizedRowBandSize);
-  const colGroup = Math.floor(cellIndex / normalizedColBandSize);
+
+  // Per ECMA-376, banding excludes header/footer rows and first/last columns.
+  // Offset the index so the first data row/column starts at band1.
+  const bandRowIndex = Math.max(0, rowIndex - (tblLook?.firstRow ? 1 : 0));
+  const bandColIndex = Math.max(0, cellIndex - (tblLook?.firstColumn ? 1 : 0));
+  const rowGroup = Math.floor(bandRowIndex / normalizedRowBandSize);
+  const colGroup = Math.floor(bandColIndex / normalizedColBandSize);
 
   if (!tblLook?.noHBand) {
     if (rowGroup % 2 === 0) {

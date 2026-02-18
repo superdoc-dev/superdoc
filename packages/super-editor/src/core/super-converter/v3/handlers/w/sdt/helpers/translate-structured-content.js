@@ -56,15 +56,21 @@ function generateSdtPrTagForStructuredContent({ node }) {
     type: 'element',
     attributes: { 'w:val': attrs.tag },
   };
+  const lock = {
+    name: 'w:lock',
+    type: 'element',
+    attributes: { 'w:val': attrs.lockMode },
+  };
 
   const resultElements = [];
   if (attrs.id) resultElements.push(id);
   if (attrs.alias) resultElements.push(alias);
   if (attrs.tag) resultElements.push(tag);
+  if (attrs.lockMode && attrs.lockMode !== 'unlocked') resultElements.push(lock);
 
   if (attrs.sdtPr) {
     const elements = attrs.sdtPr.elements || [];
-    const elementsToExclude = ['w:id', 'w:alias', 'w:tag'];
+    const elementsToExclude = ['w:id', 'w:alias', 'w:tag', 'w:lock'];
     const restElements = elements.filter((el) => !elementsToExclude.includes(el.name));
     const result = {
       name: 'w:sdtPr',

@@ -26,6 +26,9 @@ export const goToPageAndWaitForEditor = async (
 
   const url = params.toString() ? `http://localhost:4173/?${params.toString()}` : 'http://localhost:4173/';
 
+  // Block telemetry requests during tests
+  await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
+
   await page.goto(url);
   await page.waitForSelector('div.super-editor');
   const superEditor = page.locator('div.super-editor').first();
@@ -41,4 +44,10 @@ export function ptToPx(pt) {
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function settleForScreenshot(page) {
+  // Collapse selection and allow layout to settle across frames.
+  await page.keyboard.press('ArrowRight');
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }

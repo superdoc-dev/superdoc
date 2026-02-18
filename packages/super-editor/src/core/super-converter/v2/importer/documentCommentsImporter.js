@@ -60,19 +60,20 @@ export function importCommentData({ docx, editor, converter }) {
 
     // Per OOXML spec, commentsExtended.xml links via the LAST paragraph's paraId
     // when a comment has multiple paragraphs
-    const lastElement = parsedElements[parsedElements.length - 1];
+    const textElements = Array.isArray(parsedElements) ? parsedElements : parsedElements ? [parsedElements] : [];
+    const lastElement = textElements[textElements.length - 1];
     const paraId = lastElement?.attrs?.['w14:paraId'];
 
     const threadingMethod = commentThreadingProfile.defaultStyle;
+    const commentId = getCommentId(internalId, importedId, unixTimestampMs);
 
     return {
-      commentId: internalId || uuidv4(),
+      commentId,
       importedId,
       creatorName: authorName,
       creatorEmail: authorEmail,
       createdTime: unixTimestampMs,
-      textJson: parsedElements[0],
-      elements: parsedElements,
+      elements: textElements,
       initials,
       paraId,
       trackedChange,
@@ -632,4 +633,32 @@ const applyParentRelationships = (comments, parentMap, trackedChangeParentMap = 
     }
     return updatedComment;
   });
+};
+
+/**
+ * Lightweight, non-cryptographic FNV-1a 32-bit hash for stable identifiers.
+ *
+ * @param {string} input
+ * @returns {string} 8-char hex string
+ */
+const simpleHash = (input) => {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
+/**
+ * Resolve a stable comment ID for imported comments.
+ * - Prefer the explicit internal ID when present.
+ * - If the comment has an imported ID, derive a stable hash from imported ID + created time.
+ * - Otherwise, fall back to a new UUID.
+ */
+const getCommentId = (internalId, importedId, createdTime) => {
+  if (internalId != null) return internalId;
+  if (importedId == null || !Number.isFinite(createdTime)) return uuidv4();
+  const hash = simpleHash(`${importedId}-${createdTime}`);
+  return `imported-${hash}`;
 };

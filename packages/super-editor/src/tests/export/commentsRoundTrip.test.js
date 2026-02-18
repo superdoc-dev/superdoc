@@ -5,9 +5,19 @@ import { importCommentData } from '@converter/v2/importer/documentCommentsImport
 
 const extractNodeText = (node) => {
   if (!node) return '';
+  if (Array.isArray(node)) {
+    return node.map((child) => extractNodeText(child)).join('');
+  }
   if (typeof node.text === 'string') return node.text;
   const content = Array.isArray(node.content) ? node.content : [];
   return content.map((child) => extractNodeText(child)).join('');
+};
+
+const getCommentJSONNodes = (comment) => {
+  if (Array.isArray(comment.elements) && comment.elements.length) {
+    return comment.elements;
+  }
+  return [];
 };
 
 /**
@@ -53,7 +63,7 @@ describe('Comment origin detection and round trip', () => {
 
         const commentsForExport = editor.converter.comments.map((comment) => ({
           ...comment,
-          commentJSON: comment.textJson,
+          commentJSON: getCommentJSONNodes(comment),
         }));
 
         await editor.exportDocx({
@@ -104,7 +114,7 @@ describe('Comment origin detection and round trip', () => {
 
         expect(reimportedComments).toHaveLength(2);
         const roundTripTexts = reimportedComments
-          .map((comment) => extractNodeText(comment.textJson).trim())
+          .map((comment) => extractNodeText(comment.elements).trim())
           .filter((text) => text.length);
         expect(roundTripTexts).toEqual(expect.arrayContaining(['comment on text', 'BLANK']));
         reimportedComments.forEach((comment) => {
@@ -145,7 +155,7 @@ describe('Comment origin detection and round trip', () => {
 
         const commentsForExport = editor.converter.comments.map((comment) => ({
           ...comment,
-          commentJSON: comment.textJson,
+          commentJSON: getCommentJSONNodes(comment),
         }));
 
         await editor.exportDocx({
@@ -259,7 +269,7 @@ describe('Comment origin detection and round trip', () => {
 
           const commentsForExport = editor.converter.comments.map((comment) => ({
             ...comment,
-            commentJSON: comment.textJson,
+            commentJSON: getCommentJSONNodes(comment),
           }));
 
           await editor.exportDocx({
@@ -304,7 +314,7 @@ describe('Resolved comments round-trip', () => {
 
       const commentsForExport = editor.converter.comments.map((comment) => ({
         ...comment,
-        commentJSON: comment.textJson,
+        commentJSON: getCommentJSONNodes(comment),
       }));
 
       await editor.exportDocx({
@@ -343,7 +353,7 @@ describe('Resolved comments round-trip', () => {
     try {
       const commentsForExport = editor.converter.comments.map((comment) => ({
         ...comment,
-        commentJSON: comment.textJson,
+        commentJSON: getCommentJSONNodes(comment),
       }));
 
       await editor.exportDocx({
@@ -484,7 +494,7 @@ describe('Nested comments export', () => {
 
       const commentsForExport = originalComments.map((comment) => ({
         ...comment,
-        commentJSON: comment.textJson,
+        commentJSON: getCommentJSONNodes(comment),
       }));
 
       await editor.exportDocx({

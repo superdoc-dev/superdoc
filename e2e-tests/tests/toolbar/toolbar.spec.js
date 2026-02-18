@@ -370,6 +370,9 @@ test.describe('toolbar', () => {
       // Select the color "red"
       await page.locator('div[aria-label="red"]').click();
 
+      // Click back on the editor
+      await superEditor.click();
+
       // Ensure the text is red
       const hello = await superEditor.locator('.superdoc-layout').getByText('Hello', { exact: true });
       expect(hello).toBeVisible();

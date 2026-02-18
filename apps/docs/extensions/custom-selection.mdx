@@ -1,0 +1,73 @@
+---
+title: CustomSelection extension
+sidebarTitle: "Custom Selection"
+keywords: "CustomSelection extension, superdoc CustomSelection, word CustomSelection, document CustomSelection, docx CustomSelection"
+---
+
+import Description from '/snippets/extensions/custom-selection.mdx'
+
+<Description />
+
+## Commands
+
+### `restorePreservedSelection`
+
+Restore the preserved selection
+
+<Note>
+Used internally to maintain selection when interacting with toolbar
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+// Restore selection after toolbar interaction
+editor.commands.restorePreservedSelection()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Restore selection after toolbar interaction
+    editor.commands.restorePreservedSelection()
+  },
+});
+```
+</CodeGroup>
+
+**Returns:** `Function` Command function
+
+## Types
+
+### `SelectionState`
+
+Selection state
+
+<Expandable title="Properties">
+<ResponseField name="focused" type="boolean" required>
+  Whether editor is focused
+</ResponseField>
+<ResponseField name="preservedSelection" type="Object | any" required>
+  Stored selection
+</ResponseField>
+<ResponseField name="showVisualSelection" type="boolean" required>
+  Whether to show selection decoration
+</ResponseField>
+<ResponseField name="skipFocusReset" type="boolean" required>
+  Whether to skip clearing selection on next focus
+</ResponseField>
+</Expandable>
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/custom-selection/custom-selection.js" />

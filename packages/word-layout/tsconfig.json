@@ -5,7 +5,8 @@
     "rootDir": "./src",
     "composite": true,
     "declaration": true,
-    "declarationMap": true
+    "declarationMap": true,
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*"]
 }

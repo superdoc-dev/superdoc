@@ -1,0 +1,67 @@
+---
+title: TextStyle extension
+sidebarTitle: "Text Style"
+keywords: "TextStyle extension, superdoc TextStyle, word TextStyle, document TextStyle, docx TextStyle"
+---
+
+import Description from '/snippets/extensions/text-style.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  Custom HTML attributes to apply to text style spans
+</ParamField>
+
+## Attributes
+
+Mark attributes that can be set and retrieved:
+
+<ParamField path="vertAlign" type="string">
+  Vertical alignment for superscript and subscript. Values: `'superscript'`, `'subscript'`, `'baseline'`
+</ParamField>
+
+<ParamField path="position" type="string">
+  Custom vertical position offset in points (e.g., `'2pt'`, `'-1.5pt'`). Takes precedence over `vertAlign` when both are present.
+</ParamField>
+
+## Commands
+
+### `removeEmptyTextStyle`
+
+Remove empty text style marks
+
+<Note>
+Automatically checks if any style attributes exist before removal
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.removeEmptyTextStyle()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.removeEmptyTextStyle()
+  },
+});
+```
+</CodeGroup>
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/text-style/text-style.js" />

@@ -46,7 +46,30 @@ const encode = (params, encodedAttrs = {}) => {
 
   // Resolving run properties following style hierarchy
   const paragraphProperties = params?.extraParams?.paragraphProperties || {};
-  const resolvedRunProperties = resolveRunProperties(params, runProperties ?? {}, paragraphProperties);
+  let tableInfo = null;
+  if (
+    params?.extraParams?.rowIndex != null &&
+    params?.extraParams?.columnIndex != null &&
+    params?.extraParams?.tableProperties != null &&
+    params?.extraParams?.totalColumns != null &&
+    params?.extraParams?.totalRows != null
+  ) {
+    tableInfo = {
+      rowIndex: params.extraParams.rowIndex,
+      cellIndex: params.extraParams.columnIndex,
+      tableProperties: params.extraParams.tableProperties,
+      numCells: params.extraParams.totalColumns,
+      numRows: params.extraParams.totalRows,
+    };
+  }
+  const resolvedRunProperties = resolveRunProperties(
+    params,
+    runProperties ?? {},
+    paragraphProperties,
+    tableInfo,
+    false,
+    params?.extraParams?.numberingDefinedInline,
+  );
 
   // Parsing marks from run properties
   const marksResult = encodeMarksFromRPr(resolvedRunProperties, params?.docx);
@@ -68,6 +91,10 @@ const encode = (params, encodedAttrs = {}) => {
   // Applying marks to child nodes
   const contentWithRunMarks = (Array.isArray(content) ? content : []).map((child) => {
     if (!child || typeof child !== 'object') return child;
+
+    if (child.type === 'passthroughInline') {
+      return { ...child, marks: [] };
+    }
 
     // Preserve existing marks on child nodes
     const baseMarks = Array.isArray(child.marks) ? child.marks : [];

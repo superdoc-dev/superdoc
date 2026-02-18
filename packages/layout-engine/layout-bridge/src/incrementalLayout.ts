@@ -734,12 +734,18 @@ export async function incrementalLayout(
     constraints: HeaderFooterConstraints;
     measure?: HeaderFooterMeasureFn;
   },
+  previousMeasures?: Measure[] | null,
 ): Promise<IncrementalLayoutResult> {
-  const _perfStart = performance.now();
+  // Dirty region computation
+  const dirtyStart = performance.now();
   const dirty = computeDirtyRegions(previousBlocks, nextBlocks);
+  const dirtyTime = performance.now() - dirtyStart;
+
   if (dirty.deletedBlockIds.length > 0) {
     measureCache.invalidate(dirty.deletedBlockIds);
   }
+
+  // Perf summary emitted at the end of the function.
 
   const { measurementWidth, measurementHeight } = resolveMeasurementConstraints(options, nextBlocks);
 
@@ -747,31 +753,65 @@ export async function incrementalLayout(
     throw new Error('incrementalLayout: invalid measurement constraints resolved from options');
   }
 
+  const hasPreviousMeasures = Array.isArray(previousMeasures) && previousMeasures.length === previousBlocks.length;
+  const previousConstraints = hasPreviousMeasures ? resolveMeasurementConstraints(options, previousBlocks) : null;
+  const canReusePreviousMeasures =
+    hasPreviousMeasures &&
+    previousConstraints?.measurementWidth === measurementWidth &&
+    previousConstraints?.measurementHeight === measurementHeight;
+  const previousMeasuresById = canReusePreviousMeasures
+    ? new Map(previousBlocks.map((block, index) => [block.id, previousMeasures![index]]))
+    : null;
+
   const measureStart = performance.now();
   const constraints = { maxWidth: measurementWidth, maxHeight: measurementHeight };
   const measures: Measure[] = [];
   let cacheHits = 0;
   let cacheMisses = 0;
+  let reusedMeasures = 0;
+  let cacheLookupTime = 0;
+  let actualMeasureTime = 0;
+
   for (const block of nextBlocks) {
     if (block.kind === 'sectionBreak') {
       measures.push({ kind: 'sectionBreak' });
       continue;
     }
+
+    if (canReusePreviousMeasures && dirty.stableBlockIds.has(block.id)) {
+      const previousMeasure = previousMeasuresById?.get(block.id);
+      if (previousMeasure) {
+        measures.push(previousMeasure);
+        reusedMeasures++;
+        continue;
+      }
+    }
+
+    // Time the cache lookup (includes hashRuns computation)
+    const lookupStart = performance.now();
     const cached = measureCache.get(block, measurementWidth, measurementHeight);
+    cacheLookupTime += performance.now() - lookupStart;
 
     if (cached) {
       measures.push(cached);
       cacheHits++;
       continue;
     }
+
+    // Time the actual DOM measurement
+    const measureBlockStart = performance.now();
     const measurement = await measureBlock(block, constraints);
+    actualMeasureTime += performance.now() - measureBlockStart;
+
     measureCache.set(block, measurementWidth, measurementHeight, measurement);
     measures.push(measurement);
     cacheMisses++;
   }
   const measureEnd = performance.now();
+  const totalMeasureTime = measureEnd - measureStart;
+
   perfLog(
-    `[Perf] 4.1 Measure all blocks: ${(measureEnd - measureStart).toFixed(2)}ms (${cacheMisses} measured, ${cacheHits} cached)`,
+    `[Perf] 4.1 Measure all blocks: ${totalMeasureTime.toFixed(2)}ms (${cacheMisses} measured, ${cacheHits} cached, ${reusedMeasures} reused)`,
   );
 
   // Pre-layout headers to get their actual content heights BEFORE body layout.
@@ -1011,7 +1051,10 @@ export async function incrementalLayout(
       remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
   });
   const layoutEnd = performance.now();
-  perfLog(`[Perf] 4.2 Layout document (pagination): ${(layoutEnd - layoutStart).toFixed(2)}ms`);
+  const layoutTime = layoutEnd - layoutStart;
+  perfLog(`[Perf] 4.2 Layout document (pagination): ${layoutTime.toFixed(2)}ms`);
+
+  const pageCount = layout.pages.length;
 
   // Two-pass convergence loop for page number token resolution.
   // Steps: paginate -> build numbering context -> resolve PAGE/NUMPAGES tokens

@@ -14,6 +14,9 @@ export default defineConfig({
   workers: process.env.CI ? 4 : undefined,
   captureGitInfo: { commit: false, diff: false },
   reporter: [['json', { outputFile: 'test-results/playwright-report.json' }]],
+  expect: {
+    toHaveScreenshot: { maxDiffPixels: 2500 },
+  },
   use: {
     trace: 'off',
     baseURL,

@@ -1,5 +1,5 @@
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
-
+import { sortedIndexBy } from 'lodash';
 import { debugLog, getSelectionDebugConfig } from '../selection/SelectionDebug.js';
 
 /**
@@ -222,6 +222,39 @@ export class DomPositionIndex {
     const entry = entries[idx];
     if (pos < entry.pmStart || pos > entry.pmEnd) return null;
     return entry;
+  }
+
+  /**
+   * Finds the index entry that either contains the given position,
+   * or is the closest entry before or after it.
+   * @param pos - The ProseMirror position to look up
+   * @returns The closest entry to this position, or null if the index is empty
+   * @remarks
+   * This method first attempts to find an entry that contains the position.
+   * If none is found, it then finds the closest entry before or after the position.
+   * If the index is empty, it returns null.
+   */
+  findEntryClosestToPosition(pos: number): DomPositionIndexEntry | null {
+    if (!Number.isFinite(pos)) return null;
+    const entries = this.#entries;
+    if (entries.length === 0) return null;
+
+    const entryAtPos = this.findEntryAtPosition(pos);
+    if (entryAtPos) return entryAtPos;
+
+    const idx = sortedIndexBy(entries, { pmStart: pos } as never, 'pmStart') - 1;
+
+    const beforeEntry = idx >= 0 ? entries[idx] : null;
+    const afterEntry = idx < entries.length - 1 ? entries[idx + 1] : null;
+
+    if (beforeEntry && afterEntry) {
+      const distBefore = pos - beforeEntry.pmEnd;
+      const distAfter = afterEntry.pmStart - pos;
+      return distBefore <= distAfter ? beforeEntry : afterEntry;
+    }
+    if (beforeEntry) return beforeEntry;
+    if (afterEntry) return afterEntry;
+    return null;
   }
 
   findElementAtPosition(pos: number): HTMLElement | null {

@@ -1,0 +1,123 @@
+---
+title: Document extension
+sidebarTitle: "Document"
+keywords: "Document extension, superdoc Document, word Document, document Document, docx Document"
+---
+
+import Description from '/snippets/extensions/document.mdx'
+
+<Description />
+
+## Commands
+
+### `getDocumentStats`
+
+Get document statistics
+
+<Note>
+Returns word count, character count, and paragraph count
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+// Get word and character count
+const stats = editor.commands.getDocumentStats()
+console.log(`${stats.words} words, ${stats.characters} characters`)
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Get word and character count
+    const stats = editor.commands.getDocumentStats()
+    console.log(`${stats.words} words, ${stats.characters} characters`)
+  },
+});
+```
+</CodeGroup>
+
+### `clearDocument`
+
+Clear entire document
+
+<Note>
+Replaces all content with an empty paragraph
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.clearDocument()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.clearDocument()
+  },
+});
+```
+</CodeGroup>
+
+### `setSectionPageMarginsAtSelection`
+
+Set page margins for the section at the current cursor position.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setSectionPageMarginsAtSelection({
+  topInches: 1,
+  rightInches: 1,
+  bottomInches: 1,
+  leftInches: 1
+})
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setSectionPageMarginsAtSelection({
+      topInches: 1,
+      rightInches: 1,
+      bottomInches: 1,
+      leftInches: 1
+    })
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="options" type="Object">
+  Object with optional `topInches`, `rightInches`, `bottomInches`, `leftInches` (numbers in inches)
+</ParamField>
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/document/document.js" />

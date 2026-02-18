@@ -1,0 +1,97 @@
+# SuperDoc
+
+A document editing and rendering library for the web.
+
+## Architecture: Rendering
+
+SuperDoc uses its own rendering pipeline — **ProseMirror is NOT used for visual output**.
+
+```
+PM Doc (hidden) → pm-adapter → FlowBlock[] → layout-engine → Layout[] → DomPainter → DOM
+```
+
+- `PresentationEditor` wraps a hidden ProseMirror `Editor` instance for document state and editing commands
+- The hidden Editor's contenteditable DOM is never shown to the user
+- **DomPainter** (`layout-engine/painters/dom/`) owns all visual rendering
+- Style-resolved properties (backgrounds, fonts, borders, etc.) must flow through `pm-adapter` → DomPainter, not through PM decorations
+
+### Where visual changes go
+
+| Change | Where |
+|--------|-------|
+| How something looks | `pm-adapter/` (data) + `painters/dom/` (rendering) |
+| Style resolution | `style-engine/` |
+| Editing behavior | `super-editor/src/extensions/` |
+
+**Do NOT** add ProseMirror decoration plugins for visual styling — DomPainter handles rendering.
+
+### State Communication
+
+State flows from super-editor → Layout Engine via:
+- `PresentationEditor.ts` listens to editor events (`super-editor/src/core/presentation-editor/`)
+- Calls DomPainter methods to update state
+- DomPainter re-renders with new state
+
+## Project Structure
+
+```
+packages/
+  superdoc/          Main entry point (npm: superdoc)
+  react/             React wrapper (@superdoc-dev/react)
+  super-editor/      ProseMirror editor (@superdoc/super-editor)
+  layout-engine/     Layout & pagination pipeline
+    contracts/       - Shared type definitions
+    pm-adapter/      - ProseMirror → Layout bridge
+    layout-engine/   - Pagination algorithms
+    layout-bridge/   - Pipeline orchestration
+    painters/dom/    - DOM rendering
+    style-engine/    - OOXML style resolution
+  ai/                AI integration
+  collaboration-yjs/ Collaboration server
+shared/              Internal utilities
+e2e-tests/           Playwright tests
+tests/visual/        Visual regression tests (Playwright + R2 baselines)
+```
+
+## Where to Look
+
+| Task | Location |
+|------|----------|
+| React integration | `packages/react/src/SuperDocEditor.tsx` |
+| Editing features | `super-editor/src/extensions/` |
+| Presentation mode visuals | `layout-engine/painters/dom/src/renderer.ts` |
+| DOCX import/export | `super-editor/src/core/super-converter/` |
+| Style resolution | `layout-engine/style-engine/` |
+| Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
+| Visual regression tests | `tests/visual/` (see its CLAUDE.md) |
+
+## Style Resolution Boundary
+
+**The importer stores raw OOXML properties. The style-engine resolves them at render time.**
+
+- The converter (`super-converter/`) should only parse and store what is explicitly in the XML (inline properties, style references). It must NOT resolve style cascades, conditional formatting, or inherited properties.
+- The style-engine (`layout-engine/style-engine/`) is the single source of truth for cascade logic. All style resolution (defaults → table style → conditional formatting → inline overrides) happens here.
+- Both rendering systems call the style-engine to compute final visual properties.
+
+**Why**: Resolving styles during import bakes them into node attributes as inline properties. On export, these get written as direct formatting instead of style references, losing the original document intent.
+
+## When to Modify Which System
+
+- **Visual rendering**: Modify `pm-adapter/` (to feed data) and/or `painters/dom/` (to render it)
+- **Style resolution**: Modify `style-engine/` — called by pm-adapter during conversion
+- **Editing commands/behavior**: Modify `super-editor/src/extensions/`
+- **State bridging**: Modify `PresentationEditor.ts`
+
+## JSDoc types
+
+Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., `packages/superdoc/src/core/types/index.js`). These typedefs ARE the published type declarations — `vite-plugin-dts` generates `.d.ts` files from them.
+
+- **Keep JSDoc typedefs in sync with code.** If a function destructures `{ a, b, c }`, the `@typedef` must include all three properties. Missing properties become type errors for consumers.
+- **Verify types after adding parameters.** When adding a parameter to a function, update its `@typedef` or `@param` JSDoc. Build with `pnpm run --filter superdoc build:es` and check the generated `.d.ts` in `dist/`.
+- **Workspace packages don't publish types.** `@superdoc/common`, `@superdoc/contracts`, etc. are private. If a public API references their types, those types must be inlined or resolved through path aliases — consumers can't resolve workspace packages.
+
+## Commands
+
+- `pnpm build` - Build all packages
+- `pnpm test` - Run tests
+- `pnpm dev` - Start dev server (from examples/)

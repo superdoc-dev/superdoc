@@ -35,7 +35,7 @@ export const ensureFallbackComment = ({ converter, matchingImportedComment, comm
   converter.comments.push({
     commentId,
     importedId,
-    textJson: null,
+    elements: [],
     creatorName: null,
     creatorEmail: null,
     createdTime: null,

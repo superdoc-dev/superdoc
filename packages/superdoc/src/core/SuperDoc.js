@@ -4,7 +4,7 @@ import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
-import { DOCX, PDF, HTML } from '@superdoc/common';
+import { DOCX, PDF, HTML, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 import { SuperToolbar, createZip } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
 import { createSuperdocVueApp } from './create-app.js';
@@ -14,6 +14,8 @@ import { initSuperdocYdoc, initCollaborationComments, makeDocumentsCollaborative
 import { setupAwarenessHandler } from './collaboration/collaboration.js';
 import { normalizeDocumentEntry } from './helpers/file.js';
 import { isAllowed } from './collaboration/permissions.js';
+import { Whiteboard } from './whiteboard/Whiteboard';
+import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -42,6 +44,9 @@ export class SuperDoc extends EventEmitter {
   /** @type {boolean} */
   #destroyed = false;
 
+  /** @type {HTMLDivElement | null} */
+  #mountWrapper = null;
+
   /** @type {string} */
   version;
 
@@ -53,6 +58,8 @@ export class SuperDoc extends EventEmitter {
 
   /** @type {import('@hocuspocus/provider').HocuspocusProvider | undefined} */
   provider;
+
+  whiteboard;
 
   /** @type {Config} */
   config = {
@@ -71,6 +78,12 @@ export class SuperDoc extends EventEmitter {
 
     modules: {}, // Optional: Modules to load. Use modules.ai.{your_key} to pass in your key
     permissionResolver: null, // Optional: Override for permission checks
+
+    // License key for organization identification (defaults to community key)
+    licenseKey: COMMUNITY_LICENSE_KEY,
+
+    // Telemetry settings
+    telemetry: { enabled: false }, // Enable to track document opens
 
     title: 'SuperDoc',
     conversations: [],
@@ -128,10 +141,21 @@ export class SuperDoc extends EventEmitter {
    */
   constructor(config) {
     super();
-    this.#init(config);
+
+    if (!config.selector) {
+      throw new Error('SuperDoc: selector is required');
+    }
+
+    const container = typeof config.selector === 'string' ? document.querySelector(config.selector) : config.selector;
+
+    if (!(container instanceof HTMLElement)) {
+      throw new Error('SuperDoc: selector must be a valid CSS selector string or DOM element');
+    }
+
+    this.#init(config, container);
   }
 
-  async #init(config) {
+  async #init(config, container) {
     this.config = {
       ...this.config,
       ...config,
@@ -183,6 +207,16 @@ export class SuperDoc extends EventEmitter {
       };
     }
 
+    // Enable virtualization by default for better performance on large documents.
+    // Only renders visible pages (~5) instead of all pages.
+    if (!this.config.layoutEngineOptions.virtualization) {
+      this.config.layoutEngineOptions.virtualization = {
+        enabled: true,
+        window: 5,
+        overscan: 1,
+      };
+    }
+
     this.config.modules = this.config.modules || {};
     if (!Object.prototype.hasOwnProperty.call(this.config.modules, 'comments')) {
       this.config.modules.comments = {};
@@ -216,6 +250,7 @@ export class SuperDoc extends EventEmitter {
 
     this.#initVueApp();
     this.#initListeners();
+    this.#initWhiteboard();
 
     this.user = this.config.user; // The current user
     this.users = this.config.users || []; // All users who have access to this superdoc
@@ -227,11 +262,13 @@ export class SuperDoc extends EventEmitter {
     this.activeEditor = null;
     this.comments = [];
 
-    if (!this.config.selector) {
-      throw new Error('SuperDoc: selector is required');
-    }
-
-    this.app.mount(this.config.selector);
+    // Mount Vue into a child wrapper element instead of directly on the user's
+    // container. This prevents conflicts with host frameworks (React, Angular)
+    // that manage the container's DOM. See SD-1832.
+    this.#mountWrapper = document.createElement('div');
+    this.#mountWrapper.style.display = 'contents';
+    container.appendChild(this.#mountWrapper);
+    this.app.mount(this.#mountWrapper);
 
     // Required editors
     this.readyEditors = 0;
@@ -241,6 +278,18 @@ export class SuperDoc extends EventEmitter {
 
     // If a toolbar element is provided, render a toolbar
     this.#addToolbar();
+  }
+
+  #initWhiteboard() {
+    const config = this.config.modules?.whiteboard ?? {};
+    const enabled = config.enabled ?? false;
+
+    this.whiteboard = new Whiteboard({
+      Renderer: WhiteboardRenderer,
+      superdoc: this,
+      enabled,
+    });
+    this.emit('whiteboard:ready', { whiteboard: this.whiteboard });
   }
 
   /**
@@ -309,7 +358,6 @@ export class SuperDoc extends EventEmitter {
           type: DOCX,
           url: this.config.document,
           name: 'document.docx',
-          isNewFile: true,
         },
       ];
     } else if (hasDocumentFile) {
@@ -368,6 +416,9 @@ export class SuperDoc extends EventEmitter {
     this.superdocStore.init(this.config);
     const commentsModuleConfig = this.config.modules.comments;
     this.commentsStore.init(commentsModuleConfig && commentsModuleConfig !== false ? commentsModuleConfig : {});
+    if (this.isCollaborative) {
+      initCollaborationComments(this);
+    }
     this.#syncViewingVisibility();
   }
 
@@ -1110,6 +1161,12 @@ export class SuperDoc extends EventEmitter {
     this.removeAllListeners();
     delete this.app.config.globalProperties.$config;
     delete this.app.config.globalProperties.$superdoc;
+
+    // Remove the internal wrapper element from the user's container
+    if (this.#mountWrapper) {
+      this.#mountWrapper.remove();
+      this.#mountWrapper = null;
+    }
   }
 
   /**

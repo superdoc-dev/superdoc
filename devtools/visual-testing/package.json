@@ -1,0 +1,56 @@
+{
+  "name": "superdoc-visual-testing",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.25.0",
+  "scripts": {
+    "postinstall": "pnpm exec playwright install",
+    "dev": "pnpm --filter @superdoc-testing/harness dev",
+    "build": "pnpm --filter @superdoc-testing/harness build",
+    "preview": "pnpm --filter @superdoc-testing/harness preview",
+    "version": "tsx scripts/set-superdoc-version.ts",
+    "superdoc": "tsx scripts/set-superdoc-version.ts",
+    "superdoc:version": "node -p \"require('./packages/harness/node_modules/superdoc/package.json').version\"",
+    "generate": "tsx --import dotenv/config scripts/generate-all.ts",
+    "generate:visual": "tsx --import dotenv/config scripts/generate-refs.ts",
+    "generate:interactions": "tsx --import dotenv/config scripts/generate-interactions.ts",
+    "baseline": "tsx --import dotenv/config scripts/baseline-all.ts",
+    "baseline:visual": "tsx --import dotenv/config scripts/baseline-visual.ts",
+    "baseline:interactions": "tsx --import dotenv/config scripts/baseline-interactions.ts",
+    "compare": "tsx --import dotenv/config scripts/compare-all.ts",
+    "compare:visual": "tsx --import dotenv/config scripts/compare.ts",
+    "compare:interactions": "tsx --import dotenv/config scripts/compare-interactions.ts",
+    "upload-corpus": "tsx --import dotenv/config scripts/upload-corpus.ts",
+    "get-corpus": "tsx --import dotenv/config scripts/get-corpus.ts",
+    "get-docx": "tsx --import dotenv/config scripts/get-docx.ts",
+    "upload": "tsx --import dotenv/config scripts/upload-corpus-doc.ts",
+    "r2:upload": "wrangler r2 object put",
+    "r2:sync-registry": "bash scripts/r2-sync-registry.sh",
+    "filters": "tsx scripts/list-filters.ts",
+    "clear:all": "read -p 'This will delete all baselines, screenshots, and results. Are you sure? (y/N) ' confirm && [ \"$confirm\" = 'y' ] && rm -rf baselines baselines-interactions screenshots results && echo 'Cleared!' || echo 'Aborted.'",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^22.15.21",
+    "@types/pngjs": "^6.0.5",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@superdoc-testing/helpers": "workspace:*",
+    "dotenv": "^17.2.4",
+    "kleur": "^4.1.5"
+  }
+}

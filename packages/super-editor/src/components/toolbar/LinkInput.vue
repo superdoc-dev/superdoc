@@ -138,6 +138,8 @@ const isEditing = computed(() => !isAnchor.value && !!getLinkHrefAtSelection());
 
 const isDisabled = computed(() => !validUrl.value);
 
+const isViewingMode = computed(() => props.editor?.options?.documentMode === 'viewing');
+
 const openLink = () => {
   window.open(url.value, '_blank');
 };
@@ -169,6 +171,9 @@ onMounted(() => {
 
 // --- Link logic moved here ---
 const handleSubmit = () => {
+  // Prevent form submission in viewing mode
+  if (isViewingMode.value) return;
+
   const editor = props.editor;
   if (!editor) return;
 
@@ -209,6 +214,7 @@ const handleRemove = () => {
 <template>
   <div class="link-input-ctn" :class="{ 'high-contrast': isHighContrastMode }">
     <div class="link-title" v-if="isAnchor">Page anchor</div>
+    <div class="link-title" v-else-if="isViewingMode">Link details</div>
     <div class="link-title" v-else-if="isEditing">Edit link</div>
     <div class="link-title" v-else>Add link</div>
 
@@ -216,7 +222,7 @@ const handleRemove = () => {
       <!-- Text input -->
       <div class="input-row text-input-row">
         <div class="input-icon text-input-icon">T</div>
-        <input type="text" name="text" placeholder="Text" v-model="text" @keydown.enter.stop.prevent="handleSubmit" />
+        <input type="text" name="text" placeholder="Text" v-model="text" :readonly="isViewingMode" @keydown.enter.stop.prevent="!isViewingMode && handleSubmit" />
       </div>
 
       <!-- URL input -->
@@ -228,6 +234,7 @@ const handleRemove = () => {
           placeholder="Type or paste a link"
           :class="{ error: urlError }"
           v-model="rawUrl"
+          :readonly="isViewingMode"
           @keydown.enter.stop.prevent="handleSubmit"
           @keydown="urlError = false"
         />
@@ -240,7 +247,7 @@ const handleRemove = () => {
           data-item="btn-link-open"
         ></div>
       </div>
-      <div class="input-row link-buttons">
+      <div class="input-row link-buttons" v-if="!isViewingMode">
         <button class="remove-btn" @click="handleRemove" v-if="isEditing" data-item="btn-link-remove">
           <div class="remove-btn__icon" v-html="toolbarIcons.removeLink"></div>
           Remove
@@ -306,6 +313,18 @@ const handleRemove = () => {
       &:focus {
         outline: none;
         border: 1px solid #1355ff;
+      }
+
+      &[readonly] {
+        background-color: #f5f5f5;
+        cursor: default;
+        color: #888;
+        border-color: #e0e0e0;
+
+        &:active,
+        &:focus {
+          border-color: #e0e0e0;
+        }
       }
     }
   }

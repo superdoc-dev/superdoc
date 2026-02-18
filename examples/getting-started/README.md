@@ -1,21 +1,20 @@
 # Getting Started Examples
 
-Quick start examples to get SuperDoc running in your preferred framework.
+Minimal examples for integrating SuperDoc into your project. Each example loads a `.docx` file and renders it in the browser.
 
-## Examples
+| Example | Description | Docs |
+|---------|-------------|------|
+| [react](./react) | React + TypeScript with Vite | [Guide](https://docs.superdoc.dev/getting-started/frameworks/react) |
+| [vue](./vue) | Vue 3 + TypeScript with Vite | [Guide](https://docs.superdoc.dev/getting-started/frameworks/vue) |
+| [vanilla](./vanilla) | Plain JavaScript with Vite | [Guide](https://docs.superdoc.dev/getting-started/installation) |
+| [cdn](./cdn) | Zero build tools — just an HTML file | [Guide](https://docs.superdoc.dev/getting-started/installation) |
 
-| Example | Description |
-|---------|-------------|
-| [react](./react) | Basic React integration |
-| [vue](./vue) | Basic Vue.js integration |
-| [vanilla](./vanilla) | Plain JavaScript without frameworks |
-| [typescript](./typescript) | TypeScript setup with type definitions |
-| [cdn](./cdn) | Browser-based setup using CDN links |
-
-## Running an Example
+## Running
 
 ```bash
-cd <example-folder>
+cd <example>
 npm install
 npm run dev
 ```
+
+For the CDN example, just open `index.html` or run `npx serve .`.

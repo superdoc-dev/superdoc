@@ -37,6 +37,7 @@ import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attrib
 import { translator as wStylesTranslator } from '@converter/v3/handlers/w/styles/index.js';
 import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/numbering/index.js';
 import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
+import { patchNumberingDefinitions } from './patchNumberingDefinitions.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -142,6 +143,7 @@ export const createDocumentJson = (docx, converter, editor) => {
     const lists = {};
     const inlineDocumentFonts = [];
 
+    patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
@@ -757,7 +759,10 @@ const getHeaderFooterSectionData = (sectionData, docx) => {
   const target = sectionData.attributes.Target;
   const filePath = resolveOpcTargetPath(target, 'word');
   const referenceFile = filePath ? docx[filePath] : undefined;
-  const currentFileName = target;
+  // Extract just the filename for relationship file lookup.
+  // This handles both absolute paths (/word/header1.xml -> header1.xml)
+  // and relative paths (header1.xml -> header1.xml) per ECMA-376 OPC spec.
+  const currentFileName = filePath ? filePath.split('/').pop() : target.split('/').pop();
   return {
     rId,
     referenceFile,

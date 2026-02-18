@@ -1,6 +1,7 @@
 logs
 *.log
 .cache
+.vite
 .DS_Store
 .temp
 node_modules
@@ -11,8 +12,6 @@ dist-types
 .env
 .npmrc
 .eslintcache
-CLAUDE.md
-
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -65,8 +64,9 @@ reports/
 
 # Planning and progress tracking documents
 **/plan/progress.md
-
-AGENTS.md
+wrangler/
 codex.config.json
 perf-baseline-results.json
 .claude
+plans/
+dev/

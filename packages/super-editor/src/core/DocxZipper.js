@@ -262,7 +262,7 @@ class DocxZipper {
     return zip;
   }
 
-  async updateZip({ docx, updatedDocs, originalDocxFile, media, fonts, isHeadless }) {
+  async updateZip({ docx, updatedDocs, originalDocxFile, media, fonts, isHeadless, compression = 'DEFLATE' }) {
     // We use a different re-zip process if we have the original docx vs the docx xml metadata
     let zip;
 
@@ -274,7 +274,11 @@ class DocxZipper {
 
     // If we are headless we don't have 'blob' support, so export as 'nodebuffer'
     const exportType = isHeadless ? 'nodebuffer' : 'blob';
-    return await zip.generateAsync({ type: exportType });
+    return await zip.generateAsync({
+      type: exportType,
+      compression,
+      compressionOptions: compression === 'DEFLATE' ? { level: 6 } : undefined,
+    });
   }
 
   /**

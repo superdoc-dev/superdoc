@@ -96,7 +96,7 @@ describe('computeParagraphAttrs', () => {
       attrs: {
         paragraphProperties: {
           justification: 'center',
-          spacing: { before: 240, after: 120, line: 2, lineRule: 'auto' },
+          spacing: { before: 240, after: 120, line: 210, lineRule: 'exact' },
           indent: { left: 720, hanging: 360 },
           tabStops: [{ val: 'left', pos: 48 }],
         },
@@ -108,7 +108,9 @@ describe('computeParagraphAttrs', () => {
     expect(paragraphAttrs.alignment).toBe('center');
     expect(paragraphAttrs.spacing?.before).toBe(twipsToPx(240));
     expect(paragraphAttrs.spacing?.after).toBe(twipsToPx(120));
-    expect(paragraphAttrs.spacing?.line).toBe(2);
+    expect(paragraphAttrs.spacing?.line).toBe(twipsToPx(210));
+    expect(paragraphAttrs.spacing?.lineRule).toBe('exact');
+    expect(paragraphAttrs.spacing?.lineUnit).toBe('px');
     expect(paragraphAttrs.indent?.left).toBe(twipsToPx(720));
     expect(paragraphAttrs.indent?.hanging).toBe(twipsToPx(360));
     expect(paragraphAttrs.tabs?.[0]).toEqual({ val: 'start', pos: 720 });

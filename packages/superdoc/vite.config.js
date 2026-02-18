@@ -94,7 +94,8 @@ export default defineConfig(({ mode, command}) => {
     test: {
       name: projectLabel,
       globals: true,
-      environment: 'jsdom',
+      // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
+      environment: process.env.VITEST_DOM || 'happy-dom',
       retry: 2,
       testTimeout: 20000,
       hookTimeout: 10000,

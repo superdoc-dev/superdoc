@@ -5,7 +5,6 @@ import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
-import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
@@ -674,12 +673,10 @@ export class HeaderFooterEditorManager extends EventEmitter {
       this.emit('contentChanged', { descriptor } as ContentChangedPayload);
       try {
         // Update the converter data structures with the latest content
+        // Note: onHeaderFooterDataUpdate handles Yjs JSON sync (lightweight ~1KB)
+        // but does NOT call updateYdocDocxData - that's handled by the debounced
+        // main document listener to avoid ~80KB broadcasts on every keystroke
         onHeaderFooterDataUpdate({ editor, transaction }, this.#editor, descriptor.id, descriptor.kind);
-
-        // Fix Issue #2: Sync changes to Yjs document for collaboration and export
-        // This ensures header/footer changes propagate to collaborators and are included in exports
-        // The second parameter (ydoc) is optional and will be retrieved from editor.options.ydoc if not provided
-        await updateYdocDocxData(this.#editor, undefined);
       } catch (error) {
         console.error('[HeaderFooterEditorManager] Failed to sync header/footer update', { descriptor, error });
         // Emit error event so consumers can handle sync failures

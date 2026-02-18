@@ -424,6 +424,7 @@ export const CommentsPlugin = Extension.create({
             const { doc, tr } = state;
             const pluginState = CommentsPluginKey.getState(state);
             const currentActiveThreadId = pluginState.activeThreadId;
+            const layoutEngineActive = Boolean(editor.presentationEditor);
 
             const meta = tr.getMeta(CommentsPluginKey);
             if (meta?.type === 'setActiveComment' || meta?.forceUpdate) {
@@ -446,6 +447,10 @@ export const CommentsPlugin = Extension.create({
             if (!shouldUpdate) return;
             prevDoc = doc;
             shouldUpdate = false;
+
+            if (layoutEngineActive) {
+              return;
+            }
 
             const decorations = [];
             // Always rebuild positions fresh from the current document to avoid stale PM offsets
@@ -721,7 +726,7 @@ const findTrackedMark = ({
 };
 
 const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEditorState, editor) => {
-  const { insertedMark, deletionMark, formatMark, deletionNodes } = trackedChangeMeta;
+  const { insertedMark, deletionMark, formatMark, deletionNodes, emitCommentEvent = true } = trackedChangeMeta;
 
   if (!insertedMark && !deletionMark && !formatMark) {
     return;
@@ -772,7 +777,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     newEditorState,
   });
 
-  if (emitParams) editor.emit('commentsUpdate', emitParams);
+  if (emitParams && emitCommentEvent) editor.emit('commentsUpdate', emitParams);
 
   return newTrackedChanges;
 };

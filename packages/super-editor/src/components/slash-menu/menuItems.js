@@ -4,6 +4,32 @@ import TableActions from '../toolbar/TableActions.vue';
 import LinkInput from '../toolbar/LinkInput.vue';
 import { TEXTS, ICONS, TRIGGERS } from './constants.js';
 import { isTrackedChangeActionAllowed } from '@extensions/track-changes/permission-helpers.js';
+import { readClipboardRaw } from '../../core/utilities/clipboardUtils.js';
+import { handleClipboardPaste } from '../../core/InputRule.js';
+
+/**
+ * Build a minimal clipboard event-like object so ProseMirror paste hooks
+ * can access text/html and text/plain data.
+ * @param {{ html?: string, text?: string }} clipboard
+ * @returns {{ clipboardData: { getData: (type: string) => string } }}
+ */
+const createPasteEventShim = (clipboard) => {
+  const html = clipboard?.html || '';
+  const text = clipboard?.text || '';
+
+  return {
+    type: 'paste',
+    preventDefault: () => {},
+    stopPropagation: () => {},
+    clipboardData: {
+      getData: (type) => {
+        if (type === 'text/html') return html;
+        if (type === 'text/plain') return text;
+        return '';
+      },
+    },
+  };
+};
 
 /**
  * Check if a module is enabled based on editor options
@@ -257,16 +283,27 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           label: TEXTS.paste,
           icon: ICONS.paste,
           isDefault: true,
-          action: (editor) => {
-            // Use execCommand('paste') - triggers native paste without permission prompt
-            // This works because it's triggered by user interaction (clicking the menu item)
-            const editorDom = editor.view?.dom;
-            if (editorDom) {
-              editorDom.focus();
-              // execCommand paste is allowed when triggered by user action
-              const success = document.execCommand('paste');
-              if (!success) {
-                console.warn('[Paste] execCommand paste failed - clipboard may be empty or inaccessible');
+          action: async (editor) => {
+            const { view } = editor ?? {};
+            if (!view) return;
+            view.dom.focus();
+            const { html, text } = await readClipboardRaw();
+            const handled = html ? handleClipboardPaste({ editor, view }, html) : false;
+            if (!handled) {
+              const pasteEvent = createPasteEventShim({ html, text });
+
+              if (html && typeof view.pasteHTML === 'function') {
+                view.pasteHTML(html, pasteEvent);
+                return;
+              }
+
+              if (text && typeof view.pasteText === 'function') {
+                view.pasteText(text, pasteEvent);
+                return;
+              }
+
+              if (text && editor.commands?.insertContent) {
+                editor.commands.insertContent(text, { contentType: 'text' });
               }
             }
           },

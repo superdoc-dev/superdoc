@@ -5,6 +5,8 @@
   "packageManager": "pnpm@10.25.0",
   "scripts": {
     "test": "vitest run",
+    "test:bench": "VITEST_BENCH=true vitest run",
+    "test:slow": "VITEST_SLOW=1 VITEST_DOM=node vitest run --root ./packages/super-editor --exclude '**/node_modules/**' src/tests/editor/node-import-timing.test.js",
     "test:debug": "pnpm --prefix packages/super-editor run test:debug",
     "test:inspect": "NODE_OPTIONS=\"--inspect-brk=9229\" vitest --pool threads --poolOptions.threads.singleThread",
     "test:all": "vitest run",
@@ -18,6 +20,8 @@
     "dev": "pnpm --prefix packages/superdoc run dev",
     "dev:superdoc": "pnpm --prefix packages/superdoc run dev",
     "dev:super-editor": "pnpm --prefix packages/super-editor run dev",
+    "dev:collab": "pnpm --prefix packages/superdoc run dev:collab",
+    "dev:docs": "pnpm --prefix apps/docs run dev",
     "build:superdoc": "pnpm --prefix packages/superdoc run build",
     "build:super-editor": "pnpm --prefix packages/super-editor run build",
     "build": "pnpm run clean:packages && pnpm --prefix packages/super-editor run types:build && pnpm run build:superdoc && pnpm run type-check",
@@ -36,27 +40,14 @@
     "release": "pnpm run build:superdoc && pnpm run type-check && pnpx semantic-release",
     "release:dry-run": "pnpm run build:superdoc && pnpm run type-check && pnpx semantic-release --dry-run",
     "release:local": "pnpm run build:superdoc && pnpm run type-check && pnpx semantic-release --no-ci",
-    "prepare": "husky",
+    "prepare": "if [ -z \"$CI\" ]; then lefthook install; fi",
     "test:layout": "node ./scripts/test-layout.mjs",
-    "lint:staged": "lint-staged",
     "watch": "pnpm --prefix packages/superdoc run watch:es",
     "check:all": "pnpm run format && pnpm run lint:fix && pnpm --prefix packages/super-editor run types:build && pnpm run test",
     "local:publish": "pnpm --prefix packages/superdoc version prerelease --preid=local && pnpm --prefix packages/superdoc publish --registry http://localhost:4873",
     "update-preset-geometry": "ROOT=$(pwd) && cd ../superdoc-devtools/preset-geometry && pnpm run build && cp ./dist/index.js ./dist/index.js.map ./dist/index.d.ts \"$ROOT/packages/preset-geometry/\"",
     "manual-tag": "bash scripts/manual-tag.sh",
     "manual-clean-tag": "bash scripts/manual-clean-tag.sh"
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{css,scss,json}": [
-      "prettier --write"
-    ],
-    "*.vue": [
-      "prettier --write"
-    ]
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",
@@ -73,11 +64,13 @@
     "eslint-import-resolver-typescript": "catalog:",
     "eslint-plugin-import-x": "catalog:",
     "eslint-plugin-jsdoc": "catalog:",
-    "husky": "catalog:",
+    "happy-dom": "catalog:",
     "jsdom": "catalog:",
-    "lint-staged": "catalog:",
+    "konva": "catalog:",
+    "lefthook": "catalog:",
     "prettier": "catalog:",
     "semantic-release": "catalog:",
+    "semantic-release-commit-filter": "catalog:",
     "semantic-release-linear-app": "catalog:",
     "semantic-release-pnpm": "^1.0.2",
     "typescript": "catalog:",
@@ -88,5 +81,20 @@
   },
   "optionalDependencies": {
     "canvas": "catalog:"
+  },
+  "pnpm": {
+    "overrides": {
+      "canvas": "3.2.0",
+      "happy-dom": "20.4.0",
+      "jsdom": "27.3.0",
+      "vue": "3.5.25",
+      "@vue/compiler-core": "3.5.25",
+      "@vue/compiler-dom": "3.5.25",
+      "@vue/compiler-sfc": "3.5.25",
+      "@vue/runtime-core": "3.5.25",
+      "@vue/runtime-dom": "3.5.25",
+      "@vue/server-renderer": "3.5.25",
+      "@vue/shared": "3.5.25"
+    }
   }
 }

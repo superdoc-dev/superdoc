@@ -14,6 +14,7 @@ import type {
   InlineNodeAttributes,
   ShapeNodeAttributes,
 } from '../../core/types/NodeCategories.js';
+import type { StructuredContentLockMode } from '@superdoc/contracts';
 
 // ============================================
 // SHARED TYPES
@@ -185,6 +186,8 @@ export interface ParagraphAttrs extends TextContainerAttributes {
   listRendering: ListRendering | null;
   /** SuperDoc block tracking ID */
   sdBlockId: string | null;
+  /** Incrementing revision for block-level changes */
+  sdBlockRev: number | null;
   /** Additional HTML attributes */
   extraAttrs: Record<string, string>;
   /** Paragraph identifier (w:paraId) */
@@ -591,6 +594,8 @@ export interface HardBreakAttrs extends InlineNodeAttributes {
 // STRUCTURED CONTENT
 // ============================================
 
+export type { StructuredContentLockMode };
+
 /** Structured content node attributes */
 export interface StructuredContentAttrs extends BlockNodeAttributes {
   /** Unique identifier */
@@ -605,6 +610,8 @@ export interface StructuredContentAttrs extends BlockNodeAttributes {
   description?: string;
   /** Whether the content is locked */
   isLocked?: boolean;
+  /** Lock mode */
+  lockMode?: StructuredContentLockMode;
 }
 
 // ============================================

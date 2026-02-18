@@ -33,6 +33,8 @@ export default defineConfig(({ mode }) => {
       exclude: [
         ...configDefaults.exclude,
         '**/*.spec.js',
+        // Slow test excluded by default, run with VITEST_SLOW=1 (test:slow script)
+        ...(process.env.VITEST_SLOW ? [] : ['**/node-import-timing.test.js']),
       ],
       coverage: {
         provider: 'v8',

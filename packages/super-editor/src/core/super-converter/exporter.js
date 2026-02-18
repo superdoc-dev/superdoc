@@ -165,6 +165,7 @@ export function exportSchemaToJson(params) {
     table: wTblNodeTranslator,
     tableRow: wTrNodeTranslator,
     tableCell: wTcNodeTranslator,
+    tableHeader: wTcNodeTranslator,
     bookmarkStart: wBookmarkStartTranslator,
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,
@@ -564,7 +565,7 @@ export class DocxExporter {
   #replaceSpecialCharacters(text) {
     if (text === undefined || text === null) return text;
     return String(text)
-      .replace(/&/g, '&amp;')
+      .replace(/&(?!#\d+;|#x[0-9a-fA-F]+;|(?:amp|lt|gt|quot|apos);)/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')

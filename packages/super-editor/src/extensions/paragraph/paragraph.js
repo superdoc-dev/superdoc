@@ -10,6 +10,7 @@ import { toggleList } from '@core/commands/index.js';
 import { restartNumbering } from '@core/commands/restartNumbering.js';
 import { ParagraphNodeView } from './ParagraphNodeView.js';
 import { createNumberingPlugin } from './numberingPlugin.js';
+import { createLeadingCaretPlugin } from './leadingCaretPlugin.js';
 import { createDropcapPlugin } from './dropcapPlugin.js';
 import { shouldSkipNodeView } from '../../utils/headless-helpers.js';
 import { parseAttrs } from './helpers/parseAttrs.js';
@@ -112,6 +113,11 @@ export const Paragraph = OxmlNode.create({
         renderDOM: (attrs) => {
           return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
         },
+      },
+      sdBlockRev: {
+        default: 0,
+        rendered: false,
+        keepOnSplit: false,
       },
       attributes: {
         rendered: false,
@@ -315,6 +321,6 @@ export const Paragraph = OxmlNode.create({
         },
       },
     });
-    return [dropcapPlugin, numberingPlugin, listEmptyInputPlugin];
+    return [dropcapPlugin, numberingPlugin, listEmptyInputPlugin, createLeadingCaretPlugin()];
   },
 });

@@ -207,9 +207,13 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: mockToFlowBlocks,
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: mockToFlowBlocks,
+  };
+});
 
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
@@ -2441,6 +2445,7 @@ describe('PresentationEditor', () => {
         const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
           (Editor as unknown as MockedEditor).mock.results.length - 1
         ].value;
+        mockEditorInstance.view.hasFocus = vi.fn(() => true);
 
         // Mock editor state with valid selection at position 5
         mockEditorInstance.state = {

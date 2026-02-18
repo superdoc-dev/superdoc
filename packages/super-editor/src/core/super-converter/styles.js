@@ -540,6 +540,9 @@ export function decodeRPrFromMarks(marks) {
           }
         }
         break;
+      case 'link':
+        runProperties.styleId = 'Hyperlink';
+        break;
       case 'textStyle':
         Object.keys(mark.attrs).forEach((attr) => {
           const value = mark.attrs[attr];

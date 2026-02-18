@@ -68,7 +68,11 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
             }),
           },
           doc: {
-            resolve: vi.fn(),
+            resolve: vi.fn(() => ({
+              parent: { inlineContent: true },
+              min: vi.fn(function (other) { return this; }),
+              max: vi.fn(function (other) { return this; }),
+            })),
           },
         },
         dispatch: vi.fn(),
@@ -553,6 +557,286 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
       // Should handle undefined link mark type
       expect(wrapper.exists()).toBe(true);
       expect(wrapper.vm.rawUrl).toBe('');
+    });
+  });
+
+  describe('Viewing mode behavior', () => {
+    it('should detect viewing mode correctly', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'viewing' };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+        },
+      });
+
+      await nextTick();
+
+      expect(wrapper.vm.isViewingMode).toBe(true);
+    });
+
+    it('should detect non-viewing mode correctly', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+        },
+      });
+
+      await nextTick();
+
+      expect(wrapper.vm.isViewingMode).toBe(false);
+    });
+
+    it('should show "Link details" title in viewing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'viewing' };
+      const linkMarkType = { name: 'link' };
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMarkType, attrs: { href: 'https://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      const titles = wrapper.findAll('.link-title');
+      expect(titles.length).toBeGreaterThan(0);
+      expect(titles[0].text()).toBe('Link details');
+    });
+
+    it('should show "Edit link" title in editing mode when link exists', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+      const linkMark = mockEditor.state.schema.marks.link;
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMark, attrs: { href: 'https://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      const titles = wrapper.findAll('.link-title');
+      expect(titles.length).toBeGreaterThan(0);
+      expect(titles[0].text()).toBe('Edit link');
+    });
+
+    it('should make text input readonly in viewing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'viewing' };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+
+      const textInput = wrapper.find('input[name="text"]');
+      expect(textInput.exists()).toBe(true);
+      expect(textInput.attributes('readonly')).toBe('');
+    });
+
+    it('should make URL input readonly in viewing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'viewing' };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+
+      const urlInput = wrapper.find('input[name="link"]');
+      expect(urlInput.exists()).toBe(true);
+      expect(urlInput.attributes('readonly')).toBe('');
+    });
+
+    it('should not make inputs readonly in editing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+
+      const textInput = wrapper.find('input[name="text"]');
+      const urlInput = wrapper.find('input[name="link"]');
+      expect(textInput.exists()).toBe(true);
+      expect(urlInput.exists()).toBe(true);
+      expect(textInput.attributes('readonly')).toBeUndefined();
+      expect(urlInput.attributes('readonly')).toBeUndefined();
+    });
+
+    it('should hide Apply and Remove buttons in viewing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'viewing' };
+      const linkMarkType = { name: 'link' };
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMarkType, attrs: { href: 'https://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      expect(wrapper.find('.link-buttons').exists()).toBe(false);
+    });
+
+    it('should show Apply button in editing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+
+      expect(wrapper.find('.submit-btn').exists()).toBe(true);
+    });
+
+    it('should show Remove button in editing mode when editing existing link', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+      const linkMark = mockEditor.state.schema.marks.link;
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMark, attrs: { href: 'https://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      expect(wrapper.find('.remove-btn').exists()).toBe(true);
+    });
+
+    it('should keep open link button functional in viewing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'viewing' };
+      const linkMark = mockEditor.state.schema.marks.link;
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMark, attrs: { href: 'https://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      const openLinkBtn = wrapper.find('.open-link-icon');
+      expect(openLinkBtn.exists()).toBe(true);
+      expect(openLinkBtn.classes()).not.toContain('disabled');
+    });
+
+    it('should handle submit in editing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+      const linkMark = mockEditor.state.schema.marks.link;
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMark, attrs: { href: 'https://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      wrapper.vm.handleSubmit();
+
+      // Verify that link modification commands were called
+      expect(mockEditor.commands.toggleLink).toHaveBeenCalled();
+      expect(mockClosePopover).toHaveBeenCalled();
+    });
+
+    it('should not handle submit in viewing mode', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'viewing' };
+      const linkMark = mockEditor.state.schema.marks.link;
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMark, attrs: { href: 'https://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      wrapper.vm.handleSubmit();
+
+      // Verify that link modification commands were not called
+      expect(mockEditor.commands.toggleLink).not.toHaveBeenCalled();
+      expect(mockEditor.commands.unsetLink).not.toHaveBeenCalled();
+      expect(mockClosePopover).not.toHaveBeenCalled();
     });
   });
 });

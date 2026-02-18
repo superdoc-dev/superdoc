@@ -987,7 +987,7 @@ const handleMarginClick = (event) => {
   if (target?.classList?.contains('ProseMirror')) return;
 
   // Causes issues with node selection.
-  if (target?.closest?.('.presentation-editor, .superdoc-layout')) {
+  if (target?.closest?.('.presentation-editor, .superdoc-layout, .slash-menu')) {
     return;
   }
 

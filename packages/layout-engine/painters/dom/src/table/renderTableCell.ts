@@ -29,6 +29,7 @@ import {
   getSdtContainerKey,
   type SdtBoundaryOptions,
 } from '../utils/sdt-helpers.js';
+import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
 
 /**
  * Default gap between list marker and text content in pixels.
@@ -1063,11 +1064,9 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       const behindDoc =
         anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);
       const zIndex =
-        anchoredBlock.kind === 'drawing' && typeof anchoredBlock.zIndex === 'number'
+        typeof anchoredBlock.zIndex === 'number'
           ? anchoredBlock.zIndex
-          : behindDoc
-            ? -1
-            : 1;
+          : (normalizeZIndex(anchoredBlock.attrs?.originalAttributes) ?? (behindDoc ? -1 : 1));
 
       const wrap = anchoredBlock.wrap;
       if (!behindDoc && wrap?.type === 'Square') {

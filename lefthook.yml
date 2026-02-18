@@ -1,0 +1,46 @@
+pre-commit:
+  parallel: true
+  commands:
+    install-deps:
+      run: pnpm install
+      stage_fixed: true
+    typecheck:
+      glob: "*.{ts,tsx,vue}"
+      run: pnpm run type-check
+    format:
+      glob: "*.{js,jsx,ts,tsx,css,scss,json,vue}"
+      run: pnpm exec prettier --write {staged_files}
+      stage_fixed: true
+    lint:
+      glob: "*.{js,jsx,ts,tsx}"
+      run: pnpm exec eslint --fix {staged_files}
+      stage_fixed: true
+    cli-build:
+      root: "apps/cli/"
+      glob: "apps/cli/**/*.ts"
+      run: pnpm run build
+    cli-test:
+      root: "apps/cli/"
+      glob: "apps/cli/**/*.ts"
+      run: pnpm run test
+    vscode-build:
+      root: "apps/vscode-ext/"
+      glob: "apps/vscode-ext/**/*.{ts,js}"
+      run: pnpm run build
+    vscode-lint:
+      root: "apps/vscode-ext/"
+      glob: "apps/vscode-ext/**/*.{ts,js}"
+      run: pnpm run lint
+    docs-check-imports:
+      root: "apps/docs/"
+      glob: "apps/docs/**/*.mdx"
+      run: pnpm run check:imports
+    docs-test-examples:
+      root: "apps/docs/"
+      glob: "apps/docs/**/*.mdx"
+      run: pnpm run test:examples
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm exec commitlint --edit {1}

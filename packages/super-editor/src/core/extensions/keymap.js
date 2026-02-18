@@ -74,7 +74,7 @@ export const Keymap = Extension.create({
       'Ctrl-Alt-Backspace': () => handleDelete(this.editor),
       'Alt-Delete': () => handleDelete(this.editor),
       'Alt-d': () => handleDelete(this.editor),
-      'Ctrl-a': () => this.editor.commands.selectTextblockStart(),
+      'Ctrl-a': () => this.editor.commands.selectAll(),
       'Ctrl-e': () => this.editor.commands.selectTextblockEnd(),
       'Ctrl-t': () => this.editor.commands.insertTabChar(),
     };

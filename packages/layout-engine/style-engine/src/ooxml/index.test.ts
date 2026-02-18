@@ -6,6 +6,7 @@ import {
   resolveRunProperties,
   resolveParagraphProperties,
   resolveCellStyles,
+  resolveTableCellProperties,
   type OoxmlResolverParams,
 } from './index.js';
 
@@ -412,5 +413,133 @@ describe('ooxml - resolveCellStyles', () => {
     };
     const result = resolveCellStyles('runProperties', tableInfo, params.translatedLinkedStyles!);
     expect(result).toEqual([{ fontSize: 10 }, { fontSize: 50 }]);
+  });
+});
+
+describe('ooxml - resolveTableCellProperties', () => {
+  const gridTable4Styles = {
+    ...emptyStyles,
+    styles: {
+      'GridTable4-Accent1': {
+        type: 'table',
+        tableProperties: { tableStyleRowBandSize: 1, tableStyleColBandSize: 1 },
+        tableStyleProperties: {
+          firstRow: {
+            tableCellProperties: {
+              shading: { val: 'clear', color: 'auto', fill: '156082' },
+              borders: { top: { val: 'single', color: '156082', size: 4 } },
+            },
+          },
+          band1Horz: {
+            tableCellProperties: {
+              shading: { val: 'clear', color: 'auto', fill: 'C1E4F5' },
+            },
+          },
+          wholeTable: {
+            tableCellProperties: {
+              shading: { val: 'clear', color: 'auto', fill: 'EEEEEE' },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  it('resolves firstRow shading from table style', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'GridTable4-Accent1',
+        tblLook: { firstRow: true, noHBand: false, noVBand: true },
+      },
+      rowIndex: 0,
+      cellIndex: 1,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, gridTable4Styles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: '156082' });
+  });
+
+  it('resolves band1Horz shading for data rows', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'GridTable4-Accent1',
+        tblLook: { firstRow: true, noHBand: false, noVBand: true },
+      },
+      rowIndex: 1,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, gridTable4Styles);
+    // band1Horz overrides wholeTable
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'C1E4F5' });
+  });
+
+  it('falls back to wholeTable when no band matches', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'GridTable4-Accent1',
+        tblLook: { firstRow: true, noHBand: true, noVBand: true },
+      },
+      rowIndex: 1,
+      cellIndex: 1,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, gridTable4Styles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'EEEEEE' });
+  });
+
+  it('inline cell shading overrides style shading', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'GridTable4-Accent1',
+        tblLook: { firstRow: true, noHBand: false, noVBand: true },
+      },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 4,
+    };
+    const inlineProps = { shading: { val: 'clear', color: 'auto', fill: 'FF0000' } };
+    const result = resolveTableCellProperties(inlineProps, tableInfo, gridTable4Styles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'FF0000' });
+  });
+
+  it('returns inline props when no table style exists', () => {
+    const tableInfo = {
+      tableProperties: {},
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 1,
+      numCells: 1,
+    };
+    const inlineProps = { shading: { val: 'clear', fill: 'AABBCC' } };
+    const result = resolveTableCellProperties(inlineProps, tableInfo, gridTable4Styles);
+    expect(result.shading).toEqual({ val: 'clear', fill: 'AABBCC' });
+  });
+
+  it('returns empty object when no props available', () => {
+    const result = resolveTableCellProperties(null, null, null);
+    expect(result).toEqual({});
+  });
+
+  it('merges borders from style and inline', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'GridTable4-Accent1',
+        tblLook: { firstRow: true, noHBand: false, noVBand: true },
+      },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 4,
+    };
+    const inlineProps = { borders: { bottom: { val: 'double', color: '000000', size: 8 } } };
+    const result = resolveTableCellProperties(inlineProps, tableInfo, gridTable4Styles);
+    // firstRow style provides top border, inline provides bottom border - both should be present
+    expect(result.borders?.top).toEqual({ val: 'single', color: '156082', size: 4 });
+    expect(result.borders?.bottom).toEqual({ val: 'double', color: '000000', size: 8 });
   });
 });

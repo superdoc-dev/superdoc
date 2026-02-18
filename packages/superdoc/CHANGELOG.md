@@ -1,3 +1,226 @@
+# [1.11.0](https://github.com/superdoc-dev/superdoc/compare/v1.10.0...v1.11.0) (2026-02-06)
+
+
+### Bug Fixes
+
+* cli package public ([7dad84d](https://github.com/superdoc-dev/superdoc/commit/7dad84da35c78f45072907dfde94ec782b362a8f))
+* cli skill uses latest ([b74d9ba](https://github.com/superdoc-dev/superdoc/commit/b74d9bae4682f64bd11cf17f8cfff7c22965e415))
+* **cli:** document -h flag in help text ([020c4a0](https://github.com/superdoc-dev/superdoc/commit/020c4a0d58e079e1912c0773c095806bbc51eafa))
+* **cli:** document -h flag in help text ([68fa42f](https://github.com/superdoc-dev/superdoc/commit/68fa42fabbbc44b41d644b9010a12fa2573e7e8c))
+* **cli:** move bundled deps to devDependencies ([6a362ed](https://github.com/superdoc-dev/superdoc/commit/6a362ed87baad3d08cec2298980290ea2183c1ac))
+* **cli:** remove bundled deps from package.json ([f90d4af](https://github.com/superdoc-dev/superdoc/commit/f90d4af095a8e4cf5fca34774855a28559dec5de))
+* console log ([4b64109](https://github.com/superdoc-dev/superdoc/commit/4b64109b92623cfb7582774c45f96cac47a8280f))
+* document dropdown resets ([#1883](https://github.com/superdoc-dev/superdoc/issues/1883)) ([b552d2e](https://github.com/superdoc-dev/superdoc/commit/b552d2e272d7f8b19e1bf2400c58fec9fed30f16))
+* lock file ([1edf741](https://github.com/superdoc-dev/superdoc/commit/1edf7419fc5c17dc5ff6a0e7097214aee1e8d2bc))
+* make Ctrl-a select all content, and fix select all when there are tables in doc ([#1886](https://github.com/superdoc-dev/superdoc/issues/1886)) ([c87c1ab](https://github.com/superdoc-dev/superdoc/commit/c87c1ab1d122482a6c65d77decb6374e97f9d45e))
+* package lock ([11f47fa](https://github.com/superdoc-dev/superdoc/commit/11f47fabe45b5341f0873895ff50d9e791781718))
+* paragraph autospacing calculation (SD-1653) ([#1877](https://github.com/superdoc-dev/superdoc/issues/1877)) ([b7dec3c](https://github.com/superdoc-dev/superdoc/commit/b7dec3cda82840c62bfe815a636b76f5f949424c))
+* run color overwrite in applyInlineRunProperties (SD-1585) ([#1885](https://github.com/superdoc-dev/superdoc/issues/1885)) ([6051dd4](https://github.com/superdoc-dev/superdoc/commit/6051dd4de2225217b6cd426cbb2ae657998d72a2))
+* selection across pages with drag ([#1884](https://github.com/superdoc-dev/superdoc/issues/1884)) ([bb44999](https://github.com/superdoc-dev/superdoc/commit/bb449995bf0537d9471c88b7c1ddca948ea0b070))
+* **super-converter:** handle ECMA-376 percentage strings in table widths (SD-1633) ([#1844](https://github.com/superdoc-dev/superdoc/issues/1844)) ([fb9fd52](https://github.com/superdoc-dev/superdoc/commit/fb9fd5235eea1f3913da29195f682416ad60ced4))
+* **super-converter:** return transparent instead of blue for shapes ([#1854](https://github.com/superdoc-dev/superdoc/issues/1854)) ([6ac29d7](https://github.com/superdoc-dev/superdoc/commit/6ac29d79b4cb986dc52f79db16966d413c07111e)), closes [#5b9bd5](https://github.com/superdoc-dev/superdoc/issues/5b9bd5)
+
+
+### Features
+
+* add esign package to monorepo ([#1895](https://github.com/superdoc-dev/superdoc/issues/1895)) ([532e2b5](https://github.com/superdoc-dev/superdoc/commit/532e2b5fbd23406eb17e5a1125eda1aaec4496c0))
+* add template-builder package to monorepo ([#1888](https://github.com/superdoc-dev/superdoc/issues/1888)) ([0aec624](https://github.com/superdoc-dev/superdoc/commit/0aec6243dfbcc6552783f610b6469ae6ee2b6d2a))
+* **cli:** add claude code skill ([#1903](https://github.com/superdoc-dev/superdoc/issues/1903)) ([e55ce56](https://github.com/superdoc-dev/superdoc/commit/e55ce561c07bf6f103fb31657b2b928f44cd718c))
+* new cli app ([#1902](https://github.com/superdoc-dev/superdoc/issues/1902)) ([0c6aeb0](https://github.com/superdoc-dev/superdoc/commit/0c6aeb06f5a32de3b58dfe68dc38ec63b8ff2cf6))
+* **template-builder:** add cspNonce support ([#1911](https://github.com/superdoc-dev/superdoc/issues/1911)) ([5b7b34e](https://github.com/superdoc-dev/superdoc/commit/5b7b34ea3971f98078e5314fc5dd1ef23550afd6))
+* **vscode-ext:** sync from main ([47c50f7](https://github.com/superdoc-dev/superdoc/commit/47c50f74ed3fa0371acd15947d2105142fd312fd))
+* **vscode-ext:** sync from main ([226bcf1](https://github.com/superdoc-dev/superdoc/commit/226bcf12f76b7dea2aa0cd425d6116bb1f7b7ea5))
+* **vscode-ext:** sync from main ([eced1f3](https://github.com/superdoc-dev/superdoc/commit/eced1f369e527064984dc9de107bc1e670bade90))
+* **vscode-ext:** sync from main ([36b48a6](https://github.com/superdoc-dev/superdoc/commit/36b48a6195097dc539436e13218c38f6ac1aa8e4))
+* **vscode-ext:** sync from main ([cdc00df](https://github.com/superdoc-dev/superdoc/commit/cdc00dfab9857613ae5562de8eff61eaa44fceaa))
+
+## [1.10.1-next.4](https://github.com/superdoc-dev/superdoc/compare/v1.10.1-next.3...v1.10.1-next.4) (2026-01-30)
+
+
+### Bug Fixes
+
+* make Ctrl-a select all content, and fix select all when there are tables in doc ([#1886](https://github.com/superdoc-dev/superdoc/issues/1886)) ([c87c1ab](https://github.com/superdoc-dev/superdoc/commit/c87c1ab1d122482a6c65d77decb6374e97f9d45e))
+
+## [1.10.1-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.10.1-next.2...v1.10.1-next.3) (2026-01-30)
+
+
+### Bug Fixes
+
+* run color overwrite in applyInlineRunProperties (SD-1585) ([#1885](https://github.com/superdoc-dev/superdoc/issues/1885)) ([6051dd4](https://github.com/superdoc-dev/superdoc/commit/6051dd4de2225217b6cd426cbb2ae657998d72a2))
+
+## [1.10.1-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.10.1-next.1...v1.10.1-next.2) (2026-01-30)
+
+
+### Bug Fixes
+
+* document dropdown resets ([#1883](https://github.com/superdoc-dev/superdoc/issues/1883)) ([b552d2e](https://github.com/superdoc-dev/superdoc/commit/b552d2e272d7f8b19e1bf2400c58fec9fed30f16))
+* selection across pages with drag ([#1884](https://github.com/superdoc-dev/superdoc/issues/1884)) ([bb44999](https://github.com/superdoc-dev/superdoc/commit/bb449995bf0537d9471c88b7c1ddca948ea0b070))
+
+## [1.10.1-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.10.0...v1.10.1-next.1) (2026-01-30)
+
+
+### Bug Fixes
+
+* **super-converter:** return transparent instead of blue for shapes ([#1854](https://github.com/superdoc-dev/superdoc/issues/1854)) ([6ac29d7](https://github.com/superdoc-dev/superdoc/commit/6ac29d79b4cb986dc52f79db16966d413c07111e)), closes [#5b9bd5](https://github.com/superdoc-dev/superdoc/issues/5b9bd5)
+
+# [1.10.0](https://github.com/superdoc-dev/superdoc/compare/v1.9.0...v1.10.0) (2026-01-30)
+
+
+### Bug Fixes
+
+* **collaboration:** add debouncing to header/footer Y.Doc updates ([#1861](https://github.com/superdoc-dev/superdoc/issues/1861)) ([90d0f65](https://github.com/superdoc-dev/superdoc/commit/90d0f6549e9c207e127da72466a41c63035c7c85))
+* comment text after enter break is dropped on render and export ([#1853](https://github.com/superdoc-dev/superdoc/issues/1853)) ([ce7f553](https://github.com/superdoc-dev/superdoc/commit/ce7f5534afaa8e46cb4d4e41fb6478575dea26e3))
+* **comments:** pass superdoc instance when canceling pending comment ([#1862](https://github.com/superdoc-dev/superdoc/issues/1862)) ([4982bac](https://github.com/superdoc-dev/superdoc/commit/4982bac97c5f7e141d7029b9ba7b832ee509e165))
+* horizontal rule ([#1875](https://github.com/superdoc-dev/superdoc/issues/1875)) ([4b3b92e](https://github.com/superdoc-dev/superdoc/commit/4b3b92ee168adcc06c7c4c927716ebcfec94311e))
+* selection/caret issues ([#1865](https://github.com/superdoc-dev/superdoc/issues/1865)) ([3f627fb](https://github.com/superdoc-dev/superdoc/commit/3f627fbe83e715bb9b5b01f6711d6d84b57e2ed6))
+* **super-editor:** preserve toolbar style marks when wrapping runs ([9dbcdd2](https://github.com/superdoc-dev/superdoc/commit/9dbcdd21023f0467ca689bb6d21bb79431bf4370))
+* table width ([#1876](https://github.com/superdoc-dev/superdoc/issues/1876)) ([46a635c](https://github.com/superdoc-dev/superdoc/commit/46a635cc946900beebccd284f6ab9d750365b4bf))
+* use stable comment ids for imported comments ([#1863](https://github.com/superdoc-dev/superdoc/issues/1863)) ([0c330d0](https://github.com/superdoc-dev/superdoc/commit/0c330d0394e6b18d942a7a3ed6f090a5b9f036e4))
+
+
+### Features
+
+* add CLAUDE.md/AGENTS.md navigation files for AI tools ([#1878](https://github.com/superdoc-dev/superdoc/issues/1878)) ([db98d62](https://github.com/superdoc-dev/superdoc/commit/db98d62dde6d6ccb28142af46c0abff8bee3d469))
+* **track-changes:** add emitCommentEvent option to suppress sidebar bubbles ([#1880](https://github.com/superdoc-dev/superdoc/issues/1880)) ([87a2f24](https://github.com/superdoc-dev/superdoc/commit/87a2f2417322665f9f041f1a7d28642e95b5ea83))
+
+# [1.10.0-next.5](https://github.com/superdoc-dev/superdoc/compare/v1.10.0-next.4...v1.10.0-next.5) (2026-01-30)
+
+
+### Bug Fixes
+
+* comment text after enter break is dropped on render and export ([#1853](https://github.com/superdoc-dev/superdoc/issues/1853)) ([ce7f553](https://github.com/superdoc-dev/superdoc/commit/ce7f5534afaa8e46cb4d4e41fb6478575dea26e3))
+
+# [1.10.0-next.4](https://github.com/superdoc-dev/superdoc/compare/v1.10.0-next.3...v1.10.0-next.4) (2026-01-29)
+
+
+### Bug Fixes
+
+* **collaboration:** add debouncing to header/footer Y.Doc updates ([#1861](https://github.com/superdoc-dev/superdoc/issues/1861)) ([90d0f65](https://github.com/superdoc-dev/superdoc/commit/90d0f6549e9c207e127da72466a41c63035c7c85))
+
+# [1.10.0-next.3](https://github.com/superdoc-dev/superdoc/compare/v1.10.0-next.2...v1.10.0-next.3) (2026-01-29)
+
+
+### Bug Fixes
+
+* horizontal rule ([#1875](https://github.com/superdoc-dev/superdoc/issues/1875)) ([4b3b92e](https://github.com/superdoc-dev/superdoc/commit/4b3b92ee168adcc06c7c4c927716ebcfec94311e))
+
+
+### Features
+
+* **track-changes:** add emitCommentEvent option to suppress sidebar bubbles ([#1880](https://github.com/superdoc-dev/superdoc/issues/1880)) ([87a2f24](https://github.com/superdoc-dev/superdoc/commit/87a2f2417322665f9f041f1a7d28642e95b5ea83))
+
+# [1.10.0-next.2](https://github.com/superdoc-dev/superdoc/compare/v1.10.0-next.1...v1.10.0-next.2) (2026-01-29)
+
+
+### Bug Fixes
+
+* **super-editor:** preserve toolbar style marks when wrapping runs ([9dbcdd2](https://github.com/superdoc-dev/superdoc/commit/9dbcdd21023f0467ca689bb6d21bb79431bf4370))
+
+# [1.10.0-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.9.1-next.1...v1.10.0-next.1) (2026-01-29)
+
+
+### Bug Fixes
+
+* table width ([#1876](https://github.com/superdoc-dev/superdoc/issues/1876)) ([46a635c](https://github.com/superdoc-dev/superdoc/commit/46a635cc946900beebccd284f6ab9d750365b4bf))
+
+
+### Features
+
+* add CLAUDE.md/AGENTS.md navigation files for AI tools ([#1878](https://github.com/superdoc-dev/superdoc/issues/1878)) ([db98d62](https://github.com/superdoc-dev/superdoc/commit/db98d62dde6d6ccb28142af46c0abff8bee3d469))
+
+## [1.9.1-next.1](https://github.com/superdoc-dev/superdoc/compare/v1.9.0...v1.9.1-next.1) (2026-01-29)
+
+
+### Bug Fixes
+
+* **comments:** pass superdoc instance when canceling pending comment ([#1862](https://github.com/superdoc-dev/superdoc/issues/1862)) ([4982bac](https://github.com/superdoc-dev/superdoc/commit/4982bac97c5f7e141d7029b9ba7b832ee509e165))
+* selection/caret issues ([#1865](https://github.com/superdoc-dev/superdoc/issues/1865)) ([3f627fb](https://github.com/superdoc-dev/superdoc/commit/3f627fbe83e715bb9b5b01f6711d6d84b57e2ed6))
+* use stable comment ids for imported comments ([#1863](https://github.com/superdoc-dev/superdoc/issues/1863)) ([0c330d0](https://github.com/superdoc-dev/superdoc/commit/0c330d0394e6b18d942a7a3ed6f090a5b9f036e4))
+
+# [1.9.0](https://github.com/superdoc-dev/superdoc/compare/v1.8.3...v1.9.0) (2026-01-29)
+
+
+### Bug Fixes
+
+* add typesVersions for TypeScript subpath exports ([#1851](https://github.com/superdoc-dev/superdoc/issues/1851)) ([923ab29](https://github.com/superdoc-dev/superdoc/commit/923ab293329f94a04df43cc337bab4e29149e518))
+* annotation and interaction issues ([#1847](https://github.com/superdoc-dev/superdoc/issues/1847)) ([ffb1055](https://github.com/superdoc-dev/superdoc/commit/ffb1055dcf21916a23b221655a9eff8828d49fa0))
+* annotation formatting ([0ac67b2](https://github.com/superdoc-dev/superdoc/commit/0ac67b20e6dca1aebe077eaf5e7e116ad61b2135))
+* apply correct style to inserted links ([#1871](https://github.com/superdoc-dev/superdoc/issues/1871)) ([36e3c4b](https://github.com/superdoc-dev/superdoc/commit/36e3c4b066a02fbcac4e53cc3df2c3cefaf207fb))
+* block ID collisions and missing positions in paragraph converter ([3e75a98](https://github.com/superdoc-dev/superdoc/commit/3e75a9827fdb8b1847632e6a5b7f8f5dcabcabd1))
+* correct cursor position when typing after fully track-deleted content ([#1828](https://github.com/superdoc-dev/superdoc/issues/1828)) ([8de1c5f](https://github.com/superdoc-dev/superdoc/commit/8de1c5f142fae6b2362d3640b698fe6277ab45d7))
+* **export:** prefix Relationship IDs with rId for valid xsd:ID ([#1855](https://github.com/superdoc-dev/superdoc/issues/1855)) ([11e67e1](https://github.com/superdoc-dev/superdoc/commit/11e67e1e4332976df279edf62f1aa33177004f9e))
+* incorrect list counter calculation (SD-1658) ([#1867](https://github.com/superdoc-dev/superdoc/issues/1867)) ([a960a65](https://github.com/superdoc-dev/superdoc/commit/a960a656235d2c4daa7b5f169e79bfba5f057ff6))
+* list numbering sync for cloned defs and zero start overrides ([c21301b](https://github.com/superdoc-dev/superdoc/commit/c21301b64168edb4feedebc31aeba17e08ebaed2))
+* make test:slow script find the slow test file ([5a6b6d6](https://github.com/superdoc-dev/superdoc/commit/5a6b6d6d0d16caff9e8851b6a44ad827a001d993))
+* patch broken numbering definitions ([#1848](https://github.com/superdoc-dev/superdoc/issues/1848)) ([f34b121](https://github.com/superdoc-dev/superdoc/commit/f34b1217eb7afc01f49da8db54d63e6e3126185a))
+* preserve style on row insertion ([#1553](https://github.com/superdoc-dev/superdoc/issues/1553)) ([92f67dc](https://github.com/superdoc-dev/superdoc/commit/92f67dcf17456bd1ead0dc0a993fc6ae24eead5a))
+* preserve text selection on right-click in Firefox ([#1826](https://github.com/superdoc-dev/superdoc/issues/1826)) ([0a23338](https://github.com/superdoc-dev/superdoc/commit/0a2333815608581c5766467aa122f5753431525f))
+* remove redundant parameters in pm-adapter (SD-1587) ([#1823](https://github.com/superdoc-dev/superdoc/issues/1823)) ([e315ad4](https://github.com/superdoc-dev/superdoc/commit/e315ad4e8ecfe15542a9042503048909a2f7cdb5))
+* table resize ([#1821](https://github.com/superdoc-dev/superdoc/issues/1821)) ([e7e1eb8](https://github.com/superdoc-dev/superdoc/commit/e7e1eb8a42317cc63f02a51fa7955a2ac1614a0e))
+* text in new paragraph doesn't inherit styles (SD-1657) ([#1869](https://github.com/superdoc-dev/superdoc/issues/1869)) ([275fef2](https://github.com/superdoc-dev/superdoc/commit/275fef25f4ccd4ab511e66cca557abcebe79f4ef))
+
+
+### Features
+
+* dev collab mode ([#1860](https://github.com/superdoc-dev/superdoc/issues/1860)) ([469477b](https://github.com/superdoc-dev/superdoc/commit/469477bb816e98811f3986517d0541d1b4d4ac5e))
+* fix node types export, add introspection ([#1815](https://github.com/superdoc-dev/superdoc/issues/1815)) ([9b8d0d4](https://github.com/superdoc-dev/superdoc/commit/9b8d0d491dd9a9422ca44505471a34bc79894b80))
+
+# [1.9.0-next.13](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.12...v1.9.0-next.13) (2026-01-29)
+
+
+### Bug Fixes
+
+* incorrect list counter calculation (SD-1658) ([#1867](https://github.com/superdoc-dev/superdoc/issues/1867)) ([a960a65](https://github.com/superdoc-dev/superdoc/commit/a960a656235d2c4daa7b5f169e79bfba5f057ff6))
+* list numbering sync for cloned defs and zero start overrides ([c21301b](https://github.com/superdoc-dev/superdoc/commit/c21301b64168edb4feedebc31aeba17e08ebaed2))
+
+# [1.9.0-next.12](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.11...v1.9.0-next.12) (2026-01-28)
+
+
+### Bug Fixes
+
+* text in new paragraph doesn't inherit styles (SD-1657) ([#1869](https://github.com/superdoc-dev/superdoc/issues/1869)) ([275fef2](https://github.com/superdoc-dev/superdoc/commit/275fef25f4ccd4ab511e66cca557abcebe79f4ef))
+
+# [1.9.0-next.11](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.10...v1.9.0-next.11) (2026-01-28)
+
+
+### Bug Fixes
+
+* apply correct style to inserted links ([#1871](https://github.com/superdoc-dev/superdoc/issues/1871)) ([36e3c4b](https://github.com/superdoc-dev/superdoc/commit/36e3c4b066a02fbcac4e53cc3df2c3cefaf207fb))
+
+# [1.9.0-next.10](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.9...v1.9.0-next.10) (2026-01-28)
+
+
+### Bug Fixes
+
+* block ID collisions and missing positions in paragraph converter ([3e75a98](https://github.com/superdoc-dev/superdoc/commit/3e75a9827fdb8b1847632e6a5b7f8f5dcabcabd1))
+* make test:slow script find the slow test file ([5a6b6d6](https://github.com/superdoc-dev/superdoc/commit/5a6b6d6d0d16caff9e8851b6a44ad827a001d993))
+
+
+### Features
+
+* dev collab mode ([#1860](https://github.com/superdoc-dev/superdoc/issues/1860)) ([469477b](https://github.com/superdoc-dev/superdoc/commit/469477bb816e98811f3986517d0541d1b4d4ac5e))
+
+# [1.9.0-next.9](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.8...v1.9.0-next.9) (2026-01-28)
+
+
+### Bug Fixes
+
+* patch broken numbering definitions ([#1848](https://github.com/superdoc-dev/superdoc/issues/1848)) ([f34b121](https://github.com/superdoc-dev/superdoc/commit/f34b1217eb7afc01f49da8db54d63e6e3126185a))
+
+# [1.9.0-next.8](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.7...v1.9.0-next.8) (2026-01-28)
+
+
+### Bug Fixes
+
+* annotation and interaction issues ([#1847](https://github.com/superdoc-dev/superdoc/issues/1847)) ([ffb1055](https://github.com/superdoc-dev/superdoc/commit/ffb1055dcf21916a23b221655a9eff8828d49fa0))
+
+# [1.9.0-next.7](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.6...v1.9.0-next.7) (2026-01-27)
+
+
+### Bug Fixes
+
+* **export:** prefix Relationship IDs with rId for valid xsd:ID ([#1855](https://github.com/superdoc-dev/superdoc/issues/1855)) ([11e67e1](https://github.com/superdoc-dev/superdoc/commit/11e67e1e4332976df279edf62f1aa33177004f9e))
+
 # [1.9.0-next.5](https://github.com/superdoc-dev/superdoc/compare/v1.9.0-next.4...v1.9.0-next.5) (2026-01-24)
 
 

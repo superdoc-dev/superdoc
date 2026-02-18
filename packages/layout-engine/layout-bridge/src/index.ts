@@ -818,13 +818,29 @@ export function clickToPosition(
               if (blockIndex !== -1) {
                 const measure = measures[blockIndex];
                 if (measure && measure.kind === 'paragraph') {
-                  for (let li = fragment.fromLine; li < fragment.toLine; li++) {
-                    const line = measure.lines[li];
-                    const range = computeLinePmRange(blocks[blockIndex], line);
-                    if (range.pmStart != null && range.pmEnd != null) {
-                      if (domPos >= range.pmStart && domPos <= range.pmEnd) {
-                        lineIndex = li;
-                        break;
+                  // Use fragment-specific remeasured lines when present to avoid index mismatches.
+                  if (fragment.lines && fragment.lines.length > 0) {
+                    for (let localIndex = 0; localIndex < fragment.lines.length; localIndex++) {
+                      const line = fragment.lines[localIndex];
+                      if (!line) continue;
+                      const range = computeLinePmRange(blocks[blockIndex], line);
+                      if (range.pmStart != null && range.pmEnd != null) {
+                        if (domPos >= range.pmStart && domPos <= range.pmEnd) {
+                          lineIndex = fragment.fromLine + localIndex;
+                          break;
+                        }
+                      }
+                    }
+                  } else {
+                    for (let li = fragment.fromLine; li < fragment.toLine; li++) {
+                      const line = measure.lines[li];
+                      if (!line) continue;
+                      const range = computeLinePmRange(blocks[blockIndex], line);
+                      if (range.pmStart != null && range.pmEnd != null) {
+                        if (domPos >= range.pmStart && domPos <= range.pmEnd) {
+                          lineIndex = li;
+                          break;
+                        }
                       }
                     }
                   }
@@ -844,7 +860,6 @@ export function clickToPosition(
         }
       }
 
-      // Position found but couldn't locate in fragments - still return it
       logClickStage('log', 'success', {
         pos: domPos,
         usedMethod: 'DOM',

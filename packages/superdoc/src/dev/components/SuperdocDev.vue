@@ -16,6 +16,8 @@ import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
 import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.js';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
+import { HocuspocusProvider } from '@hocuspocus/provider';
+import * as Y from 'yjs';
 
 // note:
 // Or set worker globally outside the component.
@@ -41,6 +43,12 @@ const testUserName = urlParams.get('name') || `SuperDoc ${Math.floor(1000 + Math
 const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
 const useWebLayout = ref(urlParams.get('view') === 'web');
+const useCollaboration = urlParams.get('collab') === '1';
+
+// Collaboration state
+const ydocRef = shallowRef(null);
+const providerRef = shallowRef(null);
+const collabReady = ref(false);
 const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
@@ -145,19 +153,22 @@ const init = async () => {
   // eslint-disable-next-line no-unused-vars
   const testDocumentId = 'doc123';
 
-  // Prepare document config with content if available
-  const documentConfig = {
-    data: currentFile.value,
-    id: testId,
-    isNewFile: true,
-  };
+  // Prepare document config only if a file was uploaded
+  // If no file, SuperDoc will automatically create a blank document
+  let documentConfig = null;
+  if (currentFile.value) {
+    documentConfig = {
+      data: currentFile.value,
+      id: testId,
+    };
 
-  // Add markdown/HTML content if present
-  if (currentFile.value.markdownContent) {
-    documentConfig.markdown = currentFile.value.markdownContent;
-  }
-  if (currentFile.value.htmlContent) {
-    documentConfig.html = currentFile.value.htmlContent;
+    // Add markdown/HTML content if present
+    if (currentFile.value.markdownContent) {
+      documentConfig.markdown = currentFile.value.markdownContent;
+    }
+    if (currentFile.value.htmlContent) {
+      documentConfig.html = currentFile.value.htmlContent;
+    }
   }
 
   const config = {
@@ -167,6 +178,10 @@ const init = async () => {
     toolbarGroups: ['center'],
     role: userRole,
     documentMode: 'editing',
+    licenseKey: 'community-and-eval-agplv3',
+    telemetry: {
+      enabled: false,
+    },
     comments: {
       visible: true,
     },
@@ -192,12 +207,12 @@ const init = async () => {
       { name: 'Nick Bernal', email: 'nick@harbourshare.com', access: 'internal' },
       { name: 'Eric Doversberger', email: 'eric@harbourshare.com', access: 'external' },
     ],
-    document: documentConfig,
+    // Only pass document config if a file was uploaded, otherwise SuperDoc creates blank
+    ...(documentConfig ? { document: documentConfig } : {}),
     // documents: [
     //   {
     //     data: currentFile.value,
     //     id: testId,
-    //     isNewFile: true,
     //   },
     // ],
     // cspNonce: 'testnonce123',
@@ -329,12 +344,16 @@ const init = async () => {
       },
       // 'hrbr-fields': {},
 
-      // To test this dev env with collaboration you must run a local collaboration server here.
-      // collaboration: {
-      //   url: `ws://localhost:3050/docs/${testDocumentId}`,
-      //   token: 'token',
-      //   providerType: 'hocuspocus',
-      // },
+      // Collaboration - enabled via ?collab=1 URL param
+      // Run `pnpm run collab-server` first, then open http://localhost:5173?collab=1
+      ...(useCollaboration && ydocRef.value && providerRef.value
+        ? {
+            collaboration: {
+              ydoc: ydocRef.value,
+              provider: providerRef.value,
+            },
+          }
+        : {}),
       ai: {
         // Provide your Harbour API key here for direct endpoint access
         // apiKey: 'test',
@@ -346,7 +365,10 @@ const init = async () => {
         pdfViewer: pdfjsViewer,
         setWorker: true,
         workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
-        textLayerMode: 1,
+        textLayerMode: 0,
+      },
+      whiteboard: {
+        enabled: false,
       },
     },
     onEditorCreate,
@@ -367,6 +389,8 @@ const init = async () => {
   superdoc.value?.on('exception', (error) => {
     console.error('SuperDoc exception:', error);
   });
+
+  window.superdoc = superdoc.value;
 
   // const ydoc = superdoc.value.ydoc;
   // const metaMap = ydoc.getMap('meta');
@@ -485,8 +509,36 @@ const toggleCommentsPanel = () => {
 };
 
 onMounted(async () => {
-  const blankFile = await getFileObject(BlankDOCX, 'test.docx', DOCX);
-  handleNewFile(blankFile);
+  // Initialize collaboration if enabled via ?collab=1
+  if (useCollaboration) {
+    const ydoc = new Y.Doc();
+    const provider = new HocuspocusProvider({
+      url: 'ws://localhost:3050',
+      name: 'superdoc-dev-room',
+      document: ydoc,
+    });
+
+    ydocRef.value = ydoc;
+    providerRef.value = provider;
+
+    // Wait for sync before loading document
+    await new Promise((resolve) => {
+      provider.on('synced', () => {
+        collabReady.value = true;
+        resolve();
+      });
+      // Fallback timeout in case sync doesn't fire
+      setTimeout(() => {
+        collabReady.value = true;
+        resolve();
+      }, 3000);
+    });
+
+    console.log('[collab] Provider synced, initializing SuperDoc');
+  }
+
+  // Initialize SuperDoc - it will automatically create a blank document
+  init();
 });
 
 onBeforeUnmount(() => {
@@ -494,6 +546,13 @@ onBeforeUnmount(() => {
   superdoc.value?.destroy?.();
   superdoc.value = null;
   activeEditor.value = null;
+
+  // Cleanup collaboration provider
+  if (providerRef.value) {
+    providerRef.value.destroy();
+    providerRef.value = null;
+  }
+  ydocRef.value = null;
 });
 
 const toggleLayoutEngine = () => {
@@ -590,6 +649,7 @@ if (scrollTestMode.value) {
               <span class="badge">Layout Engine: {{ useLayoutEngine && !useWebLayout ? 'ON' : 'OFF' }}</span>
               <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
               <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
+              <span v-if="useCollaboration" class="badge badge--collab">Collab: ON</span>
             </div>
             <h2 class="dev-app__title">SuperDoc Dev</h2>
             <div class="dev-app__header-layout-toggle">
@@ -726,7 +786,7 @@ if (scrollTestMode.value) {
 
       <div class="dev-app__main">
         <div class="dev-app__view">
-          <div class="dev-app__content" v-if="currentFile">
+          <div class="dev-app__content">
             <div class="dev-app__content-container" :class="{ 'dev-app__content-container--web-layout': useWebLayout }">
               <div id="superdoc"></div>
             </div>
@@ -933,6 +993,11 @@ if (scrollTestMode.value) {
 .badge--warning {
   background: rgba(251, 191, 36, 0.2);
   color: #fcd34d;
+}
+
+.badge--collab {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
 }
 
 .dev-app__upload-block {

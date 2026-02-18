@@ -102,15 +102,12 @@ export class PDFJSAdapter extends PDFAdapter {
       const firstPage = 1;
 
       const pdfjsPages = await getPdfjsPages(pdfDocument, firstPage, numPages);
-      const pageContainers = [];
-
       for (const [index, page] of pdfjsPages.entries()) {
         const container = document.createElement('div');
         container.classList.add('pdf-page');
         container.dataset.pageNumber = (index + 1).toString();
         container.id = `${documentId}-page-${index + 1}`;
-
-        pageContainers.push(container);
+        viewerContainer.append(container);
 
         const { width, height } = this.getOriginalPageSize(page);
         const scale = 1;
@@ -136,9 +133,16 @@ export class PDFJSAdapter extends PDFAdapter {
         await pdfPageView.draw();
 
         emit('page-loaded', documentId, index, containerBounds);
-      }
 
-      viewerContainer.append(...pageContainers);
+        emit('page-ready', {
+          documentId,
+          pageIndex: index,
+          width: containerBounds.width,
+          height: containerBounds.height,
+          originalWidth: width,
+          originalHeight: height,
+        });
+      }
 
       emit('ready', documentId, viewerContainer);
     } catch (err) {

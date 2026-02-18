@@ -1,0 +1,235 @@
+# Generates visual + interaction baselines for released SuperDoc versions
+# Triggered manually via workflow_dispatch
+name: 📸 Baseline superdoc
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to baseline (e.g., 1.5.0-next.1). Leave empty to auto-detect from latest tag.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: baseline-superdoc-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  generate-baselines:
+    name: Generate Baselines
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Resolve release version
+        id: version
+        run: |
+          # If manual dispatch with version provided, use it
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "✅ Using manually specified version: $VERSION"
+            exit 0
+          fi
+
+          # Find tags pointing at the release commit
+          HEAD_SHA="${{ github.sha }}"
+          echo "Looking for tags at commit: $HEAD_SHA"
+
+          # Get all tags pointing at this commit
+          TAGS=$(git tag --points-at "$HEAD_SHA" 2>/dev/null || true)
+          echo "Tags found: $TAGS"
+
+          if [ -z "$TAGS" ]; then
+            echo "⚠️ No tags found at commit $HEAD_SHA"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Find a version tag (v* pattern, prefer -next. for prerelease)
+          VERSION_TAG=""
+          for tag in $TAGS; do
+            if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+              VERSION_TAG="$tag"
+              # Prefer -next. tags if multiple exist
+              if [[ "$tag" == *"-next."* ]]; then
+                break
+              fi
+            fi
+          done
+
+          if [ -z "$VERSION_TAG" ]; then
+            echo "⚠️ No version tag (v*) found at commit"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Strip leading 'v' to get npm version
+          VERSION="${VERSION_TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Resolved version: $VERSION (from tag $VERSION_TAG)"
+
+      - name: Skip if no release
+        if: steps.version.outputs.skip == 'true'
+        run: |
+          echo "No release tag found - semantic-release may have been a no-op."
+          echo "Exiting successfully."
+
+      - name: Setup pnpm
+        if: steps.version.outputs.skip != 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        if: steps.version.outputs.skip != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: devtools/visual-testing/pnpm-lock.yaml
+
+      - name: Cache apt packages
+        if: steps.version.outputs.skip != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ~/apt-cache
+          key: apt-canvas-${{ runner.os }}-v1
+
+      - name: Install canvas system dependencies
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          mkdir -p ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-cache" \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev
+
+      - name: Install dependencies
+        if: steps.version.outputs.skip != 'true'
+        working-directory: devtools/visual-testing
+        run: pnpm install
+
+      - name: Get Playwright version
+        if: steps.version.outputs.skip != 'true'
+        id: playwright-version
+        working-directory: devtools/visual-testing
+        run: |
+          echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test'].replace('^', '')")" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        if: steps.version.outputs.skip != 'true'
+        uses: actions/cache@v5
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.version.outputs.skip != 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: devtools/visual-testing
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.version.outputs.skip != 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: devtools/visual-testing
+        run: pnpm exec playwright install-deps chromium firefox webkit
+
+      - name: Wait for npm propagation
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Waiting for superdoc@$VERSION to be available on npm..."
+
+          for i in {1..30}; do
+            if npm view "superdoc@$VERSION" version 2>/dev/null; then
+              echo "✅ Version $VERSION is available on npm"
+              exit 0
+            fi
+            echo "Attempt $i/30: Version not yet available, waiting 10s..."
+            sleep 10
+          done
+
+          echo "❌ Timed out waiting for npm propagation"
+          exit 1
+
+      - name: Switch to released version
+        if: steps.version.outputs.skip != 'true'
+        working-directory: devtools/visual-testing
+        env:
+          PNPM_FROZEN_LOCKFILE: 'false'
+          NPM_CONFIG_FROZEN_LOCKFILE: 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Installing superdoc@$VERSION..."
+          pnpm superdoc "$VERSION"
+
+          # Verify installation
+          INSTALLED=$(node -p "require('./packages/harness/node_modules/superdoc/package.json').version")
+          echo "Installed version: $INSTALLED"
+
+          if [ "$INSTALLED" != "$VERSION" ]; then
+            echo "❌ Version mismatch! Expected $VERSION, got $INSTALLED"
+            exit 1
+          fi
+
+      - name: Generate baselines
+        if: steps.version.outputs.skip != 'true'
+        working-directory: devtools/visual-testing
+        env:
+          SD_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_TESTING_R2_ACCOUNT_ID }}
+          SD_TESTING_R2_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BUCKET_NAME }}
+          SD_TESTING_R2_BASELINES_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BASELINES_BUCKET_NAME }}
+          SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
+          SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          pnpm baseline "$VERSION" --ci
+
+      - name: Summary
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## 📸 Visual Baselines Generated
+
+          | Property | Value |
+          |----------|-------|
+          | **Version** | \`$VERSION\` |
+          | **Browsers** | Chromium, Firefox, WebKit |
+          | **Trigger** | Manual |
+
+          ### R2 Paths
+          - Visual: \`baselines/v.$VERSION/<browser>/\`
+          - Interactions: \`baselines-interactions/v.$VERSION/<browser>/\`
+          EOF
+
+      - name: Summary (skipped)
+        if: steps.version.outputs.skip == 'true'
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## ⏭️ Baseline Generation Skipped
+
+          No release tag was found at the triggering commit. This typically means:
+          - semantic-release determined no release was needed
+          - The commit didn't include releasable changes
+
+          This is expected behavior and not an error.
+          EOF
+
+      - name: Cleanup corpus cache
+        if: always()
+        run: |
+          rm -rf ~/.cache/superdoc-corpus || true

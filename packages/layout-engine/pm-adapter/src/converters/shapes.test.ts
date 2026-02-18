@@ -221,6 +221,22 @@ describe('shapes converter', () => {
       expect(result.zIndex).toBe(10);
     });
 
+    it('forces zIndex to 0 when behindDoc is true even with relativeHeight', () => {
+      const node: PMNode = {
+        type: 'vectorShape',
+        attrs: {
+          width: 100,
+          height: 100,
+          anchorData: { isAnchored: true, behindDoc: true },
+          originalAttributes: { relativeHeight: 251658250 },
+        },
+      };
+
+      const result = vectorShapeNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.zIndex).toBe(0);
+    });
+
     it('includes PM positions in attrs when available', () => {
       const node: PMNode = {
         type: 'vectorShape',

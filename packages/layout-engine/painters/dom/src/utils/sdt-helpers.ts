@@ -6,7 +6,7 @@
  * duplication across rendering logic.
  */
 
-import type { SdtMetadata } from '@superdoc/contracts';
+import type { SdtMetadata, StructuredContentLockMode } from '@superdoc/contracts';
 
 /**
  * Type guard for StructuredContentMetadata with specific properties.
@@ -24,9 +24,12 @@ import type { SdtMetadata } from '@superdoc/contracts';
  * }
  * ```
  */
-export function isStructuredContentMetadata(
-  sdt: SdtMetadata | null | undefined,
-): sdt is { type: 'structuredContent'; scope: 'inline' | 'block'; alias?: string | null } {
+export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is {
+  type: 'structuredContent';
+  scope: 'inline' | 'block';
+  alias?: string | null;
+  lockMode?: StructuredContentLockMode;
+} {
   return (
     sdt !== null && sdt !== undefined && typeof sdt === 'object' && 'type' in sdt && sdt.type === 'structuredContent'
   );
@@ -257,6 +260,12 @@ export function applySdtContainerStyling(
   container.dataset.sdtContainerEnd = String(isEnd);
   container.style.overflow = 'visible'; // Allow label to show above
 
+  if (isStructuredContentMetadata(sdt)) {
+    container.dataset.lockMode = sdt.lockMode || 'unlocked';
+  } else if (isStructuredContentMetadata(containerSdt)) {
+    container.dataset.lockMode = containerSdt.lockMode || 'unlocked';
+  }
+
   if (boundaryOptions?.widthOverride != null) {
     container.style.width = `${boundaryOptions.widthOverride}px`;
   }
@@ -270,4 +279,26 @@ export function applySdtContainerStyling(
     labelEl.appendChild(labelText);
     container.appendChild(labelEl);
   }
+}
+
+/**
+ * Checks whether a fragment element needs rebuilding due to SDT boundary changes.
+ *
+ * Handles two cases:
+ * 1. Element was in an SDT but no longer is (stale attributes need removal)
+ * 2. Element's start/end boundary flags don't match expected values
+ */
+export function shouldRebuildForSdtBoundary(element: HTMLElement, boundary: SdtBoundaryOptions | undefined): boolean {
+  if (!boundary) {
+    // Rebuild if element has stale SDT container attributes that should be removed
+    return element.dataset.sdtContainerStart !== undefined;
+  }
+  const startAttr = element.dataset.sdtContainerStart;
+  const endAttr = element.dataset.sdtContainerEnd;
+  const expectedStart = String(boundary.isStart ?? true);
+  const expectedEnd = String(boundary.isEnd ?? true);
+  if (startAttr === undefined || endAttr === undefined) {
+    return true;
+  }
+  return startAttr !== expectedStart || endAttr !== expectedEnd;
 }

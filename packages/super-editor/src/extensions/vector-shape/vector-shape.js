@@ -1,5 +1,6 @@
 import { Node, Attribute } from '@core/index';
 import { VectorShapeView } from './VectorShapeView';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 export const VectorShape = Node.create({
   name: 'vectorShape',
@@ -43,7 +44,7 @@ export const VectorShape = Node.create({
       },
 
       fillColor: {
-        default: '#5b9bd5',
+        default: null,
         renderDOM: (attrs) => {
           if (!attrs.fillColor) return {};
           return { 'data-fill-color': attrs.fillColor };
@@ -51,7 +52,7 @@ export const VectorShape = Node.create({
       },
 
       strokeColor: {
-        default: '#000000',
+        default: null,
         renderDOM: (attrs) => {
           if (!attrs.strokeColor) return {};
           return { 'data-stroke-color': attrs.strokeColor };
@@ -112,7 +113,13 @@ export const VectorShape = Node.create({
 
       anchorData: {
         default: null,
-        rendered: false,
+        renderDOM: ({ anchorData, originalAttributes }) => {
+          const relativeHeight = originalAttributes?.relativeHeight;
+          if (anchorData && relativeHeight) {
+            const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+            return { style: `z-index: ${zIndex}` };
+          }
+        },
       },
 
       isAnchor: {
@@ -143,7 +150,7 @@ export const VectorShape = Node.create({
       },
 
       textVerticalAlign: {
-        default: 'center',
+        default: 'top', // Per OOXML spec, text box defaults to top alignment
         rendered: false,
       },
 

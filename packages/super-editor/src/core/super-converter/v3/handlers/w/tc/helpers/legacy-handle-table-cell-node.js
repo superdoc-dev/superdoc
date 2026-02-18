@@ -61,10 +61,13 @@ export function handleTableCellNode({
 
   // Width
   let width = null;
-  if (!preferTableGridWidths) {
-    width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
-  }
   const widthType = tableCellProperties.cellWidth?.type;
+  if (!preferTableGridWidths) {
+    // For percentage widths, don't convert to px here; allow table/grid widths to drive layout.
+    if (widthType !== 'pct') {
+      width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
+    }
+  }
   if (widthType) attributes['widthType'] = widthType;
 
   if (!width && columnWidth) width = columnWidth;

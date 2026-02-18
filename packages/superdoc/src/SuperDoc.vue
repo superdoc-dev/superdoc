@@ -22,6 +22,8 @@ import CommentsLayer from './components/CommentsLayer/CommentsLayer.vue';
 import CommentDialog from '@superdoc/components/CommentsLayer/CommentDialog.vue';
 import FloatingComments from '@superdoc/components/CommentsLayer/FloatingComments.vue';
 import HrbrFieldsLayer from '@superdoc/components/HrbrFieldsLayer/HrbrFieldsLayer.vue';
+import WhiteboardLayer from './components/Whiteboard/WhiteboardLayer.vue';
+import { useWhiteboard } from './components/Whiteboard/use-whiteboard';
 import useSelection from '@superdoc/helpers/use-selection';
 
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
@@ -250,7 +252,6 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   presentationEditor.on('commentPositions', ({ positions }) => {
     const commentsConfig = proxy.$superdoc.config.modules?.comments;
     if (!commentsConfig || commentsConfig === false) return;
-    if (!positions || Object.keys(positions).length === 0) return;
     if (!shouldRenderCommentsInViewing.value) {
       commentsStore.clearEditorCommentPositions?.();
       return;
@@ -453,6 +454,11 @@ const editorOptions = (doc) => {
     proxy.$superdoc.listeners?.('fonts-resolved')?.length > 0 ? proxy.$superdoc.listeners('fonts-resolved')[0] : null;
   const useLayoutEngine = proxy.$superdoc.config.useLayoutEngine !== false;
 
+  const ydocFragment = doc.ydoc?.getXmlFragment?.('supereditor');
+  const ydocMeta = doc.ydoc?.getMap?.('meta');
+  const ydocHasContent = (ydocFragment && ydocFragment.length > 0) || (ydocMeta && Boolean(ydocMeta.get('docx')));
+  const isNewFile = doc.isNewFile && !ydocHasContent;
+
   const options = {
     isDebug: proxy.$superdoc.config.isDebug || false,
     documentId: doc.id,
@@ -493,7 +499,7 @@ const editorOptions = (doc) => {
     onTransaction: onEditorTransaction,
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
-    isNewFile: doc.isNewFile || false,
+    isNewFile,
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
@@ -515,6 +521,14 @@ const editorOptions = (doc) => {
         isInternal: proxy.$superdoc.config.isInternal,
         ...payload,
       }),
+    licenseKey: proxy.$superdoc.config.licenseKey,
+    telemetry: proxy.$superdoc.config.telemetry?.enabled
+      ? {
+          enabled: true,
+          endpoint: proxy.$superdoc.config.telemetry?.endpoint,
+          metadata: proxy.$superdoc.config.telemetry?.metadata,
+        }
+      : null,
   };
 
   return options;
@@ -728,7 +742,7 @@ const resetSelection = () => {
   toolsMenuPosition.top = null;
 };
 
-const updateSelection = ({ startX, startY, x, y, source }) => {
+const updateSelection = ({ startX, startY, x, y, source, page }) => {
   const hasStartCoords = typeof startX === 'number' || typeof startY === 'number';
   const hasEndCoords = typeof x === 'number' || typeof y === 'number';
 
@@ -748,6 +762,7 @@ const updateSelection = ({ startX, startY, x, y, source }) => {
       startX,
       startY,
       source,
+      page: page ?? null,
     };
   }
 
@@ -774,23 +789,48 @@ const updateSelection = ({ startX, startY, x, y, source }) => {
   }
 };
 
+const getPdfPageNumberFromEvent = (event) => {
+  const x = event?.clientX;
+  const y = event?.clientY;
+  if (typeof x !== 'number' || typeof y !== 'number') return null;
+  const elements = document.elementsFromPoint(x, y);
+  const pageEl = elements.find((el) => el?.classList?.contains?.('pdf-page'));
+  if (pageEl) {
+    const pageNumber = Number(pageEl.dataset?.pageNumber);
+    return Number.isFinite(pageNumber) ? pageNumber : null;
+  }
+  return null;
+};
+
 const handleSelectionStart = (e) => {
   resetSelection();
   selectionLayer.value.style.pointerEvents = 'auto';
 
   nextTick(() => {
     isDragging.value = true;
-    const y = e.offsetY / (activeZoom.value / 100);
-    const x = e.offsetX / (activeZoom.value / 100);
-    updateSelection({ startX: x, startY: y });
+    selectionLayer.value.style.pointerEvents = 'none';
+    const pageNumber = getPdfPageNumberFromEvent(e);
+    selectionLayer.value.style.pointerEvents = 'auto';
+    if (!pageNumber) {
+      isDragging.value = false;
+      selectionLayer.value.style.pointerEvents = 'none';
+      return;
+    }
+    const layerBounds = selectionLayer.value.getBoundingClientRect();
+    const zoom = activeZoom.value / 100;
+    const x = (e.clientX - layerBounds.left) / zoom;
+    const y = (e.clientY - layerBounds.top) / zoom;
+    updateSelection({ startX: x, startY: y, page: pageNumber });
     selectionLayer.value.addEventListener('mousemove', handleDragMove);
   });
 };
 
 const handleDragMove = (e) => {
   if (!isDragging.value) return;
-  const y = e.offsetY / (activeZoom.value / 100);
-  const x = e.offsetX / (activeZoom.value / 100);
+  const layerBounds = selectionLayer.value.getBoundingClientRect();
+  const zoom = activeZoom.value / 100;
+  const x = (e.clientX - layerBounds.left) / zoom;
+  const y = (e.clientY - layerBounds.top) / zoom;
   updateSelection({ x, y });
 };
 
@@ -799,6 +839,7 @@ const handleDragEnd = (e) => {
   selectionLayer.value.removeEventListener('mousemove', handleDragMove);
 
   if (!selectionPosition.value) return;
+  const pageNumber = selectionPosition.value.page ?? getPdfPageNumberFromEvent(e);
   const selection = useSelection({
     selectionBounds: {
       top: selectionPosition.value.top,
@@ -806,6 +847,7 @@ const handleDragEnd = (e) => {
       right: selectionPosition.value.right,
       bottom: selectionPosition.value.bottom,
     },
+    page: pageNumber ?? 1,
     documentId: documents.value[0].id,
   });
 
@@ -836,6 +878,10 @@ watch(
     if (proxy.$superdoc.config.useLayoutEngine !== false) {
       PresentationEditor.setGlobalZoom((zoom ?? 100) / 100);
     }
+    nextTick(() => {
+      updateWhiteboardPageSizes();
+      updateWhiteboardPageOffsets();
+    });
   },
 );
 
@@ -844,6 +890,24 @@ watch(getFloatingComments, () => {
   nextTick(() => {
     hasInitializedLocations.value = true;
   });
+});
+
+const {
+  whiteboardModuleConfig,
+  whiteboard,
+  whiteboardPages,
+  whiteboardPageSizes,
+  whiteboardPageOffsets,
+  whiteboardEnabled,
+  whiteboardOpacity,
+  handleWhiteboardPageReady,
+  updateWhiteboardPageSizes,
+  updateWhiteboardPageOffsets,
+} = useWhiteboard({
+  proxy,
+  layers,
+  documents,
+  modules,
 });
 </script>
 
@@ -919,6 +983,18 @@ watch(getFloatingComments, () => {
             :editor="proxy.$superdoc.activeEditor"
           />
 
+          <!-- Whiteboard Layer -->
+          <WhiteboardLayer
+            v-if="layers && whiteboardModuleConfig"
+            style="z-index: 3"
+            :whiteboard="whiteboard"
+            :pages="whiteboardPages"
+            :page-sizes="whiteboardPageSizes"
+            :page-offsets="whiteboardPageOffsets"
+            :enabled="whiteboardEnabled"
+            :opacity="whiteboardOpacity"
+          />
+
           <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
             <!-- PDF renderer -->
 
@@ -929,6 +1005,7 @@ watch(getFloatingComments, () => {
               @selection-change="handleSelectionChange"
               @ready="handleDocumentReady"
               @page-loaded="handlePageReady"
+              @page-ready="handleWhiteboardPageReady"
               @bypass-selection="handlePdfClick"
             />
 
@@ -1074,6 +1151,7 @@ watch(getFloatingComments, () => {
   background-color: rgba(219, 219, 219, 0.6);
   border-radius: 12px;
   cursor: pointer;
+  position: relative;
 }
 
 .tools-item i {

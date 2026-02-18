@@ -1,0 +1,309 @@
+---
+title: Events
+keywords: "supereditor events, editor lifecycle, document events, editor callbacks, editor hooks"
+---
+
+Events let you respond to editor lifecycle and content changes.
+
+## Lifecycle
+
+### `onBeforeCreate`
+
+Called before the editor view is created.
+
+<CodeGroup>
+```javascript Usage
+onBeforeCreate: ({ editor }) => {
+  // Set up external services
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onBeforeCreate: ({ editor }) => {
+    // Set up external services
+  },
+});
+```
+</CodeGroup>
+
+### `onCreate`
+
+Called when editor is fully initialized and ready.
+
+<CodeGroup>
+```javascript Usage
+onCreate: ({ editor }) => {
+  editor.focus();
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onCreate: ({ editor }) => {
+    editor.focus();
+  },
+});
+```
+</CodeGroup>
+
+### `onDestroy`
+
+Called when editor is being destroyed. Clean up resources here.
+
+<CodeGroup>
+```javascript Usage
+onDestroy: () => {
+  clearInterval(autoSaveTimer);
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onDestroy: () => {
+    clearInterval(autoSaveTimer);
+  },
+});
+```
+</CodeGroup>
+
+### `onFirstRender`
+
+Called after the first render completes.
+
+<CodeGroup>
+```javascript Usage
+onFirstRender: () => {
+  hideLoadingSpinner();
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onFirstRender: () => {
+    hideLoadingSpinner();
+  },
+});
+```
+</CodeGroup>
+
+## Content
+
+### `onUpdate`
+
+Called when document content changes.
+
+<CodeGroup>
+```javascript Usage
+onUpdate: ({ editor, transaction }) => {
+  if (transaction.docChanged) {
+    saveToBackend(editor.getJSON());
+  }
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onUpdate: ({ editor, transaction }) => {
+    if (transaction.docChanged) {
+      saveToBackend(editor.getJSON());
+    }
+  },
+});
+```
+</CodeGroup>
+
+### `onContentError`
+
+Called when content processing fails.
+
+<CodeGroup>
+```javascript Usage
+onContentError: ({ error, editor, documentId }) => {
+  console.error('Document error:', error);
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onContentError: ({ error, editor, documentId }) => {
+    console.error('Document error:', error);
+  },
+});
+```
+</CodeGroup>
+
+## Selection
+
+### `onSelectionUpdate`
+
+Called when selection changes (cursor movement).
+
+<CodeGroup>
+```javascript Usage
+onSelectionUpdate: ({ editor }) => {
+  toolbar.bold = editor.isActive('bold');
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onSelectionUpdate: ({ editor }) => {
+    toolbar.bold = editor.isActive('bold');
+  },
+});
+```
+</CodeGroup>
+
+### `onFocus`
+
+Called when editor gains focus.
+
+<CodeGroup>
+```javascript Usage
+onFocus: ({ editor, event }) => {
+  showFormattingToolbar();
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onFocus: ({ editor, event }) => {
+    showFormattingToolbar();
+  },
+});
+```
+</CodeGroup>
+
+### `onBlur`
+
+Called when editor loses focus.
+
+<CodeGroup>
+```javascript Usage
+onBlur: ({ editor, event }) => {
+  saveCurrentState();
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onBlur: ({ editor, event }) => {
+    saveCurrentState();
+  },
+});
+```
+</CodeGroup>
+
+## Features
+
+### `onCommentsUpdate`
+
+<CodeGroup>
+```javascript Usage
+onCommentsUpdate: ({ editor }) => {
+  updateCommentsSidebar();
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onCommentsUpdate: ({ editor }) => {
+    updateCommentsSidebar();
+  },
+});
+```
+</CodeGroup>
+
+### `onCommentsLoaded`
+
+<CodeGroup>
+```javascript Usage
+onCommentsLoaded: ({ editor, comments }) => {
+  console.log(`Loaded ${comments.length} comments`);
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onCommentsLoaded: ({ editor, comments }) => {
+    console.log(`Loaded ${comments.length} comments`);
+  },
+});
+```
+</CodeGroup>
+
+### `onTrackedChangesUpdate`
+
+<CodeGroup>
+```javascript Usage
+onTrackedChangesUpdate: ({ editor }) => {
+  updateReviewPanel();
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onTrackedChangesUpdate: ({ editor }) => {
+    updateReviewPanel();
+  },
+});
+```
+</CodeGroup>
+
+### `onCollaborationReady`
+
+<CodeGroup>
+```javascript Usage
+onCollaborationReady: ({ editor, ydoc }) => {
+  showCollaboratorsCursors();
+}
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+  onCollaborationReady: ({ editor, ydoc }) => {
+    showCollaboratorsCursors();
+  },
+});
+```
+</CodeGroup>

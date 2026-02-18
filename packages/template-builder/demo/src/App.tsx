@@ -8,16 +8,19 @@ import type {
   ExportEvent,
 } from '@superdoc-dev/template-builder';
 import 'superdoc/style.css';
+import '@superdoc-dev/template-builder/field-types.css';
 import './App.css';
 
 const availableFields: FieldDefinition[] = [
   { id: '1242142770', label: 'Agreement Date' },
-  { id: '1242142771', label: 'User Name' },
+  { id: '1242142771', label: 'User Name', defaultValue: 'John Doe' },
   { id: '1242142772', label: 'Company Name' },
   { id: '1242142773', label: 'Service Type' },
   { id: '1242142774', label: 'Agreement Jurisdiction' },
   { id: '1242142775', label: 'Company Address' },
   { id: '1242142776', label: 'Signature', mode: 'block' },
+  { id: '1242142777', label: 'Signer Name', fieldType: 'signer' },
+  { id: '1242142778', label: 'Signer Table', mode: 'block', fieldType: 'signer' },
 ];
 
 export function App() {
@@ -90,7 +93,9 @@ export function App() {
       console.log('Fields:', JSON.stringify(event.fields, null, 2));
       log(`Exported ${event.fields.length} fields`);
       event.fields.forEach((f) => {
-        console.log(`  - ${f.alias} (id: ${f.id}, mode: ${f.mode}, group: ${f.group || 'none'})`);
+        console.log(
+          `  - ${f.alias} (id: ${f.id}, mode: ${f.mode}, group: ${f.group || 'none'}, fieldType: ${f.fieldType || 'none'})`,
+        );
       });
     },
     [log],

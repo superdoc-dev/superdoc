@@ -110,6 +110,20 @@ const FieldItem: FC<{
               {field.mode}
             </span>
           )}
+          {field.fieldType && (
+            <span
+              style={{
+                fontSize: '9px',
+                padding: '2px 5px',
+                borderRadius: '3px',
+                background: field.fieldType === 'signer' ? '#fef3c7' : '#f3f4f6',
+                color: field.fieldType === 'signer' ? '#b45309' : '#4b5563',
+                fontWeight: '500',
+              }}
+            >
+              {field.fieldType}
+            </span>
+          )}
         </div>
       </div>
     </div>

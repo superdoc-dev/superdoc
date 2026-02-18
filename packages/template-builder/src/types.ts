@@ -8,6 +8,7 @@ export interface FieldDefinition {
   metadata?: Record<string, any>;
   mode?: 'inline' | 'block';
   group?: string;
+  fieldType?: string;
 }
 
 /** Field instance in a template document */
@@ -18,6 +19,7 @@ export interface TemplateField {
   position?: number;
   mode?: 'inline' | 'block';
   group?: string;
+  fieldType?: string;
 }
 
 export interface TriggerEvent {

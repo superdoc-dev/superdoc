@@ -1402,6 +1402,9 @@ importers:
 
   tests/behavior:
     dependencies:
+      '@superdoc/document-api':
+        specifier: workspace:*
+        version: link:../../packages/document-api
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc

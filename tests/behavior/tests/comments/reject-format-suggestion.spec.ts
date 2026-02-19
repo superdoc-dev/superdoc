@@ -1,43 +1,21 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
-import { rejectAllTrackedChanges } from '../../helpers/tracked-changes.js';
+import { rejectAllTrackChanges } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } });
 
 const TEXT = 'Agreement signed by both parties';
 
 // ---------------------------------------------------------------------------
-// Command helpers — typed functions instead of stringified eval
+// Command helpers — [commandName, ...args] tuples executed via editor.commands
 // ---------------------------------------------------------------------------
 
-type EditorCommandFn = (page: Page) => Promise<void>;
+type EditorCommand = [name: string, ...args: unknown[]];
 
-const toggleBold: EditorCommandFn = (page) => page.evaluate(() => (window as any).editor.commands.toggleBold());
-
-const toggleItalic: EditorCommandFn = (page) => page.evaluate(() => (window as any).editor.commands.toggleItalic());
-
-const toggleUnderline: EditorCommandFn = (page) =>
-  page.evaluate(() => (window as any).editor.commands.toggleUnderline());
-
-const toggleStrike: EditorCommandFn = (page) => page.evaluate(() => (window as any).editor.commands.toggleStrike());
-
-const setColor =
-  (color: string): EditorCommandFn =>
-  (page) =>
-    page.evaluate((c) => (window as any).editor.commands.setColor(c), color);
-
-const setFontFamily =
-  (family: string): EditorCommandFn =>
-  (page) =>
-    page.evaluate((f) => (window as any).editor.commands.setFontFamily(f), family);
-
-const setFontSize =
-  (size: string): EditorCommandFn =>
-  (page) =>
-    page.evaluate((s) => (window as any).editor.commands.setFontSize(s), size);
-
-async function runAll(page: Page, fns: EditorCommandFn[]): Promise<void> {
-  for (const fn of fns) await fn(page);
+async function runCommands(page: Page, commands: EditorCommand[]): Promise<void> {
+  for (const [name, ...args] of commands) {
+    await page.evaluate(({ name, args }) => (window as any).editor.commands[name](...args), { name, args });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -46,8 +24,8 @@ async function runAll(page: Page, fns: EditorCommandFn[]): Promise<void> {
 
 type FormatCase = {
   name: string;
-  setup?: EditorCommandFn[];
-  suggest: EditorCommandFn[];
+  setup?: EditorCommand[];
+  suggest: EditorCommand[];
   lacksMarks?: string[];
   restoredStyle?: Record<string, string>;
   restoredFontFamily?: string;
@@ -57,22 +35,22 @@ type FormatCase = {
 const SINGLE_MARK_CASES: FormatCase[] = [
   {
     name: 'bold',
-    suggest: [toggleBold],
+    suggest: [['toggleBold']],
     lacksMarks: ['bold'],
   },
   {
     name: 'italic',
-    suggest: [toggleItalic],
+    suggest: [['toggleItalic']],
     lacksMarks: ['italic'],
   },
   {
     name: 'underline',
-    suggest: [toggleUnderline],
+    suggest: [['toggleUnderline']],
     lacksMarks: ['underline'],
   },
   {
     name: 'strikethrough',
-    suggest: [toggleStrike],
+    suggest: [['toggleStrike']],
     lacksMarks: ['strike'],
   },
 ];
@@ -80,20 +58,26 @@ const SINGLE_MARK_CASES: FormatCase[] = [
 const STYLE_CASES: FormatCase[] = [
   {
     name: 'color',
-    setup: [setFontFamily('Times New Roman, serif'), setColor('#112233')],
-    suggest: [setColor('#FF0000')],
+    setup: [
+      ['setFontFamily', 'Times New Roman, serif'],
+      ['setColor', '#112233'],
+    ],
+    suggest: [['setColor', '#FF0000']],
     restoredStyle: { color: '#112233' },
   },
   {
     name: 'font family',
-    setup: [setFontFamily('Times New Roman, serif'), setColor('#112233')],
-    suggest: [setFontFamily('Arial, sans-serif')],
+    setup: [
+      ['setFontFamily', 'Times New Roman, serif'],
+      ['setColor', '#112233'],
+    ],
+    suggest: [['setFontFamily', 'Arial, sans-serif']],
     restoredFontFamily: 'Times New Roman',
   },
   {
     name: 'font size',
-    setup: [setFontSize('16pt')],
-    suggest: [setFontSize('24pt')],
+    setup: [['setFontSize', '16pt']],
+    suggest: [['setFontSize', '24pt']],
     restoredFontSize: '16',
   },
 ];
@@ -101,21 +85,37 @@ const STYLE_CASES: FormatCase[] = [
 const COMBINATION_CASES: FormatCase[] = [
   {
     name: 'multiple marks',
-    suggest: [toggleBold, toggleItalic, toggleUnderline],
+    suggest: [['toggleBold'], ['toggleItalic'], ['toggleUnderline']],
     lacksMarks: ['bold', 'italic', 'underline'],
   },
   {
     name: 'multiple textStyle properties',
-    setup: [setFontFamily('Arial, sans-serif'), setColor('#112233'), setFontSize('16pt')],
-    suggest: [setColor('#FF00AA'), setFontFamily('Courier New'), setFontSize('18pt')],
+    setup: [
+      ['setFontFamily', 'Arial, sans-serif'],
+      ['setColor', '#112233'],
+      ['setFontSize', '16pt'],
+    ],
+    suggest: [
+      ['setColor', '#FF00AA'],
+      ['setFontFamily', 'Courier New'],
+      ['setFontSize', '18pt'],
+    ],
     restoredStyle: { color: '#112233' },
     restoredFontFamily: 'Arial',
     restoredFontSize: '16',
   },
   {
     name: 'mixed marks and textStyle',
-    setup: [setFontFamily('Arial, sans-serif'), setColor('#112233')],
-    suggest: [toggleBold, toggleUnderline, setColor('#FF00AA'), setFontFamily('Times New Roman, serif')],
+    setup: [
+      ['setFontFamily', 'Arial, sans-serif'],
+      ['setColor', '#112233'],
+    ],
+    suggest: [
+      ['toggleBold'],
+      ['toggleUnderline'],
+      ['setColor', '#FF00AA'],
+      ['setFontFamily', 'Times New Roman, serif'],
+    ],
     lacksMarks: ['bold', 'underline'],
     restoredStyle: { color: '#112233' },
     restoredFontFamily: 'Arial',
@@ -136,7 +136,7 @@ for (const tc of ALL_CASES) {
     // Optional: set initial styles in editing mode.
     if (tc.setup) {
       await superdoc.selectAll();
-      await runAll(superdoc.page, tc.setup);
+      await runCommands(superdoc.page, tc.setup);
       await superdoc.waitForStable();
     }
 
@@ -146,13 +146,13 @@ for (const tc of ALL_CASES) {
 
     // Apply the suggested format change.
     await superdoc.selectAll();
-    await runAll(superdoc.page, tc.suggest);
+    await runCommands(superdoc.page, tc.suggest);
     await superdoc.waitForStable();
 
     await superdoc.assertTrackedChangeExists('format');
 
     // Reject all tracked changes.
-    await rejectAllTrackedChanges(superdoc.page);
+    await rejectAllTrackChanges(superdoc.page);
     await superdoc.waitForStable();
 
     // No tracked format decorations should remain.

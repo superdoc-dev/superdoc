@@ -150,65 +150,46 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
         const textResult = docApi.find({
           select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
         });
-        const contexts = Array.isArray(textResult?.context) ? textResult.context : [];
-        const context = contexts[matchIndex];
-        if (!context) return null;
+        const context = textResult?.context?.[matchIndex];
+        if (!context?.address) return null;
 
-        const ranges = Array.isArray(context.textRanges)
-          ? context.textRanges.map((range: any) => ({
-              blockId: range.blockId,
-              start: range.range.start,
-              end: range.range.end,
-            }))
-          : [];
+        const ranges = (context.textRanges ?? []).map((range: any) => ({
+          blockId: range.blockId,
+          start: range.range.start,
+          end: range.range.end,
+        }));
         if (!ranges.length) return null;
 
-        const blockAddress = context.address;
-        if (!blockAddress) return null;
-
-        const toInlineSpans = (result: any): InlineSpan[] => {
-          const matches = Array.isArray(result?.matches) ? result.matches : [];
-          const nodes = Array.isArray(result?.nodes) ? result.nodes : [];
-          const spans: InlineSpan[] = [];
-
-          for (let i = 0; i < matches.length; i++) {
-            const address = matches[i];
-            if (address?.kind !== 'inline') continue;
-            const start = address.anchor?.start;
-            const end = address.anchor?.end;
-            if (!start || !end) continue;
-            spans.push({
-              blockId: start.blockId,
-              start: start.offset,
-              end: end.offset,
-              properties:
-                nodes[i] &&
-                typeof nodes[i] === 'object' &&
-                nodes[i].properties &&
-                typeof nodes[i].properties === 'object'
-                  ? nodes[i].properties
-                  : {},
-            });
-          }
-
-          return spans;
-        };
+        const toInlineSpans = (result: any): InlineSpan[] =>
+          (result?.matches ?? [])
+            .map((address: any, i: number) => {
+              if (address?.kind !== 'inline') return null;
+              const { start, end } = address.anchor ?? {};
+              if (!start || !end) return null;
+              return {
+                blockId: start.blockId,
+                start: start.offset,
+                end: end.offset,
+                properties: result.nodes?.[i]?.properties ?? {},
+              };
+            })
+            .filter(Boolean);
 
         const runResult = docApi.find({
           select: { type: 'node', nodeType: 'run', kind: 'inline' },
-          within: blockAddress,
+          within: context.address,
           includeNodes: true,
         });
 
         const hyperlinkResult = docApi.find({
           select: { type: 'node', nodeType: 'hyperlink', kind: 'inline' },
-          within: blockAddress,
+          within: context.address,
           includeNodes: true,
         });
 
         return {
           ranges,
-          blockAddress,
+          blockAddress: context.address,
           runs: toInlineSpans(runResult),
           hyperlinks: toInlineSpans(hyperlinkResult),
         } satisfies DocTextSnapshot;
@@ -527,51 +508,42 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
               if (!tableAddress) return 'no table found in document';
 
               if (expectedRows !== undefined && expectedCols !== undefined) {
-                const countMatches = (result: unknown): number => {
-                  const matches = (result as { matches?: unknown[] } | null | undefined)?.matches;
-                  return Array.isArray(matches) ? matches.length : 0;
-                };
-
-                const findCellCountWithin = (within: unknown): number => {
-                  const tableCells = docApi.find({ select: { type: 'node', nodeType: 'tableCell' }, within });
-                  let tableHeadersCount = 0;
-                  try {
-                    const tableHeaders = docApi.find({ select: { type: 'node', nodeType: 'tableHeader' }, within });
-                    tableHeadersCount = countMatches(tableHeaders);
-                  } catch {
-                    // Some adapters do not expose tableHeader as a queryable node type.
-                  }
-                  return countMatches(tableCells) + tableHeadersCount;
-                };
-
                 const expectedCellCount = expectedRows * expectedCols;
 
                 const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
-                const rowAddresses = Array.isArray(rowResult?.matches) ? rowResult.matches : [];
-                if (rowAddresses.length > 0) {
-                  if (rowAddresses.length !== expectedRows) {
-                    return `expected ${expectedRows} rows, got ${rowAddresses.length}`;
-                  }
+                const rowCount = rowResult?.matches?.length ?? 0;
 
-                  const explicitCellCount = rowAddresses.reduce(
-                    (total: number, rowAddress: unknown) => total + findCellCountWithin(rowAddress),
-                    0,
-                  );
-                  if (explicitCellCount > 0 && explicitCellCount !== expectedCellCount) {
-                    return `expected ${expectedRows}x${expectedCols} table (${expectedCellCount} cells), got ${explicitCellCount}`;
-                  }
-
-                  if (explicitCellCount > 0) return 'ok';
+                // Only validate row count when the adapter exposes row-level querying.
+                if (rowCount > 0 && rowCount !== expectedRows) {
+                  return `expected ${expectedRows} rows, got ${rowCount}`;
                 }
 
-                // Fallback for adapter paths where tableRow/tableCell are not indexed yet.
-                const paragraphResult = docApi.find({
-                  select: { type: 'node', nodeType: 'paragraph' },
+                const cellResult = docApi.find({
+                  select: { type: 'node', nodeType: 'tableCell' },
                   within: tableAddress,
                 });
-                const paragraphCount = countMatches(paragraphResult);
-                if (paragraphCount !== expectedCellCount) {
-                  return `expected ${expectedRows}x${expectedCols} table (${expectedCellCount} cells), got ${paragraphCount} (paragraph proxy)`;
+                let cellCount = cellResult?.matches?.length ?? 0;
+                try {
+                  const headerResult = docApi.find({
+                    select: { type: 'node', nodeType: 'tableHeader' },
+                    within: tableAddress,
+                  });
+                  cellCount += headerResult?.matches?.length ?? 0;
+                } catch {
+                  /* tableHeader may not be queryable */
+                }
+
+                // Fallback: count paragraphs when cell-level querying isn't available.
+                if (cellCount === 0) {
+                  const paragraphResult = docApi.find({
+                    select: { type: 'node', nodeType: 'paragraph' },
+                    within: tableAddress,
+                  });
+                  cellCount = paragraphResult?.matches?.length ?? 0;
+                }
+
+                if (cellCount !== expectedCellCount) {
+                  return `expected ${expectedCellCount} cells, got ${cellCount}`;
                 }
               }
 

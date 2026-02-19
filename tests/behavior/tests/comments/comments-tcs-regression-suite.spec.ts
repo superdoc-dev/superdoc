@@ -16,9 +16,10 @@ type RegressionExpectation = {
   highlightTexts: string[];
 };
 
-const EXPECTATIONS: RegressionExpectation[] = JSON.parse(
-  fs.readFileSync(path.join(COMMENTS_TCS_DIR, 'expectations.json'), 'utf-8'),
-);
+const expectationsPath = path.join(COMMENTS_TCS_DIR, 'expectations.json');
+const EXPECTATIONS: RegressionExpectation[] = fs.existsSync(expectationsPath)
+  ? JSON.parse(fs.readFileSync(expectationsPath, 'utf-8'))
+  : [];
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();

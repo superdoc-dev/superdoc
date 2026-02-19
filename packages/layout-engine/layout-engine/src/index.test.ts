@@ -3307,7 +3307,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(fragment.height).toBe(60);
     });
 
-    it('emits pre-registered page-relative drawings on their stored page after pagination advances', () => {
+    it('emits pre-registered page-relative drawings on the page where they are encountered after pagination advances', () => {
       const firstPageParagraph: FlowBlock = {
         kind: 'paragraph',
         id: 'para-page-1',
@@ -3391,8 +3391,8 @@ describe('requirePageBoundary edge cases', () => {
         (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'drawing-pre-reg-page',
       );
 
-      expect(drawingOnPage1).toBeTruthy();
-      expect(drawingOnPage2).toBeUndefined();
+      expect(drawingOnPage1).toBeUndefined();
+      expect(drawingOnPage2).toBeTruthy();
     });
 
     it('creates fragment for margin-relative anchored drawing with wrapNone', () => {
@@ -3476,7 +3476,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(img.zIndex).toBe(0);
     });
 
-    it('emits pre-registered page-relative images on their stored page after pagination advances', () => {
+    it('emits pre-registered page-relative images on the page where they are encountered after pagination advances', () => {
       const firstPageParagraph: FlowBlock = {
         kind: 'paragraph',
         id: 'para-page-1',
@@ -3543,8 +3543,8 @@ describe('requirePageBoundary edge cases', () => {
         (fragment) => fragment.kind === 'image' && fragment.blockId === 'img-pre-reg-page',
       );
 
-      expect(imageOnPage1).toBeTruthy();
-      expect(imageOnPage2).toBeUndefined();
+      expect(imageOnPage1).toBeUndefined();
+      expect(imageOnPage2).toBeTruthy();
     });
   });
 

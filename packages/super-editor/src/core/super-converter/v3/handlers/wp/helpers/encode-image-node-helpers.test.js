@@ -675,7 +675,7 @@ describe('handleImageNode', () => {
    * - srcRect has no negative values
    *
    * Real-world examples:
-   * - whalar_tables_issue_tbl_only/word/header1.xml: <a:srcRect r="84800"/> → clipPath + shouldCover=false
+   * - whalar_tables_issue_tbl_only/word/header1.xml: <a:srcRect r="84800"/> → clipPath + shouldCover=false + objectFit=fill
    * - whalar_tables_issue_tbl_only/word/header2.xml: <a:srcRect/> (empty) → shouldCover=true
    * - certn_logo_left/word/header2.xml: <a:srcRect b="-3978"/> → shouldCover=false
    */
@@ -766,6 +766,7 @@ describe('handleImageNode', () => {
 
       expect(result).not.toBeNull();
       expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
     });
 
     it('sets clipPath when srcRect has positive values', () => {
@@ -803,6 +804,7 @@ describe('handleImageNode', () => {
       expect(result).not.toBeNull();
       expect(result.attrs.clipPath).toBe('inset(0% 50% 0% 0%)');
       expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
     });
 
     it('does not set clipPath when srcRect has negative values', () => {
@@ -839,6 +841,7 @@ describe('handleImageNode', () => {
 
       expect(result).not.toBeNull();
       expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
     });
 
     it('sets shouldCover=false when stretch+fillRect with NEGATIVE srcRect value', () => {

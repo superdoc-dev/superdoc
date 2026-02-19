@@ -34,7 +34,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
 
   const menuStyle = useMemo(() => {
     return {
-      position: 'absolute' as const,
+      position: 'fixed' as const,
       left: position?.left,
       top: position?.top,
       zIndex: 1000,
@@ -44,6 +44,8 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
       padding: '8px 0',
       width: '280px',
+      maxHeight: `calc(100vh - ${(position?.top ?? 0) + 10}px)`,
+      overflowY: 'auto' as const,
     };
   }, [position]);
 
@@ -333,7 +335,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                 />
               </button>
               {existingExpanded && (
-                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                <div>
                   {uniqueEntries.map((entry) => (
                     <div
                       key={entry.group || entry.id}
@@ -445,7 +447,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             />
           </button>
           {availableExpanded && (
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            <div>
               {fieldsToDisplay.map((field) => (
                 <div
                   key={field.id}

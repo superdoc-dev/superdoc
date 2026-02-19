@@ -290,8 +290,31 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           action: async (editor) => {
             const { view } = editor ?? {};
             if (!view) return;
-            view.dom.focus();
+            // Save the current selection before focusing. When the context menu
+            // is open, its hidden search input holds focus, so the PM editor's
+            // contenteditable is blurred. A raw `view.dom.focus()` would restart
+            // ProseMirror's DOMObserver which reads the stale browser selection
+            // (collapsed at the document start) and overwrites the PM state.
+            // Using `view.focus()` (ProseMirror-aware) prevents this by writing
+            // the PM selection to the DOM before restarting the observer. We also
+            // save/restore as a safety net against async drift during clipboard reads.
+            const savedFrom = view.state.selection.from;
+            const savedTo = view.state.selection.to;
+            view.focus();
             const { html, text } = await readClipboardRaw();
+            // Restore selection after the async gap — ProseMirror's DOMObserver
+            // may have overwritten the PM selection with a stale DOM selection
+            // (collapsed at document start) while awaiting the clipboard read.
+            if (view.state?.doc?.content) {
+              const { tr, doc } = view.state;
+              const maxPos = doc.content.size;
+              const safeFrom = Math.min(savedFrom, maxPos);
+              const safeTo = Math.min(savedTo, maxPos);
+              const SelectionType = view.state.selection.constructor;
+              if (typeof SelectionType.create === 'function') {
+                view.dispatch(tr.setSelection(SelectionType.create(doc, safeFrom, safeTo)));
+              }
+            }
             const handled = html ? handleClipboardPaste({ editor, view }, html) : false;
             if (!handled) {
               const pasteEvent = createPasteEventShim({ html, text });

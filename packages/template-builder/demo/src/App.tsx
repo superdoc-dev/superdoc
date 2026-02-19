@@ -251,7 +251,7 @@ export function App() {
           telemetry={{
             enabled: true,
             metadata: {
-              source: 'template-builder',
+              source: 'template-builder-demo',
             },
           }}
           onReady={handleReady}

@@ -32,9 +32,8 @@ test('apply Courier New font to selected text in loaded document', async ({ supe
   // Text content should be unchanged
   await superdoc.assertTextContains(originalText.substring(0, 20));
 
-  // Verify font applied via PM textStyle mark
-  const firstChunk = originalText.substring(0, 5);
-  await superdoc.assertTextMarkAttrs(firstChunk, 'textStyle', { fontFamily: 'Courier New' });
+  // Verify font applied via toolbar state for the current selection.
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Courier New');
 
   await superdoc.snapshot('apply-font-courier');
 });

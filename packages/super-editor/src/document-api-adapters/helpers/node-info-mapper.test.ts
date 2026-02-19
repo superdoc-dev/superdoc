@@ -294,6 +294,72 @@ describe('mapNodeInfo — inline nodes', () => {
       language: 'en-US',
     });
   });
+
+  it('maps run from OOXML-style boolean tokens and fallback fields', () => {
+    const result = mapNodeInfo(
+      makeInlineCandidate('run', {
+        nodeAttrs: {
+          runProperties: {
+            bold: { 'w:val': '0' },
+            italic: 'on',
+            underline: { 'w:val': 'none' },
+            dstrike: { val: 'true' },
+            fontFamily: { hAnsi: 'Cambria' },
+            fontSize: '16pt',
+            color: { 'w:val': '00FF00' },
+            highlight: { 'w:fill': 'FF00AA' },
+            styleId: 'Emphasis',
+            lang: 'fr-CA',
+          },
+        },
+      }),
+    );
+
+    expect(result.nodeType).toBe('run');
+    expect(result.properties).toMatchObject({
+      bold: false,
+      italic: true,
+      underline: false,
+      strike: true,
+      font: 'Cambria',
+      size: 16,
+      color: '00FF00',
+      highlight: '#FF00AA',
+      styleId: 'Emphasis',
+      language: 'fr-CA',
+    });
+  });
+
+  it('maps run highlight "none" to transparent and keeps explicit false strike', () => {
+    const result = mapNodeInfo(
+      makeInlineCandidate('run', {
+        nodeAttrs: {
+          runProperties: {
+            strike: { val: 'off' },
+            u: { val: 'single' },
+            rFonts: { ascii: 'Calibri' },
+            size: '24',
+            color: '112233',
+            highlight: { val: 'none' },
+            rStyle: 'Strong',
+            lang: { val: 'de-DE' },
+          },
+        },
+      }),
+    );
+
+    expect(result.nodeType).toBe('run');
+    expect(result.properties).toMatchObject({
+      strike: false,
+      underline: true,
+      font: 'Calibri',
+      size: 24,
+      color: '112233',
+      highlight: 'transparent',
+      styleId: 'Strong',
+      language: 'de-DE',
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

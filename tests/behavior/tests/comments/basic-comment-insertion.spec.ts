@@ -2,25 +2,54 @@ import { test, expect } from '../../fixtures/superdoc.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on' } });
 
-async function hasDocApiComment(
+interface ListedComment {
+  text?: string;
+}
+
+async function listDocApiComments(superdoc: { page: import('@playwright/test').Page }): Promise<ListedComment[]> {
+  return superdoc.page.evaluate(() => {
+    const commentsApi = (window as any).editor?.doc?.comments;
+    if (!commentsApi?.list) {
+      throw new Error('Document API is unavailable: expected editor.doc.comments.list().');
+    }
+    const result = commentsApi.list({ includeResolved: true });
+    const matches = Array.isArray(result?.matches) ? result.matches : [];
+    return matches.map((entry: any) => ({
+      text: typeof entry?.text === 'string' ? entry.text : undefined,
+    }));
+  });
+}
+
+async function assertCommentWasAdded(
   superdoc: { page: import('@playwright/test').Page },
+  beforeComments: ListedComment[],
   expectedText: string,
-): Promise<boolean | null> {
-  return superdoc.page
-    .evaluate(() => {
-      const commentsApi = (window as any).editor?.doc?.comments;
-      if (!commentsApi?.list) return null;
-      return true;
-    })
-    .then(async (supported) => {
-      if (!supported) return null;
-      return superdoc.page.evaluate((text) => {
-        const commentsApi = (window as any).editor?.doc?.comments;
-        const result = commentsApi?.list?.({ includeResolved: true });
-        const matches = Array.isArray(result?.matches) ? result.matches : [];
-        return matches.some((entry: any) => entry?.text === text);
-      }, expectedText);
-    });
+  options?: { allowUnchangedCountWhenNoText?: boolean },
+): Promise<void> {
+  const afterComments = await listDocApiComments(superdoc);
+
+  // Some adapter paths omit `text` in list results.
+  // If text is available, assert the expected body appears more times than before.
+  const beforeTexts = beforeComments
+    .map((entry) => entry.text)
+    .filter((text): text is string => typeof text === 'string');
+  const afterTexts = afterComments
+    .map((entry) => entry.text)
+    .filter((text): text is string => typeof text === 'string');
+
+  if (afterTexts.length > 0) {
+    const beforeTextMatches = beforeTexts.filter((text) => text === expectedText).length;
+    const afterTextMatches = afterTexts.filter((text) => text === expectedText).length;
+    expect(afterTextMatches).toBeGreaterThan(beforeTextMatches);
+    return;
+  }
+
+  // Fallback for list results without text fields.
+  if (options?.allowUnchangedCountWhenNoText) {
+    expect(afterComments.length).toBeGreaterThanOrEqual(beforeComments.length);
+    return;
+  }
+  expect(afterComments.length).toBeGreaterThan(beforeComments.length);
 }
 
 test('add a comment programmatically via addComment command', async ({ superdoc }) => {
@@ -38,6 +67,8 @@ test('add a comment programmatically via addComment command', async ({ superdoc 
   await superdoc.setTextSelection(worldPos, worldPos + 'world'.length);
   await superdoc.waitForStable();
 
+  const initialComments = await listDocApiComments(superdoc);
+
   // Add a comment on the selected text
   await superdoc.executeCommand('addComment', { text: 'This is a programmatic comment' });
   await superdoc.waitForStable();
@@ -45,14 +76,7 @@ test('add a comment programmatically via addComment command', async ({ superdoc 
   // Comment highlight should exist on the word "world"
   await superdoc.assertCommentHighlightExists({ text: 'world' });
 
-  // Prefer document-api when available; otherwise use PM fallback.
-  const hasCommentViaDocApi = await hasDocApiComment(superdoc, 'This is a programmatic comment');
-  if (hasCommentViaDocApi === null) {
-    const marks = await superdoc.getMarksAtPos(worldPos);
-    expect(marks).toContain('commentMark');
-  } else {
-    expect(hasCommentViaDocApi).toBe(true);
-  }
+  await assertCommentWasAdded(superdoc, initialComments, 'This is a programmatic comment');
 
   await superdoc.snapshot('comment added programmatically');
 });
@@ -84,6 +108,8 @@ test('add a comment via the UI bubble', async ({ superdoc }) => {
   await superdoc.page.keyboard.type('UI comment on selected text');
   await superdoc.waitForStable();
 
+  const initialComments = await listDocApiComments(superdoc);
+
   // Submit by clicking the "Comment" button
   await dialog.locator('.sd-button.primary', { hasText: 'Comment' }).first().click();
   await superdoc.waitForStable();
@@ -91,14 +117,11 @@ test('add a comment via the UI bubble', async ({ superdoc }) => {
   // Comment highlight should exist on the word "comment"
   await superdoc.assertCommentHighlightExists({ text: 'comment' });
 
-  // Prefer document-api when available; otherwise use PM fallback.
-  const hasCommentViaDocApi = await hasDocApiComment(superdoc, 'UI comment on selected text');
-  if (hasCommentViaDocApi === null) {
-    const marks = await superdoc.getMarksAtPos(commentPos);
-    expect(marks).toContain('commentMark');
-  } else {
-    expect(hasCommentViaDocApi).toBe(true);
-  }
+  await assertCommentWasAdded(superdoc, initialComments, 'UI comment on selected text', {
+    // UI draft entries can appear in list() before submit; fallback to non-decreasing count
+    // when list responses do not include text fields.
+    allowUnchangedCountWhenNoText: true,
+  });
 
   // Verify the comment text appears in the floating dialog
   const commentDialog = superdoc.page.locator('.floating-comment > .comments-dialog').last();

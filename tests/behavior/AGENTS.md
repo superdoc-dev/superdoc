@@ -115,7 +115,7 @@ await superdoc.waitForStable();
 Use document-api-backed text assertions from the fixture, not DOM inspection:
 
 ```ts
-// Good — text-targeted assertions (doc-api first, PM fallback)
+// Good — text-targeted assertions (document-api only)
 await superdoc.assertTextHasMarks('target text', ['bold', 'italic']);
 await superdoc.assertTextMarkAttrs('target text', 'textStyle', { fontFamily: 'Georgia' });
 await superdoc.assertTextMarkAttrs('target text', 'link', { href: 'https://example.com' });
@@ -160,7 +160,7 @@ Dropdown workflow: click the button to open, then click the option, with `waitFo
 ## Tables
 
 DomPainter renders tables as flat divs, not `<table>/<tr>/<td>`. Use fixture assertions for
-table structure (document-api first, PM fallback):
+table structure (document-api only):
 
 ```ts
 // Insert via command, not toolbar (faster, more reliable)
@@ -175,7 +175,7 @@ await superdoc.press('Tab');       // next cell
 await superdoc.press('Shift+Tab'); // previous cell
 ```
 
-`assertTableExists()` is document-api-first and falls back to PM in harnesses without `editor.doc`.
+`assertTableExists()` requires `window.editor.doc` in the behavior harness.
 
 ## Using page.evaluate()
 

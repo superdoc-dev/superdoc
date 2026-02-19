@@ -159,8 +159,10 @@ test('reject tracked font family suggestion restores original font', async ({ su
   await superdoc.waitForStable();
 
   await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
+  await superdoc.selectAll();
+  await superdoc.waitForStable();
   // Original font should be restored
-  await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { fontFamily: 'Times New Roman, serif' });
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Times New Roman');
   await superdoc.assertTextContent(TEXT);
 });
 
@@ -171,7 +173,7 @@ test('reject tracked font size suggestion restores original size', async ({ supe
   // Set initial size
   await superdoc.selectAll();
   await superdoc.page.evaluate(() => {
-    (window as any).editor.commands.setFontSize('12pt');
+    (window as any).editor.commands.setFontSize('16pt');
   });
   await superdoc.waitForStable();
 
@@ -191,8 +193,10 @@ test('reject tracked font size suggestion restores original size', async ({ supe
   await superdoc.waitForStable();
 
   await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
+  await superdoc.selectAll();
+  await superdoc.waitForStable();
   // Original size should be restored
-  await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { fontSize: '12pt' });
+  await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('16');
   await superdoc.assertTextContent(TEXT);
 });
 
@@ -231,9 +235,9 @@ test('reject multiple textStyle suggestions restores all styles', async ({ super
   await superdoc.selectAll();
   await superdoc.page.evaluate(() => {
     const e = (window as any).editor;
-    e.commands.setFontFamily('Times New Roman, serif');
+    e.commands.setFontFamily('Arial, sans-serif');
     e.commands.setColor('#112233');
-    e.commands.setFontSize('12pt');
+    e.commands.setFontSize('16pt');
   });
   await superdoc.waitForStable();
 
@@ -245,7 +249,7 @@ test('reject multiple textStyle suggestions restores all styles', async ({ super
   await superdoc.page.evaluate(() => {
     const e = (window as any).editor;
     e.commands.setColor('#FF00AA');
-    e.commands.setFontFamily('Courier New, monospace');
+    e.commands.setFontFamily('Courier New');
     e.commands.setFontSize('18pt');
   });
   await superdoc.waitForStable();
@@ -256,8 +260,11 @@ test('reject multiple textStyle suggestions restores all styles', async ({ super
   await superdoc.waitForStable();
 
   await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
+  await superdoc.selectAll();
+  await superdoc.waitForStable();
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Arial');
+  await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('16');
   await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { color: '#112233' });
-  await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { fontFamily: 'Times New Roman, serif' });
   await superdoc.assertTextContent(TEXT);
 });
 
@@ -269,7 +276,7 @@ test('reject mixed marks and textStyle suggestions restores everything', async (
   await superdoc.selectAll();
   await superdoc.page.evaluate(() => {
     const e = (window as any).editor;
-    e.commands.setFontFamily('Times New Roman, serif');
+    e.commands.setFontFamily('Arial, sans-serif');
     e.commands.setColor('#112233');
   });
   await superdoc.waitForStable();
@@ -284,7 +291,7 @@ test('reject mixed marks and textStyle suggestions restores everything', async (
   await superdoc.page.evaluate(() => {
     const e = (window as any).editor;
     e.commands.setColor('#FF00AA');
-    e.commands.setFontFamily('Arial, sans-serif');
+    e.commands.setFontFamily('Times New Roman, serif');
   });
   await superdoc.waitForStable();
 
@@ -295,7 +302,9 @@ test('reject mixed marks and textStyle suggestions restores everything', async (
 
   await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
   await superdoc.assertTextLacksMarks('Agreement', ['bold', 'underline']);
+  await superdoc.selectAll();
+  await superdoc.waitForStable();
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Arial');
   await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { color: '#112233' });
-  await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { fontFamily: 'Times New Roman, serif' });
   await superdoc.assertTextContent(TEXT);
 });

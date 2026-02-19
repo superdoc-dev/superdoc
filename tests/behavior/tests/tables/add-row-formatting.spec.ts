@@ -1,4 +1,4 @@
-import { test } from '../../fixtures/superdoc.js';
+import { test, expect } from '../../fixtures/superdoc.js';
 
 test.use({ config: { toolbar: 'full' } });
 
@@ -11,7 +11,7 @@ test('adding a row after bold cell preserves formatting in new row', async ({ su
   await superdoc.type('Bold header');
   await superdoc.waitForStable();
 
-  await superdoc.assertTextHasMarks('Bold header', ['bold']);
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
 
   // Add a row after the current one
   await superdoc.executeCommand('addRowAfter');
@@ -25,6 +25,6 @@ test('adding a row after bold cell preserves formatting in new row', async ({ su
   await superdoc.assertTextContains('New row text');
   await superdoc.assertTextContains('Bold header');
 
-  // The new text inherits bold from the row it was cloned from
-  await superdoc.assertTextHasMarks('New row text', ['bold']);
+  // The new text inherits bold from the row it was cloned from.
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
 });

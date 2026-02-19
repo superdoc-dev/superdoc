@@ -100,9 +100,6 @@ async function waitForStable(page: Page, ms?: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function createFixture(page: Page, editor: Locator, modKey: string) {
-  const hasDocumentApiMethod = async (methodName: string): Promise<boolean> =>
-    page.evaluate((name) => typeof (window as any).editor?.doc?.[name] === 'function', methodName);
-
   const normalizeHexColor = (value: unknown): string | null => {
     if (typeof value !== 'string') return null;
     const normalized = value.replace(/^#/, '').trim().toUpperCase();
@@ -133,25 +130,22 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     return false;
   };
 
-  const getTextContentWithFallback = async (): Promise<string> =>
+  const getTextContentFromDocApi = async (): Promise<string> =>
     page.evaluate(() => {
-      const editor = (window as any).editor;
-      const docApi = editor?.doc;
-      if (docApi?.getText) {
-        try {
-          return docApi.getText({});
-        } catch {
-          // Fall back to PM state for harnesses that do not expose doc-api.
-        }
+      const docApi = (window as any).editor?.doc;
+      if (!docApi?.getText) {
+        throw new Error('Document API is unavailable: expected editor.doc.getText().');
       }
-      return editor.state.doc.textContent;
+      return docApi.getText({});
     });
 
   const getDocTextSnapshot = async (text: string, occurrence = 0): Promise<DocTextSnapshot | null> =>
     page.evaluate(
       ({ searchText, matchIndex }) => {
         const docApi = (window as any).editor?.doc;
-        if (!docApi?.find) return null;
+        if (!docApi?.find) {
+          throw new Error('Document API is unavailable: expected editor.doc.find().');
+        }
 
         const textResult = docApi.find({
           select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
@@ -238,6 +232,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
       if (run.properties.bold === true) marks.add('bold');
       if (run.properties.italic === true) marks.add('italic');
       if (run.properties.underline === true) marks.add('underline');
+      if (run.properties.strike === true || run.properties.strikethrough === true) marks.add('strike');
       if (run.properties.highlight) marks.add('highlight');
     }
     for (const link of snapshot.hyperlinks) {
@@ -268,29 +263,6 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
 
     return hrefs;
   };
-
-  const assertAlignmentViaPm = async (text: string, expectedAlignment: string, occurrence = 0): Promise<void> => {
-    const pos = await fixture.findTextPos(text, occurrence);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          ({ p, alignment }) => {
-            const doc = (window as any).editor.state.doc;
-            const resolved = doc.resolve(p);
-            for (let depth = resolved.depth; depth > 0; depth--) {
-              const node = resolved.node(depth);
-              if (node.type.name === 'paragraph') {
-                return node.attrs.paragraphProperties?.justification === alignment;
-              }
-            }
-            return false;
-          },
-          { p: pos, alignment: expectedAlignment },
-        ),
-      )
-      .toBe(true);
-  };
-
   const fixture = {
     page,
 
@@ -523,102 +495,86 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     },
 
     async assertTextHasMarks(text: string, expectedNames: string[], occurrence = 0) {
-      const supportedByDocApi = expectedNames.every((name) =>
-        ['bold', 'italic', 'underline', 'highlight', 'link'].includes(name),
-      );
-
-      if (supportedByDocApi && (await hasDocumentApiMethod('find'))) {
-        const marks = await getDocMarksByText(text, occurrence);
-        if (marks && expectedNames.every((name) => marks.includes(name))) return;
-      }
-
-      const pos = await fixture.findTextPos(text, occurrence);
-      await fixture.assertMarksAtPos(pos, expectedNames);
+      const marks = await getDocMarksByText(text, occurrence);
+      expect(marks).not.toBeNull();
+      expect(marks ?? []).toEqual(expect.arrayContaining(expectedNames));
     },
 
     async assertTextLacksMarks(text: string, disallowedNames: string[], occurrence = 0) {
-      const supportedByDocApi = disallowedNames.every((name) =>
-        ['bold', 'italic', 'underline', 'highlight', 'link'].includes(name),
-      );
-
-      if (supportedByDocApi && (await hasDocumentApiMethod('find'))) {
-        const marks = await getDocMarksByText(text, occurrence);
-        if (marks && disallowedNames.every((name) => !marks.includes(name))) return;
-      }
-
-      const pos = await fixture.findTextPos(text, occurrence);
-      const marks = await fixture.getMarksAtPos(pos);
+      const marks = await getDocMarksByText(text, occurrence);
+      expect(marks).not.toBeNull();
       for (const markName of disallowedNames) {
-        expect(marks).not.toContain(markName);
+        expect(marks ?? []).not.toContain(markName);
       }
     },
 
     async assertTableExists(rows?: number, cols?: number) {
-      if (await hasDocumentApiMethod('find')) {
-        await expect
-          .poll(() =>
-            page.evaluate(
-              ({ expectedRows, expectedCols }) => {
-                const docApi = (window as any).editor?.doc;
-                if (!docApi?.find) return 'doc api unavailable';
-
-                const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
-                const tableAddress = tableResult?.matches?.[0];
-                if (!tableAddress) return 'no table found in document';
-
-                const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
-                const rowCount = Array.isArray(rowResult?.matches) ? rowResult.matches.length : 0;
-
-                let firstRowCols = 0;
-                if (rowCount > 0) {
-                  const firstRowAddress = rowResult.matches[0];
-                  const countCellsByType = (nodeType: 'tableCell' | 'tableHeader'): number => {
-                    const result = docApi.find({ select: { type: 'node', nodeType }, within: firstRowAddress });
-                    return Array.isArray(result?.matches) ? result.matches.length : 0;
-                  };
-                  firstRowCols = countCellsByType('tableCell') + countCellsByType('tableHeader');
-                }
-
-                if (expectedRows !== undefined && rowCount !== expectedRows)
-                  return `expected ${expectedRows} rows, got ${rowCount}`;
-                if (expectedCols !== undefined && firstRowCols !== expectedCols)
-                  return `expected ${expectedCols} columns, got ${firstRowCols}`;
-                return 'ok';
-              },
-              { expectedRows: rows, expectedCols: cols },
-            ),
-          )
-          .toBe('ok');
-        return;
+      if ((rows === undefined) !== (cols === undefined)) {
+        throw new Error('assertTableExists expects both rows and cols, or neither.');
       }
 
       await expect
         .poll(() =>
           page.evaluate(
             ({ expectedRows, expectedCols }) => {
-              const doc = (window as any).editor.state.doc;
-              let tableFound = false;
-              let rowCount = 0;
-              let firstRowCols = 0;
-              doc.descendants((node: any) => {
-                if (node.type.name === 'table') {
-                  tableFound = true;
-                  node.forEach((row: any) => {
-                    rowCount++;
-                    if (rowCount === 1) {
-                      row.forEach(() => {
-                        firstRowCols++;
-                      });
-                    }
-                  });
-                  return false;
+              const docApi = (window as any).editor?.doc;
+              if (!docApi?.find) {
+                throw new Error('Document API is unavailable: expected editor.doc.find().');
+              }
+
+              const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
+              const tableAddress = tableResult?.matches?.[0];
+              if (!tableAddress) return 'no table found in document';
+
+              if (expectedRows !== undefined && expectedCols !== undefined) {
+                const countMatches = (result: unknown): number => {
+                  const matches = (result as { matches?: unknown[] } | null | undefined)?.matches;
+                  return Array.isArray(matches) ? matches.length : 0;
+                };
+
+                const findCellCountWithin = (within: unknown): number => {
+                  const tableCells = docApi.find({ select: { type: 'node', nodeType: 'tableCell' }, within });
+                  let tableHeadersCount = 0;
+                  try {
+                    const tableHeaders = docApi.find({ select: { type: 'node', nodeType: 'tableHeader' }, within });
+                    tableHeadersCount = countMatches(tableHeaders);
+                  } catch {
+                    // Some adapters do not expose tableHeader as a queryable node type.
+                  }
+                  return countMatches(tableCells) + tableHeadersCount;
+                };
+
+                const expectedCellCount = expectedRows * expectedCols;
+
+                const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
+                const rowAddresses = Array.isArray(rowResult?.matches) ? rowResult.matches : [];
+                if (rowAddresses.length > 0) {
+                  if (rowAddresses.length !== expectedRows) {
+                    return `expected ${expectedRows} rows, got ${rowAddresses.length}`;
+                  }
+
+                  const explicitCellCount = rowAddresses.reduce(
+                    (total: number, rowAddress: unknown) => total + findCellCountWithin(rowAddress),
+                    0,
+                  );
+                  if (explicitCellCount > 0 && explicitCellCount !== expectedCellCount) {
+                    return `expected ${expectedRows}x${expectedCols} table (${expectedCellCount} cells), got ${explicitCellCount}`;
+                  }
+
+                  if (explicitCellCount > 0) return 'ok';
                 }
-              });
-              if (!tableFound) return 'no table found in document';
-              if (expectedRows !== undefined && rowCount !== expectedRows)
-                return `expected ${expectedRows} rows, got ${rowCount}`;
-              if (expectedCols !== undefined && firstRowCols !== expectedCols)
-                return `expected ${expectedCols} columns, got ${firstRowCols}`;
+
+                // Fallback for adapter paths where tableRow/tableCell are not indexed yet.
+                const paragraphResult = docApi.find({
+                  select: { type: 'node', nodeType: 'paragraph' },
+                  within: tableAddress,
+                });
+                const paragraphCount = countMatches(paragraphResult);
+                if (paragraphCount !== expectedCellCount) {
+                  return `expected ${expectedRows}x${expectedCols} table (${expectedCellCount} cells), got ${paragraphCount} (paragraph proxy)`;
+                }
+              }
+
               return 'ok';
             },
             { expectedRows: rows, expectedCols: cols },
@@ -727,63 +683,59 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     },
 
     async assertTextMarkAttrs(text: string, markName: string, attrs: Record<string, unknown>, occurrence = 0) {
-      if (markName === 'link' && (await hasDocumentApiMethod('find'))) {
+      if (markName === 'link') {
         const hrefs = await getDocLinkHrefsByText(text, occurrence);
-        if (hrefs && typeof attrs.href === 'string') {
-          expect(hrefs).toContain(attrs.href);
-          return;
-        }
+        expect(hrefs).not.toBeNull();
+        expect(typeof attrs.href).toBe('string');
+        expect(hrefs ?? []).toContain(attrs.href as string);
+        return;
       }
 
-      if (markName === 'textStyle' && (await hasDocumentApiMethod('find'))) {
+      if (markName === 'textStyle') {
         const runProperties = await getDocRunPropertiesByText(text, occurrence);
-        if (runProperties && runProperties.length > 0) {
-          const entries = Object.entries(attrs);
-          const allMatched = runProperties.some((props) =>
-            entries.every(([key, expectedValue]) => matchesTextStyleAttr(props, key, expectedValue)),
-          );
-
-          if (allMatched) return;
-        }
+        expect(runProperties).not.toBeNull();
+        expect((runProperties ?? []).length).toBeGreaterThan(0);
+        const entries = Object.entries(attrs);
+        const allMatched = (runProperties ?? []).some((props) =>
+          entries.every(([key, expectedValue]) => matchesTextStyleAttr(props, key, expectedValue)),
+        );
+        expect(allMatched).toBe(true);
+        return;
       }
 
-      const pos = await fixture.findTextPos(text, occurrence);
-      await fixture.assertMarkAttrsAtPos(pos, markName, attrs);
+      throw new Error(`assertTextMarkAttrs only supports "link" and "textStyle" via document-api; got "${markName}".`);
     },
 
     async assertTextAlignment(text: string, expectedAlignment: string, occurrence = 0) {
-      if ((await hasDocumentApiMethod('find')) && (await hasDocumentApiMethod('getNode'))) {
-        const alignment = await page.evaluate(
-          ({ searchText, matchIndex }) => {
-            const docApi = (window as any).editor?.doc;
-            if (!docApi?.find || !docApi?.getNode) return null;
+      await expect
+        .poll(() =>
+          page.evaluate(
+            ({ searchText, matchIndex }) => {
+              const docApi = (window as any).editor?.doc;
+              if (!docApi?.find || !docApi?.getNode) {
+                throw new Error('Document API is unavailable: expected editor.doc.find/getNode.');
+              }
 
-            const textResult = docApi.find({
-              select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
-            });
-            const contexts = Array.isArray(textResult?.context) ? textResult.context : [];
-            const context = contexts[matchIndex];
-            if (!context?.address) return null;
+              const textResult = docApi.find({
+                select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
+              });
+              const contexts = Array.isArray(textResult?.context) ? textResult.context : [];
+              const context = contexts[matchIndex];
+              if (!context?.address) return null;
 
-            const node = docApi.getNode(context.address);
-            return node?.properties?.alignment ?? null;
-          },
-          { searchText: text, matchIndex: occurrence },
-        );
-
-        if (typeof alignment === 'string') {
-          expect(alignment).toBe(expectedAlignment);
-          return;
-        }
-      }
-
-      await assertAlignmentViaPm(text, expectedAlignment, occurrence);
+              const node = docApi.getNode(context.address);
+              return node?.properties?.alignment ?? null;
+            },
+            { searchText: text, matchIndex: occurrence },
+          ),
+        )
+        .toBe(expectedAlignment);
     },
 
     // ----- Getter methods -----
 
     async getTextContent(): Promise<string> {
-      return getTextContentWithFallback();
+      return getTextContentFromDocApi();
     },
 
     async getSelection(): Promise<{ from: number; to: number }> {

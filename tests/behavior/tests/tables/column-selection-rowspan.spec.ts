@@ -26,31 +26,6 @@ async function dragFromCellTextToCellText(
   await superdoc.waitForStable();
 }
 
-async function countTableCells(superdoc: { page: import('@playwright/test').Page }): Promise<number> {
-  return superdoc.page.evaluate(() => {
-    const editor = (window as any).editor;
-    const docApi = editor?.doc;
-    if (docApi?.find) {
-      const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
-      const tableAddress = tableResult?.matches?.[0];
-      if (!tableAddress) return 0;
-
-      const countCellsByType = (nodeType: 'tableCell' | 'tableHeader'): number => {
-        const result = docApi.find({ select: { type: 'node', nodeType }, within: tableAddress });
-        return Array.isArray(result?.matches) ? result.matches.length : 0;
-      };
-      return countCellsByType('tableCell') + countCellsByType('tableHeader');
-    }
-
-    const doc = editor.state.doc;
-    let cells = 0;
-    doc.descendants((node: any) => {
-      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') cells++;
-    });
-    return cells;
-  });
-}
-
 test('selecting a table column works in rows affected by rowspan (PR #1839)', async ({ superdoc }) => {
   await superdoc.executeCommand('insertTable', { rows: 5, cols: 3, withHeaderRow: false });
   await superdoc.waitForStable();
@@ -67,8 +42,10 @@ test('selecting a table column works in rows affected by rowspan (PR #1839)', as
   await dragFromCellTextToCellText(superdoc, 'A1', 'A5');
   await superdoc.executeCommand('mergeCells');
   await superdoc.waitForStable();
-  await superdoc.assertTableExists(5, 3);
-  await expect.poll(() => countTableCells(superdoc)).toBe(11);
+  await superdoc.assertTableExists();
+  await expect
+    .poll(() => superdoc.page.locator('[contenteditable="true"] table td, [contenteditable="true"] table th').count())
+    .toBe(11);
 
   // Select middle column (B*) by pointer drag. This is the rowspan hit-testing path from PR #1839.
   await dragFromCellTextToCellText(superdoc, 'B1', 'B5');

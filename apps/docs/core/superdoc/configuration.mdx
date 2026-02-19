@@ -324,6 +324,22 @@ new SuperDoc({
   Disable custom context menus
 </ParamField>
 
+<ParamField path="onUnsupportedContent" type="function">
+  Callback invoked with HTML elements that were dropped during import because they have no schema representation. Receives an array of `{ tagName, outerHTML, count }` items. When provided, `console.warn` is suppressed.
+
+  ```javascript
+  onUnsupportedContent: (items) => {
+    items.forEach(({ tagName, count }) => {
+      console.log(`Dropped ${count}x <${tagName}>`);
+    });
+  }
+  ```
+</ParamField>
+
+<ParamField path="warnOnUnsupportedContent" type="boolean" default="false">
+  Log a `console.warn` listing HTML elements dropped during import. Ignored when `onUnsupportedContent` is provided.
+</ParamField>
+
 <ParamField path="cspNonce" type="string">
   Content Security Policy nonce
 </ParamField>

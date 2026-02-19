@@ -136,10 +136,15 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   if (insertedFrom !== insertedTo) {
     meta.insertedMark = insertedMark;
     meta.step = condensedStep;
-    // Store insertion end position for deterministic caret placement.
-    // positionTo is in newTr.doc coordinates after condensedStep is applied.
-    const insertionLength = insertedTo - insertedFrom;
-    meta.insertedTo = positionTo + insertionLength;
+    // Store insertion end position when (1) we adjusted the insertion position (e.g. past a
+    // deletion span), or (2) single-step replace of a range — selection mapping is wrong then
+    // so we need an explicit caret position. Skip for multi-step (e.g. input rules) so their
+    // intended selection is preserved.
+    const needInsertedTo = positionTo !== step.to || (isSingleStep && step.from !== step.to);
+    if (needInsertedTo) {
+      const insertionLength = insertedTo - insertedFrom;
+      meta.insertedTo = positionTo + insertionLength;
+    }
   }
 
   if (!newTr.selection.eq(tempTr.selection)) {

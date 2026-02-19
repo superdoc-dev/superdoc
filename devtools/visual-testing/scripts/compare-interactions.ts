@@ -208,6 +208,92 @@ async function runVersionSwitch(version: string): Promise<void> {
   await runCommand(['exec', 'tsx', 'scripts/set-superdoc-version.ts', version]);
 }
 
+type VersionSwitchRunner = (version: string) => Promise<void>;
+
+/**
+ * Read the current `superdoc` dependency specifier from the harness package.
+ *
+ * @returns Dependency specifier, or `unknown` when the package cannot be read
+ */
+export function getHarnessSuperdocSpecifier(): string {
+  try {
+    const pkgPath = path.resolve(process.cwd(), 'packages/harness/package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    const spec = pkg?.dependencies?.superdoc;
+    return typeof spec === 'string' && spec.trim().length > 0 ? spec.trim() : 'unknown';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(colors.warning(`Unable to read harness superdoc dependency: ${message}`));
+    return 'unknown';
+  }
+}
+
+/**
+ * Build candidate version specifiers that can be used to restore harness state.
+ *
+ * @param specifier - Raw dependency specifier from `packages/harness/package.json`
+ * @param installedVersion - Installed `superdoc` package version from `node_modules`
+ * @returns Deduplicated list of restore candidates in preferred order
+ */
+export function buildRestoreCandidates(specifier: string, installedVersion: string): string[] {
+  const candidates: string[] = [];
+  if (specifier && specifier !== 'unknown') {
+    candidates.push(specifier);
+  }
+  if (installedVersion && installedVersion !== 'unknown') {
+    candidates.push(normalizeVersionSpecifier(installedVersion));
+  }
+  return Array.from(new Set(candidates));
+}
+
+/**
+ * Decide if the harness should be restored to its previous `superdoc` version.
+ *
+ * @param versionSpec - Baseline generation version specifier
+ * @param targetVersion - Explicit target version mode flag
+ * @param restoreCandidates - Candidate versions for restore
+ * @returns `true` when a restore should be attempted
+ */
+export function shouldRestoreAfterBaselineSwitch(
+  versionSpec: string | undefined,
+  targetVersion: string | undefined,
+  restoreCandidates: string[],
+): boolean {
+  if (!versionSpec || Boolean(targetVersion) || restoreCandidates.length === 0) {
+    return false;
+  }
+
+  return normalizeVersionSpecifier(restoreCandidates[0]) !== normalizeVersionSpecifier(versionSpec);
+}
+
+/**
+ * Restore harness `superdoc` dependency by trying candidate specifiers in order.
+ *
+ * @param candidates - Candidate version specifiers to attempt
+ * @param switchVersion - Version switch implementation (defaults to `runVersionSwitch`)
+ * @throws {Error} When all restore candidates fail
+ */
+export async function restoreSuperdocVersion(
+  candidates: string[],
+  switchVersion: VersionSwitchRunner = runVersionSwitch,
+): Promise<void> {
+  const failures: string[] = [];
+  for (const candidate of candidates) {
+    try {
+      console.log(colors.muted(`Restoring SuperDoc version: ${candidate}`));
+      await switchVersion(candidate);
+      return;
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  const attempted = candidates.length > 0 ? candidates.join(', ') : '(none)';
+  const details =
+    failures.length > 0 ? failures.map((message, index) => `${index + 1}. ${message}`).join(' | ') : 'No candidates';
+  throw new Error(`Unable to restore previous SuperDoc version. Tried: ${attempted}. Failures: ${details}`);
+}
+
 async function runGenerate(
   outputFolder: string,
   filters: string[],
@@ -364,12 +450,10 @@ async function main(): Promise<void> {
       const baselinePath = path.join(baselineDir, version);
       if (!fs.existsSync(baselinePath)) {
         console.log(colors.info(`📸 Baseline ${version} not found locally. Generating...`));
-        const currentSpec = getSuperdocVersion();
-        const shouldRestore =
-          Boolean(versionSpec) &&
-          !targetVersion &&
-          currentSpec &&
-          normalizeVersionSpecifier(currentSpec) !== normalizeVersionSpecifier(versionSpec!);
+        const currentSpec = getHarnessSuperdocSpecifier();
+        const currentInstalledVersion = getSuperdocVersion();
+        const restoreCandidates = buildRestoreCandidates(currentSpec, currentInstalledVersion);
+        const shouldRestore = shouldRestoreAfterBaselineSwitch(versionSpec, targetVersion, restoreCandidates);
         await runBaselineLocal({
           versionSpec,
           filters,
@@ -380,8 +464,7 @@ async function main(): Promise<void> {
           storageArgs,
         });
         if (shouldRestore) {
-          console.log(colors.muted(`Restoring SuperDoc version: ${currentSpec}`));
-          await runVersionSwitch(currentSpec);
+          await restoreSuperdocVersion(restoreCandidates);
         }
       }
       if (!fs.existsSync(baselinePath)) {
@@ -483,12 +566,13 @@ async function main(): Promise<void> {
 
   let resultsRoot: string | undefined;
   if (resultsFolderName) {
-    resultsRoot = path.isAbsolute(resultsFolderName)
+    const resolvedResultsRoot = path.isAbsolute(resultsFolderName)
       ? path.join(resultsFolderName, 'interactions')
       : path.join('screenshots', resultsFolderName, 'interactions');
-    const hasBrowserResults = browsers.some((browser) => fs.existsSync(path.join(resultsRoot, browser)));
+    resultsRoot = resolvedResultsRoot;
+    const hasBrowserResults = browsers.some((browser) => fs.existsSync(path.join(resolvedResultsRoot, browser)));
     const pngCount = browsers.reduce((count, browser) => {
-      const dir = path.join(resultsRoot, browser);
+      const dir = path.join(resolvedResultsRoot, browser);
       return count + (fs.existsSync(dir) ? findPngFiles(dir).length : 0);
     }, 0);
     if (!hasBrowserResults || pngCount === 0) {

@@ -347,8 +347,8 @@ const init = async () => {
         excludeItems: [], // ['italic', 'bold'],
         // texts: {},
       },
-      // Test custom slash menu configuration
-      slashMenu: {
+      // Test custom context menu configuration
+      contextMenu: {
         // includeDefaultItems: true, // Include default items
         // customItems: [
         //   {

@@ -2,6 +2,7 @@ import * as xmljs from 'xml-js';
 import JSZip from 'jszip';
 import { getContentTypesFromXml, base64ToUint8Array } from './super-converter/helpers.js';
 import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
+import { DOCX } from '@superdoc/common';
 
 /**
  * Class to handle unzipping and zipping of docx files
@@ -276,6 +277,7 @@ class DocxZipper {
     const exportType = isHeadless ? 'nodebuffer' : 'blob';
     return await zip.generateAsync({
       type: exportType,
+      mimeType: DOCX,
       compression,
       compressionOptions: compression === 'DEFLATE' ? { level: 6 } : undefined,
     });

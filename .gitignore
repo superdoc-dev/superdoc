@@ -76,3 +76,5 @@ test-corpus/
 .pnpm-store
 devtools/visual-testing/pnpm-lock.yaml
 
+.bun-cache/
+

@@ -1598,6 +1598,28 @@ export async function incrementalLayout(
                     tableX += indent;
                     tableWidth = Math.max(0, tableWidth - indent);
                   }
+                  // Rescale column widths when table was clamped to section width.
+                  // This happens in mixed-orientation docs where measurement uses the
+                  // widest section but rendering is per-section (SD-1859).
+                  let fragmentColumnWidths: number[] | undefined;
+                  if (
+                    tableWidthRaw > tableWidth &&
+                    measure.columnWidths &&
+                    measure.columnWidths.length > 0 &&
+                    tableWidthRaw > 0
+                  ) {
+                    const scale = tableWidth / tableWidthRaw;
+                    fragmentColumnWidths = measure.columnWidths.map((w: number) => Math.max(1, Math.round(w * scale)));
+                    const scaledSum = fragmentColumnWidths.reduce((a: number, b: number) => a + b, 0);
+                    const target = Math.round(tableWidth);
+                    if (scaledSum !== target && fragmentColumnWidths.length > 0) {
+                      fragmentColumnWidths[fragmentColumnWidths.length - 1] = Math.max(
+                        1,
+                        fragmentColumnWidths[fragmentColumnWidths.length - 1] + (target - scaledSum),
+                      );
+                    }
+                  }
+
                   page.fragments.push({
                     kind: 'table',
                     blockId: range.blockId,
@@ -1607,6 +1629,7 @@ export async function incrementalLayout(
                     y: cursorY,
                     width: tableWidth,
                     height: Math.max(0, measure.totalHeight ?? 0),
+                    columnWidths: fragmentColumnWidths,
                   });
                   cursorY += getRangeRenderHeight(range);
                   return;

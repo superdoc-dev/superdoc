@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DocxExporter } from '@core/super-converter/exporter.js';
+import { mergeRelationshipElements } from '@core/super-converter/relationship-helpers.js';
 
 describe('DocxExporter', () => {
   // Helper to create a minimal converter stub
@@ -40,7 +41,7 @@ describe('DocxExporter', () => {
     expect(xml).toContain('Format=&lt;&lt;NUM&gt;&gt;_&lt;&lt;VER&gt;&gt;');
   });
 
-  it('does not double-escape ampersands in text nodes', () => {
+  it('encodes all ampersands in text nodes including entity-like sequences', () => {
     const exporter = new DocxExporter(createConverterStub());
 
     const data = {
@@ -52,6 +53,8 @@ describe('DocxExporter', () => {
           elements: [
             {
               type: 'text',
+              // After XML parsing, &amp;amp; becomes &amp; and &amp; becomes &
+              // Both must be re-encoded on export
               text: 'Rock & Roll &amp; Jazz',
             },
           ],
@@ -61,7 +64,70 @@ describe('DocxExporter', () => {
 
     const xml = exporter.schemaToXml(data);
 
-    expect(xml).toContain('Rock &amp; Roll &amp; Jazz');
+    // Bare & encodes to &amp;, and &amp; (literal text from decoded XML) encodes to &amp;amp;
+    expect(xml).toContain('Rock &amp; Roll &amp;amp; Jazz');
+  });
+
+  it('preserves distinct style names with entity-like characters in attributes', () => {
+    const exporter = new DocxExporter(createConverterStub());
+
+    // Simulates two styles that xml-js decoded from the original DOCX:
+    // Style 1 had w:name w:val="Body First Line .5&quot;"  → decoded to: Body First Line .5"
+    // Style 2 had w:name w:val="Body First Line .5&amp;quot;" → decoded to: Body First Line .5&quot;
+    const data = {
+      name: 'w:styles',
+      attributes: {},
+      elements: [
+        {
+          name: 'w:style',
+          attributes: { 'w:styleId': 'BodyFirstLine5' },
+          elements: [{ name: 'w:name', attributes: { 'w:val': 'Body First Line .5"' } }],
+        },
+        {
+          name: 'w:style',
+          attributes: { 'w:styleId': 'BodyFirstLine5quot' },
+          elements: [{ name: 'w:name', attributes: { 'w:val': 'Body First Line .5&quot;' } }],
+        },
+      ],
+    };
+
+    const xml = exporter.schemaToXml(data);
+
+    // The two style names must remain distinct in the output XML
+    expect(xml).toContain('w:val="Body First Line .5&quot;"');
+    expect(xml).toContain('w:val="Body First Line .5&amp;quot;"');
+  });
+
+  it('does not double-escape pre-escaped relationship targets in attributes', () => {
+    const exporter = new DocxExporter(createConverterStub());
+
+    const relationships = mergeRelationshipElements(
+      [],
+      [
+        {
+          type: 'element',
+          name: 'Relationship',
+          attributes: {
+            Id: 'rId1',
+            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+            Target: 'https://example.com/page?x=1&y=2',
+            TargetMode: 'External',
+          },
+        },
+      ],
+    );
+
+    const data = {
+      name: 'Relationships',
+      attributes: {
+        xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships',
+      },
+      elements: relationships,
+    };
+
+    const xml = exporter.schemaToXml(data);
+
+    expect(xml).toContain('Target="https://example.com/page?x=1&amp;y=2"');
     expect(xml).not.toContain('&amp;amp;');
   });
 
@@ -377,6 +443,40 @@ describe('DocxExporter', () => {
 
       // w:instrText should preserve the text as-is (only escapes special chars)
       expect(xml).toContain('FIELD[[sdspace]]INSTRUCTION');
+    });
+
+    it('normalizes w:delInstrText to w:instrText when not inside w:del', () => {
+      const exporter = new DocxExporter(createConverterStub());
+
+      const data = {
+        name: 'w:document',
+        attributes: {},
+        elements: [
+          {
+            name: 'w:r',
+            attributes: {},
+            elements: [
+              {
+                name: 'w:delInstrText',
+                attributes: { 'xml:space': 'preserve' },
+                elements: [
+                  {
+                    type: 'text',
+                    text: ' REF _Ref258418237 \\h ',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const xml = exporter.schemaToXml(data);
+
+      // w:delInstrText must be renamed to w:instrText per ECMA-376 §17.16.13
+      expect(xml).toContain('<w:instrText');
+      expect(xml).not.toContain('w:delInstrText');
+      expect(xml).toContain('REF _Ref258418237');
     });
 
     it('handles special characters along with [[sdspace]] placeholders', () => {

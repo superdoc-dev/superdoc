@@ -1,179 +1,351 @@
 #!/usr/bin/env node
 
-import { glob } from 'fast-glob';
-import { read } from './commands/read';
-import { type ReplaceResult, replace } from './commands/replace';
-import { type SearchResult, search } from './commands/search';
+import { parseGlobalArgs } from './lib/args';
+import { createFailureEnvelope, createSuccessEnvelope } from './lib/envelope';
+import { CliError, toCliError } from './lib/errors';
+import { normalizeJsonValue } from './lib/input-readers';
+import type { CliIO, CommandContext, CommandExecution, ExecutionMode, GlobalOptions, OutputMode } from './lib/types';
+import { runCall } from './commands/call';
+import { runClose } from './commands/close';
+import { runOpen } from './commands/open';
+import { runSessionClose } from './commands/session-close';
+import { runSessionList } from './commands/session-list';
+import { runSessionSave } from './commands/session-save';
+import { runSessionSetDefault, runSessionUse } from './commands/session-set-default';
+import { runSave } from './commands/save';
+import { tryRunLegacyCompatCommand } from './commands/legacy-compat';
+import { runCommandWrapper } from './lib/wrapper-dispatch';
+import { MANUAL_COMMAND_ALLOWLIST, type ManualCommandKey } from './lib/manual-command-allowlist';
+import { validateOperationResponseData } from './lib/operation-args';
+import { runInstall } from './commands/install';
+import { runUninstall } from './commands/uninstall';
+import {
+  CLI_COMMAND_SPECS,
+  CLI_COMMAND_KEYS,
+  CLI_HELP,
+  CLI_MAX_COMMAND_TOKENS,
+  type CliCommandKey,
+  type CliOperationId,
+} from './cli';
 
-const HELP = `
-superdoc - docx editing in your terminal
+const HELP = [
+  CLI_HELP,
+  '',
+  'Legacy compatibility (v0.x):',
+  '  superdoc search <pattern> <files...>',
+  '  superdoc replace-legacy <find> <to> <files...>',
+  '  superdoc read <file>',
+  '',
+  'Canonical machine call:',
+  '  superdoc call <operationId> [--input-json "{...}"|--input-file payload.json]',
+].join('\n');
 
-Commands:
-  search <pattern> <files...>    Find text across documents
-  replace <find> <to> <files...> Find and replace text
-  read <file>                    Extract plain text
+type CommandRunner = (tokens: string[], context: CommandContext) => Promise<CommandExecution>;
 
-Options:
-  --json        Machine-readable output
-  -h, --help    Show this message
+type ParsedInvocation = {
+  globals: GlobalOptions;
+  rest: string[];
+};
 
-Examples:
-  superdoc search "indemnification" ./contracts/*.docx
-  superdoc replace "ACME Corp" "Globex Inc" ./merger/*.docx
-  superdoc read ./proposal.docx
+/** The result of a programmatic CLI invocation via {@link invokeCommand}. */
+export type InvokeCommandResult = {
+  globals: GlobalOptions;
+  execution?: CommandExecution;
+  helpText?: string;
+  elapsedMs: number;
+};
 
-Docs: https://github.com/superdoc-dev/superdoc
-`;
+/** Options accepted by {@link invokeCommand}. */
+export type InvokeCommandOptions = {
+  ioOverrides?: Partial<CliIO>;
+  executionMode?: ExecutionMode;
+  collabSessionPool?: CommandContext['collabSessionPool'];
+};
 
-/**
- * Expand glob patterns to file paths
- * @param patterns - Array of file patterns (supports wildcards)
- */
-async function expandGlobs(patterns: string[]): Promise<string[]> {
-  const files: string[] = [];
+const MANUAL_COMMANDS = {
+  call: runCall,
+  close: runClose,
+  open: runOpen,
+  save: runSave,
+  'session list': runSessionList,
+  'session save': runSessionSave,
+  'session close': runSessionClose,
+  'session set-default': runSessionSetDefault,
+  'session use': runSessionUse,
+} satisfies Record<ManualCommandKey, CommandRunner>;
 
-  for (const pattern of patterns) {
-    if (pattern.includes('*')) {
-      const matches = await glob(pattern, { absolute: true });
-      for (const file of matches) {
-        if (file.endsWith('.docx')) {
-          files.push(file);
-        }
-      }
-    } else {
-      files.push(pattern);
-    }
+const EXTRA_COMMAND_KEYS = ['call'] as const;
+const COMMAND_KEY_SET = new Set<string>([...CLI_COMMAND_KEYS, ...EXTRA_COMMAND_KEYS]);
+const CLI_COMMAND_KEY_SET = new Set<string>(CLI_COMMAND_KEYS);
+const MANUAL_COMMAND_KEY_SET = new Set<string>(MANUAL_COMMAND_ALLOWLIST);
+const COMMAND_OPERATION_ID_BY_KEY = new Map<string, CliOperationId>(
+  CLI_COMMAND_SPECS.map((spec) => [spec.key, spec.operationId as CliOperationId] as const),
+);
+
+function hasCommandHelpFlag(args: string[]): boolean {
+  return args.includes('--help') || args.includes('-h');
+}
+
+function defaultIo(): CliIO {
+  let stdinCache: Promise<Uint8Array> | null = null;
+
+  return {
+    stdout(message: string) {
+      process.stdout.write(message);
+    },
+    stderr(message: string) {
+      process.stderr.write(message);
+    },
+    readStdinBytes() {
+      if (stdinCache) return stdinCache;
+
+      stdinCache = new Promise<Uint8Array>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        process.stdin.on('data', (chunk: Buffer | Uint8Array | string) => {
+          if (typeof chunk === 'string') {
+            chunks.push(Buffer.from(chunk));
+            return;
+          }
+          chunks.push(Buffer.from(chunk));
+        });
+        process.stdin.on('end', () => {
+          resolve(new Uint8Array(Buffer.concat(chunks)));
+        });
+        process.stdin.on('error', (error) => {
+          reject(error);
+        });
+      });
+
+      return stdinCache;
+    },
+    now() {
+      return Date.now();
+    },
+  };
+}
+
+function mergeIo(overrides?: Partial<CliIO>): CliIO {
+  const base = defaultIo();
+  if (!overrides) return base;
+
+  return {
+    stdout: overrides.stdout ?? base.stdout,
+    stderr: overrides.stderr ?? base.stderr,
+    readStdinBytes: overrides.readStdinBytes ?? base.readStdinBytes,
+    now: overrides.now ?? base.now,
+  };
+}
+
+function parseCommand(rest: string[]): { key: string; args: string[] } {
+  if (rest.length === 0) {
+    throw new CliError('MISSING_REQUIRED', 'Missing command.');
   }
 
-  return files;
+  const maxTokens = Math.min(Math.max(CLI_MAX_COMMAND_TOKENS, 1), rest.length);
+  for (let tokenCount = maxTokens; tokenCount >= 1; tokenCount -= 1) {
+    const candidate = rest.slice(0, tokenCount).join(' ');
+    if (!COMMAND_KEY_SET.has(candidate)) continue;
+    return {
+      key: candidate,
+      args: rest.slice(tokenCount),
+    };
+  }
+
+  const attempted = rest.slice(0, maxTokens).join(' ');
+  throw new CliError('UNKNOWN_COMMAND', `Unknown command: ${attempted}`);
+}
+
+async function executeWithTimeout<T>(operation: () => Promise<T>, timeoutMs?: number): Promise<T> {
+  if (!timeoutMs) return operation();
+
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new CliError('TIMEOUT', `Command timed out after ${timeoutMs}ms.`, {
+          timeoutMs,
+        }),
+      );
+    }, timeoutMs);
+
+    operation()
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+function writeSuccess(io: CliIO, mode: OutputMode, payload: CommandExecution, elapsedMs: number): void {
+  if (mode === 'json') {
+    io.stdout(`${JSON.stringify(createSuccessEnvelope(payload.command, payload.data, elapsedMs))}\n`);
+    return;
+  }
+
+  io.stdout(`${payload.pretty}\n`);
+}
+
+function writeFailure(io: CliIO, mode: OutputMode, error: CliError, elapsedMs: number): void {
+  if (mode === 'json') {
+    io.stderr(`${JSON.stringify(createFailureEnvelope(error, elapsedMs))}\n`);
+    return;
+  }
+
+  io.stderr(`Error [${error.code}]: ${error.message}\n`);
+}
+
+function parseInvocation(argv: string[]): ParsedInvocation {
+  const { globals, rest } = parseGlobalArgs(argv);
+  return { globals, rest };
+}
+
+async function executeParsedInvocation(
+  parsed: ParsedInvocation,
+  io: CliIO,
+  executionMode: ExecutionMode,
+  collabSessionPool?: CommandContext['collabSessionPool'],
+): Promise<{ execution?: CommandExecution; helpText?: string }> {
+  if (parsed.globals.help || parsed.rest.length === 0) {
+    return { helpText: HELP };
+  }
+
+  const { key, args } = parseCommand(parsed.rest);
+
+  const context: CommandContext = {
+    io,
+    timeoutMs: parsed.globals.timeoutMs,
+    sessionId: parsed.globals.sessionId,
+    executionMode,
+    collabSessionPool,
+  };
+
+  const execution = await executeWithTimeout(async () => {
+    if (MANUAL_COMMAND_KEY_SET.has(key)) {
+      const handler = MANUAL_COMMANDS[key as ManualCommandKey];
+      return handler(args, context);
+    }
+
+    if (CLI_COMMAND_KEY_SET.has(key)) {
+      return runCommandWrapper(key as CliCommandKey, args, context);
+    }
+
+    throw new CliError('UNKNOWN_COMMAND', `Unknown command: ${key}`);
+  }, parsed.globals.timeoutMs);
+
+  const operationId = COMMAND_OPERATION_ID_BY_KEY.get(key) as CliOperationId | undefined;
+  const shouldValidateResponse = operationId != null && !hasCommandHelpFlag(args);
+  if (!shouldValidateResponse) {
+    return { execution };
+  }
+
+  const normalizedData = normalizeJsonValue(execution.data, key);
+  validateOperationResponseData(operationId, normalizedData, key);
+  return {
+    execution: {
+      ...execution,
+      data: normalizedData as Record<string, unknown>,
+    },
+  };
 }
 
 /**
- * Format search results for human-readable output
- * @returns Formatted string with match summary
+ * Programmatically invokes a CLI command without process-level I/O side effects.
+ *
+ * @param argv - The argument tokens (e.g. `["find", "doc.docx", "--type", "text"]`)
+ * @param options - I/O overrides, execution mode, and collaboration pool
+ * @returns Parsed globals, optional execution result or help text, and elapsed time
+ * @throws {CliError} On unknown commands, validation failures, or command errors
  */
-function formatSearchResult(result: SearchResult): string {
-  const lines: string[] = [];
+export async function invokeCommand(argv: string[], options: InvokeCommandOptions = {}): Promise<InvokeCommandResult> {
+  const io = mergeIo(options.ioOverrides);
+  const startedAt = io.now();
+  const parsed = parseInvocation(argv);
+  const output = await executeParsedInvocation(
+    parsed,
+    io,
+    options.executionMode ?? 'oneshot',
+    options.collabSessionPool,
+  );
 
-  lines.push(`Found ${result.totalMatches} matches in ${result.files.length} files`);
-  lines.push('');
+  return {
+    globals: parsed.globals,
+    execution: output.execution,
+    helpText: output.helpText,
+    elapsedMs: io.now() - startedAt,
+  };
+}
 
-  for (const file of result.files) {
-    lines.push(`  ${file.path}: ${file.matches.length} matches`);
-    for (const match of file.matches.slice(0, 3)) {
-      lines.push(`    "${match.context}"`);
-    }
-    if (file.matches.length > 3) {
-      lines.push(`    ... and ${file.matches.length - 3} more`);
-    }
-  }
-
-  return lines.join('\n');
+async function runHostCommand(tokens: string[], io: CliIO): Promise<number> {
+  const { runHostStdio } = await import('./host/server');
+  return runHostStdio(tokens, io);
 }
 
 /**
- * Format replace results for human-readable output
- * @param result - Replace operation result
- * @returns Formatted string with replacement summary
+ * Top-level CLI entry point. Parses arguments, routes to the appropriate command,
+ * and writes JSON or pretty output to the provided I/O streams.
+ *
+ * @param argv - Raw process arguments (after stripping the binary path)
+ * @param ioOverrides - Optional overrides for stdout, stderr, stdin, and clock
+ * @returns Process exit code (0 on success, non-zero on error)
  */
-function formatReplaceResult(result: ReplaceResult): string {
-  const lines: string[] = [];
-
-  lines.push(`Updated ${result.files.length} files (${result.totalReplacements} replacements total)`);
-
-  for (const file of result.files) {
-    lines.push(`  ${file.path}: ${file.replacements} replacements`);
-  }
-
-  return lines.join('\n');
-}
-
-async function main() {
-  const args = process.argv.slice(2);
-
-  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
-    console.log(HELP);
-    process.exit(0);
-  }
-
-  const jsonOutput = args.includes('--json');
-  const filteredArgs = args.filter((a) => a !== '--json');
-
-  const [command, ...rest] = filteredArgs;
+export async function run(argv: string[], ioOverrides?: Partial<CliIO>): Promise<number> {
+  const io = mergeIo(ioOverrides);
+  const startedAt = io.now();
+  let outputMode: OutputMode = 'json';
 
   try {
-    switch (command) {
-      case 'search': {
-        if (rest.length < 2) {
-          console.error('Usage: superdoc search <pattern> <files...>');
-          process.exit(1);
-        }
-        const [pattern, ...filePatterns] = rest;
-        const files = await expandGlobs(filePatterns);
+    const parsed = parseInvocation(argv);
+    outputMode = parsed.globals.output;
 
-        if (files.length === 0) {
-          console.error('No .docx files found matching the pattern.');
-          process.exit(1);
-        }
-
-        const result = await search(pattern, files);
-
-        if (jsonOutput) {
-          console.log(JSON.stringify(result, null, 2));
-        } else {
-          console.log(formatSearchResult(result));
-        }
-        break;
-      }
-
-      case 'replace': {
-        if (rest.length < 3) {
-          console.error('Usage: superdoc replace <find> <replace> <files...>');
-          process.exit(1);
-        }
-        const [find, replaceWith, ...filePatterns] = rest;
-        const files = await expandGlobs(filePatterns);
-
-        if (files.length === 0) {
-          console.error('No .docx files found matching the pattern.');
-          process.exit(1);
-        }
-
-        const result = await replace(find, replaceWith, files);
-
-        if (jsonOutput) {
-          console.log(JSON.stringify(result, null, 2));
-        } else {
-          console.log(formatReplaceResult(result));
-        }
-        break;
-      }
-
-      case 'read': {
-        if (rest.length < 1) {
-          console.error('Usage: superdoc read <file>');
-          process.exit(1);
-        }
-        const [filePath] = rest;
-        const result = await read(filePath);
-
-        if (jsonOutput) {
-          console.log(JSON.stringify(result, null, 2));
-        } else {
-          console.log(result.content);
-        }
-        break;
-      }
-
-      default:
-        console.error(`Unknown command: ${command}`);
-        console.log(HELP);
-        process.exit(1);
+    if (parsed.rest[0] === 'host') {
+      const hostTokens = parsed.rest.slice(1);
+      if (parsed.globals.help) hostTokens.push('--help');
+      return await runHostCommand(hostTokens, io);
     }
+
+    if (parsed.rest[0] === 'install' && !parsed.globals.help) {
+      return await runInstall(parsed.rest.slice(1), io);
+    }
+
+    if (parsed.rest[0] === 'uninstall' && !parsed.globals.help) {
+      return await runUninstall(parsed.rest.slice(1), io);
+    }
+
+    if (parsed.rest[0] === 'call' && outputMode !== 'json') {
+      throw new CliError('INVALID_ARGUMENT', 'call: only --output json is supported.');
+    }
+
+    if (!parsed.globals.help) {
+      const legacyCompat = await tryRunLegacyCompatCommand(argv, parsed.rest, io);
+      if (legacyCompat.handled) {
+        return legacyCompat.exitCode;
+      }
+    }
+
+    const output = await executeParsedInvocation(parsed, io, 'oneshot');
+    if (output.helpText) {
+      io.stdout(output.helpText);
+      return 0;
+    }
+    if (!output.execution) {
+      throw new CliError('COMMAND_FAILED', 'Command produced no execution result and no help text.');
+    }
+
+    const elapsedMs = io.now() - startedAt;
+    writeSuccess(io, outputMode, output.execution, elapsedMs);
+    return 0;
   } catch (error) {
-    console.error('Error:', error instanceof Error ? error.message : error);
-    process.exit(1);
+    const cliError = toCliError(error);
+    const elapsedMs = io.now() - startedAt;
+    writeFailure(io, outputMode, cliError, elapsedMs);
+    return cliError.exitCode;
   }
 }
 
-main();
+if (import.meta.main) {
+  const exitCode = await run(process.argv.slice(2));
+  process.exit(exitCode);
+}

@@ -542,6 +542,12 @@ Insert content with automatic format detection.
     <ParamField path="position" type="number | Object">
       Insert position (defaults to cursor)
     </ParamField>
+    <ParamField path="onUnsupportedContent" type="function">
+      Callback for HTML elements dropped during parsing. Receives `{ tagName, outerHTML, count }[]`. Falls back to the editor-level option if not set.
+    </ParamField>
+    <ParamField path="warnOnUnsupportedContent" type="boolean" default="false">
+      Log dropped elements via `console.warn`. Falls back to the editor-level option if not set.
+    </ParamField>
   </Expandable>
 </ParamField>
 

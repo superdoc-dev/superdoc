@@ -10,7 +10,7 @@ import type {
 } from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
 import type { PageStyles } from './styles.js';
-import type { RulerOptions } from './renderer.js';
+import type { PaintSnapshot, RulerOptions } from './renderer.js';
 
 // Re-export constants
 export { DOM_CLASS_NAMES } from './constants.js';
@@ -34,6 +34,7 @@ export type {
   CreateRulerElementOptions,
 } from './ruler/index.js';
 export type { RulerOptions } from './renderer.js';
+export type { PaintSnapshot } from './renderer.js';
 
 // Re-export utility functions for testing
 export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
@@ -119,6 +120,7 @@ export const createDomPainter = (
   setVirtualizationPins?: (pageIndices: number[] | null | undefined) => void;
   setActiveComment?: (commentId: string | null) => void;
   getActiveComment?: () => string | null;
+  getPaintSnapshot?: () => PaintSnapshot | null;
   onScroll?: () => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
@@ -157,6 +159,9 @@ export const createDomPainter = (
     },
     getActiveComment() {
       return painter.getActiveComment();
+    },
+    getPaintSnapshot() {
+      return painter.getPaintSnapshot();
     },
     // Trigger virtualization update when scroll container is external to the painter
     onScroll() {

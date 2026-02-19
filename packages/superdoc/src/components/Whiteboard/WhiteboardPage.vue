@@ -77,7 +77,15 @@ const handleStickerDrop = (event, x, y, scale) => {
   if (!stickerId) return false;
   const stickers = props.whiteboard.getType('stickers') || [];
   const sticker = stickers.find((item) => item.id === stickerId);
-  if (!sticker?.src) return false;
+  if (!sticker?.src) {
+    if (import.meta.env.DEV) {
+      console.warn('[Whiteboard] Dropped sticker id is not registered.', {
+        stickerId,
+        registeredStickerIds: stickers.map((item) => item.id),
+      });
+    }
+    return false;
+  }
   props.page.addImage({
     stickerId: sticker.id,
     x,

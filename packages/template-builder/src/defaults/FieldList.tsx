@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { useMemo, useState } from 'react';
 import type { FieldListProps, TemplateField } from '../types';
+import { getFieldTypeStyle } from '../utils';
 
 const shortenGroupId = (group: string): string => {
   const parts = group.split('-');
@@ -116,8 +117,7 @@ const FieldItem: FC<{
                 fontSize: '9px',
                 padding: '2px 5px',
                 borderRadius: '3px',
-                background: field.fieldType === 'signer' ? '#fef3c7' : '#f3f4f6',
-                color: field.fieldType === 'signer' ? '#b45309' : '#4b5563',
+                ...getFieldTypeStyle(field.fieldType),
                 fontWeight: '500',
               }}
             >

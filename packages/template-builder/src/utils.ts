@@ -60,6 +60,14 @@ export const getPresentationEditor = (superdoc: SuperDoc | null) => {
   return docs[0].getPresentationEditor?.() ?? null;
 };
 
+const FIELD_TYPE_STYLES: Record<string, { background: string; color: string }> = {
+  signer: { background: '#fef3c7', color: '#b45309' },
+};
+
+const DEFAULT_FIELD_TYPE_STYLE = { background: '#f3f4f6', color: '#6b7280' };
+
+export const getFieldTypeStyle = (fieldType: string) => FIELD_TYPE_STYLES[fieldType] ?? DEFAULT_FIELD_TYPE_STYLE;
+
 export const MENU_VIEWPORT_PADDING = 10;
 export const MENU_APPROX_WIDTH = 250;
 export const MENU_APPROX_HEIGHT = 300;

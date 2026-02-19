@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FieldDefinition, FieldMenuProps } from '../types';
+import { getFieldTypeStyle } from '../utils';
 import { InfoTooltip } from './InfoTooltip';
 
 export const FieldMenu: React.FC<FieldMenuProps> = ({
@@ -156,6 +157,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             >
               <input
                 type='radio'
+                name='fieldMode'
                 value='inline'
                 checked={fieldMode === 'inline'}
                 onChange={() => setFieldMode('inline')}
@@ -172,6 +174,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             >
               <input
                 type='radio'
+                name='fieldMode'
                 value='block'
                 checked={fieldMode === 'block'}
                 onChange={() => setFieldMode('block')}
@@ -197,6 +200,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             >
               <input
                 type='radio'
+                name='fieldType'
                 value='owner'
                 checked={fieldType === 'owner'}
                 onChange={() => setFieldType('owner')}
@@ -213,6 +217,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             >
               <input
                 type='radio'
+                name='fieldType'
                 value='signer'
                 checked={fieldType === 'signer'}
                 onChange={() => setFieldType('signer')}
@@ -363,8 +368,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                               padding: '2px 6px',
                               borderRadius: '3px',
                               textTransform: 'capitalize',
-                              background: entry.fieldType === 'signer' ? '#fef3c7' : '#f3f4f6',
-                              color: entry.fieldType === 'signer' ? '#b45309' : '#6b7280',
+                              ...getFieldTypeStyle(entry.fieldType),
                               fontWeight: 500,
                             }}
                           >
@@ -476,8 +480,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                           padding: '2px 6px',
                           borderRadius: '3px',
                           textTransform: 'capitalize',
-                          background: field.fieldType === 'signer' ? '#fef3c7' : '#f3f4f6',
-                          color: field.fieldType === 'signer' ? '#b45309' : '#6b7280',
+                          ...getFieldTypeStyle(field.fieldType),
                           fontWeight: 500,
                         }}
                       >

@@ -338,6 +338,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           if (aborted) return;
           if (instance?.activeEditor) {
             const editor = instance.activeEditor;
+            const pe = getPresentationEditor(instance);
 
             editor.on('update', ({ editor: e }: any) => {
               const { state } = e;
@@ -348,7 +349,6 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
                 const text = state.doc.textBetween(triggerStart, from);
 
                 if (text === trigger) {
-                  const pe = getPresentationEditor(instance);
                   const coords = pe?.coordsAtPos(from) ?? e.view.coordsAtPos(from);
                   const bounds = clampToViewport(new DOMRect(coords.left, coords.bottom ?? coords.top, 0, 0));
 
@@ -396,7 +396,6 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               const queryText = state.doc.textBetween(menuTriggerFromRef.current, from);
               updateMenuFilter(queryText);
 
-              const pe = getPresentationEditor(instance);
               const coords = pe?.coordsAtPos(from) ?? e.view.coordsAtPos(from);
               const bounds = clampToViewport(new DOMRect(coords.left, coords.bottom ?? coords.top, 0, 0));
               setMenuPosition(bounds);

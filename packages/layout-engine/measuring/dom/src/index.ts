@@ -2509,15 +2509,14 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         columnWidths = columnWidths.slice(0, maxCellCount);
       }
 
-      // ECMA-376 §2.4.64 (tblW): when omitted, width defaults to type "auto".
-      // The table layout algorithm (§2.4.49/§2.4.50) then uses autofit, which
-      // in practice expands the table to fill available page content width.
-      // Scale columns proportionally to match this behavior.
+      // Auto-layout: only scale DOWN if columns exceed available width.
+      // Do NOT scale up — explicit w:tblGrid column widths are authoritative.
+      // Tables without w:tblGrid already arrive with page-width columns via
+      // the fallback grid builder in tableFallbackHelpers.
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
-      if (totalWidth !== effectiveTargetWidth && effectiveTargetWidth > 0 && totalWidth > 0) {
+      if (totalWidth > effectiveTargetWidth && effectiveTargetWidth > 0) {
         const scale = effectiveTargetWidth / totalWidth;
         columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
-        // Normalize to exact target width (handle rounding errors)
         const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
         if (scaledSum !== effectiveTargetWidth && columnWidths.length > 0) {
           const diff = effectiveTargetWidth - scaledSum;

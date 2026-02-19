@@ -210,7 +210,7 @@ describe('w:tbl translator', () => {
       expect(result.attrs.grid).toEqual([{ col: 2880 }, { col: 2880 }]);
     });
 
-    it('handles auto table width type as fallback', () => {
+    it('converts auto table width to 100% when no usable grid exists', () => {
       const autoWidthTable = {
         name: 'w:tbl',
         elements: [
@@ -224,7 +224,8 @@ describe('w:tbl translator', () => {
 
       const result = translator.encode(params, {});
 
-      expect(result.attrs.tableWidth).toEqual({ width: 0, type: 'auto' });
+      // No usable grid → table defaults to 100% width (fill page)
+      expect(result.attrs.tableWidth).toEqual({ value: 5000, type: 'pct' });
     });
   });
 

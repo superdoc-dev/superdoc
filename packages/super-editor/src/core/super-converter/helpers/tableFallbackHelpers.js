@@ -77,7 +77,9 @@ export const buildFallbackGridForTable = ({ params, rows, tableWidth, tableWidth
   }
 
   if (totalWidthPx == null) {
-    totalWidthPx = minimumColumnWidthPx * columnCount;
+    // No explicit width available — default to full page content width.
+    // This matches Word's autofit behavior for tables without w:tblGrid.
+    totalWidthPx = twipsToPixels(DEFAULT_CONTENT_WIDTH_TWIPS);
   }
 
   const rawColumnWidthPx = Math.max(totalWidthPx / columnCount, minimumColumnWidthPx);

@@ -2,6 +2,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
@@ -27,6 +28,19 @@ const CANDIDATE_EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapsh
 const NPM_EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapshots-npm.mjs');
 const NPM_PACKAGE_NAME = 'superdoc';
 const DEFAULT_NPM_DIST_TAG = 'next';
+const MAX_RECOMMENDED_JOBS = 8;
+
+function getRecommendedJobs() {
+  const cpuCount =
+    typeof os.availableParallelism === 'function'
+      ? os.availableParallelism()
+      : Array.isArray(os.cpus())
+        ? os.cpus().length
+        : 1;
+  return Math.max(1, Math.min(MAX_RECOMMENDED_JOBS, cpuCount));
+}
+
+const DEFAULT_JOBS = getRecommendedJobs();
 
 function printHelp() {
   console.log(`
@@ -44,9 +58,10 @@ Options:
       --no-auto-generate-candidate    Do not regenerate candidate snapshots before compare
       --auto-generate-reference       Generate missing reference snapshots automatically (default: on)
       --no-auto-generate-reference    Do not auto-generate missing reference snapshots
-      --jobs <n>                      Worker count if auto-generating snapshots/references (default: 4)
+      --jobs <n>                      Worker count if auto-generating snapshots/references (default: ${DEFAULT_JOBS})
       --limit <n>                     Process at most n docs during generation and compare
-      --pipeline <mode>               headless | presentation for auto-generation (default: headless)
+      --match <pattern>               Filter docs by relative path substring (repeatable, case-insensitive)
+      --pipeline <mode>               headless | presentation for auto-generation (default: presentation)
       --installer <name>              auto | bun | npm for auto-generation (default: auto)
       --input-root <path>             Input docs root for auto-generation
       --numeric-tolerance <value>     Number comparison tolerance (default: 0.001)
@@ -62,6 +77,7 @@ Options:
 
 Examples:
   bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15
+  bun tests/layout-snapshots/compare-layout-snapshots.mjs --match list-in-table --no-visual-on-change
   bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15 --fail-on-diff
   bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference-root ./tests/layout-snapshots/reference/v.1.13.0-next.15
 `);
@@ -107,6 +123,35 @@ function summarizeValue(value) {
   }
 }
 
+function normalizeMatchPattern(value) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    throw new Error('Invalid --match value: expected non-empty text.');
+  }
+  return text.toLowerCase();
+}
+
+function matchesAnyPattern(value, patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) return true;
+  const normalizedValue = String(value ?? '').toLowerCase();
+  return patterns.some((pattern) => normalizedValue.includes(pattern));
+}
+
+function snapshotPathMatches(relPath, patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) return true;
+
+  const posixPath = pathToPosix(String(relPath ?? ''));
+  if (matchesAnyPattern(posixPath, patterns)) return true;
+
+  const layoutSuffix = '.layout.json';
+  if (!posixPath.endsWith(layoutSuffix)) return false;
+
+  const withoutLayoutSuffix = posixPath.slice(0, -layoutSuffix.length);
+  if (matchesAnyPattern(withoutLayoutSuffix, patterns)) return true;
+  if (matchesAnyPattern(`${withoutLayoutSuffix}.docx`, patterns)) return true;
+  return false;
+}
+
 function parseArgs(argv) {
   const args = {
     reference: null,
@@ -117,9 +162,10 @@ function parseArgs(argv) {
     reportDir: null,
     autoGenerateCandidate: true,
     autoGenerateReference: true,
-    jobs: 4,
+    jobs: DEFAULT_JOBS,
     limit: undefined,
-    pipeline: 'headless',
+    matches: [],
+    pipeline: 'presentation',
     installer: 'auto',
     inputRoot: null,
     numericTolerance: 0.001,
@@ -132,6 +178,13 @@ function parseArgs(argv) {
     failOnDiff: false,
   };
 
+  const requireValue = (optionName, optionValue) => {
+    if (typeof optionValue !== 'string' || optionValue.length === 0 || optionValue.startsWith('-')) {
+      throw new Error(`Missing value for ${optionName}.`);
+    }
+    return optionValue;
+  };
+
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = argv[i + 1];
@@ -140,33 +193,33 @@ function parseArgs(argv) {
       printHelp();
       process.exit(0);
     }
-    if (arg === '--reference' && next) {
-      args.reference = next;
+    if (arg === '--reference') {
+      args.reference = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--reference-root' && next) {
-      args.referenceRoot = next;
+    if (arg === '--reference-root') {
+      args.referenceRoot = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--reference-base' && next) {
-      args.referenceBase = next;
+    if (arg === '--reference-base') {
+      args.referenceBase = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--candidate-root' && next) {
-      args.candidateRoot = next;
+    if (arg === '--candidate-root') {
+      args.candidateRoot = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--reports-root' && next) {
-      args.reportsRoot = next;
+    if (arg === '--reports-root') {
+      args.reportsRoot = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--report-dir' && next) {
-      args.reportDir = next;
+    if (arg === '--report-dir') {
+      args.reportDir = requireValue(arg, next);
       i += 1;
       continue;
     }
@@ -186,8 +239,8 @@ function parseArgs(argv) {
       args.autoGenerateReference = false;
       continue;
     }
-    if (arg === '--jobs' && next) {
-      const parsed = Number(next);
+    if (arg === '--jobs') {
+      const parsed = Number(requireValue(arg, next));
       if (!Number.isFinite(parsed) || parsed < 1) {
         throw new Error(`Invalid --jobs value "${next}".`);
       }
@@ -195,8 +248,8 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === '--limit' && next) {
-      const parsed = Number(next);
+    if (arg === '--limit') {
+      const parsed = Number(requireValue(arg, next));
       if (!Number.isFinite(parsed) || parsed < 1) {
         throw new Error(`Invalid --limit value "${next}".`);
       }
@@ -204,8 +257,18 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === '--pipeline' && next) {
-      const normalized = String(next).toLowerCase();
+    if (arg === '--match') {
+      args.matches.push(normalizeMatchPattern(requireValue(arg, next)));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--match=')) {
+      const value = arg.slice('--match='.length);
+      args.matches.push(normalizeMatchPattern(value));
+      continue;
+    }
+    if (arg === '--pipeline') {
+      const normalized = String(requireValue(arg, next)).toLowerCase();
       if (normalized !== 'headless' && normalized !== 'presentation') {
         throw new Error(`Invalid --pipeline value "${next}".`);
       }
@@ -213,8 +276,8 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === '--installer' && next) {
-      const normalized = String(next).toLowerCase();
+    if (arg === '--installer') {
+      const normalized = String(requireValue(arg, next)).toLowerCase();
       if (!['auto', 'bun', 'npm'].includes(normalized)) {
         throw new Error(`Invalid --installer value "${next}".`);
       }
@@ -222,13 +285,13 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === '--input-root' && next) {
-      args.inputRoot = next;
+    if (arg === '--input-root') {
+      args.inputRoot = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--numeric-tolerance' && next) {
-      const parsed = Number(next);
+    if (arg === '--numeric-tolerance') {
+      const parsed = Number(requireValue(arg, next));
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid --numeric-tolerance value "${next}".`);
       }
@@ -236,8 +299,8 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === '--max-diff-entries' && next) {
-      const parsed = Number(next);
+    if (arg === '--max-diff-entries') {
+      const parsed = Number(requireValue(arg, next));
       if (!Number.isFinite(parsed) || parsed < 1) {
         throw new Error(`Invalid --max-diff-entries value "${next}".`);
       }
@@ -253,23 +316,23 @@ function parseArgs(argv) {
       args.visualOnChange = false;
       continue;
     }
-    if (arg === '--visual-reference' && next) {
-      args.visualReference = next;
+    if (arg === '--visual-reference') {
+      args.visualReference = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--visual-workdir' && next) {
-      args.visualWorkdir = next;
+    if (arg === '--visual-workdir') {
+      args.visualWorkdir = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--visual-browser' && next) {
-      args.visualBrowser = next;
+    if (arg === '--visual-browser') {
+      args.visualBrowser = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--visual-threshold' && next) {
-      const parsed = Number(next);
+    if (arg === '--visual-threshold') {
+      const parsed = Number(requireValue(arg, next));
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid --visual-threshold value "${next}".`);
       }
@@ -281,7 +344,14 @@ function parseArgs(argv) {
       args.failOnDiff = true;
       continue;
     }
+
+    if (arg.startsWith('-')) {
+      throw new Error(`Unknown option "${arg}". Run with --help for usage.`);
+    }
+    throw new Error(`Unexpected positional argument "${arg}". Run with --help for usage.`);
   }
+
+  args.matches = [...new Set(args.matches)];
 
   return args;
 }
@@ -431,8 +501,104 @@ function buildPathRelation(candidatePaths, referencePaths) {
   };
 }
 
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+
+  const keys = Object.keys(value).sort();
+  const parts = [];
+  for (const key of keys) {
+    parts.push(`${JSON.stringify(key)}:${stableStringify(value[key])}`);
+  }
+  return `{${parts.join(',')}}`;
+}
+
+function canonicalizePaintSnapshot(rawPaintSnapshot) {
+  if (!rawPaintSnapshot || typeof rawPaintSnapshot !== 'object') {
+    return rawPaintSnapshot;
+  }
+
+  const snapshot = rawPaintSnapshot;
+  const pages = Array.isArray(snapshot.pages) ? snapshot.pages : [];
+  let totalLineCount = 0;
+  let totalMarkerCount = 0;
+  let totalTabCount = 0;
+
+  const canonicalizeStyleRecord = (value) => {
+    if (!value || typeof value !== 'object') return {};
+    return value;
+  };
+
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+    const page = pages[pageIndex];
+    if (!page || typeof page !== 'object') continue;
+
+    const rawLines = Array.isArray(page.lines) ? page.lines : [];
+    const normalizedLines = rawLines.map((line) => {
+      const rawMarkers = Array.isArray(line?.markers) ? line.markers : [];
+      const rawTabs = Array.isArray(line?.tabs) ? line.tabs : [];
+      const markers = rawMarkers
+        .map((marker) => canonicalizeStyleRecord(marker))
+        .sort((a, b) => stableStringify(a).localeCompare(stableStringify(b)));
+      const tabs = rawTabs
+        .map((tab) => canonicalizeStyleRecord(tab))
+        .sort((a, b) => stableStringify(a).localeCompare(stableStringify(b)));
+
+      return {
+        ...(line && typeof line === 'object' ? line : {}),
+        style: canonicalizeStyleRecord(line?.style),
+        markers,
+        tabs,
+      };
+    });
+
+    normalizedLines.sort((a, b) => {
+      const keyA = stableStringify({
+        inTableFragment: a?.inTableFragment ?? false,
+        inTableParagraph: a?.inTableParagraph ?? false,
+        style: a?.style ?? {},
+        markers: Array.isArray(a?.markers) ? a.markers : [],
+        tabs: Array.isArray(a?.tabs) ? a.tabs : [],
+      });
+      const keyB = stableStringify({
+        inTableFragment: b?.inTableFragment ?? false,
+        inTableParagraph: b?.inTableParagraph ?? false,
+        style: b?.style ?? {},
+        markers: Array.isArray(b?.markers) ? b.markers : [],
+        tabs: Array.isArray(b?.tabs) ? b.tabs : [],
+      });
+      return keyA.localeCompare(keyB);
+    });
+
+    for (let lineIndex = 0; lineIndex < normalizedLines.length; lineIndex += 1) {
+      const line = normalizedLines[lineIndex];
+      line.index = lineIndex;
+      const markerCount = Array.isArray(line.markers) ? line.markers.length : 0;
+      const tabCount = Array.isArray(line.tabs) ? line.tabs.length : 0;
+      totalMarkerCount += markerCount;
+      totalTabCount += tabCount;
+    }
+
+    page.lines = normalizedLines;
+    page.index = pageIndex;
+    page.lineCount = normalizedLines.length;
+    totalLineCount += normalizedLines.length;
+  }
+
+  snapshot.pageCount = pages.length;
+  snapshot.lineCount = totalLineCount;
+  snapshot.markerCount = totalMarkerCount;
+  snapshot.tabCount = totalTabCount;
+  return snapshot;
+}
+
 function normalizeDocSnapshot(raw) {
   const layoutSnapshot = cloneDeep(raw?.layoutSnapshot ?? {});
+  const paintSnapshot = cloneDeep(raw?.paintSnapshot ?? null);
   const blocks = Array.isArray(layoutSnapshot.blocks) ? layoutSnapshot.blocks : [];
   const idMap = new Map();
 
@@ -505,7 +671,84 @@ function normalizeDocSnapshot(raw) {
     },
     layoutOptions: raw?.layoutOptions ?? null,
     layoutSnapshot,
+    paintSnapshot: canonicalizePaintSnapshot(paintSnapshot),
   };
+}
+
+function hasPaintSnapshot(payload) {
+  return Boolean(payload && typeof payload === 'object' && payload.formatVersion != null);
+}
+
+function normalizePipelineName(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function extractRuntimePipeline(raw) {
+  return normalizePipelineName(raw?.runtime?.pipeline ?? raw?.runtime?.mode ?? null);
+}
+
+async function referenceNeedsPaintSnapshotRefresh({ matchedPaths, candidateFiles, referenceFiles }) {
+  for (const relPath of matchedPaths) {
+    const candidateFile = candidateFiles.get(relPath);
+    const referenceFile = referenceFiles.get(relPath);
+    if (!candidateFile || !referenceFile) continue;
+
+    try {
+      const [candidateRaw, referenceRaw] = await Promise.all([
+        fs.readFile(candidateFile, 'utf8'),
+        fs.readFile(referenceFile, 'utf8'),
+      ]);
+      const candidateJson = JSON.parse(candidateRaw);
+      const referenceJson = JSON.parse(referenceRaw);
+      const candidateHasPaintSnapshot = hasPaintSnapshot(candidateJson?.paintSnapshot);
+      const referenceHasPaintSnapshot = hasPaintSnapshot(referenceJson?.paintSnapshot);
+      if (candidateHasPaintSnapshot && !referenceHasPaintSnapshot) {
+        return true;
+      }
+    } catch {
+      // Parse failures are handled in the main compare loop.
+      continue;
+    }
+  }
+  return false;
+}
+
+async function referenceNeedsPipelineRefresh({ matchedPaths, candidateFiles, referenceFiles, expectedPipeline }) {
+  const expected = normalizePipelineName(expectedPipeline);
+
+  for (const relPath of matchedPaths) {
+    const candidateFile = candidateFiles.get(relPath);
+    const referenceFile = referenceFiles.get(relPath);
+    if (!candidateFile || !referenceFile) continue;
+
+    try {
+      const [candidateRaw, referenceRaw] = await Promise.all([
+        fs.readFile(candidateFile, 'utf8'),
+        fs.readFile(referenceFile, 'utf8'),
+      ]);
+      const candidateJson = JSON.parse(candidateRaw);
+      const referenceJson = JSON.parse(referenceRaw);
+      const candidatePipeline = extractRuntimePipeline(candidateJson);
+      const referencePipeline = extractRuntimePipeline(referenceJson);
+
+      if (expected && referencePipeline && referencePipeline !== expected) {
+        return true;
+      }
+      if (expected && !referencePipeline && candidatePipeline === expected) {
+        return true;
+      }
+      if (candidatePipeline && referencePipeline && candidatePipeline !== referencePipeline) {
+        return true;
+      }
+    } catch {
+      // Parse failures are handled in the main compare loop.
+      continue;
+    }
+  }
+
+  return false;
 }
 
 function getPagesByBlockIndex(normalizedDoc) {
@@ -707,6 +950,9 @@ async function runNpmReferenceGeneration({ referenceSpecifier, args }) {
   if (typeof args.limit === 'number') {
     childArgs.push('--limit', String(args.limit));
   }
+  for (const pattern of args.matches) {
+    childArgs.push('--match', pattern);
+  }
   if (args.inputRoot) {
     childArgs.push('--input-root', path.resolve(args.inputRoot));
   }
@@ -769,6 +1015,9 @@ async function runCandidateGeneration({ candidateRoot, args }) {
   ];
   if (typeof args.limit === 'number') {
     childArgs.push('--limit', String(args.limit));
+  }
+  for (const pattern of args.matches) {
+    childArgs.push('--match', pattern);
   }
   if (args.inputRoot) {
     childArgs.push('--input-root', path.resolve(args.inputRoot));
@@ -897,6 +1146,9 @@ function buildReportMarkdown(summary) {
   lines.push(`- Generated: ${summary.generatedAt}`);
   lines.push(`- Candidate root: ${summary.candidateRoot}`);
   lines.push(`- Reference root: ${summary.referenceRoot}`);
+  if (Array.isArray(summary.matchPatterns) && summary.matchPatterns.length > 0) {
+    lines.push(`- Match patterns: ${summary.matchPatterns.join(', ')}`);
+  }
   lines.push(`- Candidate docs: ${summary.candidateDocCount}`);
   lines.push(`- Reference docs: ${summary.referenceDocCount}`);
   lines.push(`- Matched docs: ${summary.matchedDocCount}`);
@@ -1013,6 +1265,18 @@ async function main() {
   let referenceFiles = await listSnapshotFiles(referenceRoot);
   let candidatePaths = [...candidateFiles.keys()].sort();
   let referencePaths = [...referenceFiles.keys()].sort();
+  const hasMatchPatterns = args.matches.length > 0;
+
+  if (hasMatchPatterns) {
+    candidatePaths = candidatePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
+    referencePaths = referencePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
+  }
+
+  if (hasMatchPatterns && candidatePaths.length === 0) {
+    throw new Error(
+      `No candidate snapshots matched --match patterns (${args.matches.join(', ')}) in ${candidateRoot}.`,
+    );
+  }
 
   if (typeof args.limit === 'number') {
     const limitedCandidatePaths = candidatePaths.slice(0, args.limit);
@@ -1048,11 +1312,66 @@ async function main() {
 
     referenceFiles = await listSnapshotFiles(referenceRoot);
     referencePaths = [...referenceFiles.keys()].sort();
+    if (hasMatchPatterns) {
+      referencePaths = referencePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
+    }
     if (typeof args.limit === 'number') {
       const limitedCandidateSet = new Set(candidatePaths);
       referencePaths = referencePaths.filter((relPath) => limitedCandidateSet.has(relPath));
     }
     relation = buildPathRelation(candidatePaths, referencePaths);
+  }
+
+  if (args.reference && args.autoGenerateReference && !args.referenceRoot && relation.matched.length > 0) {
+    const needsPaintSnapshotRefresh = await referenceNeedsPaintSnapshotRefresh({
+      matchedPaths: relation.matched,
+      candidateFiles,
+      referenceFiles,
+    });
+    const needsPipelineRefresh = await referenceNeedsPipelineRefresh({
+      matchedPaths: relation.matched,
+      candidateFiles,
+      referenceFiles,
+      expectedPipeline: args.pipeline,
+    });
+
+    const refreshReasons = [];
+    if (needsPaintSnapshotRefresh) {
+      refreshReasons.push('missing paintSnapshot metadata');
+    }
+    if (needsPipelineRefresh) {
+      refreshReasons.push(`pipeline mismatch (expected ${args.pipeline})`);
+    }
+
+    if (refreshReasons.length > 0) {
+      console.log(
+        `[layout-snapshots:compare] Reference snapshots require refresh (${refreshReasons.join('; ')}). Regenerating reference snapshots...`,
+      );
+      const generatedFolder = await runNpmReferenceGeneration({
+        referenceSpecifier: args.reference,
+        args,
+      });
+      referenceGenerated = true;
+      const resolved = await resolveGeneratedReferenceRoot({
+        generatedFolder,
+        referenceBase,
+        reference: args.reference,
+        errorContext: 'Reference refresh',
+      });
+      referenceRoot = resolved.root;
+      resolvedReferenceLabel = resolved.label;
+
+      referenceFiles = await listSnapshotFiles(referenceRoot);
+      referencePaths = [...referenceFiles.keys()].sort();
+      if (hasMatchPatterns) {
+        referencePaths = referencePaths.filter((relPath) => snapshotPathMatches(relPath, args.matches));
+      }
+      if (typeof args.limit === 'number') {
+        const limitedCandidateSet = new Set(candidatePaths);
+        referencePaths = referencePaths.filter((relPath) => limitedCandidateSet.has(relPath));
+      }
+      relation = buildPathRelation(candidatePaths, referencePaths);
+    }
   }
 
   const reportsRoot = path.resolve(args.reportsRoot);
@@ -1067,6 +1386,9 @@ async function main() {
   console.log(`[layout-snapshots:compare] Candidate root: ${candidateRoot}`);
   console.log(`[layout-snapshots:compare] Reference root: ${referenceRoot}`);
   console.log(`[layout-snapshots:compare] Report dir:     ${reportDir}`);
+  if (hasMatchPatterns) {
+    console.log(`[layout-snapshots:compare] Match:          ${args.matches.join(', ')}`);
+  }
   if (typeof args.limit === 'number') {
     console.log(`[layout-snapshots:compare] Limit:          ${args.limit}`);
   }
@@ -1241,6 +1563,7 @@ async function main() {
     candidateGenerated,
     referenceGenerated,
     limit: args.limit ?? null,
+    matchPatterns: args.matches,
     candidateDocCount: candidatePaths.length,
     referenceDocCount: referencePaths.length,
     matchedDocCount: relation.matched.length,

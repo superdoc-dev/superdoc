@@ -526,6 +526,107 @@ describe('renderTableCell', () => {
     expect(lineEl?.style.width).toBe('');
   });
 
+  it('passes list marker wrapper margins to captureLineSnapshot callbacks', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-wrap-marker',
+      runs: [{ text: 'Wrapped list item', fontFamily: 'Arial', fontSize: 16 }],
+      attrs: {
+        wordLayout: {
+          marker: {
+            markerText: '1.',
+            markerBoxWidthPx: 20,
+            gutterWidthPx: 8,
+            justification: 'left' as const,
+            run: {
+              fontFamily: 'Arial',
+              fontSize: 14,
+              bold: false,
+              italic: false,
+              color: '#000000',
+            },
+          },
+          indentLeftPx: 30,
+        },
+      },
+    };
+
+    const paraMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 16,
+          width: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+      marker: {
+        markerWidth: 20,
+        gutterWidth: 8,
+        indentLeft: 30,
+      },
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-wrap-marker',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 0 },
+      wrap: { type: 'Square', wrapText: 'bothSides' },
+      attrs: { anchorParagraphId: 'para-wrap-marker' },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        paraMeasure,
+        {
+          kind: 'image' as const,
+          width: 20,
+          height: 10,
+        },
+      ],
+      width: 80,
+      height: 30,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-wrap-marker',
+      blocks: [para, anchoredImage],
+      attrs: {},
+    };
+
+    const captured: Array<{ lineEl: HTMLElement; wrapperEl?: HTMLElement }> = [];
+
+    renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      renderLine: () => {
+        const el = doc.createElement('div');
+        el.classList.add('superdoc-line');
+        return el;
+      },
+      captureLineSnapshot: (lineEl, _context, options) => {
+        captured.push({ lineEl, wrapperEl: options?.wrapperEl });
+      },
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.lineEl.classList.contains('superdoc-line')).toBe(true);
+    expect(captured[0]?.wrapperEl).toBeTruthy();
+    expect(captured[0]?.wrapperEl?.style.marginLeft).toBe('20px');
+    expect(captured[0]?.wrapperEl?.style.marginRight).toBe('0px');
+  });
+
   describe('spacing.after margin-bottom rendering', () => {
     it('should apply margin-bottom for spacing.after on paragraphs', () => {
       const para1: ParagraphBlock = {

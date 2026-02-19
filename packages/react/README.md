@@ -10,6 +10,34 @@ npm install @superdoc-dev/react
 
 > `superdoc` is included as a dependency - no need to install it separately.
 
+## Pinning SuperDoc Version (Optional)
+
+If you need to force a specific `superdoc` version (for example, to align multiple apps or test a local build), pin it in your app's `package.json` using overrides.
+
+### npm
+
+```json
+{
+  "overrides": {
+    "superdoc": "1.14.1"
+  }
+}
+```
+
+### pnpm
+
+```json
+{
+  "pnpm": {
+    "overrides": {
+      "superdoc": "1.14.1"
+    }
+  }
+}
+```
+
+Then run your package manager install command again.
+
 ## Quick Start
 
 ```tsx

@@ -1,3 +1,10 @@
+# [1.15.0-next.18](https://github.com/superdoc-dev/superdoc/compare/v1.15.0-next.17...v1.15.0-next.18) (2026-02-19)
+
+
+### Bug Fixes
+
+* **layout:** route list text-start calculations through resolveListTextStartPx ([02b14b8](https://github.com/superdoc-dev/superdoc/commit/02b14b856c3e58aa6b0c9ad7b46943b748a3d2b5))
+
 ## [1.14.1](https://github.com/superdoc-dev/superdoc/compare/v1.14.0...v1.14.1) (2026-02-18)
 
 

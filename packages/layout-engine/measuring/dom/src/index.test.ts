@@ -212,7 +212,7 @@ describe('measureBlock', () => {
       expect(measure.lines[0].maxWidth).toBe(maxWidth - textStartPx);
     });
 
-    it('falls back to marker.textStartX when wordLayout.textStartPx is missing', async () => {
+    it('uses shared resolver output when only marker.textStartX exists in standard mode', async () => {
       const maxWidth = 200;
       const textStartX = 96; // First-line text start after marker + tab
       const block: FlowBlock = {
@@ -248,7 +248,49 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
-      expect(measure.lines[0].maxWidth).toBe(maxWidth - textStartX);
+      // Standard mode resolution is governed by resolveListTextStartPx (Step 8),
+      // which computes text start from indent/marker geometry when textStartPx is absent.
+      expect(measure.lines[0].maxWidth).toBe(120);
+    });
+
+    it('prefers shared resolved text start over top-level textStartPx when both exist', async () => {
+      const maxWidth = 240;
+      const resolvedTextStart = 112;
+      const topLevelTextStart = 160;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'wordlayout-list-resolved-precedence',
+        runs: [
+          {
+            text: 'List item should size first-line width from shared resolver output',
+            fontFamily: 'Times New Roman',
+            fontSize: 16,
+          },
+        ],
+        attrs: {
+          indent: { left: 0, firstLine: 48 },
+          wordLayout: {
+            firstLineIndentMode: true,
+            textStartPx: topLevelTextStart,
+            marker: {
+              markerText: '(a)',
+              markerBoxWidthPx: 24,
+              gutterWidthPx: 8,
+              textStartX: resolvedTextStart,
+              run: {
+                fontFamily: 'Times New Roman',
+                fontSize: 16,
+                bold: false,
+                italic: false,
+                letterSpacing: 0,
+              },
+            },
+          },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
+      expect(measure.lines[0].maxWidth).toBe(maxWidth - resolvedTextStart);
     });
 
     it('expands first-line width for hanging indents on non-list paragraphs', async () => {

@@ -95,49 +95,35 @@ function getTableIndentWidth(attrs: TableBlock['attrs']): number {
 }
 
 /**
- * Apply table indent offset to x position and width, ensuring width never goes negative.
+ * Apply table indent offset to x position and width, ensuring width stays in a sane range.
  *
- * When a table has a tableIndent offset:
- * - Positive indent: Shifts table right, reduces available width
- * - Negative indent: Shifts table left (into margin), increases available width
+ * Positive indents move the table right. Width is only reduced when needed to prevent
+ * right overflow past the current column (avoids double-shrinking tables whose grid is
+ * already reduced by tblInd in OOXML).
  *
- * Width clamping prevents negative widths when indent is larger than available space,
- * which would cause rendering issues. This is an edge case but must be handled safely.
+ * Negative indents keep the historical behavior: move left and expand width to preserve
+ * the same right edge.
  *
  * @param x - Original x position in pixels
  * @param width - Original width in pixels
  * @param indent - Table indent offset in pixels (positive or negative)
+ * @param columnWidth - Column width available for the table
  * @returns Object with adjusted x and width values
- *
- * @remarks
- * Width clamping to 0 is a defensive measure. In production scenarios, this should
- * rarely occur as the layout engine typically allocates sufficient column width.
- * However, when it does occur (e.g., extreme negative indent or narrow columns),
- * clamping prevents undefined behavior in the rendering layer.
- *
- * @example
- * ```typescript
- * // Normal positive indent
- * applyTableIndent(100, 400, 50);
- * // returns { x: 150, width: 350 }
- *
- * // Normal negative indent (extends into margin)
- * applyTableIndent(100, 400, -20);
- * // returns { x: 80, width: 420 }
- *
- * // Edge case: indent exceeds width (clamped)
- * applyTableIndent(100, 200, 250);
- * // returns { x: 350, width: 0 }
- *
- * // Zero indent (no change)
- * applyTableIndent(100, 400, 0);
- * // returns { x: 100, width: 400 }
- * ```
  */
-function applyTableIndent(x: number, width: number, indent: number): { x: number; width: number } {
+function applyTableIndent(x: number, width: number, indent: number, columnWidth: number): { x: number; width: number } {
+  const shiftedX = x + indent;
+
+  if (indent <= 0) {
+    return {
+      x: shiftedX,
+      width: Math.max(0, width - indent),
+    };
+  }
+
+  const maxWidthWithinColumn = Math.max(0, columnWidth - indent);
   return {
-    x: x + indent,
-    width: Math.max(0, width - indent),
+    x: shiftedX,
+    width: Math.min(width, maxWidthWithinColumn),
   };
 }
 
@@ -146,7 +132,7 @@ function applyTableIndent(x: number, width: number, indent: number): { x: number
  *
  * When justification is center or right/end, the table is aligned within the
  * column width and tableIndent is ignored. Otherwise, tableIndent offsets the
- * table from the left margin and reduces its usable width.
+ * table from the left margin and clamps width only when needed to avoid overflow.
  *
  * @param baseX - Left edge of the column in pixels
  * @param columnWidth - Available column width in pixels
@@ -171,7 +157,7 @@ function resolveTableFrame(
   }
 
   const tableIndent = getTableIndentWidth(attrs);
-  return applyTableIndent(baseX, width, tableIndent);
+  return applyTableIndent(baseX, width, tableIndent, columnWidth);
 }
 
 /**

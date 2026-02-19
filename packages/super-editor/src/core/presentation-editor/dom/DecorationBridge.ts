@@ -1,5 +1,5 @@
 import { DecorationSet } from 'prosemirror-view';
-import type { EditorState, Plugin, PluginKey  } from 'prosemirror-state';
+import type { EditorState, Plugin, PluginKey } from 'prosemirror-state';
 
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';

@@ -344,6 +344,12 @@ type EmbeddedTableRenderParams = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /** Optional callback to render drawing content (shapes, etc.) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
@@ -380,7 +386,8 @@ const EMBEDDED_TABLE_VERSION = 'embedded-table';
  * ```
  */
 const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => {
-  const { doc, table, measure, context, renderLine, renderDrawingContent, applySdtDataset } = params;
+  const { doc, table, measure, context, renderLine, captureLineSnapshot, renderDrawingContent, applySdtDataset } =
+    params;
   const fragment: TableFragment = {
     kind: 'table',
     blockId: table.id,
@@ -414,6 +421,7 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     context,
     blockLookup,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     applyFragmentFrame,
     applySdtDataset,
@@ -496,6 +504,12 @@ type TableCellRenderDependencies = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /**
    * Optional callback function to render drawing content (vectorShapes, shapeGroups).
    * If provided, this callback is used to render DrawingBlocks with drawingKind of 'vectorShape' or 'shapeGroup'.
@@ -594,6 +608,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     borders,
     useDefaultBorder,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     context,
     applySdtDataset,
@@ -761,6 +776,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           measure: tableMeasure,
           context: { ...context, section: 'body' },
           renderLine,
+          captureLineSnapshot,
           renderDrawingContent,
           applySdtDataset,
         });
@@ -1192,6 +1208,19 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Apply wrapSquare exclusions after all blocks are rendered and anchored positions are known.
     // This keeps anchored objects out-of-flow while preventing text overlap in table cells.
     applySquareWrapExclusionsToLines(renderedLines, wrapExclusions, contentWidthPx, alignmentOffsetY);
+
+    if (captureLineSnapshot) {
+      for (const rendered of renderedLines) {
+        const candidateLine = rendered.el.classList.contains('superdoc-line')
+          ? rendered.el
+          : rendered.el.querySelector('.superdoc-line');
+        if (!(candidateLine instanceof HTMLElement)) {
+          continue;
+        }
+        const wrapperEl = rendered.el.classList.contains('superdoc-line') ? undefined : rendered.el;
+        captureLineSnapshot(candidateLine, { ...context, section: 'body' }, { inTableParagraph: false, wrapperEl });
+      }
+    }
   }
 
   return { cellElement: cellEl };

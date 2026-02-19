@@ -54,6 +54,12 @@ type TableRowRenderDependencies = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /** Function to render drawing content (images, shapes, shape groups) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
@@ -129,6 +135,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     tableIndent,
     context,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
     tableSdt,
@@ -345,6 +352,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       borders: resolvedBorders,
       useDefaultBorder: false,
       renderLine,
+      captureLineSnapshot,
       renderDrawingContent,
       context,
       applySdtDataset,

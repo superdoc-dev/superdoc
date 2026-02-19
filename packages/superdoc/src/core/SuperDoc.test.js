@@ -209,7 +209,7 @@ describe('SuperDoc core', () => {
     const instance = new SuperDoc(config);
     await flushMicrotasks();
 
-    expect(createVueAppMock).toHaveBeenCalled();
+    expect(createVueAppMock).toHaveBeenCalledWith({ disablePiniaDevtools: false });
     // Vue mounts on a child wrapper element inside the user's container (SD-1832)
     const mountArg = app.mount.mock.calls[0][0];
     expect(mountArg).toBeInstanceOf(HTMLDivElement);
@@ -219,6 +219,25 @@ describe('SuperDoc core', () => {
     expect(instance.config.documents[0]).toMatchObject({ type: DOCX, url: 'https://example.com/doc.docx' });
     expect(instance.colors).toEqual(['blue', 'red']);
     expect(shuffleArrayMock).toHaveBeenCalledWith(['red', 'blue']);
+  });
+
+  it('passes disablePiniaDevtools option to createSuperdocVueApp', async () => {
+    createAppHarness();
+
+    new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      disablePiniaDevtools: true,
+      onException: vi.fn(),
+    });
+
+    await flushMicrotasks();
+
+    expect(createVueAppMock).toHaveBeenCalledWith({ disablePiniaDevtools: true });
   });
 
   it('defaults comments module config when omitted', async () => {

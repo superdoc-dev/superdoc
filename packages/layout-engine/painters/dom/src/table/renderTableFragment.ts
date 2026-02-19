@@ -42,6 +42,12 @@ export type TableRenderDependencies = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /** Function to render drawing content (images, shapes, shape groups) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply fragment positioning and dimensions */
@@ -123,6 +129,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     context,
     sdtBoundary,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     applyFragmentFrame,
     applySdtDataset,
@@ -343,6 +350,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         tableIndent,
         context,
         renderLine,
+        captureLineSnapshot,
         renderDrawingContent,
         applySdtDataset,
         tableSdt: block.attrs?.sdt ?? null,
@@ -483,6 +491,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       tableIndent,
       context,
       renderLine,
+      captureLineSnapshot,
       renderDrawingContent,
       applySdtDataset,
       tableSdt: block.attrs?.sdt ?? null,

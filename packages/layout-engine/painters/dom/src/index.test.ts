@@ -2545,6 +2545,70 @@ describe('DomPainter', () => {
     expect(fragmentAfter.style.left).toBe('70px');
   });
 
+  it('exposes a paint snapshot after rendering', () => {
+    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+
+    painter.paint(layout, mount);
+
+    const snapshot = painter.getPaintSnapshot?.();
+    expect(snapshot).toBeTruthy();
+    expect(snapshot?.formatVersion).toBe(1);
+    expect(snapshot?.pageCount).toBe(1);
+    expect(snapshot?.lineCount).toBeGreaterThan(0);
+  });
+
+  it('uses actual page indices when collecting virtualized paint snapshots', () => {
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 2 },
+    });
+    const virtualMount = document.createElement('div');
+    virtualMount.getBoundingClientRect = () =>
+      ({
+        width: 0,
+        height: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const multiPageLayout: Layout = {
+      ...layout,
+      pages: Array.from({ length: 10 }, (_, pageIndex) => ({
+        number: pageIndex + 1,
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'block-1',
+            fromLine: 0,
+            toLine: 1,
+            x: 30,
+            y: 40,
+            width: 300,
+            pmStart: 1,
+            pmEnd: 12,
+          },
+        ],
+      })),
+    };
+
+    painter.setVirtualizationPins?.([8]);
+    painter.paint(multiPageLayout, virtualMount);
+
+    const snapshot = painter.getPaintSnapshot?.();
+    expect(snapshot).toBeTruthy();
+    const pageIndices = snapshot?.pages.map((page) => page.index) ?? [];
+    expect(pageIndices).toContain(8);
+    expect(snapshot?.pages.find((page) => page.index === 8)?.pageNumber).toBe(9);
+  });
+
   it('renders header decorations with tokens resolved', () => {
     const headerBlock: FlowBlock = {
       kind: 'paragraph',

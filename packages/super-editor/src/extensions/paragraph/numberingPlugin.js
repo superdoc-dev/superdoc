@@ -208,58 +208,62 @@ export function createNumberingPlugin(editor) {
 
       // Generate new list properties
       numberingManager.enableCache();
-      newState.doc.descendants((node, pos) => {
-        let resolvedProps = calculateResolvedParagraphProperties(editor, node, newState.doc.resolve(pos));
-        if (node.type.name !== 'paragraph' || !resolvedProps.numberingProperties) {
-          return;
-        }
+      try {
+        newState.doc.descendants((node, pos) => {
+          let resolvedProps = calculateResolvedParagraphProperties(editor, node, newState.doc.resolve(pos));
+          if (node.type.name !== 'paragraph' || !resolvedProps.numberingProperties) {
+            return;
+          }
 
-        // Retrieving numbering definition from docx
-        const { numId, ilvl: level = 0 } = resolvedProps.numberingProperties;
-        const definitionDetails = ListHelpers.getListDefinitionDetails({ numId, level, editor });
+          // Retrieving numbering definition from docx
+          const { numId, ilvl: level = 0 } = resolvedProps.numberingProperties;
+          const definitionDetails = ListHelpers.getListDefinitionDetails({ numId, level, editor });
 
-        if (!definitionDetails || Object.keys(definitionDetails).length === 0) {
-          // Treat as normal paragraph if definition is missing
-          tr.setNodeAttribute(pos, 'listRendering', null);
-          bumpBlockRev(node, pos);
-          return;
-        }
+          if (!definitionDetails || Object.keys(definitionDetails).length === 0) {
+            // Treat as normal paragraph if definition is missing
+            tr.setNodeAttribute(pos, 'listRendering', null);
+            bumpBlockRev(node, pos);
+            return;
+          }
 
-        let { lvlText, customFormat, listNumberingType, suffix, justification, abstractId } = definitionDetails;
-        // Defining the list marker
-        let markerText = '';
-        listNumberingType = listNumberingType || 'decimal';
-        const count = numberingManager.calculateCounter(numId, level, pos, abstractId);
-        numberingManager.setCounter(numId, level, pos, count, abstractId);
-        const path = numberingManager.calculatePath(numId, level, pos);
-        if (listNumberingType !== 'bullet') {
-          markerText = generateOrderedListIndex({
-            listLevel: path,
-            lvlText: lvlText,
-            listNumberingType,
-            customFormat,
-          });
-        } else {
-          markerText = docxNumberingHelpers.normalizeLvlTextChar(lvlText);
-        }
+          let { lvlText, customFormat, listNumberingType, suffix, justification, abstractId } = definitionDetails;
+          // Defining the list marker
+          let markerText = '';
+          listNumberingType = listNumberingType || 'decimal';
+          const count = numberingManager.calculateCounter(numId, level, pos, abstractId);
+          numberingManager.setCounter(numId, level, pos, count, abstractId);
+          const path = numberingManager.calculatePath(numId, level, pos);
+          if (listNumberingType !== 'bullet') {
+            markerText =
+              generateOrderedListIndex({
+                listLevel: path,
+                lvlText: lvlText,
+                listNumberingType,
+                customFormat,
+              }) ?? '';
+          } else {
+            markerText = docxNumberingHelpers.normalizeLvlTextChar(lvlText) ?? '';
+          }
 
-        const newListRendering = {
-          markerText,
-          suffix,
-          justification,
-          path,
-          numberingType: listNumberingType,
-        };
+          const newListRendering = {
+            markerText,
+            suffix,
+            justification,
+            path,
+            numberingType: listNumberingType,
+          };
 
-        if (JSON.stringify(node.attrs.listRendering) !== JSON.stringify(newListRendering)) {
-          // Updating rendering attrs for node view usage
-          tr.setNodeAttribute(pos, 'listRendering', newListRendering);
-          bumpBlockRev(node, pos);
-        }
+          if (JSON.stringify(node.attrs.listRendering) !== JSON.stringify(newListRendering)) {
+            // Updating rendering attrs for node view usage
+            tr.setNodeAttribute(pos, 'listRendering', newListRendering);
+            bumpBlockRev(node, pos);
+          }
 
-        return false; // no need to descend into a paragraph
-      });
-      numberingManager.disableCache();
+          return false; // no need to descend into a paragraph
+        });
+      } finally {
+        numberingManager.disableCache();
+      }
       return tr.docChanged ? tr : null;
     },
   });

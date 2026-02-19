@@ -89,7 +89,7 @@ import type {
 
 import { createDomPainter } from '@superdoc/painter-dom';
 
-import type { LayoutMode } from '@superdoc/painter-dom';
+import type { LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -1509,6 +1509,13 @@ export class PresentationEditor extends EventEmitter {
    */
   getLayoutOptions(): LayoutEngineOptions {
     return { ...this.#layoutOptions };
+  }
+
+  /**
+   * Return a snapshot of painter output captured during the latest paint cycle.
+   */
+  getPaintSnapshot(): PaintSnapshot | null {
+    return this.#domPainter?.getPaintSnapshot?.() ?? null;
   }
 
   /**

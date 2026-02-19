@@ -327,6 +327,7 @@ export function App() {
               <SuperDocESign
                 ref={esignRef}
                 eventId={eventId}
+                telemetry={{ enabled: true, metadata: { source: 'esign-demo' } }}
                 document={{
                   source: documentSource,
                   mode: 'full',

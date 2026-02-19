@@ -2992,8 +2992,10 @@ describe('measureBlock', () => {
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
-      expect(measure.columnWidths).toEqual([100, 150, 200]);
-      expect(measure.totalWidth).toBe(450);
+      // Auto layout scales columns to fill available width (OOXML autofit)
+      // Original ratio 100:150:200 = 2:3:4, scaled to 600px total
+      expect(measure.columnWidths).toEqual([133, 200, 267]);
+      expect(measure.totalWidth).toBe(600);
     });
 
     it('scales column widths proportionally when exceeding available width', async () => {
@@ -3237,7 +3239,9 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
       expect(measure.columnWidths).toHaveLength(2);
-      expect(measure.columnWidths).toEqual([100, 150]);
+      // Truncated to [100, 150] (250px), then auto-layout scales up to 600px
+      // 100*(600/250)=240, 150*(600/250)=360
+      expect(measure.columnWidths).toEqual([240, 360]);
     });
   });
 
@@ -3505,9 +3509,10 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // All 4 column widths should be preserved (not truncated to 3)
+      // Auto-layout scales to fill maxWidth (800), ratio preserved
       expect(measure.columnWidths).toHaveLength(4);
-      expect(measure.columnWidths).toEqual([172, 13, 128, 310]);
-      expect(measure.totalWidth).toBe(623);
+      expect(measure.columnWidths).toEqual([221, 17, 164, 398]);
+      expect(measure.totalWidth).toBe(800);
 
       // Row 0: 2 cells spanning 3+1 = both cells measured
       expect(measure.rows[0].cells).toHaveLength(2);
@@ -3553,15 +3558,16 @@ describe('measureBlock', () => {
       expect(measure.rows[0].cells).toHaveLength(2);
       expect(measure.rows[1].cells).toHaveLength(2);
 
-      // Cell widths should correctly sum their spanned columns
-      // Row 0 cell 0: cols 0+1 = 100+50 = 150
-      expect(measure.rows[0].cells[0].width).toBe(150);
-      // Row 0 cell 1: cols 2+3 = 100+300 = 400
-      expect(measure.rows[0].cells[1].width).toBe(400);
-      // Row 1 cell 0: cols 0+1+2 = 100+50+100 = 250
-      expect(measure.rows[1].cells[0].width).toBe(250);
-      // Row 1 cell 1: col 3 = 300
-      expect(measure.rows[1].cells[1].width).toBe(300);
+      // Cell widths should correctly sum their spanned columns (after auto-layout scale-up to 800px)
+      // Scaled columns: [145, 73, 145, 437]
+      // Row 0 cell 0: cols 0+1 = 145+73 = 218
+      expect(measure.rows[0].cells[0].width).toBe(218);
+      // Row 0 cell 1: cols 2+3 = 145+437 = 582
+      expect(measure.rows[0].cells[1].width).toBe(582);
+      // Row 1 cell 0: cols 0+1+2 = 145+73+145 = 363
+      expect(measure.rows[1].cells[0].width).toBe(363);
+      // Row 1 cell 1: col 3 = 437
+      expect(measure.rows[1].cells[1].width).toBe(437);
     });
 
     it('handles single-cell full-span row correctly', async () => {
@@ -3591,9 +3597,9 @@ describe('measureBlock', () => {
 
       expect(measure.columnWidths).toHaveLength(4);
 
-      // Full-span row: 1 cell spanning all 4 columns
+      // Full-span row: 1 cell spanning all 4 columns (auto-layout scaled to 800px)
       expect(measure.rows[0].cells).toHaveLength(1);
-      expect(measure.rows[0].cells[0].width).toBe(550); // 100+50+100+300
+      expect(measure.rows[0].cells[0].width).toBe(800); // 145+73+145+437 after scale-up
 
       // 3-cell row: all cells present
       expect(measure.rows[1].cells).toHaveLength(3);
@@ -3697,9 +3703,9 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Should not scale - widths are within target
-      expect(measure.columnWidths).toEqual([50, 50]);
-      expect(measure.totalWidth).toBe(100);
+      // Auto layout expands columns to fill available width (OOXML autofit)
+      expect(measure.columnWidths).toEqual([100, 100]);
+      expect(measure.totalWidth).toBe(200);
     });
 
     it('produces exact sum after rounding adjustment', async () => {
@@ -4327,9 +4333,9 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // Zero percentage is invalid - should fall back to auto layout
-      // Auto layout without explicit width means column widths used as-is
-      expect(measure.totalWidth).toBe(100);
-      expect(measure.columnWidths[0]).toBe(100);
+      // Auto layout expands columns to fill available width (OOXML autofit)
+      expect(measure.totalWidth).toBe(600);
+      expect(measure.columnWidths[0]).toBe(600);
     });
 
     it('ignores negative percentage value', async () => {
@@ -4365,8 +4371,9 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // Negative percentage is invalid - should fall back to auto layout
-      expect(measure.totalWidth).toBe(150);
-      expect(measure.columnWidths[0]).toBe(150);
+      // Auto layout expands columns to fill available width (OOXML autofit)
+      expect(measure.totalWidth).toBe(600);
+      expect(measure.columnWidths[0]).toBe(600);
     });
 
     it('ignores NaN percentage value', async () => {
@@ -4402,8 +4409,9 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // NaN is invalid - should fall back to auto layout
-      expect(measure.totalWidth).toBe(200);
-      expect(measure.columnWidths[0]).toBe(200);
+      // Auto layout expands columns to fill available width (OOXML autofit)
+      expect(measure.totalWidth).toBe(600);
+      expect(measure.columnWidths[0]).toBe(600);
     });
 
     it('ignores Infinity percentage value', async () => {
@@ -4439,8 +4447,9 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // Infinity is invalid - should fall back to auto layout
-      expect(measure.totalWidth).toBe(175);
-      expect(measure.columnWidths[0]).toBe(175);
+      // Auto layout expands columns to fill available width (OOXML autofit)
+      expect(measure.totalWidth).toBe(600);
+      expect(measure.columnWidths[0]).toBe(600);
     });
 
     it('ignores tableWidth with missing both width and value properties', async () => {
@@ -4476,8 +4485,9 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // Missing value is invalid - should fall back to auto layout
-      expect(measure.totalWidth).toBe(120);
-      expect(measure.columnWidths[0]).toBe(120);
+      // Auto layout expands columns to fill available width (OOXML autofit)
+      expect(measure.totalWidth).toBe(600);
+      expect(measure.columnWidths[0]).toBe(600);
     });
 
     it('ignores tableWidth when type is pixel with invalid value', async () => {
@@ -4513,8 +4523,9 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // NaN pixel width is invalid - should fall back to auto layout
-      expect(measure.totalWidth).toBe(130);
-      expect(measure.columnWidths[0]).toBe(130);
+      // Auto layout expands columns to fill available width (OOXML autofit)
+      expect(measure.totalWidth).toBe(600);
+      expect(measure.columnWidths[0]).toBe(600);
     });
 
     it('handles missing tableWidth property entirely', async () => {
@@ -4547,9 +4558,9 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // No tableWidth - auto layout uses column widths as-is
-      expect(measure.totalWidth).toBe(140);
-      expect(measure.columnWidths[0]).toBe(140);
+      // No tableWidth - auto layout expands columns to fill available width (OOXML autofit)
+      expect(measure.totalWidth).toBe(600);
+      expect(measure.columnWidths[0]).toBe(600);
     });
 
     it('does NOT scale up column widths for fixed layout tables with explicit width', async () => {

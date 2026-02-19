@@ -18,6 +18,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractStrokeColor: vi.fn(),
   extractStrokeWidth: vi.fn(),
   extractLineEnds: vi.fn(),
+  extractCustomGeometry: vi.fn(),
 }));
 
 describe('handleImageNode', () => {
@@ -1195,17 +1196,13 @@ describe('getVectorShape', () => {
     expect(result.attrs.drawingContent).toBe(drawingNode);
   });
 
-  it('handles missing shape kind with warning', () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('handles missing shape kind by trying custom geometry extraction', () => {
     const graphicData = makeGraphicData();
     graphicData.elements[0].elements[0].elements[0].attributes = {}; // No prst
 
     const result = getVectorShape({ params: makeParams(), node: {}, graphicData, size: { width: 72, height: 72 } });
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith('Shape kind not found');
     expect(result.attrs.kind).toBeUndefined();
-
-    consoleWarnSpy.mockRestore();
   });
 
   it('correctly prioritizes wp:extent over a:xfrm/a:ext for dimensions', () => {

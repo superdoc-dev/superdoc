@@ -16,6 +16,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractFillColor: vi.fn(),
   extractStrokeColor: vi.fn(),
   extractStrokeWidth: vi.fn(),
+  extractCustomGeometry: vi.fn(),
 }));
 
 /**

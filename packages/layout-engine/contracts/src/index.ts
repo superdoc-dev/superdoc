@@ -700,6 +700,7 @@ export type ShapeGroupVectorChild = {
   attrs: PositionedDrawingGeometry &
     VectorShapeStyle & {
       kind?: string;
+      customGeometry?: CustomGeometryData;
       shapeId?: string;
       shapeName?: string;
     };
@@ -737,10 +738,26 @@ export type DrawingBlockBase = {
   attrs?: Record<string, unknown>;
 };
 
+/**
+ * Custom geometry path data extracted from a:custGeom/a:pathLst.
+ * Each path has an SVG `d` attribute and its own coordinate space (w × h).
+ */
+export type CustomGeometryData = {
+  paths: Array<{
+    /** SVG path d attribute (M, L, C, Q, Z commands) */
+    d: string;
+    /** Coordinate space width for this path */
+    w: number;
+    /** Coordinate space height for this path */
+    h: number;
+  }>;
+};
+
 export type VectorShapeDrawing = DrawingBlockBase & {
   drawingKind: 'vectorShape';
   geometry: DrawingGeometry;
   shapeKind?: string;
+  customGeometry?: CustomGeometryData;
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;

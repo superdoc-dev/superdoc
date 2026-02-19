@@ -817,7 +817,7 @@ export class SuperDoc extends EventEmitter {
     if (item.command === 'setDocumentMode') {
       this.setDocumentMode(argument);
     } else if (item.command === 'setZoom') {
-      this.superdocStore.activeZoom = argument;
+      this.setZoom(parseInt(argument, 10));
     }
   }
 
@@ -1005,13 +1005,14 @@ export class SuperDoc extends EventEmitter {
    * const zoom = superdoc.getZoom(); // Returns 100, 150, 200, etc.
    */
   getZoom() {
+    // Read from PE first (source of truth for actual rendered zoom)
     const doc = this.superdocStore?.documents?.[0];
     const presentationEditor = typeof doc?.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
     if (presentationEditor && typeof presentationEditor.zoom === 'number') {
       return Math.round(presentationEditor.zoom * 100);
     }
-    // Fallback to 100% if no presentation editor
-    return 100;
+    // Fall back to store (reflects setZoom calls even before PE is ready)
+    return this.superdocStore?.activeZoom ?? 100;
   }
 
   /**
@@ -1029,7 +1030,11 @@ export class SuperDoc extends EventEmitter {
 
     const zoomMultiplier = percent / 100;
 
-    // Update all presentation editors
+    // Update all presentation editors directly — this is the primary zoom mechanism.
+    // We call each PE instance rather than relying on the Vue watcher on activeZoom,
+    // because store mutations from outside the Vue component tree are not guaranteed
+    // to trigger watchers (e.g. during HMR or when the SuperDoc class runs outside
+    // the Vue effect scope).
     this.superdocStore?.documents?.forEach((doc) => {
       const presentationEditor = typeof doc?.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
       if (presentationEditor && typeof presentationEditor.setZoom === 'function') {
@@ -1037,7 +1042,11 @@ export class SuperDoc extends EventEmitter {
       }
     });
 
-    // Emit zoom change event
+    // Keep store in sync so toolbar UI reflects the zoom level
+    if (this.superdocStore) {
+      this.superdocStore.activeZoom = percent;
+    }
+
     this.emit('zoomChange', { zoom: percent });
   }
 

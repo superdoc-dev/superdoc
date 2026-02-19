@@ -2,6 +2,27 @@ import { test, expect } from '../../fixtures/superdoc.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on' } });
 
+async function hasDocApiComment(
+  superdoc: { page: import('@playwright/test').Page },
+  expectedText: string,
+): Promise<boolean | null> {
+  return superdoc.page
+    .evaluate(() => {
+      const commentsApi = (window as any).editor?.doc?.comments;
+      if (!commentsApi?.list) return null;
+      return true;
+    })
+    .then(async (supported) => {
+      if (!supported) return null;
+      return superdoc.page.evaluate((text) => {
+        const commentsApi = (window as any).editor?.doc?.comments;
+        const result = commentsApi?.list?.({ includeResolved: true });
+        const matches = Array.isArray(result?.matches) ? result.matches : [];
+        return matches.some((entry: any) => entry?.text === text);
+      }, expectedText);
+    });
+}
+
 test('add a comment programmatically via addComment command', async ({ superdoc }) => {
   await superdoc.type('hello');
   await superdoc.newLine();
@@ -13,8 +34,8 @@ test('add a comment programmatically via addComment command', async ({ superdoc 
   await superdoc.assertTextContains('world');
 
   // Select "world" using PM positions
-  const pos = await superdoc.findTextPos('world');
-  await superdoc.setTextSelection(pos, pos + 'world'.length);
+  const worldPos = await superdoc.findTextPos('world');
+  await superdoc.setTextSelection(worldPos, worldPos + 'world'.length);
   await superdoc.waitForStable();
 
   // Add a comment on the selected text
@@ -24,9 +45,14 @@ test('add a comment programmatically via addComment command', async ({ superdoc 
   // Comment highlight should exist on the word "world"
   await superdoc.assertCommentHighlightExists({ text: 'world' });
 
-  // Verify the commentMark is on the "world" text node in PM state
-  const marks = await superdoc.getMarksAtPos(pos);
-  expect(marks).toContain('commentMark');
+  // Prefer document-api when available; otherwise use PM fallback.
+  const hasCommentViaDocApi = await hasDocApiComment(superdoc, 'This is a programmatic comment');
+  if (hasCommentViaDocApi === null) {
+    const marks = await superdoc.getMarksAtPos(worldPos);
+    expect(marks).toContain('commentMark');
+  } else {
+    expect(hasCommentViaDocApi).toBe(true);
+  }
 
   await superdoc.snapshot('comment added programmatically');
 });
@@ -36,8 +62,8 @@ test('add a comment via the UI bubble', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // Select "comment" via PM positions
-  const pos = await superdoc.findTextPos('comment');
-  await superdoc.setTextSelection(pos, pos + 'comment'.length);
+  const commentPos = await superdoc.findTextPos('comment');
+  await superdoc.setTextSelection(commentPos, commentPos + 'comment'.length);
   await superdoc.waitForStable();
 
   // The floating comment bubble should appear
@@ -65,9 +91,14 @@ test('add a comment via the UI bubble', async ({ superdoc }) => {
   // Comment highlight should exist on the word "comment"
   await superdoc.assertCommentHighlightExists({ text: 'comment' });
 
-  // Verify the commentMark is present in PM state
-  const marks = await superdoc.getMarksAtPos(pos);
-  expect(marks).toContain('commentMark');
+  // Prefer document-api when available; otherwise use PM fallback.
+  const hasCommentViaDocApi = await hasDocApiComment(superdoc, 'UI comment on selected text');
+  if (hasCommentViaDocApi === null) {
+    const marks = await superdoc.getMarksAtPos(commentPos);
+    expect(marks).toContain('commentMark');
+  } else {
+    expect(hasCommentViaDocApi).toBe(true);
+  }
 
   // Verify the comment text appears in the floating dialog
   const commentDialog = superdoc.page.locator('.floating-comment > .comments-dialog').last();

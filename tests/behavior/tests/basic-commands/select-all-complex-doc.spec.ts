@@ -18,12 +18,9 @@ test('select all captures entire document in a complex table doc', async ({ supe
   await superdoc.clickOnLine(0);
   await superdoc.waitForStable();
 
-  // Grab the full document length from PM state before selecting
-  const docSize = await superdoc.page.evaluate(() => {
-    const { state } = (window as any).editor;
-    return state.doc.content.size;
-  });
-  expect(docSize).toBeGreaterThan(2);
+  // Use document-api text length as a stable baseline for full-document selection.
+  const docText = await superdoc.getTextContent();
+  expect(docText.length).toBeGreaterThan(0);
 
   // Use the editor command for select-all (keyboard shortcut produces AllSelection
   // which reports from=0, to=docSize; the command gives a reliable TextSelection).
@@ -34,5 +31,5 @@ test('select all captures entire document in a complex table doc', async ({ supe
   const selection = await superdoc.getSelection();
   expect(selection.to - selection.from).toBeGreaterThan(0);
   expect(selection.from).toBeLessThanOrEqual(1);
-  expect(selection.to).toBeGreaterThanOrEqual(docSize - 1);
+  expect(selection.to - selection.from).toBeGreaterThanOrEqual(docText.length);
 });

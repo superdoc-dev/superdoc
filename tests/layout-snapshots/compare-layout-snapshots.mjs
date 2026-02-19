@@ -406,6 +406,48 @@ async function pathExists(targetPath) {
   }
 }
 
+<<<<<<< Updated upstream
+=======
+function canPromptUser() {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY && !process.env.CI);
+}
+
+async function promptYesNo(question, defaultValue = false, timeoutMs = 10000) {
+  if (!canPromptUser()) return defaultValue;
+
+  const suffix = defaultValue ? ' [Y/n] ' : ' [y/N] ';
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const ask = () => new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      console.log(`\n(no response after ${timeoutMs / 1000}s, defaulting to ${defaultValue ? 'yes' : 'no'})`);
+      resolve(null);
+    }, timeoutMs);
+    rl.question(`${question}${suffix}`, (answer) => {
+      clearTimeout(timer);
+      resolve(answer);
+    });
+  });
+
+  try {
+    while (true) {
+      const raw = await ask();
+      if (raw === null) return defaultValue;
+      const value = String(raw ?? '').trim().toLowerCase();
+      if (!value) return defaultValue;
+      if (value === 'y' || value === 'yes') return true;
+      if (value === 'n' || value === 'no') return false;
+      console.log('Please answer yes or no.');
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+>>>>>>> Stashed changes
 async function runCommand(command, commandArgs, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, commandArgs, {

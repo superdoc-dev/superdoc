@@ -16,7 +16,7 @@ export default defineConfig({
   plugins: [react(), dts()],
   test: {
     environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
+    setupFiles: ['./src/tests/setup.ts'],
     globals: true,
     clearMocks: true,
     restoreMocks: true,

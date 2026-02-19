@@ -1074,137 +1074,54 @@ describe('SuperDoc core', () => {
   });
 
   describe('Zoom API', () => {
-    it('getZoom returns 100 when no presentation editor is available', async () => {
-      const { superdocStore } = createAppHarness();
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => null),
-        },
-      ];
+    it('getZoom returns 100 by default', async () => {
+      createAppHarness();
 
       const instance = new SuperDoc({
         selector: '#host',
         document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
       });
       await flushMicrotasks();
 
       expect(instance.getZoom()).toBe(100);
     });
 
-    it('getZoom returns correct percentage from presentation editor', async () => {
+    it('getZoom returns current activeZoom from store', async () => {
       const { superdocStore } = createAppHarness();
-      const mockPresentationEditor = {
-        zoom: 1.5, // 150%
-        setZoom: vi.fn(),
-      };
-
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => mockPresentationEditor),
-        },
-      ];
 
       const instance = new SuperDoc({
         selector: '#host',
         document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
       });
       await flushMicrotasks();
 
+      superdocStore.activeZoom = 150;
       expect(instance.getZoom()).toBe(150);
+
+      superdocStore.activeZoom = 75;
+      expect(instance.getZoom()).toBe(75);
     });
 
-    it('getZoom rounds to nearest integer', async () => {
+    it('setZoom updates activeZoom in the store', async () => {
       const { superdocStore } = createAppHarness();
-      const mockPresentationEditor = {
-        zoom: 0.333, // 33.3%
-        setZoom: vi.fn(),
-      };
-
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => mockPresentationEditor),
-        },
-      ];
 
       const instance = new SuperDoc({
         selector: '#host',
         document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
-      });
-      await flushMicrotasks();
-
-      expect(instance.getZoom()).toBe(33);
-    });
-
-    it('setZoom calls presentation editor setZoom with correct multiplier', async () => {
-      const { superdocStore } = createAppHarness();
-      const mockPresentationEditor = {
-        zoom: 1,
-        setZoom: vi.fn(),
-      };
-
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => mockPresentationEditor),
-        },
-      ];
-
-      const instance = new SuperDoc({
-        selector: '#host',
-        document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
       });
       await flushMicrotasks();
 
       instance.setZoom(150);
 
-      expect(mockPresentationEditor.setZoom).toHaveBeenCalledWith(1.5);
+      expect(superdocStore.activeZoom).toBe(150);
     });
 
     it('setZoom emits zoomChange event', async () => {
-      const { superdocStore } = createAppHarness();
-      const mockPresentationEditor = {
-        zoom: 1,
-        setZoom: vi.fn(),
-      };
-
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => mockPresentationEditor),
-        },
-      ];
+      createAppHarness();
 
       const instance = new SuperDoc({
         selector: '#host',
         document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
       });
       await flushMicrotasks();
 
@@ -1216,60 +1133,29 @@ describe('SuperDoc core', () => {
       expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 200 });
     });
 
-    it('setZoom updates all presentation editors in multi-document mode', async () => {
-      const { superdocStore } = createAppHarness();
-      const mockPresentationEditor1 = { zoom: 1, setZoom: vi.fn() };
-      const mockPresentationEditor2 = { zoom: 1, setZoom: vi.fn() };
-
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => mockPresentationEditor1),
-        },
-        {
-          id: 'doc-2',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => mockPresentationEditor2),
-        },
-      ];
+    it('getZoom reflects value set by setZoom', async () => {
+      createAppHarness();
 
       const instance = new SuperDoc({
         selector: '#host',
         document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
       });
       await flushMicrotasks();
 
       instance.setZoom(75);
+      expect(instance.getZoom()).toBe(75);
 
-      expect(mockPresentationEditor1.setZoom).toHaveBeenCalledWith(0.75);
-      expect(mockPresentationEditor2.setZoom).toHaveBeenCalledWith(0.75);
+      instance.setZoom(200);
+      expect(instance.getZoom()).toBe(200);
     });
 
     it('setZoom warns and returns early for invalid values', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const { superdocStore } = createAppHarness();
-      const mockPresentationEditor = { zoom: 1, setZoom: vi.fn() };
-
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => mockPresentationEditor),
-        },
-      ];
 
       const instance = new SuperDoc({
         selector: '#host',
         document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
       });
       await flushMicrotasks();
 
@@ -1279,73 +1165,57 @@ describe('SuperDoc core', () => {
       // Test negative value
       instance.setZoom(-50);
       expect(warnSpy).toHaveBeenCalledWith('[SuperDoc] setZoom expects a positive number representing percentage');
-      expect(mockPresentationEditor.setZoom).not.toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
       expect(zoomChangeSpy).not.toHaveBeenCalled();
 
       warnSpy.mockClear();
-      mockPresentationEditor.setZoom.mockClear();
 
       // Test zero
       instance.setZoom(0);
       expect(warnSpy).toHaveBeenCalled();
-      expect(mockPresentationEditor.setZoom).not.toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
 
       warnSpy.mockClear();
-      mockPresentationEditor.setZoom.mockClear();
 
       // Test non-number
       instance.setZoom('150');
       expect(warnSpy).toHaveBeenCalled();
-      expect(mockPresentationEditor.setZoom).not.toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
 
       warnSpy.mockClear();
-      mockPresentationEditor.setZoom.mockClear();
 
       // Test NaN
       instance.setZoom(NaN);
       expect(warnSpy).toHaveBeenCalled();
-      expect(mockPresentationEditor.setZoom).not.toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
 
       warnSpy.mockClear();
-      mockPresentationEditor.setZoom.mockClear();
 
       // Test Infinity
       instance.setZoom(Infinity);
       expect(warnSpy).toHaveBeenCalled();
-      expect(mockPresentationEditor.setZoom).not.toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
 
       warnSpy.mockRestore();
     });
 
-    it('setZoom handles documents without presentation editor gracefully', async () => {
+    it('setZoom is consistent with toolbar zoom command', async () => {
       const { superdocStore } = createAppHarness();
-
-      superdocStore.documents = [
-        {
-          id: 'doc-1',
-          type: DOCX,
-          getPresentationEditor: vi.fn(() => null),
-        },
-      ];
 
       const instance = new SuperDoc({
         selector: '#host',
         document: 'https://example.com/doc.docx',
-        documents: [],
-        modules: { comments: {}, toolbar: {} },
-        colors: ['red'],
-        user: { name: 'Jane', email: 'jane@example.com' },
       });
       await flushMicrotasks();
 
-      const zoomChangeSpy = vi.fn();
-      instance.on('zoomChange', zoomChangeSpy);
+      // Programmatic API should update the same store property as the toolbar
+      instance.setZoom(150);
+      expect(superdocStore.activeZoom).toBe(150);
 
-      // Should not throw
-      expect(() => instance.setZoom(150)).not.toThrow();
-
-      // Event should still be emitted
-      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 150 });
+      // Simulate toolbar zoom (same path)
+      instance.onToolbarCommand({ item: { command: 'setZoom' }, argument: 200 });
+      expect(superdocStore.activeZoom).toBe(200);
+      expect(instance.getZoom()).toBe(200);
     });
   });
 

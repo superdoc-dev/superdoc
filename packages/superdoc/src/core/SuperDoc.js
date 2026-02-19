@@ -1005,17 +1005,13 @@ export class SuperDoc extends EventEmitter {
    * const zoom = superdoc.getZoom(); // Returns 100, 150, 200, etc.
    */
   getZoom() {
-    const doc = this.superdocStore?.documents?.[0];
-    const presentationEditor = typeof doc?.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
-    if (presentationEditor && typeof presentationEditor.zoom === 'number') {
-      return Math.round(presentationEditor.zoom * 100);
-    }
-    // Fallback to 100% if no presentation editor
-    return 100;
+    return this.superdocStore?.activeZoom ?? 100;
   }
 
   /**
-   * Set the zoom level for all documents
+   * Set the zoom level for all documents.
+   * Updates the centralized activeZoom state, which propagates to all
+   * presentation editors, PDF viewers, and whiteboard layers via the Vue watcher.
    * @param {number} percent - The zoom level as a percentage (e.g., 100, 150, 200)
    * @example
    * superdoc.setZoom(150); // Set zoom to 150%
@@ -1027,17 +1023,10 @@ export class SuperDoc extends EventEmitter {
       return;
     }
 
-    const zoomMultiplier = percent / 100;
+    if (this.superdocStore) {
+      this.superdocStore.activeZoom = percent;
+    }
 
-    // Update all presentation editors
-    this.superdocStore?.documents?.forEach((doc) => {
-      const presentationEditor = typeof doc?.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
-      if (presentationEditor && typeof presentationEditor.setZoom === 'function') {
-        presentationEditor.setZoom(zoomMultiplier);
-      }
-    });
-
-    // Emit zoom change event
     this.emit('zoomChange', { zoom: percent });
   }
 

@@ -13,7 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@superdoc/contracts": "*",
-    "@superdoc/common": "*"
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/pm-adapter": "workspace:*"
   }
 }

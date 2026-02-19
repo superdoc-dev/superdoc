@@ -2,8 +2,13 @@ import { getTestDataByFileName, loadTestDataForEditorTests, initTestEditor } fro
 import { importCommentData } from '@converter/v2/importer/documentCommentsImporter.js';
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 
+const importedCommentIdPattern = /^imported-[0-9a-f]{8}$/;
+
 const extractNodeText = (node) => {
   if (!node) return '';
+  if (Array.isArray(node)) {
+    return node.map((child) => extractNodeText(child)).join('');
+  }
   if (typeof node.text === 'string') return node.text;
   const content = Array.isArray(node.content) ? node.content : [];
   return content.map((child) => extractNodeText(child)).join('');
@@ -29,7 +34,7 @@ describe('basic comment import [basic-comment.docx]', () => {
     expect(comments).toHaveLength(1);
 
     const comment = comments[0];
-    expect(comment.commentId).toHaveLength(36); // UUID is generated at import
+    expect(comment.commentId).toMatch(importedCommentIdPattern);
     expect(comment.creatorName).toBe('Nick Bernal');
     expect(comment.creatorEmail).toBeUndefined();
     expect(comment.createdTime).toBe(1739389620000);
@@ -38,8 +43,8 @@ describe('basic comment import [basic-comment.docx]', () => {
     expect(comment.isDone).toBe(false);
     expect(comment.parentCommentId).toBeUndefined();
 
-    const commentText = comment.textJson;
-    expect(commentText.type).toBe('paragraph');
+    const commentText = comment.elements?.[0];
+    expect(commentText?.type).toBe('paragraph');
 
     const textNode = commentText.content
       .flatMap((node) => (node.type === 'run' ? node.content || [] : [node]))
@@ -120,13 +125,13 @@ describe('comment import without extended metadata [gdocs-comments-export.docx]'
     expect(comments).toHaveLength(2);
 
     const firstComment = comments[0];
-    expect(firstComment.commentId).toHaveLength(36);
+    expect(firstComment.commentId).toMatch(importedCommentIdPattern);
     expect(firstComment.creatorName).toBe('Nick Bernal');
     expect(firstComment.createdTime).toBe(1758674262000);
     expect(firstComment.isDone).toBe(false);
 
     const secondComment = comments[1];
-    expect(extractNodeText(secondComment.textJson)).toBe('comment on text');
+    expect(extractNodeText(secondComment.elements)).toBe('comment on text');
   });
 });
 
@@ -162,5 +167,40 @@ describe('editor integration with Google Docs comments', () => {
     });
 
     expect(commentMarkCount).toBeGreaterThan(0);
+  });
+});
+
+describe('python-docx generated comments [python_docx_comment_test.docx]', () => {
+  const dataName = 'python_docx_comment_test.docx';
+  let docx;
+  let comments;
+
+  beforeAll(async () => {
+    docx = await getTestDataByFileName(dataName);
+    comments = importCommentData({ docx });
+  });
+
+  it('imports comments from python-docx generated files', () => {
+    expect(comments).toHaveLength(1);
+
+    const comment = comments[0];
+    expect(comment.commentId).toMatch(importedCommentIdPattern);
+    expect(comment.creatorName).toBe('Python-docx Script');
+    expect(comment.initials).toBe('PS');
+  });
+
+  it('applies comment marks in editor', async () => {
+    const { docx: editorDocx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(dataName);
+    const { editor } = initTestEditor({ content: editorDocx, media, mediaFiles, fonts });
+
+    let commentMarkCount = 0;
+    editor.state.doc.descendants((node) => {
+      node.marks?.forEach((mark) => {
+        if (mark.type.name === CommentMarkName) commentMarkCount += 1;
+      });
+    });
+
+    expect(commentMarkCount).toBeGreaterThan(0);
+    editor.destroy();
   });
 });

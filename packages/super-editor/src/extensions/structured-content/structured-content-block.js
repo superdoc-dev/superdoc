@@ -1,14 +1,14 @@
 import { Node, Attribute } from '@core/index';
 import { StructuredContentBlockView } from './StructuredContentBlockView';
 
-export const structuredContentClass = 'sd-structured-content-block';
-export const structuredContentInnerClass = 'sd-structured-content-block__content';
+export const structuredContentBlockClass = 'sd-structured-content-block';
+export const structuredContentBlockInnerClass = 'sd-structured-content-block__content';
 
 /**
  * Configuration options for StructuredContentBlock
  * @typedef {Object} StructuredContentBlockOptions
  * @category Options
- * @property {string} [structuredContentClass='sd-structured-content-block-tag'] - CSS class for the block
+ * @property {string} [structuredContentBlockClass='sd-structured-content-block-tag'] - CSS class for the block
  * @property {Object} [htmlAttributes] - HTML attributes for structured content blocks
  */
 
@@ -42,7 +42,7 @@ export const StructuredContentBlock = Node.create({
   addOptions() {
     return {
       htmlAttributes: {
-        class: structuredContentClass,
+        class: structuredContentBlockClass,
         'aria-label': 'Structured content block node',
       },
     };
@@ -74,6 +74,15 @@ export const StructuredContentBlock = Node.create({
         renderDOM: (attrs) => {
           if (!attrs.alias) return {};
           return { 'data-alias': attrs.alias };
+        },
+      },
+
+      lockMode: {
+        default: 'unlocked',
+        parseDOM: (elem) => elem.getAttribute('data-lock-mode') || 'unlocked',
+        renderDOM: (attrs) => {
+          if (!attrs.lockMode || attrs.lockMode === 'unlocked') return {};
+          return { 'data-lock-mode': attrs.lockMode };
         },
       },
 

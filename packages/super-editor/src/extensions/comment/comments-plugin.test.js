@@ -30,6 +30,22 @@ const createCommentSchema = () => {
     doc: { content: 'block+' },
     paragraph: { content: 'inline*', group: 'block', toDOM: () => ['p', 0], parseDOM: [{ tag: 'p' }] },
     text: { group: 'inline' },
+    commentRangeStart: {
+      inline: true,
+      group: 'inline',
+      atom: true,
+      attrs: { 'w:id': {} },
+      toDOM: (node) => ['commentRangeStart', node.attrs],
+      parseDOM: [{ tag: 'commentRangeStart' }],
+    },
+    commentRangeEnd: {
+      inline: true,
+      group: 'inline',
+      atom: true,
+      attrs: { 'w:id': {} },
+      toDOM: (node) => ['commentRangeEnd', node.attrs],
+      parseDOM: [{ tag: 'commentRangeEnd' }],
+    },
   };
 
   const marks = {
@@ -243,7 +259,7 @@ describe('CommentsPlugin commands', () => {
       view.state = currentState;
     });
 
-    const spy = vi.spyOn(CommentHelpers, 'removeCommentsById');
+    const spy = vi.spyOn(CommentHelpers, 'resolveCommentById');
 
     const command = commands.resolveComment({ commentId: 'c-4' });
     const tr = currentState.tr;
@@ -299,6 +315,49 @@ describe('CommentsPlugin commands', () => {
     expect(updatedMark?.attrs.internal).toBe(false);
   });
 
+  it('supports moveComment capability checks when dispatch is undefined', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({ commentId: 'c-move', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { editor, commands } = createEditorEnvironment(schema, doc);
+
+    const command = commands.moveComment({ commentId: 'c-move', from: 2, to: 4 });
+
+    let result;
+    expect(() => {
+      result = command({ tr: editor.state.tr, dispatch: undefined, state: editor.state, editor });
+    }).not.toThrow();
+    expect(result).toBe(true);
+  });
+
+  it('returns false (without throwing) when moveComment targets an out-of-bounds range', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({ commentId: 'c-oob', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { editor, commands, view } = createEditorEnvironment(schema, doc);
+
+    let currentState = editor.state;
+    const dispatch = vi.fn((tr) => {
+      currentState = currentState.apply(tr);
+      view.state = currentState;
+    });
+
+    const command = commands.moveComment({
+      commentId: 'c-oob',
+      from: doc.content.size + 5,
+      to: doc.content.size + 8,
+    });
+
+    let result;
+    expect(() => {
+      result = command({ tr: currentState.tr, dispatch, state: currentState, editor });
+    }).not.toThrow();
+    expect(result).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it('focuses editor when moving the cursor to a comment by id', () => {
     const schema = createCommentSchema();
     const mark = schema.marks[CommentMarkName].create({ commentId: 'c-10', internal: true });
@@ -322,6 +381,176 @@ describe('CommentsPlugin commands', () => {
 
     expect(result).toBe(false);
     expect(editor.view.focus).not.toHaveBeenCalled();
+  });
+
+  describe('addCommentReply', () => {
+    it('emits commentsUpdate event with parentCommentId', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      const command = commands.addCommentReply({
+        parentId: 'parent-123',
+        content: 'This is a reply',
+      });
+      const result = command({ editor });
+
+      expect(result).toBe(true);
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          type: comments_module_events.ADD,
+          comment: expect.objectContaining({
+            commentId: 'generated-id',
+            parentCommentId: 'parent-123',
+            commentText: 'This is a reply',
+            creatorName: 'Test User',
+            creatorEmail: 'test.user@example.com',
+            creatorImage: 'https://example.com/avatar.png',
+          }),
+          activeCommentId: 'generated-id',
+        }),
+      );
+    });
+
+    it('uses provided author fields instead of editor config', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      const command = commands.addCommentReply({
+        parentId: 'parent-456',
+        content: 'Custom author reply',
+        author: 'Custom Author',
+        authorEmail: 'custom@example.com',
+        authorImage: 'https://example.com/custom.png',
+      });
+      const result = command({ editor });
+
+      expect(result).toBe(true);
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            parentCommentId: 'parent-456',
+            creatorName: 'Custom Author',
+            creatorEmail: 'custom@example.com',
+            creatorImage: 'https://example.com/custom.png',
+          }),
+        }),
+      );
+    });
+
+    it('returns false and warns when parentId is missing', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const command = commands.addCommentReply({ content: 'No parent' });
+      const result = command({ editor });
+
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith('addCommentReply requires a parentId');
+      expect(editor.emit).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('falls back to editor config user when author fields not provided', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      const command = commands.addCommentReply({
+        parentId: 'parent-789',
+        content: 'Reply with default user',
+      });
+      command({ editor });
+
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            creatorName: 'Test User',
+            creatorEmail: 'test.user@example.com',
+            creatorImage: 'https://example.com/avatar.png',
+          }),
+        }),
+      );
+    });
+
+    it('handles empty editor options gracefully', () => {
+      const schema = createCommentSchema();
+      const paragraph = schema.node('paragraph', null, [schema.text('Hello')]);
+      const doc = schema.node('doc', null, [paragraph]);
+      const { editor, commands } = createEditorEnvironment(schema, doc);
+
+      // Clear user from editor options
+      editor.options.user = undefined;
+
+      const command = commands.addCommentReply({
+        parentId: 'parent-no-user',
+        content: 'Reply without user config',
+      });
+      const result = command({ editor });
+
+      expect(result).toBe(true);
+      expect(editor.emit).toHaveBeenCalledWith(
+        'commentsUpdate',
+        expect.objectContaining({
+          comment: expect.objectContaining({
+            parentCommentId: 'parent-no-user',
+            commentText: 'Reply without user config',
+          }),
+        }),
+      );
+    });
+  });
+
+  it('findRangeById finds resolved comment via commentRangeStart/End nodes', () => {
+    const schema = createCommentSchema();
+    const startNode = schema.nodes.commentRangeStart.create({ 'w:id': 'resolved-1' });
+    const endNode = schema.nodes.commentRangeEnd.create({ 'w:id': 'resolved-1' });
+    const paragraph = schema.node('paragraph', null, [startNode, schema.text('Commented text'), endNode]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const result = findRangeById(doc, 'resolved-1');
+
+    expect(result).not.toBeNull();
+    expect(result.from).toBe(1); // position of commentRangeStart
+    expect(result.to).toBe(16); // position of commentRangeEnd
+  });
+
+  it('findRangeById returns null when commentRangeStart/End nodes have different ids', () => {
+    const schema = createCommentSchema();
+    const startNode = schema.nodes.commentRangeStart.create({ 'w:id': 'comment-1' });
+    const endNode = schema.nodes.commentRangeEnd.create({ 'w:id': 'comment-2' });
+    const paragraph = schema.node('paragraph', null, [startNode, schema.text('Commented text'), endNode]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const result = findRangeById(doc, 'comment-1');
+
+    expect(result).toBeNull(); // Only found start, not end
+  });
+
+  it('focuses editor when moving cursor to resolved comment by id via nodes', () => {
+    const schema = createCommentSchema();
+    const startNode = schema.nodes.commentRangeStart.create({ 'w:id': 'resolved-1' });
+    const endNode = schema.nodes.commentRangeEnd.create({ 'w:id': 'resolved-1' });
+    const paragraph = schema.node('paragraph', null, [startNode, schema.text('Commented text'), endNode]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { editor, commands } = createEditorEnvironment(schema, doc);
+
+    const result = commands.setCursorById('resolved-1')({ state: editor.state, editor });
+
+    expect(result).toBe(true);
+    expect(editor.view.focus).toHaveBeenCalled();
   });
 });
 
@@ -721,6 +950,20 @@ describe('internal helper functions', () => {
     });
     expect(formatResult.trackedChangeText).toContain('Added formatting');
 
+    const deltaFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-2',
+      before: [{ type: 'textStyle', attrs: { color: '#111111', fontSize: '12px' } }],
+      after: [{ type: 'bold', attrs: {} }],
+    });
+    const deltaFormatResult = getTrackedChangeText({
+      nodes: [schema.text('Format', [deltaFormatMark])],
+      mark: deltaFormatMark,
+      trackedChangeType: TrackFormatMarkName,
+      isDeletionInsertion: false,
+    });
+    expect(deltaFormatResult.trackedChangeText).toContain('Added formatting: bold');
+    expect(deltaFormatResult.trackedChangeText).not.toContain('undefined');
+
     const combinedResult = getTrackedChangeText({
       nodes: [...insertionNodes, ...deletionNodes],
       mark: insertMark,
@@ -728,6 +971,44 @@ describe('internal helper functions', () => {
       isDeletionInsertion: true,
     });
     expect(combinedResult.deletionText).toBe('Removed');
+  });
+
+  it('does not duplicate replacement text when creating tracked change comments', () => {
+    const schema = createCommentSchema();
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'replace-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'replace-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+
+    const docInsertNode = schema.text('replacement', [insertMark]);
+    const docDeleteNode = schema.text('original', [deleteMark]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [docInsertNode, docDeleteNode])]);
+    const state = EditorState.create({ schema, doc });
+
+    // Simulate step slice and deletion nodes from a replacement transaction
+    const stepInsertNodes = [schema.text('replacement', [insertMark])];
+    const deletionNodes = [schema.text('original', [deleteMark])];
+
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: insertMark, deletionMark: deleteMark, formatMark: null },
+      deletionNodes,
+      nodes: stepInsertNodes,
+      newEditorState: state,
+      documentId: 'doc-1',
+    });
+
+    expect(payload?.trackedChangeText).toBe('replacement');
+    expect(payload?.trackedChangeText).not.toBe('replacementt');
+    expect(payload?.deletedText).toBe('original');
   });
 
   it('createOrUpdateTrackedChangeComment builds add and update payloads', () => {
@@ -795,5 +1076,156 @@ describe('internal helper functions', () => {
     expect(trackedRange).toEqual(expect.objectContaining({ from: expect.any(Number), to: expect.any(Number) }));
 
     expect(findRangeById(doc, 'missing-id')).toBeNull();
+  });
+
+  it('createOrUpdateTrackedChangeComment returns early when nodes array is empty (IT-250)', () => {
+    // Regression test for IT-250: deleting tracked changes caused
+    // "Cannot read properties of undefined (reading 'marks')" error
+    // because nodes[0] was undefined when the array was empty
+    const schema = createCommentSchema();
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'empty-nodes-test',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+
+    const emptyState = EditorState.create({
+      schema,
+      doc: schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Plain')])]),
+    });
+
+    // This should not throw - it should return undefined gracefully
+    const result = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: insertMark, deletionMark: null, formatMark: null },
+      deletionNodes: [],
+      nodes: [], // Empty nodes array - the IT-250 bug condition
+      newEditorState: emptyState,
+      documentId: 'doc-1',
+    });
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('getActiveCommentId - nested comments and TC precedence', () => {
+  it('returns innermost comment when cursor is in nested range', () => {
+    // Doc: "Hello [outer: world [inner: !]]"
+    const schema = createCommentSchema();
+    const outerMark = schema.marks[CommentMarkName].create({ commentId: 'outer-comment' });
+    const innerMark = schema.marks[CommentMarkName].create({ commentId: 'inner-comment' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Hello '),
+      schema.text('world ', [outerMark]),
+      schema.text('!', [outerMark, innerMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position 13 is on "!" (0=doc, 1=paragraph start, then "Hello " is 6 chars, "world " is 6 chars = pos 13)
+    const selection = TextSelection.create(doc, 13);
+    expect(getActiveCommentId(doc, selection)).toBe('inner-comment');
+  });
+
+  it('returns outer comment when cursor is outside inner range', () => {
+    // Doc: "Hello [outer: world [inner: !]]"
+    const schema = createCommentSchema();
+    const outerMark = schema.marks[CommentMarkName].create({ commentId: 'outer-comment' });
+    const innerMark = schema.marks[CommentMarkName].create({ commentId: 'inner-comment' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Hello '),
+      schema.text('world ', [outerMark]),
+      schema.text('!', [outerMark, innerMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position 8 is on "world" (outside inner range)
+    const selection = TextSelection.create(doc, 8);
+    expect(getActiveCommentId(doc, selection)).toBe('outer-comment');
+  });
+
+  it('returns comment ID when both comment and TC exist at cursor position', () => {
+    // Doc: text has both TC and comment marks - comment should take precedence
+    const schema = createCommentSchema();
+    const tcMark = schema.marks[TrackInsertMarkName].create({ id: 'tc-1' });
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'comment-1' });
+    const paragraph = schema.node('paragraph', null, [schema.text('lorem ipsum', [tcMark, commentMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const selection = TextSelection.create(doc, 3);
+    expect(getActiveCommentId(doc, selection)).toBe('comment-1'); // NOT 'tc-1'
+  });
+
+  it('returns TC ID when only TC exists at cursor position', () => {
+    const schema = createCommentSchema();
+    const tcMark = schema.marks[TrackInsertMarkName].create({ id: 'tc-only' });
+    const paragraph = schema.node('paragraph', null, [schema.text('TC only text', [tcMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const selection = TextSelection.create(doc, 3);
+    expect(getActiveCommentId(doc, selection)).toBe('tc-only');
+  });
+
+  it('returns comment ID on overlapping text, TC ID on TC-only text', () => {
+    // Doc: "[TC: Hello [comment: world]]"
+    const schema = createCommentSchema();
+    const tcMark = schema.marks[TrackInsertMarkName].create({ id: 'tc-2' });
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'comment-2' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Hello ', [tcMark]),
+      schema.text('world', [tcMark, commentMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Cursor on "Hello" (TC only) - position 3
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 3))).toBe('tc-2');
+    // Cursor on "world" (both TC and comment) - position 8
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 8))).toBe('comment-2');
+  });
+
+  it('handles three levels of nested comments', () => {
+    const schema = createCommentSchema();
+    const outerMark = schema.marks[CommentMarkName].create({ commentId: 'outer' });
+    const middleMark = schema.marks[CommentMarkName].create({ commentId: 'middle' });
+    const innerMark = schema.marks[CommentMarkName].create({ commentId: 'inner' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Outer ', [outerMark]),
+      schema.text('Middle ', [outerMark, middleMark]),
+      schema.text('Inner', [outerMark, middleMark, innerMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position on "Inner" text (pos 14) - should return innermost
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 14))).toBe('inner');
+    // Position on "Middle" text (pos 8) - should return middle
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 8))).toBe('middle');
+    // Position on "Outer" text (pos 3) - should return outer
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 3))).toBe('outer');
+  });
+
+  it('returns null when cursor is outside all comments', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'c-1' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('No comment. '),
+      schema.text('Has comment.', [commentMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position 5 is on "No comment." (no marks)
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 5))).toBeNull();
+  });
+
+  it('correctly identifies adjacent non-overlapping comments', () => {
+    const schema = createCommentSchema();
+    const markA = schema.marks[CommentMarkName].create({ commentId: 'a' });
+    const markB = schema.marks[CommentMarkName].create({ commentId: 'b' });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [markA]), schema.text('World', [markB])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    // Position 3 is on "Hello" (mark A)
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 3))).toBe('a');
+    // Position 8 is on "World" (mark B)
+    expect(getActiveCommentId(doc, TextSelection.create(doc, 8))).toBe('b');
   });
 });

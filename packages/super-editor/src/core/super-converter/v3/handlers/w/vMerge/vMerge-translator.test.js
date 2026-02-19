@@ -8,9 +8,9 @@ describe('w:vMerge translator', () => {
       expect(result).toBe('div123');
     });
 
-    it('returns undefined if w:val is missing', () => {
+    it('returns "continue" if w:val is missing', () => {
       const result = translator.encode({ nodes: [{ attributes: {} }] });
-      expect(result).toBeUndefined();
+      expect(result).toBe('continue');
     });
   });
 

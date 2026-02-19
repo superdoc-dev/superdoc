@@ -1,21 +1,3 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@superdoc/contracts": ["contracts/src"],
-      "@superdoc/style-engine": ["style-engine/src"],
-      "@superdoc/word-layout": ["../word-layout/src"],
-      "@superdoc/geometry-utils": ["geometry-utils/src"],
-      "@superdoc/pm-adapter": ["pm-adapter/src"],
-      "@superdoc/measuring-dom": ["measuring/dom/src"],
-      "@superdoc/layout-engine": ["layout-engine/src"],
-      "@superdoc/painter-dom": ["painters/dom/src"],
-      "@superdoc/painter-pdf": ["painters/pdf/src"],
-      "@superdoc/v1-beta-demo": ["v1-beta-demo/src"],
-      "@superdoc/layout-bridge": ["layout-bridge/src"],
-      "@superdoc/preset-geometry": ["../preset-geometry/index.js"]
-    }
-  },
-  "references": [{ "path": "./layout-bridge" }]
+  "extends": "../../tsconfig.base.json"
 }

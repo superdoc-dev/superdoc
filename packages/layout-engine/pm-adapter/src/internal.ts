@@ -11,20 +11,12 @@
  */
 
 import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
-import type { StyleContext } from '@superdoc/style-engine';
 import { isValidTrackedMode } from './tracked-changes.js';
 import { analyzeSectionRanges, createSectionBreakBlock, publishSectionMetadata } from './sections/index.js';
+import { normalizePrefix, buildPositionMap, createBlockIdGenerator } from './utilities.js';
 import {
-  pxToPt,
-  pickNumber,
-  pickDecimalSeparator,
-  pickLang,
-  normalizePrefix,
-  buildPositionMap,
-  createBlockIdGenerator,
-} from './utilities.js';
-import {
-  paragraphToFlowBlocks as paragraphToFlowBlocksImpl,
+  paragraphToFlowBlocks,
+  contentBlockNodeToDrawingBlock,
   imageNodeToBlock,
   handleImageNode,
   vectorShapeNodeToDrawingBlock,
@@ -35,13 +27,14 @@ import {
   handleShapeGroupNode,
   handleShapeContainerNode,
   handleShapeTextboxNode,
-  tableNodeToBlock as tableNodeToBlockImpl,
+  tableNodeToBlock,
   handleTableNode,
   hydrateImageBlocks,
   handleParagraphNode,
 } from './converters/index.js';
 import {
   handleTableOfContentsNode,
+  handleIndexNode,
   handleStructuredContentBlockNode,
   handleDocumentSectionNode,
   handleDocumentPartObjectNode,
@@ -52,22 +45,16 @@ import type {
   HyperlinkConfig,
   FlowBlocksResult,
   AdapterOptions,
-  BlockIdGenerator,
-  PositionMap,
+  BatchAdapterOptions,
   NodeHandlerContext,
   NodeHandler,
-  ListCounterContext,
-  PMDocumentMap,
-  BatchAdapterOptions,
-  ThemeColorPalette,
+  NestedConverters,
   ConverterContext,
+  PMDocumentMap,
 } from './types.js';
-import { defaultDecimalSeparatorFor } from '../../../../shared/locale-utils/index.js';
-import { DEFAULT_HYPERLINK_CONFIG } from './constants';
 
-const DEFAULT_FONT = 'Arial';
-const DEFAULT_SIZE = 16;
-const DEFAULT_DECIMAL_SEPARATOR = '.';
+const DEFAULT_FONT = 'Times New Roman';
+const DEFAULT_SIZE = 10 / 0.75; // 10pt in pixels
 
 /**
  * Dispatch map for node type handlers.
@@ -76,16 +63,27 @@ const DEFAULT_DECIMAL_SEPARATOR = '.';
 export const nodeHandlers: Record<string, NodeHandler> = {
   paragraph: handleParagraphNode,
   tableOfContents: handleTableOfContentsNode,
+  index: handleIndexNode,
   structuredContentBlock: handleStructuredContentBlockNode,
   documentSection: handleDocumentSectionNode,
   table: handleTableNode,
   documentPartObject: handleDocumentPartObjectNode,
-  // orderedList and bulletList removed - list handling moved out of layout-engine
   image: handleImageNode,
   vectorShape: handleVectorShapeNode,
   shapeGroup: handleShapeGroupNode,
   shapeContainer: handleShapeContainerNode,
   shapeTextbox: handleShapeTextboxNode,
+};
+
+const converters: NestedConverters = {
+  contentBlockNodeToDrawingBlock,
+  imageNodeToBlock,
+  vectorShapeNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeContainerNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+  tableNodeToBlock,
+  paragraphToFlowBlocks,
 };
 
 /**
@@ -122,28 +120,16 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   const idPrefix = normalizePrefix(options?.blockIdPrefix);
 
   const doc = pmDoc as PMNode;
+  const flowBlockCache = options?.flowBlockCache;
 
-  const docAttrs = (typeof doc.attrs === 'object' && doc.attrs !== null ? doc.attrs : {}) as Record<string, unknown>;
-  const docDecimalSeparator = pickDecimalSeparator(doc.attrs?.decimalSeparator);
-  const docLang = pickLang(docAttrs.lang ?? docAttrs.language ?? docAttrs.locale);
-  const derivedSeparator = docLang ? defaultDecimalSeparatorFor(docLang) : undefined;
-  const docTabIntervalTwips =
-    pickNumber(docAttrs.defaultTabIntervalTwips ?? docAttrs.tabIntervalTwips ?? undefined) ??
-    ((): number | undefined => {
-      const px = pickNumber(docAttrs.defaultTabIntervalPx ?? docAttrs.tabIntervalPx);
-      return px != null ? Math.round(px * 15) : undefined;
-    })();
-  const optionDecimalSeparator = pickDecimalSeparator(options?.locale?.decimalSeparator);
-  const decimalSeparator =
-    optionDecimalSeparator ?? docDecimalSeparator ?? derivedSeparator ?? DEFAULT_DECIMAL_SEPARATOR;
-  const styleContext: StyleContext = {
-    defaults: {
-      paragraphFont: defaultFont,
-      fontSize: pxToPt(defaultSize) ?? 12,
-      decimalSeparator,
-      defaultTabIntervalTwips: docTabIntervalTwips,
-    },
-  };
+  // Begin cache cycle if cache is provided
+  flowBlockCache?.begin();
+
+  if (!doc.content) {
+    flowBlockCache?.commit();
+    return { blocks: [], bookmarks: new Map() };
+  }
+
   const trackedChangesMode = isValidTrackedMode(options?.trackedChangesMode) ? options.trackedChangesMode : 'review';
   const enableTrackedChanges = options?.enableTrackedChanges ?? true;
   const trackedChangesConfig: TrackedChangesConfig = {
@@ -153,43 +139,24 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   const hyperlinkConfig: HyperlinkConfig = {
     enableRichHyperlinks: options?.enableRichHyperlinks ?? false,
   };
+  const enableComments = options?.enableComments ?? true;
   const themeColors = options?.themeColors;
-  const converterContext = options?.converterContext;
-
-  if (!doc.content) {
-    return { blocks: [], bookmarks: new Map() };
-  }
+  const converterContext: ConverterContext = normalizeConverterContext(
+    options?.converterContext,
+    defaultFont,
+    defaultSize,
+  );
 
   const blocks: FlowBlock[] = [];
   const bookmarks = new Map<string, number>();
-  const positions = buildPositionMap(doc);
+  const positions =
+    options?.positions ??
+    (options?.atomNodeTypes ? buildPositionMap(doc, { atomNodeTypes: options.atomNodeTypes }) : buildPositionMap(doc));
 
   const nextBlockId = createBlockIdGenerator(idPrefix);
   const blockCounts: Partial<Record<FlowBlock['kind'], number>> = {};
   const recordBlockKind = (kind: FlowBlock['kind']) => {
     blockCounts[kind] = (blockCounts[kind] ?? 0) + 1;
-  };
-
-  // Track B: List counter tracker for sequential numbering
-  // Maps "numId:ilvl" -> current counter value for that list/level
-  const listCounters = new Map<string, number>();
-
-  const getListCounter = (numId: number, ilvl: number): number => {
-    const key = `${numId}:${ilvl}`;
-    return listCounters.get(key) ?? 0;
-  };
-
-  const incrementListCounter = (numId: number, ilvl: number): number => {
-    const key = `${numId}:${ilvl}`;
-    const current = listCounters.get(key) ?? 0;
-    const next = current + 1;
-    listCounters.set(key, next);
-    return next;
-  };
-
-  const resetListCounter = (numId: number, ilvl: number): void => {
-    const key = `${numId}:${ilvl}`;
-    listCounters.set(key, 0);
   };
 
   // Range-aware section analysis (matches toFlowBlocks semantics)
@@ -207,86 +174,28 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     recordBlockKind(sectionBreak.kind);
   }
 
-  const paragraphConverter = (
-    para: PMNode,
-    nextBlockId: BlockIdGenerator,
-    positions: PositionMap,
-    defaultFont: string,
-    defaultSize: number,
-    context: StyleContext,
-    listCounterContext?: ListCounterContext,
-    trackedChanges?: TrackedChangesConfig,
-    bookmarks?: Map<string, number>,
-    hyperlinkConfig?: HyperlinkConfig,
-    themeColorsParam?: ThemeColorPalette,
-    converterCtx?: ConverterContext,
-  ): FlowBlock[] =>
-    paragraphToFlowBlocks(
-      para,
-      nextBlockId,
-      positions,
-      defaultFont,
-      defaultSize,
-      context,
-      listCounterContext,
-      trackedChanges,
-      bookmarks,
-      hyperlinkConfig,
-      themeColorsParam ?? themeColors,
-      converterCtx ?? converterContext,
-    );
-
-  const tableConverter = (
-    node: PMNode,
-    nextBlockId: BlockIdGenerator,
-    positions: PositionMap,
-    defaultFont: string,
-    defaultSize: number,
-    context: StyleContext,
-    trackedChanges?: TrackedChangesConfig,
-    bookmarks?: Map<string, number>,
-    hyperlinkConfig?: HyperlinkConfig,
-    themeColorsParam?: ThemeColorPalette,
-    converterCtx?: ConverterContext,
-  ): FlowBlock | null =>
-    tableNodeToBlock(
-      node,
-      nextBlockId,
-      positions,
-      defaultFont,
-      defaultSize,
-      context,
-      trackedChanges,
-      bookmarks,
-      hyperlinkConfig,
-      themeColorsParam ?? themeColors,
-      converterCtx ?? converterContext,
-    );
-
   // Build handler context for node processing
   const handlerContext: NodeHandlerContext = {
     blocks,
     recordBlockKind,
     nextBlockId,
+    blockIdPrefix: idPrefix,
     positions,
     defaultFont,
     defaultSize,
-    styleContext,
     converterContext,
-    listCounterContext: { getListCounter, incrementListCounter, resetListCounter },
     trackedChangesConfig,
     hyperlinkConfig,
+    enableComments,
     bookmarks,
     sectionState: {
       ranges: sectionRanges,
       currentSectionIndex: 0,
       currentParagraphIndex: 0,
     },
-    converters: {
-      paragraphToFlowBlocks: paragraphConverter,
-      tableNodeToBlock: tableConverter,
-      imageNodeToBlock,
-    },
+    converters,
+    themeColors,
+    flowBlockCache,
   };
 
   // Process nodes using handler dispatch pattern
@@ -304,7 +213,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     const lastSectionIndex = sectionRanges.length - 1;
     const lastSection = sectionRanges[lastSectionIndex];
     // Only emit if we haven't processed the last section yet
-    if (handlerContext.sectionState.currentSectionIndex < lastSectionIndex) {
+    if (handlerContext.sectionState!.currentSectionIndex < lastSectionIndex) {
       const sectionBreak = createSectionBreakBlock(lastSection, nextBlockId);
       blocks.push(sectionBreak);
       recordBlockKind(sectionBreak.kind);
@@ -317,28 +226,33 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   // Post-process: Merge drop-cap paragraphs with their following text paragraphs
   const mergedBlocks = mergeDropCapParagraphs(hydratedBlocks);
 
+  // Commit cache cycle - swaps next to previous, retaining only blocks seen this render
+  flowBlockCache?.commit();
+
   return { blocks: mergedBlocks, bookmarks };
 }
 
+/**
+ * Batch convert a map of ProseMirror documents to FlowBlocks.
+ *
+ * Applies optional per-document block ID prefixes via blockIdPrefixFactory.
+ *
+ * @param documents - Map of document keys to PM nodes
+ * @param options - Optional batch options (shared across documents)
+ * @returns Map of document keys to FlowBlock arrays
+ */
 export function toFlowBlocksMap(documents: PMDocumentMap, options?: BatchAdapterOptions): Record<string, FlowBlock[]> {
-  const { blockIdPrefixFactory, ...adapterOptions } = options ?? {};
-  const result: Record<string, FlowBlock[]> = {};
-  if (!documents) {
-    return result;
-  }
+  const results: Record<string, FlowBlock[]> = {};
+  const prefixFactory = options?.blockIdPrefixFactory;
 
   Object.entries(documents).forEach(([key, doc]) => {
-    if (!doc) return;
-    const prefix = blockIdPrefixFactory?.(key) ?? adapterOptions.blockIdPrefix ?? `${key}-`;
-    const perDocOptions: AdapterOptions = {
-      ...adapterOptions,
-      blockIdPrefix: prefix,
-    };
-    const { blocks } = toFlowBlocks(doc, perDocOptions);
-    result[key] = blocks;
+    if (doc == null) return;
+    const blockIdPrefix = prefixFactory ? prefixFactory(key) : options?.blockIdPrefix;
+    const result = toFlowBlocks(doc, { ...options, blockIdPrefix });
+    results[key] = result.blocks;
   });
 
-  return result;
+  return results;
 }
 
 /**
@@ -403,110 +317,47 @@ function mergeDropCapParagraphs(blocks: FlowBlock[]): FlowBlock[] {
 }
 
 /**
- * Wrapper for paragraphToFlowBlocks that injects block node converters.
+ * Normalize and populate the converter context with defaults.
  *
- * Paragraphs can contain inline images, shapes, and tables. This wrapper
- * injects those converters so the paragraph implementation can handle them.
+ * Ensures that essential properties like default font and size
+ * are set in the converter context for consistent styling.
  *
- * @see converters/paragraph.ts for the actual implementation
+ * @param context - Existing converter context (may be undefined)
+ * @param defaultFont - Default font family to use
+ * @param defaultSize - Default font size in pixels
+ * @returns Normalized converter context
  */
-function paragraphToFlowBlocks(
-  para: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
+function normalizeConverterContext(
+  context: ConverterContext | undefined,
   defaultFont: string,
   defaultSize: number,
-  styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
-  themeColors?: ThemeColorPalette,
-  converterContext?: ConverterContext,
-): FlowBlock[] {
-  return paragraphToFlowBlocksImpl(
-    para,
-    nextBlockId,
-    positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    listCounterContext,
-    trackedChanges,
-    bookmarks,
-    hyperlinkConfig,
-    themeColors,
-    {
-      imageNodeToBlock,
-      vectorShapeNodeToDrawingBlock,
-      shapeGroupNodeToDrawingBlock,
-      shapeContainerNodeToDrawingBlock,
-      shapeTextboxNodeToDrawingBlock,
-      tableNodeToBlock: (
-        node: PMNode,
-        nextBlockId: BlockIdGenerator,
-        positions: PositionMap,
-        defaultFont: string,
-        defaultSize: number,
-        styleContext: StyleContext,
-        trackedChanges?: TrackedChangesConfig,
-        bookmarks?: Map<string, number>,
-        hyperlinkConfig?: HyperlinkConfig,
-        themeColors?: ThemeColorPalette,
-        converterCtx?: ConverterContext,
-      ) =>
-        tableNodeToBlockImpl(
-          node,
-          nextBlockId,
-          positions,
-          defaultFont,
-          defaultSize,
-          styleContext,
-          trackedChanges,
-          bookmarks,
-          hyperlinkConfig,
-          themeColors,
-          paragraphToFlowBlocks,
-          converterCtx ?? converterContext,
-        ),
-    },
-    converterContext,
-  );
-}
+): ConverterContext {
+  if (!context) {
+    context = {
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: {},
+        latentStyles: {},
+        styles: {},
+      },
+    };
+  }
 
-/**
- * Wrapper for tableNodeToBlock that injects the paragraph converter.
- *
- * Tables contain paragraphs in their cells. This wrapper injects the
- * paragraph converter so table cells can be properly converted.
- *
- * @see converters/table.ts for the actual implementation
- */
-function tableNodeToBlock(
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  converterContext?: ConverterContext,
-): FlowBlock | null {
-  return tableNodeToBlockImpl(
-    node,
-    nextBlockId,
-    positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    trackedChanges,
-    bookmarks,
-    hyperlinkConfig,
-    themeColors,
-    paragraphToFlowBlocks,
-    converterContext,
-  );
+  if (!context.translatedLinkedStyles.docDefaults) {
+    context.translatedLinkedStyles.docDefaults = {};
+  }
+  if (!context.translatedLinkedStyles.docDefaults.runProperties) {
+    context.translatedLinkedStyles.docDefaults.runProperties = {};
+  }
+  if (!context.translatedLinkedStyles.docDefaults.runProperties.fontFamily) {
+    context.translatedLinkedStyles.docDefaults.runProperties.fontFamily = {};
+  }
+  if (!context.translatedLinkedStyles.docDefaults.runProperties.fontFamily.ascii) {
+    context.translatedLinkedStyles.docDefaults.runProperties.fontFamily.ascii = defaultFont;
+  }
+  if (!context.translatedLinkedStyles.docDefaults.runProperties.fontSize) {
+    context.translatedLinkedStyles.docDefaults.runProperties.fontSize = defaultSize * 0.75 * 2; // size in half-points
+  }
+
+  return context;
 }

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { NSkeleton, useMessage } from 'naive-ui';
 import 'tippy.js/dist/tippy.css';
-import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, computed, watch } from 'vue';
-import { Editor } from '@/index.js';
-import { PresentationEditor } from '@/core/PresentationEditor.js';
+import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, computed, watch, nextTick } from 'vue';
+import { Editor } from '@superdoc/super-editor';
+import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getStarterExtensions } from '@extensions/index.js';
-import SlashMenu from './slash-menu/SlashMenu.vue';
+import ContextMenu from './context-menu/ContextMenu.vue';
 import { onMarginClickCursorChange } from './cursor-helpers.js';
 import Ruler from './rulers/Ruler.vue';
 import GenericPopover from './popovers/GenericPopover.vue';
@@ -17,7 +17,9 @@ import { checkNodeSpecificClicks } from './cursor-helpers.js';
 import { adjustPaginationBreaks } from './pagination-helpers.js';
 import { getFileObject } from '@superdoc/common';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
-import { isHeadless } from '@/utils/headless-helpers.js';
+import { isHeadless } from '@utils/headless-helpers.js';
+import { isMacOS } from '@core/utilities/isMacOS.js';
+import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } from '@superdoc/painter-dom';
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -60,10 +62,30 @@ const contextMenuDisabled = computed(() => {
 });
 
 /**
+ * Computed property that determines if web layout mode is active (OOXML ST_View 'web').
+ * @returns {boolean} True if viewOptions.layout is 'web'
+ */
+const isWebLayout = computed(() => {
+  return props.options.viewOptions?.layout === 'web';
+});
+
+/**
  * Reactive ruler visibility state.
  * Uses a ref with a deep watcher to ensure proper reactivity when options.rulers changes.
  */
 const rulersVisible = ref(Boolean(props.options.rulers));
+
+/**
+ * Current zoom level from PresentationEditor.
+ * Used to scale the container min-width to accommodate zoomed content.
+ */
+const currentZoom = ref(1);
+
+/**
+ * Reference to the zoomChange event handler for cleanup.
+ * Stored to ensure proper removal in onBeforeUnmount to prevent memory leaks.
+ */
+let zoomChangeHandler = null;
 
 // Watch for changes in options.rulers with deep option to catch nested changes
 watch(
@@ -79,6 +101,169 @@ watch(
   },
   { immediate: true, deep: true },
 );
+
+watch(
+  () => props.options?.rulerContainer,
+  () => {
+    nextTick(() => {
+      syncRulerOffset();
+      setupRulerObservers();
+    });
+  },
+  { immediate: true },
+);
+
+watch(
+  rulersVisible,
+  (visible) => {
+    nextTick(() => {
+      if (visible) {
+        syncRulerOffset();
+        setupRulerObservers();
+      } else {
+        rulerHostStyle.value = {};
+        cleanupRulerObservers();
+      }
+    });
+  },
+  { immediate: true },
+);
+
+/**
+ * Computed style for the container that scales min-width based on zoom.
+ * Uses the maximum page width across all pages (for multi-section docs with landscape pages),
+ * falling back to 8.5in (letter size).
+ */
+const containerStyle = computed(() => {
+  // Web layout mode: no min-width, let CSS handle responsive width
+  if (isWebLayout.value) {
+    return {};
+  }
+
+  // Print layout mode: use fixed page dimensions
+  // Default: 8.5 inches at 96 DPI = 816px (letter size)
+  let maxWidth = 8.5 * 96;
+
+  const ed = editor.value;
+
+  // First, try to get per-page sizes from layout (handles landscape/multi-section docs)
+  if (ed && 'getPages' in ed && typeof ed.getPages === 'function') {
+    const pages = ed.getPages();
+    if (Array.isArray(pages) && pages.length > 0) {
+      // Find the maximum width across all pages (some may be landscape)
+      for (const page of pages) {
+        if (page.size && typeof page.size.w === 'number' && page.size.w > 0) {
+          maxWidth = Math.max(maxWidth, page.size.w);
+        }
+      }
+    }
+  }
+
+  // Fallback: use first section's page width from pageStyles if no pages yet
+  if (maxWidth === 8.5 * 96 && ed && 'getPageStyles' in ed && typeof ed.getPageStyles === 'function') {
+    const styles = ed.getPageStyles();
+    if (
+      styles &&
+      typeof styles === 'object' &&
+      styles.pageSize &&
+      typeof styles.pageSize === 'object' &&
+      typeof styles.pageSize.width === 'number' &&
+      styles.pageSize.width > 0
+    ) {
+      maxWidth = styles.pageSize.width * 96; // width is in inches
+    }
+  }
+
+  const scaledWidth = maxWidth * currentZoom.value;
+  return {
+    minWidth: `${scaledWidth}px`,
+  };
+});
+
+/**
+ * Inline style applied to the teleported ruler wrapper so it stays horizontally
+ * aligned with the visible document area (even when sidebars open/close).
+ */
+const rulerHostStyle = ref<Record<string, string>>({});
+const rulerContainerEl = ref<HTMLElement | null>(null);
+let editorResizeObserver: ResizeObserver | null = null;
+let rulerContainerResizeObserver: ResizeObserver | null = null;
+let layoutUpdatedHandler: (() => void) | null = null;
+
+const resolveRulerContainer = (): HTMLElement | null => {
+  const container = props.options?.rulerContainer;
+  if (!container) return null;
+
+  if (typeof container === 'string') {
+    const doc = editorWrapper.value?.ownerDocument ?? document;
+    return doc.querySelector(container);
+  }
+
+  return container instanceof HTMLElement ? container : null;
+};
+
+const getViewportRect = (): DOMRect | null => {
+  const host = editorWrapper.value;
+  if (!host) return null;
+  const viewport = host.querySelector('.presentation-editor__viewport') as HTMLElement | null;
+  const target = viewport ?? host;
+  return target.getBoundingClientRect();
+};
+
+const syncRulerOffset = () => {
+  if (!rulersVisible.value) {
+    rulerHostStyle.value = {};
+    return;
+  }
+
+  rulerContainerEl.value = resolveRulerContainer();
+  if (!rulerContainerEl.value) {
+    rulerHostStyle.value = {};
+    return;
+  }
+
+  const viewportRect = getViewportRect();
+  if (!viewportRect) return;
+
+  const hostRect = rulerContainerEl.value.getBoundingClientRect();
+  const paddingLeft = Math.max(0, viewportRect.left - hostRect.left);
+  const paddingRight = Math.max(0, hostRect.right - viewportRect.right);
+
+  rulerHostStyle.value = {
+    paddingLeft: `${paddingLeft}px`,
+    paddingRight: `${paddingRight}px`,
+  };
+};
+
+const cleanupRulerObservers = () => {
+  if (editorResizeObserver) {
+    editorResizeObserver.disconnect();
+    editorResizeObserver = null;
+  }
+
+  if (rulerContainerResizeObserver) {
+    rulerContainerResizeObserver.disconnect();
+    rulerContainerResizeObserver = null;
+  }
+};
+
+const setupRulerObservers = () => {
+  cleanupRulerObservers();
+  if (typeof ResizeObserver === 'undefined') return;
+
+  const viewportHost = editorWrapper.value;
+  const rulerHost = resolveRulerContainer();
+
+  if (viewportHost) {
+    editorResizeObserver = new ResizeObserver(() => syncRulerOffset());
+    editorResizeObserver.observe(viewportHost);
+  }
+
+  if (rulerHost) {
+    rulerContainerResizeObserver = new ResizeObserver(() => syncRulerOffset());
+    rulerContainerResizeObserver.observe(rulerHost);
+  }
+};
 
 const message = useMessage();
 
@@ -122,7 +307,13 @@ const tableResizeState = reactive({
 /**
  * Image resize overlay state management
  */
-const imageResizeState = reactive({
+interface ImageResizeState {
+  visible: boolean;
+  imageElement: HTMLElement | null;
+  blockId: string | null;
+}
+
+const imageResizeState: ImageResizeState = reactive({
   visible: false,
   imageElement: null,
   blockId: null,
@@ -362,13 +553,31 @@ const hideTableResizeOverlay = () => {
 };
 
 /**
- * Update image resize overlay visibility based on mouse position
- * Shows overlay when hovering over images with data-image-metadata attribute
+ * Update image resize overlay visibility based on mouse position.
+ * Shows overlay when hovering over images with data-image-metadata attribute.
+ * Supports both standalone image fragments (ImageBlock) and inline images (ImageRun).
+ *
+ * Edge Cases:
+ * - If editorElem is not mounted, returns early without modifying overlay state
+ * - If event.target is not an Element (e.g., text node), hides overlay and returns
+ * - When hovering over the overlay itself, preserves visibility without changing imageElement
+ * - Ignores images without data-image-metadata attribute (non-resizable images)
+ *
+ * @param {MouseEvent} event - The mouse event containing target and coordinates
+ * @returns {void}
  */
-const updateImageResizeOverlay = (event) => {
+const updateImageResizeOverlay = (event: MouseEvent): void => {
   if (!editorElem.value) return;
 
-  let target = event.target;
+  // Type guard: ensure event target is an Element
+  if (!(event.target instanceof Element)) {
+    imageResizeState.visible = false;
+    imageResizeState.imageElement = null;
+    imageResizeState.blockId = null;
+    return;
+  }
+
+  let target: Element | null = event.target;
   // Walk up DOM tree to find image fragment or overlay
   while (target && target !== document.body) {
     // Check if we're over the image resize overlay or any of its children (handles, guideline)
@@ -380,10 +589,31 @@ const updateImageResizeOverlay = (event) => {
       return;
     }
 
-    if (target.classList?.contains('superdoc-image-fragment') && target.hasAttribute('data-image-metadata')) {
+    // Check for standalone image fragments (ImageBlock)
+    if (target.classList?.contains(DOM_CLASS_NAMES.IMAGE_FRAGMENT) && target.hasAttribute('data-image-metadata')) {
       imageResizeState.visible = true;
-      imageResizeState.imageElement = target;
+      imageResizeState.imageElement = target as HTMLElement;
       imageResizeState.blockId = target.getAttribute('data-sd-block-id');
+      return;
+    }
+
+    // Check for clip wrapper first (cropped inline image): use wrapper so resizer works on cropped portion
+    if (
+      target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER) &&
+      target.querySelector?.('[data-image-metadata]')
+    ) {
+      imageResizeState.visible = true;
+      imageResizeState.imageElement = target as HTMLElement;
+      imageResizeState.blockId = target.getAttribute('data-pm-start');
+      return;
+    }
+    // Check for inline images (ImageRun inside paragraphs). When image has clipPath it is wrapped;
+    // use the wrapper so the resizer works on the cropped portion's box.
+    if (target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE) && target.hasAttribute('data-image-metadata')) {
+      imageResizeState.visible = true;
+      const wrapper = target.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
+      imageResizeState.imageElement = (wrapper ?? target) as HTMLElement;
+      imageResizeState.blockId = (wrapper ?? target).getAttribute('data-pm-start');
       return;
     }
     target = target.parentElement;
@@ -499,7 +729,7 @@ const loadNewFileData = async () => {
     const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource.value);
     return { content: docx, media, mediaFiles, fonts };
   } catch (err) {
-    console.debug('Error loading new file data:', err);
+    console.debug('[SuperDoc] Error loading file:', err);
     if (typeof props.options.onException === 'function') {
       props.options.onException({ error: err, editor: null });
     }
@@ -559,6 +789,9 @@ const initializeData = async () => {
 const getExtensions = () => getStarterExtensions();
 
 const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } = {}) => {
+  // component may have unmounted during async init
+  if (!editorElem.value) return;
+
   const { editorCtor, ...editorOptions } = props.options || {};
   const EditorCtor = editorCtor ?? Editor;
   clearSelectedImage();
@@ -590,17 +823,20 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
       clearSelectedImage();
     });
 
-    presentationEditor.on('layoutUpdated', () => {
+    layoutUpdatedHandler = () => {
       if (imageResizeState.visible && imageResizeState.blockId) {
         // Re-acquire element reference (may have been recreated after re-render)
         const escapedBlockId = CSS.escape(imageResizeState.blockId);
-        const newElement = editorElem.value?.querySelector(
-          `.superdoc-image-fragment[data-sd-block-id="${escapedBlockId}"]`,
+        let newElement = editorElem.value?.querySelector(
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-sd-block-id="${escapedBlockId}"]`,
         );
+        if (!newElement) {
+          // Inline images (and cropped inline use wrapper): re-acquire by pmStart
+          newElement = editorElem.value?.querySelector(buildInlineImagePmSelector(escapedBlockId));
+        }
         if (newElement) {
-          imageResizeState.imageElement = newElement;
+          imageResizeState.imageElement = newElement as HTMLElement;
         } else {
-          // Image virtualized away - hide overlay
           imageResizeState.visible = false;
           imageResizeState.imageElement = null;
           imageResizeState.blockId = null;
@@ -610,15 +846,14 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
       if (selectedImageState.blockId) {
         const escapedBlockId = CSS.escape(selectedImageState.blockId);
         const refreshed = editorElem.value?.querySelector(
-          `.superdoc-image-fragment[data-sd-block-id="${escapedBlockId}"]`,
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-sd-block-id="${escapedBlockId}"]`,
         );
         if (refreshed) {
           setSelectedImage(refreshed, selectedImageState.blockId, selectedImageState.pmStart);
         } else {
           // Try pmStart-based re-acquisition (inline images)
           if (selectedImageState.pmStart != null) {
-            const pmSelector = `.superdoc-image-fragment[data-pm-start="${selectedImageState.pmStart}"], .superdoc-inline-image[data-pm-start="${selectedImageState.pmStart}"]`;
-            const pmElement = editorElem.value?.querySelector(pmSelector);
+            const pmElement = editorElem.value?.querySelector(buildImagePmSelector(selectedImageState.pmStart));
             if (pmElement) {
               setSelectedImage(pmElement, selectedImageState.blockId, selectedImageState.pmStart);
               return;
@@ -628,7 +863,23 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
           clearSelectedImage();
         }
       }
-    });
+
+      nextTick(() => syncRulerOffset());
+    };
+    presentationEditor.on('layoutUpdated', layoutUpdatedHandler);
+
+    // Listen for zoom changes to update container sizing
+    zoomChangeHandler = ({ zoom }) => {
+      currentZoom.value = zoom;
+      nextTick(() => syncRulerOffset());
+    };
+    presentationEditor.on('zoomChange', zoomChangeHandler);
+
+    // Initialize zoom from current state
+    if (typeof presentationEditor.zoom === 'number') {
+      currentZoom.value = presentationEditor.zoom;
+      nextTick(() => syncRulerOffset());
+    }
   }
 
   editor.value.on('paginationUpdate', () => {
@@ -714,10 +965,45 @@ const handleSuperEditorClick = (event) => {
 onMounted(() => {
   initializeData();
   if (props.options?.suppressSkeletonLoader || !props.options?.collaborationProvider) editorReady.value = true;
+  window.addEventListener('resize', syncRulerOffset, { passive: true });
+  nextTick(() => {
+    syncRulerOffset();
+    setupRulerObservers();
+  });
 });
 
+/**
+ * Handle mouse down events in the editor margin area.
+ * Moves the cursor to the clicked location for normal left-clicks, but preserves
+ * the current selection for right-clicks and context menu triggers.
+ *
+ * This prevents unwanted cursor movement when the user is trying to open a context menu:
+ * - Right-clicks (button !== 0) are ignored because they open the context menu
+ * - Ctrl+Click on Mac is ignored because it triggers the context menu (even though button === 0)
+ * - Clicks directly on the ProseMirror content area are ignored (handled by ProseMirror itself)
+ *
+ * For normal left-clicks on margin areas, delegates to onMarginClickCursorChange which
+ * positions the cursor at the appropriate location based on the click coordinates.
+ *
+ * @param {MouseEvent} event - The mousedown event from the margin click
+ * @returns {void}
+ */
 const handleMarginClick = (event) => {
-  if (event.target.classList.contains('ProseMirror')) return;
+  // Skip right-clicks - don't move cursor when user is trying to open context menu
+  if (event.button !== 0) {
+    return;
+  }
+  // On Mac, Ctrl+Click triggers context menu but reports button=0
+  if (event.ctrlKey && isMacOS()) {
+    return;
+  }
+  const target = event.target;
+  if (target?.classList?.contains('ProseMirror')) return;
+
+  // Causes issues with node selection.
+  if (target?.closest?.('.presentation-editor, .superdoc-layout, .context-menu')) {
+    return;
+  }
 
   onMarginClickCursorChange(event, activeEditor.value);
 };
@@ -734,32 +1020,64 @@ const handleMarginChange = ({ side, value }) => {
   const base = activeEditor.value;
   if (!base) return;
 
-  const pageStyles = base.getPageStyles();
-  const { pageMargins } = pageStyles;
-  const update = { ...pageMargins, [side]: value };
-  base?.updatePageStyle({ pageMargins: update });
+  const payload =
+    side === 'left'
+      ? { leftInches: value }
+      : side === 'right'
+        ? { rightInches: value }
+        : side === 'top'
+          ? { topInches: value }
+          : side === 'bottom'
+            ? { bottomInches: value }
+            : {};
+
+  const didUpdateSection =
+    typeof base.commands?.setSectionPageMarginsAtSelection === 'function'
+      ? base.commands.setSectionPageMarginsAtSelection(payload)
+      : false;
+
+  // Fallback to legacy behavior if section-aware command is unavailable or failed
+  if (!didUpdateSection) {
+    const pageStyles = base.getPageStyles();
+    const { pageMargins } = pageStyles;
+    const update = { ...pageMargins, [side]: value };
+    base?.updatePageStyle({ pageMargins: update });
+  }
 };
 
 onBeforeUnmount(() => {
   stopPolling();
   clearSelectedImage();
+
+  // Clean up zoomChange listener if it exists
+  if (editor.value instanceof PresentationEditor && zoomChangeHandler) {
+    editor.value.off('zoomChange', zoomChangeHandler);
+    zoomChangeHandler = null;
+  }
+  if (editor.value instanceof PresentationEditor && layoutUpdatedHandler) {
+    editor.value.off('layoutUpdated', layoutUpdatedHandler);
+    layoutUpdatedHandler = null;
+  }
+
+  cleanupRulerObservers();
+  window.removeEventListener('resize', syncRulerOffset);
+
   editor.value?.destroy();
   editor.value = null;
 });
 </script>
 
 <template>
-  <div class="super-editor-container">
+  <div class="super-editor-container" :class="{ 'web-layout': isWebLayout }" :style="containerStyle">
     <!-- Ruler: teleport to external container if specified, otherwise render inline -->
     <Teleport v-if="options.rulerContainer && rulersVisible && !!activeEditor" :to="options.rulerContainer">
-      <Ruler class="ruler superdoc-ruler" :editor="activeEditor" @margin-change="handleMarginChange" />
+      <div class="ruler-host" :style="rulerHostStyle">
+        <Ruler class="ruler superdoc-ruler" :editor="activeEditor" @margin-change="handleMarginChange" />
+      </div>
     </Teleport>
-    <Ruler
-      v-else-if="rulersVisible && !!activeEditor"
-      class="ruler"
-      :editor="activeEditor"
-      @margin-change="handleMarginChange"
-    />
+    <div v-else-if="rulersVisible && !!activeEditor" class="ruler-host" :style="rulerHostStyle">
+      <Ruler class="ruler" :editor="activeEditor" @margin-change="handleMarginChange" />
+    </div>
 
     <div
       class="super-editor"
@@ -771,8 +1089,8 @@ onBeforeUnmount(() => {
       @mouseleave="handleOverlayHide"
     >
       <div ref="editorElem" class="editor-element super-editor__element" role="presentation"></div>
-      <!-- Single SlashMenu component, no Teleport needed -->
-      <SlashMenu
+      <!-- Single ContextMenu component, no Teleport needed -->
+      <ContextMenu
         v-if="!contextMenuDisabled && editorReady && activeEditor"
         :editor="activeEditor"
         :popoverControls="popoverControls"
@@ -844,11 +1162,47 @@ onBeforeUnmount(() => {
 .super-editor-container {
   width: auto;
   height: auto;
-  min-width: 8in;
+  /* min-width is controlled via inline style (containerStyle) to scale with zoom */
   min-height: 11in;
   position: relative;
   display: flex;
   flex-direction: column;
+}
+
+/* Web layout mode (OOXML ST_View 'web'): content reflows to fit container */
+.super-editor-container.web-layout {
+  min-height: unset;
+  min-width: unset;
+  width: 100%;
+}
+
+.super-editor-container.web-layout .super-editor {
+  width: 100%;
+}
+
+.super-editor-container.web-layout .editor-element {
+  width: 100%;
+}
+
+/* Web layout: ensure editor fills screen width and content reflows (WCAG AA) */
+.super-editor-container.web-layout :deep(.ProseMirror) {
+  width: 100%;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.super-editor-container.web-layout :deep(.ProseMirror p),
+.super-editor-container.web-layout :deep(.ProseMirror div),
+.super-editor-container.web-layout :deep(.ProseMirror li) {
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.ruler-host {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ruler {

@@ -5,29 +5,73 @@ import { createDocFromMarkdown } from './importMarkdown.js';
 import { wrapTextsInRuns } from '../inputRules/docx-paste/docx-paste.js';
 
 /**
- * Unified content processor that handles all content types
- * @param {Object} params
- * @param {string} params.content - The content to process
- * @param {string} params.type - Content type: 'html', 'markdown', 'text', 'schema'
- * @param {Object} params.editor - The editor instance
- * @returns {Object} Processed ProseMirror document
+ * Unified content processor that handles all content types.
+ *
+ * This function validates inputs and converts various content formats
+ * (HTML, Markdown, plain text, ProseMirror JSON) into ProseMirror documents.
+ *
+ * @param {Object} params - Processing parameters
+ * @param {string} params.content - The content to process (required, must not be null/undefined)
+ * @param {string} params.type - Content type: 'html', 'markdown', 'text', or 'schema'
+ * @param {Object} params.editor - The editor instance (required, must have schema)
+ * @returns {Object} Processed ProseMirror document node
+ * @throws {Error} If editor is missing or invalid
+ * @throws {Error} If content is null/undefined
+ * @throws {Error} If DOM is required but not available (for HTML/markdown/text types)
+ * @throws {Error} If content type is unknown
  */
 export function processContent({ content, type, editor }) {
+  // Validate editor instance
+  if (!editor) {
+    throw new Error('[processContent] Editor instance is required');
+  }
+
+  if (!editor.schema) {
+    throw new Error('[processContent] Editor schema is not initialized');
+  }
+
+  // Validate content
+  if (content === null || content === undefined) {
+    throw new Error('[processContent] Content is required and cannot be null or undefined');
+  }
+
+  const domDocument =
+    editor?.options?.document ?? editor?.options?.mockDocument ?? (typeof document !== 'undefined' ? document : null);
+
   let doc;
 
   switch (type) {
     case 'html':
-      doc = createDocFromHTML(content, editor, { isImport: true });
+      // Validate DOM availability for HTML processing
+      if (!domDocument) {
+        throw new Error(
+          '[processContent] HTML processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
+        );
+      }
+      doc = createDocFromHTML(content, editor, { isImport: true, document: domDocument });
       break;
 
     case 'markdown':
-      doc = createDocFromMarkdown(content, editor, { isImport: true });
+      // Validate DOM availability for Markdown processing
+      if (!domDocument) {
+        throw new Error(
+          '[processContent] Markdown processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
+        );
+      }
+      doc = createDocFromMarkdown(content, editor, { isImport: true, document: domDocument });
       break;
 
     case 'text':
-      const wrapper = document.createElement('div');
+      // Validate DOM availability for text processing
+      if (!domDocument) {
+        throw new Error(
+          '[processContent] Text processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
+        );
+      }
+
+      const wrapper = domDocument.createElement('div');
       wrapper.dataset.superdocImport = 'true';
-      const para = document.createElement('p');
+      const para = domDocument.createElement('p');
       para.textContent = content;
       wrapper.appendChild(para);
       doc = DOMParser.fromSchema(editor.schema).parse(wrapper);
@@ -35,12 +79,15 @@ export function processContent({ content, type, editor }) {
       break;
 
     case 'schema':
+      // Schema processing doesn't require DOM
       doc = editor.schema.nodeFromJSON(content);
       doc = wrapTextsInRuns(doc);
       break;
 
     default:
-      throw new Error(`Unknown content type: ${type}`);
+      throw new Error(
+        `[processContent] Unknown content type: ${type}. Expected 'html', 'markdown', 'text', or 'schema'.`,
+      );
   }
 
   return doc;

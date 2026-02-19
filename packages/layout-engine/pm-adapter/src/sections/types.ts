@@ -73,7 +73,10 @@ export type SectionSignature = {
   headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   columnsPx?: { count: number; gap: number };
-  numbering?: { format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman'; start?: number };
+  numbering?: {
+    format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+    start?: number;
+  };
 } | null;
 
 /**
@@ -92,7 +95,14 @@ export interface SectionRange {
   startParagraphIndex: number;
   endParagraphIndex: number;
   sectPr: SectPrElement | null;
-  margins: { header: number; footer: number } | null;
+  margins: {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+    header: number;
+    footer: number;
+  } | null;
   pageSize: { w: number; h: number } | null;
   orientation: 'portrait' | 'landscape' | null;
   columns: { count: number; gap: number } | null;
@@ -100,6 +110,9 @@ export interface SectionRange {
   titlePg: boolean;
   headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
-  numbering?: { format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman'; start?: number };
+  numbering?: {
+    format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+    start?: number;
+  };
   vAlign?: SectionVerticalAlign;
 }

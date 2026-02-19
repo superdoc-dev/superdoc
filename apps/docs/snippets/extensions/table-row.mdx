@@ -1,0 +1,17 @@
+Container for cells and headers.
+
+Managed via Table commands. See [Table extension](/extensions/table).
+
+## OOXML Structure
+
+```xml
+<w:tr>
+  <w:trPr>
+    <w:trHeight w:val="567" w:hRule="exact"/>  <!-- Optional fixed height -->
+    <w:tblHeader/>                              <!-- If header row -->
+  </w:trPr>
+  <!-- Table cells go here -->
+  <w:tc>...</w:tc>
+  <w:tc>...</w:tc>
+</w:tr>
+```

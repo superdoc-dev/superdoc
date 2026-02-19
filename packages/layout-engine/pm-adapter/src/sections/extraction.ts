@@ -5,7 +5,7 @@
  */
 
 import type { PMNode } from '../types.js';
-import type { ParagraphProperties } from './types.js';
+import type { ParagraphProperties, SectionVerticalAlign } from './types.js';
 
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;
@@ -45,8 +45,7 @@ export function parseColumnGap(gapTwips: string | number | undefined): number {
 type SectionType = 'continuous' | 'nextPage' | 'evenPage' | 'oddPage';
 type Orientation = 'portrait' | 'landscape';
 type HeaderRefType = Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
-type NumberingFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman';
-type VerticalAlign = 'top' | 'center' | 'bottom' | 'both';
+type NumberingFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
 
 interface SectionElement {
   name: string;
@@ -116,22 +115,30 @@ function extractPageSizeAndOrientation(elements: SectionElement[]): {
 
 /**
  * Extract fallback margins from <w:pgMar> element (for non-normalized values).
+ * Includes both header/footer margins and page margins (top/right/bottom/left).
  */
 function extractFallbackMargins(
   elements: SectionElement[],
   currentHeader: number | undefined,
   currentFooter: number | undefined,
-): { headerPx: number | undefined; footerPx: number | undefined } {
-  if (currentHeader !== undefined && currentFooter !== undefined) {
-    return { headerPx: currentHeader, footerPx: currentFooter };
-  }
-
+): {
+  headerPx: number | undefined;
+  footerPx: number | undefined;
+  topPx: number | undefined;
+  rightPx: number | undefined;
+  bottomPx: number | undefined;
+  leftPx: number | undefined;
+} {
   const pgMar = elements.find((el) => el?.name === 'w:pgMar');
   const a = pgMar?.attributes || {};
 
   return {
     headerPx: currentHeader ?? (a['w:header'] != null ? twipsToPixels(a['w:header']) : undefined),
     footerPx: currentFooter ?? (a['w:footer'] != null ? twipsToPixels(a['w:footer']) : undefined),
+    topPx: a['w:top'] != null ? twipsToPixels(a['w:top']) : undefined,
+    rightPx: a['w:right'] != null ? twipsToPixels(a['w:right']) : undefined,
+    bottomPx: a['w:bottom'] != null ? twipsToPixels(a['w:bottom']) : undefined,
+    leftPx: a['w:left'] != null ? twipsToPixels(a['w:left']) : undefined,
   };
 }
 
@@ -176,7 +183,14 @@ function extractPageNumbering(elements: SectionElement[]):
   if (!pgNumType?.attributes) return undefined;
 
   const fmtRaw = pgNumType.attributes['w:fmt'] as string | undefined;
-  const validFormats: NumberingFormat[] = ['decimal', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman'];
+  const validFormats: NumberingFormat[] = [
+    'decimal',
+    'lowerLetter',
+    'upperLetter',
+    'lowerRoman',
+    'upperRoman',
+    'numberInDash',
+  ];
   const fmt = (validFormats.includes(fmtRaw as NumberingFormat) ? fmtRaw : undefined) as NumberingFormat | undefined;
 
   const startRaw = pgNumType.attributes['w:start'];
@@ -247,7 +261,7 @@ function extractColumns(elements: SectionElement[]): { count: number; gap: numbe
  * // Returns: undefined
  * ```
  */
-function extractVerticalAlign(elements: SectionElement[]): VerticalAlign | undefined {
+function extractVerticalAlign(elements: SectionElement[]): SectionVerticalAlign | undefined {
   const vAlign = elements.find((el) => el?.name === 'w:vAlign');
   if (!vAlign?.attributes) return undefined;
 
@@ -265,6 +279,10 @@ function extractVerticalAlign(elements: SectionElement[]): VerticalAlign | undef
 export function extractSectionData(para: PMNode): {
   headerPx?: number;
   footerPx?: number;
+  topPx?: number;
+  rightPx?: number;
+  bottomPx?: number;
+  leftPx?: number;
   type?: SectionType;
   pageSizePx?: { w: number; h: number };
   orientation?: Orientation;
@@ -273,7 +291,7 @@ export function extractSectionData(para: PMNode): {
   headerRefs?: HeaderRefType;
   footerRefs?: HeaderRefType;
   numbering?: { format?: NumberingFormat; start?: number };
-  vAlign?: VerticalAlign;
+  vAlign?: SectionVerticalAlign;
 } | null {
   const attrs = (para.attrs ?? {}) as Record<string, unknown>;
 
@@ -302,7 +320,10 @@ export function extractSectionData(para: PMNode): {
   const type = extractSectionType(sectPrElements);
   const { pageSizePx, orientation } = extractPageSizeAndOrientation(sectPrElements);
   const titlePg = sectPrElements.some((el) => el?.name === 'w:titlePg');
-  ({ headerPx, footerPx } = extractFallbackMargins(sectPrElements, headerPx, footerPx));
+  const fallbackMargins = extractFallbackMargins(sectPrElements, headerPx, footerPx);
+  headerPx = fallbackMargins.headerPx;
+  footerPx = fallbackMargins.footerPx;
+  const { topPx, rightPx, bottomPx, leftPx } = fallbackMargins;
   const headerRefs = extractHeaderFooterRefs(sectPrElements, 'w:headerReference');
   const footerRefs = extractHeaderFooterRefs(sectPrElements, 'w:footerReference');
   const numbering = extractPageNumbering(sectPrElements);
@@ -313,6 +334,10 @@ export function extractSectionData(para: PMNode): {
   return {
     headerPx,
     footerPx,
+    topPx,
+    rightPx,
+    bottomPx,
+    leftPx,
     type,
     pageSizePx,
     orientation,

@@ -38,6 +38,7 @@ const decode = (params, decodedAttrs = {}) => {
   if (decodedAttrs && Object.keys(decodedAttrs).length) {
     translated.attributes = { ...(translated.attributes || {}), ...decodedAttrs };
   }
+
   return translated;
 };
 

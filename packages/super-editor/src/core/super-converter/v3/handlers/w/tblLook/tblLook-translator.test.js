@@ -29,6 +29,28 @@ describe('w:tblLook translator', () => {
         val: 'someValue',
       });
     });
+
+    it('decodes w:val bitmask into conditional flags', () => {
+      const result = translator.encode({
+        nodes: [
+          {
+            attributes: {
+              'w:val': '04A0',
+            },
+          },
+        ],
+      });
+
+      expect(result).toEqual({
+        val: '04A0',
+        firstRow: true,
+        lastRow: false,
+        firstColumn: true,
+        lastColumn: false,
+        noHBand: false,
+        noVBand: true,
+      });
+    });
   });
 
   describe('decode', () => {

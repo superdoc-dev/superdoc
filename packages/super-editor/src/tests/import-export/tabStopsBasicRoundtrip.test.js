@@ -44,7 +44,7 @@ describe('tab_stops_basic_test roundtrip', () => {
   it('exports custom tab stops as left/right aligned tabs', async () => {
     const buffer = await zipFolderToBuffer(join(__dirname, '../data/tab_stops_basic_test'));
     const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
-    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts });
+    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
     expect(exportedBuffer?.byteLength || exportedBuffer?.length || 0).toBeGreaterThan(0);

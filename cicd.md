@@ -7,24 +7,23 @@
 
 SuperDoc implements a streamlined dual-track release strategy with fully automated versioning:
 
-- **@beta channel**: Pre-release versions from `main` while we build toward v1
+- **@next channel**: Pre-release versions from `main` while we build toward v1
 - **@latest channel**: Stable versions from `stable` branch
 - **@X.x channels**: Patch releases for maintenance branches
-  - `@next` is currently paused; main now ships to `@beta` until v1 is ready.
 
 All releases are automated through semantic-release based on conventional commits.
 
 ## Workflow Architecture
 
 ```
-main (beta) → stable (latest) → X.x (maintenance)
+main (next) → stable (latest) → X.x (maintenance)
      ↓             ↓                ↓
   pre-releases  stable releases  patch releases
 ```
 
 ## Branch Strategy
 
-- **`main`**: Development branch, releases to @beta
+- **`main`**: Development branch, releases to @next
 - **`stable`**: Production branch, releases to @latest
 - **`X.x`**: Maintenance branches for patching old versions
 
@@ -59,7 +58,7 @@ main (beta) → stable (latest) → X.x (maintenance)
 1. Run full test suite
 2. Build packages
 3. Semantic-release publishes:
-   - From `main`: X.Y.Z-beta.N to @beta
+   - From `main`: X.Y.Z-next.N to @next
    - From `stable`: X.Y.Z to @latest
    - From `X.x`: X.x.Y to @X.x
 
@@ -129,9 +128,9 @@ main (beta) → stable (latest) → X.x (maintenance)
 ### Version Progression
 
 ```
-main (1.0.0-beta.1) → merge to stable → 1.0.0 (@latest)
+main (1.0.0-next.1) → merge to stable → 1.0.0 (@latest)
          ↓                                    ↓
-    1.1.0-beta.1                         (if needed)
+    1.1.0-next.1                         (if needed)
          ↓                               create 1.0.x
     continues...                         → 1.0.1, 1.0.2...
 ```
@@ -149,10 +148,9 @@ Version bumps are automatic based on commit messages:
 
 ### NPM Distribution Tags
 
-- **@beta**: Latest pre-release from main
-  - Install: `npm install superdoc@beta`
-  - Format: `X.Y.Z-beta.N`
-- **@next**: Paused during v1 development (no new publishes)
+- **@next**: Latest pre-release from main
+  - Install: `npm install superdoc@next`
+  - Format: `X.Y.Z-next.N`
 - **@latest**: Current stable release
   - Install: `npm install superdoc`
   - Format: `X.Y.Z`
@@ -217,13 +215,13 @@ Version bumps are automatic based on commit messages:
 
 ```bash
 # View latest releases
-npm view superdoc versions --json
+pnpm view superdoc versions --json
 
 # Check current tags
-npm view superdoc dist-tags
+pnpm view superdoc dist-tags
 
 # Dry run to preview release
-npx semantic-release --dry-run --no-ci
+pnpx semantic-release --dry-run --no-ci
 ```
 
 ### Common Issues
@@ -241,4 +239,4 @@ npx semantic-release --dry-run --no-ci
 ---
 
 For contribution guidelines and development setup, see [CONTRIBUTING.md](CONTRIBUTING.md).  
-For questions about CI/CD, reach out on [Discord](https://discord.gg/wjMccuygvy) or [GitHub Discussions](https://github.com/Harbour-Enterprises/SuperDoc/discussions).
+For questions about CI/CD, reach out on [Discord](https://discord.gg/wjMccuygvy) or [GitHub Discussions](https://github.com/superdoc-dev/superdoc/discussions).

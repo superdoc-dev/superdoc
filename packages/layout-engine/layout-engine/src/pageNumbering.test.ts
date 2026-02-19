@@ -29,6 +29,17 @@ describe('formatPageNumber', () => {
     });
   });
 
+  describe('numberInDash format', () => {
+    it('should wrap numbers in dashes', () => {
+      expect(formatPageNumber(1, 'numberInDash')).toBe('-1-');
+      expect(formatPageNumber(12, 'numberInDash')).toBe('-12-');
+    });
+
+    it('should clamp zero to 1', () => {
+      expect(formatPageNumber(0, 'numberInDash')).toBe('-1-');
+    });
+  });
+
   describe('upperRoman format', () => {
     it('should format numbers 1-10 correctly', () => {
       expect(formatPageNumber(1, 'upperRoman')).toBe('I');

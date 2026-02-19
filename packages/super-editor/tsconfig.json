@@ -14,19 +14,11 @@
       "@features/*": ["./src/features/*"],
       "@components/*": ["./src/components/*"],
       "@helpers/*": ["./src/core/helpers/*"],
-      "@packages/*": ["../*"],
       "@converter/*": ["./src/core/super-converter/*"],
       "@tests/*": ["./src/tests/*"],
-      "@translator": ["./src/core/super-converter/v3/node-translator/"],
-      "@superdoc/painter-dom": ["../layout-engine/painters/dom/src"],
-      "@superdoc/pm-adapter": ["./src/types/pm-adapter-shim.d.ts"],
-      "@superdoc/layout-bridge": ["../layout-engine/layout-bridge/src"],
-      "@superdoc/contracts": ["../layout-engine/contracts/src"],
-      "@superdoc/geometry-utils": ["../layout-engine/geometry-utils/src"],
-      "@superdoc/url-validation": ["../../shared/url-validation/index.js"],
-      "@superdoc/preset-geometry": ["../preset-geometry/index.js"]
+      "@translator": ["./src/core/super-converter/v3/node-translator/"]
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.js", "**/*.test.ts", "src/core/super-converter/**/*"]
+  "exclude": ["**/*.test.js", "**/*.test.ts"]
 }

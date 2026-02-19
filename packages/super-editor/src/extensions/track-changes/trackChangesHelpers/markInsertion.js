@@ -9,9 +9,10 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
  * @param {number} options.to To position.
  * @param {object} options.user User object ({ name, email }).
  * @param {string} options.date Date.
+ * @param {string} options.id Optional ID to use (for replace operations where insertion and deletion share the same ID).
  * @returns {Mark} Insertion mark.
  */
-export const markInsertion = ({ tr, from, to, user, date }) => {
+export const markInsertion = ({ tr, from, to, user, date, id: providedId }) => {
   tr.removeMark(from, to, tr.doc.type.schema.marks[TrackDeleteMarkName]);
   tr.removeMark(from, to, tr.doc.type.schema.marks[TrackInsertMarkName]);
 
@@ -24,7 +25,10 @@ export const markInsertion = ({ tr, from, to, user, date }) => {
   });
 
   let id;
-  if (trackedMark) {
+  if (providedId) {
+    // Use the provided ID (for replace operations)
+    id = providedId;
+  } else if (trackedMark) {
     id = trackedMark.mark.attrs.id;
   } else {
     id = uuidv4();

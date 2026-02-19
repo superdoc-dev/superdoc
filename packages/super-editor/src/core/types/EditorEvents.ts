@@ -118,4 +118,15 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when all fonts used in the document are determined */
   'fonts-resolved': [FontsResolvedPayload];
+
+  // Document Lifecycle Events
+
+  /** Called when a document is opened via editor.open() */
+  documentOpen: [{ editor: Editor; sourcePath: string | null }];
+
+  /** Called when a document is closed via editor.close() */
+  documentClose: [{ editor: Editor }];
+
+  /** Called when page styles are updated */
+  pageStyleUpdate: [{ pageMargins?: Record<string, unknown>; pageStyles: Record<string, unknown> }];
 }

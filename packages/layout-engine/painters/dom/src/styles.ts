@@ -1,3 +1,5 @@
+import { DOM_CLASS_NAMES } from './constants.js';
+
 export const CLASS_NAMES = {
   container: 'superdoc-layout',
   page: 'superdoc-page',
@@ -28,7 +30,7 @@ export const containerStyles: Partial<CSSStyleDeclaration> = {
   alignItems: 'center',
   background: 'transparent',
   padding: '0',
-  gap: '24px',
+  // gap is set dynamically by renderer based on pageGap option (default: 24px)
   overflowY: 'auto',
 };
 
@@ -39,7 +41,7 @@ export const containerStylesHorizontal: Partial<CSSStyleDeclaration> = {
   justifyContent: 'safe center',
   background: 'transparent',
   padding: '0',
-  gap: '20px',
+  // gap is set dynamically by renderer based on pageGap option (default: 20px for horizontal)
   overflowX: 'auto',
   minHeight: '100%',
 };
@@ -76,6 +78,11 @@ export const fragmentStyles: Partial<CSSStyleDeclaration> = {
   boxSizing: 'border-box',
 };
 
+/**
+ * Line container styles. z-index is intentionally not set on the line so that
+ * the resize overlay (and other UI) can stack above content. Only the image
+ * element itself gets z-index for layering within the line (e.g. above tab leaders).
+ */
 export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => ({
   lineHeight: `${lineHeight}px`,
   height: `${lineHeight}px`,
@@ -317,27 +324,33 @@ const SDT_CONTAINER_STYLES = `
   align-items: center;
 }
 
-/* Continuation styling: first fragment has top corners, last has bottom corners */
-.superdoc-document-section[data-sdt-container-start="true"] {
-  border-radius: 4px 4px 0 0;
-}
-
-.superdoc-document-section[data-sdt-container-end="true"] {
-  border-radius: 0 0 4px 4px;
-}
-
+/* Continuation styling: SDT container boundary handling for multi-fragment document sections */
+/* Single fragment (both start and end): full border radius */
 .superdoc-document-section[data-sdt-container-start="true"][data-sdt-container-end="true"] {
   border-radius: 4px;
+}
+
+/* First fragment of a multi-fragment SDT: top corners, no bottom border */
+.superdoc-document-section[data-sdt-container-start="true"]:not([data-sdt-container-end="true"]) {
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+}
+
+/* Last fragment of a multi-fragment SDT: bottom corners, no top border */
+.superdoc-document-section[data-sdt-container-end="true"]:not([data-sdt-container-start="true"]) {
+  border-radius: 0 0 4px 4px;
+  border-top: none;
 }
 
 .superdoc-document-section[data-sdt-container-start="true"]:hover {
   border-radius: 0 4px 0 0;
 }
 
-/* Middle fragments have no border radius */
+/* Middle fragments (neither start nor end): no corners, no top/bottom borders */
 .superdoc-document-section:not([data-sdt-container-start="true"]):not([data-sdt-container-end="true"]) {
   border-radius: 0;
   border-top: none;
+  border-bottom: none;
 }
 
 /* Structured Content Block - Blue border container */
@@ -345,31 +358,50 @@ const SDT_CONTAINER_STYLES = `
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+/* Group hover (JavaScript-coordinated) */
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+.superdoc-structured-content-block.ProseMirror-selectednode {
+  border-color: #629be7;
+  outline: none;
 }
 
 /* Structured content drag handle/label - positioned above */
 .superdoc-structured-content__label {
-  font-size: 10px;
+  font-size: 11px;
   align-items: center;
   justify-content: center;
   position: absolute;
   left: 2px;
   top: -19px;
   width: calc(100% - 4px);
-  max-width: 110px;
+  max-width: 130px;
   min-width: 0;
   height: 18px;
   padding: 0 4px;
   border: 1px solid #629be7;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  background-color: #629be7dd;
+  background-color: #629be7ee;
   box-sizing: border-box;
   z-index: 10;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
 }
 
 .superdoc-structured-content__label span {
@@ -379,26 +411,41 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-.superdoc-structured-content-block:hover .superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label,
+.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) .superdoc-structured-content__label {
   display: inline-flex;
 }
 
 /* Continuation styling for structured content blocks */
-.superdoc-structured-content-block[data-sdt-container-start="true"] {
-  border-radius: 4px 4px 0 0;
-}
-
-.superdoc-structured-content-block[data-sdt-container-end="true"] {
-  border-radius: 0 0 4px 4px;
-}
-
+/* Single fragment (both start and end): full border radius */
 .superdoc-structured-content-block[data-sdt-container-start="true"][data-sdt-container-end="true"] {
   border-radius: 4px;
 }
 
+/* First fragment of a multi-fragment SDT: top corners, no bottom border */
+.superdoc-structured-content-block[data-sdt-container-start="true"]:not([data-sdt-container-end="true"]) {
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+}
+
+/* Last fragment of a multi-fragment SDT: bottom corners, no top border */
+.superdoc-structured-content-block[data-sdt-container-end="true"]:not([data-sdt-container-start="true"]) {
+  border-radius: 0 0 4px 4px;
+  border-top: none;
+}
+
+/* Middle fragment (neither start nor end): no corners, no top/bottom borders */
 .superdoc-structured-content-block:not([data-sdt-container-start="true"]):not([data-sdt-container-end="true"]) {
   border-radius: 0;
   border-top: none;
+  border-bottom: none;
+}
+
+/* Collapse double borders between adjacent SDT blocks */
+.superdoc-structured-content-block + .superdoc-structured-content-block {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 /* Structured Content Inline - Inline wrapper with blue border */
@@ -406,36 +453,82 @@ const SDT_CONTAINER_STYLES = `
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
   display: inline;
+  z-index: 10;
 }
 
 /* Hover effect for inline structured content */
-.superdoc-structured-content-inline:hover {
-  background-color: rgba(98, 155, 231, 0.15);
-  border-color: #4a8ad9;
+.superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+  border-color: transparent;
 }
 
+.superdoc-structured-content-inline.ProseMirror-selectednode {
+  border-color: #629be7;
+  outline: none;
+  background-color: transparent;
+}
 /* Inline structured content label - shown on hover */
 .superdoc-structured-content-inline__label {
   position: absolute;
   bottom: calc(100% + 2px);
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10px;
-  padding: 2px 6px;
-  background-color: #629be7dd;
+  font-size: 11px;
+  padding: 0 4px;
+  background-color: #629be7ee;
   color: white;
   border-radius: 4px;
   white-space: nowrap;
   z-index: 100;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
 }
 
-.superdoc-structured-content-inline:hover .superdoc-structured-content-inline__label {
+.superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-structured-content-inline__label {
   display: block;
+}
+
+.superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover .superdoc-structured-content-inline__label {
+  display: none;
+}
+
+/* Hover highlight for SDT containers.
+ * Hover adds background highlight and z-index boost.
+ * Block SDTs use .sdt-hover class (event delegation for multi-fragment coordination).
+ * Inline SDTs use :hover (single element, no coordination needed).
+ * Hover is suppressed when the node is selected (SD-1584). */
+.superdoc-structured-content-block[data-lock-mode].sdt-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
+  background-color: rgba(98, 155, 231, 0.08);
+  z-index: 9999999;
+}
+
+/* Viewing mode: remove structured content affordances */
+.presentation-editor--viewing .superdoc-structured-content-block,
+.presentation-editor--viewing .superdoc-structured-content-inline {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-block:hover {
+  background: none;
+  border: none;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-inline:hover {
+  background: none;
+  border: none;
+}
+
+.presentation-editor--viewing .superdoc-structured-content__label,
+.presentation-editor--viewing .superdoc-structured-content-inline__label {
+  display: none !important;
 }
 
 /* Print mode: hide visual styling for SDT containers */
@@ -459,9 +552,22 @@ const SDT_CONTAINER_STYLES = `
 const FIELD_ANNOTATION_STYLES = `
 /* Field annotation draggable styles */
 .superdoc-layout .annotation[data-draggable="true"] {
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
+  user-select: text;
+}
+
+.superdoc-layout .annotation::selection,
+.superdoc-layout .annotation *::selection {
+  background: transparent;
+}
+
+.superdoc-layout .annotation::-moz-selection,
+.superdoc-layout .annotation *::-moz-selection  {
+  background: transparent;
+}
+
+.superdoc-layout .annotation,
+.superdoc-layout .annotation * {
+  caret-color: transparent;
 }
 
 .superdoc-layout .annotation[data-draggable="true"]:hover {
@@ -498,8 +604,36 @@ const IMAGE_SELECTION_STYLES = `
 }
 
 /* Ensure inline images can be targeted */
-.superdoc-inline-image.superdoc-image-selected {
+.${DOM_CLASS_NAMES.INLINE_IMAGE}.superdoc-image-selected {
   outline-offset: 2px;
+}
+
+/* Selection on clip wrapper so outline matches the visible cropped portion, not the scaled image */
+.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}.superdoc-image-selected {
+  outline-offset: 2px;
+}
+`;
+
+/**
+ * Native Selection Hiding Styles
+ *
+ * Hides the browser's native text selection highlight on layout engine content.
+ * The PresentationEditor renders its own selection overlay for precise control
+ * over selection appearance across pages, zoom levels, and virtualization.
+ *
+ * Without these styles, users would see BOTH the custom selection overlay AND
+ * the native browser selection, causing a "double selection" visual artifact.
+ */
+const NATIVE_SELECTION_STYLES = `
+/* Hide native browser selection on layout engine content.
+ * We render our own selection overlay via PresentationEditor's #localSelectionLayer
+ * for precise control over selection geometry across pages and zoom levels. */
+.superdoc-layout *::selection {
+  background: transparent;
+}
+
+.superdoc-layout *::-moz-selection {
+  background: transparent;
 }
 `;
 
@@ -509,6 +643,7 @@ let trackChangeStylesInjected = false;
 let sdtContainerStylesInjected = false;
 let fieldAnnotationStylesInjected = false;
 let imageSelectionStylesInjected = false;
+let nativeSelectionStylesInjected = false;
 
 export const ensurePrintStyles = (doc: Document | null | undefined) => {
   if (printStylesInjected || !doc) return;
@@ -568,4 +703,25 @@ export const ensureImageSelectionStyles = (doc: Document | null | undefined) => 
   styleEl.textContent = IMAGE_SELECTION_STYLES;
   doc.head?.appendChild(styleEl);
   imageSelectionStylesInjected = true;
+};
+
+/**
+ * Injects styles to hide native browser selection on layout engine content.
+ * This prevents the "double selection" visual artifact where both the browser's
+ * native selection and our custom overlay are visible simultaneously.
+ *
+ * The function is idempotent - calling it multiple times on the same document
+ * will only inject the styles once. This is tracked via the module-level
+ * `nativeSelectionStylesInjected` flag.
+ *
+ * @param doc - The document to inject styles into. If null or undefined, the function returns early without action.
+ * @returns void
+ */
+export const ensureNativeSelectionStyles = (doc: Document | null | undefined): void => {
+  if (nativeSelectionStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-native-selection-styles', 'true');
+  styleEl.textContent = NATIVE_SELECTION_STYLES;
+  doc.head?.appendChild(styleEl);
+  nativeSelectionStylesInjected = true;
 };

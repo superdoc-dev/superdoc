@@ -296,6 +296,32 @@ describe('w:tblGrid translator', () => {
       expect(widths).toEqual(['2000', '4000']);
     });
 
+    it('prefers stored grid column count when preferTableGrid is true', () => {
+      const params = {
+        node: {
+          attrs: {
+            grid: [{ col: 2000 }, { col: 4000 }],
+          },
+        },
+        extraParams: {
+          preferTableGrid: true,
+          totalColumns: 2,
+          firstRow: {
+            content: [
+              { type: 'tableCell', attrs: { colspan: 1, colwidth: [50] } },
+              { type: 'tableCell', attrs: { colspan: 1, colwidth: [60] } },
+              { type: 'tableCell', attrs: { colspan: 1, colwidth: [70] } },
+            ],
+          },
+        },
+      };
+
+      const result = translator.decode(params);
+      expect(result.elements).toHaveLength(2);
+      const widths = result.elements.map((el) => el.attributes['w:w']);
+      expect(widths).toEqual(['2000', '4000']);
+    });
+
     it('preserves narrow grid columns for placeholder cells without inflating width', () => {
       const params = {
         node: {

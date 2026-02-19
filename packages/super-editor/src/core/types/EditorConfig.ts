@@ -4,6 +4,7 @@ import type { Editor } from '../Editor.js';
 import type { Extension } from '../Extension.js';
 import type { Node as EditorNode } from '../Node.js';
 import type { Mark as EditorMark } from '../Mark.js';
+import type { EditorRenderer } from '../renderers/EditorRenderer.js';
 import type {
   FontsResolvedPayload,
   Comment,
@@ -11,7 +12,7 @@ import type {
   CommentLocationsPayload,
   ListDefinitionsPayload,
 } from './EditorEvents.js';
-import type { ProseMirrorJSON, TelemetryData } from './EditorTypes.js';
+import type { ProseMirrorJSON } from './EditorTypes.js';
 
 /**
  * User information for collaboration
@@ -51,6 +52,27 @@ export interface DocxNode {
 export interface DocxFileEntry {
   name: string;
   content: string;
+}
+
+/**
+ * Document view layout values - mirrors OOXML ST_View (ECMA-376 §17.18.102)
+ * - 'print': Print Layout View - displays document as it prints (default)
+ * - 'web': Web Page View - content reflows to fit container (mobile/accessibility)
+ */
+export type ViewLayout = 'print' | 'web';
+
+/**
+ * Document view options for controlling how the document is displayed.
+ * Mirrors OOXML document view settings.
+ */
+export interface ViewOptions {
+  /**
+   * Document view layout (OOXML ST_View compatible)
+   * - 'print': Fixed page width, displays document as it prints (default)
+   * - 'web': Content reflows to fit container width
+   * @default 'print'
+   */
+  layout?: ViewLayout;
 }
 
 /**
@@ -100,6 +122,40 @@ export interface PermissionParams {
 }
 
 /**
+ * Comment highlight color configuration
+ */
+export interface CommentHighlightColors {
+  /** Base highlight color for internal comments */
+  internal?: string;
+  /** Base highlight color for external comments */
+  external?: string;
+  /** Active highlight color override for internal comments */
+  activeInternal?: string;
+  /** Active highlight color override for external comments */
+  activeExternal?: string;
+}
+
+/**
+ * Comment highlight opacity configuration
+ */
+export interface CommentHighlightOpacity {
+  /** Opacity for active comment highlight (0-1) */
+  active?: number;
+  /** Opacity for inactive comment highlight (0-1) */
+  inactive?: number;
+}
+
+/**
+ * Comment configuration options
+ */
+export interface CommentConfig {
+  /** Comment highlight colors */
+  highlightColors?: CommentHighlightColors;
+  /** Comment highlight opacity values */
+  highlightOpacity?: CommentHighlightOpacity;
+}
+
+/**
  * Editor configuration options
  */
 export interface EditorOptions {
@@ -111,6 +167,9 @@ export interface EditorOptions {
 
   /** Whether the editor is running in headless mode */
   isHeadless?: boolean;
+
+  /** Optional Document instance for HTML/Markdown import/export in headless environments (e.g. JSDOM) */
+  document?: Document | null;
 
   /** Mock document for testing */
   mockDocument?: Document | null;
@@ -181,11 +240,21 @@ export interface EditorOptions {
   /** Whether comments are enabled */
   isCommentsEnabled?: boolean;
 
+  /** Comment highlight configuration */
+  comments?: CommentConfig;
+
   /** Whether this is a new file */
   isNewFile?: boolean;
 
   /** Editor scale/zoom */
   scale?: number;
+
+  /**
+   * Document view options (OOXML ST_View compatible).
+   * Controls how the document is displayed.
+   * @example { layout: 'web' } // Content reflows to fit container
+   */
+  viewOptions?: ViewOptions | null;
 
   /** Whether annotations are enabled */
   annotations?: boolean;
@@ -204,6 +273,9 @@ export interface EditorOptions {
 
   /** Whether to skip creating the ProseMirror view (layout mode) */
   skipViewCreation?: boolean;
+
+  /** Optional renderer implementation (defaults to ProseMirrorRenderer in DOM environments) */
+  renderer?: EditorRenderer | null;
 
   /** Numbering configuration */
   numbering?: Record<string, unknown>;
@@ -328,9 +400,41 @@ export interface EditorOptions {
   /** Handler for image uploads - async (file) => url */
   handleImageUpload?: ((file: File) => Promise<string>) | null;
 
-  /** Telemetry configuration */
-  telemetry?: TelemetryData | null;
-
   /** Host-provided permission hook */
   permissionResolver?: ((params: PermissionParams) => boolean | undefined) | null;
+
+  /**
+   * When true, defers document initialization until open() is called.
+   * This enables the new document lifecycle API where:
+   * - Constructor only initializes core services (extensions, schema)
+   * - open() loads the document
+   * - close() unloads the document
+   * - Editor instance can be reused for multiple documents
+   *
+   * Default is false for backward compatibility.
+   * The static Editor.open() factory sets this automatically.
+   */
+  deferDocumentLoad?: boolean;
+
+  /**
+   * License key for billing and telemetry authentication.
+   */
+  licenseKey?: string | null;
+
+  /**
+   * Telemetry configuration for tracking document opens.
+   * When enabled, sends document open events for usage-based billing.
+   */
+  telemetry?: {
+    /** Whether telemetry is enabled */
+    enabled: boolean;
+    /** Custom telemetry endpoint (optional) */
+    endpoint?: string;
+    /** Custom metadata to include with telemetry events (optional) */
+    metadata?: Record<string, unknown>;
+    /**
+     * @deprecated Use root-level `licenseKey` instead. If both are provided, root-level has priority.
+     */
+    licenseKey?: string | null;
+  } | null;
 }

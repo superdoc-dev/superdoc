@@ -44,6 +44,7 @@ export const useToolbarItem = (options) => {
   // icon properties
   const iconColor = ref(options.iconColor);
   const hasCaret = ref(options.hasCaret);
+  const restoreEditorFocus = Boolean(options.restoreEditorFocus);
 
   // dropdown properties
   const dropdownStyles = ref(options.dropdownStyles);
@@ -141,6 +142,7 @@ export const useToolbarItem = (options) => {
     hideLabel,
     inlineTextInputVisible,
     hasInlineTextInput,
+    restoreEditorFocus,
     markName,
     labelAttr,
     childItem,

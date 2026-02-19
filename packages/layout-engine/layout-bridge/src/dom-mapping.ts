@@ -28,6 +28,7 @@ const CLASS_NAMES = {
   page: DOM_CLASS_NAMES.PAGE,
   fragment: DOM_CLASS_NAMES.FRAGMENT,
   line: DOM_CLASS_NAMES.LINE,
+  tableFragment: DOM_CLASS_NAMES.TABLE_FRAGMENT,
 } as const;
 
 /**
@@ -106,7 +107,8 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
 
   let hitChain: Element[] = [];
   const doc = document as Document & DocumentWithElementsFromPoint;
-  if (typeof doc.elementsFromPoint === 'function') {
+  const hasElementsFromPoint = typeof doc.elementsFromPoint === 'function';
+  if (hasElementsFromPoint) {
     try {
       hitChain = doc.elementsFromPoint(viewX, viewY) ?? [];
     } catch {
@@ -161,15 +163,19 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
   const fragmentEl = hitChain.find((el) => el.classList?.contains?.(CLASS_NAMES.fragment)) as HTMLElement | null;
 
   if (!fragmentEl) {
-    // Fallback: try querySelector on the page
-    const fallbackFragment = pageEl.querySelector(`.${CLASS_NAMES.fragment}`) as HTMLElement | null;
+    if (hasElementsFromPoint) {
+      log('No fragment found in hit chain; returning null to allow geometry mapping');
+      return null;
+    }
 
+    // Fallback for environments without elementsFromPoint (e.g., JSDOM tests)
+    const fallbackFragment = pageEl.querySelector(`.${CLASS_NAMES.fragment}`) as HTMLElement | null;
     if (!fallbackFragment) {
       log('No fragment found in hit chain or fallback');
       return null;
     }
 
-    log('Using fallback fragment:', {
+    log('Using fallback fragment (no elementsFromPoint):', {
       blockId: fallbackFragment.dataset.blockId,
       pmStart: fallbackFragment.dataset.pmStart,
       pmEnd: fallbackFragment.dataset.pmEnd,
@@ -205,6 +211,16 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
     return result;
   }
 
+  // For table fragments without a direct line hit, return null so the caller
+  // (clickToPosition in index.ts) falls back to geometry-based hit testing via
+  // hitTestTableFragment, which correctly resolves the cell by column. processFragment
+  // would search all lines across all cells using only Y matching, picking the wrong
+  // column when multiple cells share the same row height.
+  if (fragmentEl.classList.contains(CLASS_NAMES.tableFragment)) {
+    log('Table fragment without line in hit chain, deferring to geometry fallback');
+    return null;
+  }
+
   const result = processFragment(fragmentEl, viewX, viewY);
   log('=== clickToPositionDom END ===', { result });
   return result;
@@ -218,7 +234,7 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
  * @param clientY - Y coordinate in viewport space
  * @returns The page element, or null if not found
  */
-function findPageElement(domContainer: HTMLElement, clientX: number, clientY: number): HTMLElement | null {
+export function findPageElement(domContainer: HTMLElement, clientX: number, clientY: number): HTMLElement | null {
   // Check if the container itself is a page element
   if (domContainer.classList?.contains?.(CLASS_NAMES.page)) {
     return domContainer;
@@ -407,11 +423,31 @@ function processFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
 
   const textNode = firstChild as Text;
   const charIndex = findCharIndexAtX(textNode, targetEl, viewX);
-  const pos = spanStart + charIndex;
+  const pos = mapCharIndexToPm(spanStart, spanEnd, textNode.length, charIndex);
 
   log('Character position:', { charIndex, spanStart, finalPos: pos });
 
   return pos;
+}
+
+function mapCharIndexToPm(spanStart: number, spanEnd: number, textLength: number, charIndex: number): number {
+  if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) {
+    return spanStart;
+  }
+  if (textLength <= 0) {
+    return spanStart;
+  }
+  const pmRange = spanEnd - spanStart;
+  if (!Number.isFinite(pmRange) || pmRange <= 0) {
+    return spanStart;
+  }
+  if (pmRange === textLength) {
+    const mapped = spanStart + charIndex;
+    return Math.min(spanEnd, Math.max(spanStart, mapped));
+  }
+
+  const ratio = charIndex / textLength;
+  return ratio <= 0.5 ? spanStart : spanEnd;
 }
 
 /**

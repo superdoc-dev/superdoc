@@ -4,12 +4,21 @@
  * Preserves structure while removing presentation
  *
  * @param {string} html - Raw HTML string
+ * @param {Document | null | undefined} [domDocument] - Optional DOM document (e.g. from JSDOM) for Node environments
  * @returns {string} Clean HTML with semantic structure only
  */
-export function stripHtmlStyles(html) {
+export function stripHtmlStyles(html, domDocument) {
   if (!html) return '';
 
-  const parser = new window.DOMParser();
+  const win = domDocument?.defaultView ?? (typeof window !== 'undefined' ? window : null);
+  const DOMParserConstructor = win?.DOMParser ?? (typeof DOMParser !== 'undefined' ? DOMParser : null);
+  if (!DOMParserConstructor) {
+    throw new Error(
+      '[super-editor] HTML import requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
+    );
+  }
+
+  const parser = new DOMParserConstructor();
   const doc = parser.parseFromString(html, 'text/html');
 
   // Supported attributes to preserve
@@ -31,7 +40,8 @@ export function stripHtmlStyles(html) {
   ];
 
   const cleanNode = (node) => {
-    if (node.nodeType !== window.Node.ELEMENT_NODE) return;
+    // Element nodes are always nodeType 1.
+    if (node.nodeType !== 1) return;
 
     // Process spans with only text inside
     if (node.nodeName.toLowerCase() === 'span' && !node.children.length) {

@@ -25,11 +25,17 @@
  * @param {string} [options.color='#000000'] - Border color (hex)
  * @returns {CellBorders} Complete borders object for all cell sides
  */
-export const createCellBorders = ({ size = 0.66665, color = '#000000' } = {}) => {
+export const createCellBorders = (borderSpec = {}) => {
+  borderSpec = {
+    size: 0.66665,
+    color: '#000000',
+    ...borderSpec,
+  };
+
   return {
-    top: { size, color },
-    left: { size, color },
-    bottom: { size, color },
-    right: { size, color },
+    top: borderSpec,
+    left: borderSpec,
+    bottom: borderSpec,
+    right: borderSpec,
   };
 };

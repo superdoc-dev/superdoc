@@ -6,6 +6,7 @@ import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/i
 import { translator as trTranslator } from '../tr';
 import { translator as tblPrTranslator } from '../tblPr';
 import { translator as tblGridTranslator } from '../tblGrid';
+import { translator as tblStylePrTranslator } from '@converter/v3/handlers/w/tblStylePr';
 import { buildFallbackGridForTable } from '@core/super-converter/helpers/tableFallbackHelpers.js';
 
 /** @type {import('@translator').XmlNodeName} */
@@ -13,6 +14,47 @@ const XML_NODE_NAME = 'w:tbl';
 
 /** @type {import('@translator').SuperDocNodeOrKeyName} */
 const SD_NODE_NAME = 'table';
+
+/** Tolerance in twips for matching cell width sum to grid + indent. Accounts for rounding in Word. */
+const INDENT_TWIPS_TOLERANCE = 5;
+
+/**
+ * Sum all column widths from a tblGrid encoded grid array.
+ * @param {Array<{col: number | string}>} columns - Grid columns with col width in twips
+ * @returns {number} Total width in twips
+ */
+const sumColumnTwips = (columns = []) =>
+  columns.reduce((sum, col) => {
+    const raw = col?.col;
+    const value = typeof raw === 'number' ? raw : Number.parseInt(raw, 10);
+    return Number.isFinite(value) ? sum + value : sum;
+  }, 0);
+
+/**
+ * Sum tcW widths from all cells in the first table row containing cells.
+ * Returns null if any cell lacks a valid width (indicates unreliable data).
+ * @param {Array<Object>} rows - XML row elements (w:tr)
+ * @returns {number | null} Total cell width in twips, or null if incomplete
+ */
+const getFirstRowCellWidthSumTwips = (rows = []) => {
+  const firstRow = rows.find((row) => row?.elements?.some((el) => el.name === 'w:tc'));
+  if (!firstRow?.elements) return null;
+
+  const cells = firstRow.elements.filter((el) => el.name === 'w:tc');
+  if (!cells.length) return null;
+
+  let sum = 0;
+  for (const cell of cells) {
+    const tcPr = cell.elements?.find((el) => el.name === 'w:tcPr');
+    const tcW = tcPr?.elements?.find((el) => el.name === 'w:tcW');
+    const rawWidth = tcW?.attributes?.['w:w'];
+    const width = typeof rawWidth === 'number' ? rawWidth : Number.parseInt(rawWidth, 10);
+    if (!Number.isFinite(width)) return null;
+    sum += width;
+  }
+
+  return sum;
+};
 
 /**
  * Encode a w:tbl element as a SuperDoc 'table' node.
@@ -70,25 +112,39 @@ const encode = (params, encodedAttrs) => {
 
   if (encodedAttrs.tableProperties.tableWidth) {
     const tableWidthMeasurement = encodedAttrs.tableProperties.tableWidth;
-    const widthPx = twipsToPixels(tableWidthMeasurement.value);
-    if (widthPx != null) {
+    if (tableWidthMeasurement.type === 'pct' && typeof tableWidthMeasurement.value === 'number') {
+      // For percentage widths, preserve the raw OOXML value (in 1/50th of a percent units)
+      // using { value, type } shape. This allows downstream code to calculate the actual
+      // percentage (value / 50) without precision loss from pixel conversion.
       encodedAttrs.tableWidth = {
-        width: widthPx,
+        value: tableWidthMeasurement.value,
         type: tableWidthMeasurement.type,
       };
-    } else if (tableWidthMeasurement.type === 'auto') {
+    } else {
+      // For fixed widths (dxa), convert to pixels using { width, type } shape.
+      const widthPx = twipsToPixels(tableWidthMeasurement.value);
+      if (widthPx != null) {
+        encodedAttrs.tableWidth = {
+          width: widthPx,
+          type: tableWidthMeasurement.type,
+        };
+      }
+    }
+
+    if (!encodedAttrs.tableWidth && tableWidthMeasurement.type === 'auto') {
       encodedAttrs.tableWidth = {
         width: 0,
         type: tableWidthMeasurement.type,
       };
     }
   }
+
+  const tableLook = encodedAttrs.tableProperties.tblLook;
   // Table borders can be specified in tblPr or inside a referenced style tag
   const borderProps = _processTableBorders(encodedAttrs.tableProperties.borders || {});
   const referencedStyles = _getReferencedTableStyles(encodedAttrs.tableStyleId, params) || {};
 
-  const rowBorders = { ...referencedStyles.rowBorders, ...borderProps.rowBorders };
-  encodedAttrs.borders = { ...referencedStyles.borders, ...borderProps.borders };
+  encodedAttrs.borders = { ...referencedStyles.borders, ...borderProps };
   encodedAttrs.tableProperties.cellMargins = referencedStyles.cellMargins = {
     ...referencedStyles.cellMargins,
     ...encodedAttrs.tableProperties.cellMargins,
@@ -99,6 +155,20 @@ const encode = (params, encodedAttrs) => {
   let columnWidths = Array.isArray(encodedAttrs['grid'])
     ? encodedAttrs['grid'].map((item) => twipsToPixels(item.col))
     : [];
+
+  const tableIndentTwips = encodedAttrs.tableProperties?.tableIndent?.value;
+  const hasIndent = Number.isFinite(tableIndentTwips) && tableIndentTwips !== 0;
+  const hasExplicitGrid = Boolean(tblGrid);
+  const gridTwipsTotal = hasExplicitGrid ? sumColumnTwips(encodedAttrs['grid']) : null;
+  const rowTcWTwipsTotal = hasExplicitGrid && hasIndent ? getFirstRowCellWidthSumTwips(rows) : null;
+  const indentDiff = rowTcWTwipsTotal != null && gridTwipsTotal != null ? rowTcWTwipsTotal - gridTwipsTotal : null;
+  const preferTableGridWidths =
+    hasExplicitGrid &&
+    hasIndent &&
+    gridTwipsTotal != null &&
+    rowTcWTwipsTotal != null &&
+    Math.sign(indentDiff) === Math.sign(tableIndentTwips) &&
+    Math.abs(indentDiff - tableIndentTwips) <= INDENT_TWIPS_TOLERANCE;
 
   if (!columnWidths.length) {
     const fallback = buildFallbackGridForTable({
@@ -115,6 +185,7 @@ const encode = (params, encodedAttrs) => {
 
   const content = [];
   const totalColumns = columnWidths.length;
+  const totalRows = rows.length;
   const activeRowSpans = totalColumns > 0 ? new Array(totalColumns).fill(0) : [];
   rows.forEach((row, rowIndex) => {
     const result = trTranslator.encode({
@@ -124,10 +195,15 @@ const encode = (params, encodedAttrs) => {
       extraParams: {
         row,
         table: node,
-        rowBorders,
+        tableProperties: encodedAttrs.tableProperties,
+        tableBorders: encodedAttrs.borders,
+        tableLook,
         columnWidths,
         activeRowSpans: activeRowSpans.slice(),
         rowIndex,
+        totalRows,
+        totalColumns,
+        preferTableGridWidths,
         _referencedStyles: referencedStyles,
       },
     });
@@ -197,15 +273,25 @@ const decode = (params, decodedAttrs) => {
   // @ts-expect-error - preProcessVerticalMergeCells expects ProseMirror table shape, but receives SuperDoc node
   params.node = preProcessVerticalMergeCells(params.node, params);
   const { node } = params;
-  const elements = translateChildNodes(params);
+  const rawGrid = node.attrs?.grid;
+  const grid = Array.isArray(rawGrid) ? rawGrid : [];
+  const preferTableGrid = node.attrs?.userEdited !== true && grid.length > 0;
+  const totalColumns = preferTableGrid ? grid.length : undefined;
+  const extraParams = {
+    ...(params.extraParams || {}),
+    preferTableGrid,
+    totalColumns,
+  };
+
+  const elements = translateChildNodes({ ...params, extraParams });
 
   // Table grid - generate if not present
   const firstRow = node.content?.find((n) => n.type === 'tableRow');
-  const properties = node.attrs.grid;
   const element = tblGridTranslator.decode({
     ...params,
-    node: { ...node, attrs: { ...node.attrs, grid: properties } },
+    node: { ...node, attrs: { ...node.attrs, grid } },
     extraParams: {
+      ...extraParams,
       firstRow,
     },
   });
@@ -231,27 +317,23 @@ const decode = (params, decodedAttrs) => {
 /**
  * Process the table borders
  * @param {Object[]} [rawBorders] The raw border properties from the `tableProperties` attribute
- * @returns {Record<"borders"|"rowBorders", Record<string,unknown>>}
+ * @returns {Record<string,unknown>}
  */
-function _processTableBorders(rawBorders) {
+export function _processTableBorders(rawBorders) {
   const /** @type {Record<string,unknown>} */ borders = {};
-  const /** @type {Record<string,unknown>} */ rowBorders = {};
   Object.entries(rawBorders).forEach(([name, attributes]) => {
     const attrs = {};
     const color = attributes.color;
     const size = attributes.size;
+    const val = attributes.val;
     if (color && color !== 'auto') attrs['color'] = color.startsWith('#') ? color : `#${color}`;
     if (size && size !== 'auto') attrs['size'] = eighthPointsToPixels(size);
+    if (val) attrs['val'] = val;
 
-    const rowBorderNames = ['insideH', 'insideV'];
-    if (rowBorderNames.includes(name)) rowBorders[name] = attrs;
     borders[name] = attrs;
   });
 
-  return {
-    borders,
-    rowBorders,
-  };
+  return borders;
 }
 
 /**
@@ -311,14 +393,13 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
   const tblPr = styleTag.elements.find((el) => el.name === 'w:tblPr');
   if (tblPr && tblPr.elements) {
     if (baseTblPr && baseTblPr.elements) {
-      tblPr.elements.push(...baseTblPr.elements);
+      tblPr.elements = [...baseTblPr.elements, ...tblPr.elements];
     }
     const tableProperties = tblPrTranslator.encode({ ...params, nodes: [tblPr] });
     if (tableProperties) {
-      const { borders, rowBorders } = _processTableBorders(tableProperties.borders || {});
+      const borders = _processTableBorders(tableProperties.borders || {});
 
-      if (borders) stylesToReturn.borders = borders;
-      if (rowBorders) stylesToReturn.rowBorders = rowBorders;
+      if (borders || Object.keys(borders).length) stylesToReturn.borders = borders;
 
       const cellMargins = {};
       Object.entries(tableProperties.cellMargins || {}).forEach(([key, attrs]) => {
@@ -333,7 +414,19 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
     }
   }
 
-  return stylesToReturn;
+  const tblStylePr = styleTag.elements.filter((el) => el.name === 'w:tblStylePr');
+  let styleProps = {};
+  if (tblStylePr) {
+    styleProps = tblStylePr.reduce((acc, el) => {
+      acc[el.attributes['w:type']] = tblStylePrTranslator.encode({ ...params, nodes: [el] });
+      return acc;
+    }, {});
+  }
+
+  return {
+    ...stylesToReturn,
+    ...styleProps,
+  };
 }
 
 /**

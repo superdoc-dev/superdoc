@@ -15,7 +15,7 @@ import { updateSectionMargins, getSectPrMargins } from '@converter/section-prope
  */
 export const insertSectionBreakAtSelection =
   ({ headerInches, footerInches } = {}) =>
-  ({ state, editor }) => {
+  ({ tr, state, editor }) => {
     if (!state || !editor) {
       console.warn('[insertSectionBreakAtSelection] Missing state or editor');
       return false;
@@ -80,8 +80,6 @@ export const insertSectionBreakAtSelection =
       sectionMargins,
     };
 
-    const tr = state.tr.setNodeMarkup(paraPos, undefined, nextAttrs, paragraph.marks);
-    // Use renderer-agnostic dispatch to support both flow and pages modes
-    editor.view.dispatch(tr);
+    tr.setNodeMarkup(paraPos, undefined, nextAttrs, paragraph.marks);
     return true;
   };

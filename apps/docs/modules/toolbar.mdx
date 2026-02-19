@@ -1,0 +1,606 @@
+---
+title: Toolbar
+keywords: "word toolbar, document formatting controls, custom toolbar, editor ui components, formatting buttons"
+---
+
+The toolbar provides a customizable UI for document editing with support for custom buttons, responsive layouts, and role-based controls.
+
+## Quick start
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  toolbar: '#toolbar'  // Simple toolbar with defaults
+});
+```
+
+## Configuration
+
+<ParamField path="modules.toolbar.selector" type="string">
+  CSS selector for the toolbar container (e.g. `'#toolbar'`). Must be a string selector, not a DOM element reference.
+</ParamField>
+
+<ParamField path="modules.toolbar.toolbarGroups" type="string[]" default="['left', 'center', 'right']">
+  Layout regions for button placement
+</ParamField>
+
+<ParamField path="modules.toolbar.groups" type="Object">
+  Custom button arrangement by group
+
+  <Expandable title="Example">
+    ```javascript
+    groups: {
+      left: ['undo', 'redo'],
+      center: ['bold', 'italic', 'underline'],
+      right: ['documentMode', 'export']
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.toolbar.excludeItems" type="string[]" default="[]">
+  Button names to exclude from toolbar
+</ParamField>
+
+<ParamField path="modules.toolbar.icons" type="Object" default="{}">
+  Custom SVG icons for buttons. See [Icon Customization](#icon-customization).
+</ParamField>
+
+<ParamField path="modules.toolbar.texts" type="Object" default="{}">
+  Custom tooltips and labels
+</ParamField>
+
+<ParamField path="modules.toolbar.fonts" type="Array" default="[]">
+  Available font options in font dropdown. See [Font Configuration](#font-configuration).
+</ParamField>
+
+<ParamField path="modules.toolbar.hideButtons" type="boolean" default="true">
+  Auto-hide buttons on small screens
+</ParamField>
+
+<ParamField path="modules.toolbar.responsiveToContainer" type="boolean" default="false">
+  Size relative to container instead of window
+</ParamField>
+
+<ParamField path="modules.toolbar.customButtons" type="Array" default="[]">
+  Custom button definitions. See [Custom Buttons](#custom-buttons).
+</ParamField>
+
+## Available buttons
+
+Use button names with `excludeItems`, `groups`, and `icons` configuration.
+
+### Text formatting
+
+<ResponseField name="bold" type="button">
+  Toggle bold (`Ctrl+B`)
+</ResponseField>
+
+<ResponseField name="italic" type="button">
+  Toggle italic (`Ctrl+I`)
+</ResponseField>
+
+<ResponseField name="underline" type="button">
+  Toggle underline (`Ctrl+U`)
+</ResponseField>
+
+<ResponseField name="strike" type="button">
+  Toggle strikethrough
+</ResponseField>
+
+<ResponseField name="clearFormatting" type="button">
+  Clear all formatting
+</ResponseField>
+
+<ResponseField name="copyFormat" type="button">
+  Format painter — copy formatting from selection
+</ResponseField>
+
+### Font controls
+
+<ResponseField name="fontFamily" type="dropdown">
+  Font family selector
+</ResponseField>
+
+<ResponseField name="fontSize" type="dropdown">
+  Font size selector (8–96pt)
+</ResponseField>
+
+<ResponseField name="color" type="dropdown">
+  Text color picker
+</ResponseField>
+
+<ResponseField name="highlight" type="dropdown">
+  Background highlight color picker
+</ResponseField>
+
+### Paragraph
+
+<ResponseField name="textAlign" type="dropdown">
+  Text alignment (left, center, right, justify)
+</ResponseField>
+
+<ResponseField name="list" type="button">
+  Toggle bullet list
+</ResponseField>
+
+<ResponseField name="numberedlist" type="button">
+  Toggle numbered list
+</ResponseField>
+
+<ResponseField name="indentleft" type="button">
+  Decrease indent
+</ResponseField>
+
+<ResponseField name="indentright" type="button">
+  Increase indent
+</ResponseField>
+
+<ResponseField name="lineHeight" type="dropdown">
+  Line height selector (1, 1.15, 1.5, 2, 2.5, 3)
+</ResponseField>
+
+<ResponseField name="linkedStyles" type="dropdown">
+  Quick paragraph styles (Normal, Heading 1, etc.)
+</ResponseField>
+
+### Insert
+
+<ResponseField name="link" type="dropdown">
+  Insert or edit link
+</ResponseField>
+
+<ResponseField name="image" type="button">
+  Upload and insert image
+</ResponseField>
+
+<ResponseField name="table" type="dropdown">
+  Insert table via grid selector
+</ResponseField>
+
+<ResponseField name="tableActions" type="dropdown">
+  Table editing actions (add/delete rows/columns, merge/split cells, etc.)
+</ResponseField>
+
+### Tools
+
+<ResponseField name="undo" type="button">
+  Undo last action
+</ResponseField>
+
+<ResponseField name="redo" type="button">
+  Redo last action
+</ResponseField>
+
+<ResponseField name="search" type="dropdown">
+  Search in document
+</ResponseField>
+
+<ResponseField name="zoom" type="dropdown">
+  Zoom level (50%–200%)
+</ResponseField>
+
+<ResponseField name="ruler" type="button">
+  Toggle document ruler
+</ResponseField>
+
+<ResponseField name="documentMode" type="dropdown">
+  Switch between editing/viewing/suggesting modes
+</ResponseField>
+
+### Track changes
+
+<ResponseField name="acceptTrackedChangeBySelection" type="button">
+  Accept tracked change at current selection
+</ResponseField>
+
+<ResponseField name="rejectTrackedChangeOnSelection" type="button">
+  Reject tracked change at current selection
+</ResponseField>
+
+## Custom buttons
+
+### Basic button
+
+```javascript
+modules: {
+  toolbar: {
+    customButtons: [{
+      type: 'button',
+      name: 'myButton',
+      tooltip: 'My Custom Button',
+      icon: '<svg>...</svg>',
+      group: 'center',
+      command: ({ item, argument, option }) => {
+        superdoc.activeEditor.commands.myCommand();
+      }
+    }]
+  }
+}
+```
+
+<ParamField path="type" type="string" required>
+  `'button'` or `'dropdown'`
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Unique button identifier
+</ParamField>
+
+<ParamField path="tooltip" type="string">
+  Hover text
+</ParamField>
+
+<ParamField path="icon" type="string">
+  SVG icon string
+</ParamField>
+
+<ParamField path="group" type="string" default="'center'">
+  Layout group: `'left'`, `'center'`, or `'right'`
+</ParamField>
+
+<ParamField path="command" type="string | function" required>
+  Command name or handler function receiving `{ item, argument, option }`
+</ParamField>
+
+### Dropdown button
+
+```javascript
+customButtons: [{
+  type: 'dropdown',
+  name: 'templates',
+  tooltip: 'Insert Template',
+  icon: templateIcon,
+  hasCaret: true,
+  options: [
+    { label: 'Contract', key: 'contract' },
+    { label: 'Invoice', key: 'invoice' }
+  ],
+  command: ({ option }) => {
+    if (option) loadTemplate(option.key);
+  }
+}]
+```
+
+<ParamField path="options" type="Array" required>
+  Dropdown items, each with `label` (display text), `key` (value), and optional `icon`
+</ParamField>
+
+<ParamField path="hasCaret" type="boolean" default="true">
+  Show dropdown arrow
+</ParamField>
+
+### Toggle button
+
+```javascript
+customButtons: [{
+  type: 'button',
+  name: 'darkMode',
+  tooltip: 'Toggle Dark Mode',
+  icon: moonIcon,
+  activeIcon: sunIcon,
+  active: false,
+  command: ({ item }) => {
+    const isActive = !item.active.value;
+    item.active.value = isActive;
+    setDarkMode(isActive);
+  }
+}]
+```
+
+<ParamField path="active" type="boolean" default="false">
+  Initial active state
+</ParamField>
+
+<ParamField path="activeIcon" type="string">
+  Icon when active
+</ParamField>
+
+## Icon customization
+
+```javascript
+modules: {
+  toolbar: {
+    icons: {
+      bold: '<svg viewBox="0 0 24 24">...</svg>',
+      italic: '<svg viewBox="0 0 24 24">...</svg>',
+      // Function for dynamic icons
+      darkMode: () => isDark ? sunIcon : moonIcon
+    }
+  }
+}
+```
+
+<Warning>
+Icons should be 24x24 viewBox SVGs with `fill="currentColor"` for proper theming
+</Warning>
+
+## Font configuration
+
+<ParamField path="fonts" type="Array">
+  <Expandable title="Font object properties">
+    <ParamField path="label" type="string" required>
+      Display name
+    </ParamField>
+    <ParamField path="key" type="string" required>
+      Font-family CSS value
+    </ParamField>
+    <ParamField path="fontWeight" type="number">
+      Font weight
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<Info>
+SuperDoc does not load fonts automatically. Custom fonts from imported DOCX files will display in the toolbar, but won't be selectable unless you load them in your application (via CSS `@font-face`, Google Fonts, etc.) and add them to the `fonts` array.
+</Info>
+
+```javascript
+fonts: [
+  { label: 'Arial', key: 'Arial' },
+  { label: 'Times', key: 'Times New Roman' },
+  { label: 'Brand Font', key: 'BrandFont, sans-serif', fontWeight: 400 }
+]
+```
+
+## Responsive behavior
+
+The toolbar adapts at these widths:
+
+| Breakpoint | Width | Behavior |
+|---|---|---|
+| XL | 1410px+ | All buttons visible |
+| LG | 1280px+ | Hides styles, format painter |
+| MD | 1024px+ | Hides separators |
+| SM | 768px+ | Hides zoom, font, redo |
+| XS | Under 768px | Shows overflow menu |
+
+Use `responsiveToContainer: true` to size based on the toolbar container instead of the window.
+
+## Role-based controls
+
+The toolbar automatically adapts based on the user's role:
+
+| Role | Available Controls |
+|---|---|
+| `viewer` | Zoom, search, print, export only |
+| `suggester` | Track changes enabled, formatting available |
+| `editor` | Full access to all controls |
+
+## API methods
+
+<CodeGroup>
+
+```javascript Usage
+const toolbar = superdoc.toolbar;
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+  },
+});
+```
+
+</CodeGroup>
+
+### `getToolbarItemByName`
+
+Get a toolbar item by its name.
+
+<CodeGroup>
+
+```javascript Usage
+const boldBtn = toolbar.getToolbarItemByName('bold');
+boldBtn.active.value;    // boolean
+boldBtn.disabled.value;  // boolean
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    const boldBtn = toolbar.getToolbarItemByName('bold');
+    boldBtn.active.value;    // boolean
+    boldBtn.disabled.value;  // boolean
+  },
+});
+```
+
+</CodeGroup>
+
+### `getToolbarItemByGroup`
+
+Get all toolbar items in a layout group.
+
+<CodeGroup>
+
+```javascript Usage
+const leftItems = toolbar.getToolbarItemByGroup('left');
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    const leftItems = toolbar.getToolbarItemByGroup('left');
+  },
+});
+```
+
+</CodeGroup>
+
+### `updateToolbarState`
+
+Refresh all button states based on the current editor state.
+
+<CodeGroup>
+
+```javascript Usage
+toolbar.updateToolbarState();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.updateToolbarState();
+  },
+});
+```
+
+</CodeGroup>
+
+### `setZoom`
+
+Set the editor zoom level programmatically.
+
+<CodeGroup>
+
+```javascript Usage
+toolbar.setZoom(150); // 150%
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.setZoom(150); // 150%
+  },
+});
+```
+
+</CodeGroup>
+
+### `destroy`
+
+Clean up toolbar resources and event listeners.
+
+<CodeGroup>
+
+```javascript Usage
+toolbar.destroy();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.destroy();
+  },
+});
+```
+
+</CodeGroup>
+
+## Events
+
+### `superdoc-command`
+
+Fired when a SuperDoc-level command is executed (zoom, document mode).
+
+<CodeGroup>
+
+```javascript Usage
+toolbar.on('superdoc-command', ({ item, argument }) => {
+  console.log(`Command: ${item.command}, arg: ${argument}`);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.on('superdoc-command', ({ item, argument }) => {
+      console.log(`Command: ${item.command}, arg: ${argument}`);
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+### `exception`
+
+Fired when an error occurs during a toolbar action.
+
+<CodeGroup>
+
+```javascript Usage
+toolbar.on('exception', ({ error, editor, originalError }) => {
+  console.error('Toolbar error:', error);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  toolbar: '#toolbar',
+  onReady: (superdoc) => {
+    const toolbar = superdoc.toolbar;
+    toolbar.on('exception', ({ error, editor, originalError }) => {
+      console.error('Toolbar error:', error);
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+## Full example
+
+<Card
+  title="Custom Toolbar Example"
+  icon="github"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/features/custom-toolbar"
+>
+  Runnable example: custom button groups, excluded items, and a custom clear-formatting button
+</Card>

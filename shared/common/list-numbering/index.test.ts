@@ -11,6 +11,22 @@ describe('generateOrderedListIndex', () => {
     expect(result).toBe('.12.4)');
   });
 
+  it('formats decimalZero markers with leading zeros for single digits', () => {
+    const singleDigit = generateOrderedListIndex({
+      listLevel: [1, 1],
+      lvlText: '%1.%2',
+      listNumberingType: 'decimalZero',
+    });
+    expect(singleDigit).toBe('1.01');
+
+    const doubleDigit = generateOrderedListIndex({
+      listLevel: [1, 10],
+      lvlText: '%1.%2',
+      listNumberingType: 'decimalZero',
+    });
+    expect(doubleDigit).toBe('1.10');
+  });
+
   it('formats lower roman numerals', () => {
     const result = generateOrderedListIndex({
       listLevel: [4],

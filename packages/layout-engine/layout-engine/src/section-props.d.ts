@@ -1,8 +1,12 @@
-import type { FlowBlock } from '@superdoc/contracts';
+import type { FlowBlock, SectionVerticalAlign } from '@superdoc/contracts';
 export type SectionProps = {
   margins?: {
     header?: number;
     footer?: number;
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
   };
   pageSize?: {
     w: number;
@@ -13,6 +17,7 @@ export type SectionProps = {
     gap: number;
   };
   orientation?: 'portrait' | 'landscape';
+  vAlign?: SectionVerticalAlign;
 };
 /**
  * Pre-scan sectionBreak blocks and snapshot each DOCX-derived break (attrs.source==='sectPr')

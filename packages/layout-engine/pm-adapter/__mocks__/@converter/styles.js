@@ -1,5 +1,5 @@
 /**
- * Mock for @converter/styles.js
+ * Mock for @superdoc/converter/internal/styles.js
  * This module is part of super-editor and not available in pm-adapter tests
  *
  * @typedef {Object} ResolvedParagraphPropertiesExtended

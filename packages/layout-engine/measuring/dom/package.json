@@ -6,15 +6,18 @@
   "private": true,
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./canvas-resolver": "./src/canvas-resolver.ts"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@superdoc/contracts": "*",
-    "@superdoc/common": "*",
-    "@superdoc/geometry-utils": "*"
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/common": "workspace:*",
+    "@superdoc/font-utils": "workspace:*",
+    "@superdoc/geometry-utils": "workspace:*",
+    "@superdoc/word-layout": "workspace:*"
   }
 }

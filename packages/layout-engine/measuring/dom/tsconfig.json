@@ -4,8 +4,15 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
-    "lib": ["DOM", "ES2021"]
+    "lib": ["DOM", "ES2021"],
+    "rootDir": "src",
+    "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "../../geometry-utils/src/**/*.ts"],
-  "references": [{ "path": "../../contracts" }]
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../contracts/tsconfig.json" },
+    { "path": "../../geometry-utils/tsconfig.json" },
+    { "path": "../../../word-layout/tsconfig.json" },
+    { "path": "../../../../shared/common/tsconfig.json" }
+  ]
 }

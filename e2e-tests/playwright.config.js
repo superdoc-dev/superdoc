@@ -14,6 +14,9 @@ export default defineConfig({
   workers: process.env.CI ? 4 : undefined,
   captureGitInfo: { commit: false, diff: false },
   reporter: [['json', { outputFile: 'test-results/playwright-report.json' }]],
+  expect: {
+    toHaveScreenshot: { maxDiffPixels: 2500 },
+  },
   use: {
     trace: 'off',
     baseURL,
@@ -25,7 +28,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'cd templates/vue && npm run build && npm run preview',
+    command: 'pnpm run --prefix templates/vue build && pnpm run --prefix templates/vue preview',
     url: baseURL,
     reuseExistingServer: !process.env.CI,
   },

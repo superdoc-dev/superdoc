@@ -1,7 +1,16 @@
-import type { FlowBlock, Fragment, Layout, Measure, Page, PainterDOM, PageMargins } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  Fragment,
+  Layout,
+  Measure,
+  Page,
+  PainterDOM,
+  PageMargins,
+  PositionMapping,
+} from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
 import type { PageStyles } from './styles.js';
-import type { RulerOptions } from './renderer.js';
+import type { PaintSnapshot, RulerOptions } from './renderer.js';
 
 // Re-export constants
 export { DOM_CLASS_NAMES } from './constants.js';
@@ -25,9 +34,13 @@ export type {
   CreateRulerElementOptions,
 } from './ruler/index.js';
 export type { RulerOptions } from './renderer.js';
+export type { PaintSnapshot } from './renderer.js';
 
 // Re-export utility functions for testing
 export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
+
+export { applySquareWrapExclusionsToLines } from './utils/anchor-helpers';
+export { buildImagePmSelector, buildInlineImagePmSelector } from './utils/image-selectors.js';
 
 // Re-export PM position validation utilities
 export {
@@ -52,6 +65,8 @@ export type PageDecorationPayload = {
   contentWidth?: number;
   headerId?: string;
   sectionType?: string;
+  /** Minimum Y coordinate from layout; negative when content extends above y=0 */
+  minY?: number;
   box?: { x: number; y: number; width: number; height: number };
   hitRegion?: { x: number; y: number; width: number; height: number };
 };
@@ -67,6 +82,8 @@ export type DomPainterOptions = {
   measures: Measure[];
   pageStyles?: PageStyles;
   layoutMode?: LayoutMode;
+  /** Gap between pages in pixels (default: 24px for vertical, 20px for horizontal) */
+  pageGap?: number;
   headerProvider?: PageDecorationProvider;
   footerProvider?: PageDecorationProvider;
   /**
@@ -100,10 +117,16 @@ export const createDomPainter = (
   options: DomPainterOptions,
 ): PainterDOM & {
   setProviders?: (header?: PageDecorationProvider, footer?: PageDecorationProvider) => void;
+  setVirtualizationPins?: (pageIndices: number[] | null | undefined) => void;
+  setActiveComment?: (commentId: string | null) => void;
+  getActiveComment?: () => string | null;
+  getPaintSnapshot?: () => PaintSnapshot | null;
+  onScroll?: () => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
     pageStyles: options.pageStyles,
     layoutMode: options.layoutMode,
+    pageGap: options.pageGap,
     headerProvider: options.headerProvider,
     footerProvider: options.footerProvider,
     virtualization: options.virtualization,
@@ -111,8 +134,8 @@ export const createDomPainter = (
   });
 
   return {
-    paint(layout: Layout, mount: HTMLElement) {
-      painter.paint(layout, mount);
+    paint(layout: Layout, mount: HTMLElement, mapping?: PositionMapping) {
+      painter.paint(layout, mount, mapping);
     },
     setData(
       blocks: FlowBlock[],
@@ -127,6 +150,22 @@ export const createDomPainter = (
     // Non-standard extension for demo app to avoid re-instantiating on provider changes
     setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider) {
       painter.setProviders(header, footer);
+    },
+    setVirtualizationPins(pageIndices: number[] | null | undefined) {
+      painter.setVirtualizationPins(pageIndices);
+    },
+    setActiveComment(commentId: string | null) {
+      painter.setActiveComment(commentId);
+    },
+    getActiveComment() {
+      return painter.getActiveComment();
+    },
+    getPaintSnapshot() {
+      return painter.getPaintSnapshot();
+    },
+    // Trigger virtualization update when scroll container is external to the painter
+    onScroll() {
+      painter.onScroll();
     },
   };
 };

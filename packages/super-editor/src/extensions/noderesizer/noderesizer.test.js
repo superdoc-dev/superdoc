@@ -204,4 +204,80 @@ describe('NodeResizer extension', () => {
     const decorations = plugin.getState(nextState);
     expect(decorations.find()).toHaveLength(0);
   });
+
+  it('should not create resize decorations for watermark images (vmlWatermark: true)', () => {
+    const editor = {
+      options: { isHeadless: false, documentMode: 'editing' },
+      isEditable: true,
+    };
+    const [plugin] = NodeResizer.config.addPmPlugins.call({ editor });
+
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        text: { group: 'inline' },
+        image: {
+          group: 'block',
+          inline: false,
+          selectable: true,
+          draggable: true,
+          attrs: {
+            size: { default: { width: 120, height: 60 } },
+            vmlWatermark: { default: false },
+          },
+          toDOM: (node) => ['img', { 'data-width': node.attrs.size.width }],
+          parseDOM: [{ tag: 'img', getAttrs: () => ({}) }],
+        },
+      },
+    });
+
+    // Create a watermark image node
+    const watermarkNode = schema.nodes.image.create({ vmlWatermark: true });
+    const doc = schema.node('doc', null, [watermarkNode]);
+    const state = EditorState.create({ schema, doc, plugins: [plugin] });
+
+    const selection = NodeSelection.create(doc, 0);
+    const nextState = state.apply(state.tr.setSelection(selection));
+
+    const decorations = plugin.getState(nextState);
+    expect(decorations.find()).toHaveLength(0);
+  });
+
+  it('should create resize decorations for regular images (vmlWatermark: false or undefined)', () => {
+    const editor = {
+      options: { isHeadless: false, documentMode: 'editing' },
+      isEditable: true,
+    };
+    const [plugin] = NodeResizer.config.addPmPlugins.call({ editor });
+
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        text: { group: 'inline' },
+        image: {
+          group: 'block',
+          inline: false,
+          selectable: true,
+          draggable: true,
+          attrs: {
+            size: { default: { width: 120, height: 60 } },
+            vmlWatermark: { default: false },
+          },
+          toDOM: (node) => ['img', { 'data-width': node.attrs.size.width }],
+          parseDOM: [{ tag: 'img', getAttrs: () => ({}) }],
+        },
+      },
+    });
+
+    // Create a regular image node (not a watermark)
+    const regularNode = schema.nodes.image.create({ vmlWatermark: false });
+    const doc = schema.node('doc', null, [regularNode]);
+    const state = EditorState.create({ schema, doc, plugins: [plugin] });
+
+    const selection = NodeSelection.create(doc, 0);
+    const nextState = state.apply(state.tr.setSelection(selection));
+
+    const decorations = plugin.getState(nextState);
+    expect(decorations.find()).toHaveLength(1);
+  });
 });

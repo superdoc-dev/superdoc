@@ -111,29 +111,48 @@ export interface CalculateTabWidthResult {
 export function computeTabStops(context: TabContext): TabStop[] {
   const { explicitStops, defaultTabInterval, paragraphIndent } = context;
   const leftIndent = paragraphIndent.left ?? 0;
+  const hanging = paragraphIndent.hanging ?? 0;
+
+  // With a hanging indent, the first line starts at (leftIndent - hanging).
+  // EXPLICIT tab stops between this effective position and leftIndent are valid for the first line
+  // (the document author deliberately placed them there for hanging indent scenarios).
+  // DEFAULT tab stops should still respect leftIndent (they're for regular body text alignment).
+  const effectiveMinIndent = Math.max(0, leftIndent - hanging);
 
   // Extract cleared positions before filtering (OOXML: clear tabs suppress default stops)
   const clearPositions = explicitStops.filter((stop) => stop.val === 'clear').map((stop) => stop.pos);
 
-  // Start with explicit stops (filter out 'clear' tabs - they remove default stops)
-  const stops = explicitStops.filter((stop) => stop.val !== 'clear');
+  // Filter explicit stops: keep those >= effectiveMinIndent (supports hanging indent first lines)
+  const filteredExplicitStops = explicitStops
+    .filter((stop) => stop.val !== 'clear')
+    .filter((stop) => stop.pos >= effectiveMinIndent);
 
-  // Find the rightmost explicit stop
-  const maxExplicit = stops.reduce((max, stop) => Math.max(max, stop.pos), 0);
-  const hasExplicit = stops.length > 0;
-  const defaultStart = hasExplicit ? Math.max(maxExplicit, leftIndent ?? 0) : 0;
+  // Find the rightmost explicit stop (use original stops for this calculation)
+  const maxExplicit = filteredExplicitStops.reduce((max, stop) => Math.max(max, stop.pos), 0);
+  const hasExplicit = filteredExplicitStops.length > 0;
 
-  // Add default stops beyond the explicit range (if any)
-  let pos = hasExplicit ? defaultStart : 0;
-  const targetLimit = Math.max(defaultStart, leftIndent ?? 0) + 14400; // 14400 twips = 10 inches
+  // Collect all stops: start with filtered explicit stops
+  const stops = [...filteredExplicitStops];
+
+  // Generate default stops at regular intervals.
+  // When explicit stops exist, start after the rightmost explicit or leftIndent.
+  // When no explicit stops, generate from 0 to ensure we hit multiples that land at/near leftIndent.
+  // Then filter defaults by leftIndent (body text alignment).
+  const defaultStart = hasExplicit ? Math.max(maxExplicit, leftIndent) : 0;
+  let pos = defaultStart;
+  const targetLimit = Math.max(defaultStart, leftIndent) + 14400; // 14400 twips = 10 inches
+
   while (pos < targetLimit) {
     pos += defaultTabInterval;
 
     // Don't add if there's already an explicit stop OR a cleared position at this position
-    const hasExplicitStop = stops.some((s) => Math.abs(s.pos - pos) < 20);
+    const hasExplicitStop = filteredExplicitStops.some((s) => Math.abs(s.pos - pos) < 20);
     const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < 20);
 
-    if (!hasExplicitStop && !hasClearStop) {
+    // Default stops must be >= leftIndent (for body text alignment)
+    const isValidDefault = pos >= leftIndent;
+
+    if (!hasExplicitStop && !hasClearStop && isValidDefault) {
       stops.push({
         val: 'start',
         pos,
@@ -142,8 +161,8 @@ export function computeTabStops(context: TabContext): TabStop[] {
     }
   }
 
-  // Filter out stops before the left indent and sort
-  return stops.filter((stop) => stop.pos >= leftIndent).sort((a, b) => a.pos - b.pos);
+  // Sort by position
+  return stops.sort((a, b) => a.pos - b.pos);
 }
 
 /**

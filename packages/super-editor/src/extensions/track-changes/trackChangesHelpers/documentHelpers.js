@@ -9,6 +9,9 @@ export const findMarkPosition = (doc, pos, markName) => {
   }
 
   const actualMark = start.node.marks.find((mark) => mark.type.name === markName);
+  if (!actualMark) {
+    return null;
+  }
 
   let startIndex = $pos.index();
   let startPos = $pos.start() + start.offset;

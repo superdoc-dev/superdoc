@@ -88,7 +88,7 @@ const resolveChanges = (editor) => {
  * Determine whether a tracked-change action is allowed for the given editor context.
  *
  * @param {Object} params
- * @param {import('@harbour-enterprises/super-editor').Editor} params.editor
+ * @param {import('../../core/Editor.ts').Editor} params.editor
  * @param {'accept'|'reject'} params.action
  * @param {Array<Object>} params.trackedChanges
  * @returns {boolean}

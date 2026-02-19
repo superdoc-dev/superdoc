@@ -38,14 +38,8 @@ export const handleParagraphNode = (params) => {
   }
 
   // Resolve paragraph properties according to styles hierarchy
-  const insideTable = (params.path || []).some((ancestor) => ancestor.name === 'w:tc');
   const tableStyleId = getTableStyleId(params.path || []);
-  const resolvedParagraphProperties = resolveParagraphProperties(
-    params,
-    inlineParagraphProperties,
-    insideTable,
-    tableStyleId,
-  );
+  const resolvedParagraphProperties = resolveParagraphProperties(params, inlineParagraphProperties, { tableStyleId });
 
   const { elements = [], attributes = {}, marks = [] } = parseProperties(node, params.docx);
   const childContent = [];
@@ -59,7 +53,11 @@ export const handleParagraphNode = (params) => {
     const childParams = {
       ...params,
       nodes: updatedElements,
-      extraParams: { ...params.extraParams, paragraphProperties: resolvedParagraphProperties },
+      extraParams: {
+        ...params.extraParams,
+        paragraphProperties: resolvedParagraphProperties,
+        numberingDefinedInline: Boolean(inlineParagraphProperties.numberingProperties),
+      },
       path: [...(params.path || []), node],
     };
     const translatedChildren = nodeListHandler.handler(childParams);

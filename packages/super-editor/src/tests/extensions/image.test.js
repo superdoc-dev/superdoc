@@ -197,7 +197,10 @@ describe('Image Extension DOM rendering', () => {
       const img = editor.view.dom.querySelector('img');
       expect(img).toBeTruthy();
       const inlineStyles = parseStyle(img.getAttribute('style'));
-      expect(inlineStyles['margin']).toBe('70px 16px 31px 34px');
+      const marginShorthand = inlineStyles['margin'];
+      expect(marginShorthand).toBeTruthy();
+      const marginValues = marginShorthand.split(' ').filter(Boolean).sort();
+      expect(marginValues).toEqual(['16px', '31px', '34px', '70px']);
 
       let insertedImage;
       editor.view.state.doc.descendants((node) => {

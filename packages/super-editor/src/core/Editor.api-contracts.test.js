@@ -174,5 +174,17 @@ describe('Editor - API Contracts (Regression Prevention)', () => {
       expect(editor.replaceNodeWithHTML).toBeDefined();
       expect(typeof editor.replaceNodeWithHTML).toBe('function');
     });
+
+    it('editor.doc getter exposes DocumentApi with find and capabilities', () => {
+      ({ editor } = initTestEditor({
+        mode: 'text',
+        content: '<p>Test</p>',
+      }));
+
+      const doc = editor.doc;
+      expect(doc).toBeDefined();
+      expect(typeof doc.find).toBe('function');
+      expect(typeof doc.capabilities).toBe('function');
+    });
   });
 });

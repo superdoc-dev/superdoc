@@ -1,0 +1,136 @@
+---
+title: Text Indent
+sidebarTitle: "Text Indent"
+keywords: "text indent, superdoc text indent, word text indent, document indentation, docx indent"
+---
+
+import Description from '/snippets/extensions/text-indent.mdx'
+
+<Description />
+
+## Commands
+
+### `setTextIndentation`
+
+Set text indentation in points.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+// Set to 72 points (1 inch)
+editor.commands.setTextIndentation(72)
+
+// Set to 36 points (0.5 inch)
+editor.commands.setTextIndentation(36)
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Set to 72 points (1 inch)
+    editor.commands.setTextIndentation(72)
+
+    // Set to 36 points (0.5 inch)
+    editor.commands.setTextIndentation(36)
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="points" type="number" required>
+  Indentation value in points
+</ParamField>
+
+### `unsetTextIndentation`
+
+Remove text indentation from selected paragraphs.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.unsetTextIndentation()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetTextIndentation()
+  },
+});
+```
+</CodeGroup>
+
+### `increaseTextIndent`
+
+Increase text indentation by 36 points (0.5 inch).
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.increaseTextIndent()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.increaseTextIndent()
+  },
+});
+```
+</CodeGroup>
+
+### `decreaseTextIndent`
+
+Decrease text indentation by 36 points. Removes indentation completely if it reaches 0 or below.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.decreaseTextIndent()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.decreaseTextIndent()
+  },
+});
+```
+</CodeGroup>
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/core/commands/textIndent.js" />

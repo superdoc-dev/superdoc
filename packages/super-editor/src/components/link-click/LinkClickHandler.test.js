@@ -245,6 +245,9 @@ describe('LinkClickHandler', () => {
   });
 
   it('should handle missing editor gracefully', async () => {
+    // Suppress Vue prop validation warning for this intentional null test
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     const wrapper = mount(LinkClickHandler, {
       props: {
         editor: null,
@@ -258,6 +261,8 @@ describe('LinkClickHandler', () => {
 
     // getEditorSurfaceElement may or may not be called depending on early return logic
     // The important thing is it doesn't crash
+
+    warnSpy.mockRestore();
   });
 
   it('should handle missing surface element gracefully', async () => {

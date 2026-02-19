@@ -68,7 +68,6 @@ describe('w:tcPr translator', () => {
               { name: 'w:cnfStyle', attributes: {} },
               { name: 'w:tcW', attributes: {} },
               { name: 'w:gridSpan', attributes: {} },
-              { name: 'w:vMerge', attributes: {} },
               { name: 'w:tcBorders', elements: [] },
               { name: 'w:shd', attributes: {} },
               { name: 'w:tcMar', elements: [] },
@@ -85,7 +84,6 @@ describe('w:tcPr translator', () => {
       expect(attributes.cnfStyle).toBeUndefined();
       expect(attributes.cellWidth).toBeUndefined();
       expect(attributes.gridSpan).toBeUndefined();
-      expect(attributes.vMerge).toBeUndefined();
       expect(attributes.borders).toBeUndefined();
       expect(attributes.shading).toBeUndefined();
       expect(attributes.noWrap).toBeUndefined();

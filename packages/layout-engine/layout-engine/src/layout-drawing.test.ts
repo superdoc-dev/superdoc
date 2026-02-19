@@ -3,6 +3,7 @@ import { layoutDrawingBlock } from './layout-drawing.js';
 import type { DrawingBlock, DrawingMeasure, DrawingFragment, DrawingGeometry } from '@superdoc/contracts';
 import type { DrawingLayoutContext } from './layout-drawing.js';
 import type { NormalizedColumns } from './layout-image.js';
+import type { PageState } from './paginator.js';
 
 /**
  * Unit tests for layoutDrawingBlock function.
@@ -26,17 +27,19 @@ describe('layoutDrawingBlock', () => {
     ...overrides,
   });
 
-  const createMockDrawingBlock = (overrides: Partial<DrawingBlock> = {}): DrawingBlock => ({
-    kind: 'drawing',
-    id: 'test-drawing-1',
-    drawingKind: 'vectorShape',
-    geometry: createMockGeometry(),
-    attrs: {
-      pmStart: 10,
-      pmEnd: 11,
-    },
-    ...overrides,
-  });
+  const createMockDrawingBlock = (overrides: Partial<DrawingBlock> = {}): DrawingBlock => {
+    const base = {
+      kind: 'drawing' as const,
+      id: 'test-drawing-1',
+      drawingKind: 'vectorShape' as const,
+      geometry: createMockGeometry(),
+      attrs: {
+        pmStart: 10,
+        pmEnd: 11,
+      },
+    };
+    return { ...base, ...overrides } as DrawingBlock;
+  };
 
   const createMockMeasure = (overrides: Partial<DrawingMeasure> = {}): DrawingMeasure => ({
     kind: 'drawing',
@@ -56,6 +59,9 @@ describe('layoutDrawingBlock', () => {
     cursorY: number;
     topMargin: number;
     contentBottom: number;
+    constraintBoundaries: [];
+    activeConstraintIndex: number;
+    trailingSpacing: number;
   };
 
   const createMockPageState = (overrides: Record<string, unknown> = {}): MockPageState =>
@@ -67,6 +73,9 @@ describe('layoutDrawingBlock', () => {
       cursorY: 100,
       topMargin: 50,
       contentBottom: 750,
+      constraintBoundaries: [],
+      activeConstraintIndex: -1,
+      trailingSpacing: 0,
       ...overrides,
     }) as MockPageState;
 
@@ -80,12 +89,13 @@ describe('layoutDrawingBlock', () => {
       block: createMockDrawingBlock(blockOverrides),
       measure: createMockMeasure(measureOverrides),
       columns: mockColumns,
-      ensurePage: () => state,
-      advanceColumn: (currentState: MockPageState): MockPageState => ({
-        ...currentState,
-        columnIndex: currentState.columnIndex + 1,
-        cursorY: currentState.topMargin,
-      }),
+      ensurePage: () => state as unknown as PageState,
+      advanceColumn: (currentState: PageState): PageState =>
+        ({
+          ...currentState,
+          columnIndex: currentState.columnIndex + 1,
+          cursorY: currentState.topMargin,
+        }) as unknown as PageState,
       columnX: (columnIndex: number) => columnIndex * (mockColumns.width + mockColumns.gap),
     };
   };
@@ -136,7 +146,7 @@ describe('layoutDrawingBlock', () => {
       layoutDrawingBlock(context);
 
       expect(state.page.fragments.length).toBe(1);
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.kind).toBe('drawing');
       expect(fragment.x).toBe(0); // columnX(0) + marginLeft(0)
       expect(fragment.y).toBe(100); // cursorY(100) + marginTop(0)
@@ -160,7 +170,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.geometry).toEqual(geometry);
       expect(fragment.scale).toBe(2.5);
     });
@@ -174,7 +184,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.drawingContentId).toBe('content-abc-123');
       expect(fragment.zIndex).toBe(42);
     });
@@ -190,7 +200,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       const expectedScale = 600 / 800; // maxWidth / width
       expect(fragment.width).toBe(600); // Scaled to column width
       expect(fragment.height).toBe(600 * expectedScale); // Height scaled proportionally (450)
@@ -209,7 +219,7 @@ describe('layoutDrawingBlock', () => {
 
       const maxWidth = 600 - 50 - 50; // 500
       const expectedScale = maxWidth / 600; // 500/600
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(maxWidth); // 500
       expect(fragment.height).toBe(300 * expectedScale); // 250
     });
@@ -220,7 +230,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(600);
       expect(fragment.height).toBe(400); // No scaling
     });
@@ -231,7 +241,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(100); // Keep original size
       expect(fragment.height).toBe(80);
     });
@@ -247,7 +257,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       // With maxWidth = 0, should not scale
       expect(fragment.width).toBe(200);
       expect(fragment.height).toBe(150);
@@ -267,7 +277,7 @@ describe('layoutDrawingBlock', () => {
 
       const pageContentHeight = 750 - 50; // 700
       const expectedScale = pageContentHeight / 800; // 0.875
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.height).toBe(pageContentHeight); // 700
       expect(fragment.width).toBe(400 * expectedScale); // 350
     });
@@ -292,7 +302,7 @@ describe('layoutDrawingBlock', () => {
       // Second: height scaling (675 -> 700, but 675 < 700 so no height scaling needed)
       // Actually height after width scaling is 675, which is less than 700, so no additional scaling
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(600);
       expect(fragment.height).toBe(675);
     });
@@ -317,7 +327,7 @@ describe('layoutDrawingBlock', () => {
       _height = 500;
       _width = _width * heightScale; // ~389
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.height).toBe(500);
       expect(fragment.width).toBeCloseTo(389, 0);
     });
@@ -332,7 +342,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       // With pageContentHeight = 0, should not scale
       expect(fragment.width).toBe(200);
       expect(fragment.height).toBe(300);
@@ -348,15 +358,15 @@ describe('layoutDrawingBlock', () => {
         block: createMockDrawingBlock(),
         measure: createMockMeasure({ width: 200, height: 200 }),
         columns: mockColumns,
-        ensurePage: () => stateRef,
-        advanceColumn: (state: MockPageState): MockPageState => {
+        ensurePage: () => stateRef as unknown as PageState,
+        advanceColumn: (state: PageState): PageState => {
           advanceColumnCalled.push(true);
           stateRef = {
-            ...state,
-            columnIndex: state.columnIndex + 1,
-            cursorY: state.topMargin,
+            ...stateRef,
+            columnIndex: stateRef.columnIndex + 1,
+            cursorY: stateRef.topMargin,
           };
-          return stateRef;
+          return stateRef as unknown as PageState;
         },
         columnX: (columnIndex: number) => columnIndex * (mockColumns.width + mockColumns.gap),
       };
@@ -376,7 +386,7 @@ describe('layoutDrawingBlock', () => {
         { cursorY: 100, topMargin: 50, contentBottom: 750 },
       );
 
-      context.advanceColumn = (state: MockPageState): MockPageState => {
+      context.advanceColumn = (state: PageState): PageState => {
         advanceColumnCalled.push(true);
         return state;
       };
@@ -396,7 +406,7 @@ describe('layoutDrawingBlock', () => {
         { cursorY: 50, topMargin: 50, contentBottom: 750 },
       );
 
-      context.advanceColumn = (state: MockPageState): MockPageState => {
+      context.advanceColumn = (state: PageState): PageState => {
         advanceColumnCalled.push(true);
         return state;
       };
@@ -416,13 +426,13 @@ describe('layoutDrawingBlock', () => {
         { cursorY: 680, topMargin: 50, contentBottom: 750 },
       );
 
-      context.advanceColumn = (state: MockPageState): MockPageState => {
+      context.advanceColumn = (state: PageState): PageState => {
         advanceColumnCalled.push(true);
         return {
           ...state,
           columnIndex: 1,
           cursorY: state.topMargin,
-        };
+        } as PageState;
       };
 
       context.ensurePage();
@@ -443,7 +453,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.y).toBe(125); // cursorY(100) + marginTop(25)
     });
 
@@ -469,7 +479,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.x).toBe(40); // columnX(0) + marginLeft(40)
     });
 
@@ -486,7 +496,7 @@ describe('layoutDrawingBlock', () => {
 
       const maxWidth = 600 - 0 - 100; // 500
       const expectedScale = maxWidth / 550;
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(maxWidth);
       expect(fragment.height).toBe(200 * expectedScale);
     });
@@ -502,7 +512,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.x).toBe(30); // columnX(0) + marginLeft(30)
       expect(fragment.y).toBe(110); // cursorY(100) + marginTop(10)
       expect(state.cursorY).toBe(230); // 100 + 10 + 100 + 20
@@ -518,7 +528,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.y).toBe(100); // cursorY(100) + Math.max(0, -50) = 100
     });
 
@@ -544,7 +554,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.x).toBe(0); // columnX(0) + Math.max(0, -40)
     });
 
@@ -561,7 +571,7 @@ describe('layoutDrawingBlock', () => {
 
       const maxWidth = 600 - 0 - 0; // Negative margin clamped to 0
       const expectedScale = maxWidth / 650;
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(maxWidth);
       expect(fragment.height).toBe(200 * expectedScale);
     });
@@ -577,7 +587,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.x).toBe(0);
       expect(fragment.y).toBe(100);
       expect(fragment.width).toBe(200); // No scaling needed
@@ -595,7 +605,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.blockId).toBe('drawing-block-789');
       expect(fragment.drawingKind).toBe('shapeGroup');
     });
@@ -611,7 +621,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.pmStart).toBe(42);
       expect(fragment.pmEnd).toBe(43);
     });
@@ -626,7 +636,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.pmStart).toBe(100);
       expect(fragment.pmEnd).toBe(101); // pmStart + 1
     });
@@ -639,7 +649,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.pmStart).toBeUndefined();
       expect(fragment.pmEnd).toBeUndefined();
     });
@@ -655,7 +665,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.pmStart).toBeUndefined();
       // pmEnd is a valid number (50), so it should be preserved
       expect(fragment.pmEnd).toBe(50);
@@ -678,7 +688,7 @@ describe('layoutDrawingBlock', () => {
       const state = context.ensurePage();
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.x).toBe(1240); // columnX(2) = 2 * 620
     });
   });
@@ -690,7 +700,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(0);
       expect(fragment.height).toBe(100);
     });
@@ -701,7 +711,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(200);
       expect(fragment.height).toBe(0);
       expect(state.cursorY).toBe(100); // Cursor should not move
@@ -713,7 +723,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(0);
       expect(fragment.height).toBe(0);
     });
@@ -726,7 +736,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.x).toBe(0);
       expect(fragment.y).toBe(100);
       expect(state.cursorY).toBe(250); // 100 + 0 + 150 + 0
@@ -740,7 +750,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.x).toBe(10);
       expect(fragment.y).toBe(100); // No top margin
     });
@@ -751,7 +761,7 @@ describe('layoutDrawingBlock', () => {
 
       layoutDrawingBlock(context);
 
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       // Should scale to fit both width (600) and height (700) constraints
       expect(fragment.width).toBeLessThanOrEqual(600);
       expect(fragment.height).toBeLessThanOrEqual(700);
@@ -764,7 +774,7 @@ describe('layoutDrawingBlock', () => {
       layoutDrawingBlock(context);
 
       const expectedScale = 600 / 700;
-      const fragment = state.page.fragments[0];
+      const fragment = state.page.fragments[0] as DrawingFragment;
       expect(fragment.width).toBe(600);
       expect(fragment.height).toBeCloseTo(333 * expectedScale, 10); // Allow floating point precision
     });

@@ -150,8 +150,19 @@ export function findParagraphContext($pos, cache, helpers) {
   return null;
 }
 
+/**
+ * Extract paragraph context for tab layout calculations.
+ *
+ * @param {import('prosemirror-model').Node} node - The paragraph node
+ * @param {number} startPos - Document position where the paragraph starts
+ * @param {any} helpers - Helper functions for document operations
+ * @param {number} [depth=0] - Nesting depth of the paragraph
+ * @returns {Object} Paragraph context with tabStops, indent, and flattened content
+ */
 export function extractParagraphContext(node, startPos, helpers, depth = 0) {
-  const paragraphProperties = getResolvedParagraphProperties(node);
+  // Prefer resolved props from style resolution; fall back to raw attrs so
+  // indent/tabStops are available before full resolution completes
+  const paragraphProperties = getResolvedParagraphProperties(node) ?? node.attrs?.paragraphProperties ?? {};
   // Map OOXML alignment values to internal values (for RTL support)
   const alignmentAliases = { left: 'start', right: 'end' };
   let tabStops = [];
@@ -160,6 +171,13 @@ export function extractParagraphContext(node, startPos, helpers, depth = 0) {
     tabStops = paragraphProperties.tabStops
       .map((stop) => {
         const ref = stop?.tab;
+        // Handle pre-processed stops (from createLayoutRequest) that already have pos in twips
+        if (!ref && stop?.pos != null) {
+          return {
+            ...stop,
+            pos: twipsToPixels(Number(stop.pos) || 0),
+          };
+        }
         if (!ref) return stop || null;
         const rawType = ref.tabType || 'start';
         const mappedVal = alignmentAliases[rawType] || rawType;
@@ -247,13 +265,18 @@ export function measureRangeWidth(view, from, to, coordCache = null, domPosCache
     range.setEnd(toRef.node, toRef.offset);
     const rect = range.getBoundingClientRect();
     range.detach?.();
-    return rect.width || 0;
+    // If getBoundingClientRect returns 0 (e.g., HappyDOM), fall back to coordsAtPos
+    if (rect.width > 0) {
+      return rect.width;
+    }
   } catch {
-    const startLeft = getLeftCoord(view, from, coordCache, domPosCache);
-    const endLeft = getLeftCoord(view, to, coordCache, domPosCache);
-    if (startLeft == null || endLeft == null) return 0;
-    return Math.max(0, endLeft - startLeft);
+    // Fall through to coordsAtPos fallback
   }
+  // Fallback: use view.coordsAtPos difference (works in test mocks and when Range fails)
+  const startLeft = getLeftCoord(view, from, coordCache, domPosCache);
+  const endLeft = getLeftCoord(view, to, coordCache, domPosCache);
+  if (startLeft == null || endLeft == null) return 0;
+  return Math.max(0, endLeft - startLeft);
 }
 
 export function getIndentWidth(view, paragraphStartPos, indentAttrs = {}, coordCache = null, domPosCache = null) {

@@ -1,1 +1,1 @@
-export function canRenderFont(...args: any[]): boolean;
+export function canRenderFont(fontName: string, uiDisplayFallbackFont?: string): boolean;

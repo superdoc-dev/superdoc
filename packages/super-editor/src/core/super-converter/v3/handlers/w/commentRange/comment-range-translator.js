@@ -28,8 +28,11 @@ const decode = (params) => {
 
   const commentNodeId = node.attrs['w:id'];
 
+  // Use String() for consistent comparison since commentNodeId comes from XML (string)
+  // while commentId/importedId may be UUID strings or numeric IDs
+  const nodeIdStr = String(commentNodeId);
   const originalComment = comments.find((comment) => {
-    return comment.commentId == commentNodeId;
+    return String(comment.commentId) === nodeIdStr || String(comment.importedId) === nodeIdStr;
   });
   if (!originalComment) return;
 
@@ -39,9 +42,6 @@ const decode = (params) => {
   );
   const isInternal = parentComment?.isInternal || originalComment.isInternal;
   if (commentsExportType === 'external' && isInternal) return;
-
-  const isResolved = !!originalComment.resolvedTime;
-  if (isResolved) return;
 
   if (node.type !== 'commentRangeStart' && node.type !== 'commentRangeEnd') {
     return;
@@ -58,7 +58,51 @@ const decode = (params) => {
     commentSchema = [commentSchema, commentReference];
   }
 
-  return commentSchema;
+  const usesRangeThreading =
+    originalComment.threadingStyleOverride === 'range-based' ||
+    originalComment.threadingMethod === 'range-based' ||
+    originalComment.originalXmlStructure?.hasCommentsExtended === false;
+
+  if (!usesRangeThreading) {
+    return commentSchema;
+  }
+
+  // Note: Comment range nodes may have trackInsert/trackDelete marks attached
+  // from prepareCommentsForExport(), but we should NOT wrap them in their own
+  // <w:ins>/<w:del> elements. The ECMA-376 spec allows comment markers inside
+  // tracked change elements, so they should be output as bare markers and will
+  // naturally sit inside or around the tracked change wrapper for the text content.
+  // See SD-1519 for details.
+
+  if (!parentComment?.trackedChange) {
+    return commentSchema;
+  }
+
+  const trackedChangeType = parentComment.trackedChangeType;
+  const isReplace = trackedChangeType === 'both';
+  const wrapperName =
+    type === 'commentRangeStart'
+      ? 'w:ins'
+      : isReplace
+        ? 'w:del'
+        : trackedChangeType === 'trackDelete'
+          ? 'w:del'
+          : 'w:ins';
+
+  const createdTime = parentComment.createdTime || Date.now();
+  const date = new Date(createdTime).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const wrapperAttributes = {
+    'w:id': String(parentComment.commentId),
+    ...(parentComment.creatorName ? { 'w:author': parentComment.creatorName } : {}),
+    ...(parentComment.creatorEmail ? { 'w:authorEmail': parentComment.creatorEmail } : {}),
+    'w:date': date,
+  };
+
+  return {
+    name: wrapperName,
+    attributes: wrapperAttributes,
+    elements: Array.isArray(commentSchema) ? commentSchema : [commentSchema],
+  };
 };
 
 /**

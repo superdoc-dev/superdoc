@@ -26,8 +26,8 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 5, 10);
 
     expect(wasModified).toBe(true);
-    expect(block.runs[0].text).toBe('5');
-    expect(block.runs[0].token).toBeUndefined();
+    expect((block.runs[0] as { text?: string }).text).toBe('5');
+    expect((block.runs[0] as { token?: string }).token).toBeUndefined();
   });
 
   it('should resolve totalPageCount token with correct total', () => {
@@ -47,8 +47,8 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 3, 99);
 
     expect(wasModified).toBe(true);
-    expect(block.runs[0].text).toBe('99');
-    expect(block.runs[0].token).toBeUndefined();
+    expect((block.runs[0] as { text?: string }).text).toBe('99');
+    expect((block.runs[0] as { token?: string }).token).toBeUndefined();
   });
 
   it('should resolve multiple tokens in the same block', () => {
@@ -84,12 +84,12 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 7, 25);
 
     expect(wasModified).toBe(true);
-    expect(block.runs[0].text).toBe('Page ');
-    expect(block.runs[1].text).toBe('7');
-    expect(block.runs[1].token).toBeUndefined();
-    expect(block.runs[2].text).toBe(' of ');
-    expect(block.runs[3].text).toBe('25');
-    expect(block.runs[3].token).toBeUndefined();
+    expect((block.runs[0] as { text?: string }).text).toBe('Page ');
+    expect((block.runs[1] as { text?: string }).text).toBe('7');
+    expect((block.runs[1] as { token?: string }).token).toBeUndefined();
+    expect((block.runs[2] as { text?: string }).text).toBe(' of ');
+    expect((block.runs[3] as { text?: string }).text).toBe('25');
+    expect((block.runs[3] as { token?: string }).token).toBeUndefined();
   });
 
   it('should not modify block without tokens', () => {
@@ -108,7 +108,7 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 1, 10);
 
     expect(wasModified).toBe(false);
-    expect(block.runs[0].text).toBe('Regular text');
+    expect((block.runs[0] as { text?: string }).text).toBe('Regular text');
   });
 
   it('should handle empty runs array', () => {
@@ -141,7 +141,7 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 0, 10);
 
     expect(wasModified).toBe(true);
-    expect(block.runs[0].text).toBe('1'); // Should fallback to 1
+    expect((block.runs[0] as { text?: string }).text).toBe('1'); // Should fallback to 1
   });
 
   it('should handle invalid total pages (use fallback)', () => {
@@ -162,7 +162,7 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 1, -5);
 
     expect(wasModified).toBe(true);
-    expect(block.runs[0].text).toBe('1'); // Should fallback to 1
+    expect((block.runs[0] as { text?: string }).text).toBe('1'); // Should fallback to 1
   });
 
   it('should handle tab runs mixed with text runs', () => {
@@ -191,10 +191,10 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 3, 10);
 
     expect(wasModified).toBe(true);
-    expect(block.runs[0].text).toBe('Page ');
-    expect(block.runs[1].text).toBe('\t');
-    expect(block.runs[2].text).toBe('3');
-    expect(block.runs[2].token).toBeUndefined();
+    expect((block.runs[0] as { text?: string }).text).toBe('Page ');
+    expect((block.runs[1] as { text?: string }).text).toBe('\t');
+    expect((block.runs[2] as { text?: string }).text).toBe('3');
+    expect((block.runs[2] as { token?: string }).token).toBeUndefined();
   });
 
   it('should not resolve pageReference tokens (handled separately)', () => {
@@ -219,8 +219,8 @@ describe('resolveTokensInBlock', () => {
 
     // pageReference tokens should not be touched by this function
     expect(wasModified).toBe(false);
-    expect(block.runs[0].text).toBe('0');
-    expect(block.runs[0].token).toBe('pageReference');
+    expect((block.runs[0] as { text?: string }).text).toBe('0');
+    expect((block.runs[0] as { token?: string }).token).toBe('pageReference');
   });
 
   it('should handle large page numbers', () => {
@@ -240,7 +240,7 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 999, 1000);
 
     expect(wasModified).toBe(true);
-    expect(block.runs[0].text).toBe('999');
+    expect((block.runs[0] as { text?: string }).text).toBe('999');
   });
 
   it('should preserve run properties when resolving tokens', () => {
@@ -265,15 +265,15 @@ describe('resolveTokensInBlock', () => {
     const wasModified = resolveTokensInBlock(block, 2, 5);
 
     expect(wasModified).toBe(true);
-    expect(block.runs[0].text).toBe('2');
-    expect(block.runs[0].token).toBeUndefined();
+    expect((block.runs[0] as { text?: string }).text).toBe('2');
+    expect((block.runs[0] as { token?: string }).token).toBeUndefined();
     // Verify other properties are preserved
-    expect(block.runs[0].fontFamily).toBe('Times New Roman');
-    expect(block.runs[0].fontSize).toBe(14);
-    expect(block.runs[0].bold).toBe(true);
-    expect(block.runs[0].italic).toBe(true);
-    expect(block.runs[0].color).toBe('#FF0000');
-    expect(block.runs[0].pmStart).toBe(10);
-    expect(block.runs[0].pmEnd).toBe(11);
+    expect((block.runs[0] as { fontFamily?: string }).fontFamily).toBe('Times New Roman');
+    expect((block.runs[0] as { fontSize?: number }).fontSize).toBe(14);
+    expect((block.runs[0] as { bold?: boolean }).bold).toBe(true);
+    expect((block.runs[0] as { italic?: boolean }).italic).toBe(true);
+    expect((block.runs[0] as { color?: string }).color).toBe('#FF0000');
+    expect((block.runs[0] as { pmStart?: number }).pmStart).toBe(10);
+    expect((block.runs[0] as { pmEnd?: number }).pmEnd).toBe(11);
   });
 });

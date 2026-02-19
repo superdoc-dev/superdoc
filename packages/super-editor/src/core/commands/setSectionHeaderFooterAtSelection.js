@@ -34,7 +34,7 @@ function findNearestParagraphWithSectPr(doc, pos) {
  */
 export const setSectionHeaderFooterAtSelection =
   ({ headerInches, footerInches } = {}) =>
-  ({ state, editor }) => {
+  ({ tr, state, editor }) => {
     if (!state || !editor) {
       console.warn('[setSectionHeaderFooterAtSelection] Missing state or editor');
       return false;
@@ -101,7 +101,6 @@ export const setSectionHeaderFooterAtSelection =
       sectionMargins: normalizedMargins,
     };
 
-    const tr = state.tr.setNodeMarkup(pos, undefined, nextAttrs, node.marks);
-    editor.view.dispatch(tr);
+    tr.setNodeMarkup(pos, undefined, nextAttrs, node.marks);
     return true;
   };

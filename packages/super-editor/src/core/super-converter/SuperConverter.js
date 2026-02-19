@@ -1,9 +1,9 @@
-import xmljs from 'xml-js';
+/* global TextEncoder */
+import * as xmljs from 'xml-js';
 import { v4 as uuidv4 } from 'uuid';
-import crc32 from 'buffer-crc32';
 import { DocxExporter, exportSchemaToJson } from './exporter';
 import { createDocumentJson, addDefaultStylesIfMissing } from './v2/importer/docxImporter.js';
-import { deobfuscateFont, getArrayBufferFromUrl } from './helpers.js';
+import { deobfuscateFont, getArrayBufferFromUrl, computeCrc32Hex } from './helpers.js';
 import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';
 import { DEFAULT_CUSTOM_XML, DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
 import {
@@ -11,6 +11,7 @@ import {
   prepareCommentParaIds,
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
+import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 
@@ -184,7 +185,10 @@ class SuperConverter {
 
     this.addedMedia = {};
     this.comments = [];
+    this.footnotes = [];
+    this.footnoteProperties = null;
     this.inlineDocumentFonts = [];
+    this.commentThreadingProfile = null;
 
     // Store custom highlight colors
     this.docHiglightColors = new Set([]);
@@ -193,8 +197,11 @@ class SuperConverter {
     this.xml = params?.xml;
     this.declaration = null;
 
-    // List defs
+    // List defs (deprecated)
     this.numbering = {};
+
+    // Translated numbering definitions
+    this.translatedNumbering = {};
 
     // Processed additional content
     this.numbering = null;
@@ -215,8 +222,11 @@ class SuperConverter {
     this.importedBodyHasFooterRef = false;
     this.headerFooterModified = false;
 
-    // Linked Styles
+    // Linked Styles (deprecated)
     this.linkedStyles = [];
+
+    // Translated linked styles
+    this.translatedLinkedStyles = {};
 
     // This is the JSON schema that we will be working with
     this.json = params?.json;
@@ -224,8 +234,6 @@ class SuperConverter {
     this.tagsNotInSchema = ['w:body'];
     this.savedTagsToRestore = [];
 
-    // Initialize telemetry
-    this.telemetry = params?.telemetry || null;
     this.documentInternalId = null;
 
     // Uploaded file
@@ -233,9 +241,12 @@ class SuperConverter {
     this.documentId = params?.documentId || null;
 
     // Document identification
-    this.documentGuid = null; // Permanent GUID for modified documents
-    this.documentHash = null; // Temporary hash for unmodified documents
+    this.documentGuid = null; // Permanent GUID (from MS docId, custom property, or generated)
+    this.documentUniqueIdentifier = null; // Final identifier (identifierHash or contentHash)
     this.documentModified = false; // Track if document has been edited
+
+    // Track if this is a blank document created from template
+    this.isBlankDoc = params?.isNewFile || false;
 
     // Parse the initial XML, if provided
     if (this.docx.length || this.xml) this.parseFromXml();
@@ -261,6 +272,14 @@ class SuperConverter {
         this.convertedXml[file.name] = addDefaultStylesIfMissing(this.convertedXml[file.name]);
       }
     });
+    if (!this.convertedXml['word/styles.xml']) {
+      for (let i = 1; i <= 5; i += 1) {
+        if (this.convertedXml[`word/styles${i}.xml`] != null) {
+          this.convertedXml['word/styles.xml'] = addDefaultStylesIfMissing(this.convertedXml[`word/styles${i}.xml`]);
+          break;
+        }
+      }
+    }
     this.initialJSON = this.convertedXml['word/document.xml'];
 
     if (!this.initialJSON) this.initialJSON = this.parseXmlToJson(this.xml);
@@ -270,9 +289,49 @@ class SuperConverter {
     this.resolveDocumentGuid();
   }
 
+  /**
+   * Parses XML content into JSON format while preserving whitespace-only text runs.
+   *
+   * This method wraps xml-js's xml2json parser with additional preprocessing to prevent
+   * the parser from dropping whitespace-only content in <w:t> and <w:delText> elements.
+   * This is critical for correctly handling documents that rely on document-level
+   * xml:space="preserve" rather than per-element attributes, which is common in
+   * PDF-to-DOCX converted documents.
+   *
+   * The whitespace preservation strategy:
+   * 1. Before parsing, wraps whitespace-only content with [[sdspace]] placeholders
+   * 2. xml-js parser preserves the placeholder-wrapped text
+   * 3. During text node processing (t-translator.js), placeholders are removed
+   *
+   * @param {string} xml - The XML string to parse
+   * @returns {Object} The parsed JSON representation of the XML document
+   *
+   * @example
+   * // Handles whitespace-only text runs
+   * const xml = '<w:t> </w:t>';
+   * const result = parseXmlToJson(xml);
+   * // Result preserves the space: { elements: [{ text: '[[sdspace]] [[sdspace]]' }] }
+   *
+   * @example
+   * // Handles elements with attributes
+   * const xml = '<w:t xml:space="preserve">  text  </w:t>';
+   * const result = parseXmlToJson(xml);
+   * // Preserves content and attributes
+   *
+   * @example
+   * // Handles both w:t and w:delText elements
+   * const xml = '<w:delText> </w:delText>';
+   * const result = parseXmlToJson(xml);
+   * // Preserves whitespace in deleted text
+   */
   parseXmlToJson(xml) {
-    // We need to preserve nodes with xml:space="preserve" and only have empty spaces
-    const newXml = xml.replace(/(<w:t xml:space="preserve">)(\s+)(<\/w:t>)/g, '$1[[sdspace]]$2[[sdspace]]$3');
+    // Preserve whitespace-only text runs so xml-js doesn't drop them during parsing.
+    // This handles both <w:t> and <w:delText> elements, with or without attributes.
+    // Documents may rely on document-level xml:space="preserve" rather than per-element attributes.
+    const newXml = xml.replace(
+      /(<w:(?:t|delText)(?:\s[^>]*)?>)(\s+)(<\/w:(?:t|delText)>)/g,
+      '$1[[sdspace]]$2[[sdspace]]$3',
+    );
     return JSON.parse(xmljs.xml2json(newXml, null, 2));
   }
 
@@ -314,6 +373,25 @@ class SuperConverter {
     }
 
     return false;
+  }
+
+  /**
+   * Extracts the namespace prefix from an element name.
+   *
+   * @private
+   * @static
+   * @param {string} elementName - The element name (may include namespace prefix, e.g., 'op:Properties')
+   * @returns {string} The namespace prefix (e.g., 'op') or empty string if no prefix
+   *
+   * @example
+   * _extractNamespacePrefix('op:Properties') // => 'op'
+   * _extractNamespacePrefix('Properties') // => ''
+   * _extractNamespacePrefix('custom:property') // => 'custom'
+   */
+  static _extractNamespacePrefix(elementName) {
+    if (!elementName || typeof elementName !== 'string') return '';
+    const colonIndex = elementName.indexOf(':');
+    return colonIndex > 0 ? elementName.slice(0, colonIndex) : '';
   }
 
   /**
@@ -427,6 +505,10 @@ class SuperConverter {
       if (!properties) return null;
       if (!properties.elements) properties.elements = [];
 
+      // Extract namespace prefix from Properties element to use for new property elements
+      const namespacePrefix = SuperConverter._extractNamespacePrefix(properties.name);
+      const propertyElementName = namespacePrefix ? `${namespacePrefix}:property` : 'property';
+
       // Check if property already exists (handle namespace prefixes)
       let property = properties.elements.find(
         (el) => SuperConverter._matchesElementName(el.name, 'property') && el.attributes?.name === propertyName,
@@ -454,7 +536,7 @@ class SuperConverter {
 
         property = {
           type: 'element',
-          name: 'property',
+          name: propertyElementName,
           attributes: {
             name: propertyName,
             fmtid: '{D5CDD505-2E9C-101B-9397-08002B2CF9AE}',
@@ -476,6 +558,12 @@ class SuperConverter {
 
         properties.elements.push(property);
       } else {
+        // Normalize namespace prefix to match parent Properties element for consistency
+        const existingPropertyPrefix = SuperConverter._extractNamespacePrefix(property.name);
+        if (existingPropertyPrefix !== namespacePrefix) {
+          property.name = propertyElementName;
+        }
+
         // Add null safety when updating existing property
         if (!property.elements?.[0]?.elements?.[0]) {
           console.warn(`Malformed property structure for "${propertyName}", recreating structure`);
@@ -509,6 +597,72 @@ class SuperConverter {
 
   static setStoredSuperdocVersion(docx = this.convertedXml, version = __APP_VERSION__) {
     return SuperConverter.setStoredCustomProperty(docx, 'SuperdocVersion', version, false);
+  }
+
+  /**
+   * Generate a Word-compatible timestamp (truncated to minute precision like MS Word)
+   * @returns {string} Timestamp in YYYY-MM-DDTHH:MM:00Z format
+   */
+  static generateWordTimestamp() {
+    const date = new Date();
+    date.setSeconds(0, 0);
+    return date.toISOString().split('.')[0] + 'Z';
+  }
+
+  /**
+   * Get the dcterms:created timestamp from the already-parsed core.xml
+   * @returns {string|null} The created timestamp in ISO format, or null if not found
+   */
+  getDocumentCreatedTimestamp() {
+    const coreXml = this.convertedXml['docProps/core.xml'];
+    if (!coreXml) return null;
+
+    const coreProps = coreXml.elements?.find(
+      (el) => el.name === 'cp:coreProperties' || SuperConverter._matchesElementName(el.name, 'coreProperties'),
+    );
+    if (!coreProps?.elements) return null;
+
+    const createdElement = coreProps.elements.find(
+      (el) => el.name === 'dcterms:created' || SuperConverter._matchesElementName(el.name, 'created'),
+    );
+
+    return createdElement?.elements?.[0]?.text || null;
+  }
+
+  /**
+   * Set the dcterms:created timestamp in the already-parsed core.xml
+   * @param {string} timestamp - The timestamp to set (ISO format)
+   */
+  setDocumentCreatedTimestamp(timestamp) {
+    const coreXml = this.convertedXml['docProps/core.xml'];
+    if (!coreXml) return;
+
+    const coreProps = coreXml.elements?.find(
+      (el) => el.name === 'cp:coreProperties' || SuperConverter._matchesElementName(el.name, 'coreProperties'),
+    );
+    if (!coreProps) return;
+
+    // Initialize elements array if missing
+    if (!coreProps.elements) {
+      coreProps.elements = [];
+    }
+
+    let createdElement = coreProps.elements.find(
+      (el) => el.name === 'dcterms:created' || SuperConverter._matchesElementName(el.name, 'created'),
+    );
+
+    if (createdElement?.elements?.[0]) {
+      createdElement.elements[0].text = timestamp;
+    } else {
+      // Create the element if it doesn't exist
+      createdElement = {
+        type: 'element',
+        name: 'dcterms:created',
+        attributes: { 'xsi:type': 'dcterms:W3CDTF' },
+        elements: [{ type: 'text', text: timestamp }],
+      };
+      coreProps.elements.push(createdElement);
+    }
   }
 
   /**
@@ -563,21 +717,26 @@ class SuperConverter {
 
   /**
    * Resolve existing document GUID (synchronous)
+   * For new files: reads existing GUID and sets fresh timestamp
+   * For imported files: reads existing GUIDs only
    */
   resolveDocumentGuid() {
     // 1. Check Microsoft's docId (READ ONLY)
     const microsoftGuid = this.getMicrosoftDocId();
     if (microsoftGuid) {
       this.documentGuid = microsoftGuid;
-      return;
+    } else {
+      // 2. Check our custom property
+      const customGuid = SuperConverter.getStoredCustomProperty(this.docx, 'DocumentGuid');
+      if (customGuid) {
+        this.documentGuid = customGuid;
+      }
     }
 
-    // 2. Check our custom property
-    const customGuid = SuperConverter.getStoredCustomProperty(this.docx, 'DocumentGuid');
-    if (customGuid) {
-      this.documentGuid = customGuid;
+    // BLANK DOC: set fresh timestamp (ensures unique identifier for each new doc from template)
+    if (this.isBlankDoc) {
+      this.setDocumentCreatedTimestamp(SuperConverter.generateWordTimestamp());
     }
-    // Don't generate hash here - do it lazily when needed
   }
 
   /**
@@ -592,57 +751,101 @@ class SuperConverter {
   }
 
   /**
-   * Generate document hash for telemetry (async, lazy)
+   * Generate identifier hash from documentGuid and dcterms:created
+   * Uses CRC32 of the combined string for a compact identifier
+   * Only call when both documentGuid and timestamp exist
+   * @returns {string} Hash identifier in format "HASH-XXXXXXXX"
    */
-  async #generateDocumentHash() {
-    if (!this.fileSource) return `HASH-${Date.now()}`;
+  #generateIdentifierHash() {
+    const combined = `${this.documentGuid}|${this.getDocumentCreatedTimestamp()}`;
+    const data = new TextEncoder().encode(combined);
+    return `HASH-${computeCrc32Hex(data).toUpperCase()}`;
+  }
+
+  /**
+   * Generate content hash from file bytes
+   * Uses CRC32 of the raw file content for a stable identifier
+   * @returns {Promise<string>} Hash identifier in format "HASH-XXXXXXXX"
+   */
+  async #generateContentHash() {
+    if (!this.fileSource) {
+      // No file source available, generate a random hash (last resort)
+      return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+    }
 
     try {
-      let buffer;
+      let data;
 
-      if (Buffer.isBuffer(this.fileSource)) {
-        buffer = this.fileSource;
+      if (ArrayBuffer.isView(this.fileSource)) {
+        const view = this.fileSource;
+        data = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
       } else if (this.fileSource instanceof ArrayBuffer) {
-        buffer = Buffer.from(this.fileSource);
+        data = new Uint8Array(this.fileSource);
       } else if (this.fileSource instanceof Blob || this.fileSource instanceof File) {
         const arrayBuffer = await this.fileSource.arrayBuffer();
-        buffer = Buffer.from(arrayBuffer);
+        data = new Uint8Array(arrayBuffer);
       } else {
-        return `HASH-${Date.now()}`;
+        return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
       }
 
-      const hash = crc32(buffer);
-      return `HASH-${hash.toString('hex').toUpperCase()}`;
+      return `HASH-${computeCrc32Hex(data).toUpperCase()}`;
     } catch (e) {
-      console.warn('Could not generate document hash:', e);
-      return `HASH-${Date.now()}`;
+      console.warn('[super-converter] Could not generate content hash:', e);
+      return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
     }
   }
 
   /**
-   * Get document identifier (GUID or hash) - async for lazy hash generation
+   * Get document unique identifier (async)
+   *
+   * For blank documents (isBlankDoc: true):
+   * - GUID and timestamp already set in resolveDocumentGuid()
+   * - Returns identifierHash(guid|timestamp)
+   *
+   * For imported files (isBlankDoc: false):
+   * - If both documentGuid and dcterms:created exist: returns identifierHash
+   * - Otherwise: returns contentHash and generates missing metadata for future exports
+   *
+   * @returns {Promise<string>} Document unique identifier
    */
   async getDocumentIdentifier() {
-    if (this.documentGuid) {
-      return this.documentGuid;
+    // Return cached identifier if already computed
+    if (this.documentUniqueIdentifier) {
+      return this.documentUniqueIdentifier;
     }
 
-    if (!this.documentHash && this.fileSource) {
-      this.documentHash = await this.#generateDocumentHash();
+    // Check what metadata we have (for new files, both are set in resolveDocumentGuid)
+    const hasGuid = Boolean(this.documentGuid);
+    const hasTimestamp = Boolean(this.getDocumentCreatedTimestamp());
+
+    if (hasGuid && hasTimestamp) {
+      // Both exist: use identifierHash
+      this.documentUniqueIdentifier = this.#generateIdentifierHash();
+    } else {
+      // Missing one or both: use contentHash for stability (same file = same hash)
+      // But generate missing metadata so re-exported file will have complete metadata
+      if (!hasGuid) {
+        this.documentGuid = uuidv4();
+      }
+      if (!hasTimestamp) {
+        this.setDocumentCreatedTimestamp(SuperConverter.generateWordTimestamp());
+      }
+      this.documentModified = true; // Ensures metadata is saved on export
+      this.documentUniqueIdentifier = await this.#generateContentHash();
     }
 
-    return this.documentHash;
+    return this.documentUniqueIdentifier;
   }
 
   /**
-   * Promote from hash to GUID on first edit
+   * Promote to GUID on first edit (for documents that didn't have one)
    */
   promoteToGuid() {
     if (this.documentGuid) return this.documentGuid;
 
     this.documentGuid = this.getMicrosoftDocId() || uuidv4();
     this.documentModified = true;
-    this.documentHash = null; // Clear temporary hash
+    this.documentUniqueIdentifier = null; // Clear cached identifier
 
     // Note: GUID is stored to custom properties during export to avoid
     // unnecessary XML modifications if the document is never saved
@@ -704,18 +907,29 @@ class SuperConverter {
 
   getDocumentFonts() {
     const inlineDocumentFonts = [...new Set(this.inlineDocumentFonts || [])];
+    const defaults = this.getDocumentDefaultStyles?.() || {};
+    const defaultTypeface = typeof defaults.typeface === 'string' ? defaults.typeface : null;
+    const defaultFontFamilyCss = typeof defaults.fontFamilyCss === 'string' ? defaults.fontFamilyCss : null;
+    const fallbackFont =
+      defaultTypeface ||
+      (defaultFontFamilyCss ? defaultFontFamilyCss.split(',')[0]?.replace(/["']/g, '').trim() : null);
+    const withDefaultFont = (fonts) => {
+      const result = [...fonts];
+      if (fallbackFont && !result.includes(fallbackFont)) result.push(fallbackFont);
+      return result;
+    };
     const fontTable = this.convertedXml['word/fontTable.xml'];
     if (!fontTable) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     const wFonts = fontTable.elements?.find((element) => element.name === 'w:fonts');
     if (!wFonts) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     if (!wFonts.elements) {
-      return inlineDocumentFonts;
+      return withDefaultFont(inlineDocumentFonts);
     }
 
     const fontsInFontTable = wFonts.elements
@@ -723,7 +937,7 @@ class SuperConverter {
       .map((element) => element.attributes['w:name']);
 
     const allFonts = [...inlineDocumentFonts, ...fontsInFontTable];
-    return [...new Set(allFonts)];
+    return withDefaultFont([...new Set(allFonts)]);
   }
 
   getFontFaceImportString() {
@@ -855,7 +1069,10 @@ class SuperConverter {
       this.pageStyles = result.pageStyles;
       this.numbering = result.numbering;
       this.comments = result.comments;
+      this.footnotes = result.footnotes;
       this.linkedStyles = result.linkedStyles;
+      this.translatedLinkedStyles = result.translatedLinkedStyles;
+      this.translatedNumbering = result.translatedNumbering;
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
 
@@ -881,7 +1098,9 @@ class SuperConverter {
     exportJsonOnly = false,
     fieldsHighlightColor,
   ) {
-    const commentsWithParaIds = comments.map((c) => prepareCommentParaIds(c));
+    // Filter out synthetic tracked change comments - they shouldn't be exported to comments.xml
+    const exportableComments = comments.filter((c) => !c.trackedChange);
+    const commentsWithParaIds = exportableComments.map((c) => prepareCommentParaIds(c));
     const commentDefinitions = commentsWithParaIds.map((c, index) =>
       getCommentDefinition(c, index, commentsWithParaIds, editor),
     );
@@ -889,7 +1108,7 @@ class SuperConverter {
     const { result, params } = this.exportToXmlJson({
       data: jsonData,
       editorSchema,
-      comments,
+      comments: exportableComments,
       commentDefinitions,
       commentsExportType,
       isFinalDoc,
@@ -902,11 +1121,24 @@ class SuperConverter {
     const exporter = new DocxExporter(this);
     const xml = exporter.schemaToXml(result);
 
+    const {
+      updatedXml: footnotesUpdatedXml,
+      relationships: footnotesRels,
+      media: footnotesMedia,
+    } = prepareFootnotesXmlForExport({
+      footnotes: this.footnotes,
+      editor,
+      converter: this,
+      convertedXml: this.convertedXml,
+    });
+    this.convertedXml = { ...this.convertedXml, ...footnotesUpdatedXml };
+
     // Update media
     await this.#exportProcessMediaFiles(
       {
         ...documentMedia,
         ...params.media,
+        ...footnotesMedia,
         ...this.media,
       },
       editor,
@@ -930,7 +1162,7 @@ class SuperConverter {
     const headFootRels = this.#exportProcessHeadersFooters({ isFinalDoc });
 
     // Update the rels table
-    this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...headFootRels]);
+    this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...footnotesRels, ...headFootRels]);
 
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);
@@ -1011,7 +1243,7 @@ class SuperConverter {
       convertedXml: this.convertedXml,
       defs,
       commentsWithParaIds,
-      converter: this,
+      threadingProfile: this.commentThreadingProfile,
     });
 
     return { documentXml, relationships };

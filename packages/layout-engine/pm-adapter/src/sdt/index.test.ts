@@ -108,6 +108,8 @@ describe('sdt module exports', () => {
         'applyTocMetadata',
         'processTocChildren',
         'handleTableOfContentsNode',
+        // Document Index
+        'handleIndexNode',
         // Structured Content Block
         'handleStructuredContentBlockNode',
         // Document Section
@@ -174,7 +176,6 @@ describe('sdt module exports', () => {
           positions: new Map(),
           defaultFont: 'Arial',
           defaultSize: 12,
-          styleContext: { styles: new Map(), numbering: new Map() },
           listCounterContext: {
             getListCounter: () => ({ value: 0, styleId: null }),
             incrementListCounter: () => undefined,

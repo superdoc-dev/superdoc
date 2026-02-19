@@ -1,0 +1,26 @@
+Semantic header cell with built-in styling.
+
+Created via `insertTable({ withHeaderRow: true })` or toggle commands. See [Table extension](/extensions/table).
+
+## OOXML Structure
+
+```xml
+<w:tc>
+  <w:tcPr>
+    <w:tcW w:w="2880" w:type="dxa"/>
+    <w:cnfStyle w:val="100000000000"/>  <!-- Header cell styling -->
+  </w:tcPr>
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="TableHeader"/>   <!-- Header paragraph style -->
+    </w:pPr>
+    <w:r>
+      <w:rPr>
+        <w:b/>                           <!-- Bold by default -->
+      </w:rPr>
+      <w:t>Header text</w:t>
+    </w:r>
+  </w:p>
+</w:tc>
+```
+

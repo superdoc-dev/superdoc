@@ -32,7 +32,7 @@ export const createMinimalTestEditor = (extensions = [], options = {}) => {
   return new Editor({
     mode: 'text',
     documentId: 'test-minimal',
-    isHeadless: true,
+    isHeadless: false,
     extensions,
     ...options,
   });
@@ -85,7 +85,7 @@ export const getNodeFromEditor = (editor, nodeType, pos = 0) => {
 export const insertText = (editor, text, pos = null) => {
   const insertPos = pos !== null ? pos : editor.state.doc.content.size;
   const tr = editor.state.tr.insertText(text, insertPos);
-  editor.view.dispatch(tr);
+  editor.dispatch(tr);
 };
 
 /**
@@ -103,7 +103,7 @@ export const createTransaction = (editor) => {
  * @param {Transaction} tr - Transaction to apply
  */
 export const applyTransaction = (editor, tr) => {
-  editor.view.dispatch(tr);
+  editor.dispatch(tr);
 };
 
 /**

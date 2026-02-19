@@ -52,6 +52,17 @@ export type FloatingObjectManager = {
    * Clear all registered exclusion zones.
    */
   clear(): void;
+  /**
+   * Update layout context used for positioning and wrapping (columns, margins, page width).
+   */
+  setLayoutContext(
+    columns: ColumnLayout,
+    margins?: {
+      left?: number;
+      right?: number;
+    },
+    pageWidth?: number,
+  ): void;
 };
 type ColumnLayout = {
   width: number;

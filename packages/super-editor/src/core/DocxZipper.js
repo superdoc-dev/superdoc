@@ -1,7 +1,8 @@
-import xmljs from 'xml-js';
+import * as xmljs from 'xml-js';
 import JSZip from 'jszip';
-import { getContentTypesFromXml } from './super-converter/helpers.js';
+import { getContentTypesFromXml, base64ToUint8Array } from './super-converter/helpers.js';
 import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
+import { DOCX } from '@superdoc/common';
 
 /**
  * Class to handle unzipping and zipping of docx files
@@ -143,6 +144,9 @@ class DocxZipper {
     );
 
     const hasFile = (filename) => {
+      if (updatedDocs && Object.prototype.hasOwnProperty.call(updatedDocs, filename)) {
+        return true;
+      }
       if (!docx?.files) return false;
       if (!fromJson) return Boolean(docx.files[filename]);
       if (Array.isArray(docx.files)) return docx.files.some((file) => file.name === filename);
@@ -167,6 +171,16 @@ class DocxZipper {
     if (hasFile('word/commentsExtensible.xml')) {
       const commentsExtendedDef = `<Override PartName="/word/commentsExtensible.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtensible+xml" />`;
       if (!hasCommentsExtensible) typesString += commentsExtendedDef;
+    }
+
+    // Update for footnotes
+    const hasFootnotes = types.elements?.some(
+      (el) => el.name === 'Override' && el.attributes.PartName === '/word/footnotes.xml',
+    );
+
+    if (hasFile('word/footnotes.xml')) {
+      const footnotesDef = `<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml" />`;
+      if (!hasFootnotes) typesString += footnotesDef;
     }
 
     const partNames = new Set(additionalPartNames);
@@ -249,7 +263,7 @@ class DocxZipper {
     return zip;
   }
 
-  async updateZip({ docx, updatedDocs, originalDocxFile, media, fonts, isHeadless }) {
+  async updateZip({ docx, updatedDocs, originalDocxFile, media, fonts, isHeadless, compression = 'DEFLATE' }) {
     // We use a different re-zip process if we have the original docx vs the docx xml metadata
     let zip;
 
@@ -261,7 +275,12 @@ class DocxZipper {
 
     // If we are headless we don't have 'blob' support, so export as 'nodebuffer'
     const exportType = isHeadless ? 'nodebuffer' : 'blob';
-    return await zip.generateAsync({ type: exportType });
+    return await zip.generateAsync({
+      type: exportType,
+      mimeType: DOCX,
+      compression,
+      compressionOptions: compression === 'DEFLATE' ? { level: 6 } : undefined,
+    });
   }
 
   /**
@@ -286,7 +305,8 @@ class DocxZipper {
     });
 
     Object.keys(media).forEach((path) => {
-      const binaryData = Buffer.from(media[path], 'base64');
+      const value = media[path];
+      const binaryData = typeof value === 'string' ? base64ToUint8Array(value) : value;
       zip.file(path, binaryData);
     });
 

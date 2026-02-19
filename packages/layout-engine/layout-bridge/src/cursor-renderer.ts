@@ -26,6 +26,25 @@ export interface CursorRect {
   y: number;
   /** Height of the cursor line */
   height: number;
+  /**
+   * Width of the selection rectangle.
+   *
+   * **Semantics:**
+   * - When undefined: Represents a collapsed cursor (zero-width selection). Rendered as a thin
+   *   vertical line at the cursor position. Typically uses the configured cursorWidth (default 2px).
+   * - When defined: Represents a selection span (from !== to). Width indicates the horizontal
+   *   extent of selected text or content.
+   *
+   * **Use Cases:**
+   * - Cursor rendering: width should be undefined or omitted
+   * - Selection highlighting: width should be the measured pixel width of the selected text/content
+   * - Collapsed selections: Some renderers treat width=0 as equivalent to undefined
+   *
+   * **Rendering Behavior:**
+   * The CursorRenderer uses this field to distinguish between cursor (thin line) and selection
+   * (filled rectangle). When width is undefined, it falls back to cursorWidth for rendering.
+   */
+  width?: number;
 }
 
 /**
@@ -176,9 +195,10 @@ export class CursorRenderer {
 
       elem.style.left = `${rect.x}px`;
       elem.style.top = `${rect.y}px`;
-      // Calculate width - for now use a default width since rect doesn't have width
-      // This will be enhanced when CursorCalculator provides width
-      elem.style.width = `${Math.max(1, 100)}px`; // Default selection width
+      // Use rect.width if provided, otherwise fall back to a minimal width
+      // Collapsed selections (from === to) should render as a thin cursor (2px)
+      const width = rect.width ?? this.cursorWidth;
+      elem.style.width = `${Math.max(1, width)}px`;
       elem.style.height = `${rect.height}px`;
     }
   }

@@ -21,7 +21,6 @@ import {
   buildTrackedChangeMetaFromMark,
   selectTrackedChangeMeta,
   trackedChangesCompatible,
-  collectTrackedChangeFromMarks,
   shouldHideTrackedNode,
   annotateBlockWithTrackedChange,
   resetRunFormatting,
@@ -492,54 +491,6 @@ describe('tracked-changes', () => {
     });
   });
 
-  describe('collectTrackedChangeFromMarks', () => {
-    it('should return undefined for empty marks array', () => {
-      expect(collectTrackedChangeFromMarks([])).toBeUndefined();
-    });
-
-    it('should return undefined for undefined marks', () => {
-      expect(collectTrackedChangeFromMarks(undefined)).toBeUndefined();
-    });
-
-    it('should return undefined when no tracked change marks present', () => {
-      const marks: PMMark[] = [{ type: 'bold' }, { type: 'italic' }];
-      expect(collectTrackedChangeFromMarks(marks)).toBeUndefined();
-    });
-
-    it('should collect single tracked change mark', () => {
-      const marks: PMMark[] = [{ type: 'trackInsert', attrs: { id: 'ins-1' } }, { type: 'bold' }];
-      const result = collectTrackedChangeFromMarks(marks);
-      expect(result).toEqual({ kind: 'insert', id: 'ins-1' });
-    });
-
-    it('should prioritize insert over format when both present', () => {
-      const marks: PMMark[] = [
-        { type: 'trackFormat', attrs: { id: 'fmt-1' } },
-        { type: 'trackInsert', attrs: { id: 'ins-1' } },
-      ];
-      const result = collectTrackedChangeFromMarks(marks);
-      expect(result?.kind).toBe('insert');
-    });
-
-    it('should prioritize delete over format when both present', () => {
-      const marks: PMMark[] = [
-        { type: 'trackFormat', attrs: { id: 'fmt-1' } },
-        { type: 'trackDelete', attrs: { id: 'del-1' } },
-      ];
-      const result = collectTrackedChangeFromMarks(marks);
-      expect(result?.kind).toBe('delete');
-    });
-
-    it('should keep first insert when multiple inserts present', () => {
-      const marks: PMMark[] = [
-        { type: 'trackInsert', attrs: { id: 'ins-1' } },
-        { type: 'trackInsert', attrs: { id: 'ins-2' } },
-      ];
-      const result = collectTrackedChangeFromMarks(marks);
-      expect(result?.id).toBe('ins-1');
-    });
-  });
-
   describe('shouldHideTrackedNode', () => {
     it('should return false when metadata is undefined', () => {
       const config: TrackedChangesConfig = { enabled: true, mode: 'original' };
@@ -781,7 +732,7 @@ describe('tracked-changes', () => {
       const applyMarksToRun = vi.fn();
 
       applyFormatChangeMarks(run, config, hyperlinkConfig, applyMarksToRun);
-      expect(applyMarksToRun).toHaveBeenCalledWith(run, beforeMarks, hyperlinkConfig, undefined);
+      expect(applyMarksToRun).toHaveBeenCalledWith(run, beforeMarks, hyperlinkConfig, undefined, undefined, true);
     });
 
     it('should handle errors in applyMarksToRun by resetting formatting', () => {
@@ -883,6 +834,22 @@ describe('tracked-changes', () => {
       expect((result[1] as TextRun).text).toBe('More');
     });
 
+    it('should strip metadata from remaining runs in original mode after filtering inserts', () => {
+      const runs: Run[] = [
+        { text: 'Keep', fontFamily: 'Arial', fontSize: 12, trackedChange: { kind: 'delete', id: 'del-1' } },
+        { text: 'Inserted', fontFamily: 'Arial', fontSize: 12, trackedChange: { kind: 'insert', id: 'ins-1' } },
+      ];
+      const config: TrackedChangesConfig = { enabled: true, mode: 'original' };
+      const hyperlinkConfig: HyperlinkConfig = { enableRichHyperlinks: false };
+      const applyMarksToRun = vi.fn();
+
+      const result = applyTrackedChangesModeToRuns(runs, config, hyperlinkConfig, applyMarksToRun);
+      expect(result).toHaveLength(1);
+      const [kept] = result as TextRun[];
+      expect(kept.text).toBe('Keep');
+      expect(kept.trackedChange).toBeUndefined();
+    });
+
     it('should filter deletions in final mode', () => {
       const runs: Run[] = [
         { text: 'Normal', fontFamily: 'Arial', fontSize: 12 },
@@ -897,6 +864,22 @@ describe('tracked-changes', () => {
       expect(result).toHaveLength(2);
       expect((result[0] as TextRun).text).toBe('Normal');
       expect((result[1] as TextRun).text).toBe('More');
+    });
+
+    it('should strip metadata from remaining runs in final mode after filtering deletions', () => {
+      const runs: Run[] = [
+        { text: 'Keep', fontFamily: 'Arial', fontSize: 12, trackedChange: { kind: 'insert', id: 'ins-1' } },
+        { text: 'Deleted', fontFamily: 'Arial', fontSize: 12, trackedChange: { kind: 'delete', id: 'del-1' } },
+      ];
+      const config: TrackedChangesConfig = { enabled: true, mode: 'final' };
+      const hyperlinkConfig: HyperlinkConfig = { enableRichHyperlinks: false };
+      const applyMarksToRun = vi.fn();
+
+      const result = applyTrackedChangesModeToRuns(runs, config, hyperlinkConfig, applyMarksToRun);
+      expect(result).toHaveLength(1);
+      const [kept] = result as TextRun[];
+      expect(kept.text).toBe('Keep');
+      expect(kept.trackedChange).toBeUndefined();
     });
 
     it('should strip metadata when disabled', () => {

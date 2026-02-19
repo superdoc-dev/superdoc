@@ -24,6 +24,15 @@ a {
   animation: superdoc-caret-blink 1.2s steps(2, start) infinite;
 }
 
+.presentation-editor__permission-overlay {
+  pointer-events: none;
+}
+
+.presentation-editor__permission-highlight {
+  border-radius: 2px;
+  background-color: rgba(199, 200, 217, 0.55);
+}
+
 @keyframes superdoc-caret-blink {
   0%,
   45% {

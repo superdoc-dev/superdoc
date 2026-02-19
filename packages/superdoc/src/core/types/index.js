@@ -6,14 +6,6 @@
  */
 
 /**
- * @typedef {Object} TelemetryConfig Telemetry configuration
- * @property {boolean} [enabled=true] Whether telemetry is enabled
- * @property {string} [licenseKey] The licence key for telemetry
- * @property {string} [endpoint] The endpoint for telemetry
- * @property {string} [superdocVersion] The version of the superdoc
- */
-
-/**
  * @typedef {Object} Document
  * @property {string} [id] The ID of the document
  * @property {string} type The type of the document
@@ -59,18 +51,46 @@
  *   currentUser?: User | null,
  *   superdoc?: SuperDoc | null,
  * }) => boolean | undefined} [comments.permissionResolver] Custom permission resolver for comment actions
+ * @property {Object} [comments.highlightColors] Comment highlight colors (internal/external and active overrides)
+ * @property {string} [comments.highlightColors.internal] Base highlight color for internal comments
+ * @property {string} [comments.highlightColors.external] Base highlight color for external comments
+ * @property {string} [comments.highlightColors.activeInternal] Active highlight color override for internal comments
+ * @property {string} [comments.highlightColors.activeExternal] Active highlight color override for external comments
+ * @property {Object} [comments.highlightOpacity] Comment highlight opacity values (0-1)
+ * @property {number} [comments.highlightOpacity.active] Opacity for active comment highlight
+ * @property {number} [comments.highlightOpacity.inactive] Opacity for inactive comment highlight
+ * @property {string} [comments.highlightHoverColor] Hover highlight color for comment marks
+ * @property {Object} [comments.trackChangeHighlightColors] Track change highlight colors
+ * @property {string} [comments.trackChangeHighlightColors.insertBorder] Border color for inserted text highlight
+ * @property {string} [comments.trackChangeHighlightColors.insertBackground] Background color for inserted text highlight
+ * @property {string} [comments.trackChangeHighlightColors.deleteBorder] Border color for deleted text highlight
+ * @property {string} [comments.trackChangeHighlightColors.deleteBackground] Background color for deleted text highlight
+ * @property {string} [comments.trackChangeHighlightColors.formatBorder] Border color for format change highlight
+ * @property {Object} [comments.trackChangeActiveHighlightColors] Active track change highlight colors (defaults to trackChangeHighlightColors)
+ * @property {string} [comments.trackChangeActiveHighlightColors.insertBorder] Active border color for inserted text highlight
+ * @property {string} [comments.trackChangeActiveHighlightColors.insertBackground] Active background color for inserted text highlight
+ * @property {string} [comments.trackChangeActiveHighlightColors.deleteBorder] Active border color for deleted text highlight
+ * @property {string} [comments.trackChangeActiveHighlightColors.deleteBackground] Active background color for deleted text highlight
+ * @property {string} [comments.trackChangeActiveHighlightColors.formatBorder] Active border color for format change highlight
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services
+ * @property {Object} [pdf] PDF module configuration
+ * @property {Object} pdf.pdfLib Preloaded pdf.js library instance
+ * @property {string} [pdf.workerSrc] PDF.js worker source URL (falls back to CDN when omitted)
+ * @property {boolean} [pdf.setWorker] Whether to auto-configure pdf.js worker
+ * @property {boolean} [pdf.textLayer] Enable text layer rendering (default: false)
+ * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
  * @property {Object} [toolbar] Toolbar module configuration
- * @property {Object} [slashMenu] Slash menu module configuration
- * @property {Array} [slashMenu.customItems] Array of custom menu sections with items
- * @property {Function} [slashMenu.menuProvider] Function to customize menu items
- * @property {boolean} [slashMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [contextMenu] Context menu module configuration
+ * @property {Array} [contextMenu.customItems] Array of custom menu sections with items
+ * @property {Function} [contextMenu.menuProvider] Function to customize menu items
+ * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [slashMenu] @deprecated Use contextMenu instead
  */
 
-/** @typedef {import('@harbour-enterprises/super-editor').Editor} Editor */
+/** @typedef {import('@superdoc/super-editor').Editor} Editor */
 /** @typedef {import('../SuperDoc.js').SuperDoc} SuperDoc */
 
 /**
@@ -88,10 +108,27 @@
  */
 
 /**
+ * @typedef {'print' | 'web'} ViewLayout
+ * Document view layout values - mirrors OOXML ST_View (ECMA-376 §17.18.102)
+ * - 'print': Print Layout View - displays document as it prints (default)
+ * - 'web': Web Page View - content reflows to fit container (mobile/accessibility)
+ */
+
+/**
+ * @typedef {Object} ViewOptions
+ * Document view options for controlling how the document is displayed.
+ * Mirrors OOXML document view settings.
+ * @property {ViewLayout} [layout='print'] Document view layout (OOXML ST_View compatible)
+ */
+
+/**
  * @typedef {Object} ExportParams
  * @property {ExportType[]} [exportType=['docx']] - File formats to export
  * @property {CommentsType} [commentsType='external'] - How to handle comments
  * @property {string} [exportedName] - Custom filename (without extension)
+ * @property {Blob[]} [additionalFiles] - Extra files to include in the export zip
+ * @property {string[]} [additionalFileNames] - Filenames for the additional files
+ * @property {boolean} [isFinalDoc=false] - Whether this is a final document export
  * @property {boolean} [triggerDownload=true] - Auto-download or return blob
  * @property {string} [fieldsHighlightColor] - Color for field highlights
  */
@@ -121,8 +158,15 @@
  * @property {Array<string>} [toolbarGroups] Toolbar groups to show
  * @property {Object} [toolbarIcons] Icons to show in the toolbar
  * @property {Object} [toolbarTexts] Texts to override in the toolbar
+ * @property {string} [uiDisplayFallbackFont='Arial, Helvetica, sans-serif'] The font-family to use for all SuperDoc UI surfaces
+ *   (toolbar, comments UI, dropdowns, tooltips, etc.). This ensures consistent typography across the entire application
+ *   and helps match your application's design system. The value should be a valid CSS font-family string.
+ *   Example (system fonts):
+ *     uiDisplayFallbackFont: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+ *   Example (custom font):
+ *     uiDisplayFallbackFont: '"Inter", Arial, sans-serif'
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
- * @property {TelemetryConfig} [telemetry] Telemetry configuration
+ * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
  * @property {Object} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
  * @property {Object} [layoutEngineOptions.trackedChanges] Optional override for paginated track-changes rendering (e.g., `{ mode: 'final' }` to force final view or `{ enabled: false }` to strip metadata entirely)
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created
@@ -146,6 +190,8 @@
  * @property {boolean} [isInternal] Whether the SuperDoc is internal
  * @property {string} [title] The title of the SuperDoc
  * @property {Object[]} [conversations] The conversations to load
+ * @property {{ visible?: boolean }} [comments] Toggle comment visibility when `documentMode` is `viewing` (default: false)
+ * @property {{ visible?: boolean }} [trackChanges] Toggle tracked-change visibility when `documentMode` is `viewing` (default: false)
  * @property {boolean} [isLocked] Whether the SuperDoc is locked
  * @property {function(File): Promise<string>} [handleImageUpload] The function to handle image uploads
  * @property {User} [lockedBy] The user who locked the SuperDoc
@@ -156,6 +202,10 @@
  * @property {string} [html] HTML content to initialize the editor with
  * @property {string} [markdown] Markdown content to initialize the editor with
  * @property {boolean} [isDebug=false] Whether to enable debug mode
+ * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
+ * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
+ * @property {string} [licenseKey] License key for organization identification
+ * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration
  */
 
 export {};

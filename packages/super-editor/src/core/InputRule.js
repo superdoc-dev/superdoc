@@ -3,6 +3,7 @@ import { Fragment, DOMParser as PMDOMParser, Slice } from 'prosemirror-model';
 import { CommandService } from './CommandService.js';
 import { chainableEditorState } from './helpers/chainableEditorState.js';
 import { getHTMLFromFragment } from './helpers/getHTMLFromFragment.js';
+import { warnNoDOM } from './helpers/domWarnings.js';
 import { getTextContentFromNodes } from './helpers/getTextContentFromNodes.js';
 import { isRegExp } from './utilities/isRegExp.js';
 import { handleDocxPaste, wrapTextsInRuns } from './inputRules/docx-paste/docx-paste.js';
@@ -150,7 +151,17 @@ export const inputRulesPlugin = ({ editor, rules }) => {
             let { text } = simulatedInputMeta;
 
             if (typeof text !== 'string') {
-              text = getHTMLFromFragment(Fragment.from(text), state.schema);
+              const domDocument =
+                editor?.options?.document ??
+                editor?.options?.mockDocument ??
+                (typeof document !== 'undefined' ? document : null);
+
+              if (!domDocument) {
+                warnNoDOM('HTML conversion for input rules');
+                return;
+              }
+
+              text = getHTMLFromFragment(Fragment.from(text), state.schema, domDocument);
             }
 
             const { from } = simulatedInputMeta;
@@ -315,10 +326,16 @@ export function handleHtmlPaste(html, editor, source) {
  * @param {Editor} editor The editor instance.
  * @returns {DocumentFragment} The processed HTML string.
  */
-export function htmlHandler(html, editor) {
-  const flatHtml = flattenListsInHtml(html, editor);
+export function htmlHandler(html, editor, domDocument) {
+  const resolvedDocument =
+    domDocument ??
+    editor?.options?.document ??
+    editor?.options?.mockDocument ??
+    (typeof document !== 'undefined' ? document : null);
+
+  const flatHtml = flattenListsInHtml(html, editor, resolvedDocument);
   const htmlWithPtSizing = convertEmToPt(flatHtml);
-  return sanitizeHtml(htmlWithPtSizing);
+  return sanitizeHtml(htmlWithPtSizing, undefined, resolvedDocument);
 }
 
 /**
@@ -356,8 +373,16 @@ export function cleanHtmlUnnecessaryTags(html) {
  * @param {string[]} forbiddenTags The list of forbidden tags to remove from the HTML.
  * @returns {DocumentFragment} The sanitized HTML as a DocumentFragment.
  */
-export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'style', 'button']) {
-  const container = document.createElement('div');
+export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'style', 'button'], domDocument) {
+  const resolvedDocument = domDocument ?? (typeof document !== 'undefined' ? document : null);
+  if (!resolvedDocument) {
+    console.warn(
+      '[super-editor] HTML sanitization requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment. Skipping sanitization.',
+    );
+    return null;
+  }
+
+  const container = resolvedDocument.createElement('div');
   container.innerHTML = html;
 
   const walkAndClean = (node) => {
@@ -367,9 +392,12 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
         continue;
       }
 
-      // Remove linebreaktype here - we don't want it when pasting HTML
+      // Internal/runtime-only attributes must not be preserved across paste.
       if (child.hasAttribute('linebreaktype')) {
         child.removeAttribute('linebreaktype');
+      }
+      if (child.hasAttribute('data-sd-block-id')) {
+        child.removeAttribute('data-sd-block-id');
       }
 
       walkAndClean(child);
@@ -383,7 +411,7 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
 /**
  * Reusable paste-handling utility that replicates the logic formerly held only
  * inside the `inputRulesPlugin` paste handler. This allows other components
- * (e.g. slash-menu items) to invoke the same paste logic without duplicating
+ * (e.g. context-menu items) to invoke the same paste logic without duplicating
  * code.
  *
  * @param {Object}   params

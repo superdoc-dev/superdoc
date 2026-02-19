@@ -87,7 +87,7 @@ describe('features-redlines tracked changes round trip', () => {
   it('re-exports with tracked changes preserved', async () => {
     const fileName = 'features-redlines-comments-annotations-and-more.docx';
     const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(fileName);
-    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts });
+    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
     const byteLength = exportedBuffer?.byteLength ?? exportedBuffer?.length ?? 0;
@@ -146,7 +146,7 @@ describe('gdocs tracked changes import/export round trip', () => {
   });
 
   it('keeps combined add/delete revisions paired through export', async () => {
-    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts });
+    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     try {
       const initialMarks = collectTrackMarkIds(editor.state.doc);
@@ -178,7 +178,7 @@ describe('msword tracked changes import/export round trip', () => {
   });
 
   it('preserves separate add and delete revisions through export', async () => {
-    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts });
+    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     try {
       const initialMarks = collectTrackMarkIds(editor.state.doc);

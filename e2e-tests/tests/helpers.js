@@ -2,10 +2,11 @@ import { expect } from '@playwright/test';
 
 export const goToPageAndWaitForEditor = async (
   page,
-  { includeFontsResolved = false, includeComments = false, layout } = {
+  { includeFontsResolved = false, includeComments = false, layout, queryParams = {} } = {
     includeFontsResolved: false,
     includeComments: false,
     layout: undefined,
+    queryParams: {},
   },
 ) => {
   const params = new URLSearchParams();
@@ -18,8 +19,15 @@ export const goToPageAndWaitForEditor = async (
   if (layout === 0 || layout === 1) {
     params.set('layout', String(layout));
   }
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    params.set(key, String(value));
+  });
 
   const url = params.toString() ? `http://localhost:4173/?${params.toString()}` : 'http://localhost:4173/';
+
+  // Block telemetry requests during tests
+  await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
 
   await page.goto(url);
   await page.waitForSelector('div.super-editor');
@@ -36,4 +44,10 @@ export function ptToPx(pt) {
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function settleForScreenshot(page) {
+  // Collapse selection and allow layout to settle across frames.
+  await page.keyboard.press('ArrowRight');
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }

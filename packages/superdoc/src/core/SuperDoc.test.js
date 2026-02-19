@@ -41,7 +41,7 @@ class MockToolbar {
 
 const createZipMock = vi.fn(async (blobs, names) => ({ zip: true, blobs, names }));
 
-vi.mock('@harbour-enterprises/super-editor', () => ({
+vi.mock('@superdoc/super-editor', () => ({
   SuperToolbar: MockToolbar,
   createZip: createZipMock,
 }));
@@ -209,13 +209,35 @@ describe('SuperDoc core', () => {
     const instance = new SuperDoc(config);
     await flushMicrotasks();
 
-    expect(createVueAppMock).toHaveBeenCalled();
-    expect(app.mount).toHaveBeenCalledWith('#host');
+    expect(createVueAppMock).toHaveBeenCalledWith({ disablePiniaDevtools: false });
+    // Vue mounts on a child wrapper element inside the user's container (SD-1832)
+    const mountArg = app.mount.mock.calls[0][0];
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(document.querySelector('#host'));
     expect(superdocStore.init).toHaveBeenCalledWith(instance.config);
     expect(instance.config.documents).toHaveLength(1);
     expect(instance.config.documents[0]).toMatchObject({ type: DOCX, url: 'https://example.com/doc.docx' });
     expect(instance.colors).toEqual(['blue', 'red']);
     expect(shuffleArrayMock).toHaveBeenCalledWith(['red', 'blue']);
+  });
+
+  it('passes disablePiniaDevtools option to createSuperdocVueApp', async () => {
+    createAppHarness();
+
+    new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      disablePiniaDevtools: true,
+      onException: vi.fn(),
+    });
+
+    await flushMicrotasks();
+
+    expect(createVueAppMock).toHaveBeenCalledWith({ disablePiniaDevtools: true });
   });
 
   it('defaults comments module config when omitted', async () => {
@@ -518,6 +540,180 @@ describe('SuperDoc core', () => {
     expect(instance.listenerCount('ready')).toBe(0);
   });
 
+  it('mounts Vue on a wrapper element inside the user container', async () => {
+    const { app } = createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    const mountArg = app.mount.mock.calls[0][0];
+
+    // Vue should mount on a child wrapper, not the user's container
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(host);
+  });
+
+  it('removes wrapper element on destroy', async () => {
+    const { app } = createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    expect(host.children.length).toBe(1);
+
+    instance.destroy();
+
+    expect(host.children.length).toBe(0);
+    expect(app.unmount).toHaveBeenCalled();
+  });
+
+  it('allows re-mounting after destroy (React StrictMode pattern)', async () => {
+    const { app } = createAppHarness();
+
+    // First mount
+    const instance1 = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    expect(host.children.length).toBe(1);
+
+    // Destroy (simulates React cleanup)
+    instance1.destroy();
+    expect(host.children.length).toBe(0);
+
+    // Re-mount (simulates React re-render)
+    const { app: app2 } = createAppHarness();
+    const instance2 = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    // Second mount should work without errors
+    expect(app2.mount).toHaveBeenCalled();
+    const mountArg = app2.mount.mock.calls[0][0];
+    expect(mountArg.parentElement).toBe(host);
+    expect(host.children.length).toBe(1);
+  });
+
+  it('mounts Vue on wrapper when selector is a DOM element', async () => {
+    const { app } = createAppHarness();
+    const host = document.querySelector('#host');
+
+    const instance = new SuperDoc({
+      selector: host,
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const mountArg = app.mount.mock.calls[0][0];
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(host);
+  });
+
+  it('throws when selector does not match any DOM element', () => {
+    createAppHarness();
+    expect(
+      () =>
+        new SuperDoc({
+          selector: '#nonexistent',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {} },
+          colors: ['red'],
+          user: { name: 'Jane', email: 'jane@example.com' },
+        }),
+    ).toThrow('SuperDoc: selector must be a valid CSS selector string or DOM element');
+  });
+
+  it('prevents app mounting if destroy is called during async init', async () => {
+    const { app } = createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+
+    // Call destroy BEFORE async init completes
+    instance.destroy();
+
+    // Wait for any pending init to complete
+    await flushMicrotasks();
+
+    // App should not have been mounted because destroy() set #destroyed = true
+    expect(app.mount).not.toHaveBeenCalled();
+  });
+
+  it('cleans up collaboration resources if destroy is called during async init', async () => {
+    const { app } = createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: {},
+        toolbar: {},
+        collaboration: { providerType: 'hocuspocus', url: 'wss://example.com' },
+      },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+
+    // Call destroy BEFORE async init completes
+    instance.destroy();
+
+    // Wait for any pending init to complete
+    await flushMicrotasks();
+
+    // App should not have been mounted
+    expect(app.mount).not.toHaveBeenCalled();
+
+    // Collaboration resources should still be cleaned up
+    expect(instance.provider.disconnect).toHaveBeenCalled();
+    expect(instance.provider.destroy).toHaveBeenCalled();
+    instance.config.documents.forEach((doc) => {
+      expect(doc.provider.disconnect).toHaveBeenCalled();
+      expect(doc.provider.destroy).toHaveBeenCalled();
+      expect(doc.ydoc.destroy).toHaveBeenCalled();
+    });
+  });
+
   it('removes comments in viewing mode and restores them when returning to editing', async () => {
     const { superdocStore } = createAppHarness();
     const removeComments = vi.fn();
@@ -550,6 +746,87 @@ describe('SuperDoc core', () => {
     instance.setDocumentMode('editing');
     expect(restoreComments).toHaveBeenCalledTimes(1);
     expect(setDocumentMode).toHaveBeenLastCalledWith('editing');
+  });
+
+  it('updates viewing comment options for presentation editors', async () => {
+    const { superdocStore } = createAppHarness();
+    const setViewingCommentOptions = vi.fn();
+    const setDocumentMode = vi.fn();
+    const presentationEditor = {
+      setViewingCommentOptions,
+      setDocumentMode,
+    };
+    const docStub = {
+      removeComments: vi.fn(),
+      restoreComments: vi.fn(),
+      getEditor: vi.fn(() => null),
+      getPresentationEditor: vi.fn(() => presentationEditor),
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      comments: { visible: true },
+      trackChanges: { visible: true },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [docStub];
+
+    instance.setDocumentMode('viewing');
+
+    expect(setViewingCommentOptions).toHaveBeenCalledWith({
+      emitCommentPositionsInViewing: true,
+      enableCommentsInViewing: true,
+    });
+  });
+
+  it('propagates context menu toggles to presentation and flow editors and skips no-op updates', async () => {
+    const { superdocStore } = createAppHarness();
+    const setContextMenuDisabled = vi.fn();
+    const setOptions = vi.fn();
+    const docStub = {
+      getPresentationEditor: vi.fn(() => ({ setContextMenuDisabled })),
+      getEditor: vi.fn(() => ({ setOptions })),
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [docStub];
+
+    instance.setDisableContextMenu(false);
+    expect(setContextMenuDisabled).not.toHaveBeenCalled();
+    expect(setOptions).not.toHaveBeenCalled();
+
+    instance.setDisableContextMenu(true);
+    expect(instance.config.disableContextMenu).toBe(true);
+    expect(setContextMenuDisabled).toHaveBeenCalledWith(true);
+    expect(setOptions).toHaveBeenCalledWith({ disableContextMenu: true });
+
+    instance.setDisableContextMenu(true);
+    expect(setContextMenuDisabled).toHaveBeenCalledTimes(1);
+    expect(setOptions).toHaveBeenCalledTimes(1);
+
+    instance.setDisableContextMenu(false);
+    expect(instance.config.disableContextMenu).toBe(false);
+    expect(setContextMenuDisabled).toHaveBeenLastCalledWith(false);
+    expect(setOptions).toHaveBeenLastCalledWith({ disableContextMenu: false });
   });
 
   it('skips rendering comments list when role is viewer', async () => {
@@ -615,8 +892,10 @@ describe('SuperDoc core', () => {
           id: expect.any(String),
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           name: 'contract.docx',
-          isNewFile: true,
         });
+        // isNewFile should NOT be set when importing existing files
+        // It should only be true when creating from blank template
+        expect(instance.config.documents[0].isNewFile).toBeUndefined();
         expect(instance.config.documents[0].data).toBe(file);
       });
 
@@ -639,8 +918,9 @@ describe('SuperDoc core', () => {
           id: expect.any(String),
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           name: 'document', // Default name for Blobs
-          isNewFile: true,
         });
+        // isNewFile should NOT be set when importing existing files
+        expect(instance.config.documents[0].isNewFile).toBeUndefined();
         // Blob should be wrapped as File
         expect(instance.config.documents[0].data).toBeInstanceOf(File);
       });
@@ -1066,6 +1346,92 @@ describe('SuperDoc core', () => {
 
       // Event should still be emitted
       expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 150 });
+    });
+  });
+
+  describe('Web layout mode configuration', () => {
+    it('auto-disables layout engine when web layout is enabled', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: { layout: 'web' },
+        useLayoutEngine: true,
+      });
+      await flushMicrotasks();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[SuperDoc] Web layout mode requires useLayoutEngine: false. Automatically disabling layout engine.',
+      );
+      expect(instance.config.useLayoutEngine).toBe(false);
+      warnSpy.mockRestore();
+    });
+
+    it('does not warn when web layout with layout engine already disabled', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: { layout: 'web' },
+        useLayoutEngine: false,
+      });
+      await flushMicrotasks();
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(instance.config.useLayoutEngine).toBe(false);
+      warnSpy.mockRestore();
+    });
+
+    it('preserves layout engine setting for print layout', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: { layout: 'print' },
+        useLayoutEngine: true,
+      });
+      await flushMicrotasks();
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(instance.config.useLayoutEngine).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('uses default print layout when viewOptions not specified', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      expect(instance.config.viewOptions).toEqual({ layout: 'print' });
+      expect(instance.config.useLayoutEngine).toBe(true);
+    });
+
+    it('handles undefined viewOptions.layout gracefully', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: {},
+        useLayoutEngine: true,
+      });
+      await flushMicrotasks();
+
+      // Should not trigger web layout warning
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(instance.config.useLayoutEngine).toBe(true);
+      warnSpy.mockRestore();
     });
   });
 });

@@ -4,6 +4,13 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
@@ -14,15 +21,18 @@
     "dev": "tsup src/index.ts --format esm --watch"
   },
   "dependencies": {
-    "@superdoc/contracts": "*",
-    "@superdoc/layout-engine": "*",
-    "@superdoc/measuring-dom": "*",
-    "@superdoc/painter-dom": "*"
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/painter-dom": "workspace:*",
+    "@superdoc/word-layout": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^22.13.1",
-    "tsup": "^8.0.2",
-    "typescript": "^5.7.3",
-    "vitest": "^3.2.4"
+    "@superdoc/pm-adapter": "workspace:*",
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

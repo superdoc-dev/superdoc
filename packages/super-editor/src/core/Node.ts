@@ -11,10 +11,14 @@ import type { AttributeSpec } from './Attribute.js';
 
 /**
  * Configuration for Node extensions.
+ * @template Options - Type for node options
+ * @template Storage - Type for node storage
+ * @template Attrs - Type for node attributes (optional, enables typed addAttributes)
  */
 export interface NodeConfig<
   Options extends Record<string, unknown> = Record<string, never>,
   Storage extends Record<string, unknown> = Record<string, never>,
+  Attrs extends Record<string, unknown> = Record<string, unknown>,
 > {
   /** The node name */
   name: string;
@@ -73,8 +77,11 @@ export interface NodeConfig<
   /** Function or object to add storage to the node */
   addStorage?: MaybeGetter<Storage>;
 
-  /** Function or object to add attributes to the node */
-  addAttributes?: MaybeGetter<Record<string, Partial<AttributeSpec>>>;
+  /**
+   * Function or object to add attributes to the node.
+   * When Attrs generic is provided, attribute keys are validated against it.
+   */
+  addAttributes?: MaybeGetter<{ [K in keyof Attrs]?: Partial<AttributeSpec> }>;
 
   /** Function or object to add commands to the node */
   addCommands?: MaybeGetter<Record<string, Command>>;
@@ -113,10 +120,12 @@ export interface NodeConfig<
  * Node class is used to create Node extensions.
  * @template Options - Type for node options
  * @template Storage - Type for node storage
+ * @template Attrs - Type for node attributes (enables typed attribute access)
  */
 export class Node<
   Options extends Record<string, unknown> = Record<string, never>,
   Storage extends Record<string, unknown> = Record<string, never>,
+  Attrs extends Record<string, unknown> = Record<string, unknown>,
 > {
   type: NodeType | string = 'node';
 
@@ -132,9 +141,15 @@ export class Node<
 
   storage: Storage;
 
-  config: NodeConfig<Options, Storage>;
+  config: NodeConfig<Options, Storage, Attrs>;
 
-  constructor(config: NodeConfig<Options, Storage>) {
+  /**
+   * Type hint for the attributes this node uses.
+   * Not used at runtime, but enables type inference.
+   */
+  declare readonly __attrsType: Attrs;
+
+  constructor(config: NodeConfig<Options, Storage, Attrs>) {
     this.config = {
       ...config,
       name: config.name || this.name,
@@ -169,7 +184,8 @@ export class Node<
   static create<
     O extends Record<string, unknown> = Record<string, never>,
     S extends Record<string, unknown> = Record<string, never>,
-  >(config: NodeConfig<O, S>): Node<O, S> {
-    return new Node<O, S>(config);
+    A extends Record<string, unknown> = Record<string, unknown>,
+  >(config: NodeConfig<O, S, A>): Node<O, S, A> {
+    return new Node<O, S, A>(config);
   }
 }

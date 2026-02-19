@@ -20,7 +20,7 @@
     "build": "tsup src/index.ts --format cjs,esm --dts --outDir dist",
     "watch:lib": "tsup src/index.ts --format cjs,esm --dts --outDir dist --watch",
     "watch:example": "nodemon --watch examples/fastify --ext ts --exec \"cd examples/fastify && tsx index.ts\"",
-    "dev": "concurrently -k -n LIB,SERVER -c yellow,green \"npm run watch:lib\" \"npm run watch:example\"",
+    "dev": "concurrently -k -n LIB,SERVER -c yellow,green \"pnpm run watch:lib\" \"pnpm run watch:example\"",
     "test": "vitest --config ./vitest.config.ts",
     "test:cov": "vitest run --coverage --config ./vitest.config.ts",
     "typecheck": "tsc --noEmit --project tsconfig.vitest.json",
@@ -35,17 +35,22 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "lib0": "catalog:",
+    "y-protocols": "catalog:",
+    "yjs": "catalog:"
+  },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "@typescript-eslint/parser": "^8.46.3",
-    "@vitest/coverage-v8": "^2.0.5",
-    "concurrently": "^9.1.2",
-    "eslint": "^9.39.1",
-    "eslint-config-prettier": "^9.1.2",
-    "nodemon": "^3.1.10",
+    "@types/node": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "concurrently": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "nodemon": "catalog:",
     "prettier": "^3.5.3",
-    "tsup": "^8.5.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.0.5"
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

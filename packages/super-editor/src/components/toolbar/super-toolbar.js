@@ -25,6 +25,7 @@ import { isList } from '@core/commands/list-helpers';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { twipsToLines } from '@converter/helpers';
 import { parseSizeUnit } from '@core/utilities';
+import { NodeSelection } from 'prosemirror-state';
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -65,6 +66,7 @@ import { parseSizeUnit } from '@core/utilities';
  * @property {*} icon.value - The value of the icon
  * @property {Object} tooltip - The tooltip for the item
  * @property {*} tooltip.value - The value of the tooltip
+ * @property {boolean} [restoreEditorFocus] - Whether to restore editor focus after command execution
  * @property {Object} attributes - Additional attributes for the item
  * @property {Object} attributes.value - The value of the attributes
  * @property {Object} disabled - Whether the item is disabled
@@ -240,12 +242,28 @@ export class SuperToolbar extends EventEmitter {
       focus: null,
     };
 
+    /**
+     * Timeout ID for restoring editor focus after toolbar command execution.
+     * Tracked for cleanup on destroy to prevent callbacks firing after toolbar is unmounted.
+     * @type {number|null}
+     * @private
+     */
+    this._restoreFocusTimeoutId = null;
+
     // Move legacy 'element' to 'selector'
     if (!this.config.selector && this.config.element) {
       this.config.selector = this.config.element;
     }
 
     this.toolbarContainer = this.findElementBySelector(this.config.selector);
+    if (this.toolbarContainer) {
+      const uiFontFamily =
+        (this.config?.uiDisplayFallbackFont || '').toString().trim() || 'Arial, Helvetica, sans-serif';
+      // Set the --sd-ui-font-family CSS variable on the toolbar container.
+      // This variable is used throughout the toolbar and its child components
+      // to ensure consistent typography across all UI surfaces (dropdowns, tooltips, etc.)
+      this.toolbarContainer.style.setProperty('--sd-ui-font-family', uiFontFamily);
+    }
     this.#initToolbarGroups();
     this.#makeToolbarItems({
       superToolbar: this,
@@ -350,6 +368,12 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     setFontSize: ({ item, argument }) => {
+      if (this.#isFieldAnnotationSelection() && argument) {
+        this.activeEditor?.commands.setFieldAnnotationsFontSize(argument, true);
+        this.updateToolbarState();
+        return;
+      }
+
       this.#runCommandWithArgumentOnly({ item, argument }, () => {
         this.activeEditor?.commands.setFieldAnnotationsFontSize(argument, true);
       });
@@ -363,6 +387,12 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     setFontFamily: ({ item, argument }) => {
+      if (this.#isFieldAnnotationSelection() && argument) {
+        this.activeEditor?.commands.setFieldAnnotationsFontFamily(argument, true);
+        this.updateToolbarState();
+        return;
+      }
+
       this.#runCommandWithArgumentOnly({ item, argument }, () => {
         this.activeEditor?.commands.setFieldAnnotationsFontFamily(argument, true);
       });
@@ -506,8 +536,13 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     toggleBold: ({ item, argument }) => {
-      let command = item.command;
+      if (this.#isFieldAnnotationSelection()) {
+        this.activeEditor?.commands.toggleFieldAnnotationsFormat('bold', true);
+        this.updateToolbarState();
+        return;
+      }
 
+      let command = item.command;
       if (command in this.activeEditor.commands) {
         this.activeEditor.commands[command](argument);
         this.activeEditor.commands.toggleFieldAnnotationsFormat('bold', true);
@@ -524,8 +559,13 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     toggleItalic: ({ item, argument }) => {
-      let command = item.command;
+      if (this.#isFieldAnnotationSelection()) {
+        this.activeEditor?.commands.toggleFieldAnnotationsFormat('italic', true);
+        this.updateToolbarState();
+        return;
+      }
 
+      let command = item.command;
       if (command in this.activeEditor.commands) {
         this.activeEditor.commands[command](argument);
         this.activeEditor.commands.toggleFieldAnnotationsFormat('italic', true);
@@ -542,8 +582,13 @@ export class SuperToolbar extends EventEmitter {
      * @returns {void}
      */
     toggleUnderline: ({ item, argument }) => {
-      let command = item.command;
+      if (this.#isFieldAnnotationSelection()) {
+        this.activeEditor?.commands.toggleFieldAnnotationsFormat('underline', true);
+        this.updateToolbarState();
+        return;
+      }
 
+      let command = item.command;
       if (command in this.activeEditor.commands) {
         this.activeEditor.commands[command](argument);
         this.activeEditor.commands.toggleFieldAnnotationsFormat('underline', true);
@@ -784,11 +829,51 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Sync document mode dropdown UI with the current mode.
+   * @private
+   * @returns {void}
+   */
+  #syncDocumentModeUi() {
+    const documentModeItem = this.getToolbarItemByName('documentMode');
+    if (!documentModeItem) return;
+
+    const mode = (this.documentMode || 'editing').toLowerCase();
+    const texts = this.config.texts || {};
+    const icons = this.config.icons || {};
+    const map = {
+      editing: {
+        label: texts.documentEditingMode || 'Editing',
+        icon: icons.documentEditingMode || icons.documentMode,
+      },
+      suggesting: {
+        label: texts.documentSuggestingMode || 'Suggesting',
+        icon: icons.documentSuggestingMode || icons.documentMode,
+      },
+      viewing: {
+        label: texts.documentViewingMode || 'Viewing',
+        icon: icons.documentViewingMode || icons.documentMode,
+      },
+    };
+
+    const next = map[mode] || map.editing;
+    if (documentModeItem.label?.value !== undefined) {
+      documentModeItem.label.value = next.label;
+    }
+    if (documentModeItem.defaultLabel?.value !== undefined) {
+      documentModeItem.defaultLabel.value = next.label;
+    }
+    if (documentModeItem.icon?.value !== undefined && next.icon) {
+      documentModeItem.icon.value = next.icon;
+    }
+  }
+
+  /**
    * Update the toolbar state based on the current editor state
    * Updates active/inactive state of all toolbar items
    * @returns {void}
    */
   updateToolbarState() {
+    this.#syncDocumentModeUi();
     this.#updateToolbarHistory();
     this.#initDefaultFonts();
     this.#updateHighlightColors();
@@ -1040,6 +1125,15 @@ export class SuperToolbar extends EventEmitter {
     const wasFocused = Boolean(typeof hasFocusFn === 'function' && hasFocusFn.call(this.activeEditor.view));
     const { command } = item;
     const isMarkToggle = this.isMarkToggle(item);
+    const shouldRestoreFocus = Boolean(item?.restoreEditorFocus);
+
+    const hasArgument = argument !== null && argument !== undefined;
+    const isDropdownOpen = item?.type === 'dropdown' && !hasArgument;
+    const isFontCommand = item?.command === 'setFontFamily' || item?.command === 'setFontSize';
+    if (isDropdownOpen && isFontCommand) {
+      // Opening/closing a dropdown should not shift editor focus or alter selection state.
+      return;
+    }
 
     // If the editor wasn't focused and this is a mark toggle, queue it and keep the button active
     // until the next selection update (after the user clicks into the editor).
@@ -1086,6 +1180,14 @@ export class SuperToolbar extends EventEmitter {
 
     if (isMarkToggle) this.#syncStickyMarksFromState();
     this.updateToolbarState();
+
+    if (shouldRestoreFocus && this.activeEditor && !this.activeEditor.options.isHeaderOrFooter) {
+      this._restoreFocusTimeoutId = setTimeout(() => {
+        this._restoreFocusTimeoutId = null;
+        if (!this.activeEditor || this.activeEditor.options.isHeaderOrFooter) return;
+        this.activeEditor.focus();
+      }, 0);
+    }
   }
 
   /**
@@ -1259,5 +1361,22 @@ export class SuperToolbar extends EventEmitter {
 
     const tr = state.tr.setStoredMarks([mark]);
     view.dispatch(tr);
+  }
+
+  #isFieldAnnotationSelection() {
+    const selection = this.activeEditor?.state?.selection;
+    return selection instanceof NodeSelection && selection?.node?.type?.name === 'fieldAnnotation';
+  }
+
+  /**
+   * Cleans up resources when the toolbar is destroyed.
+   * Clears any pending timeouts to prevent callbacks firing after unmount.
+   * @returns {void}
+   */
+  destroy() {
+    if (this._restoreFocusTimeoutId !== null) {
+      clearTimeout(this._restoreFocusTimeoutId);
+      this._restoreFocusTimeoutId = null;
+    }
   }
 }

@@ -19,7 +19,7 @@ import type { Page, SectionMetadata } from '@superdoc/contracts';
  * Page number format types supported by the layout engine.
  * These match MS Word's page numbering format options.
  */
-export type PageNumberFormat = 'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter';
+export type PageNumberFormat = 'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter' | 'numberInDash';
 
 /**
  * Display page information for a single page in the document.
@@ -187,6 +187,8 @@ export function formatPageNumber(pageNumber: number, format: PageNumberFormat): 
       return toUpperLetter(num);
     case 'lowerLetter':
       return toLowerLetter(num);
+    case 'numberInDash':
+      return `-${num}-`;
     default:
       // TypeScript exhaustiveness check - should never reach here
       return String(num);

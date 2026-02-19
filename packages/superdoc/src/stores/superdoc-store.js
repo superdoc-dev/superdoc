@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, reactive, computed } from 'vue';
 import { useCommentsStore } from './comments-store';
-import { getFileObject } from '@superdoc/common';
-import { DOCX, PDF } from '@superdoc/common';
+import { getFileObject, DOCX, PDF } from '@superdoc/common';
 import { normalizeDocumentEntry } from '@superdoc/core/helpers/file.js';
 import useDocument from '@superdoc/composables/use-document';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
@@ -203,8 +202,14 @@ export const useSuperdocStore = defineStore('superdoc', () => {
     else if (doc.url && doc.type) {
       if (doc.type.toLowerCase() === 'docx') doc.type = DOCX;
       else if (doc.type.toLowerCase() === 'pdf') doc.type = PDF;
-      const fileObject = await getFileObject(doc.url, doc.name || 'document', doc.type);
-      return { ...doc, data: fileObject };
+      try {
+        const fileObject = await getFileObject(doc.url, doc.name || 'document', doc.type);
+        return { ...doc, data: fileObject };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.debug('[SuperDoc] Failed to fetch document from URL:', message);
+        throw err;
+      }
     }
     // Invalid configuration
     return null;

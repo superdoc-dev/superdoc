@@ -1,5 +1,5 @@
 import { Node, Attribute } from '@core/index.js';
-import { isHeadless } from '@/utils/headless-helpers.js';
+import { isHeadless } from '@utils/headless-helpers.js';
 /**
  * Configuration options for PageNumber
  * @typedef {Object} PageNumberOptions

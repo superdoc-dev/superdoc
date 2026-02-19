@@ -49,9 +49,14 @@ describe('contentProcessor', () => {
         editor: mockEditor,
       });
 
-      expect(importHtml.createDocFromHTML).toHaveBeenCalledWith('<p style="color: red;">Test</p>', mockEditor, {
-        isImport: true,
-      });
+      expect(importHtml.createDocFromHTML).toHaveBeenCalledWith(
+        '<p style="color: red;">Test</p>',
+        mockEditor,
+        expect.objectContaining({
+          isImport: true,
+          document: expect.anything(),
+        }),
+      );
       expect(result).toBeDefined();
     });
   });
@@ -67,9 +72,14 @@ describe('contentProcessor', () => {
         editor: mockEditor,
       });
 
-      expect(importMarkdown.createDocFromMarkdown).toHaveBeenCalledWith('# Heading\n\nParagraph', mockEditor, {
-        isImport: true,
-      });
+      expect(importMarkdown.createDocFromMarkdown).toHaveBeenCalledWith(
+        '# Heading\n\nParagraph',
+        mockEditor,
+        expect.objectContaining({
+          isImport: true,
+          document: expect.anything(),
+        }),
+      );
       expect(result).toBeDefined();
     });
   });

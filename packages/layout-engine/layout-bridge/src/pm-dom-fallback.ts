@@ -24,6 +24,8 @@ export interface CursorRect {
   y: number;
   /** Height of the cursor line */
   height: number;
+  /** Width of the selection rectangle (optional for cursor, required for selections) */
+  width?: number;
 }
 
 /**
@@ -38,6 +40,32 @@ export interface PageTransform {
   y: number;
   /** Scale factor applied to the page */
   scale: number;
+  /**
+   * Height of the page in pixels (before scaling).
+   *
+   * **When Present:**
+   * - The page has a known, measured height (e.g., from layout calculation or DOM measurement)
+   * - Used to calculate page bottom boundary: pageBottom = y + height / scale
+   * - Enables accurate hit testing when determining which page contains a cursor
+   *
+   * **When Absent (undefined):**
+   * - Page height is unknown or not yet calculated
+   * - Falls back to a conservative default (e.g., 1000px) for coordinate transformation
+   * - May occur during initial layout before page heights are measured
+   * - May occur for pages that haven't been rendered yet
+   *
+   * **Impact on Cursor Visibility:**
+   * When height is absent, coordinate mapping uses a fallback value which may be incorrect
+   * for unusually tall or short pages. This can affect:
+   * - Cursor positioning accuracy when layout is stale
+   * - Page boundary detection for multi-page cursors
+   * - Scroll-to-cursor behavior near page boundaries
+   *
+   * **Recommendation:**
+   * Always provide height when available to ensure accurate cursor positioning. The fallback
+   * is safe but may result in minor positioning errors for non-standard page sizes.
+   */
+  height?: number;
 }
 
 /**
@@ -117,8 +145,41 @@ export class PmDomFallback {
    * - Zoom/scale transformations
    * - Multi-page layout
    *
+   * **Behavioral Change (Selection Polish):**
+   * This function now returns null when the cursor is outside all pages, rather than
+   * falling back to the first page. This change improves cursor positioning accuracy
+   * when layout is stale.
+   *
+   * **Why null is preferred over fallback-to-first-page:**
+   * 1. **Accuracy:** When layout is stale, showing no cursor is better than showing it
+   *    at the wrong position. A missing cursor prompts layout refresh; a misplaced cursor
+   *    causes user confusion and incorrect editing.
+   * 2. **Temporary State:** Layout staleness is temporary - typically resolves within
+   *    100-200ms. Hiding the cursor briefly is less disruptive than showing it incorrectly.
+   * 3. **User Expectations:** Users expect the cursor to appear where they clicked. If we
+   *    can't determine that position accurately, hiding it is more honest than guessing.
+   * 4. **Prevents Drift:** Fallback positioning can cause selection drift where the visual
+   *    cursor and actual PM selection position diverge, leading to incorrect edits.
+   *
+   * **Impact on Cursor Visibility:**
+   * - Cursor may briefly disappear during layout recalculation (typically < 200ms)
+   * - Cursor will not appear when clicking in gaps between pages (expected behavior)
+   * - Cursor will not appear for positions outside the document bounds (expected behavior)
+   * - When layout catches up, cursor will reappear at the correct position
+   *
+   * **Migration Notes:**
+   * Code relying on the old fallback behavior should handle null returns gracefully:
+   * ```typescript
+   * const cursorRect = fallback.getCursorRect(pmPos);
+   * if (cursorRect) {
+   *   renderer.render(cursorRect);
+   * } else {
+   *   renderer.hide(); // Cursor is outside all pages - hide it
+   * }
+   * ```
+   *
    * @param coords - PM viewport coordinates
-   * @returns Cursor rectangle in page space, or null if outside all pages
+   * @returns Cursor rectangle in page space, or null if outside all pages (including gaps)
    */
   mapToPageSpace(coords: { left: number; top: number; bottom: number }): CursorRect | null {
     // Get editor container bounding box
@@ -135,7 +196,9 @@ export class PmDomFallback {
     // Find which page contains this Y coordinate
     for (const transform of pageTransforms) {
       const pageTop = transform.y;
-      const pageBottom = transform.y + 1000 / transform.scale; // Assume standard page height
+      // Use real page height from transform if available, otherwise use a conservative default
+      const pageHeightUnscaled = transform.height ?? 1000;
+      const pageBottom = transform.y + pageHeightUnscaled / transform.scale;
 
       if (containerY >= pageTop && containerY < pageBottom) {
         // Found the page containing this cursor
@@ -148,17 +211,9 @@ export class PmDomFallback {
       }
     }
 
-    // Cursor is outside all pages - use first page as fallback
-    if (pageTransforms.length > 0) {
-      const firstPage = pageTransforms[0];
-      return {
-        x: (containerX - firstPage.x) / firstPage.scale,
-        y: (containerY - firstPage.y) / firstPage.scale,
-        height: height / firstPage.scale,
-        pageIndex: 0,
-      };
-    }
-
+    // Cursor is outside all pages - suppress rendering rather than guessing
+    // This prevents drawing at wrong offsets when layout is stale
+    // Changed from fallback-to-first-page to null return for better accuracy
     return null;
   }
 

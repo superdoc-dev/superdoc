@@ -1,0 +1,362 @@
+---
+title: Configuration Options
+sidebarTitle: Configuration
+---
+
+Complete guide to configuring the template builder component.
+
+## Document options
+
+Control which document is loaded and how users interact with it:
+
+```tsx
+<SuperDocTemplateBuilder
+  document={{
+    source: string | File | Blob, // Document to load
+    mode: "editing" | "viewing", // Default: "editing"
+  }}
+/>
+```
+
+**Editing mode** - Users can edit document content and insert fields
+**Viewing mode** - Read-only document display, fields can still be inserted
+
+## Field system
+
+### Available fields
+
+Define which fields users can insert:
+
+```tsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: [
+      {
+        id: "1",
+        label: "Customer Name",
+        defaultValue: "John Doe", // Optional
+        metadata: { type: "text" }, // Optional
+        group: "customer", // Optional category
+      },
+      {
+        id: "2",
+        label: "Signature",
+        mode: "block", // Force block-level insertion
+      },
+    ],
+    allowCreate: true, // Let users create new fields on the fly
+  }}
+/>
+```
+
+### Field creation
+
+Allow users to create new fields while building templates:
+
+```tsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: myFields,
+    allowCreate: true,
+  }}
+  onFieldCreate={async (field) => {
+    // Validate or save to database
+    const savedField = await api.createField(field);
+
+    // Return updated field or void
+    return { ...field, id: savedField.id };
+  }}
+/>
+```
+
+When enabled, the field menu shows a "Create new field" option at the bottom.
+
+## Menu customization
+
+### Trigger pattern
+
+Change what opens the field insertion menu:
+
+```tsx
+<SuperDocTemplateBuilder
+  menu={{
+    trigger: "@@", // Now type @@ instead of {{
+  }}
+/>
+```
+
+### Custom menu component
+
+Replace the default field menu entirely:
+
+```tsx
+import { DefaultFieldMenu } from "@superdoc-dev/template-builder/defaults";
+
+function CustomMenu({ fields, onInsert, onClose, position, query }) {
+  return (
+    <div style={{ position: "absolute", ...position }}>
+      <input
+        placeholder="Search fields..."
+        value={query}
+        onChange={(e) => {
+          /* filter logic */
+        }}
+      />
+      {fields.map((field) => (
+        <button key={field.id} onClick={() => onInsert(field)}>
+          {field.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+<SuperDocTemplateBuilder menu={{ component: CustomMenu }} />;
+```
+
+The component handles trigger detection and positioning, you just render the UI.
+
+## List sidebar
+
+### Position and visibility
+
+```tsx
+<SuperDocTemplateBuilder
+  list={{
+    position: "left" | "right", // Default: 'right'
+  }}
+/>
+```
+
+Omit `list` prop entirely to hide the sidebar.
+
+### Custom list component
+
+Replace the default sidebar:
+
+```tsx
+function CustomFieldList({
+  fields,
+  selectedField,
+  onFieldSelect,
+  onFieldDelete,
+}) {
+  return (
+    <aside>
+      <h3>Template Fields ({fields.length})</h3>
+      {fields.map((field) => (
+        <div
+          key={field.id}
+          onClick={() => onFieldSelect(field)}
+          style={{
+            background: selectedField?.id === field.id ? "#e3f2fd" : "white",
+          }}
+        >
+          <strong>{field.alias}</strong>
+          {field.group && <span>Group: {field.group}</span>}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onFieldDelete(field.id);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      ))}
+    </aside>
+  );
+}
+
+<SuperDocTemplateBuilder
+  list={{
+    position: "right",
+    component: CustomFieldList,
+  }}
+/>;
+```
+
+## Toolbar configuration
+
+Control the document editing toolbar:
+
+```tsx
+// Boolean - show/hide completely
+<SuperDocTemplateBuilder toolbar={false} />
+
+// String - show specific tools
+<SuperDocTemplateBuilder toolbar="bold italic underline" />
+
+// Object - full control
+<SuperDocTemplateBuilder
+  toolbar={{
+    items: ['bold', 'italic', 'underline', 'align', 'list'],
+    position: 'top',
+    sticky: true
+  }}
+/>
+```
+
+## Event handlers
+
+### Field lifecycle events
+
+```tsx
+<SuperDocTemplateBuilder
+  // When a field is successfully inserted
+  onFieldInsert={(field: TemplateField) => {
+    console.log("Inserted:", field.alias);
+  }}
+  // When a field is modified
+  onFieldUpdate={(field: TemplateField) => {
+    console.log("Updated:", field.alias);
+  }}
+  // When a field is removed
+  onFieldDelete={(fieldId: string | number) => {
+    console.log("Deleted:", fieldId);
+  }}
+  // Whenever the complete field list changes
+  onFieldsChange={(fields: TemplateField[]) => {
+    console.log("Template has", fields.length, "fields");
+  }}
+/>
+```
+
+### Selection and interaction
+
+```tsx
+<SuperDocTemplateBuilder
+  // When user focuses on a field in the document
+  onFieldSelect={(field: TemplateField | null) => {
+    if (field) {
+      console.log("Selected field:", field.alias);
+    }
+  }}
+  // When trigger pattern is typed
+  onTrigger={(event: TriggerEvent) => {
+    console.log("Trigger at position:", event.position);
+    console.log("Query string:", event.query);
+  }}
+/>
+```
+
+### Document ready
+
+```tsx
+<SuperDocTemplateBuilder
+  onReady={() => {
+    console.log("Document loaded and ready");
+  }}
+/>
+```
+
+## Complete example
+
+Putting it all together:
+
+```tsx
+import { useState, useRef } from "react";
+import SuperDocTemplateBuilder, {
+  SuperDocTemplateBuilderHandle,
+  FieldDefinition,
+} from "@superdoc-dev/template-builder";
+
+function TemplateEditor() {
+  const builderRef = useRef<SuperDocTemplateBuilderHandle>(null);
+  const [fields, setFields] = useState<FieldDefinition[]>([
+    { id: "1", label: "Customer Name", group: "customer" },
+    { id: "2", label: "Customer Email", group: "customer" },
+    { id: "3", label: "Invoice Date", group: "invoice" },
+    { id: "4", label: "Total Amount", group: "invoice" },
+  ]);
+
+  const handleExport = async () => {
+    const blob = await builderRef.current?.exportTemplate({
+      fileName: "invoice-template.docx",
+      triggerDownload: true,
+    });
+  };
+
+  const handleFieldCreate = async (field: FieldDefinition) => {
+    // Save to your database
+    const saved = await fetch("/api/fields", {
+      method: "POST",
+      body: JSON.stringify(field),
+    }).then((r) => r.json());
+
+    // Add to local state
+    setFields((prev) => [...prev, { ...field, id: saved.id }]);
+
+    return { ...field, id: saved.id };
+  };
+
+  return (
+    <div>
+      <header>
+        <h1>Invoice Template Builder</h1>
+        <button onClick={handleExport}>Export Template</button>
+      </header>
+
+      <SuperDocTemplateBuilder
+        ref={builderRef}
+        document={{
+          source: "invoice-base.docx",
+          mode: "editing",
+        }}
+        fields={{
+          available: fields,
+          allowCreate: true,
+        }}
+        menu={{
+          trigger: "{{",
+        }}
+        list={{
+          position: "right",
+        }}
+        toolbar={{
+          items: ["bold", "italic", "underline", "align", "list"],
+          sticky: true,
+        }}
+        onFieldsChange={(templateFields) => {
+          console.log("Template updated:", templateFields);
+        }}
+        onFieldCreate={handleFieldCreate}
+        onReady={() => {
+          console.log("Document ready for editing");
+        }}
+      />
+    </div>
+  );
+}
+```
+
+## Styling
+
+The component uses CSS classes you can target:
+
+```css
+/* Main container */
+.superdoc-template-builder {
+  height: 100vh;
+}
+
+/* Field menu popup */
+.superdoc-field-menu {
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Field list sidebar */
+.superdoc-field-list {
+  background: #f5f5f5;
+  border-left: 1px solid #ddd;
+}
+
+/* Fields in the document */
+.superdoc-field-tag {
+  background: #e3f2fd;
+  border: 1px dashed #2196f3;
+}
+```
+
+Styles from `superdoc/dist/style.css` must be imported for proper rendering.

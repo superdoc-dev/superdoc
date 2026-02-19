@@ -45,18 +45,29 @@ const encode = (params) => {
 const decode = (params) => {
   const { grid: rawGrid } = params.node.attrs || {};
   const grid = Array.isArray(rawGrid) ? rawGrid : [];
-  const { firstRow = {} } = params.extraParams || {};
+  const { firstRow = {}, preferTableGrid = false, totalColumns: requestedColumns } = params.extraParams || {};
 
   const cellNodes = firstRow.content?.filter((n) => n.type === 'tableCell') ?? [];
 
-  const colWidthsFromCellNodes = cellNodes.flatMap((cell) => {
+  let colWidthsFromCellNodes = cellNodes.flatMap((cell) => {
     const spanCount = Math.max(1, cell?.attrs?.colspan ?? 1);
     const colwidth = cell.attrs?.colwidth;
     return Array.from({ length: spanCount }).map((_, span) => (Array.isArray(colwidth) ? colwidth[span] : undefined));
   });
 
   const columnCountFromCells = colWidthsFromCellNodes.length;
-  const totalColumns = Math.max(columnCountFromCells, grid.length);
+  const gridColumnCount = grid.length;
+  let totalColumns = Math.max(columnCountFromCells, gridColumnCount);
+
+  if (typeof requestedColumns === 'number' && Number.isFinite(requestedColumns) && requestedColumns > 0) {
+    totalColumns = requestedColumns;
+  } else if (preferTableGrid && gridColumnCount > 0) {
+    totalColumns = gridColumnCount;
+  }
+
+  if (colWidthsFromCellNodes.length > totalColumns) {
+    colWidthsFromCellNodes = colWidthsFromCellNodes.slice(0, totalColumns);
+  }
   const fallbackColumnWidthTwips = resolveFallbackColumnWidthTwips(params, totalColumns, cellMinWidth);
 
   // Build the <w:tblGrid> columns

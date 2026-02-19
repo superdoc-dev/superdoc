@@ -1,0 +1,126 @@
+---
+title: AI Agents & LLMs
+sidebarTitle: AI Agents ✨
+keywords: "ai document editing, llm docx, headless editor, document automation ai, programmatic word editing"
+---
+
+SuperDoc can run headless in Node.js for server-side document processing, AI agent workflows, and batch automation.
+
+## Quick example
+
+```javascript
+import { Editor } from 'superdoc/super-editor';
+import OpenAI from 'openai';
+
+const openai = new OpenAI();
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Write a service agreement in HTML.' }],
+});
+
+const editor = await Editor.open(templateDocx);
+editor.commands.insertContent(completion.choices[0].message.content, {
+  contentType: 'html',
+});
+const docx = await editor.exportDocx();
+```
+
+## Content formats
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertContent(value, { contentType: 'html' });      // Recommended for LLMs
+editor.commands.insertContent(value, { contentType: 'markdown' });
+editor.commands.insertContent(value, { contentType: 'text' });
+editor.commands.insertContent(value, { contentType: 'schema' });     // ProseMirror JSON
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile);
+
+editor.commands.insertContent(value, { contentType: 'html' });      // Recommended for LLMs
+editor.commands.insertContent(value, { contentType: 'markdown' });
+editor.commands.insertContent(value, { contentType: 'text' });
+editor.commands.insertContent(value, { contentType: 'schema' });     // ProseMirror JSON
+```
+</CodeGroup>
+
+See [Import/Export](/getting-started/import-export) for format details, limitations, and guidance on choosing a format.
+
+## AI redlining with track changes
+
+Use `suggesting` mode so AI edits appear as tracked changes that users can accept or reject:
+
+<CodeGroup>
+```javascript Usage
+const contract = await readFile('./contract.docx');
+const editor = await Editor.open(contract, {
+  documentMode: 'suggesting',
+});
+
+// AI suggestions are tracked — users review them in Word
+editor.commands.insertContent(aiRevisions, { contentType: 'html' });
+const redlined = await editor.exportDocx();
+```
+
+```javascript Full Example
+import { readFile } from 'node:fs/promises';
+import { Editor } from 'superdoc/super-editor';
+
+const contract = await readFile('./contract.docx');
+const editor = await Editor.open(contract, {
+  documentMode: 'suggesting',
+});
+
+// AI suggestions are tracked — users review them in Word
+editor.commands.insertContent(aiRevisions, { contentType: 'html' });
+const redlined = await editor.exportDocx();
+```
+</CodeGroup>
+
+## LLM quick reference
+
+Point your AI assistant at these URLs for SuperDoc context:
+
+```
+https://docs.superdoc.dev/llms.txt        // Quick reference
+https://docs.superdoc.dev/llms-full.txt   // Complete documentation
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="SuperEditor API"
+    icon="code"
+    href="/core/supereditor/overview"
+  >
+    Headless mode, Editor.open(), and programmatic control
+  </Card>
+
+  <Card
+    title="Import/Export"
+    icon="file"
+    href="/getting-started/import-export"
+  >
+    Content formats, export options, and round-trip behavior
+  </Card>
+
+  <Card
+    title="AI Redlining (Browser)"
+    icon="github"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/features/ai-redlining"
+  >
+    React app: upload a DOCX, LLM reviews it, tracked changes in the UI
+  </Card>
+
+  <Card
+    title="AI Redlining (Headless)"
+    icon="github"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/headless/ai-redlining"
+  >
+    Node.js script: open DOCX, LLM reviews, export redlined document
+  </Card>
+</CardGroup>

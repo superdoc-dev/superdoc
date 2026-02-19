@@ -110,7 +110,7 @@ describe('PmDomFallback', () => {
       expect(rect?.height).toBe(40); // 20px / 0.5 scale = 40px
     });
 
-    it('should fallback to first page when position is outside all pages', () => {
+    it('should return null when position is outside all pages (suppress incorrect rendering)', () => {
       // Mock coordinates way below all pages
       mockPmView.coordsAtPos = () => ({
         left: 100,
@@ -120,7 +120,8 @@ describe('PmDomFallback', () => {
 
       const rect = fallback.getCursorRect(0);
 
-      expect(rect?.pageIndex).toBe(0); // Fallback to first page
+      // Should return null to suppress rendering at wrong offsets rather than guessing
+      expect(rect).toBeNull();
     });
   });
 

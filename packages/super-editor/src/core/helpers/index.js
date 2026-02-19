@@ -28,3 +28,4 @@ export * from './importHtml.js';
 export * from './importMarkdown.js';
 export * from './contentProcessor.js';
 export * from './updateDOMAttributes.js';
+export * from './applyPatch.js';

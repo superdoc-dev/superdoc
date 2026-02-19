@@ -8,7 +8,7 @@ import { translator as wNumIdTranslator } from '../numId';
 
 // Property translators for w:numPr child elements
 // Each translator handles a specific property of the numbering properties
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [mcAlternateContentTranslator, wIlvlTranslator, wInsTranslator, wNumIdTranslator];
 
 /**

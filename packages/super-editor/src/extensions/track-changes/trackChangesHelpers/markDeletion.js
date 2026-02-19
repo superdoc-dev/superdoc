@@ -15,6 +15,15 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
  * @returns {Object} Deletion map and deletionMark
  */
 export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
+  const normalizeEmail = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
+  const userEmail = normalizeEmail(user?.email);
+  const isOwnInsertion = (mark) => {
+    const authorEmail = normalizeEmail(mark?.attrs?.authorEmail);
+    // Word imports often omit authorEmail, treat missing as "own" to allow deletion.
+    if (!authorEmail || !userEmail) return true;
+    return authorEmail === userEmail;
+  };
+
   let trackedMark = findTrackedMarkBetween({
     tr,
     from,
@@ -50,10 +59,8 @@ export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
       return;
     }
 
-    if (
-      node.isInline &&
-      node.marks.find((mark) => mark.type.name === TrackInsertMarkName && mark.attrs.authorEmail === user.email)
-    ) {
+    const insertMark = node.marks.find((mark) => mark.type.name === TrackInsertMarkName);
+    if (node.isInline && insertMark && isOwnInsertion(insertMark)) {
       const removeStep = new ReplaceStep(
         deletionMap.map(Math.max(from, pos)),
         deletionMap.map(Math.min(to, pos + node.nodeSize)),

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { pictNodeTypeStrategy } from './pict-node-type-strategy';
 import { handleVRectImport } from './handle-v-rect-import';
 import { handleShapeTextboxImport } from './handle-shape-textbox-import';
+import { handleShapeImageWatermarkImport } from './handle-shape-image-watermark-import';
 
 describe('pictNodeTypeStrategy', () => {
   const createNode = (elements = []) => ({
@@ -83,14 +84,67 @@ describe('pictNodeTypeStrategy', () => {
       });
     });
 
-    it('should return unknown when shape has other elements but no textbox', () => {
+    it('should return image type when shape contains imagedata (watermarks)', () => {
       const node = createNode([createShape([{ name: 'v:imagedata' }, { name: 'v:fill' }])]);
 
       const result = pictNodeTypeStrategy(node);
 
       expect(result).toEqual({
-        type: 'unknown',
-        handler: null,
+        type: 'image',
+        handler: handleShapeImageWatermarkImport,
+      });
+    });
+  });
+
+  describe('image handler', () => {
+    it('should return image type when shape contains imagedata', () => {
+      const node = createNode([createShape([{ name: 'v:imagedata', attributes: { 'r:id': 'rId1' } }])]);
+
+      const result = pictNodeTypeStrategy(node);
+
+      expect(result).toEqual({
+        type: 'image',
+        handler: handleShapeImageWatermarkImport,
+      });
+    });
+
+    it('should prioritize textbox over imagedata when both present', () => {
+      const node = createNode([createShape([createTextbox(), { name: 'v:imagedata' }])]);
+
+      const result = pictNodeTypeStrategy(node);
+
+      expect(result).toEqual({
+        type: 'shapeContainer',
+        handler: handleShapeTextboxImport,
+      });
+    });
+
+    it('should return image type for watermark with imagedata only', () => {
+      const shape = {
+        name: 'v:shape',
+        attributes: {
+          id: 'WordPictureWatermark100927634',
+          'o:spid': '_x0000_s1027',
+          type: '#_x0000_t75',
+          style: 'position:absolute;width:466.55pt;height:233.25pt;z-index:-251653120',
+        },
+        elements: [
+          {
+            name: 'v:imagedata',
+            attributes: {
+              'r:id': 'rId1',
+              'o:title': 'Balloons',
+            },
+          },
+        ],
+      };
+      const node = createNode([shape]);
+
+      const result = pictNodeTypeStrategy(node);
+
+      expect(result).toEqual({
+        type: 'image',
+        handler: handleShapeImageWatermarkImport,
       });
     });
   });

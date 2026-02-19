@@ -1,15 +1,34 @@
 {
   "name": "@superdoc-dev/ai",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "AI integration package for SuperDoc",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
     "lint": "eslint src --ext .ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "pnpm run build",
+    "version:next": "pnpm version prerelease --preid=next --no-git-tag-version",
+    "version:beta": "pnpm version prerelease --preid=beta --no-git-tag-version",
+    "version:patch": "pnpm version patch --no-git-tag-version",
+    "version:minor": "pnpm version minor --no-git-tag-version",
+    "version:major": "pnpm version major --no-git-tag-version",
+    "publish:next": "pnpm run build && pnpm run test && pnpm publish --tag next --access public",
+    "publish:beta": "pnpm run build && pnpm run test && pnpm publish --tag beta --access public",
+    "publish:latest": "pnpm run build && pnpm run test && pnpm publish --tag latest --access public",
+    "release:next": "pnpm run version:next && pnpm run publish:next",
+    "release:beta": "pnpm run version:beta && pnpm run publish:beta",
+    "info": "pnpm view @superdoc-dev/ai dist-tags && pnpm view @superdoc-dev/ai versions"
   },
   "keywords": [
     "superdoc",
@@ -25,20 +44,22 @@
     "prosemirror-model": "^1.25.2",
     "prosemirror-state": "^1.4.3",
     "prosemirror-view": "^1.33.8",
-    "superdoc": "*"
+    "superdoc": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0",
-    "prosemirror-model": "^1.25.2",
-    "prosemirror-state": "^1.4.3",
-    "prosemirror-view": "^1.33.8",
-    "superdoc": "^0.28.0",
-    "tsup": "^8.5.1",
-    "typescript": "^5.0.0",
-    "vitest": "^3.2.4"
+    "@types/node": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "eslint": "catalog:",
+    "prosemirror-model": "catalog:",
+    "prosemirror-state": "catalog:",
+    "prosemirror-view": "catalog:",
+    "superdoc": "workspace:",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "vue": "catalog:"
   },
   "files": [
     "dist",

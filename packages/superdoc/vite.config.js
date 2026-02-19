@@ -1,12 +1,27 @@
 import path from 'path';
 import copy from 'rollup-plugin-copy'
+import dts from 'vite-plugin-dts'
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
+import { createRequire } from 'node:module';
 import { fileURLToPath, URL } from 'node:url';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { visualizer } from 'rollup-plugin-visualizer';
 import vue from '@vitejs/plugin-vue'
 
 import { version } from './package.json';
+import sourceResolve from '../../vite.sourceResolve';
+
+// WORKAROUND: rolldown doesn't support trailing-slash imports (e.g. 'punycode/')
+// which Node.js treats as "resolve the package entry point". node-stdlib-browser's
+// url polyfill uses `import from 'punycode/'` and rolldown tries to open the
+// directory as a file. We resolve the actual entry point here and redirect via a
+// small plugin in optimizeDeps.rollupOptions below.
+// Track: https://github.com/nicolo-ribaudo/tc39-proposal-import-deferral/issues/3
+// TODO: Remove once rolldown supports trailing-slash imports or node-stdlib-browser drops them.
+const require = createRequire(import.meta.url);
+const stdlibRequire = createRequire(require.resolve('node-stdlib-browser/package.json'));
+const punycodeEntry = stdlibRequire.resolve('punycode/punycode.js');
 
 const visualizerConfig = {
   filename: './dist/bundle-analysis.html',
@@ -16,70 +31,65 @@ const visualizerConfig = {
   open: true
 }
 
-export const getAliases = (isDev) => {
-  const aliases = {
-    // IMPORTANT: Specific @superdoc/* package aliases must come BEFORE the generic '@superdoc'
-    // to avoid partial matches swallowing them.
-    '@superdoc/common': path.resolve(__dirname, '../../shared/common'),
+// Internal @superdoc/ paths that map to ./src/ (not workspace packages).
+// Rolldown doesn't support regex capture groups ($1) in alias replacements,
+// so we list these explicitly instead of using /^@superdoc\/(.*)$/.
+// Update this list when adding new src/ subdirectories imported via @superdoc/.
+const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'stores', 'dev', 'icons.js', 'index.js'];
 
+export const getAliases = (_isDev) => {
+  const aliases = [
     // Workspace packages (source paths for dev)
-    '@superdoc/contracts': path.resolve(__dirname, '../layout-engine/contracts/src/index.ts'),
-    '@superdoc/geometry-utils': path.resolve(__dirname, '../layout-engine/geometry-utils/src/index.ts'),
-    '@superdoc/pm-adapter': path.resolve(__dirname, '../layout-engine/pm-adapter/src/index.ts'),
-    '@superdoc/layout-bridge': path.resolve(__dirname, '../layout-engine/layout-bridge/src/index.ts'),
-    '@superdoc/painter-dom': path.resolve(__dirname, '../layout-engine/painters/dom/src/index.ts'),
-    '@superdoc/painter-pdf': path.resolve(__dirname, '../layout-engine/painters/pdf/src/index.ts'),
-    '@superdoc/style-engine': path.resolve(__dirname, '../layout-engine/style-engine/src/index.ts'),
-    '@superdoc/measuring-dom': fileURLToPath(new URL('../layout-engine/measuring/dom/src', import.meta.url)),
-    '@superdoc/word-layout': path.resolve(__dirname, '../word-layout/src/index.ts'),
-    '@superdoc/url-validation': path.resolve(__dirname, '../../shared/url-validation/index.js'),
-    '@superdoc/preset-geometry': fileURLToPath(new URL('../preset-geometry/index.js', import.meta.url)),
+    { find: '@stores', replacement: fileURLToPath(new URL('./src/stores', import.meta.url)) },
 
-    // Generic @superdoc app alias LAST to avoid masking specific package aliases above
-    '@superdoc': fileURLToPath(new URL('./src', import.meta.url)),
-    '@stores': fileURLToPath(new URL('./src/stores', import.meta.url)),
-    '@packages': fileURLToPath(new URL('../', import.meta.url)),
-    // (rest below)
+    // Force super-editor to resolve from source (not dist) so builds always use latest code
+    { find: '@superdoc/super-editor/docx-zipper', replacement: path.resolve(__dirname, '../super-editor/src/core/DocxZipper.js') },
+    { find: '@superdoc/super-editor/toolbar', replacement: path.resolve(__dirname, '../super-editor/src/components/toolbar/Toolbar.vue') },
+    { find: '@superdoc/super-editor/file-zipper', replacement: path.resolve(__dirname, '../super-editor/src/core/super-converter/zipper.js') },
+    { find: '@superdoc/super-editor/converter/internal', replacement: path.resolve(__dirname, '../super-editor/src/core/super-converter') },
+    { find: '@superdoc/super-editor/converter', replacement: path.resolve(__dirname, '../super-editor/src/core/super-converter/SuperConverter.js') },
+    { find: '@superdoc/super-editor/editor', replacement: path.resolve(__dirname, '../super-editor/src/core/Editor.ts') },
+    { find: '@superdoc/super-editor/super-input', replacement: path.resolve(__dirname, '../super-editor/src/components/SuperInput.vue') },
+    { find: '@superdoc/super-editor/ai-writer', replacement: path.resolve(__dirname, '../super-editor/src/core/components/AIWriter.vue') },
+    { find: '@superdoc/super-editor/style.css', replacement: path.resolve(__dirname, '../super-editor/src/style.css') },
+    { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
+    { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
+
+    // Map @superdoc/<name> to ./src/<name> for internal paths
+    ...superdocSrcAliases.map(name => ({
+      find: `@superdoc/${name}`,
+      replacement: path.resolve(__dirname, `./src/${name}`),
+    })),
 
     // Super Editor aliases
-    '@': fileURLToPath(new URL('../super-editor/src', import.meta.url)),
-    '@core': fileURLToPath(new URL('../super-editor/src/core', import.meta.url)),
-    '@extensions': fileURLToPath(new URL('../super-editor/src/extensions', import.meta.url)),
-    '@features': fileURLToPath(new URL('../super-editor/src/features', import.meta.url)),
-    '@components': fileURLToPath(new URL('../super-editor/src/components', import.meta.url)),
-    '@helpers': fileURLToPath(new URL('../super-editor/src/core/helpers', import.meta.url)),
-    '@converter': fileURLToPath(new URL('../super-editor/src/core/super-converter', import.meta.url)),
-    '@tests': fileURLToPath(new URL('../super-editor/src/tests', import.meta.url)),
-    '@translator': fileURLToPath(new URL('../super-editor/src/core/super-converter/v3/node-translator/index.js', import.meta.url)),
-  };
-
-  if (isDev) {
-    aliases['@harbour-enterprises/super-editor'] = path.resolve(__dirname, '../super-editor/src');
-  }
+    { find: '@', replacement: '@superdoc/super-editor' },
+    ...sourceResolve.alias,
+  ];
 
   return aliases;
 };
 
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode, command}) => {
+export default defineConfig(({ mode, command }) => {
+  const skipDts = process.env.SUPERDOC_SKIP_DTS === '1';
   const plugins = [
     vue(),
+    !skipDts && dts({
+      include: ['src/**/*', '../super-editor/src/**/*'],
+      outDir: 'dist',
+    }),
     copy({
       targets: [
         {
-          src: path.resolve(__dirname, '../super-editor/dist/*'),
-          dest: 'dist/super-editor',
-        },
-        { 
-          src: path.resolve(__dirname, '../../node_modules/pdfjs-dist/web/images/*'), 
+          src: 'node_modules/pdfjs-dist/web/images/*',
           dest: 'dist/images',
         },
       ],
       hook: 'writeBundle'
     }),
     // visualizer(visualizerConfig)
-  ];
+  ].filter(Boolean);
   if (mode !== 'test') plugins.push(nodePolyfills());
   const isDev = command === 'serve';
 
@@ -95,12 +105,15 @@ export default defineConfig(({ mode, command}) => {
     test: {
       name: projectLabel,
       globals: true,
-      environment: 'jsdom',
+      // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
+      environment: process.env.VITEST_DOM || 'happy-dom',
       retry: 2,
       testTimeout: 20000,
       hookTimeout: 10000,
       exclude: [
+        ...configDefaults.exclude,
         '**/*.spec.js',
+        'tests/umd-smoke/**',
       ],
     },
     build: {
@@ -117,11 +130,14 @@ export default defineConfig(({ mode, command}) => {
         input: {
           'superdoc': 'src/index.js',
           'super-editor': 'src/super-editor.js',
+          'types': 'src/types.ts',
+          'super-editor/docx-zipper': '@core/DocxZipper',
+          'super-editor/converter': '@core/super-converter/SuperConverter',
+          'super-editor/file-zipper': '@core/super-converter/zipper.js',
         },
         external: [
           'yjs',
           '@hocuspocus/provider',
-          'vite-plugin-node-polyfills',
           'pdfjs-dist',
           'pdfjs-dist/build/pdf.mjs',
           'pdfjs-dist/legacy/build/pdf.mjs',
@@ -132,50 +148,53 @@ export default defineConfig(({ mode, command}) => {
             format: 'es',
             entryFileNames: '[name].es.js',
             chunkFileNames: 'chunks/[name]-[hash].es.js',
-            manualChunks: {
-              'vue': ['vue'],
-              'blank-docx': ['@superdoc/common/data/blank.docx?url'],
-              'jszip': ['jszip'],
-              'eventemitter3': ['eventemitter3'],
-              'uuid': ['uuid'],
-              'xml-js': ['xml-js'],
+            manualChunks(id) {
+              if (id.includes('/node_modules/vue/')) return 'vue';
+              if (id.includes('/node_modules/jszip/')) return 'jszip';
+              if (id.includes('/node_modules/eventemitter3/')) return 'eventemitter3';
+              if (id.includes('/node_modules/uuid/')) return 'uuid';
+              if (id.includes('/node_modules/xml-js/')) return 'xml-js';
+              if (id.includes('blank.docx')) return 'blank-docx';
             }
           },
           {
             format: 'cjs',
             entryFileNames: '[name].cjs',
             chunkFileNames: 'chunks/[name]-[hash].cjs',
-            manualChunks: {
-              'vue': ['vue'],
-              'blank-docx': ['@superdoc/common/data/blank.docx?url'],
-              'jszip': ['jszip'],
-              'eventemitter3': ['eventemitter3'],
-              'uuid': ['uuid'],
-              'xml-js': ['xml-js'],
+            manualChunks(id) {
+              if (id.includes('/node_modules/vue/')) return 'vue';
+              if (id.includes('/node_modules/jszip/')) return 'jszip';
+              if (id.includes('/node_modules/eventemitter3/')) return 'eventemitter3';
+              if (id.includes('/node_modules/uuid/')) return 'uuid';
+              if (id.includes('/node_modules/xml-js/')) return 'xml-js';
+              if (id.includes('blank.docx')) return 'blank-docx';
             }
           }
-        ],        
+        ],
       }
     },
     optimizeDeps: {
       include: ['yjs', '@hocuspocus/provider'],
-      exclude: [
-        // Layout engine packages (use source, not pre-bundled)
-        '@superdoc/pm-adapter',
-        '@superdoc/layout-bridge',
-        '@superdoc/painter-dom',
-        '@superdoc/contracts',
-        '@superdoc/style-engine',
-        '@superdoc/measuring-dom',
-        '@superdoc/word-layout',
-      ],
-      esbuildOptions: {
-        target: 'es2020',
+      // Rolldown treats trailing-slash imports as directory paths.
+      // node-stdlib-browser's url polyfill imports 'punycode/' — resolve it to the
+      // actual file since punycode is also a Node.js builtin and pnpm isolates it.
+      rollupOptions: {
+        plugins: [
+          {
+            name: 'fix-punycode-trailing-slash',
+            resolveId(source) {
+              if (source === 'punycode/' || source === 'punycode') {
+                return { id: punycodeEntry };
+              }
+            },
+          },
+        ],
       },
     },
     resolve: {
       alias: getAliases(isDev),
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
+      conditions: ['source'],
     },
     css: {
       postcss: './postcss.config.mjs',

@@ -3,11 +3,15 @@ import type { NodeConfig } from './Node.js';
 
 /**
  * Configuration for OXML Node extensions (extends NodeConfig)
+ * @template Options - Type for node options
+ * @template Storage - Type for node storage
+ * @template Attrs - Type for node attributes (optional, enables typed addAttributes)
  */
 export interface OxmlNodeConfig<
   Options extends Record<string, unknown> = Record<string, never>,
   Storage extends Record<string, unknown> = Record<string, never>,
-> extends NodeConfig<Options, Storage> {
+  Attrs extends Record<string, unknown> = Record<string, unknown>,
+> extends NodeConfig<Options, Storage, Attrs> {
   /** The OXML element name */
   oXmlName: string;
 
@@ -19,14 +23,16 @@ export interface OxmlNodeConfig<
  * OxmlNode class extends Node with OXML-specific properties.
  * @template Options - Type for node options
  * @template Storage - Type for node storage
+ * @template Attrs - Type for node attributes (enables typed attribute access)
  */
 export class OxmlNode<
   Options extends Record<string, unknown> = Record<string, never>,
   Storage extends Record<string, unknown> = Record<string, never>,
-> extends Node<Options, Storage> {
+  Attrs extends Record<string, unknown> = Record<string, unknown>,
+> extends Node<Options, Storage, Attrs> {
   oXmlName: string;
 
-  constructor(config: OxmlNodeConfig<Options, Storage>) {
+  constructor(config: OxmlNodeConfig<Options, Storage, Attrs>) {
     super(config);
     this.oXmlName = config.oXmlName;
   }
@@ -39,7 +45,8 @@ export class OxmlNode<
   static create<
     O extends Record<string, unknown> = Record<string, never>,
     S extends Record<string, unknown> = Record<string, never>,
-  >(config: OxmlNodeConfig<O, S>): OxmlNode<O, S> {
-    return new OxmlNode<O, S>(config);
+    A extends Record<string, unknown> = Record<string, unknown>,
+  >(config: OxmlNodeConfig<O, S, A>): OxmlNode<O, S, A> {
+    return new OxmlNode<O, S, A>(config);
   }
 }

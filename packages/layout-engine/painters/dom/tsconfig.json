@@ -9,5 +9,5 @@
     "lib": ["DOM", "ES2021"]
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../../contracts" }]
+  "references": [{ "path": "../../contracts/tsconfig.json" }]
 }

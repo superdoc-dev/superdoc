@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, computed, watch } from 'vue';
 import { comments_module_events } from '@superdoc/common';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { syncCommentsToClients } from '../core/collaboration/helpers.js';
@@ -8,8 +8,8 @@ import {
   trackChangesHelpers,
   TrackChangesBasePluginKey,
   CommentsPluginKey,
-} from '@harbour-enterprises/super-editor';
-import { getRichTextExtensions } from '@harbour-enterprises/super-editor';
+  getRichTextExtensions,
+} from '@superdoc/super-editor';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
 
@@ -20,6 +20,11 @@ export const useCommentsStore = defineStore('comments', () => {
     readOnly: false,
     allowResolve: true,
     showResolved: false,
+  });
+  const viewingVisibility = reactive({
+    documentMode: 'editing',
+    commentsVisible: false,
+    trackChangesVisible: false,
   });
 
   const isDebugging = false;
@@ -52,6 +57,7 @@ export const useCommentsStore = defineStore('comments', () => {
   const generalCommentIds = ref([]);
 
   const pendingComment = ref(null);
+  const isViewingMode = computed(() => viewingVisibility.documentMode === 'viewing');
 
   /**
    * Initialize the store
@@ -82,27 +88,212 @@ export const useCommentsStore = defineStore('comments', () => {
     return commentsList.value.find((c) => c.commentId == id || c.importedId == id);
   };
 
+  const getThreadParent = (comment) => {
+    if (!comment?.parentCommentId) return comment;
+    return getComment(comment.parentCommentId);
+  };
+
+  const isRangeThreadedComment = (comment) => {
+    if (!comment) return false;
+    return (
+      comment.threadingStyleOverride === 'range-based' ||
+      comment.threadingMethod === 'range-based' ||
+      comment.originalXmlStructure?.hasCommentsExtended === false
+    );
+  };
+
+  const shouldThreadWithTrackedChange = (comment) => {
+    if (!comment?.trackedChangeParentId) return false;
+    if (!isRangeThreadedComment(comment)) return false;
+    const trackedChange = getComment(comment.trackedChangeParentId);
+    return Boolean(trackedChange?.trackedChange);
+  };
+
+  /**
+   * Extract the position lookup key from a comment or comment ID.
+   * Prefers importedId for imported comments since editor marks retain the original ID.
+   *
+   * @param {Object | string | null | undefined} commentOrId The comment object or comment ID
+   * @returns {string | null} The position key (importedId or commentId)
+   */
+  const getCommentPositionKey = (commentOrId) => {
+    if (!commentOrId) return null;
+    if (typeof commentOrId === 'object') {
+      return commentOrId.importedId ?? commentOrId.commentId ?? null;
+    }
+    return commentOrId;
+  };
+
+  const clearResolvedMetadata = (comment) => {
+    if (!comment) return;
+    // Sets the resolved state to null so it can be restored in the comments sidebar
+    comment.resolvedTime = null;
+    comment.resolvedByEmail = null;
+    comment.resolvedByName = null;
+  };
+
+  /**
+   * Check if a comment originated from the super-editor (or has no explicit source).
+   * Comments without a source are assumed to be editor-backed for backward compatibility.
+   *
+   * @param {Object} comment - The comment to check
+   * @returns {boolean} True if the comment is editor-backed
+   */
+  const isEditorBackedComment = (comment) => {
+    const source = comment?.selection?.source;
+    if (source == null) return true;
+    return source === 'super-editor';
+  };
+
+  /**
+   * Check if a comment is part of a tracked-change thread.
+   * Returns true for tracked-change comments or replies to tracked changes.
+   *
+   * @param {Object} comment - The comment to check
+   * @returns {boolean} True if the comment is a tracked-change thread
+   */
+  const isTrackedChangeThread = (comment) => Boolean(comment?.trackedChange) || Boolean(comment?.trackedChangeParentId);
+
+  const syncResolvedCommentsWithDocument = () => {
+    const docPositions = editorCommentPositions.value || {};
+    const activeKeys = new Set(Object.keys(docPositions));
+    if (!activeKeys.size) return;
+
+    commentsList.value.forEach((comment) => {
+      const key = getCommentPositionKey(comment);
+      if (!key) return;
+
+      const hasActiveAnchor = activeKeys.has(String(key));
+      if (
+        hasActiveAnchor &&
+        comment.resolvedTime &&
+        isEditorBackedComment(comment) &&
+        !isTrackedChangeThread(comment)
+      ) {
+        clearResolvedMetadata(comment);
+      }
+    });
+  };
+
+  /* The watchers below are used to sync the resolved state of comments with the document.
+   *  This is especially useful for undo/redo operations that are not handled by the editor.
+   */
+  watch(editorCommentPositions, () => {
+    syncResolvedCommentsWithDocument();
+  });
+
+  watch(
+    commentsList,
+    () => {
+      syncResolvedCommentsWithDocument();
+    },
+    { deep: false },
+  );
+
+  /**
+   * Normalize a position object to a consistent { start, end } format.
+   * Handles different editor position schemas (start/end, pos/to, from/to).
+   *
+   * @param {Object | null | undefined} position The position object
+   * @returns {{ start: number, end: number } | null} The normalized range or null
+   */
+  const getCommentPositionRange = (position) => {
+    if (!position) return null;
+    const start = position.start ?? position.pos ?? position.from;
+    const end = position.end ?? position.to ?? start;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    return { start, end };
+  };
+
+  /**
+   * Get the editor position data for a comment.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @returns {Object | null} The position data from editorCommentPositions
+   */
+  const getCommentPosition = (commentOrId) => {
+    const key = getCommentPositionKey(commentOrId);
+    if (!key) return null;
+    return editorCommentPositions.value?.[key] ?? null;
+  };
+
+  /**
+   * Get the text that a comment is anchored to in the document.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @param {Object} [options] Options for text extraction
+   * @param {string} [options.separator=' '] Separator for textBetween when crossing nodes
+   * @param {boolean} [options.trim=true] Whether to trim whitespace from the result
+   * @returns {string | null} The anchored text or null if unavailable
+   */
+  const getCommentAnchoredText = (commentOrId, options = {}) => {
+    const key = getCommentPositionKey(commentOrId);
+    if (!key) return null;
+
+    const comment = typeof commentOrId === 'object' ? commentOrId : getComment(commentOrId);
+    if (!comment) return null;
+
+    const position = editorCommentPositions.value?.[key] ?? null;
+    const range = getCommentPositionRange(position);
+    if (!range) return null;
+
+    const doc = superdocStore.getDocument(comment.fileId);
+    const editor = doc?.getEditor?.();
+    const docNode = editor?.state?.doc;
+    if (!docNode?.textBetween) return null;
+
+    const separator = options.separator ?? ' ';
+    const text = docNode.textBetween(range.start, range.end, separator, separator);
+    return options.trim === false ? text : text?.trim();
+  };
+
+  /**
+   * Get both position and anchored text data for a comment.
+   *
+   * @param {Object | string} commentOrId The comment object or comment ID
+   * @param {Object} [options] Options passed to getCommentAnchoredText
+   * @param {string} [options.separator=' '] Separator for textBetween when crossing nodes
+   * @param {boolean} [options.trim=true] Whether to trim whitespace from the result
+   * @returns {{ position: Object, anchoredText: string | null } | null} The anchor data or null
+   */
+  const getCommentAnchorData = (commentOrId, options = {}) => {
+    const position = getCommentPosition(commentOrId);
+    if (!position) return null;
+    return {
+      position,
+      anchoredText: getCommentAnchoredText(commentOrId, options),
+    };
+  };
+
+  const isThreadVisible = (comment) => {
+    if (!isViewingMode.value) return true;
+    const parent = getThreadParent(comment);
+    if (!parent && comment?.parentCommentId) return false;
+    // Check both parent's trackedChange flag and comment's trackedChangeParentId
+    const isTrackedChange = Boolean(parent?.trackedChange) || Boolean(comment?.trackedChangeParentId);
+    return isTrackedChange ? viewingVisibility.trackChangesVisible : viewingVisibility.commentsVisible;
+  };
+
   /**
    * Set the active comment or clear all active comments
    *
+   * @param {Object | undefined | null} superdoc The SuperDoc instance holding the active editor
    * @param {string | undefined | null} id The comment ID
    * @returns {void}
    */
   const setActiveComment = (superdoc, id) => {
+    const activeEditor = superdoc?.activeEditor;
+
     // If no ID, we clear any focused comments
     if (id === undefined || id === null) {
       activeComment.value = null;
-      if (superdoc.activeEditor) {
-        superdoc.activeEditor.commands?.setActiveComment({ commentId: null });
-      }
+      activeEditor?.commands?.setActiveComment({ commentId: null });
       return;
     }
 
     const comment = getComment(id);
     if (comment) activeComment.value = comment.commentId;
-    if (superdoc.activeEditor) {
-      superdoc.activeEditor.commands?.setActiveComment({ commentId: activeComment.value });
-    }
+    activeEditor?.commands?.setActiveComment({ commentId: activeComment.value });
   };
 
   /**
@@ -192,7 +383,7 @@ export const useCommentsStore = defineStore('comments', () => {
     const selection = { ...superdocStore.activeSelection };
     selection.selectionBounds = { ...selection.selectionBounds };
 
-    if (superdocStore.selectionPosition?.source) {
+    if (superdocStore.selectionPosition?.source && superdocStore.selectionPosition.source !== 'pdf') {
       superdocStore.selectionPosition.source = null;
     }
 
@@ -215,43 +406,107 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   /**
-   * Generate the comments list separating resolved and active
-   * We only return parent comments here, since CommentDialog.vue will handle threaded comments
+   * Get the numeric position value for sorting a comment by document order.
+   * Checks multiple position properties to handle different editor position schemas
+   * (e.g., ProseMirror uses from/to, other editors may use start/pos).
+   *
+   * @param {Object} comment - The comment object
+   * @returns {number|null} The position value, or null if not found
    */
-  const getGroupedComments = computed(() => {
+  const getPositionSortValue = (comment) => {
+    const key = getCommentPositionKey(comment);
+    if (!key) return null;
+    const position = editorCommentPositions.value?.[key];
+    if (!position) return null;
+    // Check different position properties to handle various editor position schemas
+    if (Number.isFinite(position.start)) return position.start;
+    if (Number.isFinite(position.pos)) return position.pos;
+    if (Number.isFinite(position.from)) return position.from;
+    if (Number.isFinite(position.to)) return position.to;
+    return null;
+  };
+
+  /**
+   * Comparator that sorts comments by creation time (ascending).
+   *
+   * @param {Object} a - First comment
+   * @param {Object} b - Second comment
+   * @returns {number} Comparison result
+   */
+  const compareByCreatedTime = (a, b) => (a.createdTime ?? 0) - (b.createdTime ?? 0);
+
+  /**
+   * Comparator that sorts comments by document position (ascending).
+   * Comments without positions are sorted after those with positions.
+   * Falls back to creation time when positions are equal or unavailable.
+   *
+   * @param {Object} a - First comment
+   * @param {Object} b - Second comment
+   * @returns {number} Comparison result
+   */
+  const compareByPosition = (a, b) => {
+    const posA = getPositionSortValue(a);
+    const posB = getPositionSortValue(b);
+
+    const hasA = Number.isFinite(posA);
+    const hasB = Number.isFinite(posB);
+
+    if (hasA && hasB && posA !== posB) return posA - posB;
+    if (hasA && !hasB) return -1;
+    if (!hasA && hasB) return 1;
+    return compareByCreatedTime(a, b);
+  };
+
+  /**
+   * Generate the comments list separating resolved and active.
+   * We only return parent comments here, since CommentDialog.vue will handle threaded comments.
+   *
+   * @param {(a: Object, b: Object) => number} sorter - Comparator function for sorting comments
+   * @returns {{parentComments: Array, resolvedComments: Array}} Grouped and sorted comments
+   */
+  const buildGroupedComments = (sorter) => {
     const parentComments = [];
     const resolvedComments = [];
     const childCommentMap = new Map();
 
     commentsList.value.forEach((comment) => {
+      if (!isThreadVisible(comment)) return;
+      const trackedChangeParentId = shouldThreadWithTrackedChange(comment) ? comment.trackedChangeParentId : null;
+      const parentId = comment.parentCommentId || trackedChangeParentId;
       // Track resolved comments
       if (comment.resolvedTime) {
         resolvedComments.push(comment);
       }
 
       // Track parent comments
-      else if (!comment.parentCommentId && !comment.resolvedTime) {
+      else if (!parentId && !comment.resolvedTime) {
         parentComments.push({ ...comment });
       }
 
       // Track child comments (threaded comments)
-      else if (comment.parentCommentId) {
-        if (!childCommentMap.has(comment.parentCommentId)) {
-          childCommentMap.set(comment.parentCommentId, []);
+      else if (parentId) {
+        if (!childCommentMap.has(parentId)) {
+          childCommentMap.set(parentId, []);
         }
-        childCommentMap.get(comment.parentCommentId).push(comment);
+        childCommentMap.get(parentId).push(comment);
       }
     });
 
     // Return only parent comments
-    const sortedParentComments = parentComments.sort((a, b) => a.createdTime - b.createdTime);
-    const sortedResolvedComments = resolvedComments.sort((a, b) => a.createdTime - b.createdTime);
+    const sortedParentComments = parentComments.sort(sorter);
+    const sortedResolvedComments = resolvedComments.sort(sorter);
 
     return {
       parentComments: sortedParentComments,
       resolvedComments: sortedResolvedComments,
     };
-  });
+  };
+
+  /** @type {import('vue').ComputedRef<{parentComments: Array, resolvedComments: Array}>} Comments grouped and sorted by creation time */
+  const getGroupedComments = computed(() => buildGroupedComments(compareByCreatedTime));
+
+  /** @type {import('vue').ComputedRef<{parentComments: Array, resolvedComments: Array}>} Comments grouped and sorted by document position */
+  const getCommentsByPosition = computed(() => buildGroupedComments(compareByPosition));
 
   const hasOverlapId = (id) => overlappedIds.includes(id);
   const documentsWithConverations = computed(() => {
@@ -379,6 +634,9 @@ export const useCommentsStore = defineStore('comments', () => {
   const deleteComment = ({ commentId: commentIdToDelete, superdoc }) => {
     const commentIndex = commentsList.value.findIndex((c) => c.commentId === commentIdToDelete);
     const comment = commentsList.value[commentIndex];
+    if (!comment) {
+      return;
+    }
     const { commentId, importedId } = comment;
     const { fileId } = comment;
 
@@ -425,9 +683,13 @@ export const useCommentsStore = defineStore('comments', () => {
    */
   const processLoadedDocxComments = async ({ superdoc, editor, comments, documentId }) => {
     const document = superdocStore.getDocument(documentId);
+    if (document?.commentThreadingProfile) {
+      document.commentThreadingProfile.value = editor?.converter?.commentThreadingProfile || null;
+    }
 
     comments.forEach((comment) => {
-      const htmlContent = getHtmlFromComment(comment.textJson);
+      const textElements = Array.isArray(comment.elements) ? comment.elements : [];
+      const htmlContent = getHtmlFromComment(textElements);
 
       if (!htmlContent && !comment.trackedChange) {
         return;
@@ -438,10 +700,11 @@ export const useCommentsStore = defineStore('comments', () => {
       const newComment = useComment({
         fileId: documentId,
         fileType: document.type,
-        docxCommentJSON: comment.textJson,
+        docxCommentJSON: textElements.length ? textElements : null,
         commentId: comment.commentId,
         isInternal: false,
         parentCommentId: comment.parentCommentId,
+        trackedChangeParentId: comment.trackedChangeParentId,
         creatorName,
         createdTime: comment.createdTime,
         creatorEmail: comment.creatorEmail,
@@ -449,7 +712,7 @@ export const useCommentsStore = defineStore('comments', () => {
           name: importedName,
           email: comment.creatorEmail,
         },
-        commentText: getHtmlFromComment(comment.textJson),
+        commentText: htmlContent,
         resolvedTime: comment.isDone ? Date.now() : null,
         resolvedByEmail: comment.isDone ? comment.creatorEmail : null,
         resolvedByName: comment.isDone ? importedName : null,
@@ -457,6 +720,12 @@ export const useCommentsStore = defineStore('comments', () => {
         trackedChangeText: comment.trackedChangeText,
         trackedChangeType: comment.trackedChangeType,
         deletedText: comment.trackedDeletedText,
+        // Preserve origin metadata for export
+        origin: comment.origin || 'word', // Default to 'word' for backward compatibility
+        threadingMethod: comment.threadingMethod,
+        threadingStyleOverride: comment.threadingStyleOverride,
+        threadingParentCommentId: comment.threadingParentCommentId,
+        originalXmlStructure: comment.originalXmlStructure,
       });
 
       addComment({ superdoc, comment: newComment });
@@ -511,6 +780,12 @@ export const useCommentsStore = defineStore('comments', () => {
     });
   };
 
+  const normalizeDocxSchemaForExport = (value) => {
+    if (!value) return [];
+    const nodes = Array.isArray(value) ? value : [value];
+    return nodes.filter(Boolean);
+  };
+
   const translateCommentsForExport = () => {
     const processedComments = [];
     commentsList.value.forEach((comment) => {
@@ -519,7 +794,8 @@ export const useCommentsStore = defineStore('comments', () => {
       // If this comment originated from DOCX (Word or Google Docs), prefer the
       // original DOCX-schema JSON captured at import time. Otherwise, fall back
       // to rebuilding commentJSON from the rich-text HTML.
-      const schema = values.docxCommentJSON || convertHtmlToSchema(richText);
+      const docxSchema = normalizeDocxSchemaForExport(values.docxCommentJSON);
+      const schema = docxSchema.length ? docxSchema : convertHtmlToSchema(richText);
       processedComments.push({
         ...values,
         commentJSON: schema,
@@ -529,15 +805,14 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   const convertHtmlToSchema = (commentHTML) => {
-    const div = document.createElement('div');
-    div.innerHTML = commentHTML;
     const editor = new Editor({
       mode: 'text',
       isHeadless: true,
-      content: div,
+      content: commentHTML,
       extensions: getRichTextExtensions(),
     });
-    return editor.getJSON().content[0];
+    const json = editor.getJSON();
+    return Array.isArray(json?.content) ? json.content.filter(Boolean) : [];
   };
 
   /**
@@ -548,7 +823,17 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const handleEditorLocationsUpdate = (allCommentPositions) => {
+    if ((!allCommentPositions || Object.keys(allCommentPositions).length === 0) && commentsList.value.length > 0) {
+      return;
+    }
     editorCommentPositions.value = allCommentPositions || {};
+  };
+
+  /**
+   * Clear editor comment positions (used when entering viewing mode to hide comment bubbles)
+   */
+  const clearEditorCommentPositions = () => {
+    editorCommentPositions.value = {};
   };
 
   const getFloatingComments = computed(() => {
@@ -564,6 +849,18 @@ export const useCommentsStore = defineStore('comments', () => {
     return comments;
   });
 
+  const setViewingVisibility = ({ documentMode, commentsVisible, trackChangesVisible } = {}) => {
+    if (typeof documentMode === 'string') {
+      viewingVisibility.documentMode = documentMode;
+    }
+    if (typeof commentsVisible === 'boolean') {
+      viewingVisibility.commentsVisible = commentsVisible;
+    }
+    if (typeof trackChangesVisible === 'boolean') {
+      viewingVisibility.trackChangesVisible = trackChangesVisible;
+    }
+  };
+
   /**
    * Get HTML content from the comment text JSON (which uses DOCX schema)
    *
@@ -571,15 +868,36 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {string} The HTML content
    */
   const normalizeCommentForEditor = (node) => {
+    if (Array.isArray(node)) {
+      return node
+        .map((child) => normalizeCommentForEditor(child))
+        .flat()
+        .filter(Boolean);
+    }
+
     if (!node || typeof node !== 'object') return node;
 
+    const stripTextStyleAttrs = (attrs) => {
+      if (!attrs) return attrs;
+      const rest = { ...attrs };
+      delete rest.fontSize;
+      delete rest.fontFamily;
+      delete rest.eastAsiaFontFamily;
+      return Object.keys(rest).length ? rest : undefined;
+    };
+
+    const normalizeMark = (mark) => {
+      if (!mark) return mark;
+      const typeName = typeof mark.type === 'string' ? mark.type : mark.type?.name;
+      const attrs = mark?.attrs ? { ...mark.attrs } : undefined;
+      if (typeName === 'textStyle' && attrs) {
+        return { ...mark, attrs: stripTextStyleAttrs(attrs) };
+      }
+      return { ...mark, attrs };
+    };
+
     const cloneMarks = (marks) =>
-      Array.isArray(marks)
-        ? marks.filter(Boolean).map((mark) => ({
-            ...mark,
-            attrs: mark?.attrs ? { ...mark.attrs } : undefined,
-          }))
-        : undefined;
+      Array.isArray(marks) ? marks.filter(Boolean).map((mark) => normalizeMark(mark)) : undefined;
 
     const cloneAttrs = (attrs) => (attrs && typeof attrs === 'object' ? { ...attrs } : undefined);
 
@@ -609,18 +927,31 @@ export const useCommentsStore = defineStore('comments', () => {
     };
   };
 
-  const getHtmlFromComment = (commentTextJson) => {
+  const getHtmlFromComment = (commentTextElements) => {
     // If no content, we can't convert and its not a valid comment
-    if (!commentTextJson.content?.length) return;
+    const elementsArray = Array.isArray(commentTextElements)
+      ? commentTextElements
+      : commentTextElements
+        ? [commentTextElements]
+        : [];
+    const hasContent = elementsArray.some((element) => element?.content?.length);
+    if (!hasContent) return;
 
     try {
-      const normalizedContent = normalizeCommentForEditor(commentTextJson);
-      const schemaContent = Array.isArray(normalizedContent) ? normalizedContent[0] : normalizedContent;
-      if (!schemaContent.content.length) return null;
+      const normalizedContent = normalizeCommentForEditor(elementsArray);
+      const contentArray = Array.isArray(normalizedContent)
+        ? normalizedContent
+        : normalizedContent
+          ? [normalizedContent]
+          : [];
+      if (!contentArray.length) return null;
       const editor = new Editor({
         mode: 'text',
         isHeadless: true,
-        content: schemaContent,
+        content: {
+          type: 'doc',
+          content: contentArray,
+        },
         loadFromSchema: true,
         extensions: getRichTextExtensions(),
       });
@@ -664,10 +995,15 @@ export const useCommentsStore = defineStore('comments', () => {
     getConfig,
     documentsWithConverations,
     getGroupedComments,
+    getCommentsByPosition,
     getFloatingComments,
+    getCommentPosition,
+    getCommentAnchoredText,
+    getCommentAnchorData,
 
     // Actions
     init,
+    setViewingVisibility,
     getComment,
     setActiveComment,
     getCommentLocation,
@@ -681,6 +1017,7 @@ export const useCommentsStore = defineStore('comments', () => {
     processLoadedDocxComments,
     translateCommentsForExport,
     handleEditorLocationsUpdate,
+    clearEditorCommentPositions,
     handleTrackedChangeUpdate,
   };
 });

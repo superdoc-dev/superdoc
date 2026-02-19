@@ -31,7 +31,7 @@ vi.mock('vue', async (importOriginal) => {
   };
 });
 
-vi.mock('@/components/popovers/Mentions.vue', () => ({ default: { name: 'MentionsComponent' } }));
+vi.mock('@components/popovers/Mentions.vue', () => ({ default: { name: 'MentionsComponent' } }));
 
 describe('popover plugin basics', () => {
   let PopoverPlugin;

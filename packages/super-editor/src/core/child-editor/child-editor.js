@@ -57,7 +57,6 @@ const linkListDefinitionsChange = (options) => {
   parentConverter.numbering = numbering;
 
   const { tr } = parentEditor.state;
-  const { dispatch } = parentEditor.view;
   tr.setMeta('updatedListItemNodeViews', true);
-  dispatch(tr);
+  parentEditor.dispatch(tr);
 };

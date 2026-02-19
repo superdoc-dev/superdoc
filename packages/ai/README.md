@@ -24,15 +24,14 @@ npm install @superdoc-dev/ai
 ```typescript
 import { AIActions } from '@superdoc-dev/ai';
 
-// Initialize with OpenAI
 const ai = new AIActions(superdoc, {
   user: {
     displayName: 'AI Assistant',
-    userId: 'ai-bot-001',
+    userId: 'ai-bot-001', // Required: unique identifier
   },
   provider: {
     type: 'openai',
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENAI_API_KEY, // ⚠️ NEVER in browser!
     model: 'gpt-4',
   },
   onReady: ({ aiActions }) => {
@@ -72,11 +71,12 @@ new AIActions(superdoc: SuperDocInstance, options: AIActionsOptions)
 
 - `user` (required): User/bot information
   - `displayName`: Display name for AI-generated changes
-  - `userId?`: Optional user identifier
+  - `userId`: Unique identifier for the AI user (required)
   - `profileUrl?`: Optional profile image URL
 - `provider` (required): AI provider configuration or instance
 - `systemPrompt?`: Custom system prompt for AI context
 - `enableLogging?`: Enable debug logging (default: false)
+- `maxContextLength?`: Maximum number of characters from the document that will accompany AI prompts (default: 8,000)
 - Callbacks:
   - `onReady?`: Called when AI is initialized
   - `onStreamingStart?`: Called when streaming begins
@@ -198,6 +198,48 @@ Insert a single comment.
 await ai.action.insertComment('suggest improvements to introduction');
 ```
 
+## AIPlanner: Prompt → Plan → Action
+
+Access the planner through your `AIActions` instance to turn natural language prompts into concrete plans and apply them with formatting-safe primitives.
+
+```ts
+import { AIActions } from '@superdoc-dev/ai';
+
+const ai = new AIActions(superdoc, {
+  user: { displayName: 'AI Assistant', userId: 'ai-1' },
+  provider: {
+    type: 'openai',
+    apiKey: process.env.OPENAI_API_KEY!,
+    model: 'gpt-4o-mini',
+  },
+  // Optional planner configuration
+  planner: {
+    maxContextLength: 8000,
+    documentContextProvider: () => {
+      // Include the current selection when available, otherwise share full text
+      const { state } = superdoc.activeEditor;
+      return state.doc.textBetween(state.selection.from, state.selection.to || state.doc.content.size, ' ').trim();
+    },
+    onProgress: (event) => console.log('Progress:', event),
+  },
+});
+
+// Access planner through ai.planner
+const result = await ai.planner.execute('Add tracked changes that tighten the executive summary.');
+
+console.log(result.executedTools); // e.g. ['insertTrackedChanges', 'respond']
+console.log(result.response); // Planner's textual reply (if any)
+```
+
+### AIPlanner Highlights
+
+- **Planning Prompt** – Planner sends the document text, JSON, and schema summary (when available) to the LLM and asks for a JSON plan (`tool`, `instruction`).
+- **Tool Registry** – Built-in tools cover find/highlight, replace (single/all), tracked changes, comments, summaries, content insertion, and a `respond` fallback. You can inject your own tool definitions if needed.
+- **Formatting Preservation** – Every editing tool is backed by the `EditorAdapter`, which maintains marks and inline styling via `replaceText`, tracked changes, and comment helpers.
+- **Execution Results** – `execute` returns whether the run succeeded, which tools ran, any textual response, the parsed plan, and warnings for skipped steps.
+
+Use `ai.planner` when you want prompt → plan → action orchestration (redlining, drafting, reviews) while keeping full control over the resulting document edits.
+
 #### `insertComments(instruction)`
 
 Insert multiple comments.
@@ -231,7 +273,7 @@ When the provider configuration leaves `streamResults` enabled (default), genera
 
 ```typescript
 const ai = new AIActions(superdoc, {
-  user: { displayName: 'AI' },
+  user: { displayName: 'AI', userId: 'ai-1' },
   provider: {
     type: 'openai',
     apiKey: 'sk-...',
@@ -249,7 +291,7 @@ const ai = new AIActions(superdoc, {
 
 ```typescript
 const ai = new AIActions(superdoc, {
-  user: { displayName: 'AI' },
+  user: { displayName: 'AI', userId: 'ai-1' },
   provider: {
     type: 'anthropic',
     apiKey: 'sk-ant-...',
@@ -267,7 +309,7 @@ const ai = new AIActions(superdoc, {
 
 ```typescript
 const ai = new AIActions(superdoc, {
-  user: { displayName: 'AI' },
+  user: { displayName: 'AI', userId: 'ai-1' },
   provider: {
     type: 'http',
     url: 'https://your-ai-api.com/complete',
@@ -310,7 +352,7 @@ const customProvider: AIProvider = {
 };
 
 const ai = new AIActions(superdoc, {
-  user: { displayName: 'AI' },
+  user: { displayName: 'AI', userId: 'ai-1' },
   provider: customProvider,
 });
 ```
@@ -321,7 +363,7 @@ const ai = new AIActions(superdoc, {
 
 ```typescript
 const ai = new AIActions(superdoc, {
-  user: { displayName: 'AI' },
+  user: { displayName: 'AI', userId: 'ai-1' },
   provider: { type: 'openai', apiKey: '...', model: 'gpt-4' },
   enableLogging: true,
   onReady: () => console.log('Ready!'),
@@ -342,11 +384,23 @@ const ai = new AIActions(superdoc, {
 
 ```typescript
 const ai = new AIActions(superdoc, {
-  user: { displayName: 'Legal AI' },
+  user: { displayName: 'Legal AI', userId: 'legal-ai-1' },
   provider: { type: 'openai', apiKey: '...', model: 'gpt-4' },
   systemPrompt: `You are a legal document assistant. 
     Focus on accuracy, clarity, and compliance.
     Always cite relevant regulations when applicable.`,
+});
+```
+
+### Context Budgeting
+
+`AIActions` automatically truncates the document context that accompanies provider calls to 8,000 characters (60% head + 40% tail) to prevent token overflows. Override the default when you need more or less context:
+
+```typescript
+const ai = new AIActions(superdoc, {
+  user: { displayName: 'AI', userId: 'ai-1' },
+  provider: { type: 'openai', apiKey: '...', model: 'gpt-4o' },
+  maxContextLength: 4000, // send at most 4k characters from the document
 });
 ```
 
@@ -409,9 +463,23 @@ AGPL-3.0 - see [LICENSE](../../LICENSE) for details.
 
 - 📖 [Documentation](https://superdoc.dev/docs/ai)
 - 💬 [Discord Community](https://discord.gg/superdoc)
-- 🐛 [Issue Tracker](https://github.com/harbour-enterprises/superdoc/issues)
+- 🐛 [Issue Tracker](https://github.com/superdoc-dev/superdoc/issues)
 - 📧 [Email Support](mailto:support@superdoc.dev)
 
-## Changelog
+## Version & Compatibility
 
-See [CHANGELOG.md](./CHANGELOG.md) for version history.
+**Current Version**: 0.1.8-next.6 (Pre-release)
+
+**Supported SuperDoc Versions**: >=1.0.0-next <2.0.0
+
+> ⚠️ **Production Security**: Never expose API keys in browser code. Implement a server-side API proxy and configure `maxContextLength` appropriately. Note: `maxContextLength` is measured in **characters** (not tokens). A rough estimate is 2,000–3,000 tokens per 8,000 characters, depending on content. Adjust based on your provider's token limits.
+
+### What's New in 0.1.x
+
+- ✅ Complete architecture refactor (ai-actions)
+- ✅ Multi-provider support (OpenAI, Anthropic, HTTP, custom)
+- ✅ Dynamic schema support via editor.getSchemaSummaryJSON()
+- ✅ Flexible positioning (7 modes)
+- ✅ Query-based operations
+- ✅ AIPlanner orchestration system
+- ✅ All critical bugs fixed

@@ -1,6 +1,6 @@
 import { getInitialJSON } from '../docxHelper.js';
 import { carbonCopy } from '../../../utilities/carbonCopy.js';
-import { twipsToInches } from '../../helpers.js';
+import { twipsToInches, resolveOpcTargetPath } from '../../helpers.js';
 import { DEFAULT_LINKED_STYLES } from '../../exporter-docx-defs.js';
 import { drawingNodeHandlerEntity } from './imageImporter.js';
 import { trackChangeNodeHandlerEntity } from './trackChangesImporter.js';
@@ -18,17 +18,26 @@ import { autoPageHandlerEntity, autoTotalPageCountEntity } from './autoPageNumbe
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
+import { importFootnoteData } from './documentFootnotesImporter.js';
 import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
+import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
+import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
 import { commentRangeStartHandlerEntity, commentRangeEndHandlerEntity } from './commentRangeImporter.js';
+import { permStartHandlerEntity } from './permStartImporter.js';
+import { permEndHandlerEntity } from './permEndImporter.js';
 import bookmarkStartAttrConfigs from '@converter/v3/handlers/w/bookmark-start/attributes/index.js';
 import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attributes/index.js';
+import { translator as wStylesTranslator } from '@converter/v3/handlers/w/styles/index.js';
+import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/numbering/index.js';
+import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
+import { patchNumberingDefinitions } from './patchNumberingDefinitions.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -49,45 +58,63 @@ import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attrib
  * @param {Editor} editor instance.
  * @returns {{pmDoc: PmNodeJson, savedTagsToRestore: XmlNode, pageStyles: *}|null}
  */
+/**
+ * Detect document origin (Word vs Google Docs) based on XML structure
+ * @param {ParsedDocx} docx The parsed docx object
+ * @returns {'word' | 'google-docs' | 'unknown'} The detected origin
+ */
+const detectDocumentOrigin = (docx) => {
+  const commentsExtended = docx['word/commentsExtended.xml'];
+  if (commentsExtended) {
+    const { elements: initialElements = [] } = commentsExtended;
+    if (initialElements?.length > 0) {
+      const { elements = [] } = initialElements[0] ?? {};
+      const commentEx = elements.filter((el) => el.name === 'w15:commentEx');
+      if (commentEx.length > 0) {
+        return 'word';
+      }
+    }
+  }
+
+  // Check for comments.xml - if it exists but no commentsExtended.xml, likely Google Docs
+  const comments = docx['word/comments.xml'];
+  if (comments && !commentsExtended) {
+    // Google Docs often exports without commentsExtended.xml, using range-based threading
+    return 'google-docs';
+  }
+
+  return 'unknown';
+};
+
+/**
+ * Detect the document-level threading profile for comments based on file structure.
+ * @param {ParsedDocx} docx The parsed docx object
+ * @returns {import('@superdoc/common').CommentThreadingProfile}
+ */
+const detectCommentThreadingProfile = (docx) => {
+  const hasCommentsExtended = !!docx['word/commentsExtended.xml'];
+  const hasCommentsExtensible = !!docx['word/commentsExtensible.xml'];
+  const hasCommentsIds = !!docx['word/commentsIds.xml'];
+
+  return {
+    defaultStyle: hasCommentsExtended ? 'commentsExtended' : 'range-based',
+    mixed: false,
+    fileSet: {
+      hasCommentsExtended,
+      hasCommentsExtensible,
+      hasCommentsIds,
+    },
+  };
+};
+
 export const createDocumentJson = (docx, converter, editor) => {
   const json = carbonCopy(getInitialJSON(docx));
   if (!json) return null;
 
-  // Track initial document structure
-  if (converter?.telemetry) {
-    const files = Object.keys(docx).map((filePath) => {
-      const parts = filePath.split('/');
-      return {
-        filePath,
-        fileDepth: parts.length,
-        fileType: filePath.split('.').pop(),
-      };
-    });
-
-    const trackStructure = (documentIdentifier = null) =>
-      converter.telemetry.trackFileStructure(
-        {
-          totalFiles: files.length,
-          maxDepth: Math.max(...files.map((f) => f.fileDepth)),
-          totalNodes: 0,
-          files,
-        },
-        converter.fileSource,
-        converter.documentGuid ?? converter.documentId ?? null,
-        documentIdentifier ?? converter.documentId ?? null,
-        converter.documentInternalId,
-      );
-
-    try {
-      const identifierResult = converter.getDocumentIdentifier?.();
-      if (identifierResult && typeof identifierResult.then === 'function') {
-        identifierResult.then(trackStructure).catch(() => trackStructure());
-      } else {
-        trackStructure(identifierResult);
-      }
-    } catch {
-      trackStructure();
-    }
+  if (converter) {
+    importFootnotePropertiesFromSettings(docx, converter);
+    converter.documentOrigin = detectDocumentOrigin(docx);
+    converter.commentThreadingProfile = detectCommentThreadingProfile(docx);
   }
 
   const nodeListHandler = defaultNodeListHandler();
@@ -111,19 +138,27 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     const contentElements = node.elements?.filter((n) => n.name !== 'w:sectPr') ?? [];
     const content = pruneIgnoredNodes(contentElements);
-    const comments = importCommentData({ docx, nodeListHandler, converter, editor });
 
     // Track imported lists
     const lists = {};
     const inlineDocumentFonts = [];
 
+    patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
+    const comments = importCommentData({ docx, nodeListHandler, converter, editor });
+    const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
+
+    const translatedLinkedStyles = translateStyleDefinitions(docx);
+    const translatedNumbering = translateNumberingDefinitions(docx);
+
     let parsedContent = nodeListHandler.handler({
       nodes: content,
       nodeListHandler,
       docx,
       converter,
       numbering,
+      translatedNumbering,
+      translatedLinkedStyles,
       editor,
       inlineDocumentFonts,
       lists,
@@ -132,6 +167,7 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     // Safety: drop any inline-only nodes that accidentally landed at the doc root
     parsedContent = filterOutRootInlineNodes(parsedContent);
+    parsedContent = normalizeTableBookmarksInContent(parsedContent, editor);
     collapseWhitespaceNextToInlinePassthrough(parsedContent);
 
     const result = {
@@ -144,22 +180,25 @@ export const createDocumentJson = (docx, converter, editor) => {
       },
     };
 
-    // Not empty document
-    if (result.content.length > 1) {
-      converter?.telemetry?.trackUsage('document_import', {
-        documentType: 'docx',
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     return {
       pmDoc: result,
       savedTagsToRestore: node,
-      pageStyles: getDocumentStyles(node, docx, converter, editor, numbering),
+      pageStyles: getDocumentStyles(
+        node,
+        docx,
+        converter,
+        editor,
+        numbering,
+        translatedNumbering,
+        translatedLinkedStyles,
+      ),
       comments,
+      footnotes,
       inlineDocumentFonts,
       linkedStyles: getStyleDefinitions(docx, converter, editor),
+      translatedLinkedStyles,
       numbering: getNumberingDefinitions(docx, converter),
+      translatedNumbering,
       themeColors: getThemeColorPalette(docx),
     };
   }
@@ -183,11 +222,16 @@ export const defaultNodeListHandler = () => {
     drawingNodeHandlerEntity,
     trackChangeNodeHandlerEntity,
     tableNodeHandlerEntity,
+    footnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
     tableOfContentsHandlerEntity,
+    indexHandlerEntity,
+    indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
     pageReferenceEntity,
+    permStartHandlerEntity,
+    permEndHandlerEntity,
     passthroughNodeHandlerEntity,
   ];
 
@@ -237,6 +281,8 @@ const createNodeListHandler = (nodeHandlers) => {
     insideTrackChange,
     converter,
     numbering,
+    translatedNumbering,
+    translatedLinkedStyles,
     editor,
     filename,
     parentStyleId,
@@ -270,6 +316,8 @@ const createNodeListHandler = (nodeHandlers) => {
                 insideTrackChange,
                 converter,
                 numbering,
+                translatedNumbering,
+                translatedLinkedStyles,
                 editor,
                 filename,
                 parentStyleId,
@@ -291,20 +339,8 @@ const createNodeListHandler = (nodeHandlers) => {
           );
           if (unhandled) {
             if (!context.elementName) continue;
-
-            converter?.telemetry?.trackStatistic('unknown', context);
             continue;
           } else {
-            converter?.telemetry?.trackStatistic('node', context);
-
-            // Use Telemetry to track list item attributes
-            if (context.type === 'orderedList' || context.type === 'bulletList') {
-              context.content.forEach((item) => {
-                const innerItemContext = getSafeElementContext([item], 0, item, `/word/${filename || 'document.xml'}`);
-                converter?.telemetry?.trackStatistic('attributes', innerItemContext);
-              });
-            }
-
             const hasHighlightMark = nodes[0]?.marks?.find((mark) => mark.type === 'highlight');
             if (hasHighlightMark) {
               converter?.docHiglightColors.add(hasHighlightMark.attrs.color.toUpperCase());
@@ -329,14 +365,6 @@ const createNodeListHandler = (nodeHandlers) => {
         } catch (error) {
           console.debug('Import error', error);
           editor?.emit('exception', { error, editor });
-
-          converter?.telemetry?.trackStatistic('error', {
-            type: 'processing_error',
-            message: error.message,
-            name: error.name,
-            stack: error.stack,
-            fileName: `/word/${filename || 'document.xml'}`,
-          });
         }
       }
 
@@ -345,20 +373,62 @@ const createNodeListHandler = (nodeHandlers) => {
       console.debug('Error during import', error);
       editor?.emit('exception', { error, editor });
 
-      // Track only catastrophic handler failures
-      converter?.telemetry?.trackStatistic('error', {
-        type: 'fatal_error',
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-        fileName: `/word/${filename || 'document.xml'}`,
-      });
-
       throw error;
     }
   };
   return nodeListHandlerFn;
 };
+
+/**
+ * Parse w:footnotePr element to extract footnote properties.
+ * These properties control footnote numbering format, starting number, restart behavior, and position.
+ *
+ * @param {Object} footnotePrElement The w:footnotePr XML element
+ * @returns {Object|null} Parsed footnote properties or null if none found
+ */
+function parseFootnoteProperties(footnotePrElement, source) {
+  if (!footnotePrElement) return null;
+
+  const props = { source };
+  const elements = Array.isArray(footnotePrElement.elements) ? footnotePrElement.elements : [];
+
+  elements.forEach((el) => {
+    const val = el?.attributes?.['w:val'];
+    switch (el.name) {
+      case 'w:numFmt':
+        // Numbering format: decimal, lowerRoman, upperRoman, lowerLetter, upperLetter, etc.
+        if (val) props.numFmt = val;
+        break;
+      case 'w:numStart':
+        // Starting number for footnotes
+        if (val) props.numStart = val;
+        break;
+      case 'w:numRestart':
+        // Restart behavior: continuous, eachSect, eachPage
+        if (val) props.numRestart = val;
+        break;
+      case 'w:pos':
+        // Position: pageBottom, beneathText, sectEnd, docEnd
+        if (val) props.pos = val;
+        break;
+    }
+  });
+
+  // Also preserve the original XML for complete roundtrip fidelity
+  props.originalXml = carbonCopy(footnotePrElement);
+
+  return props;
+}
+
+function importFootnotePropertiesFromSettings(docx, converter) {
+  if (!docx || !converter || converter.footnoteProperties) return;
+  const settings = docx['word/settings.xml'];
+  const settingsRoot = settings?.elements?.[0];
+  const elements = Array.isArray(settingsRoot?.elements) ? settingsRoot.elements : [];
+  const footnotePr = elements.find((el) => el?.name === 'w:footnotePr');
+  if (!footnotePr) return;
+  converter.footnoteProperties = parseFootnoteProperties(footnotePr, 'settings');
+}
 
 /**
  *
@@ -368,7 +438,7 @@ const createNodeListHandler = (nodeHandlers) => {
  * @param {Editor} editor instance.
  * @returns {Object} The document styles object
  */
-function getDocumentStyles(node, docx, converter, editor, numbering) {
+function getDocumentStyles(node, docx, converter, editor, numbering, translatedNumbering, translatedLinkedStyles) {
   const sectPr = node.elements?.find((n) => n.name === 'w:sectPr');
   const styles = {};
 
@@ -407,11 +477,17 @@ function getDocumentStyles(node, docx, converter, editor, numbering) {
         break;
       case 'w:titlePg':
         converter.headerIds.titlePg = true;
+        break;
+      case 'w:footnotePr':
+        if (!converter.footnoteProperties) {
+          converter.footnoteProperties = parseFootnoteProperties(el, 'sectPr');
+        }
+        break;
     }
   });
 
   // Import headers and footers. Stores them in converter.headers and converter.footers
-  importHeadersFooters(docx, converter, editor, numbering);
+  importHeadersFooters(docx, converter, editor, numbering, translatedNumbering, translatedLinkedStyles);
   styles.alternateHeaders = isAlternatingHeadersOddEven(docx);
   return styles;
 }
@@ -486,13 +562,13 @@ function getStyleDefinitions(docx) {
   const styles = docx['word/styles.xml'];
   if (!styles) return [];
 
-  const { elements } = styles.elements[0];
+  const elements = styles.elements?.[0]?.elements ?? [];
   const styleDefinitions = elements.filter((el) => el.name === 'w:style');
 
   // Track latent style exceptions
   const latentStyles = elements.find((el) => el.name === 'w:latentStyles');
   const matchedLatentStyles = [];
-  latentStyles?.elements.forEach((el) => {
+  (latentStyles?.elements ?? []).forEach((el) => {
     const { attributes } = el;
     const match = styleDefinitions.find((style) => style.attributes['w:styleId'] === attributes['w:name']);
     if (match) matchedLatentStyles.push(el);
@@ -515,6 +591,21 @@ function getStyleDefinitions(docx) {
   });
 
   return allParsedStyles;
+}
+
+export function translateStyleDefinitions(docx) {
+  const styles = docx['word/styles.xml'];
+  if (!styles) return [];
+  const stylesElement = styles.elements[0];
+  const parsedStyles = wStylesTranslator.encode({ nodes: [stylesElement] });
+  return parsedStyles;
+}
+
+function translateNumberingDefinitions(docx) {
+  const numbering = docx['word/numbering.xml'] ?? baseNumbering;
+  const numberingElement = numbering.elements[0];
+  const parsedNumbering = wNumberingTranslator.encode({ nodes: [numberingElement] });
+  return parsedNumbering;
 }
 
 /**
@@ -550,12 +641,11 @@ export function addDefaultStylesIfMissing(styles) {
  * @param {Object} converter The converter instance
  * @param {Editor} mainEditor The editor instance
  */
-const importHeadersFooters = (docx, converter, mainEditor) => {
+const importHeadersFooters = (docx, converter, mainEditor, numbering, translatedNumbering, translatedLinkedStyles) => {
   const rels = docx['word/_rels/document.xml.rels'];
   const relationships = rels?.elements.find((el) => el.name === 'Relationships');
   const { elements } = relationships || { elements: [] };
 
-  const numbering = getNumberingDefinitions(docx);
   const headerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
   const footerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
   const headers = elements.filter((el) => el.attributes['Type'] === headerType);
@@ -589,6 +679,8 @@ const importHeadersFooters = (docx, converter, mainEditor) => {
       docx,
       converter,
       numbering,
+      translatedNumbering,
+      translatedLinkedStyles,
       editor,
       filename: currentFileName,
       path: [],
@@ -666,8 +758,12 @@ const findSectPr = (obj, result = []) => {
 const getHeaderFooterSectionData = (sectionData, docx) => {
   const rId = sectionData.attributes.Id;
   const target = sectionData.attributes.Target;
-  const referenceFile = docx[`word/${target}`];
-  const currentFileName = target;
+  const filePath = resolveOpcTargetPath(target, 'word');
+  const referenceFile = filePath ? docx[filePath] : undefined;
+  // Extract just the filename for relationship file lookup.
+  // This handles both absolute paths (/word/header1.xml -> header1.xml)
+  // and relative paths (header1.xml -> header1.xml) per ECMA-376 OPC spec.
+  const currentFileName = filePath ? filePath.split('/').pop() : target.split('/').pop();
   return {
     rId,
     referenceFile,
@@ -705,6 +801,7 @@ export function filterOutRootInlineNodes(content = []) {
     'commentRangeStart',
     'commentRangeEnd',
     'commentReference',
+    'footnoteReference',
     'structuredContent',
   ]);
 
@@ -719,6 +816,17 @@ export function filterOutRootInlineNodes(content = []) {
     if (!node || typeof node.type !== 'string') return;
     const type = node.type;
     const preservableNodeName = PRESERVABLE_INLINE_XML_NAMES[type];
+
+    // Anchored images are inline nodes; wrap them to satisfy doc's block-only root.
+    if (type === 'image' && node.attrs?.isAnchor) {
+      result.push({
+        type: 'paragraph',
+        content: [node],
+        attrs: {},
+        marks: [],
+      });
+      return;
+    }
 
     if (!INLINE_TYPES.has(type)) {
       result.push(node);
@@ -735,6 +843,205 @@ export function filterOutRootInlineNodes(content = []) {
   });
 
   return result;
+}
+
+/**
+ * Normalize bookmark nodes that appear as direct table children.
+ * Moves bookmarkStart/End into the first/last cell textblock of the table.
+ *
+ * Some non-conformant DOCX producers place bookmarks as direct table children.
+ * Per ECMA-376 §17.13.6.2, they should be inside cells (bookmarkStart) or
+ * as children of rows (bookmarkEnd).
+ * PM can't accept bookmarks as a direct child of table row and that is why
+ * we relocate them for compatibility.
+ *
+ * @param {Array<{type: string, content?: any[], attrs?: any}>} content
+ * @param {Editor} [editor]
+ * @returns {Array}
+ */
+export function normalizeTableBookmarksInContent(content = [], editor) {
+  if (!Array.isArray(content) || content.length === 0) return content;
+
+  return content.map((node) => normalizeTableBookmarksInNode(node, editor));
+}
+
+function normalizeTableBookmarksInNode(node, editor) {
+  if (!node || typeof node !== 'object') return node;
+
+  if (node.type === 'table') {
+    node = normalizeTableBookmarksInTable(node, editor);
+  }
+
+  if (Array.isArray(node.content)) {
+    node = { ...node, content: normalizeTableBookmarksInContent(node.content, editor) };
+  }
+
+  return node;
+}
+
+function parseColIndex(val) {
+  if (val == null || val === '') return null;
+  const n = parseInt(String(val), 10);
+  return Number.isNaN(n) ? null : Math.max(0, n);
+}
+
+/** colFirst/colLast apply only to bookmarkStart; bookmarkEnd always uses first/last cell by position. */
+function getCellIndexForBookmark(bookmarkNode, position, rowCellCount) {
+  if (!rowCellCount) return 0;
+  if (bookmarkNode?.type === 'bookmarkEnd') {
+    return position === 'start' ? 0 : rowCellCount - 1;
+  }
+  const attrs = bookmarkNode?.attrs ?? {};
+  const col = parseColIndex(position === 'start' ? attrs.colFirst : attrs.colLast);
+  if (col == null) return position === 'start' ? 0 : rowCellCount - 1;
+  return Math.min(col, rowCellCount - 1);
+}
+
+function addBookmarkToRowCellInlines(rowCellInlines, rowIndex, position, bookmarkNode, rowCellCount) {
+  const cellIndex = getCellIndexForBookmark(bookmarkNode, position, rowCellCount);
+  const bucket = rowCellInlines[rowIndex][position];
+  if (!bucket[cellIndex]) bucket[cellIndex] = [];
+  bucket[cellIndex].push(bookmarkNode);
+}
+
+/** Apply collected start/end bookmark inlines to a single row; returns new row. */
+function applyBookmarksToRow(rowNode, { start: startByCell, end: endByCell }, editor) {
+  const cellIndices = [
+    ...new Set([...Object.keys(startByCell).map(Number), ...Object.keys(endByCell).map(Number)]),
+  ].sort((a, b) => a - b);
+  let row = rowNode;
+  for (const cellIndex of cellIndices) {
+    const startNodes = startByCell[cellIndex];
+    const endNodes = endByCell[cellIndex];
+    if (startNodes?.length) row = insertInlineIntoRow(row, startNodes, editor, 'start', cellIndex);
+    if (endNodes?.length) row = insertInlineIntoRow(row, endNodes, editor, 'end', cellIndex);
+  }
+  return row;
+}
+
+function normalizeTableBookmarksInTable(tableNode, editor) {
+  if (!tableNode || tableNode.type !== 'table' || !Array.isArray(tableNode.content)) return tableNode;
+
+  const rows = tableNode.content.filter((child) => child?.type === 'tableRow');
+  if (!rows.length) return tableNode;
+
+  /** @type {{ start: Record<number, unknown[]>, end: Record<number, unknown[]> }[]} */
+  const rowCellInlines = rows.map(() => ({
+    start: /** @type {Record<number, unknown[]>} */ ({}),
+    end: /** @type {Record<number, unknown[]>} */ ({}),
+  }));
+  let rowCursor = 0;
+
+  // Collect bookmark positions per row/cell (no content array yet).
+  for (const child of tableNode.content) {
+    if (child?.type === 'tableRow') {
+      rowCursor += 1;
+      continue;
+    }
+    if (isBookmarkNode(child)) {
+      const prevRowIndex = rowCursor > 0 ? rowCursor - 1 : null;
+      const nextRowIndex = rowCursor < rows.length ? rowCursor : null;
+      const row = (nextRowIndex ?? prevRowIndex) != null ? rows[nextRowIndex ?? prevRowIndex] : null;
+      const rowCellCount = row?.content?.length ?? 0;
+      if (child.type === 'bookmarkStart') {
+        if (nextRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, nextRowIndex, 'start', child, rowCellCount);
+        else if (prevRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, prevRowIndex, 'end', child, rowCellCount);
+      } else {
+        if (prevRowIndex != null) addBookmarkToRowCellInlines(rowCellInlines, prevRowIndex, 'end', child, rowCellCount);
+        else if (nextRowIndex != null)
+          addBookmarkToRowCellInlines(rowCellInlines, nextRowIndex, 'start', child, rowCellCount);
+      }
+    }
+  }
+
+  const updatedRows = rows.map((row, index) => applyBookmarksToRow(row, rowCellInlines[index], editor));
+
+  rowCursor = 0;
+  const content = [];
+  for (const child of tableNode.content) {
+    if (child?.type === 'tableRow') {
+      content.push(updatedRows[rowCursor] ?? child);
+      rowCursor += 1;
+    } else if (!isBookmarkNode(child)) {
+      content.push(child);
+    }
+  }
+
+  return {
+    ...tableNode,
+    content,
+  };
+}
+
+/**
+ * @param {number} [cellIndex] - If set, insert into this cell; otherwise first (start) or last (end) cell.
+ */
+function insertInlineIntoRow(rowNode, inlineNodes, editor, position, cellIndex) {
+  if (!rowNode || !inlineNodes?.length) return rowNode;
+
+  if (!Array.isArray(rowNode.content) || rowNode.content.length === 0) {
+    const paragraph = { type: 'paragraph', content: inlineNodes };
+    const newCell = { type: 'tableCell', content: [paragraph], attrs: {}, marks: [] };
+    return { ...rowNode, content: [newCell] };
+  }
+
+  const lastCellIndex = rowNode.content.length - 1;
+  const targetIndex =
+    cellIndex != null ? Math.min(Math.max(0, cellIndex), lastCellIndex) : position === 'end' ? lastCellIndex : 0;
+  const targetCell = rowNode.content[targetIndex];
+  const updatedCell = insertInlineIntoCell(targetCell, inlineNodes, editor, position);
+
+  if (updatedCell === targetCell) return rowNode;
+
+  const nextContent = rowNode.content.slice();
+  nextContent[targetIndex] = updatedCell;
+  return { ...rowNode, content: nextContent };
+}
+
+function findTextblockIndex(content, editor, fromEnd) {
+  const start = fromEnd ? content.length - 1 : 0;
+  const end = fromEnd ? -1 : content.length;
+  const step = fromEnd ? -1 : 1;
+  for (let i = start; fromEnd ? i > end : i < end; i += step) {
+    if (isTextblockNode(content[i], editor)) return i;
+  }
+  return -1;
+}
+
+function insertInlineIntoCell(cellNode, inlineNodes, editor, position) {
+  if (!cellNode || !inlineNodes?.length) return cellNode;
+
+  const content = Array.isArray(cellNode.content) ? cellNode.content.slice() : [];
+  const targetIndex = findTextblockIndex(content, editor, position === 'end');
+
+  if (targetIndex === -1) {
+    const paragraph = { type: 'paragraph', content: inlineNodes };
+    if (position === 'end') content.push(paragraph);
+    else content.unshift(paragraph);
+    return { ...cellNode, content };
+  }
+
+  const targetBlock = content[targetIndex] || { type: 'paragraph', content: [] };
+  const blockContent = Array.isArray(targetBlock.content) ? targetBlock.content.slice() : [];
+  const nextBlockContent = position === 'end' ? blockContent.concat(inlineNodes) : inlineNodes.concat(blockContent);
+
+  content[targetIndex] = { ...targetBlock, content: nextBlockContent };
+  return { ...cellNode, content };
+}
+
+function isBookmarkNode(node) {
+  const typeName = node?.type;
+  return typeName === 'bookmarkStart' || typeName === 'bookmarkEnd';
+}
+
+function isTextblockNode(node, editor) {
+  const typeName = node?.type;
+  if (!typeName) return false;
+  const nodeType = editor?.schema?.nodes?.[typeName];
+  if (nodeType && typeof nodeType.isTextblock === 'boolean') return nodeType.isTextblock;
+  return typeName === 'paragraph';
 }
 
 /**

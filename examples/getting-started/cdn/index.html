@@ -1,56 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <link rel="stylesheet" href="https://unpkg.com/superdoc@0.21.0-next.1/dist/style.css">
-  <script type="module" src="https://unpkg.com/superdoc@0.21.0-next.1/dist/superdoc.umd.js"></script>
-  <link rel="stylesheet" href="./file-upload.css">
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SuperDoc - CDN example</title>
-  <style>
-    body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    .title {
-      font-size: 18px;
-    }
-  </style>
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc — CDN</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.umd.js"></script>
+  </head>
+  <body>
+    <div style="padding: 1rem; background: #f5f5f5">
+      <input type="file" id="file-input" accept=".docx" />
+    </div>
+    <div id="editor" style="height: calc(100vh - 60px)"></div>
 
-  <div class="title">SuperDoc - CDN example</div>
-  <div id="my-toolbar"></div>
+    <script>
+      var superdoc = new SuperDocLibrary.SuperDoc({
+        selector: '#editor',
+      });
 
-  <button class="file-upload-button">Load Document</button>
-  <input class="file-upload-input" style="display: none;" type="file" accept=".docx">
+      document.getElementById('file-input').addEventListener('change', function (e) {
+        var file = e.target.files[0];
+        if (!file) return;
 
-  <div id="superdoc"></div>
-
-  <script type="module">
-    const config = {
-      selector: '#superdoc',
-      toolbar: '#my-toolbar',
-      // document: './sample.docx', // URL, File or document config
-      documentMode: 'editing',
-      pagination: true,
-      rulers: true,
-      onReady: (event) => {
-        console.log('SuperDoc is ready', event);
-      },
-      onEditorCreate: (event) => {
-        console.log('Editor is created', event);
-      },
-    };
-
-    const superdoc = new SuperDocLibrary.SuperDoc(config);
-
-    window.addEventListener('file-upload', (event) => {
-      new SuperDocLibrary.SuperDoc({...config, document: event.detail}); 
-    });
-  </script>
-  <script type="module" src="./file-upload.js"></script>
-
-</body>
+        if (superdoc) superdoc.destroy();
+        superdoc = new SuperDocLibrary.SuperDoc({
+          selector: '#editor',
+          document: file,
+        });
+      });
+    </script>
+  </body>
 </html>

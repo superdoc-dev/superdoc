@@ -426,7 +426,7 @@ const handleInput = (event) => {
   resize: none;
   overflow: hidden;
   height: 100%;
-  font-family: Inter, sans-serif;
+  font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);
 }
 
 /* Add specific styles for textarea placeholder */

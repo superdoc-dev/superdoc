@@ -2,9 +2,9 @@ import { createApp } from 'vue';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Extension } from '@core/Extension.js';
 import tippy from 'tippy.js';
-import { applyStyleIsolationClass } from '@/utils/styleIsolation.js';
+import { applyStyleIsolationClass } from '@utils/styleIsolation.js';
 
-import Mentions from '@/components/popovers/Mentions.vue';
+import Mentions from '@components/popovers/Mentions.vue';
 
 /**
  * Configuration options for PopoverPlugin

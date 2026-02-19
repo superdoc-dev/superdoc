@@ -20,7 +20,7 @@ describe('hyperlink-exported.docx round trip', () => {
   it('re-exports as a Word-compatible DOCX with intact hyperlinks', async () => {
     const fileName = 'hyperlink-exported.docx';
     const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(fileName);
-    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts });
+    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
     const byteLength = exportedBuffer?.byteLength ?? exportedBuffer?.length ?? 0;

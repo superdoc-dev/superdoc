@@ -1,0 +1,141 @@
+---
+title: Underline extension
+sidebarTitle: "Underline"
+keywords: "Underline extension, superdoc Underline, word Underline, document Underline, docx Underline"
+---
+
+import Description from '/snippets/extensions/underline.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  HTML attributes for underline elements
+</ParamField>
+
+## Attributes
+
+Mark attributes that can be set and retrieved:
+
+<ParamField path="underlineType" type="UnderlineConfig" default="single">
+  Style of underline
+</ParamField>
+
+<ParamField path="underlineColor" type="string">
+  Color of the underline (hex color value)
+</ParamField>
+
+## Commands
+
+### `setUnderline`
+
+Apply underline formatting
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setUnderline()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setUnderline();
+  },
+});
+```
+</CodeGroup>
+
+**Returns:** `Function` Command
+
+### `unsetUnderline`
+
+Remove underline formatting
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.unsetUnderline()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetUnderline();
+  },
+});
+```
+</CodeGroup>
+
+**Returns:** `Function` Command
+
+### `toggleUnderline`
+
+Toggle underline formatting
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleUnderline()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleUnderline();
+  },
+});
+```
+</CodeGroup>
+
+**Returns:** `Function` Command
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleUnderline() | `⌘/Ctrl-u` | Toggle underline formatting |
+| toggleUnderline() | `⌘/Ctrl-U` | Toggle underline formatting (uppercase) |
+
+## Types
+
+### `UnderlineConfig`
+
+Underline style configuration
+
+<Expandable title="Properties">
+<ResponseField name="value" type="any | any | any | any | any | any" required>
+  Style variant
+</ResponseField>
+</Expandable>
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/underline/underline.js" />

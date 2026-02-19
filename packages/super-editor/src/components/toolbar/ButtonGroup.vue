@@ -3,7 +3,7 @@ import { computed, ref, h } from 'vue';
 import ToolbarButton from './ToolbarButton.vue';
 import ToolbarSeparator from './ToolbarSeparator.vue';
 import OverflowMenu from './OverflowMenu.vue';
-import { NDropdown, NTooltip, NSelect } from 'naive-ui';
+import { NDropdown, NTooltip } from 'naive-ui';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
 
 const emit = defineEmits(['command', 'item-clicked', 'dropdown-update-show']);
@@ -17,6 +17,16 @@ const props = defineProps({
   overflowItems: {
     type: Array,
     default: () => [],
+  },
+  /**
+   * The font-family to use for UI elements like dropdowns and tooltips.
+   * This ensures consistent typography across toolbar UI components.
+   * @type {string}
+   * @default 'Arial, Helvetica, sans-serif'
+   */
+  uiFontFamily: {
+    type: String,
+    default: 'Arial, Helvetica, sans-serif',
   },
   position: {
     type: String,
@@ -227,6 +237,7 @@ const handleDropdownUpdateShow = (open) => {
         :options="dropdownOptions(item)"
         :trigger="item.disabled.value ? null : 'click'"
         :show="item.expand.value"
+        :content-style="{ fontFamily: props.uiFontFamily }"
         size="medium"
         placement="bottom-start"
         class="toolbar-button toolbar-dropdown sd-editor-toolbar-dropdown"
@@ -237,11 +248,12 @@ const handleDropdownUpdateShow = (open) => {
         :menu-props="
           () => ({
             role: 'menu',
+            style: { fontFamily: props.uiFontFamily },
           })
         "
         :node-props="(option) => getDropdownAttributes(option, item)"
       >
-        <n-tooltip trigger="hover" :disabled="!item.tooltip?.value">
+        <n-tooltip trigger="hover" :disabled="!item.tooltip?.value" :content-style="{ fontFamily: props.uiFontFamily }">
           <template #trigger>
             <ToolbarButton
               :toolbar-item="item"
@@ -257,7 +269,12 @@ const handleDropdownUpdateShow = (open) => {
         </n-tooltip>
       </n-dropdown>
 
-      <n-tooltip trigger="hover" v-else-if="isButton(item)" class="sd-editor-toolbar-tooltip">
+      <n-tooltip
+        trigger="hover"
+        v-else-if="isButton(item)"
+        class="sd-editor-toolbar-tooltip"
+        :content-style="{ fontFamily: props.uiFontFamily }"
+      >
         <template #trigger>
           <ToolbarButton
             :toolbar-item="item"

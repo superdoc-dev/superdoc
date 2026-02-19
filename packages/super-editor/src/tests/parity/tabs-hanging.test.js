@@ -6,7 +6,7 @@ import { computeParagraphReferenceSnapshot } from '@tests/helpers/paragraphRefer
 import { zipFolderToBuffer } from '@tests/helpers/zipFolderToBuffer.js';
 import { Editor } from '@core/Editor.js';
 import { computeParagraphAttrs } from '@superdoc/pm-adapter/attributes/paragraph.js';
-import { buildStyleContextFromEditor, buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
+import { buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,16 +35,15 @@ describe('tabs and hanging indent parity', () => {
     expect(reference.paragraphProperties.tabStops).toBeTruthy();
 
     // Get adapter attrs
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
-    expect(adapterAttrs?.tabs).toBeDefined();
-    expect(adapterAttrs.tabs.length).toBeGreaterThan(0);
+    expect(paragraphAttrs?.tabs).toBeDefined();
+    expect(paragraphAttrs.tabs.length).toBeGreaterThan(0);
 
     // Compare tab stop properties
     const referenceTab = reference.paragraphProperties.tabStops[0];
-    const adapterTab = adapterAttrs.tabs[0];
+    const adapterTab = paragraphAttrs.tabs[0];
 
     if (referenceTab.pos != null) {
       expect(adapterTab.pos).toBe(referenceTab.pos);
@@ -82,12 +81,11 @@ describe('tabs and hanging indent parity', () => {
     expect(match).toBeTruthy();
 
     // Get style context which has default tab interval
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Adapter should use the same default tab interval
-    expect(adapterAttrs?.tabIntervalTwips).toBe(styleContext.defaults.defaultTabIntervalTwips);
+    expect(paragraphAttrs?.tabIntervalTwips).toBe(720);
 
     editor.destroy();
   });
@@ -119,13 +117,12 @@ describe('tabs and hanging indent parity', () => {
     const reference = computeParagraphReferenceSnapshot(editor, match.node, match.pos);
 
     // Get adapter attrs
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // Compare indent properties
     const referenceIndent = reference.paragraphProperties.indent;
-    const adapterIndent = adapterAttrs?.indent;
+    const adapterIndent = paragraphAttrs?.indent;
 
     if (referenceIndent) {
       expect(adapterIndent).toBeDefined();
@@ -162,14 +159,13 @@ describe('tabs and hanging indent parity', () => {
 
     expect(match).toBeTruthy();
 
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
-    expect(adapterAttrs?.tabs).toBeDefined();
+    expect(paragraphAttrs?.tabs).toBeDefined();
 
     // Tab positions should be in twips (positive integers)
-    for (const tab of adapterAttrs.tabs) {
+    for (const tab of paragraphAttrs.tabs) {
       expect(tab.pos).toBeTypeOf('number');
       expect(Number.isInteger(tab.pos)).toBe(true);
       expect(tab.pos).toBeGreaterThan(0);
@@ -197,13 +193,12 @@ describe('tabs and hanging indent parity', () => {
     expect(match).toBeTruthy();
 
     const reference = computeParagraphReferenceSnapshot(editor, match.node, match.pos);
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match.node, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match.node, converterContext);
 
     // If reference has tab leader, adapter should preserve it
     const referenceTab = reference.paragraphProperties.tabStops?.[0];
-    const adapterTab = adapterAttrs?.tabs?.[0];
+    const adapterTab = paragraphAttrs?.tabs?.[0];
 
     if (referenceTab && adapterTab && referenceTab.leader && referenceTab.leader !== 'none') {
       expect(adapterTab.leader).toBe(referenceTab.leader);
@@ -216,20 +211,17 @@ describe('tabs and hanging indent parity', () => {
     const para = {
       type: { name: 'paragraph' },
       attrs: {
-        tabStops: [
-          { tab: { tabType: 'start' } }, // missing pos
-          { pos: 'not-a-number' }, // invalid pos
-        ],
+        paragraphProperties: {
+          tabStops: [
+            { tab: { tabType: 'start' } }, // missing pos
+            { pos: 'not-a-number' }, // invalid pos
+          ],
+        },
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-    };
+    const { paragraphAttrs } = computeParagraphAttrs(para);
 
-    const adapterAttrs = computeParagraphAttrs(para, styleContext);
-
-    expect(adapterAttrs?.tabs).toBeUndefined();
+    expect(paragraphAttrs?.tabs).toBeUndefined();
   });
 });

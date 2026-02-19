@@ -90,9 +90,8 @@ export function getMeasuredTextWidth(
   try {
     ctx.font = font;
     const metrics = ctx.measureText(text);
-    const advanceWidth = metrics.width;
-    const paintedWidth = (metrics.actualBoundingBoxLeft || 0) + (metrics.actualBoundingBoxRight || 0);
-    const baseWidth = Math.max(advanceWidth, paintedWidth);
+    // Use advance width for line fitting; bounding-box overhangs inflate width and cause premature wraps.
+    const baseWidth = metrics.width;
     const extra = letterSpacing ? Math.max(0, text.length - 1) * letterSpacing : 0;
     const width = baseWidth + extra;
 

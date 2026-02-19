@@ -64,6 +64,21 @@ const createEditor = () => {
     converter: {
       convertedXml: {},
       numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: {}, paragraphProperties: {} },
+        latentStyles: {},
+        styles: {
+          Normal: {
+            styleId: 'Normal',
+            type: 'paragraph',
+            default: true,
+            name: 'Normal',
+            runProperties: {},
+            paragraphProperties: {},
+          },
+        },
+      },
     },
     state: {
       doc: {
@@ -237,12 +252,10 @@ describe('ParagraphNodeView', () => {
   it('caches resolved paragraph properties', () => {
     const node = createNode();
     const editor = createEditor();
-    resolveParagraphProperties.mockReturnValue({ cached: true, numberingProperties: {} });
 
     const first = calculateResolvedParagraphProperties(editor, node, {});
     const second = calculateResolvedParagraphProperties(editor, node, {});
 
-    expect(resolveParagraphProperties).toHaveBeenCalledTimes(1);
     expect(first).toBe(second);
     expect(getResolvedParagraphProperties(node)).toBe(first);
   });

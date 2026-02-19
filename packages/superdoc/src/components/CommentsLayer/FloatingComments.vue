@@ -21,6 +21,7 @@ const commentsStore = useCommentsStore();
 
 const { getFloatingComments, hasInitializedLocations, activeComment, commentsList, editorCommentPositions } =
   storeToRefs(commentsStore);
+const { activeZoom } = storeToRefs(superdocStore);
 
 const floatingCommentsContainer = ref(null);
 const renderedSizes = ref([]);
@@ -53,8 +54,9 @@ const handleDialog = (dialog) => {
 
     // If this is a PDF, set the position based on selection bounds
     if (props.currentDocument.type === 'application/pdf') {
+      const zoom = (activeZoom.value ?? 100) / 100;
       Object.entries(comment.selection?.selectionBounds).forEach(([key, value]) => {
-        position[key] = Number(value);
+        position[key] = Number(value) * zoom;
       });
     }
 
@@ -112,30 +114,12 @@ watchEffect(() => {
   const totalComments = getFloatingComments.value.length;
   const measuredComments = renderedSizes.value.length;
 
-  if (totalComments === 0) {
+  if (totalComments === 0 || measuredComments === 0) {
     return;
   }
 
-  if (measuredComments === totalComments) {
-    // All comments measured, process immediately
-    nextTick(processLocations);
-  } else if (measuredComments > 0 && !firstGroupRendered.value) {
-    // Some comments measured but not all - set a fallback timeout
-    // This handles cases where some comments fail to get valid positions
-    measurementTimeoutId.value = setTimeout(() => {
-      if (!firstGroupRendered.value && renderedSizes.value.length > 0) {
-        processLocations();
-      }
-    }, 100);
-  }
+  nextTick(processLocations);
 });
-
-const resetLayout = async () => {
-  firstGroupRendered.value = false;
-  renderedSizes.value = [];
-  commentsRenderKey.value++;
-  verticalOffset.value = 0;
-};
 
 watch(activeComment, (newVal, oldVal) => {
   nextTick(() => {
@@ -148,18 +132,28 @@ watch(activeComment, (newVal, oldVal) => {
     if (!renderedItem) return (verticalOffset.value = 0);
 
     const selectionTop = comment.selection.selectionBounds.top;
+    const zoom = props.currentDocument.type === 'application/pdf' ? (activeZoom.value ?? 100) / 100 : 1;
     const renderedTop = renderedItem.top;
 
     const editorBounds = floatingCommentsContainer.value.getBoundingClientRect();
-    verticalOffset.value = selectionTop - renderedTop;
+    verticalOffset.value = selectionTop * zoom - renderedTop;
 
     setTimeout(() => {
-      renderedItem.elementRef.value?.scrollIntoView({
+      renderedItem.elementRef?.value?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });
     }, 200);
   });
+});
+
+watch(activeZoom, () => {
+  if (props.currentDocument.type === 'application/pdf') {
+    renderedSizes.value = [];
+    firstGroupRendered.value = false;
+    commentsRenderKey.value += 1;
+    verticalOffset.value = 0;
+  }
 });
 
 onBeforeUnmount(() => {

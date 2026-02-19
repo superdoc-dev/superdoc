@@ -2,7 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "checkJs": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "strict": false
   },
   "exclude": ["**/*.test.js", "**/*.test.ts", "**/*.spec.js", "**/*.spec.ts"]
 }

@@ -1,4 +1,4 @@
-import { resolveParagraphProperties } from '@converter/styles.js';
+import { resolveParagraphProperties } from '@superdoc/style-engine/ooxml';
 import { findParentNodeClosestToPos } from '@helpers/index.js';
 
 const resolvedParagraphPropertiesCache = new WeakMap();
@@ -15,12 +15,15 @@ export function calculateResolvedParagraphProperties(editor, node, $pos) {
   if (cached) {
     return cached;
   }
-  const inTable = Boolean(findParentNodeClosestToPos($pos, (node) => node.type.name === 'table'));
+  const tableNode = findParentNodeClosestToPos($pos, (node) => node.type.name === 'table');
+  const tableStyleId = tableNode?.node.attrs.tableStyleId || null;
   const paragraphProperties = resolveParagraphProperties(
-    { docx: editor.converter.convertedXml, numbering: editor.converter.numbering },
+    {
+      translatedNumbering: editor.converter.translatedNumbering,
+      translatedLinkedStyles: editor.converter.translatedLinkedStyles,
+    },
     node.attrs.paragraphProperties || {},
-    inTable,
-    false,
+    tableStyleId,
   );
   resolvedParagraphPropertiesCache.set(node, paragraphProperties);
   return paragraphProperties;

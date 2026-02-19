@@ -61,6 +61,7 @@ function createMockEditor(overrides = {}) {
   };
 
   return {
+    zoom: 1,
     view: {
       dom: {
         style: { pointerEvents: 'auto' },

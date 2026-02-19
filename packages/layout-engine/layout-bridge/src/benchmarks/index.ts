@@ -1,9 +1,9 @@
 import { performance } from 'node:perf_hooks';
 import type { FlowBlock, Layout, ParagraphBlock, ParagraphMeasure, Run } from '@superdoc/contracts';
 import type { LayoutOptions } from '@superdoc/layout-engine';
-import { measureBlock } from '../../../measuring/dom/src/index';
-import { createDomPainter } from '../../../painters/dom/src/index';
-import { layoutDocument } from '../../../layout-engine/src/index';
+import { measureBlock } from '@superdoc/measuring-dom';
+import { createDomPainter } from '@superdoc/painter-dom';
+import { layoutDocument } from '@superdoc/layout-engine';
 import { incrementalLayout, measureCache, resolveMeasurementConstraints } from '../incrementalLayout';
 
 const LETTER_LAYOUT: LayoutOptions = {

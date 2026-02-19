@@ -11,6 +11,17 @@ import * as structuredContentHelpers from './structuredContentHelpers/index';
 const STRUCTURED_CONTENT_NAMES = ['structuredContent', 'structuredContentBlock'];
 
 /**
+ * Validates that an ID is a valid integer string (required for MS Word compatibility).
+ * @param {string|number} id - The ID to validate
+ * @returns {boolean} - True if the ID is a valid integer string
+ */
+function isValidIntegerId(id) {
+  if (id === null || id === undefined) return true; // Allow null/undefined (will be auto-generated)
+  const str = String(id);
+  return /^-?\d+$/.test(str);
+}
+
+/**
  * Find the first text node within a structured content node, even when wrapped.
  * Some plugins wrap text in inline nodes (e.g., run), so we need to search descendants.
  * @param {import('prosemirror-model').Node} node
@@ -94,6 +105,11 @@ export const StructuredContentCommands = Extension.create({
       insertStructuredContentInline:
         (options = {}) =>
         ({ editor, dispatch, state, tr }) => {
+          // Validate ID is an integer (required for MS Word compatibility)
+          if (options.attrs?.id !== undefined && !isValidIntegerId(options.attrs.id)) {
+            throw new Error('Invalid structured content id - must be an integer, got: ' + options.attrs.id);
+          }
+
           const { schema } = editor;
           let { from, to } = state.selection;
 
@@ -173,6 +189,11 @@ export const StructuredContentCommands = Extension.create({
       insertStructuredContentBlock:
         (options = {}) =>
         ({ editor, dispatch, state, tr }) => {
+          // Validate ID is an integer (required for MS Word compatibility)
+          if (options.attrs?.id !== undefined && !isValidIntegerId(options.attrs.id)) {
+            throw new Error('Invalid structured content id - must be an integer, got: ' + options.attrs.id);
+          }
+
           const { schema } = editor;
           let { from, to } = state.selection;
 
@@ -247,6 +268,11 @@ export const StructuredContentCommands = Extension.create({
       updateStructuredContentById:
         (id, options = {}) =>
         ({ editor, dispatch, state, tr }) => {
+          // Validate ID is an integer (required for MS Word compatibility)
+          if (options.attrs?.id !== undefined && !isValidIntegerId(options.attrs.id)) {
+            throw new Error('Invalid structured content id - must be an integer, got: ' + options.attrs.id);
+          }
+
           const structuredContentTags = getStructuredContentTagsById(id, state);
 
           if (!structuredContentTags.length) {
@@ -408,6 +434,11 @@ export const StructuredContentCommands = Extension.create({
       updateStructuredContentByGroup:
         (group, options = {}) =>
         ({ editor, dispatch, state, tr }) => {
+          // Validate ID is an integer (required for MS Word compatibility)
+          if (options.attrs?.id !== undefined && !isValidIntegerId(options.attrs.id)) {
+            throw new Error('Invalid structured content id - must be an integer, got: ' + options.attrs.id);
+          }
+
           const structuredContentTags = getStructuredContentByGroup(group, state);
 
           if (!structuredContentTags.length) {

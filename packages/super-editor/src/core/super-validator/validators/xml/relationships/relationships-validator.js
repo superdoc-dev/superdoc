@@ -1,3 +1,5 @@
+import { resolveOpcTargetPath } from '@converter/helpers.js';
+
 /**
  * Creates a validator for Word document relationships (word/_rels/document.xml.rels)
  *
@@ -209,22 +211,15 @@ function processRelationships(root, convertedXml, results) {
 
     // Handle image relationships
     if (isImageType(type)) {
-      const relPath = `word/${target.replace(/^\.?\//, '')}`;
-      if (/^media\/.+\.bin$/i.test(target) && relPath in convertedXml) {
+      const relPath = resolveOpcTargetPath(target, 'word');
+      if (relPath && /^media\/.+\.bin$/i.test(target) && relPath in convertedXml) {
         binMediaTargets.add(`/${relPath}`);
       }
     }
 
     // Validate internal target files exist
     if (targetMode.toLowerCase() !== 'external' && !looksExternal(target)) {
-      // Handle relative paths that go UP from word/ directory (e.g., ../customXml/item1.xml)
-      let likelyPath;
-      if (target.startsWith('../')) {
-        // Resolve relative path: ../customXml/item1.xml -> customXml/item1.xml
-        likelyPath = target.replace(/^\.\.\//, '');
-      } else {
-        likelyPath = `word/${target.replace(/^\.?\//, '')}`;
-      }
+      const likelyPath = resolveOpcTargetPath(target, 'word');
 
       if (!(likelyPath in convertedXml)) {
         if (!isImageType(type)) {

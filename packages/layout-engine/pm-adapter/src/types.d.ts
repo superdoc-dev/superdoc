@@ -3,16 +3,11 @@
  */
 import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta } from '@superdoc/contracts';
 import type { Engines } from '@superdoc/contracts';
-import type {
-  StyleContext as StyleEngineContext,
-  StyleNode as StyleEngineNode,
-  ComputedParagraphStyle,
-} from '@superdoc/style-engine';
+import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
 export type { ConverterContext } from './converter-context.js';
 export type StyleContext = StyleEngineContext;
-export type StyleNode = StyleEngineNode;
 export type { ComputedParagraphStyle };
 export type ThemeColorPalette = Record<string, string>;
 /**
@@ -77,6 +72,16 @@ export interface AdapterOptions {
    * Useful when converting multiple documents that share the same position space.
    */
   blockIdPrefix?: string;
+  /**
+   * Optional list of ProseMirror node type names that should be treated as atom/leaf nodes
+   * for position mapping. Use this to keep PM positions correct when custom atom nodes exist.
+   */
+  atomNodeTypes?: Iterable<string>;
+  /**
+   * Optional precomputed position map keyed by the PM JSON nodes passed to toFlowBlocks.
+   * When provided, this is used directly instead of building a new position map.
+   */
+  positions?: PositionMap;
   /**
    * Optional media files map for hydrating image blocks.
    * Key: normalized file path (e.g., "word/media/image1.jpeg")
@@ -220,12 +225,12 @@ export interface NodeHandlerContext {
   blocks: FlowBlock[];
   recordBlockKind: (kind: string) => void;
   nextBlockId: BlockIdGenerator;
+  blockIdPrefix?: string;
   positions: PositionMap;
   defaultFont: string;
   defaultSize: number;
   styleContext: StyleContext;
   converterContext?: ConverterContext;
-  listCounterContext: ListCounterContext;
   trackedChangesConfig: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
   bookmarks: Map<string, number>;
@@ -242,7 +247,6 @@ export interface NodeHandlerContext {
       defaultFont: string,
       defaultSize: number,
       styleContext: StyleContext,
-      listCounterContext?: ListCounterContext,
       trackedChanges?: TrackedChangesConfig,
       bookmarks?: Map<string, number>,
       hyperlinkConfig?: HyperlinkConfig,

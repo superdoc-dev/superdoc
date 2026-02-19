@@ -10,14 +10,56 @@ import type {
   ShapeGroupTransform,
   ShapeGroupChild,
   Run,
+  ParagraphAttrs,
+  ParagraphSpacing,
+  ParagraphIndent,
+  ParagraphBorders,
+  ParagraphBorder,
+  ParagraphShading,
+  TabStop,
+  DropCapDescriptor,
+  ParagraphFrame,
 } from '@superdoc/contracts';
+import { fieldAnnotationKey } from './field-annotation-key.js';
 import { hasTrackedChange, resolveTrackedChangesEnabled } from './tracked-changes-utils.js';
+
+/**
+ * Comment annotation structure attached to runs.
+ */
+type CommentAnnotation = {
+  commentId?: string;
+  internal?: boolean;
+};
+
+/**
+ * Run type with validated comment annotations.
+ */
+type RunWithComments = Run & {
+  comments: CommentAnnotation[];
+};
+
+/**
+ * Type guard to check if a run has valid comment annotations.
+ * Ensures the comments property exists, is an array, and is non-empty
+ * before attempting to access comment metadata.
+ *
+ * @param run - The run to check for comments
+ * @returns True if run has valid comments array, false otherwise
+ */
+function hasComments(run: Run): run is RunWithComments {
+  return (
+    'comments' in run &&
+    Array.isArray((run as Partial<RunWithComments>).comments) &&
+    (run as Partial<RunWithComments>).comments!.length > 0
+  );
+}
 
 export type DirtyRegion = {
   firstDirtyIndex: number;
   lastStableIndex: number;
   insertedBlockIds: string[];
   deletedBlockIds: string[];
+  stableBlockIds: Set<string>;
 };
 
 /**
@@ -44,6 +86,7 @@ export type DirtyRegion = {
 export const computeDirtyRegions = (previous: FlowBlock[], next: FlowBlock[]): DirtyRegion => {
   const prevMap = new Map(previous.map((block, index) => [block.id, { block, index }]));
   const nextMap = new Map(next.map((block, index) => [block.id, { block, index }]));
+  const stableBlockIds = new Set<string>();
 
   let firstDirtyIndex = next.length;
   let lastStableIndex = -1;
@@ -56,6 +99,7 @@ export const computeDirtyRegions = (previous: FlowBlock[], next: FlowBlock[]): D
 
     if (prevBlock.id === nextBlock.id && shallowEqual(prevBlock, nextBlock)) {
       lastStableIndex = nextPointer;
+      stableBlockIds.add(prevBlock.id);
       prevPointer += 1;
       nextPointer += 1;
       continue;
@@ -86,6 +130,7 @@ export const computeDirtyRegions = (previous: FlowBlock[], next: FlowBlock[]): D
     lastStableIndex,
     insertedBlockIds,
     deletedBlockIds,
+    stableBlockIds,
   };
 };
 
@@ -124,13 +169,237 @@ const getTrackedChangeKey = (run: Run): string => {
   return '';
 };
 
+/**
+ * Generates a hash key from comment annotations for equality comparison.
+ * Includes comment IDs and internal flag to catch visibility changes.
+ * Uses type guard to safely access comment metadata.
+ *
+ * @param run - The run to extract comment key from
+ * @returns Hash string, or empty string if no comments
+ */
+const getCommentKey = (run: Run): string => {
+  if (!hasComments(run)) return '';
+  return run.comments.map((c) => `${c.commentId ?? ''}:${c.internal ? '1' : '0'}`).join('|');
+};
+
+// ============================================================================
+// Paragraph Attribute Comparison Helpers
+// ============================================================================
+// These functions provide deep equality checks for paragraph-level attributes
+// that affect visual rendering. Changes to any of these should trigger cache
+// invalidation and re-layout.
+//
+// NOTE: When adding new visual paragraph attributes to ParagraphAttrs,
+// ensure they are added to paragraphAttrsEqual below.
+// ============================================================================
+
+/**
+ * Compares paragraph spacing properties for equality.
+ * Spacing affects vertical layout between paragraphs and line height.
+ */
+const paragraphSpacingEqual = (a?: ParagraphSpacing, b?: ParagraphSpacing): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  return (
+    a.before === b.before &&
+    a.after === b.after &&
+    a.line === b.line &&
+    a.lineRule === b.lineRule &&
+    a.beforeAutospacing === b.beforeAutospacing &&
+    a.afterAutospacing === b.afterAutospacing
+  );
+};
+
+/**
+ * Compares paragraph indent properties for equality.
+ * Indentation affects horizontal positioning of text.
+ */
+const paragraphIndentEqual = (a?: ParagraphIndent, b?: ParagraphIndent): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  return a.left === b.left && a.right === b.right && a.firstLine === b.firstLine && a.hanging === b.hanging;
+};
+
+/**
+ * Compares a single paragraph border for equality.
+ * Checks border style, width, color, and spacing properties.
+ *
+ * @param a - First paragraph border to compare
+ * @param b - Second paragraph border to compare
+ * @returns True if borders are equal or both undefined/null
+ */
+const paragraphBorderEqual = (a?: ParagraphBorder, b?: ParagraphBorder): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  return a.style === b.style && a.width === b.width && a.color === b.color && a.space === b.space;
+};
+
+/**
+ * Compares paragraph borders (all four sides) for equality.
+ * Borders affect the visual box around the paragraph.
+ */
+const paragraphBordersEqual = (a?: ParagraphBorders, b?: ParagraphBorders): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  return (
+    paragraphBorderEqual(a.top, b.top) &&
+    paragraphBorderEqual(a.right, b.right) &&
+    paragraphBorderEqual(a.bottom, b.bottom) &&
+    paragraphBorderEqual(a.left, b.left)
+  );
+};
+
+/**
+ * Compares paragraph shading/background for equality.
+ * Shading affects the background fill of the paragraph.
+ */
+const paragraphShadingEqual = (a?: ParagraphShading, b?: ParagraphShading): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  return (
+    a.fill === b.fill &&
+    a.color === b.color &&
+    a.val === b.val &&
+    a.themeColor === b.themeColor &&
+    a.themeFill === b.themeFill &&
+    a.themeFillShade === b.themeFillShade &&
+    a.themeFillTint === b.themeFillTint &&
+    a.themeShade === b.themeShade &&
+    a.themeTint === b.themeTint
+  );
+};
+
+/**
+ * Compares a single tab stop for equality.
+ * Checks tab alignment type, position, and leader character.
+ *
+ * @param a - First tab stop to compare
+ * @param b - Second tab stop to compare
+ * @returns True if tab stops have identical properties
+ */
+const tabStopEqual = (a: TabStop, b: TabStop): boolean => {
+  return a.val === b.val && a.pos === b.pos && a.leader === b.leader;
+};
+
+/**
+ * Compares tab stop arrays for equality.
+ * Tabs affect horizontal text positioning.
+ */
+const tabStopsEqual = (a?: TabStop[], b?: TabStop[]): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (!tabStopEqual(a[i], b[i])) return false;
+  }
+  return true;
+};
+
+/**
+ * Compares paragraph frame properties for equality.
+ * Frames affect positioned/floating paragraph layout.
+ */
+const paragraphFrameEqual = (a?: ParagraphFrame, b?: ParagraphFrame): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  return (
+    a.wrap === b.wrap &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.xAlign === b.xAlign &&
+    a.yAlign === b.yAlign &&
+    a.hAnchor === b.hAnchor &&
+    a.vAnchor === b.vAnchor
+  );
+};
+
+/**
+ * Compares drop cap descriptors for equality.
+ * Drop caps affect the rendering of the first letter(s) of a paragraph.
+ */
+const dropCapDescriptorEqual = (a?: DropCapDescriptor, b?: DropCapDescriptor): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  // Compare mode and lines
+  if (a.mode !== b.mode || a.lines !== b.lines) return false;
+  // Compare the drop cap run
+  const runA = a.run;
+  const runB = b.run;
+  // Safety: Check that both runs exist before accessing their properties
+  if (!runA || !runB) return !runA && !runB;
+  if (
+    runA.text !== runB.text ||
+    runA.fontFamily !== runB.fontFamily ||
+    runA.fontSize !== runB.fontSize ||
+    runA.bold !== runB.bold ||
+    runA.italic !== runB.italic ||
+    runA.color !== runB.color
+  ) {
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Compares all visual paragraph attributes for equality.
+ *
+ * This function checks every paragraph-level property that affects visual
+ * rendering. When any of these change, the cache must be invalidated.
+ *
+ * Excluded properties (non-visual or handled separately):
+ * - trackedChangesMode/trackedChangesEnabled: Handled separately in paragraphBlocksEqual
+ * - wordLayout: Computed output data, not input
+ * - sdt/containerSdt: Metadata that doesn't directly affect paragraph rendering
+ * - styleId: Style resolution happens before FlowBlock creation
+ * - numberingProperties: List handling is separate
+ * - isTocEntry/tocInstruction: TOC metadata
+ */
+const paragraphAttrsEqual = (a?: ParagraphAttrs, b?: ParagraphAttrs): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+
+  // Simple value comparisons
+  if (
+    a.alignment !== b.alignment ||
+    a.contextualSpacing !== b.contextualSpacing ||
+    a.suppressFirstLineIndent !== b.suppressFirstLineIndent ||
+    a.dropCap !== b.dropCap ||
+    a.decimalSeparator !== b.decimalSeparator ||
+    a.tabIntervalTwips !== b.tabIntervalTwips ||
+    a.keepNext !== b.keepNext ||
+    a.keepLines !== b.keepLines ||
+    a.direction !== b.direction ||
+    a.rtl !== b.rtl ||
+    a.floatAlignment !== b.floatAlignment
+  ) {
+    return false;
+  }
+
+  // Nested object comparisons
+  if (!paragraphSpacingEqual(a.spacing, b.spacing)) return false;
+  if (!paragraphIndentEqual(a.indent, b.indent)) return false;
+  if (!paragraphBordersEqual(a.borders, b.borders)) return false;
+  if (!paragraphShadingEqual(a.shading, b.shading)) return false;
+  if (!tabStopsEqual(a.tabs, b.tabs)) return false;
+  if (!paragraphFrameEqual(a.frame, b.frame)) return false;
+  if (!dropCapDescriptorEqual(a.dropCapDescriptor, b.dropCapDescriptor)) return false;
+
+  return true;
+};
+
 const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock & { kind: 'paragraph' }): boolean => {
+  // Check tracked changes mode and enabled state (handled separately from attrs)
   const aMode = (a.attrs as { trackedChangesMode?: string } | undefined)?.trackedChangesMode ?? 'review';
   const bMode = (b.attrs as { trackedChangesMode?: string } | undefined)?.trackedChangesMode ?? 'review';
   if (aMode !== bMode) return false;
   const aEnabled = resolveTrackedChangesEnabled(a.attrs, true);
   const bEnabled = resolveTrackedChangesEnabled(b.attrs, true);
   if (aEnabled !== bEnabled) return false;
+
+  // Check paragraph-level visual attributes (alignment, spacing, indent, borders, etc.)
+  if (!paragraphAttrsEqual(a.attrs, b.attrs)) return false;
+
+  // Check runs
   if (a.runs.length !== b.runs.length) return false;
   for (let i = 0; i < a.runs.length; i += 1) {
     const runA = a.runs[i];
@@ -142,12 +411,15 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
         ('src' in runB || runB.kind === 'lineBreak' || runB.kind === 'break' || runB.kind === 'fieldAnnotation'
           ? ''
           : runB.text) ||
+      fieldAnnotationKey(runA) !== fieldAnnotationKey(runB) ||
       ('bold' in runA ? runA.bold : false) !== ('bold' in runB ? runB.bold : false) ||
       ('italic' in runA ? runA.italic : false) !== ('italic' in runB ? runB.italic : false) ||
       ('color' in runA ? runA.color : undefined) !== ('color' in runB ? runB.color : undefined) ||
       ('fontSize' in runA ? runA.fontSize : undefined) !== ('fontSize' in runB ? runB.fontSize : undefined) ||
       ('fontFamily' in runA ? runA.fontFamily : undefined) !== ('fontFamily' in runB ? runB.fontFamily : undefined) ||
-      getTrackedChangeKey(runA) !== getTrackedChangeKey(runB)
+      ('highlight' in runA ? runA.highlight : undefined) !== ('highlight' in runB ? runB.highlight : undefined) ||
+      getTrackedChangeKey(runA) !== getTrackedChangeKey(runB) ||
+      getCommentKey(runA) !== getCommentKey(runB)
     ) {
       return false;
     }

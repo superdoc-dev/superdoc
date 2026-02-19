@@ -8,7 +8,8 @@ import useComment from './use-comment';
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 const { COMMENT_EVENTS } = commentsStore;
-const { documentsWithConverations, activeComment, floatingCommentsOffset, commentsList } = storeToRefs(commentsStore);
+const { documentsWithConverations, activeComment, floatingCommentsOffset, getGroupedComments } =
+  storeToRefs(commentsStore);
 const { documents, activeZoom } = storeToRefs(superdocStore);
 const { proxy } = getCurrentInstance();
 
@@ -59,8 +60,8 @@ const getStyle = (conversation) => {
   const { selection, commentId } = conversation;
   const containerBounds = selection.getContainerLocation(props.parent);
   const placement = conversation.selection.selectionBounds;
-  const top = (parseFloat(placement.top) + containerBounds.top) * activeZoom.value;
-
+  const isPdf = selection?.source === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
   const internalHighlightColor = '#078383';
   const externalHighlightColor = '#B1124B';
 
@@ -71,10 +72,10 @@ const getStyle = (conversation) => {
 
   return {
     position: 'absolute',
-    top: parseFloat(placement.top) + 'px',
-    left: placement.left + 'px',
-    width: placement.right - placement.left + 'px',
-    height: placement.bottom - placement.top + 'px',
+    top: parseFloat(placement.top) * zoom + 'px',
+    left: placement.left * zoom + 'px',
+    width: (placement.right - placement.left) * zoom + 'px',
+    height: (placement.bottom - placement.top) * zoom + 'px',
     backgroundColor: fillColor,
     pointerEvents: conversation.suppressClick ? 'none' : 'auto',
   };
@@ -92,8 +93,7 @@ const activateComment = (comment, e) => {
 };
 
 const getCurrentComments = computed(() => {
-  return commentsList.value
-    .filter((c) => !c.parentCommentId)
+  return getGroupedComments.value?.parentComments
     .filter((c) => c.selection && c.selection.selectionBounds?.top)
     .filter((c) => !c.resolvedTime)
     .filter((c) => c.selection?.source !== 'super-editor');

@@ -70,7 +70,7 @@ describe('table-width-issue round-trip', () => {
 
     // Validate both the XML-only export and the zipped DOCX match the original grid measurements.
     const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(TEST_DOC);
-    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts });
+    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
     try {
       const exportedXmlString = await editor.exportDocx({ exportXmlOnly: true });
       const exportedXmlJson = parseXmlToJson(exportedXmlString);

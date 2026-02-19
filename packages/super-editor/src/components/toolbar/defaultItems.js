@@ -523,7 +523,7 @@ export const makeDefaultItems = ({
       },
     },
     {
-      label: toolbarTexts.transparentBorders,
+      label: toolbarTexts.removeBorders,
       command: 'deleteCellAndTableBorders',
       icon: toolbarIcons.deleteBorders,
       bottomBorder: true,
@@ -636,6 +636,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.bulletList,
     active: false,
     tooltip: toolbarTexts.bulletList,
+    restoreEditorFocus: true,
     attributes: {
       ariaLabel: 'Bullet list',
     },
@@ -649,6 +650,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.numberedList,
     active: false,
     tooltip: toolbarTexts.numberedList,
+    restoreEditorFocus: true,
     attributes: {
       ariaLabel: 'Numbered list',
     },

@@ -91,11 +91,12 @@ export function generateTableCellProperties(node) {
   }
 
   const { rowspan } = attrs;
-  if (rowspan && rowspan > 1 && tableCellProperties.vMerge !== 'restart') {
+  const hasExistingVMerge = tableCellProperties.vMerge != null;
+  if (rowspan && rowspan > 1) {
     tableCellProperties['vMerge'] = 'restart';
   } else if (attrs.continueMerge) {
     tableCellProperties['vMerge'] = 'continue';
-  } else if (tableCellProperties?.vMerge) {
+  } else if (!hasExistingVMerge) {
     delete tableCellProperties.vMerge;
   }
 

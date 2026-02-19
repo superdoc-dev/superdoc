@@ -1,6 +1,6 @@
 import { Map as YMap } from 'yjs';
 
-export const addYComment = (yArray, ydoc, event) => {
+export const addYComment = (yArray, ydoc, event, user) => {
   const { comment } = event;
   const yComment = new YMap(Object.entries(comment));
 
@@ -8,11 +8,11 @@ export const addYComment = (yArray, ydoc, event) => {
     () => {
       yArray.push([yComment]);
     },
-    { user: superdoc.user },
+    { user },
   );
 };
 
-export const updateYComment = (yArray, ydoc, event) => {
+export const updateYComment = (yArray, ydoc, event, user) => {
   const { comment } = event;
   const yComment = new YMap(Object.entries(comment));
   const commentIndex = getCommentIndex(yArray, comment);
@@ -23,11 +23,11 @@ export const updateYComment = (yArray, ydoc, event) => {
       yArray.delete(commentIndex, 1);
       yArray.insert(commentIndex, [yComment]);
     },
-    { user: superdoc.user },
+    { user },
   );
 };
 
-export const deleteYComment = (yArray, ydoc, event) => {
+export const deleteYComment = (yArray, ydoc, event, user) => {
   const { comment } = event;
   const commentIndex = getCommentIndex(yArray, comment);
   if (commentIndex === -1) return;
@@ -36,7 +36,7 @@ export const deleteYComment = (yArray, ydoc, event) => {
     () => {
       yArray.delete(commentIndex, 1);
     },
-    { user: superdoc.user },
+    { user },
   );
 };
 

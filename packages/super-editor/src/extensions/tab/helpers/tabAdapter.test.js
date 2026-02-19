@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyLayoutResult } from './tabAdapter.js';
+import { applyLayoutResult, calculateTabLayout } from './tabAdapter.js';
 
 const createNode = (name, children = [], extra = {}) => {
   const node = {
@@ -28,6 +28,81 @@ const createNode = (name, children = [], extra = {}) => {
 
   return node;
 };
+
+const makeSpan = (type, text, tabId, spanId) => {
+  const base = { type, spanId };
+  if (text != null) base.text = text;
+  if (tabId) base.tabId = tabId;
+  return base;
+};
+
+const measure = {
+  measureText: (_id, text) => (text?.length || 0) * 10,
+};
+
+describe('calculateTabLayout', () => {
+  it('resets currentX after line breaks', () => {
+    const paragraphId = 'para-1';
+    const spans = [
+      makeSpan('text', 'Label', null, 's1'), // 50px
+      makeSpan('tab', null, `${paragraphId}-tab-0`, 't1'),
+      makeSpan('text', 'Tail', null, 's2'), // 40px
+      makeSpan('lineBreak', null, null, 'br1'),
+      makeSpan('text', 'Label', null, 's3'), // 50px
+      makeSpan('tab', null, `${paragraphId}-tab-1`, 't2'),
+      makeSpan('text', 'Tail', null, 's4'), // 40px
+    ];
+
+    const request = {
+      spans,
+      tabStops: [{ pos: 100, val: 'start', leader: 'none' }],
+      paragraphWidth: 800,
+      defaultTabDistance: 48,
+      defaultLineLength: 816,
+      paragraphId,
+      revision: 1,
+      indentWidth: 0,
+      indents: { left: 0, right: 0, firstLine: 0, hanging: 0 },
+    };
+
+    const result = calculateTabLayout(request, measure);
+    const firstWidth = result.tabs[`${paragraphId}-tab-0`].width;
+    const secondWidth = result.tabs[`${paragraphId}-tab-1`].width;
+
+    expect(firstWidth).toBe(50);
+    expect(secondWidth).toBe(50);
+  });
+
+  it('resets currentX after hard breaks', () => {
+    const paragraphId = 'para-1';
+    const spans = [
+      makeSpan('text', 'Label', null, 's1'), // 50px
+      makeSpan('tab', null, `${paragraphId}-tab-0`, 't1'),
+      makeSpan('hardBreak', null, null, 'br1'),
+      makeSpan('text', 'Label', null, 's2'), // 50px
+      makeSpan('tab', null, `${paragraphId}-tab-1`, 't2'),
+    ];
+
+    const request = {
+      spans,
+      tabStops: [{ pos: 100, val: 'start', leader: 'none' }],
+      paragraphWidth: 800,
+      defaultTabDistance: 48,
+      defaultLineLength: 816,
+      paragraphId,
+      revision: 1,
+      indentWidth: 0,
+      indents: { left: 0, right: 0, firstLine: 0, hanging: 0 },
+    };
+
+    const result = calculateTabLayout(request, measure);
+    const firstWidth = result.tabs[`${paragraphId}-tab-0`].width;
+    const secondWidth = result.tabs[`${paragraphId}-tab-1`].width;
+
+    expect(firstWidth).toBe(50);
+    expect(secondWidth).toBe(50);
+  });
+});
 
 describe('applyLayoutResult', () => {
   it('decorates tab nodes nested inside run nodes', () => {
@@ -140,7 +215,6 @@ describe('applyLayoutResult', () => {
 
     // Should only decorate the first tab, skip the second
     expect(decorations).toHaveLength(1);
-    // Position: paragraph(0) + 1 (enter para) + run offset 0 = 1, then run(1) + 1 (enter run) + tab offset 0 = 2
     expect(decorations[0].from).toBe(2);
     expect(decorations[0].to).toBe(3);
     expect(decorations[0].type.attrs.style).toContain('width: 15px;');
@@ -163,9 +237,6 @@ describe('applyLayoutResult', () => {
     const decorations = applyLayoutResult(result, paragraph, 0);
 
     expect(decorations).toHaveLength(1);
-    // Position: para(0) + 1 = 1 (enter para), outerRun at offset 0, so outerRun(1) + 1 = 2 (enter outerRun)
-    // text B at offset 0 in outerRun = pos 2, innerRun at offset 1 in outerRun = pos 3, innerRun(3) + 1 = 4 (enter innerRun)
-    // text A at offset 0 in innerRun = pos 4, tab at offset 1 in innerRun = pos 5
     expect(decorations[0].from).toBe(5);
     expect(decorations[0].to).toBe(6);
     expect(decorations[0].type.attrs.style).toContain('width: 50px;');
@@ -181,7 +252,7 @@ describe('applyLayoutResult', () => {
       paragraphId: 'para-0',
       revision: 0,
       tabs: {
-        'para-0-tab-0': { width: 25 }, // No height property
+        'para-0-tab-0': { width: 25 },
       },
     };
 
@@ -202,7 +273,7 @@ describe('applyLayoutResult', () => {
       paragraphId: 'para-0',
       revision: 0,
       tabs: {
-        'para-0-tab-0': { width: 25, height: '10px' }, // No leader property
+        'para-0-tab-0': { width: 25, height: '10px' },
       },
     };
 

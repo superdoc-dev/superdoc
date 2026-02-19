@@ -1,1 +1,1 @@
-export * from './b-translator.js';
+export * from './bCs-translator.js';

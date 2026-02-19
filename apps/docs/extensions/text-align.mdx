@@ -1,0 +1,99 @@
+---
+title: TextAlign extension
+sidebarTitle: "Text Align"
+keywords: "TextAlign extension, superdoc TextAlign, word TextAlign, document TextAlign, docx TextAlign"
+---
+
+import Description from '/snippets/extensions/text-align.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="alignments" type="Array<string>" default="['left','center','right','justify']">
+  Available alignment options
+</ParamField>
+
+## Commands
+
+### `setTextAlign`
+
+Set text alignment on the current paragraph.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setTextAlign('center')
+editor.commands.setTextAlign('justify')
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setTextAlign('center')
+    editor.commands.setTextAlign('justify')
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="alignment" type="string" required>
+  Alignment value (left, center, right, justify)
+</ParamField>
+
+### `unsetTextAlign`
+
+Remove text alignment (reset to default)
+
+<Note>
+Resets alignment to the default value
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.unsetTextAlign()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetTextAlign()
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| setTextAlign('left')() | `⌘/Ctrl-Shift-l` | Align text left |
+| setTextAlign('center')() | `⌘/Ctrl-Shift-e` | Align text center |
+| setTextAlign('right')() | `⌘/Ctrl-Shift-r` | Align text right |
+| setTextAlign('justify')() | `⌘/Ctrl-Shift-j` | Justify text |
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/text-align/text-align.js" />

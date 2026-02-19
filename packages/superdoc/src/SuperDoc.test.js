@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { h, defineComponent, ref, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
@@ -77,7 +77,7 @@ const stubComponent = (name) =>
   defineComponent({
     name,
     props: ['comment', 'autoFocus', 'parent', 'documentData', 'config', 'documentId', 'fileSource', 'state', 'options'],
-    emits: ['pageMarginsChange', 'ready', 'selection-change', 'page-loaded', 'bypass-selection'],
+    emits: ['pageMarginsChange', 'ready', 'selection-change', 'page-loaded', 'page-ready', 'bypass-selection'],
     setup(props, { slots }) {
       return () => h('div', { class: `${name}-stub` }, slots.default ? slots.default() : undefined);
     },
@@ -86,7 +86,7 @@ const stubComponent = (name) =>
 const SuperEditorStub = defineComponent({
   name: 'SuperEditorStub',
   props: ['fileSource', 'state', 'documentId', 'options'],
-  emits: ['pageMarginsChange'],
+  emits: ['pageMarginsChange', 'editor-ready'],
   setup(props) {
     return () => h('div', { class: 'super-editor-stub' }, [JSON.stringify(props.options.documentId)]);
   },
@@ -98,11 +98,10 @@ const FloatingCommentsStub = stubComponent('FloatingComments');
 const CommentsLayerStub = stubComponent('CommentsLayer');
 const HrbrFieldsLayerStub = stubComponent('HrbrFieldsLayer');
 const AiLayerStub = stubComponent('AiLayer');
-const PdfViewerStub = stubComponent('PdfViewer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
 
-// Mock @harbour-enterprises/super-editor with stubs and PresentationEditor class
-vi.mock('@harbour-enterprises/super-editor', () => ({
+// Mock @superdoc/super-editor with stubs and PresentationEditor class
+vi.mock('@superdoc/super-editor', () => ({
   SuperEditor: SuperEditorStub,
   AIWriter: AIWriterStub,
   PresentationEditor: class PresentationEditorMock {
@@ -116,10 +115,6 @@ vi.mock('@harbour-enterprises/super-editor', () => ({
       });
     }
   },
-}));
-
-vi.mock('./components/PdfViewer/PdfViewer.vue', () => ({
-  default: PdfViewerStub,
 }));
 
 vi.mock('./components/HtmlViewer/HtmlViewer.vue', () => ({
@@ -147,6 +142,17 @@ vi.mock('@superdoc/components/CommentsLayer/CommentsLayer.vue', () => ({
 }));
 
 vi.mock('naive-ui', () => ({
+  NConfigProvider: defineComponent({
+    name: 'NConfigProvider',
+    props: {
+      abstract: Boolean,
+      preflightStyleDisabled: Boolean,
+      styleMountTarget: Object,
+    },
+    setup(_, { slots }) {
+      return () => slots.default?.();
+    },
+  }),
   NMessageProvider: defineComponent({
     name: 'NMessageProvider',
     setup(_, { slots }) {
@@ -189,6 +195,7 @@ const buildCommentsStore = () => ({
   init: vi.fn(),
   showAddComment: vi.fn(),
   handleEditorLocationsUpdate: vi.fn(),
+  clearEditorCommentPositions: vi.fn(),
   handleTrackedChangeUpdate: vi.fn(),
   removePendingComment: vi.fn(),
   setActiveComment: vi.fn(),
@@ -354,9 +361,19 @@ describe('SuperDoc.vue', () => {
     useSelectedTextMock.mockClear();
     mockState.instances.clear();
 
+    // Make RAF synchronous in tests — jsdom has no rendering loop, and
+    // SuperDoc.vue defers selection updates via requestAnimationFrame.
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(Date.now());
+      return 0;
+    });
+
     // Set up default mock presentation editor instances for common document IDs
     const mockPresentationEditor = {
-      getSelectionBounds: vi.fn(() => null),
+      getSelectionBounds: vi.fn(() => ({
+        bounds: { top: 100, left: 10, right: 80, bottom: 160 },
+        pageIndex: 0,
+      })),
       getCommentBounds: vi.fn((positions) => positions),
       getRangeRects: vi.fn(() => []),
       getPages: vi.fn(() => []),
@@ -377,6 +394,10 @@ describe('SuperDoc.vue', () => {
     }
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('wires editor lifecycle events and propagates updates', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);
@@ -395,14 +416,21 @@ describe('SuperDoc.vue', () => {
         search: vi.fn(),
         goToSearchResult: vi.fn(),
       },
+      state: {
+        doc: { content: { size: 100 } },
+        selection: { $from: { pos: 1 }, $to: { pos: 3 } },
+      },
       view: {
         coordsAtPos: vi.fn((pos) =>
           pos === 1 ? { top: 100, bottom: 120, left: 10, right: 20 } : { top: 130, bottom: 160, left: 60, right: 80 },
         ),
-        state: { selection: { empty: true } },
+        state: { selection: { $from: { pos: 1 }, $to: { pos: 3 } } },
       },
       getPageStyles: vi.fn(() => ({ pageMargins: {} })),
     };
+
+    // processSelectionChange needs layers to be non-null to proceed past the guard
+    wrapper.vm.$.setupState.layers = document.createElement('div');
 
     options.onBeforeCreate({ editor: editorMock });
     expect(superdocStub.broadcastEditorBeforeCreate).toHaveBeenCalled();
@@ -436,6 +464,46 @@ describe('SuperDoc.vue', () => {
     expect(superdocStub.emit).toHaveBeenCalledWith('exception', { error: expect.any(Error), editor: editorMock });
   });
 
+  it('passes slash menu and context menu options through to SuperEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    const slashMenuConfig = {
+      includeDefaultItems: false,
+      items: [{ id: 'custom-section', items: [{ id: 'custom-item', label: 'Custom Item', action: vi.fn() }] }],
+    };
+    superdocStub.config.modules.slashMenu = slashMenuConfig;
+    superdocStub.config.disableContextMenu = true;
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.slashMenuConfig).toBe(slashMenuConfig);
+    expect(options.disableContextMenu).toBe(true);
+  });
+
+  it('handles editor-ready by storing presentation editor and syncing context menu disable state', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.disableContextMenu = true;
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const doc = superdocStoreStub.documents.value[0];
+    doc.setPresentationEditor = vi.fn();
+
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn(),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const editor = { options: { documentId: 'doc-1' } };
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', { editor, presentationEditor });
+    await nextTick();
+
+    expect(doc.setPresentationEditor).toHaveBeenCalledWith(presentationEditor);
+    expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(true);
+    expect(presentationEditor.on).toHaveBeenCalledWith('commentPositions', expect.any(Function));
+  });
+
   it('shows comments sidebar and tools, handles menu actions', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);
@@ -448,14 +516,22 @@ describe('SuperDoc.vue', () => {
         togglePagination: vi.fn(),
         insertAiMark: vi.fn(),
       },
+      state: {
+        doc: { content: { size: 100 } },
+        selection: { $from: { pos: 1 }, $to: { pos: 6 } },
+      },
       view: {
         coordsAtPos: vi.fn((pos) =>
           pos === 1 ? { top: 100, bottom: 140, left: 10, right: 30 } : { top: 120, bottom: 160, left: 70, right: 90 },
         ),
-        state: { selection: { empty: true } },
+        state: { selection: { $from: { pos: 1 }, $to: { pos: 6 } } },
       },
       getPageStyles: vi.fn(() => ({ pageMargins: {} })),
     };
+
+    // processSelectionChange needs layers to be non-null to proceed past the guard
+    wrapper.vm.$.setupState.layers = document.createElement('div');
+
     await nextTick();
     options.onSelectionUpdate({
       editor: editorMock,
@@ -465,7 +541,7 @@ describe('SuperDoc.vue', () => {
     const setupState = wrapper.vm.$.setupState;
     setupState.toolsMenuPosition.top = '12px';
     setupState.toolsMenuPosition.right = '0px';
-    setupState.selectionPosition.value = {
+    superdocStoreStub.selectionPosition.value = {
       left: 10,
       right: 40,
       top: 20,
@@ -592,6 +668,85 @@ describe('SuperDoc.vue', () => {
     expect(wrapper.find('.floating-comments').exists()).toBe(true);
   });
 
+  it('hides floating comments sidebar entirely in viewing mode even with comment positions', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.documentMode = 'viewing';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    commentsStoreStub.getFloatingComments.value = [{ commentId: 'c-1' }];
+    commentsStoreStub.hasInitializedLocations.value = true;
+    superdocStoreStub.isReady.value = true;
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBe(false);
+    expect(wrapper.find('.superdoc__right-sidebar').exists()).toBe(false);
+  });
+
+  it('ignores comment location updates while in viewing mode', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.documentMode = 'viewing';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCommentLocationsUpdate({
+      allCommentPositions: {
+        'comment-1': { threadId: 'comment-1', bounds: { top: 10, left: 5, right: 20, bottom: 30 } },
+      },
+      allCommentIds: ['comment-1'],
+    });
+    await nextTick();
+
+    expect(commentsStoreStub.handleEditorLocationsUpdate).not.toHaveBeenCalled();
+    expect(commentsStoreStub.clearEditorCommentPositions).toHaveBeenCalled();
+  });
+
+  it('forwards empty comment position payloads to store-level guard', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCommentLocationsUpdate({
+      allCommentPositions: {},
+      allCommentIds: [],
+    });
+    await nextTick();
+
+    expect(commentsStoreStub.handleEditorLocationsUpdate).toHaveBeenCalledWith({}, []);
+  });
+
+  it('clears PDF selections when viewing mode is active to keep tools hidden', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.documentMode = 'viewing';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const setupState = wrapper.vm.$.setupState;
+    setupState.toolsMenuPosition.top = '120px';
+    superdocStoreStub.selectionPosition.value = {
+      left: 5,
+      right: 25,
+      top: 50,
+      bottom: 90,
+      source: 'pdf',
+    };
+    await nextTick();
+
+    expect(wrapper.vm.showToolsFloatingMenu).toBeTruthy();
+
+    setupState.handleSelectionChange({
+      selectionBounds: { top: 10, left: 10, right: 20, bottom: 30 },
+      source: 'pdf',
+    });
+    await nextTick();
+
+    expect(superdocStoreStub.selectionPosition.value).toBeNull();
+    expect(setupState.toolsMenuPosition.top).toBeNull();
+    expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
+  });
+
   it('does not crash when selectionUpdate carries stale positions after new file insert', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);
@@ -625,4 +780,237 @@ describe('SuperDoc.vue', () => {
   // Note: The handlePresentationEditorReady test was removed because that function
   // no longer exists. PresentationEditor now registers itself automatically in the
   // constructor and manages zoom/layout data internally.
+
+  it('clears selection updates in viewing mode to keep the tools bubble hidden', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.documentMode = 'viewing';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const setupState = wrapper.vm.$.setupState;
+    setupState.toolsMenuPosition.top = '100px';
+    superdocStoreStub.selectionPosition.value = {
+      left: 10,
+      right: 40,
+      top: 50,
+      bottom: 70,
+      source: 'super-editor',
+    };
+    await nextTick();
+
+    expect(wrapper.vm.showToolsFloatingMenu).toBeTruthy();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+
+    options.onSelectionUpdate({
+      editor: editorMock,
+      transaction: { selection: { $from: { pos: 1 }, $to: { pos: 1 } } },
+    });
+    await nextTick();
+
+    expect(superdocStoreStub.selectionPosition.value).toBeNull();
+    expect(setupState.toolsMenuPosition.top).toBeNull();
+    expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
+  });
+
+  it('ignores queued RAF selection work if mode switches to viewing before frame runs', async () => {
+    const rafQueue = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation((id) => {
+      rafQueue[id - 1] = null;
+    });
+
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = {
+      options: { documentId: 'doc-1' },
+      state: {
+        doc: { content: { size: 10 } },
+        selection: { $from: { pos: 1 }, $to: { pos: 6 } },
+      },
+      view: {
+        state: {
+          doc: { content: { size: 10 } },
+          selection: { $from: { pos: 1 }, $to: { pos: 6 } },
+        },
+        coordsAtPos: vi.fn((pos) =>
+          pos === 1 ? { top: 100, bottom: 140, left: 10, right: 30 } : { top: 120, bottom: 160, left: 70, right: 90 },
+        ),
+      },
+    };
+
+    useSelectionMock.mockClear();
+    options.onSelectionUpdate({ editor: editorMock });
+
+    expect(rafQueue).toHaveLength(1);
+
+    superdocStub.config.documentMode = 'viewing';
+    rafQueue[0](Date.now());
+    await nextTick();
+
+    expect(useSelectionMock).not.toHaveBeenCalled();
+    expect(superdocStoreStub.selectionPosition.value).toBeNull();
+    expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
+  });
+
+  it('hides tools bubble when selection is cleared (SD-1241)', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = {
+      options: { documentId: 'doc-1' },
+      commands: { togglePagination: vi.fn() },
+      view: {
+        coordsAtPos: vi.fn((pos) =>
+          pos === 1 ? { top: 100, bottom: 140, left: 10, right: 30 } : { top: 120, bottom: 160, left: 70, right: 90 },
+        ),
+        state: { selection: { empty: true } },
+      },
+      getPageStyles: vi.fn(() => ({ pageMargins: {} })),
+    };
+
+    // First, make a selection to show the tools menu
+    options.onSelectionUpdate({
+      editor: editorMock,
+      transaction: { selection: { $from: { pos: 1 }, $to: { pos: 6 } } },
+    });
+    await nextTick();
+
+    const setupState = wrapper.vm.$.setupState;
+    setupState.toolsMenuPosition.top = '100px';
+    setupState.toolsMenuPosition.right = '0px';
+    superdocStoreStub.selectionPosition.value = {
+      left: 10,
+      right: 90,
+      top: 100,
+      bottom: 160,
+      source: 'super-editor',
+    };
+    await nextTick();
+
+    // Verify tools menu is visible
+    expect(wrapper.vm.showToolsFloatingMenu).toBe(true);
+
+    // Clear the selection (simulating cursor change/deselection)
+    setupState.resetSelection();
+    await nextTick();
+
+    // Verify both selectionPosition and toolsMenuPosition.top are cleared
+    expect(superdocStoreStub.selectionPosition.value).toBeNull();
+    expect(setupState.toolsMenuPosition.top).toBeNull();
+
+    // Verify tools menu is now hidden (computed returns falsy value)
+    expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
+  });
+
+  it('showToolsFloatingMenu returns falsy when selectionPosition is null even if toolsMenuPosition.top is set', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const setupState = wrapper.vm.$.setupState;
+
+    // Set toolsMenuPosition.top but leave selectionPosition null
+    setupState.toolsMenuPosition.top = '100px';
+    superdocStoreStub.selectionPosition.value = null;
+    await nextTick();
+
+    // Tools menu should be hidden because selectionPosition is null
+    expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
+  });
+
+  it('hides tools bubble when updateSelection receives no coordinates', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const setupState = wrapper.vm.$.setupState;
+
+    // Set up initial state with selection and tools menu visible
+    setupState.toolsMenuPosition.top = '100px';
+    superdocStoreStub.selectionPosition.value = {
+      left: 10,
+      right: 90,
+      top: 100,
+      bottom: 160,
+      source: 'super-editor',
+    };
+    await nextTick();
+
+    expect(wrapper.vm.showToolsFloatingMenu).toBeTruthy();
+
+    // Call updateSelection with no coordinates (simulates deselection)
+    setupState.updateSelection({});
+    await nextTick();
+
+    // Both should be cleared
+    expect(superdocStoreStub.selectionPosition.value).toBeNull();
+    expect(setupState.toolsMenuPosition.top).toBeNull();
+    expect(wrapper.vm.showToolsFloatingMenu).toBeFalsy();
+  });
+
+  it('merges partial trackChangeActiveHighlightColors with base colors', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.comments = {
+      trackChangeHighlightColors: {
+        insertBorder: '#00ff00',
+        deleteBackground: '#0000ff',
+      },
+      trackChangeActiveHighlightColors: {
+        insertBorder: '#ff0000', // only override this one
+      },
+    };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const styleVars = wrapper.vm.superdocStyleVars;
+
+    // Active insertBorder should be overridden
+    expect(styleVars['--sd-track-insert-border']).toBe('#ff0000');
+    // deleteBackground should be inherited from base config
+    expect(styleVars['--sd-track-delete-bg']).toBe('#0000ff');
+  });
+
+  it('sets track change CSS vars from base config when no active config provided', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.comments = {
+      trackChangeHighlightColors: {
+        insertBorder: '#11ff11',
+        deleteBorder: '#ff1111',
+        formatBorder: '#1111ff',
+      },
+    };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const styleVars = wrapper.vm.superdocStyleVars;
+
+    expect(styleVars['--sd-track-insert-border']).toBe('#11ff11');
+    expect(styleVars['--sd-track-delete-border']).toBe('#ff1111');
+    expect(styleVars['--sd-track-format-border']).toBe('#1111ff');
+  });
+
+  it('sets comment highlight hover color CSS var', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.comments = {
+      highlightHoverColor: '#abcdef88',
+    };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const styleVars = wrapper.vm.superdocStyleVars;
+    expect(styleVars['--sd-comment-highlight-hover']).toBe('#abcdef88');
+  });
 });

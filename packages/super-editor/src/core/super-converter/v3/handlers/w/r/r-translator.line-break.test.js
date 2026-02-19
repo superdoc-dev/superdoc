@@ -17,14 +17,29 @@ describe('w:r translator line break handling', () => {
 
     const handler = defaultNodeListHandler();
     const result = translator.encode({ nodes: [runNode], nodeListHandler: handler, docx: {} });
+    const runs = Array.isArray(result) ? result : [result];
 
-    expect(result?.type).toBe('run');
-    expect(result.content).toHaveLength(5);
-    expect(result.content[0]).toMatchObject({ type: 'text', text: 'One' });
-    expect(result.content[1]).toMatchObject({ type: 'lineBreak' });
-    expect(result.content[2]).toMatchObject({ type: 'text', text: 'test' });
-    expect(result.content[3]).toMatchObject({ type: 'lineBreak' });
-    expect(result.content[4]).toMatchObject({ type: 'text', text: 'after space' });
+    expect(runs).toHaveLength(5);
+    expect(runs[0]).toMatchObject({
+      type: 'run',
+      content: [{ type: 'text', text: 'One' }],
+    });
+    expect(runs[1]).toMatchObject({
+      type: 'run',
+      content: [{ type: 'lineBreak' }],
+    });
+    expect(runs[2]).toMatchObject({
+      type: 'run',
+      content: [{ type: 'text', text: 'test' }],
+    });
+    expect(runs[3]).toMatchObject({
+      type: 'run',
+      content: [{ type: 'lineBreak' }],
+    });
+    expect(runs[4]).toMatchObject({
+      type: 'run',
+      content: [{ type: 'text', text: 'after space' }],
+    });
   });
 
   it('preserves leading <w:br> nodes in a run', () => {
@@ -35,11 +50,17 @@ describe('w:r translator line break handling', () => {
 
     const handler = defaultNodeListHandler();
     const result = translator.encode({ nodes: [runNode], nodeListHandler: handler, docx: {} });
+    const runs = Array.isArray(result) ? result : [result];
 
-    expect(result?.type).toBe('run');
-    expect(result.content).toHaveLength(2);
-    expect(result.content[0]).toMatchObject({ type: 'lineBreak' });
-    expect(result.content[1]).toMatchObject({ type: 'text', text: 'starts with break' });
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({
+      type: 'run',
+      content: [{ type: 'lineBreak' }],
+    });
+    expect(runs[1]).toMatchObject({
+      type: 'run',
+      content: [{ type: 'text', text: 'starts with break' }],
+    });
   });
 
   it('preserves runs that are only <w:br>', () => {
@@ -50,9 +71,12 @@ describe('w:r translator line break handling', () => {
 
     const handler = defaultNodeListHandler();
     const result = translator.encode({ nodes: [runNode], nodeListHandler: handler, docx: {} });
+    const runs = Array.isArray(result) ? result : [result];
 
-    expect(result?.type).toBe('run');
-    expect(result.content).toHaveLength(1);
-    expect(result.content[0]).toMatchObject({ type: 'lineBreak' });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      type: 'run',
+      content: [{ type: 'lineBreak' }],
+    });
   });
 });

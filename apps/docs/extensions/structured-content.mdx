@@ -1,0 +1,747 @@
+---
+title: StructuredContent extension
+sidebarTitle: "Structured Content"
+keywords: "StructuredContent extension, superdoc StructuredContent, word StructuredContent, document StructuredContent, docx StructuredContent"
+---
+
+import Description from "/snippets/extensions/structured-content.mdx";
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField
+  path="structuredContentClass"
+  type="string"
+  default="sd-structured-content-block-tag"
+>
+  CSS class for the block
+</ParamField>
+
+<ParamField path="htmlAttributes" type="Object">
+  HTML attributes for structured content blocks
+</ParamField>
+
+## Attributes
+
+Node attributes that can be set and retrieved:
+
+<ParamField path="id" type="string">
+  Unique identifier for the structured content block
+  <Info>
+    The `id` attribute must be a **numeric string** for valid DOCX output (per
+    ECMA-376
+    [§17.5.2.18](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oe376/9bf45b56-eb07-4978-af7a-57548641667d)).
+    Use `Date.now().toString()` or sequential integers instead of UUIDs.
+  </Info>
+</ParamField>
+
+<ParamField path="tag" type="string">
+  Content control tag (e.g., 'block_table_sdt')
+</ParamField>
+
+<ParamField path="alias" type="string" default="Structured content">
+  Display name for the block
+</ParamField>
+
+<ParamField path="lockMode" type="StructuredContentLockMode" default="unlocked">
+  Controls editing and deletion restrictions on the structured content node. See [Lock modes](#lock-modes) below.
+</ParamField>
+
+## Lock modes
+
+Structured content nodes support four lock modes based on the OOXML [`w:lock` element](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.lock) (ISO/IEC 29500 §17.5.2.23). Lock modes control whether users can edit the content inside a field and whether they can delete the field wrapper itself.
+
+| Lock mode | Wrapper | Content | Use case |
+|-----------|---------|---------|----------|
+| `unlocked` | Deletable | Editable | Default — no restrictions |
+| `sdtLocked` | Protected | Editable | Protect field structure, allow value changes |
+| `contentLocked` | Deletable | Read-only | Display a computed value users can remove |
+| `sdtContentLocked` | Protected | Read-only | Fully protected field (e.g., system-generated ID) |
+
+Set the lock mode when inserting:
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertStructuredContentInline({
+  attrs: {
+    id: '3',
+    alias: 'Account ID',
+    lockMode: 'sdtContentLocked',
+  },
+  text: 'ACC-00042',
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertStructuredContentInline({
+      attrs: {
+        id: '3',
+        alias: 'Account ID',
+        lockMode: 'sdtContentLocked',
+      },
+      text: 'ACC-00042',
+    });
+  },
+});
+```
+</CodeGroup>
+
+Change the lock mode on an existing field:
+
+<CodeGroup>
+```javascript Usage
+editor.commands.updateStructuredContentById('1', {
+  attrs: { lockMode: 'contentLocked' },
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.updateStructuredContentById('1', {
+      attrs: { lockMode: 'contentLocked' },
+    });
+  },
+});
+```
+</CodeGroup>
+
+<Expandable title="How lock enforcement works">
+Lock modes are enforced at the editor plugin level using a three-layer defense:
+
+1. **Key interception** — Delete, Backspace, and Cut are blocked before a transaction is created, preventing cursor jumps
+2. **Text input blocking** — Typing is silently blocked in content-locked nodes
+3. **Transaction filter** — Safety net that catches paste, drag-drop, and programmatic edits
+
+Users can still place their cursor inside locked content and select text for copying. Only modifications are blocked.
+</Expandable>
+
+<Info>
+  Lock modes round-trip through DOCX. A document with `w:lock` elements in
+  its SDT properties will import with the correct lock mode and export the
+  `w:lock` element back to the saved file.
+</Info>
+
+## Commands
+
+### `insertStructuredContentInline`
+
+Inserts a structured content inline at the current selection.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertStructuredContentInline({
+  attrs: {
+    id: '1',
+    alias: 'Customer Name',
+    lockMode: 'sdtLocked', // optional, defaults to 'unlocked'
+  },
+  text: 'John Doe',
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertStructuredContentInline({
+      attrs: {
+        id: '1',
+        alias: 'Customer Name',
+        lockMode: 'sdtLocked',
+      },
+      text: 'John Doe',
+    });
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField
+  path="options"
+  type="StructuredContentInlineInsert"
+  required
+></ParamField>
+
+### `insertStructuredContentBlock`
+
+Inserts a structured content block at the current selection.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertStructuredContentBlock({
+  attrs: {
+    id: '2',
+    alias: 'Terms Section',
+    lockMode: 'sdtContentLocked', // optional, defaults to 'unlocked'
+  },
+  html: '<p>These terms are non-negotiable.</p>',
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertStructuredContentBlock({
+      attrs: {
+        id: '2',
+        alias: 'Terms Section',
+        lockMode: 'sdtContentLocked',
+      },
+      html: '<p>These terms are non-negotiable.</p>',
+    });
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField
+  path="options"
+  type="StructuredContentBlockInsert"
+  required
+></ParamField>
+
+### `updateStructuredContentById`
+
+Updates a single structured content field by its unique ID.
+IDs are unique identifiers, so this will update at most one field.
+If the updated node does not match the schema, it will not be updated.
+
+Pass `attrs` alone to change attributes (like `lockMode`) without replacing content:
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+// Update content
+editor.commands.updateStructuredContentById('1', {
+  text: 'Jane Smith',
+});
+
+// Update lock mode only (preserves content)
+editor.commands.updateStructuredContentById('1', {
+  attrs: { lockMode: 'contentLocked' },
+});
+
+// Update both content and attributes
+editor.commands.updateStructuredContentById('1', {
+  text: 'New value',
+  attrs: { alias: 'Updated Label', lockMode: 'sdtLocked' },
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+
+    // Update content
+    editor.commands.updateStructuredContentById('1', {
+      text: 'Jane Smith',
+    });
+
+    // Update lock mode only (preserves content)
+    editor.commands.updateStructuredContentById('1', {
+      attrs: { lockMode: 'contentLocked' },
+    });
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  Unique identifier of the field
+</ParamField>
+<ParamField path="options" type="StructuredContentUpdate" required></ParamField>
+
+### `deleteStructuredContent`
+
+Removes a structured content.
+
+**Parameters:**
+
+<ParamField
+  path="structuredContentTags"
+  type="Array<any>"
+  required
+></ParamField>
+
+### `deleteStructuredContentById`
+
+Removes a structured content by ID.
+
+**Parameters:**
+
+<ParamField path="idOrIds" type="string | Array<string>" required></ParamField>
+
+### `deleteStructuredContentAtSelection`
+
+Removes a structured content at cursor, preserving its content.
+
+### `updateStructuredContentByGroup`
+
+Update all structured content fields that share the same group identifier.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.updateStructuredContentByGroup('pricing', {
+  text: '$99.00'
+})
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.updateStructuredContentByGroup('pricing', {
+      text: '$99.00'
+    })
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="group" type="string" required>
+  Group identifier to match
+</ParamField>
+<ParamField path="options" type="StructuredContentUpdate">
+  Update options (same as `updateStructuredContentById`)
+</ParamField>
+
+### `deleteStructuredContentByGroup`
+
+Remove all structured content fields that share the same group identifier.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.deleteStructuredContentByGroup('pricing')
+editor.commands.deleteStructuredContentByGroup(['pricing', 'deprecated'])
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.deleteStructuredContentByGroup('pricing')
+    editor.commands.deleteStructuredContentByGroup(['pricing', 'deprecated'])
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="groupOrGroups" type="string | Array<string>" required>
+  Group identifier or array of group identifiers
+</ParamField>
+
+### `appendRowsToStructuredContentTable`
+
+Append multiple rows to the end of a table inside a structured content block.
+Each inner array represents the cell values for one new row.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.appendRowsToStructuredContentTable({
+  id: "block-123",
+  tableIndex: 0,
+  rows: [
+    ["A", "B"],
+    ["C", "D"],
+  ],
+  copyRowStyle: true,
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.appendRowsToStructuredContentTable({
+      id: "block-123",
+      tableIndex: 0,
+      rows: [
+        ["A", "B"],
+        ["C", "D"],
+      ],
+      copyRowStyle: true,
+    });
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField
+  path="options"
+  type="StructuredContentTableAppendRowsOptions"
+  required
+>
+  Append configuration
+</ParamField>
+
+## Helpers
+
+### `getStructuredContentBlockTags`
+
+Get all block-level structured content tags in the document
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const blocks = editor.helpers.structuredContentCommands.getStructuredContentBlockTags(editor.state);
+console.log(`Found ${blocks.length} structured content blocks`);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const blocks = editor.helpers.structuredContentCommands.getStructuredContentBlockTags(editor.state);
+    console.log(`Found ${blocks.length} structured content blocks`);
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentInlineTags`
+
+Get all inline structured content tags in the document
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const inlines = editor.helpers.structuredContentCommands.getStructuredContentInlineTags(editor.state);
+console.log(`Found ${inlines.length} inline fields`);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const inlines = editor.helpers.structuredContentCommands.getStructuredContentInlineTags(editor.state);
+    console.log(`Found ${inlines.length} inline fields`);
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentTablesById`
+
+Find all tables inside a structured content block by ID
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const tables = editor.helpers.structuredContentCommands.getStructuredContentTablesById(
+  "block-123",
+  editor.state
+);
+console.log(`Block contains ${tables.length} table(s)`);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const tables = editor.helpers.structuredContentCommands.getStructuredContentTablesById(
+      "block-123",
+      editor.state
+    );
+    console.log(`Block contains ${tables.length} table(s)`);
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  Structured content block ID
+</ParamField>
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentByGroup`
+
+Find all structured content nodes that share the same group identifier.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const fields = editor.helpers.structuredContentCommands.getStructuredContentByGroup('pricing', editor.state);
+fields.forEach(({ node, pos }) => {
+  console.log(node.attrs.tag, pos);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const fields = editor.helpers.structuredContentCommands.getStructuredContentByGroup('pricing', editor.state);
+    fields.forEach(({ node, pos }) => {
+      console.log(node.attrs.tag, pos);
+    });
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="groupOrGroups" type="string | Array<string>" required>
+  Group identifier or array of group identifiers
+</ParamField>
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentTags`
+
+Get all structured content tags (inline and block) in the document
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const allTags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
+console.log(`Found ${allTags.length} structured content elements`);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const allTags = editor.helpers.structuredContentCommands.getStructuredContentTags(editor.state);
+    console.log(`Found ${allTags.length} structured content elements`);
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="state" type="any" required></ParamField>
+
+### `getStructuredContentTagsById`
+
+Get structured content tag(s) by ID
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+const field = editor.helpers.structuredContentCommands.getStructuredContentTagsById(
+  "field-123",
+  editor.state
+);
+if (field.length) console.log("Found field:", field[0].node.attrs);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const field = editor.helpers.structuredContentCommands.getStructuredContentTagsById(
+      "field-123",
+      editor.state
+    );
+    if (field.length) console.log("Found field:", field[0].node.attrs);
+  },
+});
+```
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="idOrIds" type="string | Array<string>" required>
+  Single ID or array of IDs to find
+</ParamField>
+<ParamField path="state" type="any" required></ParamField>
+
+## Types
+
+### `StructuredContentLockMode`
+
+```typescript
+type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked'
+```
+
+### `StructuredContentInlineInsert`
+
+<Expandable title="Properties">
+  <ResponseField name="text" type="string">
+    Text content to insert
+  </ResponseField>
+  <ResponseField name="json" type="Object">
+    ProseMirror JSON
+  </ResponseField>
+  <ResponseField name="attrs" type="Object">
+    Node attributes (`id`, `alias`, `tag`, `lockMode`, `group`)
+  </ResponseField>
+</Expandable>
+
+### `StructuredContentBlockInsert`
+
+<Expandable title="Properties">
+  <ResponseField name="html" type="string">
+    HTML content to insert
+  </ResponseField>
+  <ResponseField name="json" type="Object">
+    ProseMirror JSON
+  </ResponseField>
+  <ResponseField name="attrs" type="Object">
+    Node attributes (`id`, `alias`, `tag`, `lockMode`, `group`)
+  </ResponseField>
+</Expandable>
+
+### `StructuredContentUpdate`
+
+<Expandable title="Properties">
+  <ResponseField name="text" type="string">
+    Replace content with text (only for structured content inline)
+  </ResponseField>
+  <ResponseField name="html" type="string">
+    Replace content with HTML (only for structured content block)
+  </ResponseField>
+  <ResponseField name="json" type="Object">
+    Replace content with ProseMirror JSON (overrides html)
+  </ResponseField>
+  <ResponseField name="attrs" type="Object">
+    Update attributes only (preserves content). Supports `lockMode`, `alias`, `tag`.
+  </ResponseField>
+</Expandable>
+
+### `StructuredContentTableAppendRowsOptions`
+
+<Expandable title="Properties">
+  <ResponseField name="id" type="string" required>
+    Structured content block identifier
+  </ResponseField>
+  <ResponseField name="tableIndex" type="number">
+    Index of the table inside the block
+  </ResponseField>
+  <ResponseField
+    name="rows"
+    type="Array<Array<string>> | Array<string>"
+    required
+  >
+    Cell values to append
+  </ResponseField>
+  <ResponseField name="copyRowStyle" type="boolean">
+    Clone the last row's styling when true
+  </ResponseField>
+</Expandable>
+
+## Source code
+
+import { SourceCodeLink } from "/snippets/components/source-code-link.jsx";
+
+<SourceCodeLink path="packages/super-editor/src/extensions/structured-content/structured-content.js" />

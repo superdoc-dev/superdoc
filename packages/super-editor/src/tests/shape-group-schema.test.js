@@ -99,7 +99,7 @@ describe('ShapeGroup Schema Test', () => {
                 {
                   type: 'image',
                   attrs: {
-                    src: 'test.png',
+                    src: 'word/media/test.png',
                     alt: 'Test',
                     extension: 'png',
                     id: '1',

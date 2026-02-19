@@ -1,33 +1,20 @@
 import { defineConfig } from 'vitest/config';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import baseConfig from '../../../vitest.baseConfig';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const includeBench = process.env.VITEST_BENCH === 'true';
 
 export default defineConfig({
+  ...baseConfig,
   test: {
-    environment: 'jsdom',
-    include: ['src/**/*.test.ts', 'src/**/*.bench.ts'],
+    // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
+    environment: process.env.VITEST_DOM || 'happy-dom',
+    include: includeBench
+      ? ['src/**/*.bench.ts']
+      : ['src/**/*.test.ts'],
+    exclude: includeBench ? [] : ['src/**/*.bench.ts'],
     setupFiles: ['./vitest.setup.ts'],
     coverage: {
       enabled: false,
-    },
-  },
-  resolve: {
-    alias: {
-      '@superdoc/url-validation': resolve(__dirname, '../../../shared/url-validation/index.js'),
-      '@superdoc/geometry-utils': resolve(__dirname, '../geometry-utils/src/index.ts'),
-      '@superdoc/common/layout-constants': resolve(__dirname, '../../../shared/common/layout-constants.ts'),
-      '@superdoc/common': resolve(__dirname, '../../../shared/common'),
-      '@superdoc/common/list-numbering': resolve(__dirname, '../../../shared/common/list-numbering'),
-      '@superdoc/contracts': resolve(__dirname, '../contracts/src/index.ts'),
-      '@converter': resolve(__dirname, '../../super-editor/src/core/super-converter'),
-      '@core': resolve(__dirname, '../../super-editor/src/core'),
-      '@extensions': resolve(__dirname, '../../super-editor/src/extensions'),
-      '@components': resolve(__dirname, '../../super-editor/src/components'),
-      '@helpers': resolve(__dirname, '../../super-editor/src/core/helpers'),
-      '@tests': resolve(__dirname, '../../super-editor/src/tests'),
-      '@translator': resolve(__dirname, '../../super-editor/src/core/super-converter/v3/node-translator/index.js'),
     },
   },
 });

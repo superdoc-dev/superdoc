@@ -10,3 +10,9 @@ export const MIN_MARKER_GUTTER = 24;
 export const DEFAULT_LIST_INDENT_BASE_PX = 24;
 export const DEFAULT_LIST_INDENT_STEP_PX = 24;
 export const DEFAULT_LIST_HANGING_PX = 18;
+
+// Gap in pixels added after list marker when suffix is 'space'
+export const SPACE_SUFFIX_GAP_PX = 4;
+
+// Default tab interval in pixels (0.5 inches at 96 DPI)
+export const DEFAULT_TAB_INTERVAL_PX = 48;

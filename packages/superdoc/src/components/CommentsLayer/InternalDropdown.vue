@@ -1,7 +1,8 @@
 <script setup>
-import { computed, ref, h, onMounted, watch } from 'vue';
-import { NDropdown, NTooltip, NSelect } from 'naive-ui';
+import { computed, ref, h, onMounted, watch, getCurrentInstance } from 'vue';
+import { NDropdown } from 'naive-ui';
 import { superdocIcons } from '@superdoc/icons.js';
+import { useUiFontFamily } from '@superdoc/composables/useUiFontFamily.js';
 
 const emit = defineEmits(['select']);
 const props = defineProps({
@@ -14,6 +15,8 @@ const props = defineProps({
     default: false,
   },
 });
+
+const { uiFontFamily } = useUiFontFamily();
 
 const renderIcon = (icon) => {
   return () => {
@@ -82,7 +85,13 @@ onMounted(() => {
 
 <template>
   <div class="internal-dropdown" :style="getStyle">
-    <n-dropdown trigger="click" :options="options" @select="handleSelect($event)" :disabled="isDisabled">
+    <n-dropdown
+      trigger="click"
+      :options="options"
+      @select="handleSelect($event)"
+      :disabled="isDisabled"
+      :content-style="{ fontFamily: uiFontFamily }"
+    >
       <div class="comment-option">
         <div class="active-icon" v-html="activeIcon"></div>
         <div class="option-state">{{ getState }}</div>

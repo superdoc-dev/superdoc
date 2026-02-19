@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import config from '../../test-config.js';
 import { goToPageAndWaitForEditor } from '../helpers.js';
-import { loadDocumentsFromFolders } from './doc-loader.js';
+import { isValidDocxFilename, loadDocumentsFromFolders } from './doc-loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,6 +22,10 @@ const loadDocs = () => loadDocumentsFromFolders(folders, ignore);
 let docsToRun = [];
 
 if (fileArg) {
+  const fileBaseName = path.basename(fileArg);
+  if (!isValidDocxFilename(fileBaseName, ignore)) {
+    throw new Error(`Invalid document file "${fileArg}". Only .docx files that do not start with "." are supported.`);
+  }
   docsToRun = [
     {
       id: path.basename(fileArg, path.extname(fileArg)),

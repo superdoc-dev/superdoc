@@ -32,6 +32,12 @@ export type HeaderFooterConstraints = {
   pageWidth?: number;
   /** Page margins for page-relative anchor positioning */
   margins?: { left: number; right: number };
+  /**
+   * Optional base height used to bound behindDoc overflow handling.
+   * When provided, decorative assets far outside the header/footer band
+   * won't inflate layout height.
+   */
+  overflowBaseHeight?: number;
 };
 /**
  * Layout FlowBlocks into paginated fragments using measured line data.

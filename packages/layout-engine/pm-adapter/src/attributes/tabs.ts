@@ -23,37 +23,6 @@ const PX_TO_TWIPS = 15;
 const TWIPS_THRESHOLD = 1000;
 
 /**
- * Input format from super-editor (nested structure)
- */
-interface SuperEditorTabFormat {
-  tab: {
-    tabType: string;
-    pos: number;
-    leader?: string;
-  };
-}
-
-/**
- * Input format from SuperConverter (flat structure)
- */
-interface SuperConverterTabFormat {
-  val?: string;
-  align?: string;
-  alignment?: string;
-  type?: string;
-  pos?: number;
-  position?: number;
-  offset?: number;
-  originalPos?: number;
-  leader?: string;
-}
-
-/**
- * Union of supported input formats
- */
-type _TabStopInput = SuperEditorTabFormat | SuperConverterTabFormat;
-
-/**
  * Normalize OOXML tab stops from various input formats to canonical TabStop format.
  *
  * Supports multiple input formats:
@@ -198,6 +167,7 @@ export const normalizeTabVal = (value: unknown): TabStop['val'] | undefined => {
     case 'clear':
       return value;
     case 'left':
+    case 'num':
       return 'start'; // Legacy mapping for RTL support
     case 'right':
       return 'end'; // Legacy mapping for RTL support

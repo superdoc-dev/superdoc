@@ -5,6 +5,37 @@
  * This is a placeholder for future Phase 2 work (tables pod).
  */
 
+/**
+ * OOXML percentage divisor constant.
+ * OOXML stores percentages as 1/50ths of a percent:
+ * - 5000 = 100%
+ * - 2500 = 50%
+ * - 1000 = 20%
+ */
+export const OOXML_PCT_DIVISOR = 5000;
+
+/**
+ * Table width attribute from OOXML format.
+ * Represents table width specification with different types.
+ *
+ * @property width - Width value (alternative to value property)
+ * @property value - Width value (alternative to width property)
+ * @property type - Width type: 'pct' for percentage, 'px' or 'pixel' for pixels
+ *
+ * @example
+ * // Percentage width (50%)
+ * { value: 2500, type: 'pct' }
+ *
+ * @example
+ * // Pixel width
+ * { width: 600, type: 'px' }
+ */
+export interface TableWidthAttr {
+  width?: number;
+  value?: number;
+  type?: 'pct' | 'px' | 'pixel' | string;
+}
+
 export interface TableColumnSpec {
   type: 'auto' | 'fixed' | 'pct';
   width?: number; // pt or percentage (0-100)

@@ -1,6 +1,6 @@
 import { hyperlinkNodeHandlerEntity } from '@converter/v2/importer/hyperlinkImporter.js';
 import { getTestDataByFileName } from '@tests/helpers/helpers.js';
-import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
+import { defaultNodeListHandler, translateStyleDefinitions } from '@converter/v2/importer/docxImporter.js';
 
 describe('HyperlinkNodeImporter', () => {
   it('parses w:hyperlink with styles', async () => {
@@ -11,11 +11,13 @@ describe('HyperlinkNodeImporter', () => {
     const doc = documentXml.elements[0];
     const body = doc.elements[0];
     const content = body.elements;
+    const translatedLinkedStyles = translateStyleDefinitions(docx);
 
     const { nodes } = hyperlinkNodeHandlerEntity.handler({
       nodes: [content[1].elements[2]],
       docx,
       nodeListHandler: defaultNodeListHandler(),
+      translatedLinkedStyles,
     });
     const runNode = nodes.find((node) => node.type === 'run') || nodes[0];
     const textNode = runNode.content?.find((child) => child.type === 'text');
@@ -55,11 +57,13 @@ describe('HyperlinkNodeImporter', () => {
     const doc = documentXml.elements[0];
     const body = doc.elements[0];
     const content = body.elements;
+    const translatedLinkedStyles = translateStyleDefinitions(docx);
 
     const { nodes } = hyperlinkNodeHandlerEntity.handler({
       nodes: [content[2].elements[1]],
       docx,
       nodeListHandler: defaultNodeListHandler(),
+      translatedLinkedStyles,
     });
     const runNode = nodes.find((node) => node.type === 'run') || nodes[0];
     const textNode = runNode.content?.find((child) => child.type === 'text');
@@ -92,11 +96,13 @@ describe('HyperlinkNodeImporter', () => {
     const doc = documentXml.elements[0];
     const body = doc.elements[0];
     const paragraph = body.elements[0];
+    const translatedLinkedStyles = translateStyleDefinitions(docx);
 
     const { nodes } = hyperlinkNodeHandlerEntity.handler({
       nodes: [paragraph.elements[0]],
       docx,
       nodeListHandler: defaultNodeListHandler(),
+      translatedLinkedStyles,
     });
 
     const textSegments = nodes

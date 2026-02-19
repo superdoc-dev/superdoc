@@ -158,7 +158,6 @@ describe('w:trPr translator', () => {
           attrs: {
             tableRowProperties: {
               cantSplit: false,
-              hidden: false,
               repeatHeader: false,
               // other properties are undefined
             },

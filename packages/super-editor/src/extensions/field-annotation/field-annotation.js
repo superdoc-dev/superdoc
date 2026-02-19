@@ -11,7 +11,7 @@ import { parseSizeUnit, minMax } from '@core/utilities/index.js';
 import { NodeSelection, Selection } from 'prosemirror-state';
 import { generateDocxRandomId } from '../../core/helpers/index.js';
 import { commands as cleanupCommands } from './cleanup-commands/index.js';
-import { isHeadless } from '@/utils/headless-helpers.js';
+import { isHeadless } from '@utils/headless-helpers.js';
 
 export const fieldAnnotationName = 'fieldAnnotation';
 export const annotationClass = 'annotation';

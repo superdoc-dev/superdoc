@@ -20,6 +20,7 @@ test.describe('comments & tracked changes', () => {
     },
   ];
 
+  // This is now 4 tracked changes with 2 replacements , one addition and one deletion
   const documentTrackedChanges = [
     {
       author: 'SuperDoc 8083 (imported)',
@@ -38,12 +39,7 @@ test.describe('comments & tracked changes', () => {
     },
     {
       author: 'SuperDoc 8083 (imported)',
-      text: ['Deleted: ', 'rem'],
-      date: new Date(1763743800000),
-    },
-    {
-      author: 'SuperDoc 8083 (imported)',
-      text: ['Added: ', 'add'],
+      text: ['Added: ', 'add', 'Deleted: ', 'rem'],
       date: new Date(1763743800000),
     },
   ];
@@ -125,7 +121,7 @@ test.describe('comments & tracked changes', () => {
 
     const trackedChanges = page.getByRole('dialog').filter({ hasText: 'SuperDoc 8083 (imported)', visible: true });
     const trackedChangeCount = await trackedChanges.count();
-    expect(trackedChangeCount).toBe(5);
+    expect(trackedChangeCount).toBe(4);
   });
 
   test('should have correct tracked change text', async ({ page }) => {
@@ -151,5 +147,53 @@ test.describe('comments & tracked changes', () => {
       await expect(trackedChange).toContainText(formatDate(documentTrackedChanges[i].date));
       await expect(trackedChange).toContainText(documentTrackedChanges[i].text.join(''));
     }
+  });
+
+  test('should hide comments in viewing mode by default', async ({ page }) => {
+    await goToPageAndWaitForEditor(page, {
+      includeComments: true,
+      layout: 1,
+      queryParams: { documentMode: 'viewing' },
+    });
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles(path.join(testDataFolder, 'comments-documents/basic-comments.docx'));
+
+    await page.waitForFunction(() => window.superdoc !== undefined && window.editor !== undefined, null, {
+      polling: 100,
+      timeout: 10_000,
+    });
+
+    await sleep(1000);
+
+    const commentsElements = page
+      .getByRole('dialog')
+      .filter({ hasText: 'Gabriel Chittolina (imported)', visible: true });
+    const commentCount = await commentsElements.count();
+    expect(commentCount).toBe(0);
+  });
+
+  test('should show comments in viewing mode when visible is true', async ({ page }) => {
+    await goToPageAndWaitForEditor(page, {
+      includeComments: true,
+      layout: 1,
+      queryParams: { documentMode: 'viewing', commentsVisible: true },
+    });
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles(path.join(testDataFolder, 'comments-documents/basic-comments.docx'));
+
+    await page.waitForFunction(() => window.superdoc !== undefined && window.editor !== undefined, null, {
+      polling: 100,
+      timeout: 10_000,
+    });
+
+    await sleep(1000);
+
+    const commentsElements = page
+      .getByRole('dialog')
+      .filter({ hasText: 'Gabriel Chittolina (imported)', visible: true });
+    const commentCount = await commentsElements.count();
+    expect(commentCount).toBe(2);
   });
 });

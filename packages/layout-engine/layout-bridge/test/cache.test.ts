@@ -401,7 +401,11 @@ describe('MeasureCache', () => {
       expect(cache.get(table2, 800, 600)).toBeUndefined();
     });
 
-    it('handles whitespace normalization in table cells', () => {
+    it('distinguishes different whitespace counts in table cells', () => {
+      // REGRESSION TEST (PR #1551): Previously whitespace was normalized with /\s+/g
+      // causing "Hello   World" and "Hello World" to incorrectly share cache despite
+      // having different text widths when rendered.
+      // Multiple spaces affect text width, so they MUST produce different cache keys
       const table1: TableBlock = {
         kind: 'table',
         id: 'table-whitespace',
@@ -442,8 +446,190 @@ describe('MeasureCache', () => {
       };
 
       cache.set(table1, 800, 600, { totalHeight: 50 });
-      // Whitespace normalization should treat these as the same
-      expect(cache.get(table2, 800, 600)).toEqual({ totalHeight: 50 });
+      // Different whitespace counts affect text width, so they should NOT share cache
+      expect(cache.get(table2, 800, 600)).toBeUndefined();
+    });
+
+    describe('comprehensive whitespace edge cases', () => {
+      it('distinguishes leading whitespace in table cells', () => {
+        const table1: TableBlock = {
+          kind: 'table',
+          id: 'table-leading-ws',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: ' Hello', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+        const table2: TableBlock = {
+          kind: 'table',
+          id: 'table-leading-ws',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        // Leading whitespace should produce different cache key
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
+      it('distinguishes trailing whitespace in table cells', () => {
+        const table1: TableBlock = {
+          kind: 'table',
+          id: 'table-trailing-ws',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello ', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+        const table2: TableBlock = {
+          kind: 'table',
+          id: 'table-trailing-ws',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        // Trailing whitespace should produce different cache key
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
+      it('distinguishes tabs vs spaces in table cells', () => {
+        const table1: TableBlock = {
+          kind: 'table',
+          id: 'table-tab-vs-space',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello\tWorld', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+        const table2: TableBlock = {
+          kind: 'table',
+          id: 'table-tab-vs-space',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello World', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        // Tabs vs spaces should produce different cache key
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
+      it('distinguishes empty string vs whitespace-only in table cells', () => {
+        const table1: TableBlock = {
+          kind: 'table',
+          id: 'table-empty-vs-ws',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+        const table2: TableBlock = {
+          kind: 'table',
+          id: 'table-empty-vs-ws',
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: ' ', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        // Empty string vs whitespace-only should produce different cache key
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
     });
 
     it('handles mixed multi-block and legacy cells', () => {
@@ -1155,6 +1341,570 @@ describe('MeasureCache', () => {
         cache.set(table1, 800, 600, { totalHeight: 50 });
         // Identical formatting and tracked changes should cache hit
         expect(cache.get(table2, 800, 600)).toEqual({ totalHeight: 50 });
+      });
+    });
+
+    // ============================================================================
+    // Table Cell Paragraph Attribute Caching Tests
+    // These tests verify that paragraph-level attributes (alignment, spacing,
+    // line height, indent, etc.) inside table cells are properly included in
+    // cache keys. This fixes toolbar commands (alignment, line height, indent,
+    // color, highlight) not updating immediately for text inside tables.
+    // ============================================================================
+
+    describe('paragraph attribute changes in table cells', () => {
+      const tableWithParagraphAttrs = (
+        id: string,
+        text: string,
+        paragraphAttrs: Record<string, unknown> = {},
+        runAttrs: Record<string, unknown> = {},
+      ): TableBlock => ({
+        kind: 'table',
+        id,
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0',
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-0',
+                  runs: [{ text, fontFamily: 'Arial', fontSize: 12, ...runAttrs }],
+                  attrs: paragraphAttrs,
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      describe('alignment changes', () => {
+        it('invalidates cache when alignment changes in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-align', 'Hello', { alignment: 'left' });
+          const table2 = tableWithParagraphAttrs('table-align', 'Hello', { alignment: 'center' });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+
+        it('creates cache hit when alignment is identical in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-align-same', 'Hello', { alignment: 'center' });
+          const table2 = tableWithParagraphAttrs('table-align-same', 'Hello', { alignment: 'center' });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toEqual({ totalHeight: 50 });
+        });
+      });
+
+      describe('spacing/line height changes', () => {
+        it('invalidates cache when line height changes in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-line', 'Hello', { spacing: { line: 240 } });
+          const table2 = tableWithParagraphAttrs('table-line', 'Hello', { spacing: { line: 480 } });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+
+        it('invalidates cache when lineRule changes in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-rule', 'Hello', { spacing: { lineRule: 'auto' } });
+          const table2 = tableWithParagraphAttrs('table-rule', 'Hello', { spacing: { lineRule: 'exact' } });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+
+        it('invalidates cache when spacing.before changes in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-before', 'Hello', { spacing: { before: 100 } });
+          const table2 = tableWithParagraphAttrs('table-before', 'Hello', { spacing: { before: 200 } });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+
+        it('invalidates cache when spacing.after changes in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-after', 'Hello', { spacing: { after: 100 } });
+          const table2 = tableWithParagraphAttrs('table-after', 'Hello', { spacing: { after: 200 } });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+      });
+
+      describe('indent changes', () => {
+        it('invalidates cache when indent.left changes in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-indent-l', 'Hello', { indent: { left: 720 } });
+          const table2 = tableWithParagraphAttrs('table-indent-l', 'Hello', { indent: { left: 1440 } });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+
+        it('invalidates cache when indent.firstLine changes in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-indent-fl', 'Hello', { indent: { firstLine: 0 } });
+          const table2 = tableWithParagraphAttrs('table-indent-fl', 'Hello', { indent: { firstLine: 720 } });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+      });
+
+      describe('highlight changes', () => {
+        it('invalidates cache when highlight changes in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-hl', 'Hello', {}, { highlight: 'yellow' });
+          const table2 = tableWithParagraphAttrs('table-hl', 'Hello', {}, { highlight: 'cyan' });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+
+        it('invalidates cache when highlight is added in table cell', () => {
+          const table1 = tableWithParagraphAttrs('table-hl-add', 'Hello', {}, {});
+          const table2 = tableWithParagraphAttrs('table-hl-add', 'Hello', {}, { highlight: 'yellow' });
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+      });
+
+      describe('combined attribute changes', () => {
+        it('creates cache hit for complex identical table cell paragraphs', () => {
+          const complexAttrs = {
+            alignment: 'justify',
+            spacing: { before: 100, after: 100, line: 276, lineRule: 'auto' },
+            indent: { left: 720, right: 0, firstLine: 360 },
+          };
+
+          const table1 = tableWithParagraphAttrs('table-complex', 'Hello', complexAttrs);
+          const table2 = tableWithParagraphAttrs('table-complex', 'Hello', complexAttrs);
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toEqual({ totalHeight: 50 });
+        });
+
+        it('invalidates cache when any attribute in complex table cell changes', () => {
+          const attrs1 = {
+            alignment: 'justify',
+            spacing: { before: 100, after: 100 },
+            indent: { left: 720 },
+          };
+          const attrs2 = {
+            alignment: 'center', // Changed
+            spacing: { before: 100, after: 100 },
+            indent: { left: 720 },
+          };
+
+          const table1 = tableWithParagraphAttrs('table-complex-chg', 'Hello', attrs1);
+          const table2 = tableWithParagraphAttrs('table-complex-chg', 'Hello', attrs2);
+
+          cache.set(table1, 800, 600, { totalHeight: 50 });
+          expect(cache.get(table2, 800, 600)).toBeUndefined();
+        });
+      });
+    });
+
+    // ============================================================================
+    // Table-Level and Cell-Level Border Caching Tests
+    // These tests verify that table-level borders (outer and inner borders) and
+    // cell-level borders are properly included in cache keys. This ensures that
+    // slash menu commands like "remove borders" trigger cache invalidation and
+    // re-render immediately, rather than requiring a subsequent keystroke.
+    // ============================================================================
+
+    describe('table-level border changes', () => {
+      const tableWithBorders = (id: string, text: string, tableBorders?: Record<string, unknown>): TableBlock => ({
+        kind: 'table',
+        id,
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0',
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-0',
+                  runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+                },
+              },
+            ],
+          },
+        ],
+        attrs: tableBorders ? { borders: tableBorders } : undefined,
+      });
+
+      it('invalidates cache when table borders are removed', () => {
+        const table1 = tableWithBorders('table-borders', 'Hello', {
+          top: { style: 'single', width: 8, color: '000000' },
+          bottom: { style: 'single', width: 8, color: '000000' },
+        });
+        const table2 = tableWithBorders('table-borders', 'Hello', {
+          top: { style: 'none', width: 0, color: 'auto' },
+          bottom: { style: 'none', width: 0, color: 'auto' },
+        });
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when table borders are added', () => {
+        const table1 = tableWithBorders('table-borders-add', 'Hello', undefined);
+        const table2 = tableWithBorders('table-borders-add', 'Hello', {
+          top: { style: 'single', width: 8, color: '000000' },
+        });
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
+      it('creates cache hit when table borders are identical', () => {
+        const borders = {
+          top: { style: 'single', width: 8, color: '000000' },
+          bottom: { style: 'single', width: 8, color: '000000' },
+        };
+        const table1 = tableWithBorders('table-borders-same', 'Hello', borders);
+        const table2 = tableWithBorders('table-borders-same', 'Hello', borders);
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toEqual({ totalHeight: 50 });
+      });
+    });
+
+    describe('cell-level border changes', () => {
+      const tableWithCellBorders = (id: string, text: string, cellBorders?: Record<string, unknown>): TableBlock => ({
+        kind: 'table',
+        id,
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0',
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-0',
+                  runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+                },
+                attrs: cellBorders ? { borders: cellBorders } : undefined,
+              },
+            ],
+          },
+        ],
+      });
+
+      it('invalidates cache when cell borders are removed', () => {
+        const table1 = tableWithCellBorders('cell-borders', 'Hello', {
+          top: { style: 'single', width: 8, color: '000000' },
+          bottom: { style: 'single', width: 8, color: '000000' },
+        });
+        const table2 = tableWithCellBorders('cell-borders', 'Hello', {
+          top: { style: 'none', width: 0, color: 'auto' },
+          bottom: { style: 'none', width: 0, color: 'auto' },
+        });
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when cell borders are added', () => {
+        const table1 = tableWithCellBorders('cell-borders-add', 'Hello', undefined);
+        const table2 = tableWithCellBorders('cell-borders-add', 'Hello', {
+          top: { style: 'single', width: 8, color: '000000' },
+        });
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+
+      it('creates cache hit when cell borders are identical', () => {
+        const borders = {
+          top: { style: 'single', width: 8, color: '000000' },
+          bottom: { style: 'single', width: 8, color: '000000' },
+        };
+        const table1 = tableWithCellBorders('cell-borders-same', 'Hello', borders);
+        const table2 = tableWithCellBorders('cell-borders-same', 'Hello', borders);
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toEqual({ totalHeight: 50 });
+      });
+
+      it('invalidates cache when cell padding changes', () => {
+        const tableWithPadding = (
+          id: string,
+          padding?: { top?: number; right?: number; bottom?: number; left?: number },
+        ): TableBlock => ({
+          kind: 'table',
+          id,
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Hello', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                  attrs: padding ? { padding } : undefined,
+                },
+              ],
+            },
+          ],
+        });
+
+        const table1 = tableWithPadding('cell-padding', { top: 10, right: 10, bottom: 10, left: 10 });
+        const table2 = tableWithPadding('cell-padding', { top: 20, right: 20, bottom: 20, left: 20 });
+
+        cache.set(table1, 800, 600, { totalHeight: 50 });
+        expect(cache.get(table2, 800, 600)).toBeUndefined();
+      });
+    });
+  });
+
+  // ============================================================================
+  // Paragraph Attribute Caching Tests
+  // These tests verify that paragraph-level attributes (alignment, spacing,
+  // indent, borders, shading, tabs, etc.) are properly included in cache keys.
+  // This is critical for fixing the toolbar command issue where align/center
+  // wasn't updating immediately because the cache key didn't include alignment.
+  // ============================================================================
+
+  describe('paragraph attribute caching', () => {
+    const paragraphWithAttrs = (id: string, text: string, attrs: Record<string, unknown> = {}): FlowBlock => ({
+      kind: 'paragraph',
+      id,
+      runs: [{ text, fontFamily: 'Arial', fontSize: 16 }],
+      attrs,
+    });
+
+    describe('alignment changes', () => {
+      it('invalidates cache when alignment changes from left to center', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { alignment: 'left' });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { alignment: 'center' });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        // Different alignment should result in cache miss
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when alignment changes from undefined to center', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', {});
+        const block2 = paragraphWithAttrs('p1', 'Hello', { alignment: 'center' });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('creates cache hit when alignment is identical', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { alignment: 'center' });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { alignment: 'center' });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toEqual({ totalHeight: 20 });
+      });
+    });
+
+    describe('spacing changes', () => {
+      it('invalidates cache when spacing.before changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { spacing: { before: 100 } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { spacing: { before: 200 } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when spacing.after changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { spacing: { after: 100 } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { spacing: { after: 200 } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when spacing.line changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { spacing: { line: 240 } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { spacing: { line: 360 } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when spacing.lineRule changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { spacing: { lineRule: 'auto' } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { spacing: { lineRule: 'exact' } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('creates cache hit when spacing is identical', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { spacing: { before: 100, after: 100, line: 240 } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { spacing: { before: 100, after: 100, line: 240 } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toEqual({ totalHeight: 20 });
+      });
+    });
+
+    describe('indent changes', () => {
+      it('invalidates cache when indent.left changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { indent: { left: 720 } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { indent: { left: 1440 } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when indent.firstLine changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { indent: { firstLine: 0 } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { indent: { firstLine: 720 } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('creates cache hit when indent is identical', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { indent: { left: 720, firstLine: 360 } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { indent: { left: 720, firstLine: 360 } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toEqual({ totalHeight: 20 });
+      });
+    });
+
+    describe('border and shading changes', () => {
+      it('invalidates cache when borders change', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { borders: { top: { style: 'solid', width: 1 } } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { borders: { top: { style: 'solid', width: 2 } } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when shading.fill changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { shading: { fill: '#fff' } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { shading: { fill: '#f0f0f0' } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+    });
+
+    describe('tab changes', () => {
+      it('invalidates cache when tabs are added', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { tabs: [] });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'center', pos: 4320 }] });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when tab position changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'start', pos: 720 }] });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'start', pos: 1440 }] });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('creates cache hit when tabs are identical', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'center', pos: 4320, leader: 'dot' }] });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'center', pos: 4320, leader: 'dot' }] });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toEqual({ totalHeight: 20 });
+      });
+    });
+
+    describe('other paragraph attribute changes', () => {
+      it('invalidates cache when direction changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { direction: 'ltr' });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { direction: 'rtl' });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when keepNext changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { keepNext: false });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { keepNext: true });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+
+      it('invalidates cache when floatAlignment changes', () => {
+        const block1 = paragraphWithAttrs('p1', 'Hello', { floatAlignment: 'left' });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { floatAlignment: 'center' });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+    });
+
+    describe('combined attribute changes', () => {
+      it('creates cache hit for complex identical paragraphs', () => {
+        const complexAttrs = {
+          alignment: 'justify',
+          spacing: { before: 100, after: 100, line: 276, lineRule: 'auto' },
+          indent: { left: 720, right: 0, firstLine: 360 },
+          borders: { top: { style: 'solid', width: 1, color: '#000' } },
+          shading: { fill: '#f0f0f0' },
+          tabs: [
+            { val: 'center', pos: 4320 },
+            { val: 'end', pos: 8640, leader: 'dot' },
+          ],
+          keepNext: true,
+          direction: 'ltr',
+        };
+
+        const block1 = paragraphWithAttrs('p1', 'Hello', complexAttrs);
+        const block2 = paragraphWithAttrs('p1', 'Hello', complexAttrs);
+
+        cache.set(block1, 400, 600, { totalHeight: 50 });
+        expect(cache.get(block2, 400, 600)).toEqual({ totalHeight: 50 });
+      });
+
+      it('invalidates cache when any attribute in complex paragraph changes', () => {
+        const attrs1 = {
+          alignment: 'justify',
+          spacing: { before: 100, after: 100 },
+          indent: { left: 720 },
+        };
+        const attrs2 = {
+          alignment: 'center', // Changed from justify to center
+          spacing: { before: 100, after: 100 },
+          indent: { left: 720 },
+        };
+
+        const block1 = paragraphWithAttrs('p1', 'Hello', attrs1);
+        const block2 = paragraphWithAttrs('p1', 'Hello', attrs2);
+
+        cache.set(block1, 400, 600, { totalHeight: 50 });
+        expect(cache.get(block2, 400, 600)).toBeUndefined();
+      });
+    });
+
+    describe('non-visual attributes (should not affect cache key)', () => {
+      it('creates cache hit when only sdt metadata changes', () => {
+        // sdt is non-visual metadata
+        const block1 = paragraphWithAttrs('p1', 'Hello', { sdt: { id: '1', tag: 'field1' } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { sdt: { id: '2', tag: 'field2' } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        // sdt changes should not affect cache key
+        expect(cache.get(block2, 400, 600)).toEqual({ totalHeight: 20 });
+      });
+
+      it('creates cache hit when only wordLayout changes', () => {
+        // wordLayout is computed output, not input
+        const block1 = paragraphWithAttrs('p1', 'Hello', { wordLayout: { lines: 1 } });
+        const block2 = paragraphWithAttrs('p1', 'Hello', { wordLayout: { lines: 2 } });
+
+        cache.set(block1, 400, 600, { totalHeight: 20 });
+        // wordLayout changes should not affect cache key
+        expect(cache.get(block2, 400, 600)).toEqual({ totalHeight: 20 });
       });
     });
   });

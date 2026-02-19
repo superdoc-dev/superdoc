@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "tsBuildInfoFile": "./dist/tsconfig.types.tsbuildinfo"
+  },
+  "references": [
+    { "path": "../layout-engine/contracts/tsconfig.json" },
+    { "path": "../layout-engine/layout-bridge/tsconfig.types.json" },
+    { "path": "../layout-engine/measuring/dom/tsconfig.json" },
+    { "path": "../layout-engine/painters/dom/tsconfig.json" },
+    { "path": "../layout-engine/style-engine/tsconfig.json" },
+    { "path": "../word-layout/tsconfig.json" },
+    { "path": "../../shared/common/tsconfig.json" },
+    { "path": "../document-api/tsconfig.json" }
+  ]
+}

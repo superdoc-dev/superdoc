@@ -19,13 +19,18 @@ import {
   commentRangeStartTranslator as wCommentRangeStartTranslator,
   commentRangeEndTranslator as wCommentRangeEndTranslator,
 } from './v3/handlers/w/commentRange/index.js';
+import { translator as wPermStartTranslator } from './v3/handlers/w/perm-start/index.js';
+import { translator as wPermEndTranslator } from './v3/handlers/w/perm-end/index.js';
 import { translator as sdPageReferenceTranslator } from '@converter/v3/handlers/sd/pageReference';
 import { translator as sdTableOfContentsTranslator } from '@converter/v3/handlers/sd/tableOfContents';
+import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index';
+import { translator as sdIndexEntryTranslator } from '@converter/v3/handlers/sd/indexEntry';
 import { translator as sdAutoPageNumberTranslator } from '@converter/v3/handlers/sd/autoPageNumber';
 import { translator as sdTotalPageNumberTranslator } from '@converter/v3/handlers/sd/totalPageNumber';
 import { translator as pictTranslator } from './v3/handlers/w/pict/pict-translator';
 import { translateVectorShape, translateShapeGroup } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers';
 import { translator as wTextTranslator } from '@converter/v3/handlers/w/t';
+import { translator as wFootnoteReferenceTranslator } from './v3/handlers/w/footnoteReference/footnoteReference-translator.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 
 const DEFAULT_SECTION_PROPS_TWIPS = Object.freeze({
@@ -160,6 +165,7 @@ export function exportSchemaToJson(params) {
     table: wTblNodeTranslator,
     tableRow: wTrNodeTranslator,
     tableCell: wTcNodeTranslator,
+    tableHeader: wTcNodeTranslator,
     bookmarkStart: wBookmarkStartTranslator,
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,
@@ -168,7 +174,10 @@ export function exportSchemaToJson(params) {
     hardBreak: wBrNodeTranslator,
     commentRangeStart: wCommentRangeStartTranslator,
     commentRangeEnd: wCommentRangeEndTranslator,
+    permStart: wPermStartTranslator,
+    permEnd: wPermEndTranslator,
     commentReference: () => null,
+    footnoteReference: wFootnoteReferenceTranslator,
     shapeContainer: pictTranslator,
     shapeTextbox: pictTranslator,
     contentBlock: pictTranslator,
@@ -182,6 +191,8 @@ export function exportSchemaToJson(params) {
     'total-page-number': sdTotalPageNumberTranslator,
     pageReference: sdPageReferenceTranslator,
     tableOfContents: sdTableOfContentsTranslator,
+    index: sdIndexTranslator,
+    indexEntry: sdIndexEntryTranslator,
     passthroughBlock: translatePassthroughNode,
     passthroughInline: translatePassthroughNode,
   };
@@ -197,7 +208,6 @@ export function exportSchemaToJson(params) {
     console.error('No translation function found for node type:', type);
     return null;
   }
-
   // Call the handler for this node type
   return handler(params);
 }
@@ -244,6 +254,13 @@ function translateBodyNode(params) {
     if (!hasFooter && hasDefaultFooter && !params.editor.options.isHeaderOrFooter && canExportFooterRef) {
       const defaultFooter = generateDefaultHeaderFooter('footer', params.converter.footerIds?.default);
       sectPr.elements.push(defaultFooter);
+    }
+
+    // Re-emit footnote properties if they were parsed during import
+    const hasFootnotePr = sectPr.elements?.some((n) => n.name === 'w:footnotePr');
+    const footnoteProperties = params.converter.footnoteProperties;
+    if (!hasFootnotePr && footnoteProperties?.source === 'sectPr' && footnoteProperties.originalXml) {
+      sectPr.elements.push(carbonCopy(footnoteProperties.originalXml));
     }
   }
 
@@ -298,6 +315,20 @@ function translateHeadingNode(params) {
 }
 
 /**
+ * Merge mc:Ignorable lists from two attribute objects, deduplicating entries.
+ *
+ * @param {string} defaultIgnorable - The default mc:Ignorable string
+ * @param {string} originalIgnorable - The original mc:Ignorable string from import
+ * @returns {string} Merged and deduplicated mc:Ignorable string
+ */
+function mergeMcIgnorable(defaultIgnorable = '', originalIgnorable = '') {
+  const merged = [
+    ...new Set([...defaultIgnorable.split(/\s+/).filter(Boolean), ...originalIgnorable.split(/\s+/).filter(Boolean)]),
+  ];
+  return merged.join(' ');
+}
+
+/**
  * Translate a document node
  *
  * @param {ExportParams} params The parameters object
@@ -310,10 +341,24 @@ function translateDocumentNode(params) {
   };
 
   const translatedBodyNode = exportSchemaToJson({ ...params, node: bodyNode });
+
+  // Merge original document attributes with defaults to preserve custom namespaces
+  const originalAttrs = params.converter?.documentAttributes || {};
+  const attributes = {
+    ...DEFAULT_DOCX_DEFS,
+    ...originalAttrs,
+  };
+
+  // Merge mc:Ignorable lists - combine both default and original ignorable namespaces
+  const mergedIgnorable = mergeMcIgnorable(DEFAULT_DOCX_DEFS['mc:Ignorable'], originalAttrs['mc:Ignorable']);
+  if (mergedIgnorable) {
+    attributes['mc:Ignorable'] = mergedIgnorable;
+  }
+
   const node = {
     name: 'w:document',
     elements: [translatedBodyNode],
-    attributes: DEFAULT_DOCX_DEFS,
+    attributes,
   };
 
   return [node, params];
@@ -380,7 +425,6 @@ export function processOutputMarks(marks = []) {
 function translateMark(mark) {
   const xmlMark = SuperConverter.markTypes.find((m) => m.type === mark.type);
   if (!xmlMark) {
-    // TODO: Telemetry
     return {};
   }
 
@@ -568,6 +612,14 @@ export class DocxExporter {
     if (!node) return null;
     let { name } = node;
     const { elements, attributes } = node;
+
+    // Normalize w:delInstrText → w:instrText. During import, w:del wrappers around
+    // field character runs lose their trackDelete marks (only text content gets marked),
+    // so on export the w:del wrapper is absent. Per ECMA-376 §17.16.13, w:delInstrText
+    // outside w:del is non-conformant — renaming to w:instrText keeps the field valid.
+    if (name === 'w:delInstrText') {
+      name = 'w:instrText';
+    }
 
     let tag = `<${name}`;
 

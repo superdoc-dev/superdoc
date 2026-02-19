@@ -112,6 +112,12 @@ export interface SuperDocESignProps {
   onFieldChange?: (field: FieldChange) => void;
   onFieldsDiscovered?: (fields: FieldInfo[]) => void;
 
+  /** Telemetry configuration for SuperDoc */
+  telemetry?: { enabled: boolean; metadata?: Record<string, any> };
+
+  /** License key for SuperDoc */
+  licenseKey?: string;
+
   isDisabled?: boolean;
   className?: string;
   style?: React.CSSProperties;

@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
 import { rejectAllTrackedChanges } from '../../helpers/tracked-changes.js';
 
@@ -6,305 +7,184 @@ test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } })
 const TEXT = 'Agreement signed by both parties';
 
 // ---------------------------------------------------------------------------
-// Single mark rejections
+// Command helpers — typed functions instead of stringified eval
 // ---------------------------------------------------------------------------
 
-test('reject tracked bold suggestion removes bold', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
+type EditorCommandFn = (page: Page) => Promise<void>;
 
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
+const toggleBold: EditorCommandFn = (page) => page.evaluate(() => (window as any).editor.commands.toggleBold());
 
-  await superdoc.selectAll();
-  await superdoc.executeCommand('toggleBold');
-  await superdoc.waitForStable();
+const toggleItalic: EditorCommandFn = (page) => page.evaluate(() => (window as any).editor.commands.toggleItalic());
 
-  await superdoc.assertTrackedChangeExists('format');
+const toggleUnderline: EditorCommandFn = (page) =>
+  page.evaluate(() => (window as any).editor.commands.toggleUnderline());
 
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
+const toggleStrike: EditorCommandFn = (page) => page.evaluate(() => (window as any).editor.commands.toggleStrike());
 
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.assertTextLacksMarks('Agreement', ['bold']);
-  await superdoc.assertTextContent(TEXT);
-});
+const setColor =
+  (color: string): EditorCommandFn =>
+  (page) =>
+    page.evaluate((c) => (window as any).editor.commands.setColor(c), color);
 
-test('reject tracked italic suggestion removes italic', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
+const setFontFamily =
+  (family: string): EditorCommandFn =>
+  (page) =>
+    page.evaluate((f) => (window as any).editor.commands.setFontFamily(f), family);
 
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
+const setFontSize =
+  (size: string): EditorCommandFn =>
+  (page) =>
+    page.evaluate((s) => (window as any).editor.commands.setFontSize(s), size);
 
-  await superdoc.selectAll();
-  await superdoc.executeCommand('toggleItalic');
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.assertTextLacksMarks('Agreement', ['italic']);
-  await superdoc.assertTextContent(TEXT);
-});
-
-test('reject tracked underline suggestion removes underline', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
-
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  await superdoc.selectAll();
-  await superdoc.executeCommand('toggleUnderline');
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.assertTextLacksMarks('Agreement', ['underline']);
-  await superdoc.assertTextContent(TEXT);
-});
-
-test('reject tracked strikethrough suggestion removes strike', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
-
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  await superdoc.selectAll();
-  await superdoc.executeCommand('toggleStrike');
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.assertTextContent(TEXT);
-});
+async function runAll(page: Page, fns: EditorCommandFn[]): Promise<void> {
+  for (const fn of fns) await fn(page);
+}
 
 // ---------------------------------------------------------------------------
-// TextStyle rejections
+// Test matrix — each entry describes one rejection scenario
 // ---------------------------------------------------------------------------
 
-test('reject tracked color suggestion restores original color', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
+type FormatCase = {
+  name: string;
+  setup?: EditorCommandFn[];
+  suggest: EditorCommandFn[];
+  lacksMarks?: string[];
+  restoredStyle?: Record<string, string>;
+  restoredFontFamily?: string;
+  restoredFontSize?: string;
+};
 
-  // Set initial styling
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    const e = (window as any).editor;
-    e.commands.setFontFamily('Times New Roman, serif');
-    e.commands.setColor('#112233');
+const SINGLE_MARK_CASES: FormatCase[] = [
+  {
+    name: 'bold',
+    suggest: [toggleBold],
+    lacksMarks: ['bold'],
+  },
+  {
+    name: 'italic',
+    suggest: [toggleItalic],
+    lacksMarks: ['italic'],
+  },
+  {
+    name: 'underline',
+    suggest: [toggleUnderline],
+    lacksMarks: ['underline'],
+  },
+  {
+    name: 'strikethrough',
+    suggest: [toggleStrike],
+    lacksMarks: ['strike'],
+  },
+];
+
+const STYLE_CASES: FormatCase[] = [
+  {
+    name: 'color',
+    setup: [setFontFamily('Times New Roman, serif'), setColor('#112233')],
+    suggest: [setColor('#FF0000')],
+    restoredStyle: { color: '#112233' },
+  },
+  {
+    name: 'font family',
+    setup: [setFontFamily('Times New Roman, serif'), setColor('#112233')],
+    suggest: [setFontFamily('Arial, sans-serif')],
+    restoredFontFamily: 'Times New Roman',
+  },
+  {
+    name: 'font size',
+    setup: [setFontSize('16pt')],
+    suggest: [setFontSize('24pt')],
+    restoredFontSize: '16',
+  },
+];
+
+const COMBINATION_CASES: FormatCase[] = [
+  {
+    name: 'multiple marks',
+    suggest: [toggleBold, toggleItalic, toggleUnderline],
+    lacksMarks: ['bold', 'italic', 'underline'],
+  },
+  {
+    name: 'multiple textStyle properties',
+    setup: [setFontFamily('Arial, sans-serif'), setColor('#112233'), setFontSize('16pt')],
+    suggest: [setColor('#FF00AA'), setFontFamily('Courier New'), setFontSize('18pt')],
+    restoredStyle: { color: '#112233' },
+    restoredFontFamily: 'Arial',
+    restoredFontSize: '16',
+  },
+  {
+    name: 'mixed marks and textStyle',
+    setup: [setFontFamily('Arial, sans-serif'), setColor('#112233')],
+    suggest: [toggleBold, toggleUnderline, setColor('#FF00AA'), setFontFamily('Times New Roman, serif')],
+    lacksMarks: ['bold', 'underline'],
+    restoredStyle: { color: '#112233' },
+    restoredFontFamily: 'Arial',
+  },
+];
+
+const ALL_CASES = [
+  ...SINGLE_MARK_CASES.map((c) => ({ ...c, name: `reject tracked ${c.name} suggestion` })),
+  ...STYLE_CASES.map((c) => ({ ...c, name: `reject tracked ${c.name} suggestion` })),
+  ...COMBINATION_CASES.map((c) => ({ ...c, name: `reject ${c.name} suggestions restores original` })),
+];
+
+for (const tc of ALL_CASES) {
+  test(tc.name, async ({ superdoc }) => {
+    await superdoc.type(TEXT);
+    await superdoc.waitForStable();
+
+    // Optional: set initial styles in editing mode.
+    if (tc.setup) {
+      await superdoc.selectAll();
+      await runAll(superdoc.page, tc.setup);
+      await superdoc.waitForStable();
+    }
+
+    // Switch to suggesting mode.
+    await superdoc.setDocumentMode('suggesting');
+    await superdoc.waitForStable();
+
+    // Apply the suggested format change.
+    await superdoc.selectAll();
+    await runAll(superdoc.page, tc.suggest);
+    await superdoc.waitForStable();
+
+    await superdoc.assertTrackedChangeExists('format');
+
+    // Reject all tracked changes.
+    await rejectAllTrackedChanges(superdoc.page);
+    await superdoc.waitForStable();
+
+    // No tracked format decorations should remain.
+    await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
+
+    // Verify marks were removed.
+    if (tc.lacksMarks) {
+      await superdoc.assertTextLacksMarks('Agreement', tc.lacksMarks);
+    }
+
+    // Verify textStyle attrs were restored.
+    if (tc.restoredStyle) {
+      await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', tc.restoredStyle);
+    }
+
+    // Verify toolbar shows restored font family.
+    if (tc.restoredFontFamily) {
+      await superdoc.selectAll();
+      await superdoc.waitForStable();
+      await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText(
+        tc.restoredFontFamily,
+      );
+    }
+
+    // Verify toolbar shows restored font size.
+    if (tc.restoredFontSize) {
+      await superdoc.selectAll();
+      await superdoc.waitForStable();
+      await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue(tc.restoredFontSize);
+    }
+
+    // Document text should always be unchanged.
+    await superdoc.assertTextContent(TEXT);
   });
-  await superdoc.waitForStable();
-
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  // Suggest a color change
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    (window as any).editor.commands.setColor('#FF0000');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  // Original color should be restored
-  await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { color: '#112233' });
-  await superdoc.assertTextContent(TEXT);
-});
-
-test('reject tracked font family suggestion restores original font', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
-
-  // Set initial styling
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    const e = (window as any).editor;
-    e.commands.setFontFamily('Times New Roman, serif');
-    e.commands.setColor('#112233');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  // Suggest a font family change
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    (window as any).editor.commands.setFontFamily('Arial, sans-serif');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.selectAll();
-  await superdoc.waitForStable();
-  // Original font should be restored
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Times New Roman');
-  await superdoc.assertTextContent(TEXT);
-});
-
-test('reject tracked font size suggestion restores original size', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
-
-  // Set initial size
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    (window as any).editor.commands.setFontSize('16pt');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  // Suggest a size change
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    (window as any).editor.commands.setFontSize('24pt');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.selectAll();
-  await superdoc.waitForStable();
-  // Original size should be restored
-  await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('16');
-  await superdoc.assertTextContent(TEXT);
-});
-
-// ---------------------------------------------------------------------------
-// Combination rejections
-// ---------------------------------------------------------------------------
-
-test('reject multiple mark suggestions restores all marks', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
-
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  await superdoc.selectAll();
-  await superdoc.executeCommand('toggleBold');
-  await superdoc.executeCommand('toggleItalic');
-  await superdoc.executeCommand('toggleUnderline');
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.assertTextLacksMarks('Agreement', ['bold', 'italic', 'underline']);
-  await superdoc.assertTextContent(TEXT);
-});
-
-test('reject multiple textStyle suggestions restores all styles', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
-
-  // Set initial styles
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    const e = (window as any).editor;
-    e.commands.setFontFamily('Arial, sans-serif');
-    e.commands.setColor('#112233');
-    e.commands.setFontSize('16pt');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  // Suggest multiple style changes
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    const e = (window as any).editor;
-    e.commands.setColor('#FF00AA');
-    e.commands.setFontFamily('Courier New');
-    e.commands.setFontSize('18pt');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.selectAll();
-  await superdoc.waitForStable();
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Arial');
-  await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('16');
-  await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { color: '#112233' });
-  await superdoc.assertTextContent(TEXT);
-});
-
-test('reject mixed marks and textStyle suggestions restores everything', async ({ superdoc }) => {
-  await superdoc.type(TEXT);
-  await superdoc.waitForStable();
-
-  // Set initial styles
-  await superdoc.selectAll();
-  await superdoc.page.evaluate(() => {
-    const e = (window as any).editor;
-    e.commands.setFontFamily('Arial, sans-serif');
-    e.commands.setColor('#112233');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  // Suggest marks + style changes
-  await superdoc.selectAll();
-  await superdoc.executeCommand('toggleBold');
-  await superdoc.executeCommand('toggleUnderline');
-  await superdoc.page.evaluate(() => {
-    const e = (window as any).editor;
-    e.commands.setColor('#FF00AA');
-    e.commands.setFontFamily('Times New Roman, serif');
-  });
-  await superdoc.waitForStable();
-
-  await superdoc.assertTrackedChangeExists('format');
-
-  await rejectAllTrackedChanges(superdoc.page);
-  await superdoc.waitForStable();
-
-  await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await superdoc.assertTextLacksMarks('Agreement', ['bold', 'underline']);
-  await superdoc.selectAll();
-  await superdoc.waitForStable();
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Arial');
-  await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { color: '#112233' });
-  await superdoc.assertTextContent(TEXT);
-});
+}

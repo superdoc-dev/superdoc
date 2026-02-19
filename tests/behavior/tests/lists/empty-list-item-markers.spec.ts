@@ -17,10 +17,23 @@ test('empty list items show markers and accept typed content', async ({ superdoc
   const markerCount = await markers.count();
   expect(markerCount).toBeGreaterThan(0);
 
-  // Type into an empty list item (pos 229 is an empty paragraph in the list,
-  // cursor inside it is at pos 230)
-  await superdoc.clickOnLine(0); // focus the editor first
-  await superdoc.setTextSelection(230);
+  // Find the first empty list line (a .superdoc-line inside a list with no visible text).
+  const emptyLineIndex = await superdoc.page.evaluate(() => {
+    const lines = Array.from(document.querySelectorAll('.superdoc-line'));
+    return lines.findIndex((line) => {
+      const hasMarker = line.querySelector('.superdoc-paragraph-marker') !== null;
+      const textContent = (line.textContent ?? '').replace(/[\s\u200B]/g, '');
+      // A line is "empty" if it has a list marker but the text portion is blank.
+      // Subtract the marker text to check only the content area.
+      const markerText = line.querySelector('.superdoc-paragraph-marker')?.textContent ?? '';
+      const contentOnly = textContent.replace(markerText.replace(/\s/g, ''), '');
+      return hasMarker && contentOnly.length === 0;
+    });
+  });
+  expect(emptyLineIndex).toBeGreaterThanOrEqual(0);
+
+  // Click into that empty line to position cursor
+  await superdoc.clickOnLine(emptyLineIndex);
   await superdoc.waitForStable();
   await superdoc.type('New content in empty list item');
   await superdoc.waitForStable();

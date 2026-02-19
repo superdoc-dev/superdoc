@@ -57,7 +57,8 @@ test('selecting a table column works in rows affected by rowspan (PR #1839)', as
   for (const label of ['B1', 'B2', 'B3', 'B4', 'B5']) {
     await superdoc.assertTextHasMarks(label, ['bold']);
   }
-  for (const label of ['C1', 'C2', 'C3', 'C4', 'C5']) {
+  // Merged A column and C column must remain unbold.
+  for (const label of ['A1', 'C1', 'C2', 'C3', 'C4', 'C5']) {
     await superdoc.assertTextLacksMarks(label, ['bold']);
   }
 });

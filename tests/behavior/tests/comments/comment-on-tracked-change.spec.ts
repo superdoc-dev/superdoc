@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
+import { assertDocumentApiReady, listComments, listTrackChanges } from '../../helpers/document-api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/comments-tcs/gdocs-comment-on-change.docx');
@@ -14,6 +15,10 @@ test('comment thread on tracked change shows both the change and replies', async
   await superdoc.loadDocument(DOC_PATH);
   await superdoc.page.waitForSelector('.superdoc-comment-highlight', { timeout: 30_000 });
   await superdoc.waitForStable();
+  await assertDocumentApiReady(superdoc.page);
+
+  await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(1);
+  await expect.poll(async () => (await listComments(superdoc.page, { includeResolved: true })).total).toBe(4);
 
   // Both "new text" and "Test" should have comment highlights
   await superdoc.assertCommentHighlightExists({ text: 'new text' });
@@ -47,6 +52,7 @@ test('clicking a different comment activates its dialog', async ({ superdoc }) =
   await superdoc.loadDocument(DOC_PATH);
   await superdoc.page.waitForSelector('.superdoc-comment-highlight', { timeout: 30_000 });
   await superdoc.waitForStable();
+  await assertDocumentApiReady(superdoc.page);
 
   // Click on the "Test" comment highlight
   await superdoc.clickOnCommentedText('Test');

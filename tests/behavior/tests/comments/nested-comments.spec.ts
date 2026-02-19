@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
+import { assertDocumentApiReady, listComments } from '../../helpers/document-api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GDOCS_PATH = path.resolve(__dirname, '../../test-data/comments-tcs/nested-comments-gdocs.docx');
@@ -20,11 +21,13 @@ test.describe('nested comments from Google Docs', () => {
     await superdoc.loadDocument(GDOCS_PATH);
     await superdoc.page.waitForSelector('.superdoc-comment-highlight', { timeout: 30_000 });
     await superdoc.waitForStable();
+    await assertDocumentApiReady(superdoc.page);
 
     // Multiple comment highlights should be present
     const highlights = superdoc.page.locator('.superdoc-comment-highlight');
     const count = await highlights.count();
-    expect(count).toBeGreaterThanOrEqual(5);
+    expect(count).toBe(7);
+    await expect.poll(async () => (await listComments(superdoc.page, { includeResolved: true })).total).toBe(5);
 
     // Click "Licensee" — dialog shows "licensee...distribute" + "modify" replies
     await superdoc.clickOnCommentedText('Licensee');
@@ -76,11 +79,13 @@ test.describe('nested comments from MS Word', () => {
     await superdoc.loadDocument(WORD_PATH);
     await superdoc.page.waitForSelector('.superdoc-comment-highlight', { timeout: 30_000 });
     await superdoc.waitForStable();
+    await assertDocumentApiReady(superdoc.page);
 
     // Multiple comment highlights should be present
     const highlights = superdoc.page.locator('.superdoc-comment-highlight');
     const count = await highlights.count();
-    expect(count).toBeGreaterThanOrEqual(5);
+    expect(count).toBe(7);
+    await expect.poll(async () => (await listComments(superdoc.page, { includeResolved: true })).total).toBe(5);
 
     // Click "modify" — dialog shows "comment on modify"
     await superdoc.clickOnCommentedText('modify');

@@ -1,54 +1,5 @@
-import { type Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
-
-/**
- * Replace a text placeholder with a formatted field annotation.
- */
-async function replaceTextWithAnnotation(
-  page: Page,
-  searchText: string,
-  displayLabel: string,
-  fieldId: string,
-  formatting: { bold?: boolean; italic?: boolean; underline?: boolean } = {},
-) {
-  await page.evaluate(
-    ({ search, label, id, format }: any) => {
-      const editor = (window as any).editor;
-      const doc = editor.state.doc;
-      let found: { from: number; to: number } | null = null;
-
-      doc.descendants((node: any, pos: number) => {
-        if (found) return false;
-        if (node.isText && node.text) {
-          const index = node.text.indexOf(search);
-          if (index !== -1) {
-            found = { from: pos + index, to: pos + index + search.length };
-            return false;
-          }
-        }
-        return true;
-      });
-
-      if (!found) throw new Error(`Text "${search}" not found`);
-
-      editor.commands.replaceWithFieldAnnotation([
-        {
-          from: (found as any).from,
-          to: (found as any).to,
-          attrs: {
-            type: 'text',
-            displayLabel: label,
-            fieldId: id,
-            fieldColor: '#6366f1',
-            highlighted: true,
-            ...format,
-          },
-        },
-      ]);
-    },
-    { search: searchText, label: displayLabel, id: fieldId, format: formatting },
-  );
-}
+import { replaceTextWithAnnotation } from '../../helpers/field-annotations.js';
 
 test('field annotations render with bold, italic, underline formatting', async ({ superdoc }) => {
   // Type placeholders
@@ -66,15 +17,31 @@ test('field annotations render with bold, italic, underline formatting', async (
   await superdoc.waitForStable();
 
   // Replace each placeholder with a field annotation
-  await replaceTextWithAnnotation(superdoc.page, '[PLAIN]', 'Plain text', 'field-plain');
-  await replaceTextWithAnnotation(superdoc.page, '[BOLD]', 'Bold text', 'field-bold', { bold: true });
-  await replaceTextWithAnnotation(superdoc.page, '[ITALIC]', 'Italic text', 'field-italic', { italic: true });
-  await replaceTextWithAnnotation(superdoc.page, '[UNDERLINE]', 'Underlined', 'field-underline', { underline: true });
-  await replaceTextWithAnnotation(superdoc.page, '[BOLD_ITALIC]', 'Bold italic', 'field-bi', {
+  await replaceTextWithAnnotation(superdoc.page, '[PLAIN]', { displayLabel: 'Plain text', fieldId: 'field-plain' });
+  await replaceTextWithAnnotation(superdoc.page, '[BOLD]', {
+    displayLabel: 'Bold text',
+    fieldId: 'field-bold',
+    bold: true,
+  });
+  await replaceTextWithAnnotation(superdoc.page, '[ITALIC]', {
+    displayLabel: 'Italic text',
+    fieldId: 'field-italic',
+    italic: true,
+  });
+  await replaceTextWithAnnotation(superdoc.page, '[UNDERLINE]', {
+    displayLabel: 'Underlined',
+    fieldId: 'field-underline',
+    underline: true,
+  });
+  await replaceTextWithAnnotation(superdoc.page, '[BOLD_ITALIC]', {
+    displayLabel: 'Bold italic',
+    fieldId: 'field-bi',
     bold: true,
     italic: true,
   });
-  await replaceTextWithAnnotation(superdoc.page, '[ALL]', 'All formats', 'field-all', {
+  await replaceTextWithAnnotation(superdoc.page, '[ALL]', {
+    displayLabel: 'All formats',
+    fieldId: 'field-all',
     bold: true,
     italic: true,
     underline: true,

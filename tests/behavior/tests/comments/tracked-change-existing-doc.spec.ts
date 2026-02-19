@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
+import { assertDocumentApiReady, getDocumentText, listTrackChanges } from '../../helpers/document-api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/comments-tcs/tracked-changes.docx');
@@ -13,9 +14,9 @@ test.use({ config: { toolbar: 'full', comments: 'on', trackChanges: true } });
 test('tracked change replacement in existing document', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);
   await superdoc.waitForStable();
+  await assertDocumentApiReady(superdoc.page);
 
-  // Verify the document loaded with content
-  const textBefore = await superdoc.getTextContent();
+  const textBefore = await getDocumentText(superdoc.page);
   expect(textBefore.length).toBeGreaterThan(0);
 
   // Grab the first line's text before replacing
@@ -34,14 +35,13 @@ test('tracked change replacement in existing document', async ({ superdoc }) => 
   await superdoc.type('programmatically inserted');
   await superdoc.waitForStable();
 
-  // The new text should be in the document
-  await superdoc.assertTextContains('programmatically inserted');
-
-  // A tracked insert decoration should exist for the new text
-  await superdoc.assertTrackedChangeExists('insert');
-
-  // A tracked delete decoration should exist for the replaced text
-  await superdoc.assertTrackedChangeExists('delete');
+  await expect.poll(() => getDocumentText(superdoc.page)).toContain('programmatically inserted');
+  await expect
+    .poll(async () => (await listTrackChanges(superdoc.page, { type: 'insert' })).total)
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(async () => (await listTrackChanges(superdoc.page, { type: 'delete' })).total)
+    .toBeGreaterThanOrEqual(1);
 
   // The floating comment dialog for our change should appear with tracked change details.
   // Scope to .floating-comment > .comments-dialog to skip the measurement-layer duplicate.

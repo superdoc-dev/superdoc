@@ -1,28 +1,28 @@
 import { test, expect } from '../../fixtures/superdoc.js';
+import { assertDocumentApiReady, listComments } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on' } });
 
 test('editing a comment updates its text', async ({ superdoc }) => {
+  await assertDocumentApiReady(superdoc.page);
+
   await superdoc.type('hello comments');
   await superdoc.waitForStable();
 
-  // Select "comments"
+  // Select "comments" and add an initial comment through the UI.
   const pos = await superdoc.findTextPos('comments');
   await superdoc.setTextSelection(pos, pos + 'comments'.length);
   await superdoc.waitForStable();
 
-  // Click the comment tool button in the bubble
   const bubble = superdoc.page.locator('.superdoc__tools');
   await expect(bubble).toBeVisible({ timeout: 5_000 });
   await bubble.locator('[data-id="is-tool"]').click();
   await superdoc.waitForStable();
 
-  // Pending comment dialog should open — type and submit
   const pendingDialog = superdoc.page.locator('.comments-dialog').first();
   await pendingDialog.locator('.comment-entry .editor-element').first().click();
   await superdoc.page.keyboard.type('original comment');
   await superdoc.waitForStable();
-
   await pendingDialog.locator('.sd-button.primary', { hasText: 'Comment' }).first().click();
   await superdoc.waitForStable();
 
@@ -61,6 +61,14 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   // After update the dialog loses is-active; verify the text changed via the visible sidebar dialog
   const updatedDialog = superdoc.page.locator('.floating-comment > .comments-dialog');
   await expect(updatedDialog.locator('.comment-body .comment').first()).toContainText('changed comment');
+  // CommentInfo.text is optional in the contract — some adapters don't populate it.
+  // Verify via the API when available; the DOM assertion above covers all adapters.
+  const listed = await listComments(superdoc.page, { includeResolved: true });
+  expect(listed.total).toBeGreaterThanOrEqual(1);
+  const commentTexts = listed.matches.map((e) => e.text).filter(Boolean);
+  if (commentTexts.length > 0) {
+    expect(commentTexts).toContain('changed comment');
+  }
 
   // Comment highlight should still exist
   await superdoc.assertCommentHighlightExists({ text: 'comments' });

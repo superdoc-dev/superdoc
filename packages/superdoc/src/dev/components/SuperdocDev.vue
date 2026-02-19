@@ -242,6 +242,7 @@ const init = async () => {
   superdoc.value?.destroy?.();
   superdoc.value = null;
   activeEditor.value = null;
+  currentZoom.value = 100;
 
   let testId = 'document-123';
 

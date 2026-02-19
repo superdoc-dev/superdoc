@@ -26,6 +26,7 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
     className,
     style,
     documentHeight = '600px',
+    pdf,
   } = props;
 
   const [scrolled, setScrolled] = useState(!document.validation?.scroll?.required);
@@ -204,10 +205,11 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
 
       instance = new SuperDoc({
         selector: containerRef.current!,
-        document: document.source,
+        document: pdf && typeof document.source === 'string' ? { url: document.source, type: 'pdf' } : document.source,
         documentMode: 'viewing',
         modules: {
           comments: false,
+          ...(pdf ? { pdf } : {}),
         },
         viewOptions: {
           layout: document.viewOptions?.layout ?? (document.layoutMode === 'responsive' ? 'web' : 'print'),
@@ -218,6 +220,11 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
           if (instance?.activeEditor) {
             discoverAndApplyFields(instance.activeEditor);
           }
+          addAuditEvent({ type: 'ready' });
+          setIsReady(true);
+        },
+        onPdfDocumentReady: () => {
+          if (aborted) return;
           addAuditEvent({ type: 'ready' });
           setIsReady(true);
         },
@@ -238,7 +245,7 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
       superdocRef.current = null;
     };
     // Use primitives to avoid re-init on every render when object references change
-  }, [document.source, document.mode, document.layoutMode, document.viewOptions?.layout, discoverAndApplyFields]);
+  }, [document.source, document.mode, document.layoutMode, document.viewOptions?.layout, pdf, discoverAndApplyFields]);
 
   useEffect(() => {
     if (!document.validation?.scroll?.required || !isReady) return;

@@ -40,6 +40,31 @@ describe('FlowBlockCache', () => {
     expect(result.entry!.blocks).toBe(mockBlocks);
   });
 
+  it('retains serialized node across fast-path hits so external fallback stays incremental', () => {
+    const cache = new FlowBlockCache();
+    const node = makeParagraphNode('hello', 5);
+
+    // Render 1: cache is populated with serialized JSON.
+    cache.begin();
+    cache.set('p1', JSON.stringify(node), 5, mockBlocks, 0);
+    cache.commit();
+
+    // Render 2: local-only fast path hit, caller writes lookup payload into next generation.
+    cache.begin();
+    const fastPathHit = cache.get('p1', node);
+    expect(fastPathHit.entry).not.toBeNull();
+    cache.set('p1', fastPathHit.nodeJson, fastPathHit.nodeRev, fastPathHit.entry!.blocks, 0);
+    cache.commit();
+
+    // Render 3: collaboration/external change mode requires JSON fallback.
+    // With unchanged content this should still be a HIT.
+    cache.setHasExternalChanges(true);
+    cache.begin();
+    const externalFallback = cache.get('p1', node);
+
+    expect(externalFallback.entry).not.toBeNull();
+  });
+
   it('returns MISS when sdBlockRev differs', () => {
     const cache = new FlowBlockCache();
     const nodeV1 = makeParagraphNode('hello', 1);

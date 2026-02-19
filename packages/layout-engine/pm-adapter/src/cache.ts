@@ -114,12 +114,8 @@ export class FlowBlockCache {
     const cached = this.#previous.get(id);
     if (!cached) {
       this.#misses++;
-      if (nodeRev != null) {
-        return { entry: null, nodeRev };
-      }
-      // Serialize once - this is reused in set() to avoid double serialization
       const nodeJson = JSON.stringify(node);
-      return { entry: null, nodeJson };
+      return { entry: null, nodeJson, nodeRev };
     }
 
     if (nodeRev != null && cached.nodeRev != null) {
@@ -135,7 +131,7 @@ export class FlowBlockCache {
       // been updated despite content changes — fall through to JSON comparison.
       if (!this.#hasExternalChanges) {
         this.#hits++;
-        return { entry: cached, nodeRev };
+        return { entry: cached, nodeRev, nodeJson: cached.nodeJson };
       }
     }
 

@@ -418,7 +418,6 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           modules,
           toolbar: toolbarSettings?.selector,
           cspNonce,
-          telemetry: { enabled: false, metadata: { source: 'template-builder' } },
           onReady: handleReady,
         });
 

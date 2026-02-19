@@ -457,6 +457,22 @@ describe('AIActionsService', () => {
       expect(result.success).toBe(true);
       expect(result.results).toHaveLength(1);
     });
+
+    it('should throw when trackChanges and contentType: html are both set', async () => {
+      const actions = new AIActionsService(mockProvider, mockEditor, () => mockEditor.state.doc.textContent, false);
+
+      await expect(
+        actions.literalReplace('A', '<strong>B</strong>', { trackChanges: true, contentType: 'html' }),
+      ).rejects.toThrow('trackChanges and contentType');
+    });
+
+    it('should throw when trackChanges and contentType: markdown are both set', async () => {
+      const actions = new AIActionsService(mockProvider, mockEditor, () => mockEditor.state.doc.textContent, false);
+
+      await expect(
+        actions.literalReplace('A', '**B**', { trackChanges: true, contentType: 'markdown' }),
+      ).rejects.toThrow('trackChanges and contentType');
+    });
   });
 
   describe('insertTrackedChange', () => {
@@ -802,6 +818,200 @@ describe('AIActionsService', () => {
       expect(result.success).toBe(true);
       expect(streamSpy).not.toHaveBeenCalled();
       expect(completionSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('insertContent with contentType', () => {
+    it('should disable streaming when contentType is html', async () => {
+      const response = JSON.stringify({
+        success: true,
+        results: [{ suggestedText: '<p>Hello <a href="https://example.com">link</a></p>' }],
+      });
+
+      const streamSpy = vi.fn().mockImplementation(async function* () {
+        yield response;
+      });
+      const completionSpy = vi.fn().mockResolvedValue(response);
+
+      mockProvider.streamCompletion = streamSpy as typeof mockProvider.streamCompletion;
+      mockProvider.getCompletion = completionSpy;
+
+      const insertFormattedSpy = vi
+        .spyOn(EditorAdapter.prototype, 'insertFormattedContent')
+        .mockImplementation(() => {});
+
+      const actions = new AIActionsService(
+        mockProvider,
+        mockEditor,
+        () => mockEditor.state.doc.textContent,
+        false,
+        undefined,
+        true, // streaming preference enabled
+      );
+
+      const result = await actions.insertContent('generate html', { contentType: 'html' });
+
+      expect(result.success).toBe(true);
+      // Streaming must be disabled for HTML content
+      expect(streamSpy).not.toHaveBeenCalled();
+      expect(completionSpy).toHaveBeenCalled();
+      // Should use insertFormattedContent, not insertText
+      expect(insertFormattedSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ contentType: 'html' }),
+      );
+
+      insertFormattedSpy.mockRestore();
+    });
+
+    it('should disable streaming when contentType is markdown', async () => {
+      const response = JSON.stringify({
+        success: true,
+        results: [{ suggestedText: '# Title\n\n[link](https://example.com)' }],
+      });
+
+      const streamSpy = vi.fn().mockImplementation(async function* () {
+        yield response;
+      });
+      const completionSpy = vi.fn().mockResolvedValue(response);
+
+      mockProvider.streamCompletion = streamSpy as typeof mockProvider.streamCompletion;
+      mockProvider.getCompletion = completionSpy;
+
+      const insertFormattedSpy = vi
+        .spyOn(EditorAdapter.prototype, 'insertFormattedContent')
+        .mockImplementation(() => {});
+
+      const actions = new AIActionsService(
+        mockProvider,
+        mockEditor,
+        () => mockEditor.state.doc.textContent,
+        false,
+        undefined,
+        true,
+      );
+
+      const result = await actions.insertContent('generate markdown', { contentType: 'markdown' });
+
+      expect(result.success).toBe(true);
+      expect(streamSpy).not.toHaveBeenCalled();
+      expect(completionSpy).toHaveBeenCalled();
+      expect(insertFormattedSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ contentType: 'markdown' }),
+      );
+
+      insertFormattedSpy.mockRestore();
+    });
+
+    it('should route through insertFormattedContent with position: before for html', async () => {
+      const response = JSON.stringify({
+        success: true,
+        results: [{ suggestedText: '<p>Before content</p>' }],
+      });
+
+      mockProvider.getCompletion = vi.fn().mockResolvedValue(response);
+
+      const insertFormattedSpy = vi
+        .spyOn(EditorAdapter.prototype, 'insertFormattedContent')
+        .mockImplementation(() => {});
+
+      const actions = new AIActionsService(mockProvider, mockEditor, () => mockEditor.state.doc.textContent, false);
+      const result = await actions.insertContent('add content', {
+        position: 'before',
+        contentType: 'html',
+      });
+
+      expect(result.success).toBe(true);
+      expect(insertFormattedSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ position: 'before', contentType: 'html' }),
+      );
+
+      insertFormattedSpy.mockRestore();
+    });
+
+    it('should route through insertFormattedContent with position: after for html', async () => {
+      const response = JSON.stringify({
+        success: true,
+        results: [{ suggestedText: '<p>After content</p>' }],
+      });
+
+      mockProvider.getCompletion = vi.fn().mockResolvedValue(response);
+
+      const insertFormattedSpy = vi
+        .spyOn(EditorAdapter.prototype, 'insertFormattedContent')
+        .mockImplementation(() => {});
+
+      const actions = new AIActionsService(mockProvider, mockEditor, () => mockEditor.state.doc.textContent, false);
+      const result = await actions.insertContent('add content', {
+        position: 'after',
+        contentType: 'html',
+      });
+
+      expect(result.success).toBe(true);
+      expect(insertFormattedSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ position: 'after', contentType: 'html' }),
+      );
+
+      insertFormattedSpy.mockRestore();
+    });
+
+    it('should use plain insertText path when contentType is text', async () => {
+      const response = JSON.stringify({
+        success: true,
+        results: [{ suggestedText: 'Plain text content' }],
+      });
+
+      mockProvider.getCompletion = vi.fn().mockResolvedValue(response);
+
+      const insertTextSpy = vi.spyOn(EditorAdapter.prototype, 'insertText').mockImplementation(() => {});
+      const insertFormattedSpy = vi
+        .spyOn(EditorAdapter.prototype, 'insertFormattedContent')
+        .mockImplementation(() => {});
+
+      const actions = new AIActionsService(mockProvider, mockEditor, () => mockEditor.state.doc.textContent, false);
+      const result = await actions.insertContent('add content', { contentType: 'text' });
+
+      expect(result.success).toBe(true);
+      expect(insertFormattedSpy).not.toHaveBeenCalled();
+      expect(insertTextSpy).toHaveBeenCalled();
+
+      insertTextSpy.mockRestore();
+      insertFormattedSpy.mockRestore();
+    });
+  });
+
+  describe('literalReplace with contentType', () => {
+    let literalSpy: ReturnType<typeof vi.spyOn<typeof EditorAdapter.prototype, 'findLiteralMatches'>>;
+    let insertFormattedSpy: ReturnType<typeof vi.spyOn<typeof EditorAdapter.prototype, 'insertFormattedContent'>>;
+
+    beforeEach(() => {
+      literalSpy = vi.spyOn(EditorAdapter.prototype, 'findLiteralMatches');
+      insertFormattedSpy = vi.spyOn(EditorAdapter.prototype, 'insertFormattedContent').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      literalSpy.mockRestore();
+      insertFormattedSpy.mockRestore();
+    });
+
+    it('should route replacement through insertFormattedContent when contentType is html', async () => {
+      const match = { from: 0, to: 5, text: 'Hello' };
+      literalSpy.mockReturnValueOnce([match]).mockReturnValue([]);
+
+      const actions = new AIActionsService(mockProvider, mockEditor, () => mockEditor.state.doc.textContent, false);
+      const result = await actions.literalReplace('Hello', '<p><strong>Hi</strong></p>', {
+        contentType: 'html',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalled();
+      expect(insertFormattedSpy).toHaveBeenCalledWith(
+        '<p><strong>Hi</strong></p>',
+        expect.objectContaining({ contentType: 'html', position: 'replace' }),
+      );
     });
   });
 

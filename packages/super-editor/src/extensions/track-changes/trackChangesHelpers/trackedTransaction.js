@@ -110,6 +110,8 @@ export const trackedTransaction = ({ tr, state, user }) => {
     } else if (trackMeta?.insertedTo !== undefined) {
       const boundedInsertedTo = Math.max(0, Math.min(trackMeta.insertedTo, newTr.doc.content.size));
       const $insertPos = newTr.doc.resolve(boundedInsertedTo);
+      // Near is used here because its safer than an exact position
+      // exact is not guaranteed to be a valid cursor position
       newTr.setSelection(TextSelection.near($insertPos, 1));
     } else {
       const deletionMarkSchema = state.schema.marks[TrackDeleteMarkName];

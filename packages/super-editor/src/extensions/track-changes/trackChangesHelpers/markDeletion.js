@@ -78,7 +78,7 @@ export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
     const insertMark = node.marks.find((mark) => mark.type.name === TrackInsertMarkName);
     const existingDeleteMarks = node.marks.filter((mark) => mark.type.name === TrackDeleteMarkName);
 
-    if (node.isInline && insertMark && isOwnInsertion(insertMark)) {
+    if (insertMark && isOwnInsertion(insertMark)) {
       const removeStep = new ReplaceStep(mappedFrom, mappedTo, Slice.empty);
       if (!tr.maybeStep(removeStep).failed) {
         deletionMap.appendMap(removeStep.getMap());

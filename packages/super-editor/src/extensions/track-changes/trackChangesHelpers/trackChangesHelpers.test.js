@@ -24,6 +24,7 @@ import { handleTrackChangeNode } from '@converter/v2/importer/trackChangesImport
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { findTextPos } from './testUtils.js';
 
 describe('trackChangesHelpers', () => {
   let editor;
@@ -56,16 +57,6 @@ describe('trackChangesHelpers', () => {
       doc,
       plugins: basePlugins,
     });
-
-  const findTextPos = (docNode, exactText) => {
-    let found = null;
-    docNode.descendants((node, pos) => {
-      if (found) return false;
-      if (!node.isText || node.text !== exactText) return;
-      found = pos;
-    });
-    return found;
-  };
 
   it('findMarkPosition returns full mark span', () => {
     const mark = schema.marks[TrackInsertMarkName].create({

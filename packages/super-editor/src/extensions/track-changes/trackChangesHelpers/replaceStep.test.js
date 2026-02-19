@@ -5,6 +5,7 @@ import { trackedTransaction, documentHelpers } from './index.js';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { findTextPos } from './testUtils.js';
 
 describe('trackChangesHelpers replaceStep', () => {
   let editor;
@@ -31,17 +32,6 @@ describe('trackChangesHelpers replaceStep', () => {
       doc,
       plugins: basePlugins,
     });
-
-  const findTextPos = (docNode, exactText) => {
-    let found = null;
-    docNode.descendants((node, pos) => {
-      if (found) return false;
-      if (!node.isText) return;
-      if (node.text !== exactText) return;
-      found = pos;
-    });
-    return found;
-  };
 
   const getParagraphRange = (docNode, index) => {
     let range = null;

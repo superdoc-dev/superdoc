@@ -47,6 +47,7 @@ import { createLinkedChildEditor } from '@core/child-editor/index.js';
 import { unflattenListsInHtml } from './inputRules/html/html-helpers.js';
 import { SuperValidator } from '@core/super-validator/index.js';
 import { createDocFromMarkdown, createDocFromHTML } from '@core/helpers/index.js';
+import { COMMENT_FILE_BASENAMES } from '@core/super-converter/constants.js';
 import { isHeadless } from '../utils/headless-helpers.js';
 import { canUseDOM } from '../utils/canUseDOM.js';
 import { buildSchemaSummary } from './schema-summary.js';
@@ -2586,7 +2587,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs?: boolean;
     fieldsHighlightColor?: string | null;
     compression?: 'DEFLATE' | 'STORE';
-  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
+  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string | null> | ProseMirrorJSON | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
@@ -2654,7 +2655,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
       const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
 
-      const updatedDocs: Record<string, string> = {
+      const updatedDocs: Record<string, string | null> = {
         ...this.options.customUpdatedFiles,
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
@@ -2677,26 +2678,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
         updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
       }
 
-      if (preparedComments.length) {
-        const commentsXml = this.converter.schemaToXml(this.converter.convertedXml['word/comments.xml'].elements[0]);
-        updatedDocs['word/comments.xml'] = String(commentsXml);
-
-        const commentsExtended = this.converter.convertedXml['word/commentsExtended.xml'];
-        if (commentsExtended?.elements?.[0]) {
-          const commentsExtendedXml = this.converter.schemaToXml(commentsExtended.elements[0]);
-          updatedDocs['word/commentsExtended.xml'] = String(commentsExtendedXml);
-        }
-
-        const commentsExtensible = this.converter.convertedXml['word/commentsExtensible.xml'];
-        if (commentsExtensible?.elements?.[0]) {
-          const commentsExtensibleXml = this.converter.schemaToXml(commentsExtensible.elements[0]);
-          updatedDocs['word/commentsExtensible.xml'] = String(commentsExtensibleXml);
-        }
-
-        const commentsIds = this.converter.convertedXml['word/commentsIds.xml'];
-        if (commentsIds?.elements?.[0]) {
-          const commentsIdsXml = this.converter.schemaToXml(commentsIds.elements[0]);
-          updatedDocs['word/commentsIds.xml'] = String(commentsIdsXml);
+      // Serialize each comment file if it exists in convertedXml, otherwise mark as null
+      // for deletion from the zip (removes stale originals).
+      const commentFiles = COMMENT_FILE_BASENAMES.map((name) => `word/${name}`);
+      for (const path of commentFiles) {
+        const data = this.converter.convertedXml[path];
+        if (data?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(data.elements[0]));
+        } else {
+          updatedDocs[path] = null;
         }
       }
 

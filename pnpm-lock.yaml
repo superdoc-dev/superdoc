@@ -411,22 +411,54 @@ importers:
         version: 3.2.0
 
   apps/cli:
+    dependencies:
+      '@hocuspocus/provider':
+        specifier: 'catalog:'
+        version: 2.15.3(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19)
+      '@superdoc/document-api':
+        specifier: workspace:*
+        version: link:../../packages/document-api
+      fast-glob:
+        specifier: 'catalog:'
+        version: 3.3.3
+      y-websocket:
+        specifier: 'catalog:'
+        version: 3.0.0(yjs@13.6.19)
+      yjs:
+        specifier: 'catalog:'
+        version: 13.6.19
     devDependencies:
+      '@superdoc/super-editor':
+        specifier: workspace:*
+        version: link:../../packages/super-editor
       '@types/bun':
         specifier: 'catalog:'
         version: 1.3.8
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.2
-      fast-glob:
-        specifier: 'catalog:'
-        version: 3.3.3
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+    optionalDependencies:
+      '@superdoc-dev/cli-darwin-arm64':
+        specifier: workspace:*
+        version: link:platforms/cli-darwin-arm64
+      '@superdoc-dev/cli-darwin-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-darwin-x64
+      '@superdoc-dev/cli-linux-arm64':
+        specifier: workspace:*
+        version: link:platforms/cli-linux-arm64
+      '@superdoc-dev/cli-linux-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-linux-x64
+      '@superdoc-dev/cli-windows-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-windows-x64
 
   apps/docs:
     devDependencies:

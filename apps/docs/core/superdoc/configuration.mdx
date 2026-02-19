@@ -36,15 +36,21 @@ new SuperDoc({
     ```json
     {
       id: 'doc-123', // string
-      type: 'docx', // string, can be 'docx' or 'pdf'
-      data: File // File or Blob
+      type: 'pdf', // string, can be 'docx' or 'pdf'
+      data: File, // local File or Blob source
+      // OR
+      url: 'https://example.com/report.pdf' // remote URL source
     }
     ```
     - `string` - URL to fetch
     - `File` - From file input
   </Expandable>
   
-  <Note>Use `documents` array for multiple documents instead</Note>
+  <Note>
+    For a `Document` object, use `data` for local files and `url` for remote files.
+    Provide one source field (`data` or `url`) per document object.
+    Use `documents` array for multiple documents instead.
+  </Note>
 </ParamField>
 
 <ParamField path="documents" type="Document[]">

@@ -2347,6 +2347,60 @@ describe('layoutTableBlock', () => {
         expect(fragments[0].width).toBe(170); // 200 - 30
       });
 
+      it('should not shrink width when table already fits after positive indent', () => {
+        const block = createMockTableBlock(1);
+        block.attrs = { tableIndent: { width: 30 } } as TableAttrs;
+        const measure = createMockTableMeasure([100], [20]);
+
+        const fragments: TableFragment[] = [];
+        const mockPage = { fragments };
+
+        layoutTableBlock({
+          block,
+          measure,
+          columnWidth: 200,
+          ensurePage: () => ({
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 1000,
+          }),
+          advanceColumn: (state) => state,
+          columnX: () => 0,
+        });
+
+        expect(fragments).toHaveLength(1);
+        expect(fragments[0].x).toBe(30);
+        expect(fragments[0].width).toBe(100);
+      });
+
+      it('should avoid double-shrinking when measure width already reflects tblGrid with tblInd', () => {
+        const block = createMockTableBlock(1);
+        block.attrs = { tableIndent: { width: 1440 } } as TableAttrs;
+        const measure = createMockTableMeasure([7910], [20]);
+
+        const fragments: TableFragment[] = [];
+        const mockPage = { fragments };
+
+        layoutTableBlock({
+          block,
+          measure,
+          columnWidth: 9350,
+          ensurePage: () => ({
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 1000,
+          }),
+          advanceColumn: (state) => state,
+          columnX: () => 0,
+        });
+
+        expect(fragments).toHaveLength(1);
+        expect(fragments[0].x).toBe(1440);
+        expect(fragments[0].width).toBe(7910);
+      });
+
       it('should apply negative indent correctly (extends into margin)', () => {
         const block = createMockTableBlock(1);
         block.attrs = { tableIndent: { width: -40 } } as TableAttrs;
@@ -2465,7 +2519,7 @@ describe('layoutTableBlock', () => {
         expect(fragments.length).toBeGreaterThan(1);
         fragments.forEach((fragment) => {
           expect(fragment.x).toBe(25);
-          expect(fragment.width).toBe(75); // 100 - 25 (measure totalWidth is used, not columnWidth)
+          expect(fragment.width).toBe(100);
         });
       });
 
@@ -2533,7 +2587,7 @@ describe('layoutTableBlock', () => {
 
         expect(fragments).toHaveLength(1);
         expect(fragments[0].x).toBe(40);
-        expect(fragments[0].width).toBe(60); // 100 - 40
+        expect(fragments[0].width).toBe(100);
       });
 
       it('should apply tableIndent to tables with no rows but non-zero totalHeight', () => {
@@ -2561,7 +2615,7 @@ describe('layoutTableBlock', () => {
 
         expect(fragments).toHaveLength(1);
         expect(fragments[0].x).toBe(20);
-        expect(fragments[0].width).toBe(80); // 100 - 20
+        expect(fragments[0].width).toBe(100);
       });
 
       it('should apply tableIndent to partial row fragments', () => {
@@ -2600,7 +2654,7 @@ describe('layoutTableBlock', () => {
         expect(fragments.length).toBeGreaterThan(1);
         fragments.forEach((fragment) => {
           expect(fragment.x).toBe(30);
-          expect(fragment.width).toBe(70); // 100 - 30
+          expect(fragment.width).toBe(100);
         });
       });
     });

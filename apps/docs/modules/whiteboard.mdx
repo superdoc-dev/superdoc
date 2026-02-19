@@ -47,6 +47,7 @@ All APIs are exposed via `superdoc.whiteboard`.
 ### `register`
 
 Register palette items (e.g. stickers, comments).
+For stickers, `src` is an image URL and can point to common browser-supported formats (for example: `svg`, `png`, `jpg`, `webp`, or data URL).
 
 ```javascript
 superdoc.whiteboard.register('stickers', [
@@ -57,6 +58,29 @@ superdoc.whiteboard.register('comments', [
   { id: 'great-job', text: 'Great job!' },
 ]);
 ```
+
+### Sticker drag-and-drop checklist
+
+For sticker drag/drop, keep the id contract explicit:
+
+1. Register sticker ids when whiteboard is created.
+2. Set `application/sticker` to the exact sticker id on drag start.
+3. Use `text/plain` only as optional fallback content (empty string is fine).
+
+```javascript
+superdoc.on('whiteboard:init', ({ whiteboard }) => {
+  whiteboard.register('stickers', [
+    { id: 'cite-source', src: '/stickers/cite-source.svg', width: 52, height: 52 },
+  ]);
+});
+
+function onStickerDragStart(event, stickerId) {
+  event.dataTransfer.setData('application/sticker', stickerId);
+  event.dataTransfer.setData('text/plain', '');
+}
+```
+
+If a dropped id is not in the registered sticker list, whiteboard continues through other drop handlers and may use `text/plain`.
 
 ### `getType`
 

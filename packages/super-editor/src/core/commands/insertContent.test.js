@@ -327,3 +327,71 @@ describe('insertContent (integration) list export', () => {
     expect(Number(topBorder?.attributes?.['w:sz'])).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// CI-only: horizontal rule insertion (requires real Editor which depends on
+// @superdoc/document-api — unresolvable in local workspace, works in CI).
+// ---------------------------------------------------------------------------
+describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', () => {
+  let helpers = null;
+  let cachedDocxData = null;
+
+  const setupEditor = async () => {
+    vi.resetModules();
+    vi.doUnmock('../helpers/contentProcessor.js');
+
+    if (!helpers) {
+      helpers = await import('../../tests/helpers/helpers.js');
+    }
+    if (!cachedDocxData) {
+      cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+    }
+
+    const { docx, media, mediaFiles, fonts } = cachedDocxData;
+    const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    return editor;
+  };
+
+  const countHorizontalRules = (editor) => {
+    let count = 0;
+    const content = editor.getJSON().content || [];
+    for (const block of content) {
+      if (block.type === 'contentBlock' && block.attrs?.horizontalRule) count++;
+      // contentBlock is inline — check inside paragraph > run or paragraph directly
+      for (const inline of block.content || []) {
+        if (inline.type === 'contentBlock' && inline.attrs?.horizontalRule) count++;
+        for (const child of inline.content || []) {
+          if (child.type === 'contentBlock' && child.attrs?.horizontalRule) count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  it('insertContent with contentType html creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('<hr>', { contentType: 'html' });
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+
+  it('insertContent with contentType markdown creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('---', { contentType: 'markdown' });
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+
+  it('insertContent with bare <hr> (no contentType) creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('<hr>');
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+});

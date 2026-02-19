@@ -278,4 +278,52 @@ describe('insertContent (integration) list export', () => {
     expect(first.numId).toBeDefined();
     expect(first.ilvl).toBe('0');
   });
+
+  it('defaults imported HTML tables to 100% width', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent(
+      '<table><tbody><tr><td>Query</td><td>Assessment</td></tr><tr><td>A</td><td>B</td></tr></tbody></table>',
+      { contentType: 'html' },
+    );
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
+
+  it('normalizes imported HTML table header borders for render and export parity', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent(
+      '<table><thead><tr><th>Search Query</th><th>Findings / Assessment</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>',
+      { contentType: 'html' },
+    );
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    const headerCell = tableNode?.content?.[0]?.content?.[0];
+    expect(headerCell?.type).toBe('tableHeader');
+    const borders = headerCell?.attrs?.borders;
+    expect(borders?.top).toBeDefined();
+    expect(borders?.right).toBeDefined();
+    expect(borders?.bottom).toBeDefined();
+    expect(borders?.left).toBeDefined();
+
+    const result = await exportFromEditorContent(editor);
+    const body = result.elements?.find((el) => el.name === 'w:body');
+    const table = body?.elements?.find((el) => el.name === 'w:tbl');
+    const firstRow = table?.elements?.find((el) => el.name === 'w:tr');
+    const firstCell = firstRow?.elements?.find((el) => el.name === 'w:tc');
+    const firstCellProperties = firstCell?.elements?.find((el) => el.name === 'w:tcPr');
+    const firstCellBorders = firstCellProperties?.elements?.find((el) => el.name === 'w:tcBorders');
+    const topBorder = firstCellBorders?.elements?.find((el) => el.name === 'w:top');
+
+    expect(firstCellBorders).toBeDefined();
+    expect(topBorder?.attributes?.['w:val']).toBe('single');
+    expect(Number(topBorder?.attributes?.['w:sz'])).toBeGreaterThan(0);
+  });
 });

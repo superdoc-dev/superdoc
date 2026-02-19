@@ -1,6 +1,8 @@
 // @ts-nocheck
 
 import { Node, Attribute } from '@core/index.js';
+import { createCellBorders } from '../table-cell/helpers/createCellBorders.js';
+import { renderCellBorderStyle } from '../table-cell/helpers/renderCellBorderStyle.js';
 
 /**
  * Configuration options for TableHeader
@@ -16,6 +18,7 @@ import { Node, Attribute } from '@core/index.js';
  * @property {number} [colspan=1] - Number of columns this header spans
  * @property {number} [rowspan=1] - Number of rows this header spans
  * @property {number[]} [colwidth] - Column widths array in pixels
+ * @property {import('../table-cell/helpers/createCellBorders.js').CellBorders} [borders] - Cell border configuration
  */
 
 /**
@@ -64,6 +67,11 @@ export const TableHeader = Node.create({
             'data-colwidth': attrs.colwidth.join(','),
           };
         },
+      },
+
+      borders: {
+        default: () => createCellBorders(),
+        renderDOM: ({ borders }) => renderCellBorderStyle(borders),
       },
 
       __placeholder: {

@@ -1,33 +1,56 @@
 {
   "name": "@superdoc-dev/cli",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "bin": {
     "superdoc": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "skill"
   ],
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target node --format esm",
-    "test": "bun test",
+    "build:native": "bun build src/index.ts --compile --outfile dist/superdoc",
+    "build:native:all": "node scripts/build-native-cli.js --all",
+    "build:native:host": "node scripts/build-native-cli.js",
+    "build:stage": "node scripts/stage-artifacts.js",
+    "build:sync-version": "node scripts/sync-version.js",
+    "build:prepublish": "node scripts/build-and-stage.js",
+    "publish:platforms": "node scripts/publish.js --tag latest",
+    "publish:platforms:dry": "node scripts/publish.js --tag latest --dry-run",
+    "test": "NODE_ENV=test bun test",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "prepublishOnly": "pnpm run build",
     "release": "pnpx semantic-release",
     "release:dry-run": "pnpx semantic-release --dry-run"
   },
+  "dependencies": {
+    "@hocuspocus/provider": "catalog:",
+    "@superdoc/document-api": "workspace:*",
+    "fast-glob": "catalog:",
+    "y-websocket": "catalog:",
+    "yjs": "catalog:"
+  },
   "devDependencies": {
+    "@superdoc/super-editor": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "fast-glob": "catalog:",
     "superdoc": "workspace:*",
     "typescript": "catalog:"
   },
   "module": "src/index.ts",
+  "optionalDependencies": {
+    "@superdoc-dev/cli-darwin-arm64": "workspace:*",
+    "@superdoc-dev/cli-darwin-x64": "workspace:*",
+    "@superdoc-dev/cli-linux-x64": "workspace:*",
+    "@superdoc-dev/cli-linux-arm64": "workspace:*",
+    "@superdoc-dev/cli-windows-x64": "workspace:*"
+  },
   "publishConfig": {
     "access": "public"
   }

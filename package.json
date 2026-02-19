@@ -4,7 +4,7 @@
   "license": "AGPL-3.0",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && pnpm run test:cli",
     "test:bench": "VITEST_BENCH=true vitest run",
     "test:slow": "VITEST_SLOW=1 VITEST_DOM=node vitest run --root ./packages/super-editor --exclude '**/node_modules/**' src/tests/editor/node-import-timing.test.js",
     "test:debug": "pnpm --prefix packages/super-editor run test:debug",
@@ -60,7 +60,11 @@
     "manual-clean-tag": "bash scripts/manual-clean-tag.sh",
     "docapi:sync": "pnpm exec tsx packages/document-api/scripts/generate-contract-outputs.ts",
     "docapi:check": "pnpm exec tsx packages/document-api/scripts/check-contract-parity.ts && pnpm exec tsx packages/document-api/scripts/check-contract-outputs.ts",
-    "docapi:sync:check": "pnpm run docapi:sync && pnpm run docapi:check"
+    "docapi:sync:check": "pnpm run docapi:sync && pnpm run docapi:check",
+    "test:cli": "pnpm --prefix apps/cli run test",
+    "cli:prepare": "pnpm run test:cli && pnpm --prefix apps/cli run build:prepublish",
+    "cli:release": "pnpm run cli:prepare && pnpm --prefix apps/cli run publish:platforms",
+    "cli:release:dry": "pnpm run cli:prepare && pnpm --prefix apps/cli run publish:platforms:dry"
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",

@@ -39,6 +39,8 @@ export type ReferenceGroupKey = 'core' | 'capabilities' | 'create' | 'format' | 
 
 export interface OperationDefinitionEntry {
   memberPath: string;
+  description: string;
+  requiresDocumentContext: boolean;
   metadata: CommandStaticMetadata;
   referenceDocPath: string;
   referenceGroup: ReferenceGroupKey;
@@ -117,6 +119,8 @@ const T_NOT_FOUND_COMMAND_TRACKED = [
 export const OPERATION_DEFINITIONS = {
   find: {
     memberPath: 'find',
+    description: 'Search the document for nodes matching type, text, or attribute criteria.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       deterministicTargetResolution: false,
@@ -126,6 +130,8 @@ export const OPERATION_DEFINITIONS = {
   },
   getNode: {
     memberPath: 'getNode',
+    description: 'Retrieve a single node by target position.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -135,6 +141,8 @@ export const OPERATION_DEFINITIONS = {
   },
   getNodeById: {
     memberPath: 'getNodeById',
+    description: 'Retrieve a single node by its unique ID.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -144,12 +152,16 @@ export const OPERATION_DEFINITIONS = {
   },
   getText: {
     memberPath: 'getText',
+    description: 'Extract the plain-text content of the document.',
+    requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
   },
   info: {
     memberPath: 'info',
+    description: 'Return document metadata including revision, node count, and capabilities.',
+    requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'info.mdx',
     referenceGroup: 'core',
@@ -157,6 +169,8 @@ export const OPERATION_DEFINITIONS = {
 
   insert: {
     memberPath: 'insert',
+    description: 'Insert text or inline content at a target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
@@ -169,6 +183,8 @@ export const OPERATION_DEFINITIONS = {
   },
   replace: {
     memberPath: 'replace',
+    description: 'Replace content at a target position with new text or inline content.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -181,6 +197,8 @@ export const OPERATION_DEFINITIONS = {
   },
   delete: {
     memberPath: 'delete',
+    description: 'Delete content at a target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -194,6 +212,8 @@ export const OPERATION_DEFINITIONS = {
 
   'format.bold': {
     memberPath: 'format.bold',
+    description: 'Toggle bold formatting on the target range.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -206,6 +226,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'format.italic': {
     memberPath: 'format.italic',
+    description: 'Toggle italic formatting on the target range.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -218,6 +240,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'format.underline': {
     memberPath: 'format.underline',
+    description: 'Toggle underline formatting on the target range.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -230,6 +254,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'format.strikethrough': {
     memberPath: 'format.strikethrough',
+    description: 'Toggle strikethrough formatting on the target range.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -243,6 +269,8 @@ export const OPERATION_DEFINITIONS = {
 
   'create.paragraph': {
     memberPath: 'create.paragraph',
+    description: 'Create a new paragraph at the target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
@@ -255,6 +283,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'create.heading': {
     memberPath: 'create.heading',
+    description: 'Create a new heading at the target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
@@ -268,6 +298,8 @@ export const OPERATION_DEFINITIONS = {
 
   'lists.list': {
     memberPath: 'lists.list',
+    description: 'List all list nodes in the document, optionally filtered by scope.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -277,6 +309,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.get': {
     memberPath: 'lists.get',
+    description: 'Retrieve a specific list node by target.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -286,6 +320,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.insert': {
     memberPath: 'lists.insert',
+    description: 'Insert a new list at the target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
@@ -298,6 +334,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.setType': {
     memberPath: 'lists.setType',
+    description: 'Change the list type (ordered, unordered) of a target list.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -310,6 +348,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.indent': {
     memberPath: 'lists.indent',
+    description: 'Increase the indentation level of a list item.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -322,6 +362,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.outdent': {
     memberPath: 'lists.outdent',
+    description: 'Decrease the indentation level of a list item.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -334,6 +376,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.restart': {
     memberPath: 'lists.restart',
+    description: 'Restart numbering of an ordered list at the target item.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -346,6 +390,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.exit': {
     memberPath: 'lists.exit',
+    description: 'Exit a list context, converting the target item to a paragraph.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
@@ -359,6 +405,8 @@ export const OPERATION_DEFINITIONS = {
 
   'comments.add': {
     memberPath: 'comments.add',
+    description: 'Add a new comment thread anchored to a target range.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: false,
@@ -371,6 +419,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.edit': {
     memberPath: 'comments.edit',
+    description: 'Edit the content of an existing comment.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -383,6 +433,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.reply': {
     memberPath: 'comments.reply',
+    description: 'Add a reply to an existing comment thread.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: false,
@@ -395,6 +447,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.move': {
     memberPath: 'comments.move',
+    description: 'Move a comment thread to a new anchor range.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -407,6 +461,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.resolve': {
     memberPath: 'comments.resolve',
+    description: 'Resolve or unresolve a comment thread.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -419,6 +475,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.remove': {
     memberPath: 'comments.remove',
+    description: 'Remove a comment or reply by ID.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -431,6 +489,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.setInternal': {
     memberPath: 'comments.setInternal',
+    description: 'Toggle the internal (private) flag on a comment thread.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -443,6 +503,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.setActive': {
     memberPath: 'comments.setActive',
+    description: 'Set the active (focused) comment thread for UI highlighting.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -455,6 +517,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.goTo': {
     memberPath: 'comments.goTo',
+    description: 'Scroll the viewport to a comment thread by ID.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'conditional',
       throws: T_NOT_FOUND_COMMAND,
@@ -464,6 +528,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.get': {
     memberPath: 'comments.get',
+    description: 'Retrieve a single comment thread by ID.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -473,6 +539,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.list': {
     memberPath: 'comments.list',
+    description: 'List all comment threads in the document.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
     }),
@@ -482,6 +550,8 @@ export const OPERATION_DEFINITIONS = {
 
   'trackChanges.list': {
     memberPath: 'trackChanges.list',
+    description: 'List all tracked changes in the document.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
     }),
@@ -490,6 +560,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.get': {
     memberPath: 'trackChanges.get',
+    description: 'Retrieve a single tracked change by ID.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -499,6 +571,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.accept': {
     memberPath: 'trackChanges.accept',
+    description: 'Accept a tracked change, applying it permanently.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -511,6 +585,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.reject': {
     memberPath: 'trackChanges.reject',
+    description: 'Reject a tracked change, reverting it.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -523,6 +599,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.acceptAll': {
     memberPath: 'trackChanges.acceptAll',
+    description: 'Accept all tracked changes in the document.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -535,6 +613,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.rejectAll': {
     memberPath: 'trackChanges.rejectAll',
+    description: 'Reject all tracked changes in the document.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -548,6 +628,8 @@ export const OPERATION_DEFINITIONS = {
 
   'capabilities.get': {
     memberPath: 'capabilities',
+    description: 'Query runtime capabilities supported by the current document engine.',
+    requiresDocumentContext: false,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: NONE_THROWS,

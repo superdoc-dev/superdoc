@@ -1,7 +1,7 @@
 <script setup>
 import '@superdoc/common/styles/common-styles.css';
 import '../dev-styles.css';
-import { nextTick, onMounted, onBeforeUnmount, provide, ref, shallowRef, computed, watch } from 'vue';
+import { nextTick, onMounted, onBeforeUnmount, provide, ref, shallowRef, computed, watch, onUnmounted } from 'vue';
 
 import { SuperDoc } from '@superdoc/index.js';
 import { DOCX, PDF, HTML } from '@superdoc/common';
@@ -15,6 +15,7 @@ import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import SidebarLayout from './sidebar/SidebarLayout.vue';
+import CustomToolbarExample from './CustomToolbarExample.vue';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 
@@ -829,6 +830,14 @@ const setActiveSidebar = (id) => {
 
 // Scroll test mode - adds content above editor to make page scrollable (for testing focus scroll bugs)
 const scrollTestMode = ref(urlParams.get('scrolltest') === '1');
+
+// Custom toolbar demo - always show for this deployment
+const showCustomToolbar = ref(true);
+const toggleCustomToolbar = () => {
+  const url = new URL(window.location.href);
+  url.searchParams.set('customToolbar', showCustomToolbar.value ? '0' : '1');
+  window.location.href = url.toString();
+};
 const toggleScrollTestMode = () => {
   const url = new URL(window.location.href);
   url.searchParams.set('scrolltest', scrollTestMode.value ? '0' : '1');
@@ -871,6 +880,7 @@ if (scrollTestMode.value) {
               <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
               <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
               <span v-if="useCollaboration" class="badge badge--collab">Collab: ON</span>
+              <span v-if="showCustomToolbar" class="badge badge--custom-toolbar">Custom Toolbar: ON</span>
             </div>
             <h2 class="dev-app__title">SuperDoc Dev</h2>
             <div class="dev-app__header-layout-toggle">
@@ -985,6 +995,9 @@ if (scrollTestMode.value) {
             <button class="dev-app__header-export-btn" @click="toggleViewLayout">
               Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)
             </button>
+            <button class="dev-app__header-export-btn" @click="toggleCustomToolbar">
+              Custom Toolbar {{ showCustomToolbar ? 'off' : 'on' }} (reloads)
+            </button>
           </div>
         </div>
       </div>
@@ -1005,6 +1018,12 @@ if (scrollTestMode.value) {
         <div id="ruler-container" class="sd-ruler"></div>
       </div>
 
+      <!-- Custom Toolbar Example Component - only mount after editor is available -->
+      <CustomToolbarExample
+        v-if="showCustomToolbar && activeEditor"
+        :editor-instance="superdoc"
+      />
+
       <div class="dev-app__main">
         <div class="dev-app__view">
           <div class="dev-app__content">
@@ -1014,7 +1033,8 @@ if (scrollTestMode.value) {
           </div>
         </div>
       </div>
-      <div v-if="activeSidebarComponent" class="dev-app__sidebar">
+      <!-- Sidebar hidden for custom toolbar demo -->
+      <div v-if="false && activeSidebarComponent" class="dev-app__sidebar">
         <div class="dev-app__sidebar-content">
           <component
             :is="activeSidebarComponent"
@@ -1225,6 +1245,11 @@ if (scrollTestMode.value) {
 .badge--collab {
   background: rgba(34, 197, 94, 0.2);
   color: #86efac;
+}
+
+.badge--custom-toolbar {
+  background: rgba(250, 204, 21, 0.2);
+  color: #fcd34d;
 }
 
 .dev-app__upload-block {
@@ -1607,6 +1632,162 @@ if (scrollTestMode.value) {
   font-size: 14px;
   line-height: 1.5;
   color: #fde68a;
+}
+
+/* Custom HTML Toolbar Demo Styles */
+.custom-toolbar {
+  background: #fefce8;
+  border-bottom: 2px solid #facc15;
+  padding: 8px 12px;
+}
+
+.custom-toolbar__info {
+  font-size: 12px;
+  color: #713f12;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: rgba(250, 204, 21, 0.2);
+  border-radius: 6px;
+}
+
+.custom-toolbar__info code {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.custom-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-toolbar__row--secondary {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(250, 204, 21, 0.5);
+}
+
+.custom-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.custom-toolbar__label {
+  font-size: 10px;
+  color: #92400e;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.custom-toolbar__btn {
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.custom-toolbar__btn:hover:not(:disabled) {
+  background: #f5f5f5;
+  border-color: #a3a3a3;
+}
+
+.custom-toolbar__btn:active:not(:disabled) {
+  background: #e5e5e5;
+}
+
+.custom-toolbar__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.custom-toolbar__btn--active {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.custom-toolbar__btn--danger {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.custom-toolbar__btn--danger:hover:not(:disabled) {
+  background: #fecaca;
+  border-color: #f87171;
+}
+
+.custom-toolbar__btn--success {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.custom-toolbar__btn--success:hover:not(:disabled) {
+  background: #bbf7d0;
+  border-color: #4ade80;
+}
+
+.custom-toolbar__input {
+  padding: 6px 8px;
+  border: 1px solid #d4d4d4;
+  border-radius: 4px;
+  font-size: 13px;
+  width: 120px;
+}
+
+.custom-toolbar__input:disabled {
+  opacity: 0.5;
+}
+
+.custom-toolbar__select {
+  padding: 6px 8px;
+  border: 1px solid #d4d4d4;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.custom-toolbar__select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.custom-toolbar__color {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #d4d4d4;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.custom-toolbar__color--highlight {
+  background: #ffff00;
+}
+
+.custom-toolbar__color:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.custom-toolbar__divider {
+  width: 1px;
+  height: 24px;
+  background: #d4d4d4;
+  margin: 0 4px;
 }
 
 /* Mobile responsive styles */

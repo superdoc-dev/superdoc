@@ -132,6 +132,15 @@ describe('PermissionRanges extension', () => {
     expect(instance.isEditable).toBe(true);
   });
 
+  it('keeps viewing mode editable in headless mode when the document contains an everyone range', () => {
+    const instance = createEditor(docWithPermissionRange, { isHeadless: true });
+    expect(instance.options.isHeadless).toBe(true);
+    expect(instance.options.documentMode).toBe(VIEWING_MODE);
+    const storedRanges = instance.storage.permissionRanges?.ranges ?? [];
+    expect(storedRanges.length).toBeGreaterThan(0);
+    expect(instance.storage.permissionRanges?.hasAllowedRanges).toBe(true);
+  });
+
   it('stays read-only when there are no approved ranges', () => {
     const instance = createEditor(docWithoutPermissionRange);
     expect(instance.options.documentMode).toBe(VIEWING_MODE);

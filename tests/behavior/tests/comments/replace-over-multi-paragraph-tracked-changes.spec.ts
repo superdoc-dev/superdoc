@@ -102,3 +102,80 @@ test('markDeletion plain delete preserves existing deletion ids', async ({ super
   expect(afterOldId).toBe(beforeOldId);
   expect(afterOldId).not.toBe(afterPlainId);
 });
+
+test('replace over multi-paragraph tracked changes stays coherent', async ({ superdoc }) => {
+  // Step 1: Create three lines of text
+  await superdoc.type('Line one stays');
+  await superdoc.newLine();
+  await superdoc.type('Line two keeps tailword2');
+  await superdoc.newLine();
+  await superdoc.type('Line three keeps tailword3');
+  await superdoc.waitForStable();
+
+  await superdoc.assertTextContains('Line one stays');
+  await superdoc.assertTextContains('Line two keeps tailword2');
+  await superdoc.assertTextContains('Line three keeps tailword3');
+
+  // Step 2: Switch to suggesting mode and delete last word on lines 2 and 3
+  await superdoc.setDocumentMode('suggesting');
+  await superdoc.waitForStable();
+
+  const tail2From = await superdoc.findTextPos('tailword2');
+  await superdoc.setTextSelection(tail2From, tail2From + 'tailword2'.length);
+  await superdoc.press('Backspace');
+  await superdoc.waitForStable();
+
+  const tail3From = await superdoc.findTextPos('tailword3');
+  await superdoc.setTextSelection(tail3From, tail3From + 'tailword3'.length);
+  await superdoc.press('Backspace');
+  await superdoc.waitForStable();
+
+  // Both words should still exist in PM (as tracked deletions, not truly removed)
+  await superdoc.assertTextContains('tailword2');
+  await superdoc.assertTextContains('tailword3');
+
+  // Tracked delete marks should exist
+  const deletionCountAfterStep2 = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    let count = 0;
+    editor.state.doc.descendants((node: any) => {
+      if (!node.isText) return;
+      for (const mark of node.marks ?? []) {
+        if (mark.type?.name === 'trackDelete') count++;
+      }
+    });
+    return count;
+  });
+  expect(deletionCountAfterStep2).toBeGreaterThanOrEqual(2);
+
+  // Step 3: Select from "Line two keeps" through "tailword3" and replace with typed text
+  const line2Start = await superdoc.findTextPos('Line two keeps');
+  const tail3Pos = await superdoc.findTextPos('tailword3');
+  await superdoc.setTextSelection(line2Start, tail3Pos + 'tailword3'.length);
+  await superdoc.type('Merged suggestion');
+  await superdoc.waitForStable();
+
+  // The replacement text should be present
+  await superdoc.assertTextContains('Merged suggestion');
+
+  // Line one should remain untouched
+  await superdoc.assertTextContains('Line one stays');
+
+  // Verify a trackInsert mark exists for the replacement text
+  const hasTrackInsert = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    let found = false;
+    editor.state.doc.descendants((node: any) => {
+      if (found) return false;
+      if (!node.isText) return true;
+      for (const mark of node.marks ?? []) {
+        if (mark.type?.name === 'trackInsert') {
+          found = true;
+          return false;
+        }
+      }
+    });
+    return found;
+  });
+  expect(hasTrackInsert).toBe(true);
+});

@@ -2,6 +2,13 @@
   "contractVersion": "0.1.0",
   "entries": [
     {
+      "code": "AMBIGUOUS_TARGET",
+      "message": "Inspect structured error details and operation capabilities.",
+      "nonAppliedOperations": [],
+      "operations": ["create.heading", "create.paragraph"],
+      "preApplyOperations": ["create.heading", "create.paragraph"]
+    },
+    {
       "code": "CAPABILITY_UNAVAILABLE",
       "message": "Check runtime capabilities and switch to supported mode or operation.",
       "nonAppliedOperations": [],
@@ -157,6 +164,7 @@
         "comments.setInternal",
         "create.heading",
         "create.paragraph",
+        "delete",
         "format.bold",
         "format.italic",
         "format.strikethrough",
@@ -170,7 +178,25 @@
         "lists.setType",
         "replace"
       ],
-      "preApplyOperations": ["insert"]
+      "preApplyOperations": [
+        "comments.add",
+        "comments.move",
+        "create.heading",
+        "create.paragraph",
+        "delete",
+        "format.bold",
+        "format.italic",
+        "format.strikethrough",
+        "format.underline",
+        "insert",
+        "lists.exit",
+        "lists.indent",
+        "lists.insert",
+        "lists.outdent",
+        "lists.restart",
+        "lists.setType",
+        "replace"
+      ]
     },
     {
       "code": "NO_OP",
@@ -328,5 +354,5 @@
       ]
     }
   ],
-  "sourceHash": "d53e75c131bc35996800d18ff3b67961de5d6d031ba20f4a6a03106e1117acaa"
+  "sourceHash": "dd10c0218ba8a9148e8a3412053672bbbe88976f7a779650602aa98dec6efeee"
 }

@@ -4,6 +4,7 @@ import type { BlockNodeAttributes } from '../../core/types/NodeCategories.js';
 import type { BlockNodeAddress, BlockNodeType, NodeAddress, NodeType } from '@superdoc/document-api';
 import type { ParagraphAttrs } from '../../extensions/types/node-attributes.js';
 import { toId } from './value-utils.js';
+import { DocumentApiAdapterError } from '../errors.js';
 
 /** Superset of all possible ID attributes across block node types. */
 type BlockIdAttrs = BlockNodeAttributes & {
@@ -190,6 +191,34 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
 export function findBlockById(index: BlockIndex, address: NodeAddress): BlockCandidate | undefined {
   if (address.kind !== 'block') return undefined;
   return index.byId.get(`${address.nodeType}:${address.nodeId}`);
+}
+
+/**
+ * Finds a block candidate by raw nodeId without requiring a nodeType.
+ *
+ * This is needed for create operations that position relative to _any_ block type.
+ *
+ * @param index - The block index to search.
+ * @param nodeId - The node ID to resolve.
+ * @returns The single matching candidate.
+ * @throws {DocumentApiAdapterError} `TARGET_NOT_FOUND` if no candidate matches.
+ * @throws {DocumentApiAdapterError} `AMBIGUOUS_TARGET` if more than one candidate matches.
+ */
+export function findBlockByNodeIdOnly(index: BlockIndex, nodeId: string): BlockCandidate {
+  const matches = index.candidates.filter((candidate) => candidate.nodeId === nodeId);
+
+  if (matches.length === 0) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block with nodeId "${nodeId}" was not found.`, { nodeId });
+  }
+
+  if (matches.length > 1) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${nodeId}".`, {
+      nodeId,
+      count: matches.length,
+    });
+  }
+
+  return matches[0]!;
 }
 
 /**

@@ -618,6 +618,49 @@ const capabilitiesOutputSchema = objectSchema(
 );
 
 const strictEmptyObjectSchema = objectSchema({});
+
+/**
+ * Shared JSON Schema constraints for inputs that accept either a canonical `target`
+ * or a block-relative `blockId` + `start` + `end` locator — but not both.
+ *
+ * Used by: delete, replace, format.*, comments.add, comments.move.
+ */
+const rangeLocatorConstraints = {
+  allOf: [
+    { not: { required: ['target', 'blockId'] } },
+    { not: { required: ['target', 'start'] } },
+    { not: { required: ['target', 'end'] } },
+    { if: { required: ['start'] }, then: { required: ['blockId', 'end'] } },
+    { if: { required: ['end'] }, then: { required: ['blockId', 'start'] } },
+    { if: { required: ['blockId'] }, then: { required: ['start', 'end'] } },
+  ],
+  anyOf: [{ required: ['target'] }, { required: ['blockId', 'start', 'end'] }],
+};
+
+const rangeLocatorProperties = {
+  blockId: { type: 'string', description: 'Block ID for block-relative range targeting.' } as JsonSchema,
+  start: {
+    type: 'integer',
+    minimum: 0,
+    description: 'Start offset within the block identified by blockId.',
+  } as JsonSchema,
+  end: { type: 'integer', minimum: 0, description: 'End offset within the block identified by blockId.' } as JsonSchema,
+};
+
+/**
+ * Shared input schema for format operations (bold, italic, underline, strikethrough).
+ * All four accept identical input shapes.
+ */
+const formatInputSchema: JsonSchema = {
+  ...objectSchema(
+    {
+      target: textAddressSchema,
+      ...rangeLocatorProperties,
+    },
+    [],
+  ),
+  ...rangeLocatorConstraints,
+};
 const insertInputSchema: JsonSchema = {
   ...objectSchema(
     {
@@ -669,68 +712,56 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: textMutationFailureSchemaFor('insert'),
   },
   replace: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        text: { type: 'string' },
-      },
-      ['target', 'text'],
-    ),
+    input: {
+      ...objectSchema(
+        {
+          target: textAddressSchema,
+          text: { type: 'string' },
+          ...rangeLocatorProperties,
+        },
+        ['text'],
+      ),
+      ...rangeLocatorConstraints,
+    },
     output: textMutationResultSchemaFor('replace'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('replace'),
   },
   delete: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
+    input: {
+      ...objectSchema(
+        {
+          target: textAddressSchema,
+          ...rangeLocatorProperties,
+        },
+        [],
+      ),
+      ...rangeLocatorConstraints,
+    },
     output: textMutationResultSchemaFor('delete'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('delete'),
   },
   'format.bold': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
+    input: formatInputSchema,
     output: textMutationResultSchemaFor('format.bold'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.bold'),
   },
   'format.italic': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
+    input: formatInputSchema,
     output: textMutationResultSchemaFor('format.italic'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.italic'),
   },
   'format.underline': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
+    input: formatInputSchema,
     output: textMutationResultSchemaFor('format.underline'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.underline'),
   },
   'format.strikethrough': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
+    input: formatInputSchema,
     output: textMutationResultSchemaFor('format.strikethrough'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.strikethrough'),
@@ -741,20 +772,34 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         oneOf: [
           objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
           objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
-          objectSchema(
-            {
-              kind: { const: 'before' },
-              target: blockNodeAddressSchema,
-            },
-            ['kind', 'target'],
-          ),
-          objectSchema(
-            {
-              kind: { const: 'after' },
-              target: blockNodeAddressSchema,
-            },
-            ['kind', 'target'],
-          ),
+          {
+            ...objectSchema(
+              {
+                kind: { const: 'before' },
+                target: blockNodeAddressSchema,
+                nodeId: {
+                  type: 'string',
+                  description: 'Node ID shorthand — adapter resolves to a full BlockNodeAddress.',
+                },
+              },
+              ['kind'],
+            ),
+            oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+          },
+          {
+            ...objectSchema(
+              {
+                kind: { const: 'after' },
+                target: blockNodeAddressSchema,
+                nodeId: {
+                  type: 'string',
+                  description: 'Node ID shorthand — adapter resolves to a full BlockNodeAddress.',
+                },
+              },
+              ['kind'],
+            ),
+            oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+          },
         ],
       },
       text: { type: 'string' },
@@ -771,20 +816,34 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           oneOf: [
             objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
             objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
-            objectSchema(
-              {
-                kind: { const: 'before' },
-                target: blockNodeAddressSchema,
-              },
-              ['kind', 'target'],
-            ),
-            objectSchema(
-              {
-                kind: { const: 'after' },
-                target: blockNodeAddressSchema,
-              },
-              ['kind', 'target'],
-            ),
+            {
+              ...objectSchema(
+                {
+                  kind: { const: 'before' },
+                  target: blockNodeAddressSchema,
+                  nodeId: {
+                    type: 'string',
+                    description: 'Node ID shorthand — adapter resolves to a full BlockNodeAddress.',
+                  },
+                },
+                ['kind'],
+              ),
+              oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+            },
+            {
+              ...objectSchema(
+                {
+                  kind: { const: 'after' },
+                  target: blockNodeAddressSchema,
+                  nodeId: {
+                    type: 'string',
+                    description: 'Node ID shorthand — adapter resolves to a full BlockNodeAddress.',
+                  },
+                },
+                ['kind'],
+              ),
+              oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+            },
           ],
         },
         text: { type: 'string' },
@@ -811,62 +870,110 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: listItemInfoSchema,
   },
   'lists.insert': {
-    input: objectSchema(
-      {
-        target: listItemAddressSchema,
-        position: listInsertPositionSchema,
-        text: { type: 'string' },
-      },
-      ['target', 'position'],
-    ),
+    input: {
+      ...objectSchema(
+        {
+          target: listItemAddressSchema,
+          nodeId: { type: 'string', description: 'Node ID shorthand — adapter resolves to a ListItemAddress.' },
+          position: listInsertPositionSchema,
+          text: { type: 'string' },
+        },
+        ['position'],
+      ),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
     output: listsInsertResultSchemaFor('lists.insert'),
     success: listsInsertSuccessSchema,
     failure: listsFailureSchemaFor('lists.insert'),
   },
   'lists.setType': {
-    input: objectSchema(
-      {
-        target: listItemAddressSchema,
-        kind: listKindSchema,
-      },
-      ['target', 'kind'],
-    ),
+    input: {
+      ...objectSchema(
+        {
+          target: listItemAddressSchema,
+          nodeId: { type: 'string', description: 'Node ID shorthand — adapter resolves to a ListItemAddress.' },
+          kind: listKindSchema,
+        },
+        ['kind'],
+      ),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
     output: listsMutateItemResultSchemaFor('lists.setType'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.setType'),
   },
   'lists.indent': {
-    input: objectSchema({ target: listItemAddressSchema }, ['target']),
+    input: {
+      ...objectSchema(
+        {
+          target: listItemAddressSchema,
+          nodeId: { type: 'string', description: 'Node ID shorthand — adapter resolves to a ListItemAddress.' },
+        },
+        [],
+      ),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
     output: listsMutateItemResultSchemaFor('lists.indent'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.indent'),
   },
   'lists.outdent': {
-    input: objectSchema({ target: listItemAddressSchema }, ['target']),
+    input: {
+      ...objectSchema(
+        {
+          target: listItemAddressSchema,
+          nodeId: { type: 'string', description: 'Node ID shorthand — adapter resolves to a ListItemAddress.' },
+        },
+        [],
+      ),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
     output: listsMutateItemResultSchemaFor('lists.outdent'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.outdent'),
   },
   'lists.restart': {
-    input: objectSchema({ target: listItemAddressSchema }, ['target']),
+    input: {
+      ...objectSchema(
+        {
+          target: listItemAddressSchema,
+          nodeId: { type: 'string', description: 'Node ID shorthand — adapter resolves to a ListItemAddress.' },
+        },
+        [],
+      ),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
     output: listsMutateItemResultSchemaFor('lists.restart'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.restart'),
   },
   'lists.exit': {
-    input: objectSchema({ target: listItemAddressSchema }, ['target']),
+    input: {
+      ...objectSchema(
+        {
+          target: listItemAddressSchema,
+          nodeId: { type: 'string', description: 'Node ID shorthand — adapter resolves to a ListItemAddress.' },
+        },
+        [],
+      ),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
     output: listsExitResultSchemaFor('lists.exit'),
     success: listsExitSuccessSchema,
     failure: listsFailureSchemaFor('lists.exit'),
   },
   'comments.add': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        text: { type: 'string' },
-      },
-      ['target', 'text'],
-    ),
+    input: {
+      ...objectSchema(
+        {
+          target: textAddressSchema,
+          text: { type: 'string' },
+          ...rangeLocatorProperties,
+        },
+        ['text'],
+      ),
+      ...rangeLocatorConstraints,
+    },
     output: receiptResultSchemaFor('comments.add'),
     success: receiptSuccessSchema,
     failure: receiptFailureResultSchemaFor('comments.add'),
@@ -896,13 +1003,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: receiptFailureResultSchemaFor('comments.reply'),
   },
   'comments.move': {
-    input: objectSchema(
-      {
-        commentId: { type: 'string' },
-        target: textAddressSchema,
-      },
-      ['commentId', 'target'],
-    ),
+    input: {
+      ...objectSchema(
+        {
+          commentId: { type: 'string' },
+          target: textAddressSchema,
+          ...rangeLocatorProperties,
+        },
+        ['commentId'],
+      ),
+      ...rangeLocatorConstraints,
+    },
     output: receiptResultSchemaFor('comments.move'),
     success: receiptSuccessSchema,
     failure: receiptFailureResultSchemaFor('comments.move'),

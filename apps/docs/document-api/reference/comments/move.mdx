@@ -23,6 +23,7 @@ description: Generated reference for comments.move
 - `TARGET_NOT_FOUND`
 - `COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
@@ -34,9 +35,102 @@ description: Generated reference for comments.move
 ```json
 {
   "additionalProperties": false,
+  "allOf": [
+    {
+      "not": {
+        "required": [
+          "target",
+          "blockId"
+        ]
+      }
+    },
+    {
+      "not": {
+        "required": [
+          "target",
+          "start"
+        ]
+      }
+    },
+    {
+      "not": {
+        "required": [
+          "target",
+          "end"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "start"
+        ]
+      },
+      "then": {
+        "required": [
+          "blockId",
+          "end"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "end"
+        ]
+      },
+      "then": {
+        "required": [
+          "blockId",
+          "start"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "blockId"
+        ]
+      },
+      "then": {
+        "required": [
+          "start",
+          "end"
+        ]
+      }
+    }
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "blockId",
+        "start",
+        "end"
+      ]
+    }
+  ],
   "properties": {
+    "blockId": {
+      "description": "Block ID for block-relative range targeting.",
+      "type": "string"
+    },
     "commentId": {
       "type": "string"
+    },
+    "end": {
+      "description": "End offset within the block identified by blockId.",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "start": {
+      "description": "Start offset within the block identified by blockId.",
+      "minimum": 0,
+      "type": "integer"
     },
     "target": {
       "additionalProperties": false,
@@ -73,8 +167,7 @@ description: Generated reference for comments.move
     }
   },
   "required": [
-    "commentId",
-    "target"
+    "commentId"
   ],
   "type": "object"
 }

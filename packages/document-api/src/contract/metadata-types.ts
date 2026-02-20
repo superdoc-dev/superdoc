@@ -16,6 +16,7 @@ export const PRE_APPLY_THROW_CODES = [
   'TRACK_CHANGE_COMMAND_UNAVAILABLE',
   'CAPABILITY_UNAVAILABLE',
   'INVALID_TARGET',
+  'AMBIGUOUS_TARGET',
 ] as const;
 
 export type PreApplyThrowCode = (typeof PRE_APPLY_THROW_CODES)[number];

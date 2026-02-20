@@ -24,6 +24,7 @@ description: Generated reference for lists.setType
 - `COMMAND_UNAVAILABLE`
 - `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
@@ -35,12 +36,28 @@ description: Generated reference for lists.setType
 ```json
 {
   "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
   "properties": {
     "kind": {
       "enum": [
         "ordered",
         "bullet"
       ]
+    },
+    "nodeId": {
+      "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+      "type": "string"
     },
     "target": {
       "additionalProperties": false,
@@ -64,7 +81,6 @@ description: Generated reference for lists.setType
     }
   },
   "required": [
-    "target",
     "kind"
   ],
   "type": "object"

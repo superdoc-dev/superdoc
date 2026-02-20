@@ -10,7 +10,7 @@ import type {
   MutationOptions,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from './helpers/index-cache.js';
-import { findBlockById, type BlockCandidate } from './helpers/node-address-resolver.js';
+import { findBlockById, findBlockByNodeIdOnly, type BlockCandidate } from './helpers/node-address-resolver.js';
 import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { requireEditorCommand, ensureTrackedCapability } from './helpers/mutation-helpers.js';
@@ -41,10 +41,13 @@ function resolveParagraphInsertPosition(editor: Editor, input: CreateParagraphIn
   if (location.kind === 'documentEnd') return editor.state.doc.content.size;
 
   const index = getBlockIndex(editor);
-  const target = findBlockById(index, location.target);
+  const hasTarget = 'target' in location && location.target != null;
+  const target = hasTarget
+    ? findBlockById(index, location.target)
+    : findBlockByNodeIdOnly(index, (location as { nodeId: string }).nodeId);
   if (!target) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Create paragraph target block was not found.', {
-      target: location.target,
+      target: hasTarget ? location.target : (location as { nodeId: string }).nodeId,
     });
   }
 
@@ -191,10 +194,13 @@ function resolveHeadingInsertPosition(editor: Editor, input: CreateHeadingInput)
   if (location.kind === 'documentEnd') return editor.state.doc.content.size;
 
   const index = getBlockIndex(editor);
-  const target = findBlockById(index, location.target);
+  const hasTarget = 'target' in location && location.target != null;
+  const target = hasTarget
+    ? findBlockById(index, location.target)
+    : findBlockByNodeIdOnly(index, (location as { nodeId: string }).nodeId);
   if (!target) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Create heading target block was not found.', {
-      target: location.target,
+      target: hasTarget ? location.target : (location as { nodeId: string }).nodeId,
     });
   }
 

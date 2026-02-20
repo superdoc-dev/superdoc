@@ -233,6 +233,7 @@ const isImportedTableElement = (element) => Boolean(element?.closest?.(IMPORT_CO
  * @property {number} [rows=3] - Number of rows to create
  * @property {number} [cols=3] - Number of columns to create
  * @property {boolean} [withHeaderRow=false] - Create first row as header row
+ * @property {number[]} [columnWidths] - Explicit column widths in pixels
  */
 
 /**

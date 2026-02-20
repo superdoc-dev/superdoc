@@ -103,5 +103,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build superdoc (CLI runtime dependency)
+        run: pnpm run build:superdoc
+
       - name: Run CLI tests
         run: pnpm run test:cli

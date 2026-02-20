@@ -1,17 +1,33 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.0.0-beta.17",
+  "version": "1.15.0",
   "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "directory": "packages/superdoc"
+  },
+  "homepage": "https://www.superdoc.dev/",
+  "bugs": {
+    "url": "https://github.com/superdoc-dev/superdoc/issues"
+  },
   "readme": "../../README.md",
   "files": [
     "dist"
   ],
   "exports": {
     ".": {
-      "types": "./dist/packages/superdoc/src/index.d.ts",
+      "types": "./dist/superdoc/src/index.d.ts",
+      "source": "./src/index.js",
       "import": "./dist/superdoc.es.js",
       "require": "./dist/superdoc.cjs"
+    },
+    "./types": {
+      "types": "./dist/super-editor/src/types.d.ts",
+      "source": "./src/types.ts",
+      "import": "./dist/types.es.js",
+      "require": "./dist/types.cjs"
     },
     "./converter": {
       "import": "./dist/super-editor/converter.es.js"
@@ -20,65 +36,84 @@
       "import": "./dist/super-editor/docx-zipper.es.js"
     },
     "./super-editor": {
-      "types": "./dist/super-editor/index.d.ts",
+      "types": "./dist/super-editor/src/index.d.ts",
       "import": "./dist/super-editor.es.js",
       "require": "./dist/super-editor.cjs"
-    },
-    "./super-editor/style.css": {
-      "import": "./dist/super-editor/style.css"
-    },
-    "./common": {
-      "import": "./dist/common.es.js"
     },
     "./file-zipper": {
       "import": "./dist/super-editor/file-zipper.es.js"
     },
     "./style.css": "./dist/style.css"
   },
-  "types": "./dist/packages/superdoc/src/index.d.ts",
+  "types": "./dist/superdoc/src/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "super-editor": [
+        "./dist/super-editor/src/index.d.ts"
+      ],
+      "types": [
+        "./dist/super-editor/src/types.d.ts"
+      ]
+    }
+  },
   "main": "./dist/superdoc.umd.js",
   "module": "./dist/superdoc.es.js",
   "scripts": {
-    "dev": "vite",
-    "build": "cd ../super-editor && npm run build && cd ../superdoc && vite build && tsc && npm run build:umd",
+    "dev": "concurrently -k -n VITE,WORD -c cyan,magenta \"vite\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
+    "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"node src/dev/collab-server.js\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
+    "collab-server": "node src/dev/collab-server.js",
+    "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
+    "build": "vite build && pnpm run build:umd",
+    "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
     "postbuild": "node ./scripts/ensure-types.cjs",
-    "build:es": "cd ../super-editor && npm run build && cd ../superdoc && vite build",
-    "watch:es": "nodemon --watch src --watch ../super-editor/src --ext js,ts,vue --exec \"npm run build:es\" --delay 100ms",
+    "build:es": "vite build && node ./scripts/ensure-types.cjs",
+    "watch:es": "vite build --watch",
     "build:umd": "vite build --config vite.config.umd.js",
     "clean": "rm -rf dist",
-    "pack:local": "npm run build:es && npm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
-    "pack": "npm run build:es && npm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
+    "pack:local": "pnpm run pack",
+    "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
+    "pack:es": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
     "test": "vitest"
   },
   "dependencies": {
-    "buffer-crc32": "^1.0.0",
-    "eventemitter3": "^5.0.1",
-    "jsdom": "^25.0.1",
-    "naive-ui": "^2.43.1",
-    "pinia": "^2.1.7",
-    "rollup-plugin-copy": "^3.5.0",
-    "uuid": "^9.0.1",
-    "vue": "^3.5.20",
-    "y-websocket": "^3.0.0"
+    "buffer-crc32": "catalog:",
+    "eventemitter3": "catalog:",
+    "jsdom": "catalog:",
+    "konva": "catalog:",
+    "naive-ui": "catalog:",
+    "pinia": "catalog:",
+    "rollup-plugin-copy": "catalog:",
+    "uuid": "catalog:",
+    "vue": "catalog:",
+    "y-websocket": "catalog:"
   },
   "peerDependencies": {
     "@hocuspocus/provider": "^2.13.6",
-    "pdfjs-dist": ">=4.3.136 <=4.6.82",
-    "y-prosemirror": "^1.3.7",
-    "yjs": "13.6.19"
+    "pdfjs-dist": "^5.4.296",
+    "y-prosemirror": "catalog:",
+    "yjs": "catalog:"
   },
   "devDependencies": {
-    "@hocuspocus/provider": "^2.13.6",
-    "@vitejs/plugin-vue": "^5.2.1",
-    "@vue/test-utils": "^2.4.6",
-    "nodemon": "^3.1.10",
-    "pdfjs-dist": "4.3.136",
-    "postcss-nested": "^6.0.1",
-    "postcss-prefixwrap": "^1.56.2",
-    "rollup-plugin-visualizer": "^5.12.0",
-    "typescript": "^5.7.3",
-    "vite": "^6.3.5",
-    "vite-plugin-node-polyfills": "^0.24.0",
-    "vitest": "^3.2.4"
+    "@hocuspocus/provider": "catalog:",
+    "@hocuspocus/server": "catalog:",
+    "@superdoc/common": "workspace:*",
+    "@superdoc/super-editor": "workspace:*",
+    "concurrently": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "jszip": "catalog:",
+    "nodemon": "catalog:",
+    "pdfjs-dist": "catalog:",
+    "postcss-nested": "catalog:",
+    "postcss-prefixwrap": "catalog:",
+    "prosemirror-model": "catalog:",
+    "prosemirror-state": "catalog:",
+    "rollup-plugin-visualizer": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:",
+    "vite-plugin-node-polyfills": "catalog:",
+    "vitest": "catalog:",
+    "xml-js": "catalog:"
   }
 }

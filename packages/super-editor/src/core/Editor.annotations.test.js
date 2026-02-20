@@ -30,7 +30,7 @@ describe('Editor annotation utilities', () => {
     const processedTransaction = { mocked: true };
     const annotationValues = [{ input_id: 'field-1', input_value: 'value' }];
 
-    const dispatchSpy = vi.spyOn(editor.view, 'dispatch').mockImplementation(() => {});
+    const dispatchSpy = vi.spyOn(editor, 'dispatch').mockImplementation(() => {});
     const processTablesSpy = vi.spyOn(AnnotatorHelpers, 'processTables').mockReturnValue(processedTransaction);
 
     editor.prepareForAnnotations(annotationValues);
@@ -40,7 +40,7 @@ describe('Editor annotation utilities', () => {
   });
 
   it('annotate dispatches when annotator makes a change', () => {
-    const dispatchSpy = vi.spyOn(editor.view, 'dispatch').mockImplementation(() => {});
+    const dispatchSpy = vi.spyOn(editor, 'dispatch').mockImplementation(() => {});
     vi.spyOn(AnnotatorHelpers, 'processTables').mockImplementation(({ tr }) => tr);
 
     const scrolledTransaction = { id: 'scrolled' };

@@ -1,0 +1,421 @@
+---
+title: Events
+keywords: "superdoc events, document events, editor callbacks, word editor listeners, event handling"
+---
+
+SuperDoc uses an event system for lifecycle hooks and change notifications.
+
+## Subscribing to events
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('ready', handler);     // Subscribe
+superdoc.once('ready', handler);   // One-time listener
+superdoc.off('ready', handler);    // Unsubscribe
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+const handler = ({ superdoc }) => {
+  console.log('Handler called');
+};
+
+superdoc.on('ready', handler);     // Subscribe
+superdoc.once('ready', handler);   // One-time listener
+superdoc.off('ready', handler);    // Unsubscribe
+```
+</CodeGroup>
+
+## Lifecycle events
+
+### `ready`
+
+Fired when SuperDoc is fully initialized.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('ready', ({ superdoc }) => {
+  // Safe to use all features
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('ready', ({ superdoc }) => {
+  // Safe to use all features
+});
+```
+</CodeGroup>
+
+### `editorBeforeCreate`
+
+Fired before an editor is created. Use this to configure extensions or set up services.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('editorBeforeCreate', ({ editor }) => {
+  // Configure before editor mounts
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('editorBeforeCreate', ({ editor }) => {
+  // Configure before editor mounts
+});
+```
+</CodeGroup>
+
+### `editorCreate`
+
+When an editor is created.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('editorCreate', ({ editor }) => {
+  editor.focus();
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('editorCreate', ({ editor }) => {
+  editor.focus();
+});
+```
+</CodeGroup>
+
+### `editorDestroy`
+
+When an editor is destroyed.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('editorDestroy', () => {
+  cleanup();
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('editorDestroy', () => {
+  cleanup();
+});
+```
+</CodeGroup>
+
+## Content events
+
+### `editor-update`
+
+When editor content changes.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('editor-update', ({ editor }) => {
+  autoSave(editor.getJSON());
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('editor-update', ({ editor }) => {
+  autoSave(editor.getJSON());
+});
+```
+</CodeGroup>
+
+### `content-error`
+
+When content processing fails.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('content-error', ({ error, editor, documentId }) => {
+  console.error('Content error:', error);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('content-error', ({ error, editor, documentId }) => {
+  console.error('Content error:', error);
+});
+```
+</CodeGroup>
+
+### `fonts-resolved`
+
+When document fonts are resolved.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
+  if (unsupportedFonts.length > 0) {
+    console.warn('Unsupported fonts:', unsupportedFonts.join(', '));
+  }
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
+  if (unsupportedFonts.length > 0) {
+    console.warn('Unsupported fonts:', unsupportedFonts.join(', '));
+  }
+});
+```
+</CodeGroup>
+
+## Comments events
+
+### `comments-update`
+
+When comments are modified.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('comments-update', ({ type, data }) => {
+  // type: 'add', 'update', 'deleted', 'resolved'
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('comments-update', ({ type, data }) => {
+  // type: 'add', 'update', 'deleted', 'resolved'
+});
+```
+</CodeGroup>
+
+## Collaboration events
+
+### `collaboration-ready`
+
+When collaboration is initialized.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('collaboration-ready', ({ editor }) => {
+  showOnlineUsers();
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('collaboration-ready', ({ editor }) => {
+  showOnlineUsers();
+});
+```
+</CodeGroup>
+
+### `awareness-update`
+
+When user presence changes.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('awareness-update', ({ context, states }) => {
+  const users = Array.from(states.values());
+  updateUserCursors(users);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('awareness-update', ({ context, states }) => {
+  const users = Array.from(states.values());
+  updateUserCursors(users);
+});
+```
+</CodeGroup>
+
+### `locked`
+
+When document lock state changes.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('locked', ({ isLocked, lockedBy }) => {
+  if (isLocked) {
+    showLockBanner(`Locked by ${lockedBy.name}`);
+  }
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('locked', ({ isLocked, lockedBy }) => {
+  if (isLocked) {
+    showLockBanner(`Locked by ${lockedBy.name}`);
+  }
+});
+```
+</CodeGroup>
+
+## UI events
+
+### `sidebar-toggle`
+
+When the comments sidebar is toggled.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('sidebar-toggle', (isOpened) => {
+  adjustLayout(isOpened);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('sidebar-toggle', (isOpened) => {
+  adjustLayout(isOpened);
+});
+```
+</CodeGroup>
+
+## Error events
+
+### `exception`
+
+When an error occurs during document processing or runtime.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('exception', ({ error, document, editor }) => {
+  console.error('SuperDoc error:', error);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('exception', ({ error, document, editor }) => {
+  console.error('SuperDoc error:', error);
+});
+```
+</CodeGroup>
+
+## Configuration-based events
+
+Events can also be set during initialization:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'document.docx',
+  onReady: ({ superdoc }) => { },
+  onEditorBeforeCreate: ({ editor }) => { },
+  onEditorCreate: ({ editor }) => { },
+  onEditorUpdate: ({ editor }) => { },
+  onFontsResolved: ({ documentFonts, unsupportedFonts }) => { },
+  onSidebarToggle: (isOpened) => { },
+  onException: ({ error }) => { },
+});
+```
+
+## Event order
+
+1. `editorBeforeCreate` — Before editor mounts
+2. `editorCreate` — Editor ready
+3. `ready` — All editors ready
+4. `collaboration-ready` — If collaboration enabled
+5. Runtime events (`editor-update`, `comments-update`, `sidebar-toggle`, etc.)
+6. `editorDestroy` — Cleanup

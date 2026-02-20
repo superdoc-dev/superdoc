@@ -73,6 +73,99 @@ describe('engines-tabs computeTabStops', () => {
     expect(firstDefault?.val).toBe('start');
     expect(firstDefault?.leader).toBe('none');
   });
+
+  it('preserves tab stops between (left - hanging) and left when hanging indent exists', () => {
+    // SD-1472 regression: When left=709 and hanging=709, the first line starts at 0.
+    // Tab stops at 340 (between 0 and 709) should be preserved for first-line use.
+    const stops = computeTabStops({
+      explicitStops: [
+        { val: 'start', pos: 340, leader: 'none' },
+        { val: 'start', pos: 709, leader: 'none' },
+      ],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 709, hanging: 709 },
+    });
+
+    // Tab at 340 should NOT be filtered out (it's valid for first line starting at 0)
+    expect(stops.find((stop) => stop.pos === 340)).toBeDefined();
+    expect(stops.find((stop) => stop.pos === 709)).toBeDefined();
+  });
+
+  it('filters tab stops before effective first-line indent with partial hanging', () => {
+    // With left=500 and hanging=200, first line starts at 300.
+    // Tab stops at 200 (before 300) should be filtered out.
+    const stops = computeTabStops({
+      explicitStops: [
+        { val: 'start', pos: 200, leader: 'none' }, // Before effective indent, should be filtered
+        { val: 'start', pos: 400, leader: 'none' }, // After effective indent, should be kept
+      ],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 500, hanging: 200 },
+    });
+
+    // Tab at 200 should be filtered (200 < 300 effective indent)
+    expect(stops.find((stop) => stop.pos === 200)).toBeUndefined();
+    // Tab at 400 should be kept (400 >= 300 effective indent)
+    expect(stops.find((stop) => stop.pos === 400)).toBeDefined();
+  });
+
+  it('handles hanging indent larger than left indent gracefully', () => {
+    // Edge case: hanging > left, effective indent would be negative, clamped to 0
+    const stops = computeTabStops({
+      explicitStops: [
+        { val: 'start', pos: 100, leader: 'none' },
+        { val: 'start', pos: 500, leader: 'none' },
+      ],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 200, hanging: 400 }, // effective = max(0, 200-400) = 0
+    });
+
+    // Both stops should be preserved since effective min indent is 0
+    expect(stops.find((stop) => stop.pos === 100)).toBeDefined();
+    expect(stops.find((stop) => stop.pos === 500)).toBeDefined();
+  });
+
+  it('default tabs respect leftIndent even with hanging indent (no explicit stops)', () => {
+    // Regression test: When there are no explicit stops, default tabs should be filtered
+    // by leftIndent, not effectiveMinIndent (0).
+    // This ensures "$100" in "Purchase Price Per Share <tab> $100..." aligns correctly.
+    const stops = computeTabStops({
+      explicitStops: [], // No explicit stops - relies on defaults
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 3600, hanging: 3600 }, // effective = 0, but defaults respect leftIndent
+    });
+
+    // Default stops are generated at 720, 1440, ..., 3600, 4320, ...
+    // But filtered to only include those >= leftIndent (3600)
+    // So first default is at 3600 (which happens to be a multiple of 720)
+    const firstStop = stops[0];
+    expect(firstStop.pos).toBe(3600); // First multiple of 720 >= leftIndent
+    expect(stops.find((stop) => stop.pos === 720)).toBeUndefined(); // No stop at 720
+    expect(stops.find((stop) => stop.pos === 1440)).toBeUndefined(); // No stop at 1440
+    expect(stops.find((stop) => stop.pos === 4320)).toBeDefined(); // Second default at 4320
+  });
+
+  it('combines explicit stops in hanging range with defaults starting at leftIndent', () => {
+    // When explicit stops exist in the hanging indent range AND there's a gap before leftIndent,
+    // explicit stops should be preserved, but defaults should start from leftIndent.
+    const stops = computeTabStops({
+      explicitStops: [
+        { val: 'start', pos: 340, leader: 'none' }, // In hanging range (0-709)
+        { val: 'start', pos: 709, leader: 'none' }, // At leftIndent
+      ],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 709, hanging: 709 },
+    });
+
+    // Explicit stop at 340 should be preserved (for first line)
+    expect(stops.find((stop) => stop.pos === 340)).toBeDefined();
+    // Explicit stop at 709 should be preserved
+    expect(stops.find((stop) => stop.pos === 709)).toBeDefined();
+    // First default should be at 709 + 720 = 1429
+    expect(stops.find((stop) => stop.pos === 1429)).toBeDefined();
+    // No default at 720 (before leftIndent, and no explicit stop there)
+    expect(stops.filter((stop) => stop.pos === 720).length).toBe(0);
+  });
 });
 
 describe('engines-tabs layoutWithTabs', () => {

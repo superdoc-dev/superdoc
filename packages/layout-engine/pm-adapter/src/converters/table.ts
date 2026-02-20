@@ -24,69 +24,56 @@ import type {
   NodeHandlerContext,
   BlockIdGenerator,
   PositionMap,
-  StyleContext,
   TrackedChangesConfig,
   HyperlinkConfig,
   ThemeColorPalette,
   ConverterContext,
-  ListCounterContext,
-  TableNodeToBlockOptions,
   NestedConverters,
+  TableNodeToBlockParams,
 } from '../types.js';
 import { extractTableBorders, extractCellBorders, extractCellPadding } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { annotateBlockWithTrackedChange, shouldHideTrackedNode } from '../tracked-changes.js';
-
-type ParagraphConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  converterContext?: ConverterContext,
-) => FlowBlock[];
+import {
+  resolveNodeSdtMetadata,
+  applySdtMetadataToParagraphBlocks,
+  applySdtMetadataToTableBlock,
+} from '../sdt/index.js';
+import { TableProperties, resolveTableCellProperties } from '@superdoc/style-engine/ooxml';
 
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
-  defaultFont: string;
-  defaultSize: number;
-  styleContext: StyleContext;
-  listCounterContext?: ListCounterContext;
-  trackedChanges?: TrackedChangesConfig;
-  bookmarks?: Map<string, number>;
-  hyperlinkConfig?: HyperlinkConfig;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
+  hyperlinkConfig: HyperlinkConfig;
   themeColors?: ThemeColorPalette;
-  paragraphToFlowBlocks?: ParagraphConverter;
-  converterContext?: ConverterContext;
-  converters?: NestedConverters;
+  converterContext: ConverterContext;
+  converters: NestedConverters;
+  enableComments: boolean;
 };
 
 type ParseTableCellArgs = {
   cellNode: PMNode;
   rowIndex: number;
   cellIndex: number;
+  numCells: number;
+  numRows: number;
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
-  /** Table style paragraph props to pass to paragraph converter for style cascade */
-  tableStyleParagraphProps?: import('../converter-context.js').TableStyleParagraphProps;
+  tableProperties?: TableProperties;
 };
 
 type ParseTableRowArgs = {
   rowNode: PMNode;
   rowIndex: number;
+  numRows: number;
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
-  /** Table style paragraph props to pass to paragraph converter for style cascade */
-  tableStyleParagraphProps?: import('../converter-context.js').TableStyleParagraphProps;
+  /** Table style to pass to paragraph converter for style cascade */
+  tableProperties?: TableProperties;
 };
 
 const isTableRowNode = (node: PMNode): boolean => node.type === 'tableRow' || node.type === 'table_row';
@@ -189,56 +176,170 @@ const normalizeRowHeight = (rowProps?: Record<string, unknown>): NormalizedRowHe
  * // Returns: null
  */
 const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
-  const { cellNode, rowIndex, cellIndex, context, defaultCellPadding, tableStyleParagraphProps } = args;
+  const { cellNode, rowIndex, cellIndex, numCells, numRows, context, defaultCellPadding, tableProperties } = args;
   if (!isTableCellNode(cellNode) || !Array.isArray(cellNode.content)) {
     return null;
   }
 
-  // Convert all paragraphs in the cell to blocks
-  // Note: Table cells can only contain paragraphs, images, and drawings (not nested tables)
-  const blocks: (ParagraphBlock | ImageBlock | DrawingBlock)[] = [];
+  // Convert all cell children into blocks.
+  // Table cells can contain paragraphs, images/drawings, structured content blocks, and nested tables.
+  const blocks: (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[] = [];
+
+  // Resolve table cell properties from the style cascade (wholeTable → bands → conditional → inline)
+  const inlineTcProps = cellNode.attrs?.tableCellProperties as Record<string, unknown> | undefined;
+  const tableInfo = tableProperties ? { tableProperties, rowIndex, cellIndex, numCells, numRows } : undefined;
+  const resolvedTcProps = resolveTableCellProperties(
+    inlineTcProps as Parameters<typeof resolveTableCellProperties>[0],
+    tableInfo,
+    context.converterContext?.translatedLinkedStyles,
+  );
+
+  // Extract cell background color for auto text color resolution
+  // Priority: inline background attr > resolved style shading
+  const cellBackground = cellNode.attrs?.background as { color?: string } | undefined;
+  let cellBackgroundColor: string | undefined;
+  if (cellBackground && typeof cellBackground.color === 'string') {
+    const rawColor = cellBackground.color.trim();
+    if (rawColor) {
+      const normalized = rawColor.startsWith('#') ? rawColor : `#${rawColor}`;
+      // Validate it's a proper hex color (3 or 6 hex digits after #)
+      if (/^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(normalized)) {
+        cellBackgroundColor = normalized;
+      }
+    }
+  }
+  // Fall back to resolved style shading if no inline background
+  if (!cellBackgroundColor && resolvedTcProps?.shading?.fill) {
+    const fill = resolvedTcProps.shading.fill;
+    if (fill !== 'auto') {
+      cellBackgroundColor = fill.startsWith('#') ? fill : `#${fill}`;
+    }
+  }
 
   // Create enhanced converter context with table style paragraph props for the style cascade
   // This allows paragraphs inside table cells to inherit table style's pPr
-  const cellConverterContext: ConverterContext | undefined = tableStyleParagraphProps
-    ? {
-        ...context.converterContext,
-        tableStyleParagraphProps,
-      }
-    : context.converterContext;
+  // Also includes backgroundColor for auto text color resolution
+  const cellConverterContext: ConverterContext =
+    tableProperties || cellBackgroundColor
+      ? ({
+          ...context.converterContext,
+          ...(tableProperties && { tableInfo: { tableProperties, rowIndex, cellIndex, numCells, numRows } }),
+          ...(cellBackgroundColor && { backgroundColor: cellBackgroundColor }),
+        } as ConverterContext)
+      : context.converterContext;
 
-  const paragraphToFlowBlocks = context.converters?.paragraphToFlowBlocks ?? context.paragraphToFlowBlocks;
-  const listCounterContext = context.listCounterContext;
+  const paragraphToFlowBlocks = context.converters.paragraphToFlowBlocks;
+  const tableNodeToBlock = context.converters?.tableNodeToBlock;
+
+  /**
+   * Appends converted paragraph blocks to the cell's blocks array.
+   *
+   * This helper:
+   * 1. Applies SDT metadata to paragraph blocks (for structured content inheritance)
+   * 2. Filters to only include supported block types (paragraph, image, drawing)
+   * 3. Appends the filtered blocks to the cell's blocks array
+   *
+   * @param paragraphBlocks - The converted flow blocks from a paragraph node
+   * @param sdtMetadata - Optional SDT metadata to apply (from parent structuredContentBlock)
+   */
+  const appendParagraphBlocks = (
+    paragraphBlocks: FlowBlock[],
+    sdtMetadata?: ReturnType<typeof resolveNodeSdtMetadata>,
+  ) => {
+    applySdtMetadataToParagraphBlocks(
+      paragraphBlocks.filter((block) => block.kind === 'paragraph') as ParagraphBlock[],
+      sdtMetadata,
+    );
+    paragraphBlocks.forEach((block) => {
+      if (block.kind === 'paragraph' || block.kind === 'image' || block.kind === 'drawing') {
+        blocks.push(block);
+      }
+    });
+  };
 
   for (const childNode of cellNode.content) {
     if (childNode.type === 'paragraph') {
       if (!paragraphToFlowBlocks) continue;
-      const paragraphBlocks = paragraphToFlowBlocks(
-        childNode,
-        context.nextBlockId,
-        context.positions,
-        context.defaultFont,
-        context.defaultSize,
-        context.styleContext,
-        listCounterContext,
-        context.trackedChanges,
-        context.bookmarks,
-        context.hyperlinkConfig,
-        context.themeColors,
-        cellConverterContext,
-      );
-      paragraphBlocks.forEach((block) => {
-        if (block.kind === 'paragraph' || block.kind === 'image' || block.kind === 'drawing') {
-          blocks.push(block);
-        }
+      const paragraphBlocks = paragraphToFlowBlocks({
+        para: childNode,
+        nextBlockId: context.nextBlockId,
+        positions: context.positions,
+        trackedChangesConfig: context.trackedChangesConfig,
+        bookmarks: context.bookmarks,
+        hyperlinkConfig: context.hyperlinkConfig,
+        themeColors: context.themeColors,
+        converterContext: cellConverterContext,
+        converters: context.converters,
+        enableComments: context.enableComments,
       });
+      appendParagraphBlocks(paragraphBlocks);
+      continue;
+    }
+
+    if (childNode.type === 'structuredContentBlock' && Array.isArray(childNode.content)) {
+      const structuredContentMetadata = resolveNodeSdtMetadata(childNode, 'structuredContentBlock');
+      for (const nestedNode of childNode.content) {
+        if (nestedNode.type === 'paragraph') {
+          if (!paragraphToFlowBlocks) continue;
+          const paragraphBlocks = paragraphToFlowBlocks({
+            para: nestedNode,
+            nextBlockId: context.nextBlockId,
+            positions: context.positions,
+            trackedChangesConfig: context.trackedChangesConfig,
+            bookmarks: context.bookmarks,
+            hyperlinkConfig: context.hyperlinkConfig,
+            themeColors: context.themeColors,
+            converterContext: cellConverterContext,
+            converters: context.converters,
+            enableComments: context.enableComments,
+          });
+          appendParagraphBlocks(paragraphBlocks, structuredContentMetadata);
+          continue;
+        }
+        if (nestedNode.type === 'table' && tableNodeToBlock) {
+          const tableBlock = tableNodeToBlock(nestedNode, {
+            nextBlockId: context.nextBlockId,
+            positions: context.positions,
+            trackedChangesConfig: context.trackedChangesConfig,
+            bookmarks: context.bookmarks,
+            hyperlinkConfig: context.hyperlinkConfig,
+            themeColors: context.themeColors,
+            converterContext: context.converterContext,
+            converters: context.converters,
+            enableComments: context.enableComments,
+          });
+          if (tableBlock && tableBlock.kind === 'table') {
+            applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
+            blocks.push(tableBlock);
+          }
+          continue;
+        }
+      }
+      continue;
+    }
+
+    if (childNode.type === 'table' && tableNodeToBlock) {
+      const tableBlock = tableNodeToBlock(childNode, {
+        nextBlockId: context.nextBlockId,
+        positions: context.positions,
+        trackedChangesConfig: context.trackedChangesConfig,
+        bookmarks: context.bookmarks,
+        hyperlinkConfig: context.hyperlinkConfig,
+        themeColors: context.themeColors,
+        converterContext: context.converterContext,
+        converters: context.converters,
+        enableComments: context.enableComments,
+      });
+      if (tableBlock && tableBlock.kind === 'table') {
+        blocks.push(tableBlock);
+      }
       continue;
     }
 
     if (childNode.type === 'image' && context.converters?.imageNodeToBlock) {
       const mergedMarks = [...(childNode.marks ?? [])];
-      const trackedMeta = context.trackedChanges ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
-      if (shouldHideTrackedNode(trackedMeta, context.trackedChanges)) {
+      const trackedMeta = context.trackedChangesConfig ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
+      if (shouldHideTrackedNode(trackedMeta, context.trackedChangesConfig)) {
         continue;
       }
       const imageBlock = context.converters.imageNodeToBlock(
@@ -246,10 +347,10 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.nextBlockId,
         context.positions,
         trackedMeta,
-        context.trackedChanges,
+        context.trackedChangesConfig,
       );
       if (imageBlock && imageBlock.kind === 'image') {
-        annotateBlockWithTrackedChange(imageBlock, trackedMeta, context.trackedChanges);
+        annotateBlockWithTrackedChange(imageBlock, trackedMeta, context.trackedChangesConfig);
         blocks.push(imageBlock);
       }
       continue;
@@ -261,7 +362,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.nextBlockId,
         context.positions,
       );
-      if (drawingBlock) {
+      if (drawingBlock && drawingBlock.kind === 'drawing') {
         blocks.push(drawingBlock);
       }
       continue;
@@ -273,7 +374,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.nextBlockId,
         context.positions,
       );
-      if (drawingBlock) {
+      if (drawingBlock && drawingBlock.kind === 'drawing') {
         blocks.push(drawingBlock);
       }
       continue;
@@ -285,7 +386,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.nextBlockId,
         context.positions,
       );
-      if (drawingBlock) {
+      if (drawingBlock && drawingBlock.kind === 'drawing') {
         blocks.push(drawingBlock);
       }
       continue;
@@ -297,48 +398,11 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.nextBlockId,
         context.positions,
       );
-      if (drawingBlock) {
+      if (drawingBlock && drawingBlock.kind === 'drawing') {
         blocks.push(drawingBlock);
       }
+      continue;
     }
-  }
-
-  try {
-    const blockSummaries = blocks.map((b) => {
-      if (b.kind === 'paragraph') {
-        const runs = (b as ParagraphBlock).runs ?? [];
-        const attrs = (b as ParagraphBlock).attrs ?? {};
-        return {
-          kind: 'paragraph',
-          runKinds: runs.map((r) => (r as { kind?: string }).kind ?? 'text'),
-          runCount: runs.length,
-          runPreview: runs.map((r) => {
-            const kind = (r as { kind?: string }).kind ?? 'text';
-            if (kind === 'image') {
-              const img = r as { src?: string; width?: number; height?: number };
-              return { kind, src: img.src, width: img.width, height: img.height };
-            }
-            return { kind };
-          }),
-          hasNumbering: Boolean((attrs as Record<string, unknown>).numberingProperties),
-          markerText:
-            (attrs as { wordLayout?: { marker?: { markerText?: string } } }).wordLayout?.marker?.markerText,
-        };
-      }
-      return { kind: b.kind };
-    });
-    console.log(
-      '[tableNodeToBlock.parseTableCell] cell contents',
-      JSON.stringify({
-        cellIndex,
-        rowIndex,
-        cellIdPreview: `cell-${rowIndex}-${cellIndex}`,
-        childTypes: cellNode.content.map((c) => c?.type),
-        blocks: blockSummaries,
-      }),
-    );
-  } catch {
-    // best-effort logging; ignore serialization errors
   }
 
   if (blocks.length === 0) {
@@ -369,6 +433,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (background && typeof background.color === 'string') {
     const bgColor = background.color;
     cellAttrs.background = bgColor.startsWith('#') ? bgColor : `#${bgColor}`;
+  } else if (cellBackgroundColor) {
+    // Use resolved style background when no inline background is set
+    cellAttrs.background = cellBackgroundColor;
   }
 
   const tableCellProperties = cellNode.attrs?.tableCellProperties;
@@ -402,7 +469,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * @param args.rowIndex - Zero-based row index for ID generation
  * @param args.context - Parser dependencies (block ID generator, converters, style context)
  * @param args.defaultCellPadding - Optional default padding from table style to pass to cells
- * @param args.tableStyleParagraphProps - Optional paragraph properties from table style for cascade
+ * @param args.tableStyleId - Optional table style ID for paragraph style cascade in cells
  * @returns TableRow object with cells and attributes, or null if the row contains no valid cells
  *
  * @example
@@ -424,7 +491,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * // Returns: null
  */
 const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
-  const { rowNode, rowIndex, context, defaultCellPadding, tableStyleParagraphProps } = args;
+  const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows } = args;
   if (!isTableRowNode(rowNode) || !Array.isArray(rowNode.content)) {
     return null;
   }
@@ -437,7 +504,9 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       cellIndex,
       context,
       defaultCellPadding,
-      tableStyleParagraphProps,
+      tableProperties,
+      numCells: rowNode?.content?.length || 1,
+      numRows,
     });
     if (parsedCell) {
       cells.push(parsedCell);
@@ -594,8 +663,6 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
  * @param node - Table node to convert
  * @param nextBlockId - Block ID generator
  * @param positions - Position map for PM node tracking
- * @param defaultFont - Default font family
- * @param defaultSize - Default font size
  * @param _styleContext - Style context (unused in current implementation)
  * @param trackedChanges - Optional tracked changes configuration
  * @param bookmarks - Optional bookmark position map
@@ -605,64 +672,46 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
  */
 export function tableNodeToBlock(
   node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  _styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  paragraphToFlowBlocks?: (
-    node: PMNode,
-    nextBlockId: BlockIdGenerator,
-    positions: PositionMap,
-    defaultFont: string,
-    defaultSize: number,
-    styleContext: StyleContext,
-    listCounterContext?: ListCounterContext,
-    trackedChanges?: TrackedChangesConfig,
-    bookmarks?: Map<string, number>,
-    hyperlinkConfig?: HyperlinkConfig,
-    themeColors?: ThemeColorPalette,
-    converterContext?: ConverterContext,
-  ) => FlowBlock[],
-  converterContext?: ConverterContext,
-  options?: TableNodeToBlockOptions,
+  {
+    nextBlockId,
+    positions,
+    trackedChangesConfig,
+    bookmarks,
+    hyperlinkConfig,
+    themeColors,
+    converterContext,
+    converters,
+    enableComments,
+  }: TableNodeToBlockParams,
 ): FlowBlock | null {
   if (!Array.isArray(node.content) || node.content.length === 0) return null;
-  const paragraphConverter = paragraphToFlowBlocks ?? options?.converters?.paragraphToFlowBlocks;
+  const paragraphConverter = converters.paragraphToFlowBlocks;
   if (!paragraphConverter) return null;
 
   const parserDeps: TableParserDependencies = {
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext: _styleContext,
-    trackedChanges,
+    trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     themeColors,
-    listCounterContext: options?.listCounterContext,
-    paragraphToFlowBlocks: paragraphConverter,
     converterContext,
-    converters: options?.converters,
+    converters,
+    enableComments,
   };
 
   const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext);
   const defaultCellPadding = hydratedTableStyle?.cellPadding;
-  const tableStyleParagraphProps = hydratedTableStyle?.paragraphProps;
 
   const rows: TableRow[] = [];
   node.content.forEach((rowNode, rowIndex) => {
     const parsedRow = parseTableRow({
       rowNode,
       rowIndex,
+      numRows: node?.content?.length ?? 1,
       context: parserDeps,
       defaultCellPadding,
-      tableStyleParagraphProps,
+      tableProperties: node.attrs?.tableProperties as TableProperties | undefined,
     });
     if (parsedRow) {
       rows.push(parsedRow);
@@ -709,6 +758,10 @@ export function tableNodeToBlock(
     tableAttrs.tableWidth = hydratedTableStyle.tableWidth;
   }
 
+  if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
+    tableAttrs.tableIndent = { ...node.attrs.tableIndent };
+  }
+
   // Pass tableLayout through (extracted by tblLayout-translator.js)
   const tableLayout = node.attrs?.tableLayout;
   if (tableLayout) {
@@ -729,15 +782,16 @@ export function tableNodeToBlock(
   };
 
   /**
-   * Column width priority hierarchy (per plan Phase 3):
+   * Column width priority hierarchy:
    * 1. User-edited grid (userEdited flag + grid attribute)
-   * 2. PM colwidth attributes (fallback for PM-native edits)
-   * 3. Original OOXML grid (untouched documents)
+   * 2. Original OOXML grid (untouched documents — grid values sum to page width)
+   * 3. PM colwidth attributes (fallback for PM-native edits or missing grid)
    * 4. Auto-calculate from content (no explicit widths)
    *
-   * When both grid and colwidth are present:
-   * - If userEdited=true: use grid (Priority 1)
-   * - Otherwise: use colwidth (Priority 2) over grid (Priority 3)
+   * Grid values (from w:tblGrid) represent actual column positions on the page and
+   * sum to exactly the content width. Cell colwidth values may be scaled up from tcW
+   * (cell width hints) during import and require down-scaling in the measuring code,
+   * which introduces proportion changes that make columns narrower than they should be.
    */
 
   // Priority 1: User-edited grid (preserves resize operations)
@@ -758,7 +812,22 @@ export function tableNodeToBlock(
     }
   }
 
-  // Priority 2: PM colwidth attributes (higher priority than grid when userEdited !== true)
+  // Priority 2: Original OOXML grid (grid values are authoritative for column positions)
+  if (!columnWidths && Array.isArray(node.attrs?.grid) && node.attrs.grid.length > 0) {
+    columnWidths = (node.attrs.grid as Array<{ col?: number } | null | undefined>)
+      .filter((col): col is { col?: number } => col != null && typeof col === 'object')
+      .map((col) => {
+        const twips = typeof col.col === 'number' ? col.col : 0;
+        return twips > 0 ? twipsToPixels(twips) : 0;
+      })
+      .filter((width: number) => width > 0);
+
+    if (columnWidths.length === 0) {
+      columnWidths = undefined;
+    }
+  }
+
+  // Priority 3: PM colwidth attributes (fallback when no grid is available)
   if (!columnWidths && Array.isArray(node.content) && node.content.length > 0) {
     const firstRow = node.content[0];
     if (firstRow && isTableRowNode(firstRow) && Array.isArray(firstRow.content) && firstRow.content.length > 0) {
@@ -776,21 +845,6 @@ export function tableNodeToBlock(
       if (tempWidths.length > 0) {
         columnWidths = tempWidths;
       }
-    }
-  }
-
-  // Priority 3: Original OOXML grid (fallback when no colwidth)
-  if (!columnWidths && Array.isArray(node.attrs?.grid) && node.attrs.grid.length > 0) {
-    columnWidths = (node.attrs.grid as Array<{ col?: number } | null | undefined>)
-      .filter((col): col is { col?: number } => col != null && typeof col === 'object')
-      .map((col) => {
-        const twips = typeof col.col === 'number' ? col.col : 0;
-        return twips > 0 ? twipsToPixels(twips) : 0;
-      })
-      .filter((width: number) => width > 0);
-
-    if (columnWidths.length === 0) {
-      columnWidths = undefined;
     }
   }
 
@@ -825,34 +879,27 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     converters,
     converterContext,
+    enableComments,
   } = context;
 
-  const tableBlock = tableNodeToBlock(
-    node,
+  const tableBlock = tableNodeToBlock(node, {
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
-    undefined, // themeColors
-    converters?.paragraphToFlowBlocks,
+    themeColors: undefined,
     converterContext,
-    { listCounterContext, converters },
-  );
+    converters,
+    enableComments,
+  });
   if (tableBlock) {
     blocks.push(tableBlock);
-    recordBlockKind(tableBlock.kind);
+    recordBlockKind?.(tableBlock.kind);
   }
 }

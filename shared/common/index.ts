@@ -7,6 +7,15 @@ export * from './key-transform';
 // Event types
 export * from './event-types';
 
+// Comment types
+export type {
+  Comment,
+  CommentContent,
+  CommentJSON,
+  CommentThreadingProfile,
+  CommentThreadingStyle,
+} from './comments-types';
+
 // List numbering helpers
 export * from './list-numbering';
 
@@ -21,31 +30,9 @@ export { default as vClickOutside } from './helpers/v-click-outside';
 // import BasicUpload from '@superdoc/common/components/BasicUpload.vue'
 // This is because .vue files cannot be re-exported from compiled TypeScript in dist/
 
-// Telemetry
-export { Telemetry, TelemetryEventNames, customTelemetryEvent } from './Telemetry';
-export type {
-  // Configuration
-  TelemetryConfig,
-  // Data structures
-  Statistics,
-  FileStructure,
-  FileInfo,
-  DocumentInfo,
-  TelemetryError,
-  UnknownElement,
-  BrowserInfo,
-  // Event types
-  TelemetryEventName,
-  KnownTelemetryEvent,
-  CustomTelemetryEvent,
-  StatisticCategory,
-  BaseTelemetryEvent,
-  TelemetryUsageEvent,
-  TelemetryParsingReport,
-  TelemetryPayload,
-  // Data interface
-  StatisticData,
-} from './Telemetry';
-
 // Collaboration/Awareness
 export * from './collaboration/awareness';
+
+// Telemetry
+export { Telemetry, COMMUNITY_LICENSE_KEY } from './Telemetry';
+export type { TelemetryConfig, TelemetryPayload, DocumentOpenEvent, BrowserInfo } from './Telemetry';

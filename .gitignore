@@ -1,17 +1,17 @@
 logs
 *.log
 .cache
+.vite
 .DS_Store
 .temp
 node_modules
 dist
 dist-ssr
+dist-types
 *.local
 .env
 .npmrc
 .eslintcache
-CLAUDE.md
-
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -36,6 +36,10 @@ lerna-debug.log*
 
 packages/super-editor/src/tests/data/*/
 
+packages/word-layout/tests/**/*.js
+packages/word-layout/tests/**/*.d.ts
+packages/word-layout/tests/**/*.map
+
 # Playwright
 test-results
 *.tgz
@@ -50,6 +54,7 @@ coverage
 coverage/
 **/coverage
 **/coverage/
+reports/
 
 **/src/**/*.d.ts.map
 **/src/**/*.js.map
@@ -59,8 +64,17 @@ coverage/
 
 # Planning and progress tracking documents
 **/plan/progress.md
-
-AGENTS.md
+wrangler/
 codex.config.json
 perf-baseline-results.json
 .claude
+plans/
+
+tests/layout-snapshots/candidate/
+tests/layout-snapshots/reference/
+test-corpus/
+.pnpm-store
+devtools/visual-testing/pnpm-lock.yaml
+
+.bun-cache/
+

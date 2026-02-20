@@ -2,10 +2,10 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: ['src/index.ts'],
-  format: ['cjs'],
+  format: ['esm'],
   dts: true,
-  clean: true, // Always clean dist folder before build
-  minify: true, // Minify the output
+  clean: true,
+  minify: true,
   sourcemap: false,
   outDir: 'dist',
   target: 'es2020',

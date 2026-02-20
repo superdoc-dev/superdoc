@@ -14,6 +14,8 @@ import {
   applyTextStyleMark,
   applyMarksToRun,
   extractDataAttributes,
+  getLuminance,
+  resolveAutoColor,
   TRACK_INSERT_MARK,
   TRACK_DELETE_MARK,
   TRACK_FORMAT_MARK,
@@ -503,8 +505,13 @@ describe('mark application', () => {
       expect(normalizeUnderlineStyle('wavy')).toBe('wavy');
     });
 
-    it('returns undefined for explicit "none" value', () => {
+    it('returns undefined for explicit off values', () => {
       expect(normalizeUnderlineStyle('none')).toBeUndefined();
+      expect(normalizeUnderlineStyle('0')).toBeUndefined();
+      expect(normalizeUnderlineStyle('false')).toBeUndefined();
+      expect(normalizeUnderlineStyle('off')).toBeUndefined();
+      expect(normalizeUnderlineStyle(0)).toBeUndefined();
+      expect(normalizeUnderlineStyle(false)).toBeUndefined();
     });
 
     it('returns "single" for undefined/null (default)', () => {
@@ -517,6 +524,14 @@ describe('mark application', () => {
       expect(normalizeUnderlineStyle('thick')).toBe('single');
       expect(normalizeUnderlineStyle('unknown')).toBe('single');
       expect(normalizeUnderlineStyle(123)).toBe('single');
+    });
+
+    it('handles case-insensitive off values', () => {
+      expect(normalizeUnderlineStyle('NONE')).toBeUndefined();
+      expect(normalizeUnderlineStyle('False')).toBeUndefined();
+      expect(normalizeUnderlineStyle('OFF')).toBeUndefined();
+      expect(normalizeUnderlineStyle('Double')).toBe('double');
+      expect(normalizeUnderlineStyle('WAVY')).toBe('wavy');
     });
   });
 
@@ -851,7 +866,7 @@ describe('mark application', () => {
       const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
       applyMarksToRun(run, [{ type: 'commentMark', attrs: { commentId: 'c-1', internal: true } }]);
 
-      expect(run.comments).toEqual([{ commentId: 'c-1', internal: true }]);
+      expect(run.comments).toEqual([{ commentId: 'c-1', importedId: undefined, internal: true, trackedChange: false }]);
     });
 
     it('dedupes comment annotations by id/importedId', () => {
@@ -862,7 +877,12 @@ describe('mark application', () => {
       ]);
 
       expect(run.comments).toHaveLength(1);
-      expect(run.comments?.[0]).toEqual({ commentId: 'c-1', importedId: 'imp-1', internal: false });
+      expect(run.comments?.[0]).toEqual({
+        commentId: 'c-1',
+        importedId: 'imp-1',
+        internal: false,
+        trackedChange: false,
+      });
     });
 
     it('applies underline mark with default style', () => {
@@ -884,6 +904,18 @@ describe('mark application', () => {
       applyMarksToRun(run, [{ type: 'underline', attrs: { color: 'FF0000' } }]);
 
       expect(run.underline?.color).toBe('#FF0000');
+    });
+
+    it('clears underline when underline mark is explicit none', () => {
+      const run: TextRun = {
+        text: 'Hello',
+        fontFamily: 'Arial',
+        fontSize: 12,
+        underline: { style: 'single' },
+      };
+      applyMarksToRun(run, [{ type: 'underline', attrs: { underlineType: 'none' } }]);
+
+      expect(run.underline).toBeUndefined();
     });
 
     it('applies textStyle mark', () => {
@@ -982,6 +1014,355 @@ describe('mark application', () => {
       expect(run.fontFamily).toBe('Arial');
       expect(run.fontSize).toBe(12);
       expect(run.italic).toBe(true);
+    });
+  });
+
+  describe('getLuminance', () => {
+    it('returns 0 for pure black (#000000)', () => {
+      const luminance = getLuminance('#000000');
+      expect(luminance).toBe(0);
+    });
+
+    it('returns 1 for pure white (#FFFFFF)', () => {
+      const luminance = getLuminance('#FFFFFF');
+      expect(luminance).toBe(1);
+    });
+
+    it('returns ~0.2159 for mid-gray (#808080)', () => {
+      const luminance = getLuminance('#808080');
+      // Mid gray should produce a luminance around 0.2159
+      expect(luminance).toBeCloseTo(0.2159, 3);
+    });
+
+    it('returns luminance < 0.18 for dark purple (#342D8C)', () => {
+      const luminance = getLuminance('#342D8C');
+      // Dark purple should be below the WCAG AA threshold
+      expect(luminance).toBeLessThan(0.18);
+      expect(luminance).toBeCloseTo(0.045, 2);
+    });
+
+    it('handles short hex format (#F00 = #FF0000)', () => {
+      const luminance = getLuminance('#F00');
+      const luminanceFull = getLuminance('#FF0000');
+      expect(luminance).toBe(luminanceFull);
+      expect(luminance).toBeCloseTo(0.2126, 3);
+    });
+
+    it('handles hex without # prefix', () => {
+      const luminance = getLuminance('808080');
+      const luminanceWithHash = getLuminance('#808080');
+      expect(luminance).toBe(luminanceWithHash);
+    });
+
+    it('returns 1.0 (light) for invalid color strings', () => {
+      expect(getLuminance('invalid')).toBe(1);
+      expect(getLuminance('xyz')).toBe(1);
+      expect(getLuminance('')).toBe(1);
+      expect(getLuminance('#GGGGGG')).toBe(1);
+    });
+
+    it('handles pure red (#FF0000)', () => {
+      const luminance = getLuminance('#FF0000');
+      // Red channel coefficient is 0.2126
+      expect(luminance).toBeCloseTo(0.2126, 4);
+    });
+
+    it('handles pure green (#00FF00)', () => {
+      const luminance = getLuminance('#00FF00');
+      // Green channel coefficient is 0.7152
+      expect(luminance).toBeCloseTo(0.7152, 4);
+    });
+
+    it('handles pure blue (#0000FF)', () => {
+      const luminance = getLuminance('#0000FF');
+      // Blue channel coefficient is 0.0722
+      expect(luminance).toBeCloseTo(0.0722, 4);
+    });
+
+    it('handles light gray (#CCCCCC)', () => {
+      const luminance = getLuminance('#CCCCCC');
+      // Light gray should be well above the 0.18 threshold
+      expect(luminance).toBeGreaterThan(0.18);
+      expect(luminance).toBeCloseTo(0.6038, 3);
+    });
+
+    it('applies sRGB gamma correction correctly', () => {
+      // Test a color where gamma correction matters
+      // #404040 should have different linear vs non-linear luminance
+      const luminance = getLuminance('#404040');
+      // With sRGB gamma correction, #404040 (64/255 per channel) produces ~0.0513 luminance
+      expect(luminance).toBeCloseTo(0.0513, 2);
+    });
+
+    it('handles edge case at gamma threshold (values around 0.03928)', () => {
+      // RGB value of ~10 corresponds to c = 10/255 ≈ 0.0392 (right at threshold)
+      const luminance = getLuminance('#0A0A0A');
+      expect(luminance).toBeGreaterThan(0);
+      expect(luminance).toBeLessThan(0.01);
+    });
+
+    it('is case-insensitive for hex letters', () => {
+      expect(getLuminance('#ffffff')).toBe(1);
+      expect(getLuminance('#FFFFFF')).toBe(1);
+      expect(getLuminance('#FfFfFf')).toBe(1);
+    });
+
+    it('handles 3-digit short hex with various values', () => {
+      // #ABC should expand to #AABBCC
+      const luminance = getLuminance('#ABC');
+      const luminanceExpanded = getLuminance('#AABBCC');
+      expect(luminance).toBe(luminanceExpanded);
+    });
+  });
+
+  describe('resolveAutoColor', () => {
+    it('returns white (#FFFFFF) for pure black background', () => {
+      expect(resolveAutoColor('#000000')).toBe('#FFFFFF');
+    });
+
+    it('returns black (#000000) for pure white background', () => {
+      expect(resolveAutoColor('#FFFFFF')).toBe('#000000');
+    });
+
+    it('returns white for dark purple (#342D8C)', () => {
+      // Dark purple has luminance < 0.18, should get white text
+      expect(resolveAutoColor('#342D8C')).toBe('#FFFFFF');
+    });
+
+    it('returns black for light gray (#CCCCCC)', () => {
+      // Light gray has luminance > 0.18, should get black text
+      expect(resolveAutoColor('#CCCCCC')).toBe('#000000');
+    });
+
+    it('handles threshold boundary at luminance = 0.18', () => {
+      // Mid gray (#808080) has luminance ~0.2159 (above threshold)
+      expect(resolveAutoColor('#808080')).toBe('#000000');
+    });
+
+    it('returns white for colors just below threshold', () => {
+      // Find a color with luminance slightly below 0.18
+      // #5E5E5E has luminance ~0.1307 (< 0.18)
+      expect(resolveAutoColor('#5E5E5E')).toBe('#FFFFFF');
+    });
+
+    it('returns black for colors just above threshold', () => {
+      // #8C8C8C has luminance ~0.2518 (> 0.18)
+      expect(resolveAutoColor('#8C8C8C')).toBe('#000000');
+    });
+
+    it('handles short hex format', () => {
+      // #000 = pure black -> white text
+      expect(resolveAutoColor('#000')).toBe('#FFFFFF');
+      // #FFF = pure white -> black text
+      expect(resolveAutoColor('#FFF')).toBe('#000000');
+    });
+
+    it('handles hex without # prefix', () => {
+      expect(resolveAutoColor('000000')).toBe('#FFFFFF');
+      expect(resolveAutoColor('FFFFFF')).toBe('#000000');
+    });
+
+    it('defaults to black text for invalid colors', () => {
+      // Invalid colors return luminance 1.0 (light), so should get black text
+      expect(resolveAutoColor('invalid')).toBe('#000000');
+      expect(resolveAutoColor('')).toBe('#000000');
+      expect(resolveAutoColor('#XYZ')).toBe('#000000');
+    });
+
+    it('returns white for pure red (#FF0000)', () => {
+      // Red has luminance ~0.2126 (above threshold), should get black text
+      expect(resolveAutoColor('#FF0000')).toBe('#000000');
+    });
+
+    it('returns black for pure green (#00FF00)', () => {
+      // Green has luminance ~0.7152 (well above threshold), should get black text
+      expect(resolveAutoColor('#00FF00')).toBe('#000000');
+    });
+
+    it('returns white for pure blue (#0000FF)', () => {
+      // Blue has luminance ~0.0722 (below threshold), should get white text
+      expect(resolveAutoColor('#0000FF')).toBe('#FFFFFF');
+    });
+
+    it('returns white for dark red (#8B0000)', () => {
+      // Dark red has low luminance, should get white text
+      expect(resolveAutoColor('#8B0000')).toBe('#FFFFFF');
+    });
+
+    it('is case-insensitive', () => {
+      expect(resolveAutoColor('#ffffff')).toBe('#000000');
+      expect(resolveAutoColor('#FFFFFF')).toBe('#000000');
+      expect(resolveAutoColor('#000000')).toBe('#FFFFFF');
+      expect(resolveAutoColor('#000000')).toBe('#FFFFFF');
+    });
+  });
+
+  describe('applyMarksToRun - backgroundColor auto color resolution', () => {
+    it('applies auto white text color for dark purple background', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      // No explicit color mark, but backgroundColor provided
+      applyMarksToRun(run, [], undefined, undefined, '#342D8C');
+
+      expect(run.color).toBe('#FFFFFF');
+    });
+
+    it('preserves existing run color when style already set one', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12, color: '#336699' };
+      // Background color provided but no color mark; style-set color should remain
+      applyMarksToRun(run, [], undefined, undefined, '#000000');
+
+      expect(run.color).toBe('#336699');
+    });
+
+    it('treats auto color value as unset and applies contrast color', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12, color: 'auto' };
+      applyMarksToRun(run, [], undefined, undefined, '#000000');
+
+      expect(run.color).toBe('#FFFFFF');
+    });
+
+    it('treats default black color as eligible for auto contrast', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12, color: '#000000' };
+      applyMarksToRun(run, [], undefined, undefined, '#000000');
+
+      expect(run.color).toBe('#FFFFFF');
+    });
+
+    it('treats short-hex black as eligible for auto contrast', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12, color: '#000' };
+      applyMarksToRun(run, [], undefined, undefined, '#000000');
+
+      expect(run.color).toBe('#FFFFFF');
+    });
+
+    it('treats none color value as unset and applies contrast color', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12, color: 'none' };
+      applyMarksToRun(run, [], undefined, undefined, '#000000');
+
+      expect(run.color).toBe('#FFFFFF');
+    });
+
+    it('does not override an explicit black color mark', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'textStyle', attrs: { color: '#000000' } }];
+      applyMarksToRun(run, marks, undefined, undefined, '#000000');
+
+      expect(run.color).toBe('#000000'); // Mark-set color should stick
+    });
+
+    it('applies auto black text color for white background', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      applyMarksToRun(run, [], undefined, undefined, '#FFFFFF');
+
+      expect(run.color).toBe('#000000');
+    });
+
+    it('applies auto black text color for light gray background', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      applyMarksToRun(run, [], undefined, undefined, '#CCCCCC');
+
+      expect(run.color).toBe('#000000');
+    });
+
+    it('skips auto color when explicit color mark is present', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'textStyle', attrs: { color: 'FF0000' } }];
+      applyMarksToRun(run, marks, undefined, undefined, '#000000');
+
+      // Explicit red color should override auto resolution
+      expect(run.color).toBe('#FF0000');
+    });
+
+    it('skips auto color when no background is provided', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      applyMarksToRun(run, [], undefined, undefined, undefined);
+
+      // No backgroundColor, so no auto color should be applied
+      expect(run.color).toBeUndefined();
+    });
+
+    it('works with TabRun (should not apply auto color)', () => {
+      const run = { kind: 'tab' as const };
+      applyMarksToRun(run, [], undefined, undefined, '#000000');
+
+      // TabRun should not receive auto color
+      expect('color' in run).toBe(false);
+    });
+
+    it('applies auto color even when other marks are present (no color)', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'bold' }, { type: 'italic' }];
+      applyMarksToRun(run, marks, undefined, undefined, '#000000');
+
+      // Bold and italic don't set color, so auto color should apply
+      expect(run.bold).toBe(true);
+      expect(run.italic).toBe(true);
+      expect(run.color).toBe('#FFFFFF');
+    });
+
+    it('applies auto color when textStyle mark does not set color', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'textStyle', attrs: { fontSize: 16, fontFamily: 'Courier' } }];
+      applyMarksToRun(run, marks, undefined, undefined, '#FFFFFF');
+
+      // textStyle sets fontSize and fontFamily but not color
+      expect(run.fontSize).toBe(16);
+      expect(run.fontFamily).toBe('Courier');
+      expect(run.color).toBe('#000000'); // Auto color applied
+    });
+
+    it('handles short hex background colors', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      applyMarksToRun(run, [], undefined, undefined, '#000');
+
+      expect(run.color).toBe('#FFFFFF');
+    });
+
+    it('handles background colors without # prefix', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      applyMarksToRun(run, [], undefined, undefined, 'FFFFFF');
+
+      expect(run.color).toBe('#000000');
+    });
+
+    it('applies auto color at threshold boundary', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      // Mid gray should produce black text
+      applyMarksToRun(run, [], undefined, undefined, '#808080');
+
+      expect(run.color).toBe('#000000');
+    });
+
+    it('handles invalid background color gracefully', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      // Invalid color should default to luminance 1.0 -> black text
+      applyMarksToRun(run, [], undefined, undefined, 'invalid');
+
+      expect(run.color).toBe('#000000');
+    });
+
+    it('prioritizes explicit color from highlight over auto color', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'highlight', attrs: { color: 'FFFF00' } }];
+      applyMarksToRun(run, marks, undefined, undefined, '#000000');
+
+      // Highlight doesn't set text color, so auto color should still apply
+      expect(run.highlight).toBe('#FFFF00');
+      expect(run.color).toBe('#FFFFFF'); // Auto color for dark background
+    });
+
+    it('does not apply auto color when textStyle explicitly sets color to undefined', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'textStyle', attrs: { color: '' } }];
+      applyMarksToRun(run, marks, undefined, undefined, '#000000');
+
+      // Empty color string should not set run.color, but mark attempted to set it
+      // This is a tricky edge case - the mark tried to set color (even if invalid)
+      // Check current behavior: normalizeColor('') likely returns undefined or '#'
+      // If it returns undefined, color won't be set, so auto color should apply
+      // If it returns '#invalid', then markSetColor will be false and auto applies
+      // Based on code: resolveColorFromAttributes returns undefined for empty string
+      expect(run.color).toBe('#FFFFFF'); // Auto color applied since no valid color was set
     });
   });
 
@@ -1240,6 +1621,171 @@ describe('mark application', () => {
           'data-valid3': 'value3',
         });
       });
+    });
+  });
+
+  describe('enableComments parameter', () => {
+    it('skips comment marks when enableComments is false', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [
+        { type: 'bold' },
+        { type: 'comment', attrs: { commentId: 'c-1', internal: false } },
+        { type: 'commentMark', attrs: { commentId: 'c-2', internal: true } },
+        { type: 'italic' },
+      ];
+
+      applyMarksToRun(run, marks, undefined, undefined, undefined, false);
+
+      // Bold and italic should be applied
+      expect(run.bold).toBe(true);
+      expect(run.italic).toBe(true);
+
+      // Comments should NOT be applied when enableComments is false
+      expect(run.comments).toBeUndefined();
+    });
+
+    it('includes comment marks when enableComments is true', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [
+        { type: 'bold' },
+        { type: 'comment', attrs: { commentId: 'c-1', internal: false } },
+        { type: 'commentMark', attrs: { commentId: 'c-2', internal: true } },
+      ];
+
+      applyMarksToRun(run, marks, undefined, undefined, undefined, true);
+
+      // Bold should be applied
+      expect(run.bold).toBe(true);
+
+      // Comments SHOULD be applied when enableComments is true
+      expect(run.comments).toBeDefined();
+      expect(run.comments).toHaveLength(2);
+      expect(run.comments?.[0]).toEqual({
+        commentId: 'c-1',
+        importedId: undefined,
+        internal: false,
+        trackedChange: false,
+      });
+      expect(run.comments?.[1]).toEqual({
+        commentId: 'c-2',
+        importedId: undefined,
+        internal: true,
+        trackedChange: false,
+      });
+    });
+
+    it('includes comment marks when enableComments is undefined (default true)', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'comment', attrs: { commentId: 'c-1', internal: false } }];
+
+      // Default behavior when enableComments is not specified should include comments
+      applyMarksToRun(run, marks, undefined);
+
+      expect(run.comments).toBeDefined();
+      expect(run.comments).toHaveLength(1);
+      expect(run.comments?.[0]).toEqual({
+        commentId: 'c-1',
+        importedId: undefined,
+        internal: false,
+        trackedChange: false,
+      });
+    });
+
+    it('includes comment marks when config object is undefined', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'commentMark', attrs: { commentId: 'c-1', internal: true } }];
+
+      // When no config is passed, comments should be included by default
+      applyMarksToRun(run, marks);
+
+      expect(run.comments).toBeDefined();
+      expect(run.comments).toHaveLength(1);
+      expect(run.comments?.[0]).toEqual({
+        commentId: 'c-1',
+        importedId: undefined,
+        internal: true,
+        trackedChange: false,
+      });
+    });
+
+    it('handles mixed marks with enableComments false', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [
+        { type: 'bold' },
+        { type: 'textStyle', attrs: { color: 'FF0000' } },
+        { type: 'comment', attrs: { commentId: 'c-1' } },
+        { type: 'underline', attrs: { underlineType: 'double' } },
+        { type: 'commentMark', attrs: { commentId: 'c-2' } },
+        { type: 'italic' },
+      ];
+
+      applyMarksToRun(run, marks, undefined, undefined, undefined, false);
+
+      // All non-comment marks should be applied
+      expect(run.bold).toBe(true);
+      expect(run.italic).toBe(true);
+      expect(run.color).toBe('#FF0000');
+      expect(run.underline?.style).toBe('double');
+
+      // Comments should be skipped
+      expect(run.comments).toBeUndefined();
+    });
+
+    it('handles mixed marks with enableComments true', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [
+        { type: 'bold' },
+        { type: 'comment', attrs: { commentId: 'c-1', internal: false } },
+        { type: 'italic' },
+        { type: 'commentMark', attrs: { commentId: 'c-2', internal: true } },
+      ];
+
+      applyMarksToRun(run, marks, undefined, undefined, undefined, true);
+
+      // All marks should be applied
+      expect(run.bold).toBe(true);
+      expect(run.italic).toBe(true);
+      expect(run.comments).toHaveLength(2);
+    });
+
+    it('only skips comment marks, not other marks, when enableComments is false', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [
+        { type: 'comment', attrs: { commentId: 'c-1' } },
+        { type: 'strike' },
+        { type: 'commentMark', attrs: { commentId: 'c-2' } },
+        { type: 'highlight', attrs: { color: 'FFFF00' } },
+      ];
+
+      applyMarksToRun(run, marks, undefined, undefined, undefined, false);
+
+      // Non-comment marks should be applied
+      expect(run.strike).toBe(true);
+      expect(run.highlight).toBe('#FFFF00');
+
+      // Comments should be skipped
+      expect(run.comments).toBeUndefined();
+    });
+
+    it('handles enableComments with empty marks array', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+
+      applyMarksToRun(run, [], undefined, undefined, undefined, false);
+
+      expect(run.comments).toBeUndefined();
+      expect(run.bold).toBeUndefined();
+    });
+
+    it('handles enableComments with only non-comment marks', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      const marks: PMMark[] = [{ type: 'bold' }, { type: 'italic' }];
+
+      applyMarksToRun(run, marks, undefined, undefined, undefined, false);
+
+      // Non-comment marks should still be applied
+      expect(run.bold).toBe(true);
+      expect(run.italic).toBe(true);
+      expect(run.comments).toBeUndefined();
     });
   });
 });

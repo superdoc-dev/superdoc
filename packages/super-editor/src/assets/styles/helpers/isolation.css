@@ -4,7 +4,7 @@
  * SVG has its own rendering model and doesn't need CSS isolation the same way text content does.
  */
 .sd-editor-scoped,
-.sd-editor-scoped :where(*:not(svg):not(svg *)),
+.sd-editor-scoped :where(*:not(svg):not(svg *):not(.annotation):not([data-drag-handle])),
 .sd-editor-scoped :where(*:not(svg):not(svg *)::before),
 .sd-editor-scoped :where(*:not(svg):not(svg *)::after) {
   all: revert;

@@ -247,9 +247,9 @@ export function buildMultiSectionIdentifier(
     // Track per-section titlePg from section metadata (w:titlePg element in OOXML)
     // Note: The presence of a 'first' header/footer reference does NOT mean titlePg is enabled.
     // The w:titlePg element must be present in sectPr to use first page headers/footers.
-    if (section.titlePg === true) {
-      identifier.sectionTitlePg.set(idx, true);
-    }
+    // Track per-section titlePg from section metadata (w:titlePg element in OOXML)
+    // Store explicit false so later sections don't inherit section 0's value.
+    identifier.sectionTitlePg.set(idx, section.titlePg === true);
   }
 
   // Set legacy fields from section 0 for backward compatibility
@@ -265,13 +265,20 @@ export function buildMultiSectionIdentifier(
 
   // Merge converter IDs as fallbacks for dynamically created headers/footers
   // Only fill in null values - don't override existing refs from section metadata
+  // Also fall back to converter's titlePg if not set from section metadata
   if (converterIds?.headerIds) {
+    if (!identifier.titlePg && (converterIds.headerIds as { titlePg?: boolean }).titlePg) {
+      identifier.titlePg = true;
+    }
     identifier.headerIds.default = identifier.headerIds.default ?? converterIds.headerIds.default ?? null;
     identifier.headerIds.first = identifier.headerIds.first ?? converterIds.headerIds.first ?? null;
     identifier.headerIds.even = identifier.headerIds.even ?? converterIds.headerIds.even ?? null;
     identifier.headerIds.odd = identifier.headerIds.odd ?? converterIds.headerIds.odd ?? null;
   }
   if (converterIds?.footerIds) {
+    if (!identifier.titlePg && (converterIds.footerIds as { titlePg?: boolean }).titlePg) {
+      identifier.titlePg = true;
+    }
     identifier.footerIds.default = identifier.footerIds.default ?? converterIds.footerIds.default ?? null;
     identifier.footerIds.first = identifier.footerIds.first ?? converterIds.footerIds.first ?? null;
     identifier.footerIds.even = identifier.footerIds.even ?? converterIds.footerIds.even ?? null;
@@ -290,17 +297,28 @@ export function buildMultiSectionIdentifier(
  * - Alternate headers (even/odd pages based on physical page number)
  * - Fallback to default variant
  *
+ * **Important**: When `titlePg` is enabled, this function returns 'first' even if the
+ * section doesn't explicitly define a 'first' header/footer. This supports Word's
+ * inheritance behavior where sections inherit header/footer definitions from previous
+ * sections. The rendering layer is responsible for resolving the actual content ID
+ * through inheritance fallback logic.
+ *
  * @param pageNumber - Physical page number (1-indexed)
  * @param sectionIndex - Index of the section this page belongs to
  * @param identifier - Multi-section identifier with per-section mappings
- * @param options - Optional settings (kind: 'header' | 'footer')
- * @returns HeaderFooterType ('default' | 'first' | 'even' | 'odd') or null if none available
+ * @param options - Optional settings (kind: 'header' | 'footer', sectionPageNumber)
+ * @returns HeaderFooterType ('default' | 'first' | 'even' | 'odd') or null if no header/footer content exists
  *
  * @example
  * ```typescript
- * // First page of section 1 with titlePg enabled
- * const type = getHeaderFooterTypeForSection(1, 1, identifier, { kind: 'footer' });
- * // Returns 'first' if section 1 has a 'first' footer
+ * // First page of section 1 with titlePg enabled and 'first' header defined
+ * const type = getHeaderFooterTypeForSection(1, 1, identifier, { kind: 'header' });
+ * // Returns 'first'
+ *
+ * // First page of section 2 with titlePg enabled but NO 'first' header defined
+ * // (section 2 only has 'default' header)
+ * const type = getHeaderFooterTypeForSection(2, 1, identifier, { kind: 'header' });
+ * // Returns 'first' - rendering layer will inherit from section 1's 'first' header
  * ```
  */
 export function getHeaderFooterTypeForSection(
@@ -327,13 +345,20 @@ export function getHeaderFooterTypeForSection(
   const hasDefault = Boolean(ids.default);
 
   // Check titlePg for this specific section
-  const sectionTitlePg = identifier.sectionTitlePg.get(sectionIndex) ?? identifier.titlePg;
-  const titlePgEnabled = sectionTitlePg && hasFirst;
+  const sectionTitlePg = identifier.sectionTitlePg.has(sectionIndex)
+    ? identifier.sectionTitlePg.get(sectionIndex)!
+    : identifier.titlePg;
+  const titlePgEnabled = sectionTitlePg === true;
 
   // Use the section-relative page number to determine "first page" variants
   const isFirstPageOfSection = sectionPageNumber === 1;
   if (isFirstPageOfSection && titlePgEnabled) {
-    return 'first';
+    // Return 'first' variant type when titlePg is enabled, regardless of whether this section
+    // has a 'first' header defined. Word inherits headers from previous sections when not defined,
+    // so we let the rendering layer handle the inheritance/fallback logic.
+    // Only return null if there's absolutely no header content anywhere.
+    if (hasFirst || hasDefault || hasEven || hasOdd) return 'first';
+    return null;
   }
 
   if (identifier.alternateHeaders) {

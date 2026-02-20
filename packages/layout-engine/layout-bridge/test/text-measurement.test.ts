@@ -416,10 +416,14 @@ describe('text measurement utility', () => {
   describe('justify alignment integration', () => {
     // These tests verify that justify alignment works correctly through the public API
     it('applies justify spacing for justified text', () => {
-      const block = createBlock([{ text: 'A B', fontFamily: 'Arial', fontSize: 16 }]);
+      // Use two runs so the first line is NOT the last line (last lines skip justify)
+      const block = createBlock([
+        { text: 'A B', fontFamily: 'Arial', fontSize: 16 },
+        { text: 'C D', fontFamily: 'Arial', fontSize: 16 },
+      ]);
       const line = baseLine({
         fromRun: 0,
-        toRun: 0,
+        toRun: 0, // First line only covers first run
         toChar: 3,
         width: 30,
         maxWidth: 100,
@@ -451,6 +455,120 @@ describe('text measurement utility', () => {
 
       // Should be the same since no justify
       expect(x2).toBe(x2Base);
+    });
+
+    it('skips justify spacing on the last line of a paragraph', () => {
+      // Single-line paragraph: the line IS the last line, so justify should be skipped
+      const block = createBlock([{ text: 'A B', fontFamily: 'Arial', fontSize: 16 }]);
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 0, // Same as block.runs.length - 1, so this is the last line
+        toChar: 3,
+        width: 30,
+        maxWidth: 100,
+      });
+      (block as any).attrs = { alignment: 'justify' };
+
+      // Even with slack available, last line should NOT have extra justify spacing
+      const x2Normal = measureCharacterX(block, line, 2, 30);
+      const x2WithSlack = measureCharacterX(block, line, 2, 100);
+
+      // Should be the same since last line skips justify
+      expect(x2WithSlack).toBe(x2Normal);
+    });
+
+    it('applies justify spacing on last line when paragraph ends with lineBreak', () => {
+      // Paragraph ending with lineBreak (soft break / Shift+Enter) SHOULD justify the last line
+      const block = createBlock([{ text: 'A B', fontFamily: 'Arial', fontSize: 16 }, { kind: 'lineBreak' as const }]);
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 0, // This line doesn't include the lineBreak run
+        toChar: 3,
+        width: 30,
+        maxWidth: 100,
+      });
+      (block as any).attrs = { alignment: 'justify' };
+
+      // With soft break at end, even last line should be justified
+      const x2Normal = measureCharacterX(block, line, 2, 30);
+      const x2Justified = measureCharacterX(block, line, 2, 100);
+
+      // Should be justified (wider) because paragraph ends with lineBreak
+      expect(x2Justified).toBeGreaterThan(x2Normal);
+    });
+
+    it('handles empty runs array without crashing', () => {
+      // Empty runs should not crash and should not apply justify
+      const block = createBlock([]);
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 0,
+        toChar: 0,
+        width: 0,
+        maxWidth: 100,
+      });
+      (block as any).attrs = { alignment: 'justify' };
+
+      // Should not crash and should return 0 for character position 0
+      const x0 = measureCharacterX(block, line, 0, 100);
+      expect(x0).toBe(0);
+
+      // findCharacterAtX should also handle empty runs
+      const result = findCharacterAtX(block, line, 50, 0, 100);
+      expect(result.charOffset).toBe(0);
+      expect(result.pmPosition).toBe(0);
+    });
+
+    it('auto-derives correct flags for multi-line paragraphs', () => {
+      // Multi-line paragraph: middle lines should be justified, last line should not
+      const block = createBlock([
+        { text: 'First line with spaces', fontFamily: 'Arial', fontSize: 16 },
+        { text: 'Second line also spaced', fontFamily: 'Arial', fontSize: 16 },
+        { text: 'Last line here', fontFamily: 'Arial', fontSize: 16 },
+      ]);
+      (block as any).attrs = { alignment: 'justify' };
+
+      // First line (not last) - should be justified
+      const firstLine = baseLine({
+        fromRun: 0,
+        toRun: 0,
+        toChar: 22,
+        width: 220,
+        maxWidth: 300,
+      });
+
+      const firstX = measureCharacterX(block, firstLine, 10, 300);
+      const firstXNormal = measureCharacterX(block, firstLine, 10, 220);
+      // Middle lines should be justified
+      expect(firstX).toBeGreaterThan(firstXNormal);
+
+      // Middle line (not last) - should be justified
+      const middleLine = baseLine({
+        fromRun: 1,
+        toRun: 1,
+        toChar: 23,
+        width: 230,
+        maxWidth: 300,
+      });
+
+      const middleX = measureCharacterX(block, middleLine, 10, 300);
+      const middleXNormal = measureCharacterX(block, middleLine, 10, 230);
+      // Middle lines should be justified
+      expect(middleX).toBeGreaterThan(middleXNormal);
+
+      // Last line - should NOT be justified (auto-derived)
+      const lastLine = baseLine({
+        fromRun: 2,
+        toRun: 2,
+        toChar: 14,
+        width: 140,
+        maxWidth: 300,
+      });
+
+      const lastX = measureCharacterX(block, lastLine, 10, 300);
+      const lastXNormal = measureCharacterX(block, lastLine, 10, 140);
+      // Last line should NOT be justified (same width)
+      expect(lastX).toBe(lastXNormal);
     });
   });
 

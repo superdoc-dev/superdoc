@@ -79,6 +79,11 @@ export type FloatingObjectManager = {
    * Clear all registered exclusion zones.
    */
   clear(): void;
+
+  /**
+   * Update layout context used for positioning and wrapping (columns, margins, page width).
+   */
+  setLayoutContext(columns: ColumnLayout, margins?: { left?: number; right?: number }, pageWidth?: number): void;
 };
 
 type ColumnLayout = {
@@ -93,7 +98,10 @@ export function createFloatingObjectManager(
   pageWidth?: number,
 ): FloatingObjectManager {
   const zones: ExclusionZone[] = [];
-  const marginLeft = Math.max(0, margins?.left ?? 0);
+  let currentColumns = columns;
+  let currentMargins = margins;
+  let currentPageWidth = pageWidth;
+  let marginLeft = Math.max(0, currentMargins?.left ?? 0);
 
   return {
     registerDrawing(drawingBlock, measure, anchorY, columnIndex, pageNumber) {
@@ -114,7 +122,7 @@ export function createFloatingObjectManager(
       const objectWidth = measure.width ?? 0;
       const objectHeight = measure.height ?? 0;
 
-      const x = computeAnchorX(anchor, columnIndex, columns, objectWidth, margins, pageWidth);
+      const x = computeAnchorX(anchor, columnIndex, currentColumns, objectWidth, currentMargins, currentPageWidth);
 
       // Compute image Y position (anchor Y + vertical offset)
       const y = anchorY + (anchor.offsetV ?? 0);
@@ -161,7 +169,7 @@ export function createFloatingObjectManager(
       const tableHeight = measure.totalHeight ?? 0;
 
       // Compute table X position based on anchor alignment
-      const x = computeTableAnchorX(anchor, columnIndex, columns, tableWidth, margins, pageWidth);
+      const x = computeTableAnchorX(anchor, columnIndex, currentColumns, tableWidth, currentMargins, currentPageWidth);
 
       // Compute table Y position (anchor Y + vertical offset)
       const y = anchorY + (anchor.offsetV ?? 0);
@@ -229,7 +237,7 @@ export function createFloatingObjectManager(
       const rightFloats: ExclusionZone[] = [];
 
       // Use absolute coordinates for comparison - columnOrigin is the left edge of content
-      const columnOrigin = marginLeft + columnIndex * (columns.width + columns.gap);
+      const columnOrigin = marginLeft + columnIndex * (currentColumns.width + currentColumns.gap);
       const columnCenter = columnOrigin + baseWidth / 2;
 
       for (const zone of wrappingZones) {
@@ -297,6 +305,22 @@ export function createFloatingObjectManager(
     clear() {
       zones.length = 0;
     },
+    /**
+     * Update layout context used for positioning and wrapping (columns, margins, page width).
+     * This method should be called when the layout configuration changes (e.g., section breaks,
+     * column changes, page size changes) to ensure floating objects are positioned and wrapped
+     * correctly relative to the new layout boundaries.
+     *
+     * @param nextColumns - Column layout configuration (width, gap, count)
+     * @param nextMargins - Optional page margins (left, right) in pixels
+     * @param nextPageWidth - Optional total page width in pixels
+     */
+    setLayoutContext(nextColumns, nextMargins, nextPageWidth) {
+      currentColumns = nextColumns;
+      currentMargins = nextMargins;
+      currentPageWidth = nextPageWidth;
+      marginLeft = Math.max(0, currentMargins?.left ?? 0);
+    },
   };
 }
 
@@ -330,17 +354,11 @@ export function computeAnchorX(
   let baseX: number;
   let availableWidth: number;
   if (relativeFrom === 'page') {
-    // Word's page-relative origin is the physical page edge. For single-column
-    // documents, authors typically expect column-relative behavior; if we detect
-    // a single column layout, treat page-relative as margin-relative to align
-    // with practical expectations and DOCX samples.
-    if (columns.count === 1) {
-      baseX = contentLeft;
-      availableWidth = contentWidth;
-    } else {
-      baseX = 0;
-      availableWidth = pageWidth != null ? pageWidth : contentWidth;
-    }
+    // Word's page-relative origin is always the physical page edge (x=0).
+    // Even for single-column layouts we honor the true page coordinate so
+    // anchors can extend into the margins (e.g., full-bleed covers).
+    baseX = 0;
+    availableWidth = pageWidth != null ? pageWidth : contentWidth + marginLeft + marginRight;
   } else if (relativeFrom === 'margin') {
     baseX = contentLeft;
     availableWidth = contentWidth;

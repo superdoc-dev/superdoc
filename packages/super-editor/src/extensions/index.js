@@ -10,8 +10,14 @@ import { Gapcursor } from './gapcursor/index.js';
 import { Collaboration } from './collaboration/index.js';
 import { CollaborationCursor } from './collaboration-cursor/index.js';
 import { AiPlugin, AiMark, AiAnimationMark, AiLoaderNode } from './ai/index.js';
-import { SlashMenu } from './slash-menu';
-import { StructuredContentCommands } from './structured-content/index.js';
+import { ContextMenu } from './context-menu';
+import {
+  StructuredContentCommands,
+  StructuredContent,
+  StructuredContentBlock,
+  DocumentSection,
+  DocumentPartObject,
+} from './structured-content/index.js';
 
 // Nodes extensions
 import { Document } from './document/index.js';
@@ -19,7 +25,8 @@ import { Text } from './text/index.js';
 import { Run } from './run/index.js';
 import { Paragraph } from './paragraph/index.js';
 import { Heading } from './heading/index.js';
-import { CommentRangeStart, CommentRangeEnd, CommentReference } from './comment/index.js';
+import { CommentRangeStart, CommentRangeEnd, CommentReference, CommentsMark } from './comment/index.js';
+import { FootnoteReference } from './footnote/index.js';
 import { TabNode } from './tab/index.js';
 import { LineBreak, HardBreak } from './line-break/index.js';
 import { Table } from './table/index.js';
@@ -35,17 +42,13 @@ import { PageReference } from './page-reference/index.js';
 import { ShapeContainer } from './shape-container/index.js';
 import { ShapeTextbox } from './shape-textbox/index.js';
 import { ContentBlock } from './content-block/index.js';
-import {
-  StructuredContent,
-  StructuredContentBlock,
-  DocumentSection,
-  DocumentPartObject,
-} from './structured-content/index.js';
 import { BlockNode } from './block-node/index.js';
 import { TableOfContents } from './table-of-contents/index.js';
+import { DocumentIndex } from './document-index/index.js';
 import { VectorShape } from './vector-shape/index.js';
 import { ShapeGroup } from './shape-group/index.js';
 import { PassthroughBlock, PassthroughInline } from '@extensions/passthrough/index.js';
+import { IndexEntry } from './index-entry/index.js';
 
 // Marks extensions
 import { TextStyle } from './text-style/text-style.js';
@@ -55,19 +58,23 @@ import { Underline } from './underline/index.js';
 import { Highlight } from './highlight/index.js';
 import { Strike } from './strike/index.js';
 import { Link } from './link/index.js';
-import { TrackInsert, TrackDelete, TrackFormat } from './track-changes/index.js';
-import { CommentsMark } from './comment/index.js';
+import { TrackInsert, TrackDelete, TrackFormat, TrackChanges } from './track-changes/index.js';
 import { TextTransform } from './text-transform/index.js';
 
 // Plugins
 import { CommentsPlugin } from './comment/index.js';
 import { Placeholder } from './placeholder/index.js';
 import { PopoverPlugin } from './popover-plugin/index.js';
-import { TrackChanges } from './track-changes/index.js';
 import { LinkedStyles } from './linked-styles/linked-styles.js';
 import { Search } from './search/index.js';
 import { NodeResizer } from './noderesizer/index.js';
 import { CustomSelection } from './custom-selection/index.js';
+import { PermissionRanges } from './permission-ranges/index.js';
+import { VerticalNavigation } from './vertical-navigation/index.js';
+
+// Permissions
+import { PermStart, PermStartBlock } from './perm-start/index.js';
+import { PermEnd, PermEndBlock } from './perm-end/index.js';
 
 // Helpers
 import { trackChangesHelpers } from './track-changes/index.js';
@@ -120,6 +127,7 @@ const getStarterExtensions = () => {
     CommentRangeStart,
     CommentRangeEnd,
     CommentReference,
+    FootnoteReference,
     Document,
     FontFamily,
     FontSize,
@@ -131,10 +139,11 @@ const getStarterExtensions = () => {
     LineBreak,
     HardBreak,
     Run,
-    SlashMenu,
+    ContextMenu,
     Strike,
     TabNode,
     TableOfContents,
+    DocumentIndex,
     Text,
     TextAlign,
     TextStyle,
@@ -168,6 +177,7 @@ const getStarterExtensions = () => {
     PageNumber,
     TotalPageCount,
     PageReference,
+    IndexEntry,
     ShapeContainer,
     ShapeTextbox,
     ContentBlock,
@@ -182,6 +192,12 @@ const getStarterExtensions = () => {
     TextTransform,
     VectorShape,
     ShapeGroup,
+    PermStart,
+    PermEnd,
+    PermStartBlock,
+    PermEndBlock,
+    PermissionRanges,
+    VerticalNavigation,
     PassthroughInline,
     PassthroughBlock,
   ];
@@ -197,6 +213,7 @@ export {
   CommentRangeStart,
   CommentRangeEnd,
   CommentReference,
+  FootnoteReference,
   TabNode,
   LineBreak,
   HardBreak,
@@ -217,6 +234,8 @@ export {
   TableRow,
   TableCell,
   TableHeader,
+  DocumentIndex,
+  IndexEntry,
   Placeholder,
   DropCursor,
   BlockNode,
@@ -253,4 +272,5 @@ export {
   ShapeGroup,
   PassthroughInline,
   PassthroughBlock,
+  PermissionRanges,
 };

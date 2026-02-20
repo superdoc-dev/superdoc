@@ -26,7 +26,8 @@ export const migrateListsToV2IfNecessary = (editor) => {
 
   const { state } = editor;
   const { doc } = state;
-  const { dispatch } = editor.view;
+  const dispatch =
+    typeof editor.view?.dispatch === 'function' ? editor.view.dispatch.bind(editor.view) : editor.dispatch.bind(editor);
 
   const LIST_TYPES = ['orderedList', 'bulletList'];
 

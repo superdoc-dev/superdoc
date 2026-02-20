@@ -1,11 +1,11 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { hydrateTableStyleAttrs } from './table-styles.js';
 import type { PMNode } from '../types.js';
-import * as tblTranslator from '@converter/v3/handlers/w/tbl/tbl-translator.js';
+import * as tblTranslator from '@superdoc/super-editor/converter/internal/v3/handlers/w/tbl/tbl-translator.js';
 
 // Mock the external super-converter module that's imported by table-styles.ts
 // This module is part of super-editor package and not available in pm-adapter tests
-vi.mock('@converter/v3/handlers/w/tbl/tbl-translator.js');
+vi.mock('@superdoc/super-editor/converter/internal/v3/handlers/w/tbl/tbl-translator.js');
 
 describe('hydrateTableStyleAttrs', () => {
   beforeEach(() => {
@@ -98,7 +98,7 @@ describe('hydrateTableStyleAttrs', () => {
       expect(result?.paragraphProps?.spacing?.before).toBeCloseTo((120 / 1440) * 96);
       expect(result?.paragraphProps?.spacing?.after).toBeCloseTo((240 / 1440) * 96);
       // For 'auto' lineRule, line is in 240ths: 276/240 = 1.15
-      expect(result?.paragraphProps?.spacing?.line).toBeCloseTo(1.15);
+      expect(result?.paragraphProps?.spacing?.line).toBeCloseTo(1.3225);
       expect(result?.paragraphProps?.spacing?.lineRule).toBe('auto');
     });
 
@@ -185,6 +185,7 @@ describe('hydrateTableStyleAttrs', () => {
       const resultExact = hydrateTableStyleAttrs(tableExact, { docx: mockDocxExact });
       // For 'exact' lineRule, use twipsToPx: (240/1440)*96 = 16
       expect(resultExact?.paragraphProps?.spacing?.line).toBeCloseTo(16);
+      expect(resultExact?.paragraphProps?.spacing?.lineUnit).toBe('px');
       expect(resultExact?.paragraphProps?.spacing?.lineRule).toBe('exact');
 
       const mockDocxAtLeast = {

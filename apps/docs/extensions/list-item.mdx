@@ -1,0 +1,37 @@
+---
+title: List item
+sidebarTitle: "List Item"
+keywords: "list item, superdoc list item, word list item, document list item, docx list item"
+---
+
+import Description from '/snippets/extensions/list-item.mdx'
+
+<Description />
+
+<Info>
+List item behavior is handled by the [Paragraph extension](/extensions/paragraph). Lists in SuperDoc are paragraphs with numbering properties, matching how Word stores lists internally.
+</Info>
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| (split item) | `Enter` | Split list item at cursor |
+| (line break) | `Shift-Enter` | Add a line break within the current item |
+| (indent) | `Tab` | Increase nesting level |
+| (outdent) | `Shift-Tab` | Decrease nesting level |
+
+## Numbering formats
+
+Supported numbering formats from Word:
+- **Decimal** — 1, 2, 3, 4...
+- **Lower alpha** — a, b, c, d...
+- **Upper alpha** — A, B, C, D...
+- **Lower roman** — i, ii, iii, iv...
+- **Upper roman** — I, II, III, IV...
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/paragraph/paragraph.js" />

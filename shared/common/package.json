@@ -16,7 +16,11 @@
     "./list-numbering": "./list-numbering/index.ts",
     "./list-numbering/*": "./list-numbering/*.ts",
     "./layout-constants": "./layout-constants.ts",
-    "./*.ts": "./*.ts"
+    "./list-marker-utils": "./list-marker-utils.ts",
+    "./*.ts": "./*.ts",
+    "./*": {
+      "source": "./*"
+    }
   },
   "files": [
     "*.ts",
@@ -29,15 +33,16 @@
     "list-numbering"
   ],
   "scripts": {
+    "build": "tsc --project tsconfig.json --emitDeclarationOnly",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^22.13.1",
-    "@vitejs/plugin-vue": "^5.0.4",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.8",
-    "vue": "^3.5.20"
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "vue": "catalog:"
   }
 }

@@ -1,0 +1,167 @@
+---
+title: Configuration
+sidebarTitle: Configuration
+keywords: "collaboration configuration, superdoc events, awareness, user presence"
+---
+
+All configuration options and events for real-time collaboration.
+
+## Configuration
+
+**You manage the Yjs provider** — works with SuperDoc Yjs, Liveblocks, Hocuspocus, etc.
+
+```javascript
+import * as Y from "yjs";
+import { LiveblocksYjsProvider } from "@liveblocks/yjs";
+
+const ydoc = new Y.Doc();
+const provider = new LiveblocksYjsProvider(room, ydoc);
+
+new SuperDoc({
+  selector: "#editor",
+  modules: {
+    collaboration: { ydoc, provider },
+  },
+});
+```
+
+<ParamField path="modules.collaboration.ydoc" type="Y.Doc" required>
+  Your Yjs document instance
+</ParamField>
+
+<ParamField path="modules.collaboration.provider" type="Object" required>
+  Any Yjs-compatible provider
+</ParamField>
+
+## User configuration
+
+<ParamField path="user" type="Object" required>
+  Current user information for presence/awareness
+
+```javascript
+user: {
+  name: 'John Smith',
+  email: 'john@example.com',
+  image: 'https://example.com/avatar.jpg'  // Optional
+}
+```
+
+</ParamField>
+
+<ParamField path="colors" type="string[]">
+  Color palette for user cursors and selections. Users are automatically assigned colors from this palette.
+
+```javascript
+colors: ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
+```
+
+</ParamField>
+
+## Media upload
+
+Handle image uploads in collaborative documents:
+
+```javascript
+new SuperDoc({
+  handleImageUpload: (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const dataUrl = event.target.result;
+        const mediaPath = `word/media/${file.name}`;
+
+        // Store in Yjs for sync
+        if (superdoc.ydoc) {
+          const mediaMap = superdoc.ydoc.getMap("media");
+          mediaMap.set(mediaPath, dataUrl);
+        }
+
+        resolve(dataUrl);
+      };
+
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  },
+});
+```
+
+## Events
+
+### `onCollaborationReady`
+
+Fired when collaboration sync is complete.
+
+```javascript
+onCollaborationReady: ({ editor }) => {
+  console.log("Collaboration ready");
+}
+```
+
+### `onAwarenessUpdate`
+
+Fired when users join, leave, or update their presence.
+
+```javascript
+onAwarenessUpdate: ({ states, added, removed, superdoc }) => {
+  console.log("Active users:", states);
+
+  added.forEach((clientId) => {
+    const user = states.find((s) => s.clientId === clientId);
+    console.log("User joined:", user?.name);
+  });
+
+  removed.forEach((clientId) => {
+    console.log("User left:", clientId);
+  });
+}
+```
+
+**`states` array item properties:**
+
+| Property   | Type     | Description           |
+| ---------- | -------- | --------------------- |
+| `clientId` | `number` | Unique session ID     |
+| `name`     | `string` | User's display name   |
+| `email`    | `string` | User's email          |
+| `color`    | `string` | Assigned cursor color (hex) |
+
+### `onLocked`
+
+Fired when the document is locked or unlocked.
+
+```javascript
+onLocked: ({ isLocked, lockedBy }) => {
+  if (isLocked) {
+    console.log("Document locked by:", lockedBy?.name);
+  }
+}
+```
+
+| Property   | Type      | Description                    |
+| ---------- | --------- | ------------------------------ |
+| `isLocked` | `boolean` | Whether the document is locked |
+| `lockedBy` | `Object`  | User who locked the document   |
+
+## Provider events
+
+Listen to provider events directly for connection status:
+
+```javascript
+provider.on("sync", (synced) => {
+  if (synced) console.log("Document synced");
+});
+
+// For Hocuspocus/URL-based providers
+provider.on("status", ({ status }) => {
+  // 'connecting' | 'connected' | 'disconnected'
+  updateConnectionIndicator(status);
+});
+
+provider.on("authenticationFailed", ({ reason }) => {
+  if (reason === "token-expired") {
+    refreshToken();
+  }
+});
+```

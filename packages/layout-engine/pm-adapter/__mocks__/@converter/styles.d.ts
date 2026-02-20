@@ -4,7 +4,7 @@ export function resolveParagraphProperties(
 ): ResolvedParagraphPropertiesExtended;
 export function resolveRunProperties(styleId: unknown, context: unknown): Record<string, never>;
 /**
- * Mock for @converter/styles resolveParagraphProperties
+ * Mock for @superdoc/converter/internal/styles resolveParagraphProperties
  */
 export type ResolvedParagraphPropertiesExtended = {
   spacing: unknown;

@@ -114,7 +114,7 @@ export function createSectionBreakBlock(
   blockIdGen: BlockIdGenerator,
   extraAttrs?: Record<string, unknown>,
 ): SectionBreakBlock {
-  const result = {
+  return {
     kind: 'sectionBreak',
     id: blockIdGen('sectionBreak'),
     margins: section.margins ?? { header: 0, footer: 0 },
@@ -132,8 +132,6 @@ export function createSectionBreakBlock(
     ...(section.footerRefs && { footerRefs: section.footerRefs }),
     ...(section.vAlign && { vAlign: section.vAlign }),
   } as SectionBreakBlock;
-
-  return result;
 }
 
 /**

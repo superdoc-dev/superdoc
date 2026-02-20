@@ -3,47 +3,68 @@ name: 🚀 Manual Patch Release
 on:
   workflow_dispatch:
     inputs:
-      dist-tag:
-        description: npm dist-tag to publish under
+      ref:
+        description: Branch or tag to release from (defaults to the workflow ref)
         required: false
-        default: beta
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
   manual-patch-release:
-    runs-on: ubuntu-latest
-    env:
-      DIST_TAG: ${{ github.event.inputs.dist-tag || 'beta' }}
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          token: ${{ steps.generate_token.outputs.token }}
 
-      - uses: actions/setup-node@v5
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # Pinned commit hash for @v4
+
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
-          cache: npm
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
 
-      - name: Update npm
-        run: npm install -g npm@latest
+      - name: Cache apt packages
+        uses: actions/cache@v5
+        with:
+          path: ~/apt-cache
+          key: apt-canvas-${{ runner.os }}-v1
+
+      - name: Install canvas system dependencies
+        run: |
+          mkdir -p ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-cache" \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Bump patch version (no git tag)
-        run: npm --workspace=superdoc version patch --no-git-tag-version
+        run: pnpm install
 
       - name: Build packages
-        run: npm run build
+        run: pnpm run build
 
-      - name: Publish patch release
+      - name: Release
         env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: node scripts/publish-superdoc.cjs --dist-tag "${DIST_TAG}" --skip-build
-
-      - name: Show published version
-        run: node -e "console.log('published version:', require('./packages/superdoc/package.json').version)"
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+        run: pnpx semantic-release

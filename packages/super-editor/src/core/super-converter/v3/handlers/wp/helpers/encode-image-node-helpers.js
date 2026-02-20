@@ -1,7 +1,15 @@
 import { emuToPixels, rotToDegrees, polygonToObj } from '@converter/helpers.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
-import { extractStrokeWidth, extractStrokeColor, extractFillColor } from './vector-shape-helpers';
+import { extractStrokeWidth, extractStrokeColor, extractFillColor, extractLineEnds } from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
+import {
+  collectTextBoxParagraphs,
+  preProcessTextBoxContent,
+  resolveParagraphPropertiesForTextBox,
+  extractRunFormatting,
+  extractParagraphAlignment,
+  extractBodyPrProperties,
+} from './textbox-content-helpers.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -26,6 +34,78 @@ const normalizeTargetPath = (targetPath = '') => {
  */
 const DEFAULT_SHAPE_WIDTH = 100;
 const DEFAULT_SHAPE_HEIGHT = 100;
+
+const isDocPrHidden = (docPr) => {
+  const hidden = docPr?.attributes?.hidden;
+  if (hidden === true || hidden === 1) return true;
+  if (hidden == null) return false;
+  const normalized = String(hidden).toLowerCase();
+  return normalized === '1' || normalized === 'true';
+};
+
+/**
+ * Extracts effect extent values from a drawing element.
+ *
+ * Effect extents define additional space around a shape for effects like shadows
+ * or arrowheads. Values are converted from EMU to pixels.
+ *
+ * @param {Object} node - The drawing element node (wp:anchor or wp:inline)
+ * @returns {{ left: number, top: number, right: number, bottom: number }|null}
+ *   Effect extent object with pixel values, or null if not present or all zeros
+ */
+const extractEffectExtent = (node) => {
+  const effectExtent = node?.elements?.find((el) => el.name === 'wp:effectExtent');
+  if (!effectExtent?.attributes) return null;
+
+  const sanitizeEmuValue = (value) => {
+    if (value === null || value === undefined) return 0;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+
+  const left = emuToPixels(sanitizeEmuValue(effectExtent.attributes?.['l']));
+  const top = emuToPixels(sanitizeEmuValue(effectExtent.attributes?.['t']));
+  const right = emuToPixels(sanitizeEmuValue(effectExtent.attributes?.['r']));
+  const bottom = emuToPixels(sanitizeEmuValue(effectExtent.attributes?.['b']));
+
+  if (!left && !top && !right && !bottom) return null;
+  return { left, top, right, bottom };
+};
+
+const buildClipPathFromSrcRect = (srcRectAttrs = {}) => {
+  const edges = {
+    left: srcRectAttrs.l,
+    top: srcRectAttrs.t,
+    right: srcRectAttrs.r,
+    bottom: srcRectAttrs.b,
+  };
+
+  let hasValue = false;
+  let hasPositive = false;
+  const percentEdges = {};
+
+  for (const [edge, value] of Object.entries(edges)) {
+    if (value == null) continue;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    hasValue = true;
+    if (numeric < 0) {
+      return null;
+    }
+    const percent = Math.max(0, Math.min(100, numeric / 1000));
+    if (percent > 0) hasPositive = true;
+    percentEdges[edge] = percent;
+  }
+
+  if (!hasValue || !hasPositive) return null;
+
+  const top = percentEdges.top ?? 0;
+  const right = percentEdges.right ?? 0;
+  const bottom = percentEdges.bottom ?? 0;
+  const left = percentEdges.left ?? 0;
+
+  return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
+};
 
 /**
  * Encodes image XML into Editor node.
@@ -166,6 +246,7 @@ export function handleImageNode(node, params, isAnchor) {
   }
 
   const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+  const isHidden = isDocPrHidden(docPr);
 
   let anchorData = null;
   if (hRelativeFrom || alignH || vRelativeFrom || alignV) {
@@ -190,7 +271,18 @@ export function handleImageNode(node, params, isAnchor) {
       horizontal: positionHValue,
       top: positionVValue,
     };
-    return handleShapeDrawing(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap, isAnchor);
+    return handleShapeDrawing(
+      params,
+      node,
+      graphicData,
+      size,
+      padding,
+      shapeMarginOffset,
+      anchorData,
+      wrap,
+      isAnchor,
+      isHidden,
+    );
   }
 
   if (uri === GROUP_URI) {
@@ -199,7 +291,7 @@ export function handleImageNode(node, params, isAnchor) {
       horizontal: positionHValue,
       top: positionVValue,
     };
-    return handleShapeGroup(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap);
+    return handleShapeGroup(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap, isHidden);
   }
 
   const picture = graphicData?.elements.find((el) => el.name === 'pic:pic');
@@ -213,10 +305,34 @@ export function handleImageNode(node, params, isAnchor) {
     return null;
   }
 
-  // Check for stretch fill mode
-  const stretch = blipFill?.elements.find((el) => el.name === 'a:stretch');
-  const fillRect = stretch?.elements.find((el) => el.name === 'a:fillRect');
+  // Check for stretch mode: <a:stretch><a:fillRect/></a:stretch>
+  // This tells Word to scale the image to fill the extent rectangle.
+  //
+  // srcRect behavior:
+  // - Positive values (e.g., r="84800"): actual cropping that Word applies to the source image
+  // - Negative values (e.g., b="-3978"): Word extended the mapping (image doesn't need clipping)
+  // - Empty/no srcRect: no pre-adjustment, use cover+clip for aspect ratio mismatch
+  //
+  // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
+  // negative values (Word already adjusted the mapping).
+  const stretch = blipFill?.elements?.find((el) => el.name === 'a:stretch');
+  const fillRect = stretch?.elements?.find((el) => el.name === 'a:fillRect');
+  const srcRect = blipFill?.elements?.find((el) => el.name === 'a:srcRect');
+  const srcRectAttrs = srcRect?.attributes || {};
+  const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
+
+  // Check if srcRect has negative values (indicating Word extended/adjusted the image mapping)
+  const srcRectHasNegativeValues = ['l', 't', 'r', 'b'].some((attr) => {
+    const val = srcRectAttrs[attr];
+    return val != null && parseFloat(val) < 0;
+  });
+
   const shouldStretch = Boolean(stretch && fillRect);
+  // Use cover mode for plain stretch/fillRect when there is no explicit srcRect clipping.
+  // When srcRect emits clipping, we set explicit objectFit='fill' so clip-path math applies
+  // to a fully filled extent box (avoids "thin strip" rendering for cropped anchors).
+  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
+  const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
@@ -298,6 +414,7 @@ export function handleImageNode(node, params, isAnchor) {
     ...(wasConverted && { originalSrc: path, originalExtension: extension }),
     id: docPr?.attributes?.id || '',
     title: docPr?.attributes?.descr || 'Image',
+    ...(isHidden ? { hidden: true } : {}),
     inline: true, // Always true; wrap.type controls actual layout behavior
     padding,
     marginOffset,
@@ -318,7 +435,10 @@ export function handleImageNode(node, params, isAnchor) {
         }
       : {}),
     wrapTopAndBottom: wrap.type === 'TopAndBottom',
-    shouldStretch,
+    shouldCover,
+    ...(shouldFillClippedStretch ? { objectFit: 'fill' } : {}),
+    ...(clipPath ? { clipPath } : {}),
+    rawSrcRect: srcRect,
     originalPadding: {
       distT: attributes['distT'],
       distB: attributes['distB'],
@@ -349,9 +469,21 @@ export function handleImageNode(node, params, isAnchor) {
  * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} anchorData - Anchor positioning data.
  * @param {{ type: string, attrs: Object }} wrap - Wrap configuration.
  * @param {boolean} isAnchor - Whether the shape is anchored (true) or inline (false).
+ * @param {boolean} isHidden - Whether the drawing should be hidden.
  * @returns {{ type: string, attrs: Object }|null} A vectorShape or contentBlock node, or null when no content exists.
  */
-const handleShapeDrawing = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isAnchor) => {
+const handleShapeDrawing = (
+  params,
+  node,
+  graphicData,
+  size,
+  padding,
+  marginOffset,
+  anchorData,
+  wrap,
+  isAnchor,
+  isHidden,
+) => {
   const wsp = graphicData.elements.find((el) => el.name === 'wps:wsp');
   const textBox = wsp.elements.find((el) => el.name === 'wps:txbx');
   const textBoxContent = textBox?.elements?.find((el) => el.name === 'w:txbxContent');
@@ -360,23 +492,22 @@ const handleShapeDrawing = (params, node, graphicData, size, padding, marginOffs
   const prstGeom = spPr?.elements.find((el) => el.name === 'a:prstGeom');
   const shapeType = prstGeom?.attributes['prst'];
 
-  // Check if shape has gradient fill or other complex fills
-  const hasGradientFill = spPr?.elements?.find((el) => el.name === 'a:gradFill');
-
-  // For plain rectangles without text and without gradients, use the specialized contentBlock handler
-  if (shapeType === 'rect' && !textBoxContent && !hasGradientFill) {
-    return getRectangleShape(params, spPr, node, marginOffset, anchorData, wrap, isAnchor);
-  }
-
   // For all other shapes (with or without text), or shapes with gradients, use the vector shape handler
   if (shapeType) {
     const result = getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor });
+    if (result?.attrs && isHidden) {
+      result.attrs.hidden = true;
+    }
     if (result) return result;
   }
 
   // Fallback to placeholder if no shape type found
   const fallbackType = textBoxContent ? 'textbox' : 'drawing';
-  return buildShapePlaceholder(node, size, padding, marginOffset, fallbackType);
+  const placeholder = buildShapePlaceholder(node, size, padding, marginOffset, fallbackType);
+  if (placeholder?.attrs && isHidden) {
+    placeholder.attrs.hidden = true;
+  }
+  return placeholder;
 };
 
 function collectPreservedDrawingChildren(node) {
@@ -408,12 +539,17 @@ function collectPreservedDrawingChildren(node) {
  * @param {{ horizontal?: number, left?: number, top?: number }} marginOffset - Group offsets relative to its anchor (in pixels).
  * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} anchorData - Anchor positioning data.
  * @param {{ type: string, attrs: Object }} wrap - Wrap configuration.
+ * @param {boolean} isHidden - Whether the drawing should be hidden.
  * @returns {{ type: 'shapeGroup', attrs: Object }|null} A shapeGroup node representing the group, or null when no content exists.
  */
-const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap) => {
+const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isHidden) => {
   const wgp = graphicData.elements.find((el) => el.name === 'wpg:wgp');
   if (!wgp) {
-    return buildShapePlaceholder(node, size, padding, marginOffset, 'group');
+    const placeholder = buildShapePlaceholder(node, size, padding, marginOffset, 'group');
+    if (placeholder?.attrs && isHidden) {
+      placeholder.attrs.hidden = true;
+    }
+    return placeholder;
   }
 
   // Extract group properties
@@ -506,6 +642,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       const fillColor = extractFillColor(spPr, style);
       const strokeColor = extractStrokeColor(spPr, style);
       const strokeWidth = extractStrokeWidth(spPr);
+      const lineEnds = extractLineEnds(spPr);
 
       // Get shape ID and name
       const cNvPr = wsp.elements?.find((el) => el.name === 'wps:cNvPr');
@@ -520,7 +657,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
 
       if (textBoxContent) {
         // Extract text from all paragraphs in the textbox
-        textContent = extractTextFromTextBox(textBoxContent, bodyPr);
+        textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
       }
 
       // Extract horizontal alignment from text content (defaults to 'left' if not specified)
@@ -540,6 +677,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
           fillColor,
           strokeColor,
           strokeWidth,
+          lineEnds,
           shapeId,
           shapeName,
           textContent,
@@ -644,6 +782,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
     type: 'shapeGroup',
     attrs: {
       ...schemaAttrs,
+      ...(isHidden ? { hidden: true } : {}),
       groupTransform,
       shapes: allShapes,
       size,
@@ -667,64 +806,127 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
  *
  * @param {Object} textBoxContent - The w:txbxContent element containing paragraphs and text runs
  * @param {Object} bodyPr - The wps:bodyPr element containing text box properties (vertical alignment, insets, wrap mode)
- * @returns {{ parts: Array<{ text: string, formatting: Object, isLineBreak?: boolean }>, horizontalAlign: string, verticalAlign: string, insets: { top: number, right: number, bottom: number, left: number }, wrap: string }|null} Text content with formatting information and line break markers, or null if no text found
+ * @param {{ docx?: Object, filename?: string }} params - Translator params for field preprocessing
+ * @returns {{
+ *   parts: Array<{
+ *     text: string,
+ *     formatting?: { bold?: boolean, italic?: boolean, color?: string, fontSize?: number, fontFamily?: string },
+ *     fieldType?: 'PAGE' | 'NUMPAGES',
+ *     isLineBreak?: boolean,
+ *     isEmptyParagraph?: boolean
+ *   }>,
+ *   horizontalAlign: string,
+ *   verticalAlign: string,
+ *   insets: { top: number, right: number, bottom: number, left: number },
+ *   wrap: string
+ * }|null} Text content with formatting information and line break markers, or null if no text found
  */
-function extractTextFromTextBox(textBoxContent, bodyPr) {
+function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   if (!textBoxContent || !textBoxContent.elements) return null;
 
-  const paragraphs = textBoxContent.elements.filter((el) => el.name === 'w:p');
+  const processedContent = preProcessTextBoxContent(textBoxContent, params);
+  const paragraphs = collectTextBoxParagraphs(processedContent?.elements || []);
   const textParts = [];
-  let horizontalAlign = null; // Extract from first paragraph with alignment
+  let horizontalAlign = null;
 
-  paragraphs.forEach((paragraph, paragraphIndex) => {
-    // Extract paragraph alignment (w:jc) if not already found
-    if (!horizontalAlign) {
-      const pPr = paragraph.elements?.find((el) => el.name === 'w:pPr');
-      const jc = pPr?.elements?.find((el) => el.name === 'w:jc');
-      if (jc) {
-        const jcVal = jc.attributes?.['val'] || jc.attributes?.['w:val'];
-        // Map Word alignment values to our format
-        if (jcVal === 'left' || jcVal === 'start') horizontalAlign = 'left';
-        else if (jcVal === 'right' || jcVal === 'end') horizontalAlign = 'right';
-        else if (jcVal === 'center') horizontalAlign = 'center';
+  /**
+   * Appends a field part (PAGE or NUMPAGES) to textParts with formatting.
+   * @param {'PAGE' | 'NUMPAGES'} fieldType - The field type
+   * @param {Object} node - The field node element
+   * @param {Object} paragraphProperties - Resolved paragraph properties
+   */
+  const appendFieldPart = (fieldType, node, paragraphProperties) => {
+    const rPr = node?.elements?.find((el) => el.name === 'w:rPr');
+    const formatting = extractRunFormatting(rPr, paragraphProperties, params);
+    textParts.push({ text: '', formatting, fieldType });
+  };
+
+  /**
+   * Processes a single run element and extracts text parts.
+   * @param {Object} run - The w:r run element
+   * @param {Object} paragraphProperties - Resolved paragraph properties
+   * @returns {boolean} True if the run contained any text content
+   */
+  const handleRun = (run, paragraphProperties) => {
+    if (!run?.elements) return false;
+    const rPr = run.elements.find((el) => el.name === 'w:rPr');
+    const formatting = extractRunFormatting(rPr, paragraphProperties, params);
+    let hasText = false;
+
+    run.elements.forEach((el) => {
+      if (el.name === 'w:t' || el.name === 'w:delText') {
+        const textNode = el.elements?.find((n) => n.type === 'text');
+        if (textNode) {
+          hasText = true;
+          const cleanedText =
+            typeof textNode.text === 'string' ? textNode.text.replace(/\[\[sdspace\]\]/g, ' ') : textNode.text;
+          textParts.push({ text: cleanedText, formatting });
+        }
+      } else if (el.name === 'w:tab') {
+        hasText = true;
+        textParts.push({ text: '\t', formatting });
+      } else if (el.name === 'w:br') {
+        hasText = true;
+        textParts.push({ text: '\n', formatting: {}, isLineBreak: true });
+      } else if (el.name === 'sd:autoPageNumber') {
+        hasText = true;
+        appendFieldPart('PAGE', el, paragraphProperties);
+      } else if (el.name === 'sd:totalPageNumber') {
+        hasText = true;
+        appendFieldPart('NUMPAGES', el, paragraphProperties);
       }
+    });
+
+    return hasText;
+  };
+
+  /**
+   * Recursively processes paragraph elements including nested hyperlinks.
+   * @param {Object} el - The element to process
+   * @param {Object} paragraphProperties - Resolved paragraph properties
+   * @returns {boolean} True if any text content was found
+   */
+  const handleParagraphElement = (el, paragraphProperties) => {
+    if (!el) return false;
+
+    if (el.name === 'w:r') {
+      return handleRun(el, paragraphProperties);
+    }
+    if (el.name === 'sd:autoPageNumber') {
+      appendFieldPart('PAGE', el, paragraphProperties);
+      return true;
+    }
+    if (el.name === 'sd:totalPageNumber') {
+      appendFieldPart('NUMPAGES', el, paragraphProperties);
+      return true;
+    }
+    if ((el.name === 'w:hyperlink' || el.name === 'sd:pageReference') && Array.isArray(el.elements)) {
+      let hasText = false;
+      el.elements.forEach((child) => {
+        if (handleParagraphElement(child, paragraphProperties)) {
+          hasText = true;
+        }
+      });
+      return hasText;
+    }
+    return false;
+  };
+
+  // Process each paragraph
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const paragraphProperties = resolveParagraphPropertiesForTextBox(paragraph, params);
+
+    // Extract horizontal alignment from first paragraph that has it
+    if (!horizontalAlign) {
+      horizontalAlign = extractParagraphAlignment(paragraph);
     }
 
-    const runs = paragraph.elements?.filter((el) => el.name === 'w:r') || [];
     let paragraphHasText = false;
+    const elements = paragraph.elements || [];
 
-    runs.forEach((run) => {
-      const textEl = run.elements?.find((el) => el.name === 'w:t');
-      if (textEl && textEl.elements) {
-        const text = textEl.elements.find((el) => el.type === 'text');
-        if (text) {
-          paragraphHasText = true;
-          // Replace temporary sdspace placeholders with real spaces
-          const cleanedText = typeof text.text === 'string' ? text.text.replace(/\[\[sdspace\]\]/g, ' ') : text.text;
-          // Extract formatting from run properties
-          const rPr = run.elements?.find((el) => el.name === 'w:rPr');
-          const formatting = {};
-
-          if (rPr) {
-            const bold = rPr.elements?.find((el) => el.name === 'w:b');
-            const italic = rPr.elements?.find((el) => el.name === 'w:i');
-            const color = rPr.elements?.find((el) => el.name === 'w:color');
-            const sz = rPr.elements?.find((el) => el.name === 'w:sz');
-
-            if (bold) formatting.bold = true;
-            if (italic) formatting.italic = true;
-            if (color) formatting.color = color.attributes?.['val'] || color.attributes?.['w:val'];
-            if (sz) {
-              const szVal = sz.attributes?.['val'] || sz.attributes?.['w:val'];
-              formatting.fontSize = parseInt(szVal, 10) / 2; // half-points to points
-            }
-          }
-
-          textParts.push({
-            text: cleanedText,
-            formatting,
-          });
-        }
+    elements.forEach((el) => {
+      if (handleParagraphElement(el, paragraphProperties)) {
+        paragraphHasText = true;
       }
     });
 
@@ -735,112 +937,24 @@ function extractTextFromTextBox(textBoxContent, bodyPr) {
         text: '\n',
         formatting: {},
         isLineBreak: true,
-        isEmptyParagraph: !paragraphHasText, // Mark empty paragraphs for extra spacing
+        isEmptyParagraph: !paragraphHasText,
       });
     }
   });
 
   if (textParts.length === 0) return null;
 
-  // Extract bodyPr attributes for text alignment and insets
-  const bodyPrAttrs = bodyPr?.attributes || {};
-
-  // Extract vertical alignment from anchor attribute (t=top, ctr=center, b=bottom)
-  let verticalAlign = 'center'; // Default to center
-  const anchorAttr = bodyPrAttrs['anchor'];
-  if (anchorAttr === 't') verticalAlign = 'top';
-  else if (anchorAttr === 'ctr') verticalAlign = 'center';
-  else if (anchorAttr === 'b') verticalAlign = 'bottom';
-
-  // Extract text insets from bodyPr (in EMUs, need to convert to pixels)
-  // Default insets in OOXML: left/right = 91440 EMU (~9.6px), top/bottom = 45720 EMU (~4.8px)
-  // Conversion formula: pixels = emu * 96 / 914400
-  const EMU_TO_PX = 96 / 914400;
-  const DEFAULT_HORIZONTAL_INSET_EMU = 91440;
-  const DEFAULT_VERTICAL_INSET_EMU = 45720;
-
-  const lIns = bodyPrAttrs['lIns'] != null ? parseFloat(bodyPrAttrs['lIns']) : DEFAULT_HORIZONTAL_INSET_EMU;
-  const tIns = bodyPrAttrs['tIns'] != null ? parseFloat(bodyPrAttrs['tIns']) : DEFAULT_VERTICAL_INSET_EMU;
-  const rIns = bodyPrAttrs['rIns'] != null ? parseFloat(bodyPrAttrs['rIns']) : DEFAULT_HORIZONTAL_INSET_EMU;
-  const bIns = bodyPrAttrs['bIns'] != null ? parseFloat(bodyPrAttrs['bIns']) : DEFAULT_VERTICAL_INSET_EMU;
-
-  const insets = {
-    top: tIns * EMU_TO_PX,
-    right: rIns * EMU_TO_PX,
-    bottom: bIns * EMU_TO_PX,
-    left: lIns * EMU_TO_PX,
-  };
-
-  // Extract wrap mode (default to 'square' if not specified)
-  const wrap = bodyPrAttrs['wrap'] || 'square';
+  // Extract body properties (vertical alignment, insets, wrap mode)
+  const { verticalAlign, insets, wrap } = extractBodyPrProperties(bodyPr);
 
   return {
     parts: textParts,
-    horizontalAlign: horizontalAlign || 'left', // Default to left if not specified
+    horizontalAlign: horizontalAlign || 'left',
     verticalAlign,
     insets,
     wrap,
   };
 }
-
-/**
- * Translates a rectangle shape (a:prstGeom with prst="rect") into a contentBlock node.
- *
- * @param {{ nodes: Array<Object> }} params - Parameters object containing the current nodes.
- * @param {Object} spPr - The wps:spPr shape properties element.
- * @param {Object} node - The wp:anchor or wp:inline node containing attributes.
- * @param {{ horizontal?: number, left?: number, top?: number }} marginOffset - Positioning offsets for anchored shapes (in pixels).
- * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} anchorData - Anchor positioning data.
- * @param {{ type: string, attrs: Object }} wrap - Text wrapping configuration.
- * @param {boolean} isAnchor - Whether the shape is anchored (true) or inline (false).
- * @returns {{ type: 'contentBlock', attrs: Object }} An object of type contentBlock with size, positioning, and optional background color.
- */
-const getRectangleShape = (params, spPr, node, marginOffset, anchorData, wrap, isAnchor) => {
-  const schemaAttrs = {};
-
-  const drawingNode = params.nodes?.[0];
-
-  if (drawingNode?.name === DRAWING_XML_TAG) {
-    schemaAttrs.drawingContent = drawingNode;
-  }
-
-  // Look for shape properties in spPr, not node
-  const xfrm = spPr?.elements?.find((el) => el.name === 'a:xfrm');
-  const start = xfrm?.elements?.find((el) => el.name === 'a:off');
-  const size = xfrm?.elements?.find((el) => el.name === 'a:ext');
-  const solidFill = spPr?.elements?.find((el) => el.name === 'a:solidFill');
-
-  // TODO: We should handle outline (a:ln element)
-
-  // Only create rectangleSize if we have the necessary data
-  if (start && size) {
-    const rectangleSize = {
-      top: emuToPixels(start.attributes?.['y'] || 0),
-      left: emuToPixels(start.attributes?.['x'] || 0),
-      width: emuToPixels(size.attributes?.['cx'] || 0),
-      height: emuToPixels(size.attributes?.['cy'] || 0),
-    };
-    schemaAttrs.size = rectangleSize;
-  }
-
-  const background = solidFill?.elements[0]?.attributes['val'];
-
-  if (background) {
-    schemaAttrs.background = '#' + background;
-  }
-
-  return {
-    type: 'contentBlock',
-    attrs: {
-      ...schemaAttrs,
-      marginOffset,
-      anchorData,
-      wrap,
-      isAnchor,
-      originalAttributes: node?.attributes,
-    },
-  };
-};
 
 /**
  * Builds a contentBlock placeholder for shapes that we cannot fully translate yet.
@@ -1012,6 +1126,8 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
   const fillColor = extractFillColor(spPr, style);
   const strokeColor = extractStrokeColor(spPr, style);
   const strokeWidth = extractStrokeWidth(spPr);
+  const lineEnds = extractLineEnds(spPr);
+  const effectExtent = extractEffectExtent(node);
 
   // Extract textbox content if present
   const textBox = wsp.elements?.find((el) => el.name === 'wps:txbx');
@@ -1021,7 +1137,7 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
   let textAlign = 'left';
 
   if (textBoxContent) {
-    textContent = extractTextFromTextBox(textBoxContent, bodyPr);
+    textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
     textAlign = textContent?.horizontalAlign || 'left';
   }
 
@@ -1037,6 +1153,8 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
       fillColor,
       strokeColor,
       strokeWidth,
+      lineEnds,
+      effectExtent,
       marginOffset,
       anchorData,
       wrap,

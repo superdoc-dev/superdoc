@@ -7,7 +7,6 @@ const workspaces = [
   '@superdoc/measuring-dom',
   '@superdoc/layout-engine',
   '@superdoc/painter-dom',
-  '@superdoc/painter-pdf'
 ];
 
 for (const workspace of workspaces) {

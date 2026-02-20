@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from 'vue';
-import { NSelect } from 'naive-ui';
 
 const props = defineProps({
   field: {

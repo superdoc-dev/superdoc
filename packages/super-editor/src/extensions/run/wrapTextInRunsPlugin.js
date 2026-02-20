@@ -1,99 +1,133 @@
-import { Plugin } from 'prosemirror-state';
-import { decodeRPrFromMarks } from '@converter/styles.js';
+import { Plugin, TextSelection } from 'prosemirror-state';
+import { decodeRPrFromMarks, encodeMarksFromRPr } from '@converter/styles.js';
+import { carbonCopy } from '@core/utilities/carbonCopy';
+import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
+
+const getParagraphAtPos = (doc, pos) => {
+  try {
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth >= 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type.name === 'paragraph') {
+        return node;
+      }
+    }
+  } catch (_e) {
+    /* ignore invalid positions */
+  }
+  return null;
+};
 
 /**
- * Normalizes and merges overlapping ranges so they can be processed once.
- * @param {Array<{from: number, to: number}>} ranges
- * @param {number} docSize
- * @returns {Array<{from: number, to: number}>}
+ * Converts an array of mark definitions into ProseMirror Mark instances.
+ * @param {import('prosemirror-model').Schema} schema - The ProseMirror schema
+ * @param {Array<{ type: string, attrs?: Record<string, unknown> }>} markDefs - Mark definitions with type and optional attrs
+ * @returns {import('prosemirror-model').Mark[]} Array of Mark instances (invalid types are filtered out)
  */
-const mergeRanges = (ranges, docSize) => {
-  if (!ranges.length) return [];
-  const sorted = ranges
-    .map(({ from, to }) => ({
-      from: Math.max(0, from),
-      to: Math.min(docSize, to),
-    }))
-    .filter(({ from, to }) => from < to)
-    .sort((a, b) => a.from - b.from);
+const createMarksFromDefs = (schema, markDefs = []) =>
+  markDefs
+    .map((def) => {
+      const markType = schema.marks[def.type];
+      return markType ? markType.create(def.attrs) : null;
+    })
+    .filter(Boolean);
 
-  const merged = [];
-  for (const range of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && range.from <= last.to) {
-      last.to = Math.max(last.to, range.to);
-    } else {
-      merged.push({ ...range });
+// Keep collapsed selections inside run nodes so caret geometry maps to text positions.
+const normalizeSelectionIntoRun = (tr, runType) => {
+  const selection = tr.selection;
+  if (!(selection instanceof TextSelection)) return;
+  if (selection.from !== selection.to) return;
+  const $pos = tr.doc.resolve(selection.from);
+  if ($pos.parent.type === runType) return;
+
+  const nodeAfter = $pos.nodeAfter;
+  if (nodeAfter?.type === runType && nodeAfter.content.size > 0) {
+    const nextPos = selection.from + 1;
+    if (nextPos <= tr.doc.content.size) {
+      tr.setSelection(TextSelection.create(tr.doc, nextPos));
+    }
+    return;
+  }
+
+  const nodeBefore = $pos.nodeBefore;
+  if (nodeBefore?.type === runType && nodeBefore.content.size > 0) {
+    const prevPos = selection.from - 1;
+    if (prevPos >= 0) {
+      tr.setSelection(TextSelection.create(tr.doc, prevPos));
     }
   }
-  return merged;
 };
 
 /**
- * Extracts changed ranges from a batch of transactions.
- * @param {Array<import('prosemirror-state').Transaction>} trs
- * @param {number} docSize
- * @returns {Array<{from: number, to: number}>}
- */
-const collectChangedRanges = (trs, docSize) => {
-  const ranges = [];
-  trs.forEach((tr) => {
-    if (!tr.docChanged) return;
-    tr.mapping.maps.forEach((map) => {
-      map.forEach((oldStart, oldEnd, newStart, newEnd) => {
-        if (newStart !== oldStart || oldEnd !== newEnd) {
-          ranges.push({ from: newStart, to: newEnd });
-        }
-      });
-    });
-  });
-  return mergeRanges(ranges, docSize);
-};
-
-/**
- * Re-maps ranges through the provided transaction mappings to keep them aligned with the latest doc.
- * @param {Array<{from: number, to: number}>} ranges
- * @param {Array<import('prosemirror-state').Transaction>} transactions
- * @param {number} docSize
- * @returns {Array<{from: number, to: number}>}
- */
-const mapRangesThroughTransactions = (ranges, transactions, docSize) => {
-  let mapped = ranges;
-  transactions.forEach((tr) => {
-    mapped = mapped
-      .map(({ from, to }) => {
-        const mappedFrom = tr.mapping.map(from, -1);
-        const mappedTo = tr.mapping.map(to, 1);
-        if (mappedFrom >= mappedTo) return null;
-        return { from: mappedFrom, to: mappedTo };
-      })
-      .filter(Boolean);
-  });
-  return mergeRanges(mapped, docSize);
-};
-
-/**
- * Creates a transaction that wraps bare text nodes in run nodes within the provided ranges.
+ * Copies run properties from the previous paragraph's last run and applies its marks to a text node.
  * @param {import('prosemirror-state').EditorState} state
- * @param {Array<{from: number, to: number}>} ranges
- * @param {import('prosemirror-model').NodeType | undefined} runType
- * @returns {import('prosemirror-state').Transaction | null}
+ * @param {number} pos
+ * @param {import('prosemirror-model').Node} textNode
+ * @param {import('prosemirror-model').NodeType} runType
+ * @param {Object} editor
+ * @returns {{ runProperties: Record<string, unknown> | undefined, textNode: import('prosemirror-model').Node }}
  */
-const buildWrapTransaction = (state, ranges, runType) => {
+const copyRunPropertiesFromPreviousParagraph = (state, pos, textNode, runType, editor) => {
+  let runProperties;
+  let updatedTextNode = textNode;
+  const paragraphNode = getParagraphAtPos(state.doc, pos - 2);
+  if (paragraphNode && paragraphNode.content.size > 0) {
+    const lastChild = paragraphNode.child(paragraphNode.childCount - 1);
+    if (lastChild.type === runType && lastChild.attrs.runProperties) {
+      runProperties = carbonCopy(lastChild.attrs.runProperties);
+    }
+    // Copy marks and apply them to the text node being wrapped.
+    if (runProperties) {
+      const markDefs = encodeMarksFromRPr(runProperties, editor?.converter?.convertedXml ?? {});
+      const markInstances = markDefs.map((def) => state.schema.marks[def.type]?.create(def.attrs)).filter(Boolean);
+      if (markInstances.length) {
+        const mergedMarks = markInstances.reduce((set, mark) => mark.addToSet(set), updatedTextNode.marks);
+        updatedTextNode = updatedTextNode.mark(mergedMarks);
+      }
+    }
+  }
+  return { runProperties, textNode: updatedTextNode };
+};
+
+const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta = []) => {
   if (!ranges.length) return null;
 
   const replacements = [];
+  const metaStyleMarks = createMarksFromDefs(state.schema, markDefsFromMeta);
 
   ranges.forEach(({ from, to }) => {
     state.doc.nodesBetween(from, to, (node, pos, parent, index) => {
-      if (!node.isText || !parent || parent.type === runType) return;
+      if (!node.isText || !parent || parent.type === runType || parent.type?.name === 'structuredContent') return;
 
       const match = parent.contentMatchAt ? parent.contentMatchAt(index) : null;
       if (match && !match.matchType(runType)) return;
       if (!match && !parent.type.contentMatch.matchType(runType)) return;
 
-      const runProperties = decodeRPrFromMarks(node.marks);
-      const runNode = runType.create({ runProperties }, node);
+      let runProperties;
+      let textNode = node;
+
+      // For the first node in a paragraph, inherit run properties from previous paragraph
+      // and merge marks (this preserves existing marks like italic while adding inherited ones like bold)
+      if (index === 0) {
+        ({ runProperties, textNode } = copyRunPropertiesFromPreviousParagraph(state, pos, textNode, runType, editor));
+      }
+
+      // Apply explicit toolbar style marks (e.g., highlight color selected by user)
+      // These take priority and are merged with any existing marks
+      if (metaStyleMarks.length) {
+        const mergedMarks = metaStyleMarks.reduce((set, mark) => mark.addToSet(set), textNode.marks);
+        textNode = textNode.mark(mergedMarks);
+        // Merge toolbar-selected properties with inherited properties
+        const metaRunProps = decodeRPrFromMarks(metaStyleMarks);
+        runProperties = { ...runProperties, ...metaRunProps };
+      }
+
+      // If we still don't have runProperties, decode from the final marks
+      if (!runProperties) {
+        runProperties = decodeRPrFromMarks(textNode.marks);
+      }
+
+      const runNode = runType.create({ runProperties }, textNode);
       replacements.push({ from: pos, to: pos + node.nodeSize, runNode });
     });
   });
@@ -102,20 +136,15 @@ const buildWrapTransaction = (state, ranges, runType) => {
 
   const tr = state.tr;
   replacements.sort((a, b) => b.from - a.from).forEach(({ from, to, runNode }) => tr.replaceWith(from, to, runNode));
+  normalizeSelectionIntoRun(tr, runType);
 
   return tr.docChanged ? tr : null;
 };
 
-/**
- * Plugin that wraps bare text nodes in run nodes, including text inserted via IME
- * composition. While composing we collect changed ranges, and on compositionend
- * we immediately wrap without waiting for additional input.
- *
- * @returns {Plugin}
- */
-export const wrapTextInRunsPlugin = () => {
+export const wrapTextInRunsPlugin = (editor) => {
   let view = null;
   let pendingRanges = [];
+  let lastStyleMarksMeta = [];
 
   const flush = () => {
     if (!view) return;
@@ -124,7 +153,7 @@ export const wrapTextInRunsPlugin = () => {
       pendingRanges = [];
       return;
     }
-    const tr = buildWrapTransaction(view.state, pendingRanges, runType);
+    const tr = buildWrapTransaction(view.state, pendingRanges, runType, editor, lastStyleMarksMeta);
     pendingRanges = [];
     if (tr) {
       view.dispatch(tr);
@@ -132,7 +161,6 @@ export const wrapTextInRunsPlugin = () => {
   };
 
   const onCompositionEnd = () => {
-    // Defer so ProseMirror applies the composition-ending transaction first.
     if (typeof globalThis === 'undefined') return;
     globalThis.queueMicrotask(flush);
   };
@@ -146,6 +174,7 @@ export const wrapTextInRunsPlugin = () => {
           editorView.dom.removeEventListener('compositionend', onCompositionEnd);
           view = null;
           pendingRanges = [];
+          lastStyleMarksMeta = [];
         },
       };
     },
@@ -155,16 +184,25 @@ export const wrapTextInRunsPlugin = () => {
       const runType = newState.schema.nodes.run;
       if (!runType) return null;
 
-      // Keep pending ranges up to date across the transaction batch
-      pendingRanges = mapRangesThroughTransactions(pendingRanges, transactions, docSize);
-      const changedRanges = collectChangedRanges(transactions, docSize);
-      pendingRanges = mergeRanges([...pendingRanges, ...changedRanges], docSize);
+      pendingRanges = collectChangedRangesThroughTransactions(transactions, docSize, {
+        extraRanges: pendingRanges,
+      });
 
       if (view?.composing) {
         return null;
       }
 
-      const tr = buildWrapTransaction(newState, pendingRanges, runType);
+      // Extract style marks from the most recent transaction that has them.
+      // These marks persist across transactions until new ones are provided (sticky toolbar behavior).
+      const metaFromTxn = [...transactions]
+        .reverse()
+        .map((txn) => txn.getMeta('sdStyleMarks'))
+        .find(Boolean);
+      if (metaFromTxn?.length) {
+        lastStyleMarksMeta = metaFromTxn;
+      }
+
+      const tr = buildWrapTransaction(newState, pendingRanges, runType, editor, lastStyleMarksMeta);
       pendingRanges = [];
       return tr;
     },

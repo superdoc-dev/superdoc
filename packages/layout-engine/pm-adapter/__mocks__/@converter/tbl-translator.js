@@ -1,5 +1,5 @@
 /**
- * Mock for @converter/v3/handlers/w/tbl/tbl-translator.js
+ * Mock for @superdoc/converter/internal/v3/handlers/w/tbl/tbl-translator.js
  * This module is part of super-editor and not available in pm-adapter tests
  *
  * @typedef {Object} TableStyleProps

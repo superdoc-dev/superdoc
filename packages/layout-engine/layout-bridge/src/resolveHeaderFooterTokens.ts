@@ -31,6 +31,7 @@ import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
  * @param blocks - Array of FlowBlocks for a single header/footer variant
  * @param pageNumber - Current page number (1-indexed) where this header/footer appears
  * @param totalPages - Total number of pages in the document
+ * @param pageNumberText - Optional preformatted page number string (e.g., "-1-")
  *
  * @example
  * ```typescript
@@ -41,7 +42,12 @@ import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
  * // and "10" for NUMPAGES field
  * ```
  */
-export function resolveHeaderFooterTokens(blocks: FlowBlock[], pageNumber: number, totalPages: number): void {
+export function resolveHeaderFooterTokens(
+  blocks: FlowBlock[],
+  pageNumber: number,
+  totalPages: number,
+  pageNumberText?: string,
+): void {
   // Validate inputs
   if (!blocks || blocks.length === 0) {
     return;
@@ -57,7 +63,7 @@ export function resolveHeaderFooterTokens(blocks: FlowBlock[], pageNumber: numbe
     totalPages = 1;
   }
 
-  const pageNumberStr = String(pageNumber);
+  const pageNumberStr = pageNumberText ?? String(pageNumber);
   const totalPagesStr = String(totalPages);
 
   // Process each block in the header/footer

@@ -70,8 +70,12 @@ export function translateFieldAnnotation(params) {
   const annotationAttrsJson = JSON.stringify(annotationAttrs);
 
   // Build sdtPr elements with passthrough support
+  // Sanitize displayLabel to prevent string "undefined" from being written to DOCX
+  const sanitizedDisplayLabel =
+    attrs.displayLabel === 'undefined' || attrs.displayLabel === undefined ? '' : attrs.displayLabel;
+
   const sdtPrElements = [
-    { name: 'w:alias', attributes: { 'w:val': attrs.displayLabel } },
+    { name: 'w:alias', attributes: { 'w:val': sanitizedDisplayLabel } },
     { name: 'w:tag', attributes: { 'w:val': annotationAttrsJson } },
     { name: 'w:id', attributes: { 'w:val': id } },
   ];
@@ -184,10 +188,15 @@ export function prepareHtmlAnnotation(params) {
   const {
     node: { attrs = {}, marks = [] },
     editorSchema,
+    editor,
   } = params;
 
   let html = attrs.rawHtml || attrs.displayLabel;
-  const paragraphHtmlContainer = sanitizeHtml(html);
+  const paragraphHtmlContainer = sanitizeHtml(
+    html,
+    undefined,
+    editor?.options?.document ?? editor?.options?.mockDocument,
+  );
   const marksFromAttrs = translateFieldAttrsToMarks(attrs);
   const allMarks = [...marks, ...marksFromAttrs];
 
@@ -201,7 +210,6 @@ export function prepareHtmlAnnotation(params) {
 
   const htmlAnnotationNode = state.doc.toJSON();
   const listTypes = ['bulletList', 'orderedList'];
-  const { editor } = params;
   const seenLists = new Map();
   state.doc.descendants((node) => {
     if (listTypes.includes(node.type.name)) {

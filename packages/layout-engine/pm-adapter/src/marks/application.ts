@@ -63,6 +63,7 @@ type CommentAnnotation = {
   commentId: string;
   importedId?: string;
   internal?: boolean;
+  trackedChange?: boolean;
 };
 
 /**
@@ -148,6 +149,88 @@ const applyThemeShade = (baseHex: string, ratio: number): string => {
   return rgbToHex(shaded);
 };
 
+/**
+ * Calculates relative luminance of a hex color per WCAG 2.1 guidelines.
+ *
+ * Implements the WCAG 2.1 relative luminance formula to determine perceived brightness
+ * of a color. This is critical for ensuring sufficient contrast between text and background
+ * colors to meet accessibility standards (WCAG AA requires 4.5:1 contrast for normal text).
+ *
+ * The calculation converts RGB values to linear RGB space using the sRGB gamma correction,
+ * then applies weighted coefficients based on human perception (green contributes most to
+ * perceived brightness, blue the least).
+ *
+ * @param hexColor - Hex color string (e.g., "#FF0000" or "F00" for red). May optionally
+ *   include the "#" prefix. Supports both 3-digit (#RGB) and 6-digit (#RRGGBB) formats.
+ * @returns Relative luminance value from 0 (black) to 1 (white). Returns 1.0 (light) for
+ *   invalid color strings to default to black text for safety.
+ *
+ * @example
+ * ```typescript
+ * getLuminance('#FFFFFF'); // 1.0 (pure white)
+ * getLuminance('#000000'); // 0.0 (pure black)
+ * getLuminance('#808080'); // ~0.2159 (mid gray)
+ * getLuminance('#342D8C'); // ~0.0557 (dark purple, < 0.18 threshold)
+ * getLuminance('#F00');    // 0.2126 (red in short form)
+ * getLuminance('invalid'); // 1.0 (defaults to light/black text)
+ * ```
+ *
+ * @see https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+ * @see https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
+ */
+export const getLuminance = (hexColor: string): number => {
+  const rgb = hexToRgb(hexColor);
+  if (!rgb) return 1; // Default to light if invalid color
+  const toLinear = (channel: number): number => {
+    const c = channel / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  const R = toLinear(rgb.r);
+  const G = toLinear(rgb.g);
+  const B = toLinear(rgb.b);
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+};
+
+/**
+ * WCAG AA luminance threshold for 4.5:1 contrast ratio.
+ * Backgrounds darker than this threshold should use white text.
+ */
+const WCAG_AA_LUMINANCE_THRESHOLD = 0.18;
+
+/**
+ * Resolves auto text color (black or white) based on background luminance for optimal contrast.
+ *
+ * Automatically determines whether to use white (#FFFFFF) or black (#000000) text based on
+ * the background color's relative luminance to ensure WCAG AA compliance (4.5:1 contrast ratio
+ * for normal text). This is essential for table cells and other elements where text color is
+ * not explicitly set.
+ *
+ * The function uses a luminance threshold of 0.18 - backgrounds darker than this receive white
+ * text, while lighter backgrounds receive black text. This threshold is calibrated to ensure
+ * maximum readability across all background colors.
+ *
+ * @param backgroundColor - Background color as hex string (e.g., "#FF0000", "F00", or "#808080").
+ *   May optionally include the "#" prefix. Supports both 3-digit and 6-digit hex formats.
+ * @returns "#FFFFFF" (white) for dark backgrounds (luminance < 0.18), or "#000000" (black)
+ *   for light backgrounds (luminance >= 0.18).
+ *
+ * @example
+ * ```typescript
+ * resolveAutoColor('#000000'); // "#FFFFFF" (white text on black)
+ * resolveAutoColor('#FFFFFF'); // "#000000" (black text on white)
+ * resolveAutoColor('#342D8C'); // "#FFFFFF" (white text on dark purple)
+ * resolveAutoColor('#CCCCCC'); // "#000000" (black text on light gray)
+ * resolveAutoColor('#808080'); // "#000000" (black text on mid gray, at threshold boundary)
+ * ```
+ *
+ * @see https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
+ * @see {@link getLuminance} for luminance calculation details
+ */
+export const resolveAutoColor = (backgroundColor: string): string => {
+  const luminance = getLuminance(backgroundColor);
+  return luminance < WCAG_AA_LUMINANCE_THRESHOLD ? '#FFFFFF' : '#000000';
+};
+
 const resolveThemeColor = (
   attrs: Record<string, unknown> | undefined,
   themeColors?: ThemeColorPalette,
@@ -211,6 +294,7 @@ const pushCommentAnnotation = (run: TextRun, attrs: Record<string, unknown> | un
   const commentId = typeof attrs?.commentId === 'string' ? attrs.commentId : undefined;
   const importedId = typeof attrs?.importedId === 'string' ? attrs.importedId : undefined;
   const internal = attrs?.internal === true;
+  const trackedChange = attrs?.trackedChange === true;
 
   if (!commentId && !importedId) return;
 
@@ -222,6 +306,7 @@ const pushCommentAnnotation = (run: TextRun, attrs: Record<string, unknown> | un
       commentId: commentId ?? (importedId as string),
       importedId,
       internal,
+      trackedChange,
     });
   }
 
@@ -477,19 +562,59 @@ export const collectTrackedChangeFromMarks = (marks?: PMMark[]): TrackedChangeMe
 
 /**
  * Normalizes underline style value from PM mark attributes.
- * Returns a valid UnderlineStyle, or undefined only for explicit 'none'.
+ * Returns a valid UnderlineStyle, or undefined for explicit off values.
  * Missing/undefined values default to 'single' (presence of underline mark implies underline).
  *
  * @param value - Unknown value from mark attributes that should be an underline style
- * @returns A valid UnderlineStyle ('single', 'double', 'dotted', 'dashed', 'wavy'), or undefined if explicitly 'none'
+ * @returns A valid UnderlineStyle ('single', 'double', 'dotted', 'dashed', 'wavy'), or undefined if explicitly disabled
+ *
+ * @remarks
+ * Handles multiple value types:
+ * - Strings: Recognizes specific underline styles ('double', 'dotted', etc.) and off values ('none', '0', 'false', 'off')
+ * - Numbers: 0 returns undefined (off), any other number returns 'single'
+ * - Booleans: false returns undefined (off), true returns 'single'
+ * - undefined/null: Returns 'single' (default)
+ * - Empty/whitespace strings: Returns 'single' (default)
+ *
+ * @example
+ * ```typescript
+ * normalizeUnderlineStyle('double');    // 'double'
+ * normalizeUnderlineStyle('none');      // undefined
+ * normalizeUnderlineStyle(false);       // undefined
+ * normalizeUnderlineStyle(0);           // undefined
+ * normalizeUnderlineStyle(undefined);   // 'single'
+ * normalizeUnderlineStyle(123);         // 'single'
+ * normalizeUnderlineStyle('custom');    // 'single'
+ * ```
  */
 export const normalizeUnderlineStyle = (value: unknown): UnderlineStyle | undefined => {
-  // Return undefined only for explicitly "none" - this means "no underline"
   if (value === 'none') {
     return undefined;
   }
-  if (value === 'double' || value === 'dotted' || value === 'dashed' || value === 'wavy') {
-    return value;
+  if (value === undefined || value === null) {
+    return 'single';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'single' : undefined;
+  }
+  if (typeof value === 'number') {
+    // Treat 0 as explicitly "off", any other number as "on" with default 'single' style
+    return value === 0 ? undefined : 'single';
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    // Empty string defaults to 'single' because the presence of an underline mark
+    // itself implies underline should be applied, even if the value is missing/empty
+    if (!normalized) {
+      return 'single';
+    }
+    if (normalized === 'none' || normalized === '0' || normalized === 'false' || normalized === 'off') {
+      return undefined;
+    }
+    if (normalized === 'double' || normalized === 'dotted' || normalized === 'dashed' || normalized === 'wavy') {
+      return normalized;
+    }
+    return 'single';
   }
   // Default to 'single' for missing values or other underline types (e.g., 'single', 'words', 'thick', etc.)
   // The presence of an underline mark implies underline should be applied
@@ -703,6 +828,9 @@ const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = {
  * @param run - The text run to apply marks to (mutated in place)
  * @param marks - Array of ProseMirror marks to apply
  * @param hyperlinkConfig - Configuration for hyperlink processing (defaults to basic mode)
+ * @param themeColors - Optional theme color palette for resolving theme colors
+ * @param backgroundColor - Optional cell background color for auto text color resolution
+ * @param enableComments - Whether to process comment marks (defaults to true)
  * @throws Does not throw; errors in mark processing are logged but do not interrupt processing
  */
 export const applyMarksToRun = (
@@ -710,9 +838,19 @@ export const applyMarksToRun = (
   marks: PMMark[],
   hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
   themeColors?: ThemeColorPalette,
+  backgroundColor?: string,
+  enableComments = true,
 ): void => {
+  // If comments are disabled, clear any existing annotations before processing marks.
+  if (!enableComments && 'comments' in run && (run as TextRun).comments) {
+    delete (run as TextRun).comments;
+  }
+
   // Type guard to distinguish TabRun from TextRun
   const isTabRun = run.kind === 'tab';
+
+  // Track if any mark explicitly sets a color (vs style defaults)
+  let markSetColor = false;
 
   marks.forEach((mark) => {
     const forwardedDataAttrs = extractDataAttributes(mark.attrs as Record<string, unknown> | undefined);
@@ -751,25 +889,39 @@ export const applyMarksToRun = (
         case 'textStyle':
           // TextStyle mark only applies to TextRun (has fontFamily, fontSize, etc.)
           if (!isTabRun) {
+            const colorBefore = run.color;
             applyTextStyleMark(run, mark.attrs ?? {}, themeColors);
+            // Track if this mark explicitly set a color (not just inherited from style defaults)
+            if (run.color !== colorBefore && run.color !== undefined) {
+              markSetColor = true;
+            }
           }
           break;
         case 'commentMark':
         case 'comment': {
-          // Comment marks only apply to TextRun
-          if (!isTabRun) {
+          // Comment marks only apply to TextRun, and only when comments are enabled
+          if (!isTabRun && enableComments) {
             pushCommentAnnotation(run, mark.attrs ?? {});
           }
           break;
         }
         case 'underline': {
-          const style = normalizeUnderlineStyle(mark.attrs?.underlineType);
+          // Check multiple attribute names for underline value:
+          // - underlineType: Primary attribute name (current schema)
+          // - value: Legacy attribute name from older schemas
+          // - underline: Alternative attribute name for consistency with other marks
+          // - style: Fallback for Word import compatibility
+          const underlineValue =
+            mark.attrs?.underlineType ?? mark.attrs?.value ?? mark.attrs?.underline ?? mark.attrs?.style;
+          const style = normalizeUnderlineStyle(underlineValue);
           if (style) {
             const underlineColor = resolveColorFromAttributes(mark.attrs ?? {}, themeColors);
             run.underline = {
               style,
               color: underlineColor ?? run.underline?.color,
             };
+          } else if (underlineValue !== undefined && underlineValue !== null) {
+            delete run.underline;
           }
           break;
         }
@@ -836,4 +988,19 @@ export const applyMarksToRun = (
       run.dataAttrs = { ...(run.dataAttrs ?? {}), ...forwardedDataAttrs };
     }
   });
+
+  // Auto color resolution: if no mark explicitly set a color and we have a background color,
+  // resolve text color based on background luminance for proper contrast (WCAG AA).
+  // Respect colors that were already applied by styles/defaults; only fill when color is unset/auto.
+  if (!isTabRun && !markSetColor && backgroundColor) {
+    const normalizedExisting = normalizeColor(run.color);
+    const normalizedUpper = normalizedExisting?.toUpperCase();
+    const isDefaultBlack = normalizedUpper === '#000000' || normalizedUpper === '#000';
+    const isAutoColorValue =
+      typeof run.color === 'string' && ['auto', 'none'].includes(run.color.trim().replace(/^#/, '').toLowerCase());
+
+    if (!normalizedExisting || isAutoColorValue || isDefaultBlack) {
+      run.color = resolveAutoColor(backgroundColor);
+    }
+  }
 };

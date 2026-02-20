@@ -71,7 +71,7 @@ export function handleHtmlPaste(html: string, editor: Editor, source?: string): 
 /**
  * Handle HTML content before insertion
  */
-export function htmlHandler(html: string, editor: Editor): DocumentFragment;
+export function htmlHandler(html: string, editor: Editor, domDocument?: Document | null): DocumentFragment;
 
 /**
  * Convert em units to pt units in font-size
@@ -86,7 +86,7 @@ export function cleanHtmlUnnecessaryTags(html: string): string;
 /**
  * Sanitize HTML and remove forbidden tags
  */
-export function sanitizeHtml(html: string, forbiddenTags?: string[]): DocumentFragment;
+export function sanitizeHtml(html: string, forbiddenTags?: string[], domDocument?: Document | null): DocumentFragment;
 
 /**
  * Handle clipboard paste events

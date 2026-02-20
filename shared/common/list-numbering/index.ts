@@ -1,6 +1,6 @@
 type NumberingHandler = (path: number[], lvlText: string, customFormat?: string) => string | null;
 
-type NumberFormatter = (value: number) => string;
+type NumberFormatter = (value: number, idx?: number) => string;
 
 const handleDecimal: NumberingHandler = (path, lvlText) => generateNumbering(path, lvlText, numberToStringFormatter);
 const handleRoman: NumberingHandler = (path, lvlText) => generateNumbering(path, lvlText, intToRoman);
@@ -18,9 +18,11 @@ const handleCustom: NumberingHandler = (path, lvlText, customFormat) =>
   generateFromCustom(path, lvlText, customFormat as string);
 const handleJapaneseCounting: NumberingHandler = (path, lvlText) =>
   generateNumbering(path, lvlText, intToJapaneseCounting);
+const handleDecimalZero: NumberingHandler = (path, lvlText) => generateNumbering(path, lvlText, decimalZeroFormatter);
 
 const listIndexMap: Record<string, NumberingHandler> = {
   decimal: handleDecimal,
+  decimalZero: handleDecimalZero,
   lowerRoman: handleLowerRoman,
   upperRoman: handleRoman,
   lowerLetter: handleLowerAlpha,
@@ -32,7 +34,7 @@ const listIndexMap: Record<string, NumberingHandler> = {
 
 export interface GenerateOrderedListIndexOptions {
   listLevel: number[];
-  lvlText: string;
+  lvlText: string | null | undefined;
   listNumberingType?: string;
   customFormat?: string;
 }
@@ -43,11 +45,13 @@ export const generateOrderedListIndex = ({
   listNumberingType,
   customFormat,
 }: GenerateOrderedListIndexOptions): string | null => {
+  if (typeof lvlText !== 'string') return null;
   const handler = listIndexMap[listNumberingType as string];
   return handler ? handler(listLevel, lvlText, customFormat) : null;
 };
 
 const createNumbering = (values: string[], lvlText: string): string => {
+  if (typeof lvlText !== 'string') return '';
   return values.reduce<string>((acc, value, index) => {
     return Number(value) > 9
       ? acc.replace(/^0/, '').replace(`%${index + 1}`, value)
@@ -56,7 +60,7 @@ const createNumbering = (values: string[], lvlText: string): string => {
 };
 
 const generateNumbering = (path: number[], lvlText: string, formatter: NumberFormatter): string => {
-  const formattedValues = path.map((entry) => formatter(entry));
+  const formattedValues = path.map((entry, idx) => formatter(entry, idx));
   return createNumbering(formattedValues, lvlText);
 };
 
@@ -67,7 +71,15 @@ const ordinalFormatter: NumberFormatter = (value) => {
   return `${value}${suffix}`;
 };
 
+const decimalZeroFormatter: NumberFormatter = (value, idx) => {
+  if (value >= 10 || idx === 0) return String(value);
+  return `0${value}`;
+};
+
 const generateFromCustom = (path: number[], lvlText: string, customFormat: string): string => {
+  if (typeof customFormat !== 'string') {
+    return generateNumbering(path, lvlText, numberToStringFormatter);
+  }
   if (customFormat.match(/(?:[0]+\d,\s){3}\.{3}/) == null) {
     return generateNumbering(path, lvlText, numberToStringFormatter);
   }

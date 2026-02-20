@@ -166,4 +166,320 @@ describe('computeDirtyRegions', () => {
     const result = computeDirtyRegions(prev, next);
     expect(result.firstDirtyIndex).toBe(0);
   });
+
+  // ============================================================================
+  // Paragraph Attribute Change Detection Tests
+  // These tests verify that changes to paragraph-level attributes trigger
+  // proper cache invalidation (the fix for alignment toolbar commands not
+  // updating immediately).
+  // ============================================================================
+
+  describe('paragraph attribute changes', () => {
+    const paragraphWithAttrs = (id: string, text: string, attrs: Record<string, unknown> = {}) => ({
+      kind: 'paragraph' as const,
+      id,
+      runs: [{ text, fontFamily: 'Arial', fontSize: 16 }],
+      attrs,
+    });
+
+    describe('alignment changes', () => {
+      it('detects alignment change from left to center', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { alignment: 'left' })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { alignment: 'center' })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects alignment change from undefined to center', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', {})];
+        const next = [paragraphWithAttrs('p1', 'Hello', { alignment: 'center' })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects alignment change from center to right', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { alignment: 'center' })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { alignment: 'right' })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects alignment change from right to justify', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { alignment: 'right' })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { alignment: 'justify' })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('treats identical alignment as stable', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { alignment: 'center' })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { alignment: 'center' })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+    });
+
+    describe('spacing changes', () => {
+      it('detects spacing.before change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { spacing: { before: 100 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { spacing: { before: 200 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects spacing.after change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { spacing: { after: 100 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { spacing: { after: 200 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects spacing.line change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { spacing: { line: 240 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { spacing: { line: 360 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects spacing.lineRule change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { spacing: { lineRule: 'auto' } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { spacing: { lineRule: 'exact' } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('treats identical spacing as stable', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { spacing: { before: 100, after: 100, line: 240 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { spacing: { before: 100, after: 100, line: 240 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+    });
+
+    describe('indent changes', () => {
+      it('detects indent.left change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { indent: { left: 720 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { indent: { left: 1440 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects indent.right change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { indent: { right: 0 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { indent: { right: 720 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects indent.firstLine change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { indent: { firstLine: 0 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { indent: { firstLine: 720 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects indent.hanging change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { indent: { hanging: 0 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { indent: { hanging: 360 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('treats identical indent as stable', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { indent: { left: 720, firstLine: 360 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { indent: { left: 720, firstLine: 360 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+    });
+
+    describe('border changes', () => {
+      it('detects border.top change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { borders: { top: { style: 'solid', width: 1 } } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { borders: { top: { style: 'solid', width: 2 } } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects border color change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { borders: { bottom: { style: 'solid', color: '#000' } } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { borders: { bottom: { style: 'solid', color: '#f00' } } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects border style change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { borders: { left: { style: 'solid' } } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { borders: { left: { style: 'dashed' } } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('treats identical borders as stable', () => {
+        const prev = [
+          paragraphWithAttrs('p1', 'Hello', { borders: { top: { style: 'solid', width: 1, color: '#000' } } }),
+        ];
+        const next = [
+          paragraphWithAttrs('p1', 'Hello', { borders: { top: { style: 'solid', width: 1, color: '#000' } } }),
+        ];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+    });
+
+    describe('shading changes', () => {
+      it('detects shading.fill change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { shading: { fill: '#fff' } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { shading: { fill: '#ff0' } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects shading addition', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', {})];
+        const next = [paragraphWithAttrs('p1', 'Hello', { shading: { fill: '#f0f0f0' } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('treats identical shading as stable', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { shading: { fill: '#f0f0f0', color: '#000' } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { shading: { fill: '#f0f0f0', color: '#000' } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+    });
+
+    describe('tab stop changes', () => {
+      it('detects tab stop addition', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { tabs: [] })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'center', pos: 4320 }] })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects tab stop position change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'start', pos: 720 }] })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'start', pos: 1440 }] })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects tab stop type change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'start', pos: 720 }] })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'center', pos: 720 }] })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects tab stop leader change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'end', pos: 8640, leader: 'none' }] })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'end', pos: 8640, leader: 'dot' }] })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('treats identical tabs as stable', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'center', pos: 4320, leader: 'dot' }] })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { tabs: [{ val: 'center', pos: 4320, leader: 'dot' }] })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+    });
+
+    describe('other paragraph attribute changes', () => {
+      it('detects direction change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { direction: 'ltr' })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { direction: 'rtl' })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects keepNext change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { keepNext: false })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { keepNext: true })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects keepLines change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { keepLines: false })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { keepLines: true })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects floatAlignment change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { floatAlignment: 'left' })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { floatAlignment: 'center' })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('detects contextualSpacing change', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { contextualSpacing: false })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { contextualSpacing: true })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+    });
+
+    describe('combined attribute changes', () => {
+      it('detects multiple attribute changes at once', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { alignment: 'left', spacing: { before: 100 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { alignment: 'center', spacing: { before: 200 } })];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(0);
+      });
+
+      it('treats complex identical paragraphs as stable', () => {
+        const complexAttrs = {
+          alignment: 'justify' as const,
+          spacing: { before: 100, after: 100, line: 276, lineRule: 'auto' as const },
+          indent: { left: 720, right: 0, firstLine: 360 },
+          borders: {
+            top: { style: 'solid' as const, width: 1, color: '#000' },
+            bottom: { style: 'solid' as const, width: 1, color: '#000' },
+          },
+          shading: { fill: '#f0f0f0' },
+          tabs: [
+            { val: 'center' as const, pos: 4320 },
+            { val: 'end' as const, pos: 8640, leader: 'dot' as const },
+          ],
+          keepNext: true,
+          direction: 'ltr' as const,
+        };
+        const prev = [paragraphWithAttrs('p1', 'Hello', complexAttrs)];
+        const next = [paragraphWithAttrs('p1', 'Hello', complexAttrs)];
+        const result = computeDirtyRegions(prev, next);
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+    });
+
+    describe('non-visual attributes (should not trigger invalidation)', () => {
+      it('ignores sdt metadata changes', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { sdt: { id: '1', tag: 'field1' } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { sdt: { id: '2', tag: 'field2' } })];
+        const result = computeDirtyRegions(prev, next);
+        // sdt is non-visual metadata, should not trigger invalidation
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+
+      it('ignores wordLayout changes (computed output)', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { wordLayout: { lines: 1 } })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { wordLayout: { lines: 2 } })];
+        const result = computeDirtyRegions(prev, next);
+        // wordLayout is computed output, should not trigger invalidation
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+
+      it('ignores styleId changes (resolved before FlowBlock)', () => {
+        const prev = [paragraphWithAttrs('p1', 'Hello', { styleId: 'Heading1' })];
+        const next = [paragraphWithAttrs('p1', 'Hello', { styleId: 'Heading2' })];
+        const result = computeDirtyRegions(prev, next);
+        // styleId is resolved before FlowBlock, should not trigger invalidation
+        expect(result.firstDirtyIndex).toBe(next.length);
+      });
+    });
+  });
 });

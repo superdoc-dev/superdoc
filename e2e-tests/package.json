@@ -4,46 +4,43 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "build": "docker build -t playwright .",
-    "build:nocache": "docker build --pull --no-cache -t playwright .",
-    "update-screenshots": "npm run build && docker run -e PLAYWRIGHT_ARGS='--update-snapshots' --rm  -v ./test-results:/app/test-results -v ./tests/visuals:/app/tests/visuals playwright",
-    "update-screenshots:layout": "LAYOUT_ENGINE=1 npx playwright test tests/visuals/layout-engine.spec.js --update-snapshots=all",
-    "update-screenshots:layout:docker": "npm run build && docker run --rm --cpus=4 --memory=8gb -e LAYOUT_ENGINE=1 -e PLAYWRIGHT_ARGS='tests/visuals/layout-engine.spec.js --update-snapshots=all' -v ./test-results:/app/test-results -v ./tests:/app/tests playwright",
+    "build": "docker build -t playwright -f Dockerfile ..",
+    "build:nocache": "docker build --pull --no-cache -t playwright -f Dockerfile ..",
+    "update-screenshots": "pnpm run build && docker run -e PLAYWRIGHT_ARGS='--update-snapshots' --rm  -v ./test-results:/app/e2e-tests/test-results -v ./tests/visuals:/app/e2e-tests/tests/visuals -ti playwright",
+    "update-screenshots:layout": "LAYOUT_ENGINE=1 playwright test tests/visuals/layout-engine.spec.js --update-snapshots=all",
+    "update-screenshots:layout:docker": "pnpm run build && docker run --rm --cpus=4 --memory=8gb -e LAYOUT_ENGINE=1 -e PLAYWRIGHT_ARGS='tests/visuals/layout-engine.spec.js --update-snapshots=all' -v ./test-results:/app/e2e-tests/test-results -v ./tests:/app/e2e-tests/tests -ti playwright",
     "layout-compare": "node ./helpers/run-layout-compare.js",
-    "test:local": "docker run --rm --cpus=4 --memory=8gb -v ./test-results:/app/test-results -v ./tests:/app/tests playwright",
-    "test": "npx playwright test",
-    "test:ui": "npx playwright test --ui -g",
-    "test:layout:docker": "docker run --rm --cpus=4 --memory=8gb -e LAYOUT_ENGINE=1 -e PLAYWRIGHT_ARGS='tests/visuals/layout-engine.spec.js' -v ./test-results:/app/test-results -v ./tests:/app/tests playwright",
-    "test:layout": "LAYOUT_ENGINE=1 npx playwright test tests/visuals/layout-engine.spec.js --reporter=list",
-    "template": "cd templates/vue && npm run dev",
-    "build:superdoc": "cd ../ && npm run pack && cp ./packages/superdoc/superdoc.tgz ./e2e-tests/superdoc.tgz && cd e2e-tests/templates/vue && npm install file:../../superdoc.tgz",
-    "reinstall": "npm run build:superdoc",
-    "rebuild": "npm run reinstall && npm run build:nocache"
+    "test:local": "docker run --rm --cpus=4 --memory=8gb -v ./test-results:/app/e2e-tests/test-results -v ./tests:/app/e2e-tests/tests -ti playwright",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui -g",
+    "test:layout:docker": "docker run --rm --cpus=4 --memory=8gb -e LAYOUT_ENGINE=1 -e PLAYWRIGHT_ARGS='tests/visuals/layout-engine.spec.js' -v ./test-results:/app/e2e-tests/test-results -v ./tests:/app/e2e-tests/tests -ti playwright",
+    "test:layout": "LAYOUT_ENGINE=1 playwright test tests/visuals/layout-engine.spec.js --reporter=list",
+    "template": "pnpm run --prefix templates/vue dev"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Harbour-Enterprises/SuperDoc.git"
+    "url": "git+https://github.com/superdoc-dev/superdoc.git"
   },
   "keywords": [],
   "author": "gabriel@superdoc.dev",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@fontsource/inter": "^5.2.8",
-    "@linear/sdk": "^53.0.0",
-    "@playwright/test": "^1.57.0",
-    "jszip": "^3.10.1",
-    "patch-package": "^8.0.1",
-    "playwright": "^1.56.0",
-    "vue": "^3.5.13"
+    "@fontsource/inter": "catalog:",
+    "@linear/sdk": "catalog:",
+    "@playwright/test": "catalog:",
+    "jszip": "catalog:",
+    "patch-package": "catalog:",
+    "playwright": "catalog:",
+    "vue": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^22.15.3",
-    "@vitejs/plugin-vue": "^5.2.2",
-    "jimp": "^1.6.0",
-    "nodemon": "^3.1.10",
-    "pixelmatch": "^7.1.0",
-    "vite": "^6.3.1"
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "jimp": "catalog:",
+    "nodemon": "catalog:",
+    "pixelmatch": "catalog:",
+    "vite": "catalog:"
   },
   "workspaces": [
     "templates/vue"

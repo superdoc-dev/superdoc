@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist-types"
+  },
+  "references": [{ "path": "../super-editor/tsconfig.types.json" }, { "path": "../../shared/common/tsconfig.json" }]
+}

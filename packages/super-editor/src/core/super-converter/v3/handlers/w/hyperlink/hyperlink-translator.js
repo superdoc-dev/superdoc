@@ -53,7 +53,7 @@ const encode = (params, encodedAttrs) => {
   const { nodes, docx, nodeListHandler } = params;
   const node = nodes[0];
 
-  let href = _resolveHref(docx, encodedAttrs);
+  let href = _resolveHref(docx, encodedAttrs, params.filename);
 
   // Add marks to the run nodes and process them
   const linkMark = { type: 'link', attrs: { ...encodedAttrs, href } };
@@ -80,17 +80,19 @@ const encode = (params, encodedAttrs) => {
  * @param {import('@translator').EncodedAttributes} encodedAttrs - The encoded attributes containing rId or anchor.
  * @returns {string|undefined} The resolved href or undefined if not found.
  */
-const _resolveHref = (docx, encodedAttrs) => {
-  const rels = docx['word/_rels/document.xml.rels'];
-  const relationships = rels.elements.find((el) => el.name === 'Relationships');
-  const { elements } = relationships;
+const _resolveHref = (docx, encodedAttrs, filename) => {
+  const currentFile = filename || 'document.xml';
+  let rels = docx?.[`word/_rels/${currentFile}.rels`];
+  if (!rels) rels = docx?.['word/_rels/document.xml.rels'];
+  const relationships = rels?.elements?.find((el) => el.name === 'Relationships');
+  const elements = relationships?.elements || [];
 
   const { rId, anchor } = encodedAttrs;
   let href;
   if (!rId && anchor) {
     href = `#${anchor}`;
   } else if (rId) {
-    const rel = elements.find((el) => el.attributes['Id'] === rId) || {};
+    const rel = elements.find((el) => el.attributes?.['Id'] === rId) || {};
     const { attributes: relAttributes = {} } = rel;
     href = relAttributes['Target'];
   }

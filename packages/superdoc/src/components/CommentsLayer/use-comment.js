@@ -16,6 +16,7 @@ export default function useComment(params) {
   const commentId = params.commentId || uuidv4();
   const importedId = params.importedId;
   const parentCommentId = params.parentCommentId;
+  const trackedChangeParentId = params.trackedChangeParentId;
   const fileId = params.fileId;
   const fileType = params.fileType;
   const createdAtVersionNumber = params.createdAtVersionNumber;
@@ -31,10 +32,12 @@ export default function useComment(params) {
   const creatorImage = params.creatorImage;
   const createdTime = params.createdTime || Date.now();
   const importedAuthor = ref(params.importedAuthor || null);
-
-  // Original DOCX-schema comment JSON captured at import time
-  // (preserve exact comment content when re-exporting DOCX)
   const docxCommentJSON = params.docxCommentJSON || null;
+  const origin = params.origin;
+  const threadingMethod = params.threadingMethod;
+  const threadingStyleOverride = params.threadingStyleOverride;
+  const threadingParentCommentId = params.threadingParentCommentId;
+  const originalXmlStructure = params.originalXmlStructure;
 
   const commentText = ref(params.commentText || '');
 
@@ -229,6 +232,7 @@ export default function useComment(params) {
       commentId,
       importedId,
       parentCommentId,
+      trackedChangeParentId,
       fileId,
       fileType,
       mentions: mentions.value.map((u) => {
@@ -251,6 +255,11 @@ export default function useComment(params) {
       resolvedTime: resolvedTime.value,
       resolvedByEmail: resolvedByEmail.value,
       resolvedByName: resolvedByName.value,
+      origin,
+      threadingMethod,
+      threadingStyleOverride,
+      threadingParentCommentId,
+      originalXmlStructure,
     };
   };
 
@@ -259,6 +268,7 @@ export default function useComment(params) {
     commentId,
     importedId,
     parentCommentId,
+    trackedChangeParentId,
     fileId,
     fileType,
     mentions,
@@ -281,6 +291,11 @@ export default function useComment(params) {
     resolvedByName,
     importedAuthor,
     docxCommentJSON,
+    origin,
+    threadingMethod,
+    threadingStyleOverride,
+    threadingParentCommentId,
+    originalXmlStructure,
 
     // Actions
     setText,

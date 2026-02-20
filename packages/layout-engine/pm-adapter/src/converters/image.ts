@@ -8,7 +8,7 @@ import type { ImageBlock, BoxSpacing, ImageAnchor } from '@superdoc/contracts';
 import type { PMNode, BlockIdGenerator, PositionMap, NodeHandlerContext, TrackedChangesConfig } from '../types.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { shouldHideTrackedNode, annotateBlockWithTrackedChange } from '../tracked-changes.js';
-import { isFiniteNumber, pickNumber } from '../utilities.js';
+import { isFiniteNumber, pickNumber, normalizeZIndex, resolveFloatingZIndex } from '../utilities.js';
 
 // ============================================================================
 // Constants
@@ -30,6 +30,11 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 
 const isAllowedObjectFit = (value?: string): value is 'contain' | 'cover' | 'fill' | 'scale-down' => {
   return value === 'contain' || value === 'cover' || value === 'fill' || value === 'scale-down';
+};
+
+const isHiddenDrawing = (attrs: Record<string, unknown>): boolean => {
+  if (toBoolean(attrs.hidden) === true) return true;
+  return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
 };
 
 // ============================================================================
@@ -218,6 +223,9 @@ export function imageNodeToBlock(
   _trackedChanges?: TrackedChangesConfig,
 ): ImageBlock | null {
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
+  if (isHiddenDrawing(attrs)) {
+    return null;
+  }
   if (!attrs.src || typeof attrs.src !== 'string') {
     return null;
   }
@@ -247,15 +255,22 @@ export function imageNodeToBlock(
     explicitDisplay === 'inline' || explicitDisplay === 'block' ? explicitDisplay : isInline ? 'inline' : 'block';
 
   const explicitObjectFit = typeof attrs.objectFit === 'string' ? (attrs.objectFit as string) : undefined;
+  const shouldCover = attrs.shouldCover === true;
   const isAnchor = anchor?.isAnchored ?? (typeof attrs.isAnchor === 'boolean' ? attrs.isAnchor : false);
 
   const objectFit: 'contain' | 'cover' | 'fill' | 'scale-down' | undefined = isAllowedObjectFit(explicitObjectFit)
     ? explicitObjectFit
-    : display === 'inline'
-      ? 'scale-down'
-      : isAnchor
-        ? 'contain'
-        : 'contain';
+    : shouldCover
+      ? 'cover'
+      : display === 'inline'
+        ? 'scale-down'
+        : isAnchor
+          ? 'contain'
+          : 'contain';
+
+  // Same z-index as editor: from OOXML relativeHeight (Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE))
+  const zIndexFromRelativeHeight = normalizeZIndex(attrs.originalAttributes as Record<string, unknown> | undefined);
+  const zIndex = resolveFloatingZIndex(anchor?.behindDoc === true, zIndexFromRelativeHeight);
 
   return {
     kind: 'image',
@@ -271,7 +286,12 @@ export function imageNodeToBlock(
     margin: toBoxSpacing(attrs.marginOffset as Record<string, unknown> | undefined),
     anchor,
     wrap: normalizedWrap,
+    ...(zIndex !== undefined && { zIndex }),
     attrs: attrsWithPm,
+    // VML image adjustments for watermark effects
+    gain: typeof attrs.gain === 'string' || typeof attrs.gain === 'number' ? attrs.gain : undefined,
+    blacklevel:
+      typeof attrs.blacklevel === 'string' || typeof attrs.blacklevel === 'number' ? attrs.blacklevel : undefined,
   };
 }
 
@@ -286,7 +306,7 @@ export function imageNodeToBlock(
  * @param node - Image node to process
  * @param context - Shared handler context
  */
-export function handleImageNode(node: PMNode, context: NodeHandlerContext): void {
+export function handleImageNode(node: PMNode, context: NodeHandlerContext): ImageBlock | void {
   const { blocks, recordBlockKind, nextBlockId, positions, trackedChangesConfig } = context;
 
   const trackedMeta = trackedChangesConfig.enabled ? collectTrackedChangeFromMarks(node.marks ?? []) : undefined;
@@ -297,6 +317,7 @@ export function handleImageNode(node: PMNode, context: NodeHandlerContext): void
   if (imageBlock && imageBlock.kind === 'image') {
     annotateBlockWithTrackedChange(imageBlock, trackedMeta, trackedChangesConfig);
     blocks.push(imageBlock);
-    recordBlockKind(imageBlock.kind);
+    recordBlockKind?.(imageBlock.kind);
+    return imageBlock;
   }
 }

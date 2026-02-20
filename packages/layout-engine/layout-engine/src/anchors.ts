@@ -58,7 +58,9 @@ export function collectPreRegisteredAnchors(blocks: FlowBlock[], measures: Measu
     const drawingBlock = block as ImageBlock | DrawingBlock;
     const drawingMeasure = measure as ImageMeasure | DrawingMeasure;
 
-    if (!drawingBlock.anchor?.isAnchored) continue;
+    if (!drawingBlock.anchor?.isAnchored) {
+      continue;
+    }
 
     // Only pre-register page/margin-relative anchors
     if (isPageRelativeAnchor(drawingBlock)) {
@@ -76,6 +78,14 @@ export function collectPreRegisteredAnchors(blocks: FlowBlock[], measures: Measu
 export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]): Map<number, AnchoredDrawing[]> {
   const map = new Map<number, AnchoredDrawing[]>();
   const len = Math.min(blocks.length, measures.length);
+  const paragraphIndexById = new Map<string, number>();
+
+  for (let i = 0; i < len; i += 1) {
+    const block = blocks[i];
+    if (block.kind === 'paragraph') {
+      paragraphIndexById.set(block.id, i);
+    }
+  }
 
   const nearestPrevParagraph = (fromIndex: number): number | null => {
     for (let i = fromIndex - 1; i >= 0; i -= 1) {
@@ -111,7 +121,15 @@ export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]
     }
 
     // Heuristic: anchor to nearest preceding paragraph, else nearest next paragraph
-    let anchorParaIndex = nearestPrevParagraph(i);
+    const anchorParagraphId =
+      typeof drawingBlock.attrs === 'object' && drawingBlock.attrs
+        ? (drawingBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
+        : undefined;
+    let anchorParaIndex =
+      typeof anchorParagraphId === 'string' ? (paragraphIndexById.get(anchorParagraphId) ?? null) : null;
+    if (anchorParaIndex == null) {
+      anchorParaIndex = nearestPrevParagraph(i);
+    }
     if (anchorParaIndex == null) anchorParaIndex = nearestNextParagraph(i);
     if (anchorParaIndex == null) continue; // no paragraphs at all
 
@@ -129,6 +147,14 @@ export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]
  */
 export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]): Map<number, AnchoredTable[]> {
   const map = new Map<number, AnchoredTable[]>();
+  const paragraphIndexById = new Map<string, number>();
+
+  for (let i = 0; i < blocks.length; i += 1) {
+    const block = blocks[i];
+    if (block.kind === 'paragraph') {
+      paragraphIndexById.set(block.id, i);
+    }
+  }
 
   const nearestPrevParagraph = (fromIndex: number): number | null => {
     for (let i = fromIndex - 1; i >= 0; i -= 1) {
@@ -156,8 +182,16 @@ export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]):
     // Check if the table is anchored/floating
     if (!tableBlock.anchor?.isAnchored) continue;
 
-    // Heuristic: anchor to nearest preceding paragraph, else nearest next paragraph
-    let anchorParaIndex = nearestPrevParagraph(i);
+    // Heuristic: anchor to explicit paragraph id, else nearest preceding paragraph, else nearest next paragraph
+    const anchorParagraphId =
+      typeof tableBlock.attrs === 'object' && tableBlock.attrs
+        ? (tableBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
+        : undefined;
+    let anchorParaIndex =
+      typeof anchorParagraphId === 'string' ? (paragraphIndexById.get(anchorParagraphId) ?? null) : null;
+    if (anchorParaIndex == null) {
+      anchorParaIndex = nearestPrevParagraph(i);
+    }
     if (anchorParaIndex == null) anchorParaIndex = nearestNextParagraph(i);
     if (anchorParaIndex == null) continue; // no paragraphs at all
 

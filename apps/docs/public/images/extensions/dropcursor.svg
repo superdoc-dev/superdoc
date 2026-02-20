@@ -1,0 +1,35 @@
+<svg width="100" height="100" viewBox="0 0 100 100" role="img" aria-labelledby="title desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="title">Draggable demo badge (minimal)</title>
+  <desc id="desc">Blue rounded square with a dashed white border, the text DRAG ME!, and a minimal white cursor indicating draggability.</desc>
+
+  <defs>
+    <filter id="ds" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-opacity=".22"></feDropShadow>
+    </filter>
+    <style>
+      .card { fill:#3b82f6; }
+      .dash { fill:none; stroke:#fff; stroke-width:1.5; stroke-dasharray:3 3; stroke-linecap:round; opacity:.95; }
+      .txt  { fill:#fff; font:700 11px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif; letter-spacing:.6px; }
+      .inkS { stroke:#fff; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; fill:none; }
+      .grab { cursor:grab; }
+    </style>
+  </defs>
+
+  <!-- Background card with subtle shadow -->
+  <g filter="url(#ds)" class="grab">
+    <rect x="0" y="0" width="100" height="100" rx="8" class="card"></rect>
+    <rect x="1.5" y="1.5" width="97" height="97" rx="8" class="dash"></rect>
+  </g>
+
+  <!-- Headline -->
+  <text x="50" y="30" text-anchor="middle" class="txt">DRAG ME!</text>
+
+  <!-- Minimal pointer cursor + motion ticks -->
+  <g transform="translate(58,52)" filter="url(#ds)">
+    <!-- motion ticks -->
+    <path d="M-8 -2 l6 2" class="inkS"></path>
+    <path d="M-9 3 l7 2" class="inkS"></path>
+    <!-- pointer (filled white) -->
+    <path d="M0 0 L0 18 L4 14 L8 24 L12 22 L8 12 L14 12 Z" fill="#fff"></path>
+  </g>
+</svg>

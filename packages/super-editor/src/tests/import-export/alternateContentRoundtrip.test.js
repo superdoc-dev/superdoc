@@ -27,7 +27,7 @@ describe('alternateContent roundtrip', () => {
     const buffer = await getTestDataAsFileBuffer('alternateContent_valid.docx');
 
     const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
-    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts });
+    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
     expect(exportedBuffer?.byteLength || exportedBuffer?.length || 0).toBeGreaterThan(0);

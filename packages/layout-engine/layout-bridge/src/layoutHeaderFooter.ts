@@ -1,5 +1,5 @@
 import type { FlowBlock, HeaderFooterLayout, Measure } from '@superdoc/contracts';
-import { layoutHeaderFooter, type HeaderFooterConstraints } from '../../layout-engine/src/index';
+import { layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
 import { MeasureCache } from './cache';
 import { resolveHeaderFooterTokens, cloneHeaderFooterBlocks } from './resolveHeaderFooterTokens';
 import { FeatureFlags } from './featureFlags';
@@ -270,20 +270,37 @@ export async function layoutHeaderFooterWithCache(
 
       // Resolve page number tokens for this specific page
       const { displayText, totalPages: totalPagesForPage } = pageResolver(pageNum);
-      const resolvedPageNum = parseInt(displayText, 10) || pageNum;
 
-      resolveHeaderFooterTokens(clonedBlocks, resolvedPageNum, totalPagesForPage);
+      resolveHeaderFooterTokens(clonedBlocks, pageNum, totalPagesForPage, displayText);
 
       // Measure and layout
       const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock);
       const pageLayout = layoutHeaderFooter(clonedBlocks, measures, constraints);
+      const measuresById = new Map<string, Measure>();
+      for (let i = 0; i < clonedBlocks.length; i += 1) {
+        measuresById.set(clonedBlocks[i].id, measures[i]);
+      }
+      const fragmentsWithLines =
+        pageLayout.pages[0]?.fragments.map((fragment) => {
+          if (fragment.kind !== 'para') {
+            return fragment;
+          }
+          const measure = measuresById.get(fragment.blockId);
+          if (!measure || measure.kind !== 'paragraph') {
+            return fragment;
+          }
+          return {
+            ...fragment,
+            lines: measure.lines.slice(fragment.fromLine, fragment.toLine),
+          };
+        }) ?? [];
 
       // Store page-specific data
       pages.push({
         number: pageNum,
         blocks: clonedBlocks,
         measures,
-        fragments: pageLayout.pages[0]?.fragments ?? [],
+        fragments: fragmentsWithLines,
       });
     }
 

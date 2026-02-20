@@ -182,8 +182,16 @@ export declare const applyFormatChangeMarks: (
   run: TextRun,
   config: TrackedChangesConfig,
   hyperlinkConfig: HyperlinkConfig,
-  applyMarksToRun: (run: TextRun, marks: PMMark[], config: HyperlinkConfig, themeColors?: ThemeColorPalette) => void,
+  applyMarksToRun: (
+    run: TextRun,
+    marks: PMMark[],
+    config: HyperlinkConfig,
+    themeColors?: ThemeColorPalette,
+    backgroundColor?: string,
+    enableComments?: boolean,
+  ) => void,
   themeColors?: ThemeColorPalette,
+  enableComments?: boolean,
 ) => void;
 /**
  * Applies tracked changes mode filtering and metadata stripping to runs.
@@ -199,6 +207,14 @@ export declare const applyTrackedChangesModeToRuns: (
   runs: Run[],
   config: TrackedChangesConfig | undefined,
   hyperlinkConfig: HyperlinkConfig,
-  applyMarksToRun: (run: TextRun, marks: PMMark[], config: HyperlinkConfig, themeColors?: ThemeColorPalette) => void,
+  applyMarksToRun: (
+    run: TextRun,
+    marks: PMMark[],
+    config: HyperlinkConfig,
+    themeColors?: ThemeColorPalette,
+    backgroundColor?: string,
+    enableComments?: boolean,
+  ) => void,
   themeColors?: ThemeColorPalette,
+  enableComments?: boolean,
 ) => Run[];

@@ -8,510 +8,34 @@ import {
   eighthPointsToPixels,
   linesToTwips,
 } from '@converter/helpers.js';
-import { translator as w_pPrTranslator } from '@converter/v3/handlers/w/pPr';
-import { translator as w_rPrTranslator } from '@converter/v3/handlers/w/rpr';
 import { isValidHexColor, getHexColorFromDocxSystem } from '@converter/helpers';
 import { SuperConverter } from '@converter/SuperConverter.js';
 import { getUnderlineCssString } from '@extensions/linked-styles/underline-css.js';
+import {
+  resolveDocxFontFamily,
+  resolveRunProperties,
+  resolveParagraphProperties,
+  combineRunProperties,
+} from '@superdoc/style-engine/ooxml';
+
+export { resolveRunProperties, resolveParagraphProperties, combineRunProperties };
 
 /**
- * Properties that must be explicitly overridden by inline formatting.
- * These properties require special handling because inline w:rPr formatting must
- * always take precedence over character style (w:rStyle) properties, even though
- * both are merged in the style chain. This explicit override ensures that direct
- * formatting (e.g., w:sz for fontSize) always wins over linked character styles.
- *
- * Note: fontFamily and color are already handled by combineProperties with full override logic.
+ * Font family converter from SuperConverter (lazy getter to avoid circular import)
+ * @returns {(fontName: string, docx?: Record<string, unknown>) => string}
  */
-const INLINE_OVERRIDE_PROPERTIES = ['fontSize', 'bold', 'italic', 'strike', 'underline', 'letterSpacing'];
-
-/**
- * Default font size in half-points (20 half-points = 10pt).
- * This baseline ensures all text has a valid, positive font size when no other source provides one.
- * Used as the final fallback in fontSize resolution cascade:
- * 1. Inline formatting (highest priority)
- * 2. Character style
- * 3. Paragraph style
- * 4. Document defaults
- * 5. Normal style
- * 6. DEFAULT_FONT_SIZE_HALF_POINTS (this constant)
- */
-const DEFAULT_FONT_SIZE_HALF_POINTS = 20;
-
-/**
- * Gets the resolved run properties by merging defaults, styles, and inline properties.
- *
- * FontSize Fallback Behavior:
- * - Validates that the resolved fontSize is a valid positive number
- * - If fontSize is null, 0, negative, or NaN, applies fallback cascade:
- *   1. Document defaults (defaultProps.fontSize)
- *   2. Normal style (normalProps.fontSize)
- *   3. Baseline constant (DEFAULT_FONT_SIZE_HALF_POINTS = 20 half-points = 10pt)
- * - Each fallback source is validated before use (must be positive finite number)
- * - Ensures all text has a valid font size, preventing rendering issues
- *
- * @param {import('@translator').SCEncoderConfig} params - Converter context containing docx data.
- * @param {Object} inlineRpr - The inline run properties.
- * @param {Object} resolvedPpr - The resolved paragraph properties.
- * @param {boolean} [isListNumber=false] - Whether this run is a list number marker. When true,
- *                                         applies special handling for numbering properties and
- *                                         removes inline underlines.
- * @param {boolean} [numberingDefinedInline=false] - Whether numbering is defined inline rather than
- *                                                   in the style definition. When false, inline rPr
- *                                                   is ignored for list numbers.
- * @returns {Object} The resolved run properties.
- */
-export const resolveRunProperties = (
-  params,
-  inlineRpr,
-  resolvedPpr,
-  isListNumber = false,
-  numberingDefinedInline = false,
-) => {
-  const paragraphStyleId = resolvedPpr?.styleId;
-  const paragraphStyleProps = resolveStyleChain(params, paragraphStyleId, w_rPrTranslator);
-
-  // Get default run properties
-  const defaultProps = getDefaultProperties(params, w_rPrTranslator);
-  const { properties: normalProps, isDefault: isNormalDefault } = getStyleProperties(params, 'Normal', w_rPrTranslator);
-
-  // Get run properties from direct character style, unless it's inside a TOC paragraph style
-  let runStyleProps = {};
-  if (!paragraphStyleId?.startsWith('TOC')) {
-    runStyleProps = inlineRpr.styleId ? resolveStyleChain(params, inlineRpr.styleId, w_rPrTranslator) : {};
-  }
-
-  let styleChain;
-
-  if (isNormalDefault) {
-    styleChain = [defaultProps, normalProps];
-  } else {
-    styleChain = [normalProps, defaultProps];
-  }
-
-  if (isListNumber) {
-    // Numbering properties
-    let numberingProps = {};
-    const numId = resolvedPpr?.numberingProperties?.numId;
-    /**
-     * Per OOXML spec §17.9.16, numId="0" (or '0') is a special sentinel value that disables
-     * numbering inherited from paragraph styles. We only fetch numbering properties when
-     * numId is not null/undefined and not the special zero value.
-     */
-    if (numId != null && numId !== 0 && numId !== '0') {
-      numberingProps = getNumberingProperties(
-        params,
-        resolvedPpr.numberingProperties.ilvl ?? 0,
-        numId,
-        w_rPrTranslator,
-      );
-    }
-
-    if (!numberingDefinedInline) {
-      // If numbering is not defined inline, we need to ignore the inline rPr
-      inlineRpr = {};
-    }
-
-    // Inline underlines are ignored for list numbers
-    if (inlineRpr?.underline) {
-      delete inlineRpr.underline;
-    }
-
-    styleChain = [...styleChain, paragraphStyleProps, runStyleProps, inlineRpr, numberingProps];
-  } else {
-    styleChain = [...styleChain, paragraphStyleProps, runStyleProps, inlineRpr];
-  }
-
-  const finalProps = combineProperties(styleChain, ['fontFamily', 'color']);
-
-  // Ensure direct formatting (inline properties) always win over character style properties.
-  // Even though inlineRpr is last in styleChain, we explicitly override to guarantee correctness.
-  // This is critical for properties like fontSize where inline w:sz must override w:rStyle fontSize.
-  // Note: fontFamily and color are already handled by combineProperties with full override.
-  for (const prop of INLINE_OVERRIDE_PROPERTIES) {
-    if (inlineRpr?.[prop] != null) {
-      finalProps[prop] = inlineRpr[prop];
-    }
-  }
-
-  // If no fontSize resolved from any source, fall back to defaults/Normal or a 10pt baseline (20 half-points)
-  // Validate that the resolved fontSize is a valid positive number
-  if (
-    finalProps.fontSize == null ||
-    typeof finalProps.fontSize !== 'number' ||
-    !Number.isFinite(finalProps.fontSize) ||
-    finalProps.fontSize <= 0
-  ) {
-    // Cascade through fallback sources, validating each
-    let defaultFontSize = DEFAULT_FONT_SIZE_HALF_POINTS;
-
-    if (
-      defaultProps?.fontSize != null &&
-      typeof defaultProps.fontSize === 'number' &&
-      Number.isFinite(defaultProps.fontSize) &&
-      defaultProps.fontSize > 0
-    ) {
-      defaultFontSize = defaultProps.fontSize;
-    } else if (
-      normalProps?.fontSize != null &&
-      typeof normalProps.fontSize === 'number' &&
-      Number.isFinite(normalProps.fontSize) &&
-      normalProps.fontSize > 0
-    ) {
-      defaultFontSize = normalProps.fontSize;
-    }
-
-    finalProps.fontSize = defaultFontSize;
-  }
-
-  return finalProps;
+const getToCssFontFamily = () => {
+  // @ts-expect-error - SuperConverter.toCssFontFamily exists but isn't typed
+  return SuperConverter.toCssFontFamily;
 };
 
 /**
- * Gets the resolved paragraph properties by merging defaults, styles, and inline properties.
- * @param {import('@translator').SCEncoderConfig} params
- * @param {Object} inlineProps - The inline paragraph properties.
- * @param {boolean} [insideTable=false] - Whether the paragraph is inside a table.
- * @param {boolean} [overrideInlineStyleId=false] - Whether to override the inline style ID with the one from numbering.
- * @param {string | null} [tableStyleId=null] - styleId for the current table, if any.
- * @returns {Object} The resolved paragraph properties.
+ * Font size scaling factor for subscript and superscript text.
+ * This value (0.65 or 65%) matches Microsoft Word's default rendering behavior
+ * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
+ * Applied to the base font size to reduce text size for sub/superscripts.
  */
-export function resolveParagraphProperties(
-  params,
-  inlineProps,
-  insideTable = false,
-  overrideInlineStyleId = false,
-  tableStyleId = null,
-) {
-  const defaultProps = getDefaultProperties(params, w_pPrTranslator);
-  const { properties: normalProps, isDefault: isNormalDefault } = getStyleProperties(params, 'Normal', w_pPrTranslator);
-
-  let styleId = inlineProps?.styleId;
-  let styleProps = inlineProps?.styleId ? resolveStyleChain(params, inlineProps?.styleId, w_pPrTranslator) : {};
-
-  // Numbering style
-  let numberingProps = {};
-  let ilvl = inlineProps?.numberingProperties?.ilvl ?? styleProps?.numberingProperties?.ilvl;
-  let numId = inlineProps?.numberingProperties?.numId ?? styleProps?.numberingProperties?.numId;
-  let numberingDefinedInline = inlineProps?.numberingProperties?.numId != null;
-  /**
-   * Per OOXML spec §17.9.16, numId="0" (or '0') is a special sentinel value that disables/removes
-   * numbering inherited from paragraph styles. When encountered inline, we set numId to null to
-   * prevent referencing a numbering definition.
-   */
-  const inlineNumIdDisablesNumbering =
-    inlineProps?.numberingProperties?.numId === 0 || inlineProps?.numberingProperties?.numId === '0';
-  if (inlineNumIdDisablesNumbering) {
-    numId = null;
-  }
-  /**
-   * Validates that the paragraph has valid numbering properties.
-   * Per OOXML spec §17.9.16, numId="0" (or '0') disables numbering.
-   */
-  const isList = numId != null && numId !== 0 && numId !== '0';
-  if (isList) {
-    ilvl = ilvl != null ? ilvl : 0;
-    numberingProps = getNumberingProperties(params, ilvl, numId, w_pPrTranslator);
-    if (overrideInlineStyleId && numberingProps.styleId) {
-      styleId = numberingProps.styleId;
-      styleProps = resolveStyleChain(params, styleId, w_pPrTranslator);
-      if (inlineProps) {
-        inlineProps.styleId = styleId;
-
-        if (
-          styleProps.numberingProperties?.ilvl === inlineProps.numberingProperties?.ilvl &&
-          styleProps.numberingProperties?.numId === inlineProps.numberingProperties?.numId
-        ) {
-          // Numbering is already defined in style, so remove from inline props
-          delete inlineProps.numberingProperties;
-          numberingDefinedInline = false;
-        }
-      }
-    }
-  }
-
-  const tableProps = tableStyleId ? resolveStyleChain(params, tableStyleId, w_pPrTranslator) : {};
-
-  // Resolve property chain - regular properties are treated differently from indentation
-  //   Chain for regular properties
-  let defaultsChain;
-  if (isNormalDefault) {
-    defaultsChain = [defaultProps, normalProps];
-  } else {
-    defaultsChain = [normalProps, defaultProps];
-  }
-  const propsChain = [...defaultsChain, tableProps, numberingProps, styleProps, inlineProps];
-
-  //  Chain for indentation properties
-  let indentChain;
-  if (isList) {
-    if (numberingDefinedInline) {
-      // If numbering is defined inline, then numberingProps should override styleProps for indentation
-      indentChain = [...defaultsChain, styleProps, numberingProps, inlineProps];
-    } else {
-      // Otherwise, styleProps should override numberingProps for indentation but it should not follow the based-on chain
-      styleProps = resolveStyleChain(params, styleId, w_pPrTranslator, false);
-      indentChain = [...defaultsChain, numberingProps, styleProps, inlineProps];
-    }
-  } else {
-    // Otherwise, styleProps should override numberingProps for indentation
-    indentChain = [...defaultsChain, numberingProps, styleProps, inlineProps];
-  }
-
-  let finalProps = combineProperties(propsChain);
-  let finalIndent = combineProperties(
-    indentChain.map((props) => (props.indent != null ? { indent: props.indent } : {})),
-    [],
-    {
-      firstLine: (target, source) => {
-        // If a higher priority source defines firstLine, remove hanging from the final result
-        if (target.hanging != null && source.firstLine != null) {
-          delete target.hanging;
-        }
-
-        return source.firstLine;
-      },
-    },
-  );
-  finalProps.indent = finalIndent.indent;
-
-  // TODO: the following likely isn't exactly true --- rather, the doc-default spacing can be overridden by table-level paragraph settings. See 17.7.2 (Style Hierarchy) in the spec.
-  if (insideTable && !inlineProps?.spacing && !styleProps.spacing) {
-    // Word ignores doc-default spacing inside table cells unless explicitly set,
-    // so drop the derived values when nothing is defined inline or via style.
-    finalProps.spacing = undefined;
-  }
-  return finalProps;
-}
-
-/**
- * Resolves a style's property chain by following its based-on ancestry.
- * @param {import('@translator').SCEncoderConfig} params - Converter context containing docx data.
- * @param {string} styleId - The style ID to resolve.
- * @param {Object} translator - Translator used to encode style properties.
- * @param {boolean} [followBasedOnChain=true] - Whether to walk the basedOn hierarchy.
- * @returns {Object} Combined properties for the requested style chain.
- */
-const resolveStyleChain = (params, styleId, translator, followBasedOnChain = true) => {
-  let styleProps = {},
-    basedOn = null;
-  if (styleId && styleId !== 'Normal') {
-    ({ properties: styleProps, basedOn } = getStyleProperties(params, styleId, translator));
-  }
-
-  let styleChain = [styleProps];
-  const seenStyles = new Set();
-  let nextBasedOn = basedOn;
-  while (followBasedOnChain && nextBasedOn) {
-    if (seenStyles.has(basedOn)) {
-      break;
-    }
-    seenStyles.add(basedOn);
-    const result = getStyleProperties(params, basedOn, translator);
-    const basedOnProps = result.properties;
-    nextBasedOn = result.basedOn;
-    if (basedOnProps && Object.keys(basedOnProps).length) {
-      styleChain.push(basedOnProps);
-    }
-    basedOn = nextBasedOn;
-  }
-  styleChain = styleChain.reverse();
-  const combinedStyleProps = combineProperties(styleChain);
-  return combinedStyleProps;
-};
-
-/**
- * Reads document default properties for a given element type (paragraph/run).
- * @param {import('@translator').SCEncoderConfig} params - Converter context with parsed docx.
- * @param {Object} translator - Translator responsible for encoding element properties.
- * @returns {Object} Default property map for the requested element.
- */
-export function getDefaultProperties(params, translator) {
-  const { docx } = params;
-  const styles = docx['word/styles.xml'];
-  const rootElements = styles?.elements?.[0]?.elements;
-  if (!rootElements?.length) {
-    return {};
-  }
-  const defaults = rootElements.find((el) => el.name === 'w:docDefaults');
-  const xmlName = translator.xmlName;
-  const elementPrDefault = defaults?.elements?.find((el) => el.name === `${xmlName}Default`) || {};
-  const elementPr = elementPrDefault?.elements?.find((el) => el.name === xmlName);
-  if (!elementPr) {
-    return {};
-  }
-  const result = translator.encode({ ...params, nodes: [elementPr] }) || {};
-  return result;
-}
-
-/**
- * Retrieves the properties for a specific style ID.
- * @param {import('@translator').SCEncoderConfig} params - Converter context with parsed docx.
- * @param {string} styleId - The style identifier to look up.
- * @param {Object} translator - Translator used to encode style properties.
- * @returns {{properties: Object, isDefault: boolean, basedOn: string|null}} Style metadata and properties.
- */
-export function getStyleProperties(params, styleId, translator) {
-  const { docx } = params;
-  const emptyResult = { properties: {}, isDefault: false, basedOn: null };
-  if (!styleId) return emptyResult;
-  const styles = docx['word/styles.xml'];
-  const rootElements = styles?.elements?.[0]?.elements;
-  if (!rootElements?.length) {
-    return emptyResult;
-  }
-
-  const style = rootElements.find((el) => el.name === 'w:style' && el.attributes['w:styleId'] === styleId);
-  let basedOn = style?.elements?.find((el) => el.name === 'w:basedOn');
-  if (basedOn) {
-    basedOn = basedOn?.attributes?.['w:val'];
-  }
-  const elementPr = style?.elements?.find((el) => el.name === translator.xmlName);
-  if (!elementPr) {
-    return { ...emptyResult, basedOn };
-  }
-  const result = translator.encode({ ...params, nodes: [elementPr] }) || {};
-
-  return { properties: result, isDefault: style?.attributes?.['w:default'] === '1', basedOn };
-}
-
-/**
- * Resolves numbering properties for a given level and numbering definition.
- * @param {import('@translator').SCEncoderConfig} params - Converter context with numbering data.
- * @param {number} ilvl - Indent level within the numbering definition.
- * @param {number|string} numId - Numbering definition identifier.
- * @param {Object} translator - Translator used to encode numbering properties.
- * @param {number} [tries=0] - Internal guard to avoid infinite recursion when following numStyleLink.
- * @returns {Object} Combined numbering property object for the level.
- */
-export function getNumberingProperties(params, ilvl, numId, translator, tries = 0) {
-  const { numbering: allDefinitions } = params;
-  if (!allDefinitions) return {};
-  const { definitions, abstracts } = allDefinitions;
-
-  const propertiesChain = [];
-
-  // Find the num definition for the given numId
-  const numDefinition = definitions[numId];
-  if (!numDefinition) return {};
-
-  // Find overrides for this level in the num definition
-  const lvlOverride = numDefinition?.elements?.find(
-    (element) => element.name === 'w:lvlOverride' && element.attributes['w:ilvl'] == ilvl,
-  );
-  const overridePr = lvlOverride?.elements?.find((el) => el.name === translator.xmlName);
-  if (overridePr) {
-    const overrideProps = translator.encode({ ...params, nodes: [overridePr] }) || {};
-    propertiesChain.push(overrideProps);
-  }
-
-  // Find corresponding abstractNum definition
-  const abstractNumId = numDefinition.elements?.find((item) => item.name === 'w:abstractNumId')?.attributes?.['w:val'];
-
-  const listDefinitionForThisNumId = abstracts[abstractNumId];
-  if (!listDefinitionForThisNumId) return {};
-
-  // Handle numStyleLink if present
-  const numStyleLink = listDefinitionForThisNumId.elements?.find((item) => item.name === 'w:numStyleLink');
-  const styleId = numStyleLink?.attributes?.['w:val'];
-
-  if (styleId && tries < 1) {
-    const { properties: styleProps } = getStyleProperties(params, styleId, w_pPrTranslator);
-    if (styleProps?.numberingProperties?.numId) {
-      return getNumberingProperties(params, ilvl, styleProps.numberingProperties.numId, translator, tries + 1);
-    }
-  }
-
-  // Find the level definition within the abstractNum
-
-  const levelDefinition = listDefinitionForThisNumId?.elements?.find(
-    (element) => element.name === 'w:lvl' && element.attributes['w:ilvl'] == ilvl,
-  );
-  if (!levelDefinition) return {};
-
-  // Find the properties element within the level definition
-  const abstractElementPr = levelDefinition?.elements?.find((el) => el.name === translator.xmlName);
-  if (!abstractElementPr) return {};
-  const abstractProps = translator.encode({ ...params, nodes: [abstractElementPr] }) || {};
-
-  // Find pStyle for this level, if any
-  const pStyleElement = levelDefinition?.elements?.find((el) => el.name === 'w:pStyle');
-  if (pStyleElement) {
-    const pStyleId = pStyleElement?.attributes?.['w:val'];
-    abstractProps.styleId = pStyleId;
-  }
-  propertiesChain.push(abstractProps);
-
-  // Combine properties
-  propertiesChain.reverse();
-  const result = combineProperties(propertiesChain);
-
-  return result;
-}
-
-/**
- * Performs a deep merge on an ordered list of property objects.
- * @param {Array<Object>} propertiesArray - Ordered list of property objects to combine.
- * @param {Array<string>} [fullOverrideProps=[]] - Keys that should overwrite instead of merge.
- * @param {Object<string, Function>} [specialHandling={}] - Optional per-key merge overrides.
- * @returns {Object} Combined property object.
- */
-export const combineProperties = (propertiesArray, fullOverrideProps = [], specialHandling = {}) => {
-  if (!propertiesArray || propertiesArray.length === 0) {
-    return {};
-  }
-
-  /**
-   * Determines whether the supplied value is a mergeable plain object.
-   * @param {unknown} item - Value to inspect.
-   * @returns {boolean} True when the value is a non-array object.
-   */
-  const isObject = (item) => item && typeof item === 'object' && !Array.isArray(item);
-
-  /**
-   * Deep merges two objects while respecting override lists and per-key handlers.
-   * @param {Object} target - Accumulated target object.
-   * @param {Object} source - Next source object to merge.
-   * @returns {Object} New merged object.
-   */
-  const merge = (target, source) => {
-    const output = { ...target };
-
-    if (isObject(target) && isObject(source)) {
-      for (const key in source) {
-        if (Object.prototype.hasOwnProperty.call(source, key)) {
-          if (!fullOverrideProps.includes(key) && isObject(source[key])) {
-            if (key in target && isObject(target[key])) {
-              output[key] = merge(target[key], source[key]);
-            } else {
-              output[key] = source[key];
-            }
-          } else {
-            const handler = specialHandling[key];
-            if (handler && typeof handler === 'function') {
-              output[key] = handler(output, source);
-            } else {
-              output[key] = source[key];
-            }
-          }
-        }
-      }
-    }
-
-    return output;
-  };
-
-  return propertiesArray.reduce((acc, current) => merge(acc, current), {});
-};
-
-/**
- * Combines run property objects while fully overriding certain keys.
- * @param {Array<Object>} propertiesArray - Ordered list of run property objects.
- * @returns {Object} Combined run property object.
- */
-export const combineRunProperties = (propertiesArray) => {
-  return combineProperties(propertiesArray, ['fontFamily', 'color']);
-};
+const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
 
 /**
  * Encodes run property objects into mark definitions for the editor schema.
@@ -520,6 +44,10 @@ export const combineRunProperties = (propertiesArray) => {
  * @returns {Array<Object>} Mark definitions representing the run styling.
  */
 export function encodeMarksFromRPr(runProperties, docx) {
+  if (!runProperties || typeof runProperties !== 'object') {
+    return [];
+  }
+
   const marks = [];
   const textStyleAttrs = {};
   let highlightColor = null;
@@ -575,12 +103,13 @@ export function encodeMarksFromRPr(runProperties, docx) {
         textStyleAttrs[key] = `${spacing}pt`;
         break;
       case 'fontFamily':
-        const fontFamily = getFontFamilyValue(value, docx);
+        const fontFamily = resolveDocxFontFamily(value, docx, getToCssFontFamily());
         textStyleAttrs[key] = fontFamily;
-        const eastAsiaFamily = value['eastAsia'];
+        // value can be a string (from resolveRunPropertiesFromParagraphStyle) or an object
+        const eastAsiaFamily = typeof value === 'object' && value !== null ? value['eastAsia'] : undefined;
 
         if (eastAsiaFamily) {
-          const eastAsiaCss = SuperConverter.toCssFontFamily(eastAsiaFamily, docx);
+          const eastAsiaCss = getFontFamilyValue({ 'w:ascii': eastAsiaFamily }, docx);
           if (!fontFamily || eastAsiaCss !== textStyleAttrs.fontFamily) {
             textStyleAttrs.eastAsiaFontFamily = eastAsiaCss;
           }
@@ -609,6 +138,21 @@ export function encodeMarksFromRPr(runProperties, docx) {
         }
         break;
       }
+      case 'vertAlign': {
+        if (value) {
+          textStyleAttrs.vertAlign = value;
+        }
+        break;
+      }
+      case 'position': {
+        if (value != null && Number.isFinite(value)) {
+          const points = halfPointToPoints(value);
+          if (Number.isFinite(points)) {
+            textStyleAttrs.position = `${points}pt`;
+          }
+        }
+        break;
+      }
     }
   });
 
@@ -619,6 +163,7 @@ export function encodeMarksFromRPr(runProperties, docx) {
   if (highlightColor) {
     marks.push({ type: 'highlight', attrs: { color: highlightColor } });
   }
+
   return marks;
 }
 
@@ -754,6 +299,8 @@ export function encodeCSSFromRPr(runProperties, docx) {
   let hasTextDecorationNone = false;
   let highlightColor = null;
   let hasHighlightTag = false;
+  let verticalAlignValue;
+  let fontSizeOverride;
 
   Object.keys(runProperties).forEach((key) => {
     const value = runProperties[key];
@@ -855,13 +402,14 @@ export function encodeCSSFromRPr(runProperties, docx) {
       }
       case 'fontFamily': {
         if (!value) break;
-        const fontFamily = getFontFamilyValue(value, docx);
+        const fontFamily = resolveDocxFontFamily(value, docx, getToCssFontFamily());
         if (fontFamily) {
           css['font-family'] = fontFamily;
         }
-        const eastAsiaFamily = value['eastAsia'];
+        // value can be a string (from resolveRunPropertiesFromParagraphStyle) or an object
+        const eastAsiaFamily = typeof value === 'object' && value !== null ? value['eastAsia'] : undefined;
         if (eastAsiaFamily) {
-          const eastAsiaCss = SuperConverter.toCssFontFamily(eastAsiaFamily, docx);
+          const eastAsiaCss = getFontFamilyValue({ 'w:ascii': eastAsiaFamily }, docx);
           if (eastAsiaCss && (!fontFamily || eastAsiaCss !== fontFamily)) {
             css['font-family'] = css['font-family'] || eastAsiaCss;
           }
@@ -892,6 +440,37 @@ export function encodeCSSFromRPr(runProperties, docx) {
         }
         break;
       }
+      case 'vertAlign': {
+        // Skip if position is present - position takes precedence over vertAlign
+        if (runProperties.position != null && Number.isFinite(runProperties.position)) {
+          break;
+        }
+        if (value === 'superscript' || value === 'subscript') {
+          verticalAlignValue = value === 'superscript' ? 'super' : 'sub';
+          if (runProperties.fontSize != null && Number.isFinite(runProperties.fontSize)) {
+            const scaledPoints = halfPointToPoints(runProperties.fontSize * SUBSCRIPT_SUPERSCRIPT_SCALE);
+            if (Number.isFinite(scaledPoints)) {
+              fontSizeOverride = `${scaledPoints}pt`;
+            }
+          } else {
+            fontSizeOverride = `${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`;
+          }
+        } else if (value === 'baseline') {
+          verticalAlignValue = 'baseline';
+        }
+        break;
+      }
+      case 'position': {
+        if (value != null && Number.isFinite(value)) {
+          const points = halfPointToPoints(value);
+          if (Number.isFinite(points)) {
+            verticalAlignValue = `${points}pt`;
+            // Position takes precedence over vertAlign, so clear font-size override
+            fontSizeOverride = undefined;
+          }
+        }
+        break;
+      }
       default:
         break;
     }
@@ -910,6 +489,14 @@ export function encodeCSSFromRPr(runProperties, docx) {
       // @ts-expect-error - CSS object allows string indexing
       css['color'] = 'inherit';
     }
+  }
+
+  if (fontSizeOverride) {
+    css['font-size'] = fontSizeOverride;
+  }
+
+  if (verticalAlignValue) {
+    css['vertical-align'] = verticalAlignValue;
   }
 
   return css;
@@ -957,6 +544,9 @@ export function decodeRPrFromMarks(marks) {
           }
         }
         break;
+      case 'link':
+        runProperties.styleId = 'Hyperlink';
+        break;
       case 'textStyle':
         Object.keys(mark.attrs).forEach((attr) => {
           const value = mark.attrs[attr];
@@ -996,6 +586,20 @@ export function decodeRPrFromMarks(marks) {
                 runProperties.fontFamily = result;
               }
               break;
+            case 'vertAlign':
+              if (value != null) {
+                runProperties.vertAlign = value;
+              }
+              break;
+            case 'position': {
+              if (value != null) {
+                const numeric = parseFloat(value);
+                if (!isNaN(numeric)) {
+                  runProperties.position = numeric * 2;
+                }
+              }
+              break;
+            }
           }
         });
         break;
@@ -1033,6 +637,7 @@ function getFontFamilyValue(attributes, docx) {
 
   if (!resolved) return null;
 
+  // @ts-expect-error - toCssFontFamily is a static method on SuperConverter
   return SuperConverter.toCssFontFamily(resolved, docx);
 }
 

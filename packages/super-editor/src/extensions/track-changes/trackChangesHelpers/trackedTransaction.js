@@ -1,9 +1,11 @@
 import { Mapping, ReplaceStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 import { TextSelection } from 'prosemirror-state';
+import { ySyncPluginKey } from 'y-prosemirror';
 import { replaceStep } from './replaceStep.js';
 import { addMarkStep } from './addMarkStep.js';
 import { removeMarkStep } from './removeMarkStep.js';
 import { TrackDeleteMarkName } from '../constants.js';
+import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 
@@ -16,10 +18,14 @@ export const trackedTransaction = ({ tr, state, user }) => {
   const onlyInputTypeMeta = ['inputType', 'uiEvent', 'paste', 'pointer'];
   const notAllowedMeta = ['historyUndo', 'historyRedo', 'acceptReject'];
   const isProgrammaticInput = tr.getMeta('inputType') === 'programmatic';
+  const ySyncMeta = tr.getMeta(ySyncPluginKey);
+  const allowedMeta = new Set([...onlyInputTypeMeta, ySyncPluginKey.key]);
+  const hasDisallowedMeta = tr.meta && Object.keys(tr.meta).some((meta) => !allowedMeta.has(meta));
 
   if (
+    ySyncMeta?.isChangeOrigin || // Skip Yjs-origin transactions (remote/rehydration).
     !tr.steps.length ||
-    (tr.meta && !Object.keys(tr.meta).every((meta) => onlyInputTypeMeta.includes(meta)) && !isProgrammaticInput) ||
+    (hasDisallowedMeta && !isProgrammaticInput) ||
     notAllowedMeta.includes(tr.getMeta('inputType')) ||
     tr.getMeta(CommentsPluginKey) // Skip if it's a comment transaction.
   ) {
@@ -91,21 +97,32 @@ export const trackedTransaction = ({ tr, state, user }) => {
     newTr.setMeta('addToHistory', tr.getMeta('addToHistory'));
   }
 
-  if (tr.selectionSet) {
-    const deletionMarkSchema = state.schema.marks[TrackDeleteMarkName];
-    const deletionMark = findMark(state, deletionMarkSchema, false);
+  // Get the track changes meta to check if we have an adjusted insertion position (SD-1624).
+  const trackMeta = newTr.getMeta(TrackChangesBasePluginKey);
 
+  if (tr.selectionSet) {
     if (
       tr.selection instanceof TextSelection &&
       (tr.selection.from < state.selection.from || tr.getMeta('inputType') === 'deleteContentBackward')
     ) {
       const caretPos = map.map(tr.selection.from, -1);
       newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
-    } else if (tr.selection.from > state.selection.from && deletionMark) {
-      const caretPos = map.map(deletionMark.to + 1, 1);
-      newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
+    } else if (trackMeta?.insertedTo !== undefined) {
+      const boundedInsertedTo = Math.max(0, Math.min(trackMeta.insertedTo, newTr.doc.content.size));
+      const $insertPos = newTr.doc.resolve(boundedInsertedTo);
+      // Near is used here because its safer than an exact position
+      // exact is not guaranteed to be a valid cursor position
+      newTr.setSelection(TextSelection.near($insertPos, 1));
     } else {
-      newTr.setSelection(tr.selection.map(newTr.doc, map));
+      const deletionMarkSchema = state.schema.marks[TrackDeleteMarkName];
+      const deletionMark = findMark(state, deletionMarkSchema, false);
+
+      if (tr.selection.from > state.selection.from && deletionMark) {
+        const caretPos = map.map(deletionMark.to + 1, 1);
+        newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
+      } else {
+        newTr.setSelection(tr.selection.map(newTr.doc, map));
+      }
     }
   } else if (state.selection.from - tr.selection.from > 1 && tr.selection.$head.depth > 1) {
     const caretPos = map.map(tr.selection.from - 2, -1);

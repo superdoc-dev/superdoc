@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 
-const hasTabPlugin = (view) => {
-  return view.state.plugins.some((plugin) => {
+const hasTabPlugin = (state) => {
+  return state.plugins.some((plugin) => {
     const keyObj = plugin.key || plugin.spec?.key;
     return keyObj?.key === 'tabPlugin';
   });
@@ -26,7 +26,7 @@ describe('Tab extension - headless mode behavior', () => {
 
     const { editor } = initTestEditor({ loadFromSchema: true, content: doc, isHeadless: true });
 
-    expect(hasTabPlugin(editor.view)).toBe(false);
+    expect(hasTabPlugin(editor.state)).toBe(false);
     editor.destroy();
   });
 
@@ -59,7 +59,7 @@ describe('Tab extension - headless mode behavior', () => {
 
     // Verify a tab node exists in the updated document
     let foundTab = false;
-    editor.view.state.doc.descendants((node) => {
+    editor.state.doc.descendants((node) => {
       if (node.type?.name === 'tab') {
         foundTab = true;
         return false;

@@ -7,14 +7,14 @@ import type { FlowBlock, SectionVerticalAlign } from '@superdoc/contracts';
  * margins, columns, and orientation. Each section can have independent
  * formatting, enabling mixed layouts within a single document.
  *
- * @property margins - Header/footer margin distances from page edges (in pixels)
+ * @property margins - Page margin distances from page edges (in pixels)
  * @property pageSize - Page dimensions in pixels (width and height)
  * @property columns - Multi-column layout configuration
  * @property orientation - Page orientation (portrait or landscape)
  * @property vAlign - Vertical alignment of content within the section's pages
  */
 export type SectionProps = {
-  margins?: { header?: number; footer?: number };
+  margins?: { header?: number; footer?: number; top?: number; right?: number; bottom?: number; left?: number };
   pageSize?: { w: number; h: number };
   columns?: { count: number; gap: number };
   orientation?: 'portrait' | 'landscape';
@@ -34,9 +34,24 @@ const _snapshotSectionProps = (block: FlowBlock): SectionProps | null => {
 
   let hasProps = false;
   const props: SectionProps = {};
-  if (block.margins && (block.margins.header != null || block.margins.footer != null)) {
+  if (
+    block.margins &&
+    (block.margins.header != null ||
+      block.margins.footer != null ||
+      block.margins.top != null ||
+      block.margins.right != null ||
+      block.margins.bottom != null ||
+      block.margins.left != null)
+  ) {
     hasProps = true;
-    props.margins = { header: block.margins.header, footer: block.margins.footer };
+    props.margins = {
+      header: block.margins.header,
+      footer: block.margins.footer,
+      top: block.margins.top,
+      right: block.margins.right,
+      bottom: block.margins.bottom,
+      left: block.margins.left,
+    };
   }
   if (block.pageSize) {
     hasProps = true;
@@ -107,7 +122,14 @@ export function computeNextSectionPropsAtBreak(blocks: FlowBlock[]): Map<number,
     if (source.kind !== 'sectionBreak') return props;
 
     if (source.margins) {
-      props.margins = { header: source.margins.header, footer: source.margins.footer };
+      props.margins = {
+        header: source.margins.header,
+        footer: source.margins.footer,
+        top: source.margins.top,
+        right: source.margins.right,
+        bottom: source.margins.bottom,
+        left: source.margins.left,
+      };
     }
     if (source.pageSize) {
       props.pageSize = { w: source.pageSize.w, h: source.pageSize.h };

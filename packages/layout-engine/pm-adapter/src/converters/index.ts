@@ -10,11 +10,11 @@
  * - Table conversion and handler
  */
 
-// Text runs
-export { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
-
 // Paragraphs (converter + handler)
 export { paragraphToFlowBlocks, mergeAdjacentRuns, handleParagraphNode } from './paragraph.js';
+
+// Content blocks (converter)
+export { contentBlockNodeToDrawingBlock } from './content-block.js';
 
 // Images (converter + handler)
 export { imageNodeToBlock, handleImageNode } from './image.js';

@@ -1,4 +1,4 @@
-import xmljs from 'xml-js';
+import * as xmljs from 'xml-js';
 /**
  * @typedef {Object.<string, XmlNode>} ParsedDocx
  * this should have the `media` as a key for image handling

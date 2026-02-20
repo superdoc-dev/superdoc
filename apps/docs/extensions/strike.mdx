@@ -1,0 +1,110 @@
+---
+title: Strike extension
+sidebarTitle: "Strike"
+keywords: "Strike extension, superdoc Strike, word Strike, document Strike, docx Strike"
+---
+
+import Description from '/snippets/extensions/strike.mdx'
+
+<Description />
+
+## Options
+
+Configure the extension behavior:
+
+<ParamField path="htmlAttributes" type="Object" default="{}">
+  HTML attributes for strikethrough elements
+</ParamField>
+
+## Commands
+
+### `setStrike`
+
+Apply strikethrough formatting
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.setStrike()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setStrike();
+  },
+});
+```
+</CodeGroup>
+
+### `unsetStrike`
+
+Remove strikethrough formatting
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.unsetStrike()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.unsetStrike();
+  },
+});
+```
+</CodeGroup>
+
+### `toggleStrike`
+
+Toggle strikethrough formatting
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleStrike()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleStrike();
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleStrike() | `⌘/Ctrl-Shift-x` | Toggle strikethrough formatting |
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/strike/strike.js" />

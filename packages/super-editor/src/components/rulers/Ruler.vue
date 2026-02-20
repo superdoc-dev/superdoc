@@ -47,12 +47,35 @@ const initialX = ref(0);
 let offsetX = 0;
 
 let selectionUpdateHandler = null;
+let zoomChangeHandler = null;
+
+/**
+ * Current zoom level from the editor.
+ * Used to scale the ruler to match the document's zoom level.
+ */
+const currentZoom = ref(1);
 
 /**
  * Get the PresentationEditor instance if available.
+ * Handles both cases:
+ * 1. props.editor IS a PresentationEditor (has zoom property and setZoom method)
+ * 2. props.editor is an inner Editor with a presentationEditor reference
  */
 const getPresentationEditor = () => {
-  return props.editor?.presentationEditor ?? null;
+  const editor = props.editor;
+  if (!editor) return null;
+
+  // Check if the editor IS a PresentationEditor (has zoom getter and setZoom method)
+  if (typeof editor.zoom === 'number' && typeof editor.setZoom === 'function') {
+    return editor;
+  }
+
+  // Check if the editor has a presentationEditor reference
+  if (editor.presentationEditor) {
+    return editor.presentationEditor;
+  }
+
+  return null;
 };
 
 /**
@@ -61,7 +84,9 @@ const getPresentationEditor = () => {
  */
 const updateRulerForCurrentSection = () => {
   // Ruler section-awareness is only relevant for paginated docx mode
-  if (!props.editor || props.editor.options?.mode !== 'docx') return;
+  if (!props.editor || props.editor.options?.mode !== 'docx') {
+    return;
+  }
 
   const presentationEditor = getPresentationEditor();
 
@@ -105,11 +130,14 @@ const updateRulerForCurrentSection = () => {
 
 /**
  * Get the style for a ruler tick element.
+ * Positions are multiplied by zoom to space ticks according to zoomed page width.
+ * The tick marks themselves stay the same visual size (no CSS transform).
  */
 const getTickStyle = computed(() => (tick) => {
+  const zoom = currentZoom.value;
   return {
     position: 'absolute',
-    left: `${tick.x}px`,
+    left: `${tick.x * zoom}px`,
     bottom: '0',
     width: '1px',
     height: tick.height,
@@ -120,28 +148,49 @@ const getTickStyle = computed(() => (tick) => {
 
 /**
  * Get the position of the margin handles.
+ * Internal handle.x is in base coordinates; display position is multiplied by zoom.
  */
 const getHandlePosition = computed(() => (side) => {
   const handle = side === 'left' ? leftHandle : rightHandle;
+  const zoom = currentZoom.value;
   return {
-    left: `${handle.x}px`,
+    left: `${handle.x * zoom}px`,
   };
 });
 
 /**
  * Get the style for the vertical indicator.
+ * Position is multiplied by zoom to match handle position.
+ * Returns a safe default object if ruler is not yet mounted.
  */
 const getVerticalIndicatorStyle = computed(() => {
-  if (!ruler.value) return;
+  if (!ruler.value) {
+    // Return safe default when ruler is not yet mounted
+    return { left: '0px', minHeight: '100%' };
+  }
+
+  const zoom = currentZoom.value;
   const parentElement = ruler.value.parentElement;
   const editor = parentElement?.querySelector('.super-editor') ?? document.querySelector('.super-editor');
-  if (!editor) return { left: `${currentHandle.value.x}px`, minHeight: '100%' };
+  if (!editor) return { left: `${currentHandle.value.x * zoom}px`, minHeight: '100%' };
   const editorBounds = editor.getBoundingClientRect();
   return {
-    left: `${currentHandle.value.x}px`,
+    left: `${currentHandle.value.x * zoom}px`,
     minHeight: `${editorBounds.height}px`,
   };
 });
+
+/**
+ * Convert screen X coordinate to base (unscaled) coordinate space.
+ * The ruler displays at zoomed width, so we divide by zoom to get base coordinates.
+ */
+const screenToLocalX = (screenX) => {
+  if (!ruler.value) return screenX;
+  const rulerRect = ruler.value.getBoundingClientRect();
+  const zoom = currentZoom.value;
+  // Ruler is displayed at zoomed width, convert screen position to base coordinates
+  return (screenX - rulerRect.left) / zoom;
+};
 
 /**
  * On mouse down, prepare to drag a margin handle and show the vertical indicator.
@@ -153,7 +202,10 @@ const handleMouseDown = (event) => {
   const itemId = event.currentTarget.id;
   currentHandle.value = itemId === 'left-margin-handle' ? leftHandle : rightHandle;
   initialX.value = currentHandle.value.x;
-  offsetX = event.clientX - currentHandle.value.x;
+
+  // Calculate offset in local coordinates
+  const localX = screenToLocalX(event.clientX);
+  offsetX = localX - currentHandle.value.x;
 
   showVerticalIndicator.value = true;
 };
@@ -164,7 +216,9 @@ const handleMouseDown = (event) => {
 const handleMouseMove = (event) => {
   if (!isDragging.value || !pageSize.value) return;
 
-  const newLeft = event.clientX - offsetX;
+  // Convert screen coordinates to local coordinates
+  const localX = screenToLocalX(event.clientX);
+  const newLeft = localX - offsetX;
   const pageWidthPx = pageSize.value.width * PPI;
   const otherHandleX = currentHandle.value.side === 'left' ? rightHandle.x : leftHandle.x;
 
@@ -215,15 +269,43 @@ const getNewMarginValue = () => {
 };
 
 /**
- * Set ruler style variables including dynamic width from definition.
+ * Computed style for the ruler wrapper (scaled dimensions for layout).
+ */
+const wrapperStyle = computed(() => {
+  const width = rulerDefinition.value?.widthPx ?? pageSize.value?.width * PPI ?? 816;
+  const zoom = currentZoom.value;
+  const scaledWidth = width * zoom;
+  return {
+    width: `${scaledWidth}px`,
+    minWidth: `${scaledWidth}px`,
+    height: '25px',
+    overflow: 'visible',
+    flexShrink: 0,
+  };
+});
+
+/**
+ * Computed style for the inner ruler.
+ * Uses scaled width directly - tick positions are spaced by zoom, no CSS transform needed.
+ */
+const rulerStyle = computed(() => {
+  const width = rulerDefinition.value?.widthPx ?? pageSize.value?.width * PPI ?? 816;
+  const zoom = currentZoom.value;
+  const scaledWidth = width * zoom;
+  return {
+    width: `${scaledWidth}px`,
+    height: '25px',
+  };
+});
+
+/**
+ * CSS variables for colors and alignment.
  */
 const getStyleVars = computed(() => {
-  const width = rulerDefinition.value?.widthPx ?? pageSize.value?.width * PPI ?? 816;
   return {
     '--alignment': alignment,
     '--ruler-handle-color': rulerHandleOriginalColor.value,
     '--ruler-handle-active-color': rulerHandleActiveColor.value,
-    '--ruler-width': `${width}px`,
   };
 });
 
@@ -238,33 +320,97 @@ const handleSelectionUpdate = () => {
 };
 
 /**
+ * Handle zoom change events from the PresentationEditor.
+ * Updates tick spacing to match the document's zoom level.
+ */
+const handleZoomChange = ({ zoom }) => {
+  currentZoom.value = zoom;
+};
+
+/**
+ * Initialize zoom from the current editor state.
+ * Called on mount and when the editor instance changes.
+ */
+const initializeZoom = () => {
+  const presentationEditor = getPresentationEditor();
+  if (presentationEditor && typeof presentationEditor.zoom === 'number') {
+    currentZoom.value = presentationEditor.zoom;
+  } else {
+    currentZoom.value = 1;
+  }
+};
+
+/**
  * Set up event listeners on the editor instance.
  * Registers a handler for 'selectionUpdate' events to keep the ruler synchronized
  * with the current section's page styles as the user navigates the document.
+ * Also listens for 'zoomChange' events to scale the ruler appropriately.
  */
 const setupEditorListeners = () => {
   if (!props.editor) return;
   selectionUpdateHandler = handleSelectionUpdate;
   props.editor.on('selectionUpdate', selectionUpdateHandler);
+
+  // Listen for zoom changes on the PresentationEditor
+  const presentationEditor = getPresentationEditor();
+  if (presentationEditor) {
+    zoomChangeHandler = handleZoomChange;
+    presentationEditor.on('zoomChange', zoomChangeHandler);
+    initializeZoom();
+  }
 };
 
 /**
  * Clean up event listeners from the editor instance.
- * Removes the 'selectionUpdate' handler and clears the reference to prevent memory leaks.
+ * Removes the 'selectionUpdate' and 'zoomChange' handlers and clears the references to prevent memory leaks.
  * Should be called when the component is unmounted or the editor instance changes.
  */
 const cleanupEditorListeners = () => {
-  if (!props.editor || !selectionUpdateHandler) return;
-  props.editor.off('selectionUpdate', selectionUpdateHandler);
-  selectionUpdateHandler = null;
+  if (props.editor && selectionUpdateHandler) {
+    props.editor.off('selectionUpdate', selectionUpdateHandler);
+    selectionUpdateHandler = null;
+  }
+
+  // Clean up zoom listener from PresentationEditor
+  const presentationEditor = getPresentationEditor();
+  if (presentationEditor && zoomChangeHandler) {
+    presentationEditor.off('zoomChange', zoomChangeHandler);
+    zoomChangeHandler = null;
+  }
+};
+
+/**
+ * Get PresentationEditor from an editor instance (helper for cleanup).
+ */
+const getPresentationEditorFrom = (editor) => {
+  if (!editor) return null;
+  if (typeof editor.zoom === 'number' && typeof editor.setZoom === 'function') {
+    return editor;
+  }
+  return editor.presentationEditor ?? null;
 };
 
 watch(
   () => props.editor,
   (newEditor, oldEditor) => {
-    if (oldEditor && selectionUpdateHandler) {
-      oldEditor.off('selectionUpdate', selectionUpdateHandler);
+    // Clean up old editor listeners
+    if (oldEditor) {
+      if (selectionUpdateHandler) {
+        oldEditor.off('selectionUpdate', selectionUpdateHandler);
+      }
+      // Clean up zoom listener from old PresentationEditor
+      const oldPresentationEditor = getPresentationEditorFrom(oldEditor);
+      if (oldPresentationEditor && zoomChangeHandler) {
+        oldPresentationEditor.off('zoomChange', zoomChangeHandler);
+      }
     }
+
+    // If zoomChangeHandler exists but oldEditor was null or didn't have a PresentationEditor,
+    // we still need to clear the handler reference to prevent stale references
+    if (zoomChangeHandler && !oldEditor) {
+      zoomChangeHandler = null;
+    }
+
     if (newEditor) {
       setupEditorListeners();
       updateRulerForCurrentSection();
@@ -287,38 +433,64 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="ruler" ref="ruler" :style="getStyleVars">
-    <!-- Margin handles -->
-    <div
-      class="margin-handle handle-left"
-      id="left-margin-handle"
-      @mousedown="handleMouseDown"
-      :style="getHandlePosition('left')"
-    ></div>
-    <div
-      class="margin-handle handle-right"
-      id="right-margin-handle"
-      @mousedown="handleMouseDown"
-      :style="getHandlePosition('right')"
-    ></div>
-
-    <div v-if="showVerticalIndicator" class="vertical-indicator" :style="getVerticalIndicatorStyle"></div>
-
-    <!-- Ruler tick marks -->
-    <template v-if="rulerDefinition">
+  <div class="ruler-wrapper" :style="[wrapperStyle, getStyleVars]">
+    <div class="ruler" ref="ruler" :style="rulerStyle">
+      <!-- Margin handles -->
       <div
-        v-for="(tick, index) in rulerDefinition.ticks"
-        :key="index"
-        :class="['ruler-tick', `ruler-tick--${tick.size}`]"
-        :style="getTickStyle(tick)"
-      >
-        <span v-if="tick.label !== undefined" class="numbering">{{ tick.label }}</span>
-      </div>
-    </template>
+        class="margin-handle handle-left"
+        id="left-margin-handle"
+        @mousedown="handleMouseDown"
+        :style="getHandlePosition('left')"
+      ></div>
+      <div
+        class="margin-handle handle-right"
+        id="right-margin-handle"
+        @mousedown="handleMouseDown"
+        :style="getHandlePosition('right')"
+      ></div>
+
+      <div v-if="showVerticalIndicator" class="vertical-indicator" :style="getVerticalIndicatorStyle"></div>
+
+      <!-- Ruler tick marks -->
+      <template v-if="rulerDefinition">
+        <div
+          v-for="(tick, index) in rulerDefinition.ticks"
+          :key="index"
+          :class="['ruler-tick', `ruler-tick--${tick.size}`]"
+          :style="getTickStyle(tick)"
+        >
+          <span v-if="tick.label !== undefined" class="numbering">{{ tick.label }}</span>
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
+/**
+ * Wrapper provides the scaled layout width so the container sizes correctly.
+ * Width is set via inline style (wrapperStyle computed).
+ */
+.ruler-wrapper {
+  /* width set via inline style */
+  /* height set via inline style */
+  /* overflow set via inline style */
+}
+
+/**
+ * Inner ruler uses scaled width with zoom-spaced tick positions.
+ * Width is set via inline style (rulerStyle computed).
+ */
+.ruler {
+  /* width set via inline style */
+  /* height set via inline style */
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  position: relative;
+  color: #666;
+}
+
 .vertical-indicator {
   position: absolute;
   height: 0px;
@@ -344,17 +516,6 @@ onUnmounted(() => {
 
 .margin-handle:hover {
   background-color: var(--ruler-handle-active-color);
-}
-
-.ruler {
-  height: 25px;
-  width: var(--ruler-width, 8.5in);
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  position: relative;
-  color: #666;
-  transition: width 150ms ease-out;
 }
 
 .ruler-tick {

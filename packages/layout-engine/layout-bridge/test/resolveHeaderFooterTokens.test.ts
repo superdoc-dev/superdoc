@@ -38,6 +38,29 @@ describe('resolveHeaderFooterTokens', () => {
     expect((block.runs[1] as TextRun).token).toBe('pageNumber');
   });
 
+  it('should use provided pageNumberText when resolving pageNumber tokens', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-dash',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 1, 10, '-1-');
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('-1-');
+    expect((block.runs[0] as TextRun).token).toBe('pageNumber');
+  });
+
   it('should resolve totalPageCount token in footer blocks', () => {
     const blocks: FlowBlock[] = [
       {

@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { FlowBlock, ParagraphBlock, SectionMetadata } from '@superdoc/contracts';
-import type { HeaderFooterConstraints } from '../../layout-engine/src/index';
+import type { HeaderFooterConstraints } from '../../layout-engine';
 import {
   computeHeaderFooterContentHash,
   computeSectionMetadataHash,
@@ -157,6 +157,46 @@ describe('Cache Invalidation', () => {
         const hash2 = computeConstraintsHash(constraints2);
 
         expect(hash1).not.toBe(hash2);
+      });
+
+      it('should include overflowBaseHeight in hash when provided', () => {
+        const constraints: HeaderFooterConstraints = {
+          width: 500,
+          height: 100,
+          overflowBaseHeight: 50,
+        };
+
+        const hash = computeConstraintsHash(constraints);
+        expect(hash).toContain('obh:50');
+      });
+
+      it('should produce different hashes when overflowBaseHeight changes', () => {
+        const constraints1: HeaderFooterConstraints = {
+          width: 500,
+          height: 100,
+          overflowBaseHeight: 50,
+        };
+
+        const constraints2: HeaderFooterConstraints = {
+          width: 500,
+          height: 100,
+          overflowBaseHeight: 75,
+        };
+
+        const hash1 = computeConstraintsHash(constraints1);
+        const hash2 = computeConstraintsHash(constraints2);
+
+        expect(hash1).not.toBe(hash2);
+      });
+
+      it('should omit overflowBaseHeight from hash when undefined', () => {
+        const constraints: HeaderFooterConstraints = {
+          width: 500,
+          height: 100,
+        };
+
+        const hash = computeConstraintsHash(constraints);
+        expect(hash).not.toContain('obh:');
       });
     });
   });
@@ -507,6 +547,42 @@ describe('Cache Invalidation', () => {
       invalidateHeaderFooterCache(cache, cacheState, blocks, undefined, constraints, undefined);
 
       expect(invalidateSpy).not.toHaveBeenCalled();
+    });
+
+    it('should invalidate cache when overflowBaseHeight changes', () => {
+      const invalidateSpy = vi.spyOn(cache, 'invalidate');
+
+      const blocks = {
+        default: [
+          {
+            kind: 'paragraph',
+            id: 'p1',
+            runs: [{ text: 'Hello' }],
+          } as ParagraphBlock,
+        ],
+      };
+
+      const constraints1: HeaderFooterConstraints = {
+        width: 500,
+        height: 100,
+        overflowBaseHeight: 50,
+      };
+
+      const constraints2: HeaderFooterConstraints = {
+        width: 500,
+        height: 100,
+        overflowBaseHeight: 75,
+      };
+
+      // First call
+      invalidateHeaderFooterCache(cache, cacheState, blocks, undefined, constraints1, undefined);
+
+      // Second call with changed overflowBaseHeight
+      invalidateSpy.mockClear();
+      invalidateHeaderFooterCache(cache, cacheState, blocks, undefined, constraints2, undefined);
+
+      expect(invalidateSpy).toHaveBeenCalled();
+      expect(invalidateSpy).toHaveBeenCalledWith(['p1']);
     });
   });
 });

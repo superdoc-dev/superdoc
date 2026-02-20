@@ -337,6 +337,24 @@ describe('analysis', () => {
       expect(result.paragraphs[0]).toEqual({ index: 1, node: para2 });
       expect(result.totalCount).toBe(2);
     });
+
+    it('should include paragraphs inside index nodes', () => {
+      const para1 = { type: 'paragraph', content: [] };
+      const para2 = { type: 'paragraph', content: [] };
+      const para3 = { type: 'paragraph', content: [] };
+
+      vi.mocked(breaksModule.hasSectPr).mockImplementation((node) => node === para2);
+
+      const doc: PMNode = {
+        type: 'doc',
+        content: [para1, { type: 'index', content: [para2, para3] }],
+      };
+
+      const result = findParagraphsWithSectPr(doc);
+
+      expect(result.paragraphs).toEqual([{ index: 1, node: para2 }]);
+      expect(result.totalCount).toBe(3);
+    });
   });
 
   // ==================== buildSectionRangesFromParagraphs Tests ====================
@@ -480,6 +498,221 @@ describe('analysis', () => {
       const result = buildSectionRangesFromParagraphs(paragraphs, false);
 
       expect(result[0].margins).toBeNull();
+    });
+
+    it('should extract page margins even without header/footer margins', () => {
+      // Regression test: Some documents specify page margins (top/right/bottom/left)
+      // without header/footer margins. These should still be extracted.
+      const para1: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: { type: 'element', name: 'w:sectPr', elements: [{}] },
+          },
+        },
+      };
+
+      const paragraphs = [{ index: 0, node: para1 }];
+
+      // Mock section data with page margins but no header/footer margins
+      vi.mocked(extractionModule.extractSectionData).mockReturnValue({
+        type: SectionType.CONTINUOUS,
+        titlePg: false,
+        // No headerPx or footerPx
+        topPx: 85, // ~1300 twips
+        bottomPx: 18, // ~280 twips
+        leftPx: 85, // ~1275 twips (asymmetric)
+        rightPx: 47, // ~708 twips (asymmetric)
+      });
+      vi.mocked(breaksModule.getSectPrFromNode).mockReturnValue(null);
+
+      const result = buildSectionRangesFromParagraphs(paragraphs, false);
+
+      // Margins should NOT be null - they should contain the page margins
+      expect(result[0].margins).not.toBeNull();
+      expect(result[0].margins).toEqual({
+        header: 0, // Default when not specified
+        footer: 0, // Default when not specified
+        top: 85,
+        bottom: 18,
+        left: 85,
+        right: 47,
+      });
+    });
+
+    it('should extract only header margin when specified without footer or page margins', () => {
+      const para1: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: { type: 'element', name: 'w:sectPr', elements: [{}] },
+          },
+        },
+      };
+
+      const paragraphs = [{ index: 0, node: para1 }];
+
+      // Only header margin specified
+      vi.mocked(extractionModule.extractSectionData).mockReturnValue({
+        type: SectionType.NEXT_PAGE,
+        titlePg: false,
+        headerPx: 72, // Only header specified
+      });
+      vi.mocked(breaksModule.getSectPrFromNode).mockReturnValue(null);
+
+      const result = buildSectionRangesFromParagraphs(paragraphs, false);
+
+      expect(result[0].margins).not.toBeNull();
+      expect(result[0].margins).toEqual({
+        header: 72,
+        footer: 0, // Default when not specified
+        top: undefined,
+        bottom: undefined,
+        left: undefined,
+        right: undefined,
+      });
+    });
+
+    it('should extract only footer margin when specified without header or page margins', () => {
+      const para1: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: { type: 'element', name: 'w:sectPr', elements: [{}] },
+          },
+        },
+      };
+
+      const paragraphs = [{ index: 0, node: para1 }];
+
+      // Only footer margin specified
+      vi.mocked(extractionModule.extractSectionData).mockReturnValue({
+        type: SectionType.NEXT_PAGE,
+        titlePg: false,
+        footerPx: 36, // Only footer specified
+      });
+      vi.mocked(breaksModule.getSectPrFromNode).mockReturnValue(null);
+
+      const result = buildSectionRangesFromParagraphs(paragraphs, false);
+
+      expect(result[0].margins).not.toBeNull();
+      expect(result[0].margins).toEqual({
+        header: 0, // Default when not specified
+        footer: 36,
+        top: undefined,
+        bottom: undefined,
+        left: undefined,
+        right: undefined,
+      });
+    });
+
+    it('should extract only one page margin when specified (e.g., only topPx)', () => {
+      const para1: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: { type: 'element', name: 'w:sectPr', elements: [{}] },
+          },
+        },
+      };
+
+      const paragraphs = [{ index: 0, node: para1 }];
+
+      // Only top margin specified
+      vi.mocked(extractionModule.extractSectionData).mockReturnValue({
+        type: SectionType.CONTINUOUS,
+        titlePg: false,
+        topPx: 100, // Only top specified
+      });
+      vi.mocked(breaksModule.getSectPrFromNode).mockReturnValue(null);
+
+      const result = buildSectionRangesFromParagraphs(paragraphs, false);
+
+      expect(result[0].margins).not.toBeNull();
+      expect(result[0].margins).toEqual({
+        header: 0, // Default when not specified
+        footer: 0, // Default when not specified
+        top: 100,
+        bottom: undefined,
+        left: undefined,
+        right: undefined,
+      });
+    });
+
+    it('should create margins object with explicit zero values', () => {
+      const para1: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: { type: 'element', name: 'w:sectPr', elements: [{}] },
+          },
+        },
+      };
+
+      const paragraphs = [{ index: 0, node: para1 }];
+
+      // Explicit zero values for all margins
+      vi.mocked(extractionModule.extractSectionData).mockReturnValue({
+        type: SectionType.NEXT_PAGE,
+        titlePg: false,
+        headerPx: 0,
+        footerPx: 0,
+        topPx: 0,
+        bottomPx: 0,
+        leftPx: 0,
+        rightPx: 0,
+      });
+      vi.mocked(breaksModule.getSectPrFromNode).mockReturnValue(null);
+
+      const result = buildSectionRangesFromParagraphs(paragraphs, false);
+
+      // Should still create margins object even with all zeros
+      expect(result[0].margins).not.toBeNull();
+      expect(result[0].margins).toEqual({
+        header: 0,
+        footer: 0,
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+      });
+    });
+
+    it('should handle mixed header and page margins', () => {
+      const para1: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: { type: 'element', name: 'w:sectPr', elements: [{}] },
+          },
+        },
+      };
+
+      const paragraphs = [{ index: 0, node: para1 }];
+
+      // Mix of header/footer and page margins
+      vi.mocked(extractionModule.extractSectionData).mockReturnValue({
+        type: SectionType.NEXT_PAGE,
+        titlePg: false,
+        headerPx: 72,
+        footerPx: 36,
+        topPx: 144,
+        leftPx: 90,
+        // No right or bottom specified
+      });
+      vi.mocked(breaksModule.getSectPrFromNode).mockReturnValue(null);
+
+      const result = buildSectionRangesFromParagraphs(paragraphs, false);
+
+      expect(result[0].margins).not.toBeNull();
+      expect(result[0].margins).toEqual({
+        header: 72,
+        footer: 36,
+        top: 144,
+        bottom: undefined,
+        left: 90,
+        right: undefined,
+      });
     });
 
     it('should use default section type when not provided', () => {
@@ -713,6 +946,7 @@ describe('analysis', () => {
         columnsPx: { count: 2, gap: 100 },
         headerRefs: { default: 'header1', first: 'headerFirst' },
         footerRefs: { default: 'footer1' },
+        numbering: { format: 'decimal', start: 5 },
       });
 
       const result = createFinalSectionFromBodySectPr(bodySectPr, 0, 10, 0);
@@ -723,6 +957,7 @@ describe('analysis', () => {
       expect(result!.columns).toEqual({ count: 2, gap: 100 });
       expect(result!.headerRefs).toEqual({ default: 'header1', first: 'headerFirst' });
       expect(result!.footerRefs).toEqual({ default: 'footer1' });
+      expect(result!.numbering).toEqual({ format: 'decimal', start: 5 });
     });
 
     it('should respect body section type from extracted data', () => {

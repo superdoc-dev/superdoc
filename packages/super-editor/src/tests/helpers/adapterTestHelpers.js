@@ -44,10 +44,29 @@ export const buildStyleContextFromEditor = (editor) => {
  * Build ConverterContext from editor instance for paragraph hydration.
  */
 export const buildConverterContextFromEditor = (editor) => {
+  const converter = editor.converter;
+  if (!converter) {
+    throw new Error('Editor does not have converter');
+  }
+
   return {
-    docx: editor.converter?.convertedXml,
-    numbering: editor.converter?.numbering,
-    styles: editor.converter?.convertedXml?.['word/styles.xml'],
+    docx: converter.convertedXml,
+    numbering: converter.numbering,
+    translatedNumbering: converter.translatedNumbering ?? {},
+    translatedLinkedStyles: converter.translatedLinkedStyles ?? {
+      docDefaults: { runProperties: {}, paragraphProperties: {} },
+      latentStyles: {},
+      styles: {
+        Normal: {
+          styleId: 'Normal',
+          type: 'paragraph',
+          default: true,
+          name: 'Normal',
+          runProperties: {},
+          paragraphProperties: {},
+        },
+      },
+    },
   };
 };
 

@@ -25,7 +25,7 @@ const buildDocWithCommentNodes = (schema) => {
 
 describe('Search command', () => {
   it('finds regex matches with figure spaces in plain text paragraphs', () => {
-    const editor = createDocxTestEditor({ isHeadless: true });
+    const editor = createDocxTestEditor();
 
     try {
       const { doc, paragraph, run } = editor.schema.nodes;
@@ -48,12 +48,12 @@ describe('Search command', () => {
         doc: docWithText,
         plugins: editor.state.plugins,
       });
-      editor.view.updateState(baseState);
+      editor.setState(baseState);
 
       const pattern =
         /An\u2002Income\u2002Strategy\u2002Approach to\u2002the\u2002Positive\u2002Theory\u2002of\u2002Accounting/gi;
 
-      const paragraphNode = editor.view.state.doc.child(0);
+      const paragraphNode = editor.state.doc.child(0);
       const textContent = __searchTextContent(paragraphNode);
       expect(textContent).toBe(SEARCH_TEXT);
 
@@ -68,7 +68,7 @@ describe('Search command', () => {
   });
 
   it('should find matches when text spans multiple comment range nodes', () => {
-    const editor = createDocxTestEditor({ isHeadless: true });
+    const editor = createDocxTestEditor();
 
     try {
       const docWithComments = buildDocWithCommentNodes(editor.schema);
@@ -80,17 +80,17 @@ describe('Search command', () => {
       const tr = baseState.tr;
       prepareCommentsForImport(baseState.doc, tr, editor.schema, { comments: [] });
       const preparedState = baseState.apply(tr);
-      editor.view.updateState(preparedState);
+      editor.setState(preparedState);
 
       const remainingCommentNodes = [];
-      editor.view.state.doc.descendants((node) => {
+      editor.state.doc.descendants((node) => {
         if (['commentRangeStart', 'commentRangeEnd', 'commentReference'].includes(node.type.name)) {
           remainingCommentNodes.push(node.type.name);
         }
       });
       expect(remainingCommentNodes).toHaveLength(0);
 
-      const docText = editor.view.state.doc.textBetween(0, editor.view.state.doc.content.size);
+      const docText = editor.state.doc.textBetween(0, editor.state.doc.content.size);
       expect(docText).toContain('An');
 
       const matches = editor.commands.search(new RegExp(SEARCH_TEXT, 'gi'));
@@ -103,7 +103,7 @@ describe('Search command', () => {
   });
 
   it('should include text from adjacent run nodes in string search matches', () => {
-    const editor = createDocxTestEditor({ isHeadless: true });
+    const editor = createDocxTestEditor();
 
     try {
       const { doc, paragraph, run } = editor.schema.nodes;
@@ -119,21 +119,21 @@ describe('Search command', () => {
         doc: docWithRuns,
         plugins: editor.state.plugins,
       });
-      editor.view.updateState(baseState);
+      editor.setState(baseState);
 
       const matches = editor.commands.search('An');
 
       expect(matches).toHaveLength(1);
       const match = matches[0];
       expect(match?.text).toBe('An');
-      expect(editor.view.state.doc.textBetween(match.from, match.to)).toBe('An');
+      expect(editor.state.doc.textBetween(match.from, match.to)).toBe('An');
     } finally {
       editor.destroy();
     }
   });
 
   it('should report accurate positions for regex matches containing braces around bookmark nodes', () => {
-    const editor = createDocxTestEditor({ isHeadless: true });
+    const editor = createDocxTestEditor();
 
     try {
       const { doc, paragraph, run, bookmarkStart, bookmarkEnd } = editor.schema.nodes;
@@ -153,20 +153,20 @@ describe('Search command', () => {
         doc: docWithBookmarks,
         plugins: editor.state.plugins,
       });
-      editor.view.updateState(baseState);
+      editor.setState(baseState);
 
       const matches = editor.commands.search(/\{([^}]*)\}/gi);
       expect(matches).toHaveLength(1);
       const match = matches[0];
       expect(match?.text).toBe(BRACED_TEXT);
-      expect(editor.view.state.doc.textBetween(match.from, match.to)).toBe(BRACED_TEXT);
+      expect(editor.state.doc.textBetween(match.from, match.to)).toBe(BRACED_TEXT);
     } finally {
       editor.destroy();
     }
   });
 
   it('maps matches inside inline bookmark wrappers without expanding selection', () => {
-    const editor = createDocxTestEditor({ isHeadless: true });
+    const editor = createDocxTestEditor();
 
     try {
       const { doc, paragraph, bookmarkStart, run, bookmarkEnd } = editor.schema.nodes;
@@ -186,14 +186,14 @@ describe('Search command', () => {
         doc: docWithInlineWrapper,
         plugins: editor.state.plugins,
       });
-      editor.view.updateState(baseState);
+      editor.setState(baseState);
 
       const matches = editor.commands.search(/\{InsideBookmark\}/gi);
 
       expect(matches).toHaveLength(1);
       const match = matches[0];
       expect(match?.text).toBe(WRAPPED_TEXT);
-      expect(editor.view.state.doc.textBetween(match.from, match.to)).toBe(WRAPPED_TEXT);
+      expect(editor.state.doc.textBetween(match.from, match.to)).toBe(WRAPPED_TEXT);
     } finally {
       editor.destroy();
     }

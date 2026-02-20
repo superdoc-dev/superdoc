@@ -42,7 +42,7 @@ import { translator as webHiddenTranslator } from '../webHidden/webHidden-transl
 
 // Property translators for w:rPr child elements
 // Each translator handles a specific property of the run properties
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 export const propertyTranslators = [
   boldCsTranslator,
   boldTranslator,

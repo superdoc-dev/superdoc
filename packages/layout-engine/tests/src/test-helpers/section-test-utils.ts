@@ -11,6 +11,7 @@ import type { PMNode, FlowBlock, SectionBreakBlock, Measure, Layout, Page } from
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { measureBlock } from '@superdoc/measuring-dom';
+import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 
 /**
  * Section properties for creating test documents.
@@ -21,6 +22,8 @@ export type TestSectionProps = {
   pageSize?: { w: number; h: number };
   columns?: { count: number; gap: number };
   margins?: { header?: number; footer?: number };
+  /** Vertical alignment of content within the section's pages */
+  vAlign?: 'top' | 'center' | 'bottom' | 'both';
 };
 
 /**
@@ -42,6 +45,22 @@ export const DEFAULT_MARGINS = {
   header: 72,
   footer: 72,
 } as const;
+
+const DEFAULT_TRANSLATED_LINKED_STYLES: StylesDocumentProperties = {
+  docDefaults: {},
+  latentStyles: {},
+  styles: {},
+};
+
+const DEFAULT_TRANSLATED_NUMBERING: NumberingProperties = {
+  abstracts: {},
+  definitions: {},
+};
+
+export const DEFAULT_CONVERTER_CONTEXT = {
+  translatedLinkedStyles: DEFAULT_TRANSLATED_LINKED_STYLES,
+  translatedNumbering: DEFAULT_TRANSLATED_NUMBERING,
+};
 
 /**
  * Counter for generating unique block IDs.
@@ -166,6 +185,17 @@ function createSectPrElements(sectionProps: TestSectionProps): Array<Record<stri
       attributes: {
         'w:num': sectionProps.columns.count.toString(),
         'w:space': pixelsToTwips(sectionProps.columns.gap).toString(),
+      },
+    });
+  }
+
+  // Add w:vAlign element (vertical alignment)
+  if (sectionProps.vAlign) {
+    elements.push({
+      type: 'element',
+      name: 'w:vAlign',
+      attributes: {
+        'w:val': sectionProps.vAlign,
       },
     });
   }
@@ -328,6 +358,10 @@ export function createSectionBreak(props: TestSectionProps): SectionBreakBlock {
     };
   }
 
+  if (props.vAlign) {
+    block.vAlign = props.vAlign;
+  }
+
   return block;
 }
 
@@ -343,6 +377,7 @@ export function pmToFlowBlocks(pmDoc: PMNode): {
 } {
   return toFlowBlocks(pmDoc, {
     emitSectionBreaks: true,
+    converterContext: DEFAULT_CONVERTER_CONTEXT,
   });
 }
 

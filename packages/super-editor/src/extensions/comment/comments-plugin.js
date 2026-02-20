@@ -1,14 +1,19 @@
 import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Extension } from '@core/Extension.js';
 import { Decoration, DecorationSet } from 'prosemirror-view';
-import { removeCommentsById, getHighlightColor } from './comments-helpers.js';
+import {
+  removeCommentsById,
+  resolveCommentById,
+  getHighlightColor,
+  translateFormatChangesToEnglish,
+} from './comments-helpers.js';
 import { CommentMarkName } from './comments-constants.js';
 
 // Example tracked-change keys, if needed
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '../track-changes/plugins/index.js';
+import { getTrackChanges } from '../track-changes/trackChangesHelpers/getTrackChanges.js';
 import { comments_module_events } from '@superdoc/common';
-import { translateFormatChangesToEnglish } from './comments-helpers.js';
 import { normalizeCommentEventPayload, updatePosition } from './helpers/index.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -21,6 +26,164 @@ export const CommentsPlugin = Extension.create({
 
   addCommands() {
     return {
+      /**
+       * Add a comment to the current selection
+       * @category Command
+       * @param {string|Object} contentOrOptions - Comment content as a string, or an options object
+       * @param {string} [contentOrOptions.content] - The comment content (text or HTML)
+       * @param {string} [contentOrOptions.commentId] - Explicit comment ID (defaults to a new UUID)
+       * @param {string} [contentOrOptions.author] - Author name (defaults to user from editor config)
+       * @param {string} [contentOrOptions.authorEmail] - Author email (defaults to user from editor config)
+       * @param {string} [contentOrOptions.authorImage] - Author image URL (defaults to user from editor config)
+       * @param {boolean} [contentOrOptions.isInternal=false] - Whether the comment is internal/private
+       * @returns {boolean} True if the comment was added successfully, false otherwise
+       * @example
+       * // Simple usage with just content
+       * editor.commands.addComment('This needs review')
+       *
+       * // With options
+       * editor.commands.addComment({
+       *   content: 'Please clarify this section',
+       *   author: 'Jane Doe',
+       *   isInternal: true
+       * })
+       *
+       * // To get the comment ID, listen to the commentsUpdate event
+       * editor.on('commentsUpdate', (event) => {
+       *   if (event.type === 'add') {
+       *     console.log('New comment ID:', event.activeCommentId)
+       *   }
+       * })
+       */
+      addComment:
+        (contentOrOptions) =>
+        ({ tr, dispatch, editor }) => {
+          // Validate that there is a text selection
+          const { selection } = tr;
+          const { $from, $to } = selection;
+
+          if ($from.pos === $to.pos) {
+            console.warn('addComment requires a text selection. Please select text before adding a comment.');
+            return false;
+          }
+
+          // Handle string or options object
+          let content, explicitCommentId, author, authorEmail, authorImage, isInternal;
+
+          if (typeof contentOrOptions === 'string') {
+            content = contentOrOptions;
+          } else if (contentOrOptions && typeof contentOrOptions === 'object') {
+            content = contentOrOptions.content;
+            explicitCommentId = contentOrOptions.commentId;
+            author = contentOrOptions.author;
+            authorEmail = contentOrOptions.authorEmail;
+            authorImage = contentOrOptions.authorImage;
+            isInternal = contentOrOptions.isInternal;
+          }
+
+          // Generate a unique comment ID
+          const commentId = explicitCommentId ?? uuidv4();
+          const resolvedInternal = isInternal ?? false;
+
+          // Get user defaults from editor config
+          const configUser = editor.options?.user || {};
+
+          // Add the comment mark to the selection
+          tr.setMeta(CommentsPluginKey, { event: 'add' });
+          tr.addMark(
+            $from.pos,
+            $to.pos,
+            editor.schema.marks[CommentMarkName].create({
+              commentId,
+              internal: resolvedInternal,
+            }),
+          );
+
+          if (dispatch) dispatch(tr);
+
+          // Build and emit the comment payload
+          const commentPayload = normalizeCommentEventPayload({
+            conversation: {
+              commentId,
+              isInternal: resolvedInternal,
+              commentText: content,
+              creatorName: author ?? configUser.name,
+              creatorEmail: authorEmail ?? configUser.email,
+              creatorImage: authorImage ?? configUser.image,
+              createdTime: Date.now(),
+            },
+            editorOptions: editor.options,
+            fallbackCommentId: commentId,
+            fallbackInternal: resolvedInternal,
+          });
+
+          editor.emit('commentsUpdate', {
+            type: comments_module_events.ADD,
+            comment: commentPayload,
+            activeCommentId: commentId,
+          });
+
+          return true;
+        },
+
+      /**
+       * Add a reply to an existing comment or tracked change
+       * @category Command
+       * @param {Object} options - Reply options
+       * @param {string} options.parentId - The ID of the parent comment or tracked change
+       * @param {string} [options.content] - The reply content (text or HTML)
+       * @param {string} [options.author] - Author name (defaults to user from editor config)
+       * @param {string} [options.authorEmail] - Author email (defaults to user from editor config)
+       * @param {string} [options.authorImage] - Author image URL (defaults to user from editor config)
+       * @returns {boolean} True if the reply was added successfully, false otherwise
+       * @example
+       * editor.commands.addCommentReply({
+       *   parentId: 'comment-123',
+       *   content: 'I agree with this suggestion'
+       * })
+       */
+      addCommentReply:
+        (options = {}) =>
+        ({ editor }) => {
+          const { parentId, content, author, authorEmail, authorImage, commentId: explicitCommentId } = options;
+
+          if (!parentId) {
+            console.warn('addCommentReply requires a parentId');
+            return false;
+          }
+
+          const commentId = explicitCommentId ?? uuidv4();
+          const configUser = editor.options?.user || {};
+
+          const commentPayload = normalizeCommentEventPayload({
+            conversation: {
+              commentId,
+              parentCommentId: parentId,
+              commentText: content,
+              creatorName: author ?? configUser.name,
+              creatorEmail: authorEmail ?? configUser.email,
+              creatorImage: authorImage ?? configUser.image,
+              createdTime: Date.now(),
+            },
+            editorOptions: editor.options,
+            fallbackCommentId: commentId,
+            fallbackInternal: false,
+          });
+
+          editor.emit('commentsUpdate', {
+            type: comments_module_events.ADD,
+            comment: commentPayload,
+            activeCommentId: commentId,
+          });
+
+          return true;
+        },
+
+      /**
+       * @private
+       * Internal command to insert a comment mark at the current selection.
+       * Use `addComment` for the public API.
+       */
       insertComment:
         (conversation = {}) =>
         ({ tr, dispatch }) => {
@@ -69,7 +232,7 @@ export const CommentsPlugin = Extension.create({
         ({ commentId, importedId }) =>
         ({ tr, dispatch, state }) => {
           tr.setMeta(CommentsPluginKey, { event: 'deleted' });
-          removeCommentsById({ commentId, importedId, state, tr, dispatch });
+          return removeCommentsById({ commentId, importedId, state, tr, dispatch });
         },
 
       setActiveComment:
@@ -80,42 +243,49 @@ export const CommentsPlugin = Extension.create({
         },
 
       setCommentInternal:
-        ({ commentId, isInternal }) =>
+        ({ commentId, importedId, isInternal }) =>
         ({ tr, dispatch, state }) => {
           const { doc } = state;
-          let foundStartNode;
-          let foundPos;
+          const commentMarkType = this.editor.schema.marks[CommentMarkName];
+          if (!commentMarkType) return false;
+          const matchedSegments = [];
 
-          // Find the commentRangeStart node that matches the comment ID
           tr.setMeta(CommentsPluginKey, { event: 'update' });
           doc.descendants((node, pos) => {
-            if (foundStartNode) return;
-
+            if (!node.isInline) return;
             const { marks = [] } = node;
-            const commentMark = marks.find((mark) => mark.type.name === CommentMarkName);
-
-            if (commentMark) {
-              const { attrs } = commentMark;
-              const wid = attrs.commentId;
-              if (wid === commentId) {
-                foundStartNode = node;
-                foundPos = pos;
-              }
-            }
+            marks
+              .filter((mark) => mark.type.name === CommentMarkName)
+              .forEach((commentMark) => {
+                const { attrs } = commentMark;
+                const wid = attrs.commentId;
+                const importedWid = attrs.importedId;
+                if (wid === commentId || (importedId && importedWid === importedId)) {
+                  matchedSegments.push({
+                    from: pos,
+                    to: pos + node.nodeSize,
+                    attrs,
+                    mark: commentMark,
+                  });
+                }
+              });
           });
 
-          // If no matching node, return false
-          if (!foundStartNode) return false;
+          if (!matchedSegments.length) return false;
 
-          // Update the mark itself
-          tr.addMark(
-            foundPos,
-            foundPos + foundStartNode.nodeSize,
-            this.editor.schema.marks[CommentMarkName].create({
-              commentId,
-              internal: isInternal,
-            }),
-          );
+          matchedSegments.forEach(({ from, to, attrs, mark }) => {
+            tr.removeMark(from, to, mark);
+            tr.addMark(
+              from,
+              to,
+              commentMarkType.create({
+                ...attrs,
+                commentId: attrs?.commentId ?? commentId,
+                importedId: attrs?.importedId ?? importedId,
+                internal: isInternal,
+              }),
+            );
+          });
 
           tr.setMeta(CommentsPluginKey, { type: 'setCommentInternal' });
           dispatch(tr);
@@ -123,10 +293,115 @@ export const CommentsPlugin = Extension.create({
         },
 
       resolveComment:
-        ({ commentId }) =>
+        ({ commentId, importedId }) =>
         ({ tr, dispatch, state }) => {
           tr.setMeta(CommentsPluginKey, { event: 'update' });
-          removeCommentsById({ commentId, state, tr, dispatch });
+          return resolveCommentById({ commentId, importedId, state, tr, dispatch });
+        },
+      editComment:
+        ({ commentId, importedId, content, text }) =>
+        ({ editor }) => {
+          const nextCommentId = commentId ?? importedId;
+          if (!nextCommentId) return false;
+
+          const normalizedText = content ?? text ?? '';
+          const payload = normalizeCommentEventPayload({
+            conversation: {
+              commentId: nextCommentId,
+              importedId,
+              commentText: normalizedText,
+              updatedTime: Date.now(),
+            },
+            editorOptions: editor.options,
+            fallbackCommentId: nextCommentId,
+            fallbackInternal: false,
+          });
+
+          editor.emit('commentsUpdate', {
+            type: comments_module_events.UPDATE,
+            comment: payload,
+            activeCommentId: nextCommentId,
+          });
+
+          return true;
+        },
+      moveComment:
+        ({ commentId, from, to }) =>
+        ({ tr, dispatch, state, editor }) => {
+          if (!commentId) return false;
+          if (!Number.isFinite(from) || !Number.isFinite(to)) return false;
+          if (from >= to) return false;
+
+          const { doc } = state;
+          if (from < 0 || to > doc.content.size) return false;
+          const resolved = findRangeById(doc, commentId);
+          if (!resolved) return false;
+
+          const markType = editor.schema?.marks?.[CommentMarkName];
+          if (!markType) return false;
+
+          tr.setMeta(CommentsPluginKey, { event: 'update' });
+
+          const segments = [];
+          doc.descendants((node, pos) => {
+            if (!node.isInline) return;
+            const commentMark = node.marks?.find(
+              (mark) =>
+                mark.type.name === CommentMarkName &&
+                (mark.attrs?.commentId === commentId || mark.attrs?.importedId === commentId),
+            );
+            if (!commentMark) return;
+            segments.push({
+              from: pos,
+              to: pos + node.nodeSize,
+              attrs: commentMark.attrs,
+              mark: commentMark,
+            });
+          });
+
+          if (segments.length > 0) {
+            segments.forEach((segment) => {
+              tr.removeMark(segment.from, segment.to, segment.mark);
+            });
+
+            const attrs = segments[0]?.attrs ?? { commentId };
+            const mappedFrom = tr.mapping.map(from);
+            const mappedTo = tr.mapping.map(to);
+            tr.addMark(mappedFrom, mappedTo, markType.create(attrs));
+            if (dispatch) dispatch(tr);
+            return true;
+          }
+
+          const startType = editor.schema?.nodes?.commentRangeStart;
+          const endType = editor.schema?.nodes?.commentRangeEnd;
+          if (!startType || !endType) return false;
+
+          let startPos = null;
+          let endPos = null;
+          let startAttrs = { 'w:id': commentId };
+          doc.descendants((node, pos) => {
+            if (node.type.name === 'commentRangeStart' && node.attrs?.['w:id'] === commentId) {
+              startPos = pos;
+              startAttrs = { ...node.attrs };
+            }
+            if (node.type.name === 'commentRangeEnd' && node.attrs?.['w:id'] === commentId) {
+              endPos = pos;
+            }
+          });
+
+          if (startPos == null || endPos == null) return false;
+
+          const toDelete = [startPos, endPos].sort((a, b) => b - a);
+          toDelete.forEach((pos) => {
+            tr.delete(pos, pos + 1);
+          });
+
+          const mappedFrom = tr.mapping.map(from);
+          const mappedTo = tr.mapping.map(to);
+          tr.insert(mappedTo, endType.create({ 'w:id': commentId }));
+          tr.insert(mappedFrom, startType.create({ ...startAttrs, 'w:id': commentId }));
+          if (dispatch) dispatch(tr);
+          return true;
         },
       setCursorById:
         (id) =>
@@ -134,7 +409,9 @@ export const CommentsPlugin = Extension.create({
           const { from } = findRangeById(state.doc, id) || {};
           if (from != null) {
             state.tr.setSelection(TextSelection.create(state.doc, from));
-            editor.view.focus();
+            if (editor.view && typeof editor.view.focus === 'function') {
+              editor.view.focus();
+            }
             return true;
           }
           return false;
@@ -153,10 +430,11 @@ export const CommentsPlugin = Extension.create({
 
       state: {
         init() {
+          const highlightColors = editor.options.comments?.highlightColors || {};
           return {
             activeThreadId: null,
-            externalColor: '#B1124B',
-            internalColor: '#078383',
+            externalColor: highlightColors.external ?? '#B1124B',
+            internalColor: highlightColors.internal ?? '#078383',
             decorations: DecorationSet.empty,
             allCommentPositions: {},
             allCommentIds: [],
@@ -173,10 +451,23 @@ export const CommentsPlugin = Extension.create({
 
           if (type === 'setActiveComment') {
             shouldUpdate = true;
-            pluginState.activeThreadId = meta.activeThreadId; // Update the outer scope variable
+            const previousActiveThreadId = pluginState.activeThreadId;
+            const newActiveThreadId = meta.activeThreadId;
+
+            // Emit commentsUpdate event when active comment changes (e.g., from comment bubble click)
+            // Defer emission to after transaction completes to avoid dispatching during apply()
+            if (previousActiveThreadId !== newActiveThreadId) {
+              const update = {
+                type: comments_module_events.SELECTED,
+                activeCommentId: newActiveThreadId ? newActiveThreadId : null,
+              };
+              setTimeout(() => editor.emit('commentsUpdate', update), 0);
+            }
+
+            pluginState.activeThreadId = newActiveThreadId;
             return {
               ...pluginState,
-              activeThreadId: meta.activeThreadId,
+              activeThreadId: newActiveThreadId,
               changedActiveThread: true,
             };
           }
@@ -249,6 +540,7 @@ export const CommentsPlugin = Extension.create({
             const { doc, tr } = state;
             const pluginState = CommentsPluginKey.getState(state);
             const currentActiveThreadId = pluginState.activeThreadId;
+            const layoutEngineActive = Boolean(editor.presentationEditor);
 
             const meta = tr.getMeta(CommentsPluginKey);
             if (meta?.type === 'setActiveComment' || meta?.forceUpdate) {
@@ -272,6 +564,10 @@ export const CommentsPlugin = Extension.create({
             prevDoc = doc;
             shouldUpdate = false;
 
+            if (layoutEngineActive) {
+              return;
+            }
+
             const decorations = [];
             // Always rebuild positions fresh from the current document to avoid stale PM offsets
             const allCommentPositions = {};
@@ -285,15 +581,22 @@ export const CommentsPlugin = Extension.create({
                 const threadId = attrs.commentId || attrs.importedId;
 
                 if (!onlyActiveThreadChanged) {
-                  const currentBounds = view.coordsAtPos(pos);
+                  let currentBounds;
+                  try {
+                    currentBounds = view.coordsAtPos(pos);
+                  } catch {
+                    currentBounds = null;
+                  }
 
-                  updatePosition({
-                    allCommentPositions,
-                    threadId,
-                    pos,
-                    currentBounds,
-                    node,
-                  });
+                  if (currentBounds) {
+                    updatePosition({
+                      allCommentPositions,
+                      threadId,
+                      pos,
+                      currentBounds,
+                      node,
+                    });
+                  }
                 }
 
                 const isInternal = attrs.internal;
@@ -326,15 +629,22 @@ export const CommentsPlugin = Extension.create({
 
               if (trackedChangeMark) {
                 if (!onlyActiveThreadChanged) {
-                  const currentBounds = view.coordsAtPos(pos);
+                  let currentBounds;
+                  try {
+                    currentBounds = view.coordsAtPos(pos);
+                  } catch {
+                    currentBounds = null;
+                  }
                   const { id } = trackedChangeMark.mark.attrs;
-                  updatePosition({
-                    allCommentPositions,
-                    threadId: id,
-                    pos,
-                    currentBounds,
-                    node,
-                  });
+                  if (currentBounds) {
+                    updatePosition({
+                      allCommentPositions,
+                      threadId: id,
+                      pos,
+                      currentBounds,
+                      node,
+                    });
+                  }
                 }
 
                 // Add decoration for tracked changes when activated
@@ -438,67 +748,67 @@ const getActiveCommentId = (doc, selection) => {
   const nodeAtPos = doc.nodeAt($from.pos);
   if (!nodeAtPos) return;
 
-  // If we have a tracked change, we can return it right away
+  // Check for tracked change mark (we'll use this as fallback if no comment found)
   const trackedChangeMark = findTrackedMark({
     doc,
     from: $from.pos,
     to: $to.pos,
   });
 
-  if (trackedChangeMark) {
-    return trackedChangeMark.mark.attrs.id;
-  }
+  // Check for comment nodes first - comments take precedence over tracked changes
+  // This ensures that when cursor is on text that has both TC and comment, the comment is selected
+  // Collect all comment marks at the cursor position along with their ranges
+  const commentRanges = new Map(); // commentId -> { start, end }
 
-  // Otherwise, we need to check for comment nodes
-  const overlaps = [];
-  let found = false;
-
-  // Look for commentRangeStart nodes before the current position
-  // There could be overlapping comments so we need to track all of them
+  // First pass: find all comment ranges in the document
   doc.descendants((node, pos) => {
-    if (found) return;
-
-    // node goes from `pos` to `end = pos + node.nodeSize`
-    const end = pos + node.nodeSize;
-
-    // If $from.pos is outside this node’s range, skip it
-    if ($from.pos < pos || $from.pos >= end) {
-      return;
-    }
-
-    // Now we know $from.pos is within this node’s start/end
     const { marks = [] } = node;
-    const commentMark = marks.find((mark) => mark.type.name === CommentMarkName);
-    if (commentMark) {
-      overlaps.push({
-        node,
-        pos,
-        size: node.nodeSize,
+    const commentMarks = marks.filter((mark) => mark.type.name === CommentMarkName);
+
+    commentMarks.forEach((mark) => {
+      const commentId = mark.attrs.commentId || mark.attrs.importedId;
+      if (!commentId) return;
+
+      const existing = commentRanges.get(commentId);
+      const end = pos + node.nodeSize;
+
+      if (!existing) {
+        commentRanges.set(commentId, { start: pos, end });
+      } else {
+        // Extend the range if this node extends it
+        commentRanges.set(commentId, {
+          start: Math.min(existing.start, pos),
+          end: Math.max(existing.end, end),
+        });
+      }
+    });
+  });
+
+  // Find which comments contain the cursor position
+  const containingComments = [];
+  commentRanges.forEach((range, commentId) => {
+    if ($from.pos >= range.start && $from.pos < range.end) {
+      containingComments.push({
+        commentId,
+        start: range.start,
+        end: range.end,
+        size: range.end - range.start,
       });
     }
-
-    // If we've passed the position, we can stop
-    if (pos > $from.pos) {
-      found = true;
-    }
   });
 
-  // Get the closest commentRangeStart node to the current position
-  let closest = null;
-  let closestCommentRangeStart = null;
-  overlaps.forEach(({ pos, node }) => {
-    if (!closest) closest = $from.pos - pos;
-
-    const diff = $from.pos - pos;
-    if (diff >= 0 && diff <= closest) {
-      closestCommentRangeStart = node;
-      closest = diff;
+  if (containingComments.length === 0) {
+    // No comments found, fall back to tracked change if present
+    if (trackedChangeMark) {
+      return trackedChangeMark.mark.attrs.id;
     }
-  });
+    return null;
+  }
 
-  const { marks: closestMarks = [] } = closestCommentRangeStart || {};
-  const closestCommentMark = closestMarks.find((mark) => mark.type.name === CommentMarkName);
-  return closestCommentMark?.attrs?.commentId || closestCommentMark?.attrs?.importedId;
+  // Return the innermost comment (smallest range)
+  // For nested comments, the inner one has the smallest size
+  containingComments.sort((a, b) => a.size - b.size);
+  return containingComments[0].commentId;
 };
 
 const findTrackedMark = ({
@@ -532,7 +842,7 @@ const findTrackedMark = ({
 };
 
 const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEditorState, editor) => {
-  const { insertedMark, deletionMark, formatMark, deletionNodes } = trackedChangeMeta;
+  const { insertedMark, deletionMark, formatMark, deletionNodes, emitCommentEvent = true } = trackedChangeMeta;
 
   if (!insertedMark && !deletionMark && !formatMark) {
     return;
@@ -583,34 +893,98 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     newEditorState,
   });
 
-  if (emitParams) editor.emit('commentsUpdate', emitParams);
+  if (emitParams && emitCommentEvent) editor.emit('commentsUpdate', emitParams);
 
   return newTrackedChanges;
+};
+
+const normalizeFormatAttrsForCommentText = (attrs = {}, nodes) => {
+  const before = Array.isArray(attrs.before) ? attrs.before : [];
+  const after = Array.isArray(attrs.after) ? attrs.after : [];
+  const beforeTextStyle = before.find((mark) => mark?.type === 'textStyle');
+
+  if (!beforeTextStyle) {
+    return {
+      ...attrs,
+      before,
+      after,
+    };
+  }
+
+  const afterTextStyleIndex = after.findIndex((mark) => mark?.type === 'textStyle');
+  const wasTextStyleRemoved = nodes.some((node) => {
+    const hasTextStyleMark = node.marks.find((mark) => mark.type.name === 'textStyle');
+    return !hasTextStyleMark;
+  });
+
+  if (afterTextStyleIndex === -1) {
+    if (wasTextStyleRemoved) {
+      return {
+        ...attrs,
+        before,
+        after,
+      };
+    } else {
+      return {
+        ...attrs,
+        before,
+        after: [
+          ...after,
+          {
+            type: 'textStyle',
+            attrs: {
+              ...beforeTextStyle.attrs,
+            },
+          },
+        ],
+      };
+    }
+  }
+
+  const mergedAfter = [...after];
+  mergedAfter[afterTextStyleIndex] = {
+    ...mergedAfter[afterTextStyleIndex],
+    attrs: {
+      ...(beforeTextStyle.attrs || {}),
+      ...(mergedAfter[afterTextStyleIndex].attrs || {}),
+    },
+  };
+
+  return {
+    ...attrs,
+    before,
+    after: mergedAfter,
+  };
 };
 
 const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsertion }) => {
   let trackedChangeText = '';
   let deletionText = '';
 
-  if (trackedChangeType === TrackInsertMarkName) {
+  // Extract deletion text first
+  if (trackedChangeType === TrackDeleteMarkName || isDeletionInsertion) {
+    deletionText = nodes.reduce((acc, node) => {
+      const hasDeleteMark = node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName);
+      if (!hasDeleteMark) return acc;
+      const nodeText = node?.text || node?.textContent || '';
+      acc += nodeText;
+      return acc;
+    }, '');
+  }
+
+  if (trackedChangeType === TrackInsertMarkName || isDeletionInsertion) {
     trackedChangeText = nodes.reduce((acc, node) => {
-      if (!node.marks.find((nodeMark) => nodeMark.type.name === mark.type.name)) return acc;
-      acc += node?.text || node?.textContent || '';
+      const hasInsertMark = node.marks.find((nodeMark) => nodeMark.type.name === TrackInsertMarkName);
+      if (!hasInsertMark) return acc;
+      const nodeText = node?.text || node?.textContent || '';
+      acc += nodeText;
       return acc;
     }, '');
   }
 
   // If this is a format change, let's get the string of what changes were made
   if (trackedChangeType === TrackFormatMarkName) {
-    trackedChangeText = translateFormatChangesToEnglish(mark.attrs);
-  }
-
-  if (trackedChangeType === TrackDeleteMarkName || isDeletionInsertion) {
-    deletionText = nodes.reduce((acc, node) => {
-      if (!node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName)) return acc;
-      acc += node?.text || node?.textContent || '';
-      return acc;
-    }, '');
+    trackedChangeText = translateFormatChangesToEnglish(normalizeFormatAttrsForCommentText(mark.attrs, nodes));
   }
 
   return {
@@ -628,22 +1002,76 @@ const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes
   const id = attrs.id;
 
   const node = nodes[0];
-  const isDeletionInsertion = !!(marks.insertedMark && marks.deletionMark);
+  // Use getTrackChanges to find all tracked changes with the matching ID
+  // This will find both insertion and deletion marks if they exist with the same ID
+  const trackedChangesWithId = getTrackChanges(newEditorState, id);
 
+  // Check metadata first - this should be set correctly by groupChanges() in createCommentForTrackChanges
+  // for both newly created and imported tracked changes
+  let isDeletionInsertion = !!(marks.insertedMark && marks.deletionMark);
+
+  // Fallback: If metadata doesn't indicate replacement (e.g., edge cases during import),
+  // check the document state directly to detect replacements by finding both marks with same ID
+  // This ensures robustness even if groupChanges() misses a replacement or metadata isn't set
+  if (!isDeletionInsertion) {
+    const hasInsertMark = trackedChangesWithId.some(({ mark }) => mark.type.name === TrackInsertMarkName);
+    const hasDeleteMark = trackedChangesWithId.some(({ mark }) => mark.type.name === TrackDeleteMarkName);
+    isDeletionInsertion = hasInsertMark && hasDeleteMark;
+  }
+
+  // Collect nodes from the tracked changes found
+  // We need to get the actual nodes at those positions
   let nodesWithMark = [];
-  newEditorState.doc.descendants((node) => {
-    const { marks = [] } = node;
-    const changeMarks = marks.filter((mark) => TRACK_CHANGE_MARKS.includes(mark.type.name));
-    if (!changeMarks.length) return;
-    const hasMatchingId = changeMarks.find((mark) => mark.attrs.id === id);
-    if (hasMatchingId) nodesWithMark.push(node);
+  trackedChangesWithId.forEach(({ from, to }) => {
+    newEditorState.doc.nodesBetween(from, to, (node) => {
+      // Only collect inline text nodes
+      if (node.isText) {
+        // Check if this node has the mark (it should, since getTrackChanges found it)
+        const hasMatchingMark = node.marks?.some((m) => TRACK_CHANGE_MARKS.includes(m.type.name) && m.attrs.id === id);
+        if (hasMatchingMark) {
+          // Check if we already have this node (by reference, not by content)
+          const alreadyAdded = nodesWithMark.some((n) => n === node);
+          if (!alreadyAdded) {
+            nodesWithMark.push(node);
+          }
+        }
+      }
+    });
   });
+
+  // For replacements, we need both insertion nodes and deletion nodes
+  // When isDeletionInsertion is true, nodesWithMark should contain both types
+  let nodesToUse;
+  if (isDeletionInsertion) {
+    // For replacements, prefer nodes found in the document to avoid duplicating text
+    // when step.slice/deletionNodes include overlapping content.
+    const hasInsertNode = nodesWithMark.some((node) =>
+      node.marks.find((nodeMark) => nodeMark.type.name === TrackInsertMarkName),
+    );
+    const hasDeleteNode = nodesWithMark.some((node) =>
+      node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName),
+    );
+
+    const fallbackNodes = [
+      ...(!hasInsertNode && nodes?.length ? nodes : []),
+      ...(!hasDeleteNode && deletionNodes?.length ? deletionNodes : []),
+    ];
+    // safety net for identity dedupe
+    // work is done above
+    nodesToUse = Array.from(new Set([...nodesWithMark, ...fallbackNodes]));
+  } else {
+    // For non-replacements, use nodes found in document or fall back to step nodes
+    nodesToUse = nodesWithMark.length ? nodesWithMark : node ? [node] : [];
+  }
+
+  if (!nodesToUse.length) {
+    return;
+  }
 
   const { deletionText, trackedChangeText } = getTrackedChangeText({
     state: newEditorState,
-    nodes: nodesWithMark.length ? nodesWithMark : [node],
+    nodes: nodesToUse,
     mark: trackedMark,
-    marks,
     trackedChangeType,
     isDeletionInsertion,
     deletionNodes,
@@ -693,6 +1121,13 @@ function findRangeById(doc, id) {
     if (commentMark) {
       if (from === null || pos < from) from = pos;
       if (to === null || pos + node.nodeSize > to) to = pos + node.nodeSize;
+    }
+    // For resolved comments: check commentRangeStart/End nodes (marks are removed when resolved)
+    if (node.type.name === 'commentRangeStart' && node.attrs['w:id'] === id) {
+      from = pos;
+    }
+    if (node.type.name === 'commentRangeEnd' && node.attrs['w:id'] === id) {
+      to = pos;
     }
   });
   return from !== null && to !== null ? { from, to } : null;

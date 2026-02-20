@@ -1,7 +1,7 @@
 // @ts-check
 import { CustomSelectionPluginKey } from '../custom-selection/custom-selection.js';
 import { getLineHeightValueString } from '@core/super-converter/helpers.js';
-import { findParentNode } from '@helpers/index.js';
+import { findParentNode } from '../../core/helpers/findParentNode.js';
 import { kebabCase } from '@superdoc/common';
 import { getUnderlineCssString } from './index.js';
 import { twipsToLines, twipsToPixels, halfPointToPixels } from '@converter/helpers.js';
@@ -158,7 +158,7 @@ export const getQuickFormatList = (editor) => {
  * @param {Object} basedOnStyle - The basedOn style object
  * @param {Object} node - The current node
  * @param {Object} parent - The parent of current node
- * @param {boolean} includeSpacing - Whether to include spacing styles
+ * @param {boolean} _includeSpacing - Whether to include spacing styles (currently unused)
  * @returns {string} The CSS style string for decorations
  * @note Node marks take precedence over linked style properties per Word behavior
  * @private

@@ -1,9 +1,11 @@
 import { Attribute, Node } from '@core/index.js';
+import { formatInsetClipPathTransform } from '@superdoc/contracts';
 import { ImageRegistrationPlugin } from './imageHelpers/imageRegistrationPlugin.js';
 import { ImagePositionPlugin } from './imageHelpers/imagePositionPlugin.js';
 import { getNormalizedImageAttrs } from './imageHelpers/legacyAttributes.js';
 import { getRotationMargins } from './imageHelpers/rotation.js';
 import { inchesToPixels } from '@converter/helpers.js';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 /**
  * Configuration options for Image
@@ -101,6 +103,11 @@ export const Image = Node.create({
 
       id: { rendered: false },
 
+      hidden: {
+        default: false,
+        rendered: false,
+      },
+
       title: {
         default: null,
       },
@@ -137,7 +144,13 @@ export const Image = Node.create({
 
       anchorData: {
         default: null,
-        rendered: false,
+        renderDOM: ({ anchorData, originalAttributes }) => {
+          const relativeHeight = originalAttributes?.relativeHeight;
+          if (anchorData && relativeHeight) {
+            const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+            return { style: `position:relative; z-index: ${zIndex}` };
+          }
+        },
       },
 
       isAnchor: { rendered: false },
@@ -192,21 +205,40 @@ export const Image = Node.create({
       originalExtension: { rendered: false },
       originalSrc: { rendered: false },
 
-      shouldStretch: {
+      shouldCover: {
         default: false,
         rendered: false,
       },
 
+      clipPath: {
+        default: null,
+        renderDOM: (attrs) => {
+          const clipPath = attrs.clipPath;
+          if (typeof clipPath !== 'string' || clipPath.trim().length === 0) {
+            return {};
+          }
+          // When we have size we render a wrapper in renderDOM; clip-path and scale go on the inner img only, so don't add here
+          if (attrs.size?.width && attrs.size?.height) {
+            return {};
+          }
+          let style = `clip-path: ${clipPath};`;
+          const scaleStyle = formatInsetClipPathTransform(clipPath);
+          if (scaleStyle) style += ` ${scaleStyle}`;
+          return { style };
+        },
+      },
+
       size: {
         default: {},
-        renderDOM: ({ size, shouldStretch }) => {
+        renderDOM: ({ size, shouldCover }) => {
           let style = '';
           let { width, height } = size ?? {};
           if (width) style += `width: ${width}px;`;
-          if (height && shouldStretch) {
-            // When shouldStretch is true (from <a:stretch><a:fillRect/>),
-            // stretch the image to fill both dimensions without preserving aspect ratio
-            style += `height: ${height}px; object-fit: fill;`;
+          if (height && shouldCover) {
+            // When shouldCover is true (from <a:stretch><a:fillRect/> with empty srcRect),
+            // scale the image to cover the extent and clip overflow (like MS Word)
+            // MS Word anchors to top-left corner, clipping from right/bottom
+            style += `height: ${height}px; object-fit: cover; object-position: left top;`;
           } else if (height) style += 'height: auto;';
           return { style };
         },
@@ -235,6 +267,10 @@ export const Image = Node.create({
         rendered: false,
       },
       originalDrawingChildren: {
+        default: null,
+        rendered: false,
+      },
+      rawSrcRect: {
         default: null,
         rendered: false,
       },
@@ -425,6 +461,10 @@ export const Image = Node.create({
     // Calculate margin data based on anchor data, margin offsets and float direction
     const hasAnchorData = Boolean(anchorData);
     const hasMarginOffsets = marginOffset?.horizontal != null || marginOffset?.top != null;
+    const isWrapBehindDoc = wrap?.attrs?.behindDoc;
+    const isAnchorBehindDoc = anchorData?.behindDoc;
+    const isBehindDocAnchor = wrap?.type === 'None' && (isWrapBehindDoc || isAnchorBehindDoc);
+    const isAbsolutelyPositioned = style.includes('position: absolute;');
 
     if (hasAnchorData) {
       switch (anchorData.hRelativeFrom) {
@@ -458,7 +498,6 @@ export const Image = Node.create({
             // and the element is absolutely positioned (e.g., wrap type 'None'),
             // we need to use 'left' positioning to allow negative offsets
             // This handles cases like full-width images that extend into margins
-            const isAbsolutelyPositioned = style.includes('position: absolute;');
             if (isAbsolutelyPositioned) {
               // Don't apply horizontal offset via margins - will use 'left' instead
               // Set a flag to apply the offset directly as 'left' property
@@ -478,7 +517,8 @@ export const Image = Node.create({
       const relativeFromPageV = anchorData?.vRelativeFrom === 'page';
       const relativeFromMarginV = anchorData?.vRelativeFrom === 'margin';
       const maxMarginV = 500;
-      const baseTop = Math.max(0, marginOffset?.top ?? 0);
+      const allowNegativeTopOffset = isBehindDocAnchor;
+      const baseTop = allowNegativeTopOffset ? (marginOffset?.top ?? 0) : Math.max(0, marginOffset?.top ?? 0);
       // TODO: Images that go into the margin have negative offsets - often by high values.
       // These values will not be shown correctly when rendered in browser. Adjusting to zero is smallest possible
       // adjustment that continues to give a result close to the original.
@@ -504,9 +544,12 @@ export const Image = Node.create({
         }
       }
 
-      // Don't apply vertical offset as margin-top for images positioned relative to margin
-      // as this causes double-counting of the offset
-      if (top && !relativeFromMarginV) {
+      const appliedTopViaStyle = isAbsolutelyPositioned && allowNegativeTopOffset && !relativeFromMarginV;
+      if (appliedTopViaStyle) {
+        style += `top: ${top}px;`;
+        // Don't apply vertical offset as margin-top for images positioned relative to margin
+        // as this causes double-counting of the offset
+      } else if (top && !relativeFromMarginV) {
         if (relativeFromPageV && top >= maxMarginV) margin.top += maxMarginV;
         else margin.top += top;
       }
@@ -521,11 +564,57 @@ export const Image = Node.create({
     if (margin.top) style += `margin-top: ${margin.top}px;`;
     if (margin.bottom) style += `margin-bottom: ${margin.bottom}px;`;
 
+    if (isBehindDocAnchor) {
+      style += 'max-width: none;';
+    }
+
     // Merge wrap styling with existing htmlAttributes style
     const finalAttributes = { ...htmlAttributes };
     if (style) {
       const existingStyle = finalAttributes.style || '';
       finalAttributes.style = existingStyle + (existingStyle ? ' ' : '') + style;
+    }
+
+    const clipPath = node.attrs.clipPath;
+    const hasClipPath = typeof clipPath === 'string' && clipPath.trim().length > 0;
+    const { width: sizeW, height: sizeH } = size ?? {};
+
+    // When clipPath is set we scale the image so the cropped portion fills the box;
+    // wrap in a container so only that portion occupies space and overflow is hidden.
+    // Resize updates node size so wrapper gets new dimensions and cropped portion stays within.
+    if (hasClipPath && sizeW > 0 && sizeH > 0) {
+      const wrapperStyle = [
+        finalAttributes.style || '',
+        'overflow: hidden',
+        `width: ${sizeW}px`,
+        `height: ${sizeH}px`,
+        'display: inline-block',
+        'box-sizing: border-box',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      // clipPath attribute's renderDOM returns {} when size is set (so styles go on wrapper);
+      // inner img is built here so we set clip-path and fill styles explicitly.
+      const imgInnerStyle = [
+        'width: 100%',
+        'height: 100%',
+        'max-width: 100%',
+        'max-height: 100%',
+        'min-width: 0',
+        'min-height: 0',
+        'box-sizing: border-box',
+        `clip-path: ${clipPath}`,
+        formatInsetClipPathTransform(clipPath) || '',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      const imgAttrs = Attribute.mergeAttributes(this.options.htmlAttributes, {
+        src: this.storage.media[node.attrs.src] ?? node.attrs.src,
+        alt: node.attrs.alt ?? 'Uploaded picture',
+        title: node.attrs.title ?? undefined,
+        style: imgInnerStyle,
+      });
+      return ['span', { ...finalAttributes, style: wrapperStyle }, ['img', imgAttrs]];
     }
 
     return ['img', Attribute.mergeAttributes(this.options.htmlAttributes, finalAttributes)];

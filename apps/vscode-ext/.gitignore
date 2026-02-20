@@ -1,0 +1,9 @@
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+*.docx
+.DS_Store
+.env
+*.log

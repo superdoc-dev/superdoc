@@ -139,6 +139,108 @@ describe('image converter', () => {
       expect(result.objectFit).toBe('cover');
     });
 
+    /**
+     * shouldCover tests - Critical for OOXML image stretch/clip behavior
+     *
+     * In OOXML, images can have:
+     * - <a:stretch><a:fillRect/></a:stretch>: Scale image to fill extent rectangle
+     * - <a:srcRect>: Specifies source cropping/extension
+     *
+     * srcRect attribute behavior:
+     * - Positive values (e.g., r="84800"): Crop percentage from that edge (84.8% from right)
+     * - Negative values (e.g., b="-3978"): Extend/pad the source mapping
+     * - Empty/no srcRect: No pre-adjustment
+     *
+     * shouldCover is set to true when:
+     * - stretch+fillRect is present AND
+     * - srcRect has no negative values (meaning we need CSS to handle clipping)
+     *
+     * This matches MS Word behavior where stretched images with positive srcRect
+     * values are clipped to fit the extent rectangle.
+     */
+    describe('shouldCover (OOXML stretch/clip behavior)', () => {
+      it('sets objectFit to cover when shouldCover is true (stretch with empty srcRect)', () => {
+        // Simulates: <a:stretch><a:fillRect/></a:stretch> with empty <a:srcRect/>
+        // Example: whalar header2.xml - logo needs to be scaled and clipped
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            shouldCover: true,
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.objectFit).toBe('cover');
+      });
+
+      it('sets objectFit to cover when shouldCover is true (stretch with positive srcRect)', () => {
+        // Simulates: <a:stretch><a:fillRect/></a:stretch> with <a:srcRect r="84800"/>
+        // Example: whalar header1.xml - 84.8% cropped from right, needs CSS clipping
+        // Since we don't implement actual srcRect cropping, CSS cover handles it
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            shouldCover: true,
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.objectFit).toBe('cover');
+      });
+
+      it('does not set objectFit to cover when shouldCover is false (negative srcRect)', () => {
+        // Simulates: <a:stretch><a:fillRect/></a:stretch> with <a:srcRect b="-3978"/>
+        // Example: certn header2.xml - negative value means Word extended the mapping
+        // The image should NOT be clipped because Word already adjusted it
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            shouldCover: false,
+            isAnchor: true,
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.objectFit).toBe('contain');
+      });
+
+      it('does not set objectFit to cover when shouldCover is false (no stretch)', () => {
+        // No <a:stretch><a:fillRect/></a:stretch> present
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            shouldCover: false,
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.objectFit).toBe('contain');
+      });
+
+      it('explicit objectFit overrides shouldCover', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            shouldCover: true,
+            objectFit: 'fill',
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.objectFit).toBe('fill');
+      });
+    });
+
     it('handles wrap configuration', () => {
       const node: PMNode = {
         type: 'image',
@@ -339,6 +441,95 @@ describe('image converter', () => {
 
       expect(result.attrs?.pmStart).toBe(10);
       expect(result.attrs?.pmEnd).toBe(20);
+    });
+
+    describe('zIndex from originalAttributes.relativeHeight', () => {
+      const OOXML_BASE = 251658240;
+
+      it('sets zIndex when originalAttributes.relativeHeight is a number', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true },
+            originalAttributes: { relativeHeight: OOXML_BASE + 10 },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(10);
+      });
+
+      it('sets zIndex when originalAttributes.relativeHeight is a string (OOXML)', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true },
+            originalAttributes: { relativeHeight: '251658291' },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(51);
+      });
+
+      it('sets zIndex to 0 when anchor.behindDoc is true and no relativeHeight', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true, behindDoc: true },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(0);
+      });
+
+      it('forces zIndex to 0 when behindDoc is true even with relativeHeight', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true, behindDoc: true },
+            originalAttributes: { relativeHeight: OOXML_BASE + 10 },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(0);
+      });
+
+      it('clamps base relativeHeight to 1 when not behindDoc', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true, behindDoc: false },
+            originalAttributes: { relativeHeight: OOXML_BASE },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(1);
+      });
+
+      it('sets zIndex to 1 when no originalAttributes and not behindDoc (default stacking)', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: { src: 'image.jpg' },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(1);
+      });
     });
 
     it('validates and filters invalid wrap type', () => {

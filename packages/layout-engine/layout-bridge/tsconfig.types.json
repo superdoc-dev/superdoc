@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist-types"
+  },
+  "references": [
+    { "path": "../contracts/tsconfig.json" },
+    { "path": "../layout-engine/tsconfig.json" },
+    { "path": "../measuring/dom/tsconfig.json" },
+    { "path": "../painters/dom/tsconfig.json" },
+    { "path": "../../word-layout/tsconfig.json" },
+    { "path": "../../../shared/common/tsconfig.json" }
+  ]
+}

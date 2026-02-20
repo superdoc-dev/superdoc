@@ -270,7 +270,7 @@ describe('headerFooterUtils', () => {
       expect(firstPageType).toBe('default');
 
       // Verify sectionTitlePg is false
-      expect(identifier.sectionTitlePg.get(0)).toBeUndefined();
+      expect(identifier.sectionTitlePg.get(0)).toBe(false);
       expect(identifier.titlePg).toBe(false);
     });
 
@@ -317,6 +317,37 @@ describe('headerFooterUtils', () => {
         sectionPageNumber: 2,
       });
       expect(secondPageType).toBe('default');
+    });
+
+    it('respects per-section titlePg when earlier sections enable it and later sections disable it', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default', first: 'h0-first' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { default: 'h1-default', first: 'h1-first' },
+          titlePg: false,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+
+      const section0First = getHeaderFooterTypeForSection(1, 0, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+      });
+      const section1First = getHeaderFooterTypeForSection(3, 1, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+      });
+
+      expect(section0First).toBe('first');
+      expect(section1First).toBe('default');
+      expect(identifier.sectionTitlePg.get(0)).toBe(true);
+      expect(identifier.sectionTitlePg.get(1)).toBe(false);
     });
   });
 
@@ -480,6 +511,122 @@ describe('headerFooterUtils', () => {
       expect(identifier.footerIds.first).toBe('conv-f-first');
       expect(identifier.footerIds.even).toBe('section-f-even');
       expect(identifier.footerIds.odd).toBe('conv-f-odd');
+    });
+  });
+
+  describe('header/footer inheritance across sections (SD-1370)', () => {
+    /**
+     * Tests for Word's OOXML inheritance model where sections inherit header/footer
+     * definitions from previous sections when not explicitly defined.
+     *
+     * Scenario: Section 1 has both 'first' and 'default' headers, Section 2 only has
+     * 'default' header but titlePg is enabled. Word inherits Section 1's 'first' header
+     * for Section 2's first page.
+     */
+
+    it('returns "first" variant type when titlePg enabled but no first header defined', () => {
+      // Section 2 has titlePg enabled but only defines 'default' header
+      // getHeaderFooterTypeForSection should return 'first' so rendering layer
+      // can implement inheritance from Section 1
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'rId6', first: 'rId7' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { default: 'rId8' }, // No 'first' defined
+          titlePg: true, // But titlePg is enabled
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+
+      // Section 1 first page - returns 'first' (has first header)
+      const section0FirstPage = getHeaderFooterTypeForSection(1, 0, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+      });
+      expect(section0FirstPage).toBe('first');
+
+      // Section 2 first page - should return 'first' even though section doesn't have first header
+      // This allows rendering layer to implement inheritance from previous section
+      const section1FirstPage = getHeaderFooterTypeForSection(3, 1, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+      });
+      expect(section1FirstPage).toBe('first');
+
+      // Section 2 second page - should return 'default'
+      const section1SecondPage = getHeaderFooterTypeForSection(4, 1, identifier, {
+        kind: 'header',
+        sectionPageNumber: 2,
+      });
+      expect(section1SecondPage).toBe('default');
+    });
+
+    it('returns null when titlePg enabled but no headers exist anywhere', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: {}, // No headers at all
+          titlePg: true,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+
+      const firstPage = getHeaderFooterTypeForSection(1, 0, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+      });
+      expect(firstPage).toBeNull();
+    });
+
+    it('returns "first" when titlePg enabled and only default header exists', () => {
+      // Even if only 'default' header exists, return 'first' for first page when titlePg enabled
+      // This supports inheritance - previous section might have a 'first' header to inherit
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'rId-default-only' }, // Only default, no first
+          titlePg: true,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+
+      const firstPage = getHeaderFooterTypeForSection(1, 0, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+      });
+      // Returns 'first' to support inheritance; rendering layer handles the actual rId resolution
+      expect(firstPage).toBe('first');
+    });
+
+    it('applies same inheritance logic to footers', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          footerRefs: { default: 'f0-default', first: 'f0-first' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 1,
+          footerRefs: { default: 'f1-default' }, // No 'first' footer
+          titlePg: true,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+
+      // Section 2 first page - should return 'first' for footers too
+      const section1FirstPage = getHeaderFooterTypeForSection(3, 1, identifier, {
+        kind: 'footer',
+        sectionPageNumber: 1,
+      });
+      expect(section1FirstPage).toBe('first');
     });
   });
 });

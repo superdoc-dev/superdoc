@@ -1,14 +1,8 @@
 <script setup>
-import { computed, toRefs, ref, getCurrentInstance, onMounted, nextTick } from 'vue';
-import { NDropdown, NTooltip, NSelect } from 'naive-ui';
+import { computed, ref, getCurrentInstance, onMounted, nextTick, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
-import { SuperInput } from '@harbour-enterprises/super-editor';
-import { superdocIcons } from '@superdoc/icons.js';
-import useSelection from '@superdoc/helpers/use-selection';
-import useComment from '@superdoc/components/CommentsLayer/use-comment';
-import Avatar from '@superdoc/components/general/Avatar.vue';
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
 import CommentInput from './CommentInput.vue';
@@ -30,9 +24,6 @@ const props = defineProps({
 });
 
 const { proxy } = getCurrentInstance();
-const role = proxy.$superdoc.config.role;
-const commentCreator = props.comment.email;
-
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
@@ -50,12 +41,30 @@ const {
   editorCommentPositions,
   isCommentHighlighted,
 } = storeToRefs(commentsStore);
-
 const { activeZoom } = storeToRefs(superdocStore);
 
 const isInternal = ref(true);
-const isFocused = ref(false);
 const commentInput = ref(null);
+const editCommentInputs = ref(new Map());
+
+const setEditCommentInputRef = (commentId) => (el) => {
+  if (!commentId) return;
+  if (el) {
+    editCommentInputs.value.set(commentId, el);
+    if (editingCommentId.value === commentId) {
+      nextTick(() => {
+        focusEditInput(commentId);
+      });
+    }
+  } else {
+    editCommentInputs.value.delete(commentId);
+  }
+};
+
+const focusEditInput = (commentId) => {
+  const input = editCommentInputs.value.get(commentId);
+  input?.focus?.();
+};
 const commentDialogElement = ref(null);
 
 const isActiveComment = computed(() => activeComment.value === props.comment.commentId);
@@ -82,15 +91,63 @@ const showInputSection = computed(() => {
   );
 });
 
+const isRangeThreadedComment = (comment) => {
+  if (!comment) return false;
+  return (
+    comment.threadingStyleOverride === 'range-based' ||
+    comment.threadingMethod === 'range-based' ||
+    comment.originalXmlStructure?.hasCommentsExtended === false
+  );
+};
+
+const collectTrackedChangeThread = (parentComment, allComments) => {
+  const trackedChangeId = parentComment.commentId;
+  const threadIds = new Set([trackedChangeId]);
+  const queue = [];
+
+  allComments.forEach((comment) => {
+    if (comment.commentId === trackedChangeId) return;
+    const isDirectChild = comment.parentCommentId === trackedChangeId;
+    const isRangeBasedTrackedChangeComment =
+      comment.trackedChangeParentId === trackedChangeId && isRangeThreadedComment(comment);
+
+    if (isDirectChild || isRangeBasedTrackedChangeComment) {
+      threadIds.add(comment.commentId);
+      queue.push(comment.commentId);
+    }
+  });
+
+  for (let i = 0; i < queue.length; i += 1) {
+    const parentId = queue[i];
+    allComments.forEach((comment) => {
+      if (comment.parentCommentId === parentId && !threadIds.has(comment.commentId)) {
+        threadIds.add(comment.commentId);
+        queue.push(comment.commentId);
+      }
+    });
+  }
+
+  return allComments.filter((comment) => threadIds.has(comment.commentId));
+};
+
 const comments = computed(() => {
   const parentComment = props.comment;
-  return commentsStore.commentsList
-    .filter((c) => {
-      const isThreadedComment = c.parentCommentId === parentComment.commentId;
-      const isThisComment = c.commentId === props.comment.commentId;
-      return isThreadedComment || isThisComment;
-    })
-    .sort((a, b) => a.commentId === props.comment.commentId && a.createdTime - b.createdTime);
+  const allComments = commentsStore.commentsList;
+  const threadComments = parentComment.trackedChange
+    ? collectTrackedChangeThread(parentComment, allComments)
+    : allComments.filter((comment) => {
+        const isThreadedComment = comment.parentCommentId === parentComment.commentId;
+        const isThisComment = comment.commentId === parentComment.commentId;
+        return isThreadedComment || isThisComment;
+      });
+
+  return threadComments.sort((a, b) => {
+    // Parent comment (the one passed as prop) should always be first
+    if (a.commentId === parentComment.commentId) return -1;
+    if (b.commentId === parentComment.commentId) return 1;
+    // Sort remaining comments (children) by creation time
+    return a.createdTime - b.createdTime;
+  });
 });
 
 const isInternalDropdownDisabled = computed(() => {
@@ -98,9 +155,7 @@ const isInternalDropdownDisabled = computed(() => {
   return getConfig.value.readOnly;
 });
 
-const isEditingThisComment = computed(() => (comment) => {
-  return editingCommentId.value === comment.commentId;
-});
+const isEditingThisComment = computed(() => (comment) => editingCommentId.value === comment.commentId);
 
 const shouldShowInternalExternal = computed(() => {
   if (!proxy.$superdoc.config.isInternal) return false;
@@ -112,12 +167,21 @@ const hasTextContent = computed(() => {
 });
 
 const setFocus = () => {
-  if (props.comment.resolvedTime) return;
   const editor = proxy.$superdoc.activeEditor;
-  activeComment.value = props.comment.commentId;
-  props.comment.setActive(proxy.$superdoc);
+
+  // Only set as active if not resolved (resolved comments can't be edited)
+  if (!props.comment.resolvedTime) {
+    activeComment.value = props.comment.commentId;
+    props.comment.setActive(proxy.$superdoc);
+  }
+
+  // Always allow scrolling to the comment location, even for resolved comments
   if (editor) {
-    const cursorId = props.comment.importedId || props.comment.commentId;
+    // For resolved comments, use commentId since prepareCommentsForImport rewrites
+    // commentRangeStart/End nodes' w:id to the internal commentId (not importedId)
+    const cursorId = props.comment.resolvedTime
+      ? props.comment.commentId
+      : props.comment.importedId || props.comment.commentId;
     editor.commands?.setCursorById(cursorId);
   }
 };
@@ -202,10 +266,13 @@ const handleResolve = () => {
 const handleOverflowSelect = (value, comment) => {
   switch (value) {
     case 'edit':
-      currentCommentText.value = comment.commentText;
+      currentCommentText.value = comment?.commentText?.value ?? comment?.commentText ?? '';
       activeComment.value = comment.commentId;
       editingCommentId.value = comment.commentId;
       commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
+      nextTick(() => {
+        focusEditInput(comment.commentId);
+      });
       break;
     case 'delete':
       deleteComment({ superdoc: proxy.$superdoc, commentId: comment.commentId });
@@ -253,7 +320,10 @@ const getSidebarCommentStyle = computed(() => {
   }
 
   if (pendingComment.value && pendingComment.value.commentId === props.comment.commentId) {
-    const top = Math.max(96, pendingComment.value.selection?.selectionBounds.top - 50);
+    const source = pendingComment.value.selection?.source;
+    const isPdf = source === 'pdf' || source?.value === 'pdf';
+    const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+    const top = Math.max(96, pendingComment.value.selection?.selectionBounds.top * zoom - 50);
     style.position = 'absolute';
     style.top = top + 'px';
   }
@@ -289,6 +359,26 @@ onMounted(() => {
   nextTick(() => {
     const commentId = props.comment.importedId !== undefined ? props.comment.importedId : props.comment.commentId;
     emit('ready', { commentId, elementRef: commentDialogElement });
+  });
+});
+
+watch(
+  showInputSection,
+  (isVisible) => {
+    if (!isVisible) return;
+    nextTick(() => {
+      commentInput.value?.focus?.();
+    });
+  },
+  { immediate: true },
+);
+
+watch(editingCommentId, (commentId) => {
+  if (!commentId) return;
+  const entry = comments.value.find((comment) => comment.commentId === commentId);
+  if (!entry || entry.trackedChange) return;
+  nextTick(() => {
+    focusEditInput(commentId);
   });
 });
 </script>
@@ -352,7 +442,13 @@ onMounted(() => {
           }}
         </div>
         <div v-else class="comment-editing">
-          <CommentInput :users="usersFiltered" :config="getConfig" :include-header="false" :comment="comment" />
+          <CommentInput
+            :ref="setEditCommentInputRef(comment.commentId)"
+            :users="usersFiltered"
+            :config="getConfig"
+            :include-header="false"
+            :comment="comment"
+          />
           <div class="comment-footer">
             <button class="sd-button" @click.stop.prevent="handleCancel(comment)">Cancel</button>
             <button class="sd-button primary" @click.stop.prevent="handleCommentUpdate(comment)">Update</button>
@@ -367,7 +463,7 @@ onMounted(() => {
       <CommentInput ref="commentInput" :users="usersFiltered" :config="getConfig" :comment="props.comment" />
 
       <div class="comment-footer" v-if="showButtons && !getConfig.readOnly">
-        <button class="sd-button" @click.stop.prevent="cancelComment">Cancel</button>
+        <button class="sd-button" @click.stop.prevent="handleCancel">Cancel</button>
         <button
           class="sd-button primary"
           @click.stop.prevent="handleAddComment"
@@ -413,6 +509,7 @@ onMounted(() => {
   padding: 10px 15px;
   border-radius: 12px;
   background-color: #f3f6fd;
+  font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);
   transition: background-color 250ms ease;
   -webkit-box-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
   -moz-box-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);

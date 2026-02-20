@@ -7,17 +7,39 @@
 
 import type {
   BoxSpacing,
+  DrawingBlock,
   DrawingContentSnapshot,
-  ParagraphIndent,
+  ImageBlock,
   ShapeGroupChild,
+  ShapeGroupDrawing,
+  ShapeGroupImageChild,
   ShapeGroupTransform,
   FlowBlock,
   ImageRun,
   ParagraphBlock,
   Run,
+  TableBlock,
 } from '@superdoc/contracts';
 import type { PMNode, PositionMap, BlockIdGenerator } from './types.js';
 import { TWIPS_PER_INCH, PX_PER_INCH, PX_PER_PT, ATOMIC_INLINE_TYPES } from './constants.js';
+
+export type LineEnd = {
+  type?: string;
+  width?: string;
+  length?: string;
+};
+
+export type LineEnds = {
+  head?: LineEnd;
+  tail?: LineEnd;
+};
+
+export type EffectExtent = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
 
 // ============================================================================
 // Unit Conversion Utilities
@@ -55,52 +77,6 @@ export const twipsToPx = (value: number): number => (value / TWIPS_PER_INCH) * P
 export const ptToPx = (pt?: number | null): number | undefined => {
   if (pt == null || !Number.isFinite(pt)) return undefined;
   return pt * PX_PER_PT;
-};
-
-/**
- * Converts a value from pixels to points.
- *
- * @param px - The value in pixels to convert (optional, nullable)
- * @returns The equivalent value in points, or undefined if input is null/undefined/not finite
- *
- * @example
- * ```typescript
- * const points = pxToPt(16); // 12pt (16px at 96 DPI)
- * pxToPt(null); // undefined
- * pxToPt(Infinity); // undefined
- * ```
- */
-export const pxToPt = (px?: number | null): number | undefined => {
-  if (px == null || !Number.isFinite(px)) return undefined;
-  return px / PX_PER_PT;
-};
-
-/**
- * Converts paragraph indent values from twips to pixels.
- *
- * Takes an indent object with potentially four properties (left, right, firstLine, hanging)
- * and converts any finite numeric values from twips to pixels.
- *
- * @param indent - The paragraph indent object with values in twips (optional, nullable)
- * @returns A new indent object with values in pixels, or undefined if no valid values exist
- *
- * @example
- * ```typescript
- * const pxIndent = convertIndentTwipsToPx({ left: 1440, firstLine: 720 });
- * // { left: 96, firstLine: 48 }
- *
- * convertIndentTwipsToPx(null); // undefined
- * convertIndentTwipsToPx({}); // undefined (no valid properties)
- * ```
- */
-export const convertIndentTwipsToPx = (indent?: ParagraphIndent | null): ParagraphIndent | undefined => {
-  if (!indent) return undefined;
-  const result: ParagraphIndent = {};
-  if (isFiniteNumber(indent.left)) result.left = twipsToPx(indent.left);
-  if (isFiniteNumber(indent.right)) result.right = twipsToPx(indent.right);
-  if (isFiniteNumber(indent.firstLine)) result.firstLine = twipsToPx(indent.firstLine);
-  if (isFiniteNumber(indent.hanging)) result.hanging = twipsToPx(indent.hanging);
-  return Object.keys(result).length ? result : undefined;
 };
 
 // ============================================================================
@@ -198,52 +174,6 @@ export const pickNumber = (value: unknown): number | undefined => {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
-};
-
-/**
- * Validates and normalizes a decimal separator character.
- *
- * Only accepts '.' or ',' as valid decimal separators.
- *
- * @param value - The value to validate as a decimal separator
- * @returns The normalized separator ('.' or ','), or undefined if invalid
- *
- * @example
- * ```typescript
- * pickDecimalSeparator("."); // "."
- * pickDecimalSeparator(","); // ","
- * pickDecimalSeparator(" . "); // "."
- * pickDecimalSeparator(";"); // undefined
- * pickDecimalSeparator(123); // undefined
- * ```
- */
-export const pickDecimalSeparator = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim();
-  if (normalized === '.' || normalized === ',') return normalized;
-  return undefined;
-};
-
-/**
- * Extracts and normalizes a language code string.
- *
- * Trims whitespace and converts to lowercase. Returns undefined for empty strings.
- *
- * @param value - The language code to normalize
- * @returns The normalized language code, or undefined if invalid or empty
- *
- * @example
- * ```typescript
- * pickLang("EN-US"); // "en-us"
- * pickLang("  fr  "); // "fr"
- * pickLang(""); // undefined
- * pickLang(123); // undefined
- * ```
- */
-export const pickLang = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim().toLowerCase();
-  return normalized || undefined;
 };
 
 /**
@@ -442,78 +372,6 @@ export const toBoolean = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
-/**
- * Checks if a value is explicitly truthy according to specific patterns.
- *
- * Unlike coerceBoolean which returns undefined for unrecognized values, this
- * function always returns a definite boolean. It returns true ONLY for explicitly
- * truthy values, and false for everything else (including unrecognized values).
- *
- * Use this when you need a definite boolean answer and want to treat unknown
- * values as false rather than undefined.
- *
- * Recognized truthy values: true, 1, 'true', '1', 'on'
- *
- * @param value - The value to check for truthiness
- * @returns True if the value matches truthy patterns, false otherwise
- *
- * @example
- * ```typescript
- * isTruthy(true); // true
- * isTruthy(1); // true
- * isTruthy("true"); // true
- * isTruthy("on"); // true
- * isTruthy(false); // false
- * isTruthy(0); // false
- * isTruthy("yes"); // false (not in recognized patterns)
- * isTruthy("maybe"); // false
- * isTruthy(null); // false
- * ```
- */
-export const isTruthy = (value: unknown): boolean => {
-  if (value === true || value === 1) return true;
-  if (typeof value === 'string') {
-    const normalized = value.toLowerCase();
-    if (normalized === 'true' || normalized === '1' || normalized === 'on') {
-      return true;
-    }
-  }
-  return false;
-};
-
-/**
- * Checks if a value is explicitly false according to specific patterns.
- *
- * Similar to isTruthy, this always returns a definite boolean. It returns true
- * ONLY when the value explicitly indicates false, not for unrecognized values.
- *
- * Recognized falsy values: false, 0, 'false', '0', 'off'
- *
- * @param value - The value to check for explicit falseness
- * @returns True if the value matches explicit false patterns, false otherwise
- *
- * @example
- * ```typescript
- * isExplicitFalse(false); // true
- * isExplicitFalse(0); // true
- * isExplicitFalse("false"); // true
- * isExplicitFalse("off"); // true
- * isExplicitFalse(true); // false
- * isExplicitFalse(1); // false
- * isExplicitFalse("no"); // false (not in recognized patterns)
- * isExplicitFalse("maybe"); // false
- * isExplicitFalse(null); // false
- * ```
- */
-export const isExplicitFalse = (value: unknown): boolean => {
-  if (value === false || value === 0) return true;
-  if (typeof value === 'string') {
-    const normalized = value.toLowerCase();
-    return normalized === 'false' || normalized === '0' || normalized === 'off';
-  }
-  return false;
-};
-
 // ============================================================================
 // Box Spacing Utilities
 // ============================================================================
@@ -574,6 +432,7 @@ export function toBoxSpacing(spacing?: Record<string, unknown>): BoxSpacing | un
  * storing references that would prevent garbage collection.
  *
  * @param root - The root ProseMirror node to build position map from
+ * @param options - Optional atom node type metadata for schema-aware position sizing
  * @returns A WeakMap mapping each node to its { start, end } position range
  *
  * @example
@@ -584,13 +443,26 @@ export function toBoxSpacing(spacing?: Record<string, unknown>): BoxSpacing | un
  *     { type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }
  *   ]
  * };
- * const map = buildPositionMap(doc);
+ * const map = buildPositionMap(doc, { atomNodeTypes: ['customAtom'] });
  * const paragraph = doc.content[0];
  * map.get(paragraph); // { start: 0, end: 7 } (1 open + 5 text + 1 close)
  * ```
  */
-export const buildPositionMap = (root: PMNode): PositionMap => {
+type BuildPositionMapOptions = {
+  atomNodeTypes?: Iterable<string>;
+};
+
+export const buildPositionMap = (root: PMNode, options?: BuildPositionMapOptions): PositionMap => {
   const map: PositionMap = new WeakMap();
+  const atomNodeTypes = new Set(ATOMIC_INLINE_TYPES);
+
+  if (options?.atomNodeTypes) {
+    for (const nodeType of options.atomNodeTypes) {
+      if (typeof nodeType === 'string' && nodeType.length > 0) {
+        atomNodeTypes.add(nodeType);
+      }
+    }
+  }
 
   const visit = (node: PMNode, pos: number): number => {
     if (node.type === 'text') {
@@ -600,7 +472,7 @@ export const buildPositionMap = (root: PMNode): PositionMap => {
       return end;
     }
 
-    if (ATOMIC_INLINE_TYPES.has(node.type)) {
+    if (atomNodeTypes.has(node.type)) {
       const end = pos + 1;
       map.set(node, { start: pos, end });
       return end;
@@ -788,6 +660,97 @@ export function normalizeShapeSize(value: unknown): { width?: number; height?: n
   return result;
 }
 
+/** Valid size values for line end markers (sm, med, lg) */
+const LINE_END_SIZES = new Set(['sm', 'med', 'lg']);
+
+/**
+ * Normalizes a single line end configuration from an unknown value.
+ *
+ * @param value - The value to normalize
+ * @returns A validated LineEnd object, or undefined if invalid or type is 'none'
+ */
+const normalizeLineEnd = (value: unknown): LineEnd | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  const type = typeof maybe.type === 'string' ? maybe.type : undefined;
+  if (!type || type === 'none') return undefined;
+  const width = typeof maybe.width === 'string' && LINE_END_SIZES.has(maybe.width) ? maybe.width : undefined;
+  const length = typeof maybe.length === 'string' && LINE_END_SIZES.has(maybe.length) ? maybe.length : undefined;
+  return { type, width, length };
+};
+
+/**
+ * Normalizes line end markers (arrowheads) configuration from an unknown value.
+ *
+ * Validates and extracts head and tail line end configurations.
+ * Returns undefined if input is invalid or neither head nor tail is present.
+ *
+ * @param value - Value to normalize (expected to have head/tail properties)
+ * @returns A validated LineEnds object, or undefined if invalid
+ *
+ * @example
+ * ```typescript
+ * normalizeLineEnds({ head: { type: 'triangle', width: 'sm' } });
+ * // { head: { type: 'triangle', width: 'sm' } }
+ *
+ * normalizeLineEnds({ tail: { type: 'none' } });
+ * // undefined (type 'none' is filtered out)
+ *
+ * normalizeLineEnds(null);
+ * // undefined
+ * ```
+ */
+export function normalizeLineEnds(value: unknown): LineEnds | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  const head = normalizeLineEnd(maybe.head);
+  const tail = normalizeLineEnd(maybe.tail);
+  if (!head && !tail) return undefined;
+  return { head, tail };
+}
+
+/**
+ * Normalizes effect extent values from an unknown value.
+ *
+ * Effect extents define additional space around a shape for effects like shadows
+ * or arrowheads. Negative values are clamped to 0.
+ *
+ * @param value - Value to normalize (expected to have left/top/right/bottom properties)
+ * @returns A validated EffectExtent object, or undefined if all values are null/undefined
+ *
+ * @example
+ * ```typescript
+ * normalizeEffectExtent({ left: 10, top: 5, right: 10, bottom: 5 });
+ * // { left: 10, top: 5, right: 10, bottom: 5 }
+ *
+ * normalizeEffectExtent({ left: -5, right: 10 });
+ * // { left: 0, top: 0, right: 10, bottom: 0 }
+ *
+ * normalizeEffectExtent(null);
+ * // undefined
+ * ```
+ */
+export function normalizeEffectExtent(value: unknown): EffectExtent | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  const left = coerceNumber(maybe.left);
+  const top = coerceNumber(maybe.top);
+  const right = coerceNumber(maybe.right);
+  const bottom = coerceNumber(maybe.bottom);
+
+  if (left == null && top == null && right == null && bottom == null) {
+    return undefined;
+  }
+
+  const clamp = (val: number | null | undefined) => (val != null && val > 0 ? val : 0);
+  return {
+    left: clamp(left),
+    top: clamp(top),
+    right: clamp(right),
+    bottom: clamp(bottom),
+  };
+}
+
 /**
  * Normalizes and validates shape group children from an array.
  *
@@ -903,7 +866,13 @@ export function inferExtensionFromPath(value?: string | null): string | undefine
 /**
  * Hydrates image blocks by converting file path references to base64 data URLs.
  *
- * For each image block, attempts to resolve the image source by checking multiple
+ * This function processes multiple types of blocks containing images:
+ * - **ImageBlocks**: Top-level image blocks with `kind: 'image'`
+ * - **ParagraphBlocks**: Paragraphs containing ImageRuns (inline images)
+ * - **DrawingBlocks**: Drawing blocks with `drawingKind === 'shapeGroup'` that contain image children
+ * - **TableBlocks**: Tables containing cells with any of the above block types
+ *
+ * For each image, attempts to resolve the image source by checking multiple
  * candidate paths against the provided media files map. Uses path normalization
  * and extension inference to maximize match success rate.
  *
@@ -918,7 +887,7 @@ export function inferExtensionFromPath(value?: string | null): string | undefine
  * - Extension from the src path
  * - Default to 'jpeg' if neither available
  *
- * **Image blocks are left unchanged if:**
+ * **Images are left unchanged if:**
  * - No media files are provided
  * - The src already starts with 'data:' (already a data URL)
  * - No matching media file is found in any candidate path
@@ -929,12 +898,30 @@ export function inferExtensionFromPath(value?: string | null): string | undefine
  *
  * @example
  * ```typescript
+ * // Hydrating a top-level ImageBlock
  * const blocks = [
  *   { kind: 'image', src: 'word/media/image1.jpg', attrs: { rId: 'rId5' } }
  * ];
  * const mediaFiles = { 'word/media/image1.jpg': 'iVBORw0KGgoAAAANS...' };
  * const hydrated = hydrateImageBlocks(blocks, mediaFiles);
  * // Result: [{ kind: 'image', src: 'data:image/jpg;base64,iVBORw0KGgoAAAANS...' }]
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Hydrating a DrawingBlock with shapeGroup containing image children
+ * const blocks = [
+ *   {
+ *     kind: 'drawing',
+ *     drawingKind: 'shapeGroup',
+ *     shapes: [
+ *       { shapeType: 'image', attrs: { src: 'word/media/img.png', x: 0, y: 0 } }
+ *     ]
+ *   }
+ * ];
+ * const mediaFiles = { 'word/media/img.png': 'base64data...' };
+ * const hydrated = hydrateImageBlocks(blocks, mediaFiles);
+ * // Image child's src is hydrated to data URL
  * ```
  *
  * @example
@@ -1087,8 +1074,9 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
           let cellsChanged = false;
           const newCells = row.cells.map((cell) => {
             let cellChanged = false;
-            const hydratedBlocks = (cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []))
-              .map((cb) => hydrateBlock(cb as unknown as FlowBlock));
+            const hydratedBlocks = (cell.blocks ?? (cell.paragraph ? [cell.paragraph] : [])).map((cb) =>
+              hydrateBlock(cb as unknown as FlowBlock),
+            );
 
             if (cell.blocks && hydratedBlocks !== cell.blocks) {
               cellChanged = true;
@@ -1107,7 +1095,10 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
             if (cellChanged) {
               return {
                 ...cell,
-                blocks: hydratedBlocks.length > 0 ? hydratedBlocks : cell.blocks,
+                // Cast to expected type - hydrateBlock preserves block kinds, just hydrates image sources
+                blocks: (hydratedBlocks.length > 0 ? hydratedBlocks : cell.blocks) as
+                  | (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[]
+                  | undefined,
                 paragraph: hydratedParagraph,
               };
             }
@@ -1127,6 +1118,48 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
 
         if (rowsChanged) {
           return { ...blk, rows: newRows };
+        }
+        return blk;
+      }
+
+      // Handle DrawingBlocks with shapeGroup kind (contain image children)
+      if (blk.kind === 'drawing') {
+        const drawingBlock = blk as DrawingBlock;
+        if (drawingBlock.drawingKind !== 'shapeGroup') {
+          return blk;
+        }
+
+        const shapeGroupBlock = drawingBlock as ShapeGroupDrawing;
+        if (!shapeGroupBlock.shapes || shapeGroupBlock.shapes.length === 0) {
+          return blk;
+        }
+
+        let shapesChanged = false;
+        const hydratedShapes = shapeGroupBlock.shapes.map((shape) => {
+          // Only process image children
+          if (shape.shapeType !== 'image') {
+            return shape;
+          }
+
+          const imageChild = shape as ShapeGroupImageChild;
+          const src = imageChild.attrs?.src;
+          if (!src || src.startsWith('data:')) {
+            return shape;
+          }
+
+          const resolvedSrc = resolveImageSrc(src);
+          if (resolvedSrc) {
+            shapesChanged = true;
+            return {
+              ...imageChild,
+              attrs: { ...imageChild.attrs, src: resolvedSrc },
+            };
+          }
+          return shape;
+        });
+
+        if (shapesChanged) {
+          return { ...shapeGroupBlock, shapes: hydratedShapes };
         }
         return blk;
       }
@@ -1403,6 +1436,22 @@ export function normalizeTextInsets(
  */
 export const OOXML_Z_INDEX_BASE = 251658240;
 
+// ============================================================================
+// OOXML Element Utilities (z-index from relativeHeight)
+// ============================================================================
+
+/**
+ * Coerces relativeHeight from OOXML (number or string) to a finite number.
+ */
+export function coerceRelativeHeight(raw: unknown): number | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
 /**
  * Normalizes z-index from OOXML relativeHeight value.
  *
@@ -1425,8 +1474,50 @@ export const OOXML_Z_INDEX_BASE = 251658240;
  */
 export function normalizeZIndex(originalAttributes: unknown): number | undefined {
   if (!isPlainObject(originalAttributes)) return undefined;
-  const relativeHeight = originalAttributes.relativeHeight;
-  if (typeof relativeHeight !== 'number') return undefined;
-  // Subtract base to get relative z-index, ensuring non-negative values
+  const relativeHeight = coerceRelativeHeight(originalAttributes.relativeHeight);
+  if (relativeHeight === undefined) return undefined;
   return Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+}
+
+/**
+ * Resolves the CSS z-index for a floating object based on its behindDoc flag
+ * and an OOXML-derived raw value.
+ *
+ * - behindDoc objects always return 0.
+ * - Non-behindDoc objects are clamped to at least 1 so they never share the
+ *   behindDoc sentinel value (0).
+ *
+ * @param behindDoc - Whether the object is behind body text
+ * @param raw - OOXML-derived z-index (from normalizeZIndex or block.zIndex)
+ * @param fallback - Value to use when raw is undefined (default: 1)
+ * @returns Resolved z-index
+ */
+export function resolveFloatingZIndex(behindDoc: boolean, raw: number | undefined, fallback = 1): number {
+  if (behindDoc) return 0;
+  if (raw === undefined) return Math.max(1, fallback);
+  return Math.max(1, raw);
+}
+
+/**
+ * Returns z-index for an image or drawing block.
+ *
+ * We cannot rely on `block.zIndex` only: when the flow-block cache hits, the
+ * paragraph handler reuses cached blocks and never calls the image/shape
+ * converters, so those blocks never get `zIndex` set. This helper uses
+ * `block.zIndex` when present, otherwise derives from
+ * `block.attrs.originalAttributes.relativeHeight` via normalizeZIndex,
+ * otherwise behindDoc ? 0 : 1.
+ *
+ * Rendering policy:
+ * - behindDoc anchored objects always return 0.
+ * - Anchored objects with text wrapping (Square/Tight/Through/TopAndBottom, or
+ *   missing wrap metadata) keep OOXML relativeHeight ordering but are clamped
+ *   to at least 1 (never 0 unless behindDoc=true).
+ * - Front/no-wrap anchored objects (wrap None) also preserve OOXML relativeHeight order.
+ */
+export function getFragmentZIndex(block: ImageBlock | DrawingBlock): number {
+  const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
+  const raw = typeof block.zIndex === 'number' ? block.zIndex : normalizeZIndex(attrs?.originalAttributes);
+
+  return resolveFloatingZIndex(block.anchor?.behindDoc === true, raw);
 }

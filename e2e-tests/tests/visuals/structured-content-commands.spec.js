@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { goToPageAndWaitForEditor, sleep } from '../helpers.js';
+import { goToPageAndWaitForEditor, sleep, settleForScreenshot } from '../helpers.js';
 
 test.describe('structured content commands', () => {
   const addStructuredContentInline = async (page, options) => {
@@ -68,6 +68,11 @@ test.describe('structured content commands', () => {
     await tableToAdd.click();
   };
 
+  const expectEditorScreenshot = async (page, superEditor) => {
+    await settleForScreenshot(page);
+    await expect(superEditor).toHaveScreenshot();
+  };
+
   test('should insert a structured content inline and type into it', async ({ page }) => {
     const superEditor = await goToPageAndWaitForEditor(page);
 
@@ -77,7 +82,7 @@ test.describe('structured content commands', () => {
     await domLocator.click();
     await page.keyboard.type('Some content inside a structured content inline', { delay: 100 });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should turn selected text into a structured content inline', async ({ page }) => {
@@ -96,7 +101,7 @@ test.describe('structured content commands', () => {
 
     // Click somewhere else just so the tag is not "selected" anymore
     await page.getByText('Some content that will become a structured content inline').click();
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should insert structured content inline with given text', async ({ page }) => {
@@ -107,7 +112,7 @@ test.describe('structured content commands', () => {
       text: 'Some content that was inserted programatically',
     });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   // TODO: Check what's going on here, the visual seems weird
@@ -127,7 +132,7 @@ test.describe('structured content commands', () => {
       },
     });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should insert a structured content block and type into it', async ({ page }) => {
@@ -142,7 +147,7 @@ test.describe('structured content commands', () => {
       delay: 100,
     });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should insert html as structured content block', async ({ page }) => {
@@ -153,7 +158,7 @@ test.describe('structured content commands', () => {
       html: 'Some <b>HTML</b> <i>content</i>',
     });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should insert image as structured content block', async ({ page }) => {
@@ -174,7 +179,7 @@ test.describe('structured content commands', () => {
 
     await page.keyboard.press('ArrowDown');
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should insert a base64 image as structured content block', async ({ page }) => {
@@ -195,7 +200,7 @@ test.describe('structured content commands', () => {
 
     await page.keyboard.press('ArrowDown');
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should update structured content block by id (html -> html)', async ({ page }) => {
@@ -212,7 +217,7 @@ test.describe('structured content commands', () => {
       html: 'Updated <b><i>HTML</i></b>',
     });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should update structured content block by id (html -> json)', async ({ page }) => {
@@ -238,7 +243,7 @@ test.describe('structured content commands', () => {
       },
     });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should update structured content block by id (json -> json)', async ({ page }) => {
@@ -271,7 +276,7 @@ test.describe('structured content commands', () => {
       },
     });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should update structured content block by id (json -> html)', async ({ page }) => {
@@ -296,7 +301,7 @@ test.describe('structured content commands', () => {
       html: 'Some <b>updated</b> <i> initial </i>paragraph here',
     });
 
-    await expect(superEditor).toHaveScreenshot();
+    await expectEditorScreenshot(page, superEditor);
   });
 
   test('should delete structured content inline by id', async ({ page }) => {
@@ -376,7 +381,7 @@ test.describe('structured content commands', () => {
       await page.keyboard.press('Enter');
       await page.keyboard.type('Item 3');
 
-      await expect(superEditor).toHaveScreenshot();
+      await expectEditorScreenshot(page, superEditor);
     });
 
     test('should insert multiple structured content inline inside a nested list', async ({ page }) => {
@@ -401,7 +406,7 @@ test.describe('structured content commands', () => {
       await page.keyboard.press('Enter');
       await page.keyboard.type('Item5');
 
-      await expect(superEditor).toHaveScreenshot();
+      await expectEditorScreenshot(page, superEditor);
     });
 
     test('should insert structured content inline inside a table cell', async ({ page }) => {
@@ -413,7 +418,7 @@ test.describe('structured content commands', () => {
         text: 'Some structured content inside a table cell',
       });
 
-      await expect(superEditor).toHaveScreenshot();
+      await expectEditorScreenshot(page, superEditor);
     });
 
     test('should insert an image structured content inside a table cell', async ({ page }) => {
@@ -431,7 +436,7 @@ test.describe('structured content commands', () => {
         },
       });
       await sleep(2000);
-      await expect(superEditor).toHaveScreenshot();
+      await expectEditorScreenshot(page, superEditor);
     });
   });
 });

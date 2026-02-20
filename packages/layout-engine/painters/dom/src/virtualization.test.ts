@@ -105,6 +105,25 @@ describe('DomPainter virtualization (vertical)', () => {
     expect(bottomSpacer).toBeTruthy();
   });
 
+  it('defaults virtualization gap to 72px when no gap is provided', () => {
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 2 },
+    });
+
+    const layout = makeLayout(3);
+    painter.paint(layout, mount);
+
+    // Outer container keeps gap at 0 because it includes spacer elements.
+    expect(mount.style.gap).toBe('0px');
+    // The inner virtual pages container carries the effective inter-page gap.
+    const pagesContainer = mount.querySelector('[data-virtual-spacer="top"]')?.nextElementSibling as
+      | HTMLElement
+      | undefined;
+    expect(pagesContainer?.style.gap).toBe('72px');
+  });
+
   it('updates the window on scroll', () => {
     const painter = createDomPainter({
       blocks: [block],
@@ -125,6 +144,87 @@ describe('DomPainter virtualization (vertical)', () => {
     const firstIndexAfter = firstAfter ? Number(firstAfter.dataset.pageIndex) : -1;
 
     expect(firstIndexAfter).toBeGreaterThanOrEqual(firstIndexBefore);
+  });
+
+  it('restores block SDT label when a virtualized start fragment remounts', () => {
+    Object.defineProperty(mount, 'clientHeight', { value: 600, configurable: true });
+    Object.defineProperty(mount, 'scrollHeight', { value: 12000, configurable: true });
+
+    const sdtBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'virtual-sdt-block',
+      runs: [{ text: 'Virtual SDT', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 11 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'virtual-sdt-1',
+          alias: 'Virtual Block Control',
+        },
+      },
+    };
+
+    const sdtMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 11,
+          width: 90,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const sdtLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: Array.from({ length: 6 }, (_, i) => ({
+        number: i + 1,
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'virtual-sdt-block',
+            fromLine: 0,
+            toLine: 1,
+            x: 24,
+            y: 24,
+            width: 220,
+            pmStart: 0,
+            pmEnd: 11,
+          },
+        ],
+      })),
+    };
+
+    const painter = createDomPainter({
+      blocks: [sdtBlock],
+      measures: [sdtMeasure],
+      virtualization: { enabled: true, window: 1, overscan: 0, gap: 72, paddingTop: 0 },
+    });
+
+    painter.paint(sdtLayout, mount);
+
+    const labelBefore = mount.querySelector(
+      '.superdoc-page[data-page-index="0"] .superdoc-structured-content__label',
+    ) as HTMLElement | null;
+    expect(labelBefore).toBeTruthy();
+
+    mount.scrollTop = 3 * (500 + 72);
+    mount.dispatchEvent(new Event('scroll'));
+    expect(mount.querySelector('.superdoc-page[data-page-index="0"]')).toBeNull();
+
+    mount.scrollTop = 0;
+    mount.dispatchEvent(new Event('scroll'));
+
+    const remountedLabel = mount.querySelector(
+      '.superdoc-page[data-page-index="0"] .superdoc-structured-content__label',
+    ) as HTMLElement | null;
+    expect(remountedLabel).toBeTruthy();
   });
 
   it('handles window size larger than total pages', () => {
@@ -180,6 +280,33 @@ describe('DomPainter virtualization (vertical)', () => {
     // With overscan=2, should render up to 3 + 2*2 = 7 pages
     expect(pages.length).toBeGreaterThanOrEqual(3);
     expect(pages.length).toBeLessThanOrEqual(7);
+  });
+
+  it('pins pages outside the scroll window', () => {
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 2, overscan: 0, gap: 72, paddingTop: 0 },
+    });
+
+    const layout = makeLayout(12);
+    painter.paint(layout, mount);
+
+    expect(mount.querySelector('.superdoc-page[data-page-index="10"]')).toBeNull();
+
+    painter.setVirtualizationPins?.([10]);
+
+    expect(mount.querySelector('.superdoc-page[data-page-index="10"]')).toBeTruthy();
+
+    const gapSpacer = mount.querySelector('[data-virtual-spacer="gap"]') as HTMLElement | null;
+    expect(gapSpacer).toBeTruthy();
+    expect(gapSpacer?.dataset.gapFrom).toBe('1');
+    expect(gapSpacer?.dataset.gapTo).toBe('10');
+
+    painter.setVirtualizationPins?.([]);
+
+    expect(mount.querySelector('.superdoc-page[data-page-index="10"]')).toBeNull();
+    expect(mount.querySelector('[data-virtual-spacer="gap"]')).toBeNull();
   });
 
   it('updates providers without remounting pages', () => {

@@ -1,11 +1,15 @@
 import { Extension } from '@core/Extension.js';
 import { Slice } from 'prosemirror-model';
 import { Mapping, ReplaceStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
+import { v4 as uuidv4 } from 'uuid';
 import { TrackDeleteMarkName, TrackInsertMarkName, TrackFormatMarkName } from './constants.js';
 import { TrackChangesBasePlugin, TrackChangesBasePluginKey } from './plugins/index.js';
 import { getTrackChanges } from './trackChangesHelpers/getTrackChanges.js';
+import { markDeletion } from './trackChangesHelpers/markDeletion.js';
+import { markInsertion } from './trackChangesHelpers/markInsertion.js';
 import { collectTrackedChanges, isTrackedChangeActionAllowed } from './permission-helpers.js';
 import { CommentsPluginKey } from '../comment/comments-plugin.js';
+import { findMarkInRangeBySnapshot } from './trackChangesHelpers/markSnapshotHelpers.js';
 
 export const TrackChanges = Extension.create({
   name: 'trackChanges',
@@ -116,13 +120,20 @@ export const TrackChanges = Extension.create({
               });
 
               formatChangeMark.attrs.after.forEach((newMark) => {
-                tr.step(
-                  new RemoveMarkStep(
-                    map.map(Math.max(pos, from)),
-                    map.map(Math.min(pos + node.nodeSize, to)),
-                    node.marks.find((mark) => mark.type.name === newMark.type),
-                  ),
-                );
+                const mappedFrom = map.map(Math.max(pos, from));
+                const mappedTo = map.map(Math.min(pos + node.nodeSize, to));
+                const liveMark = findMarkInRangeBySnapshot({
+                  doc: tr.doc,
+                  from: mappedFrom,
+                  to: mappedTo,
+                  snapshot: newMark,
+                });
+
+                if (!liveMark) {
+                  return;
+                }
+
+                tr.step(new RemoveMarkStep(mappedFrom, mappedTo, liveMark));
               });
 
               tr.step(
@@ -238,6 +249,140 @@ export const TrackChanges = Extension.create({
           const from = 0,
             to = state.doc.content.size;
           return commands.rejectTrackedChangesBetween(from, to);
+        },
+
+      insertTrackedChange:
+        (options = {}) =>
+        ({ state, dispatch, editor }) => {
+          const {
+            from = state.selection.from,
+            to = state.selection.to,
+            text = '',
+            id,
+            user,
+            comment,
+            addToHistory = true,
+            emitCommentEvent = true,
+          } = options;
+
+          // Validate bounds to prevent RangeError
+          const docSize = state.doc.content.size;
+          if (from < 0 || to > docSize || from > to) {
+            console.warn('insertTrackedChange: invalid range', { from, to, docSize });
+            return false;
+          }
+
+          // Check if there's actually a change to make
+          const originalText = state.doc.textBetween(from, to, '', '');
+          if (originalText === text) {
+            return false;
+          }
+
+          if (!dispatch) {
+            return true;
+          }
+
+          const resolvedUser = user ?? editor?.options?.user ?? {};
+
+          // Warn if user info is missing - marks will have undefined author
+          if (!resolvedUser.name && !resolvedUser.email) {
+            console.warn('insertTrackedChange: no user name/email provided, track change will have undefined author');
+          }
+          const date = new Date().toISOString();
+          const tr = state.tr;
+
+          // Get marks from original position BEFORE any changes for format preservation
+          const marks = state.doc.resolve(from).marks();
+
+          // For replacements (both deletion and insertion), generate a shared ID upfront
+          // so the deletion and insertion marks are linked together
+          const isReplacement = from !== to && text;
+          const sharedId = id ?? (isReplacement ? uuidv4() : null);
+
+          let changeId = sharedId;
+          let insertPos = to; // Default insert position is after the selection
+          let deletionMark = null;
+          let deletionNodes = [];
+
+          // Step 1: Mark the original text as deleted (if there's text to delete)
+          if (from !== to) {
+            const result = markDeletion({
+              tr,
+              from,
+              to,
+              user: resolvedUser,
+              date,
+              id: sharedId,
+            });
+            deletionMark = result.deletionMark;
+            deletionNodes = result.nodes || [];
+            if (!changeId) {
+              changeId = deletionMark.attrs.id;
+            }
+            // Map the insert position through the deletion mapping
+            insertPos = result.deletionMap.map(to);
+          }
+
+          // Step 2: Insert the new text after the deleted content
+          let insertedMark = null;
+          let insertedNode = null;
+          if (text) {
+            insertedNode = state.schema.text(text, marks);
+            tr.insert(insertPos, insertedNode);
+
+            // Step 3: Mark the insertion
+            const insertedFrom = insertPos;
+            const insertedTo = insertPos + insertedNode.nodeSize;
+            insertedMark = markInsertion({
+              tr,
+              from: insertedFrom,
+              to: insertedTo,
+              user: resolvedUser,
+              date,
+              id: sharedId,
+            });
+
+            if (!changeId) {
+              changeId = insertedMark.attrs.id;
+            }
+          }
+
+          // Store metadata for external consumers (pass full mark objects for comments plugin)
+          // Create a mock step with slice for the comments plugin to extract nodes
+          const mockStep = insertedNode
+            ? {
+                slice: { content: { content: [insertedNode] } },
+              }
+            : null;
+
+          tr.setMeta(TrackChangesBasePluginKey, {
+            insertedMark: insertedMark || null,
+            deletionMark: deletionMark || null,
+            deletionNodes,
+            step: mockStep,
+            emitCommentEvent,
+          });
+          tr.setMeta(CommentsPluginKey, { type: 'force' });
+          tr.setMeta('skipTrackChanges', true);
+
+          if (!addToHistory) {
+            tr.setMeta('addToHistory', false);
+          }
+
+          dispatch(tr);
+
+          // Handle comment if provided (guard for editors without comments extension)
+          if (comment?.trim() && changeId && editor.commands.addCommentReply) {
+            editor.commands.addCommentReply({
+              parentId: changeId,
+              content: comment,
+              author: resolvedUser.name,
+              authorEmail: resolvedUser.email,
+              authorImage: resolvedUser.image,
+            });
+          }
+
+          return true;
         },
 
       toggleTrackChanges:

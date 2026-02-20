@@ -177,8 +177,8 @@ import { createTable } from './tableHelpers/createTable.js';
 import { createColGroup } from './tableHelpers/createColGroup.js';
 import { deleteTableWhenSelected } from './tableHelpers/deleteTableWhenSelected.js';
 import { isInTable } from '@helpers/isInTable.js';
-import { createTableBorders } from './tableHelpers/createTableBorders.js';
 import { createCellBorders } from '../table-cell/helpers/createCellBorders.js';
+import { createTableBorders } from './tableHelpers/createTableBorders.js';
 import { findParentNode } from '@helpers/findParentNode.js';
 import { TextSelection } from 'prosemirror-state';
 import { isCellSelection } from './tableHelpers/isCellSelection.js';
@@ -212,7 +212,20 @@ import {
   pickTemplateRowForAppend,
   buildRowFromTemplateRow,
   insertRowsAtTableEnd,
+  insertRowAtIndex,
 } from './tableHelpers/appendRows.js';
+
+const IMPORT_CONTEXT_SELECTOR = '[data-superdoc-import="true"]';
+const IMPORT_DEFAULT_TABLE_WIDTH_PCT = 5000; // OOXML percent units where 5000 == 100%
+
+/**
+ * Detects whether a table element is being parsed from imported content
+ * (e.g. insertContent with contentType "html"/"markdown").
+ *
+ * @param {Element} element
+ * @returns {boolean}
+ */
+const isImportedTableElement = (element) => Boolean(element?.closest?.(IMPORT_CONTEXT_SELECTOR));
 
 /**
  * Table configuration options
@@ -353,17 +366,6 @@ export const Table = Node.create({
        */
       borders: {
         default: {},
-        renderDOM({ borders }) {
-          if (!borders) return {};
-
-          const style = Object.entries(borders).reduce((acc, [key, { size, color }]) => {
-            return `${acc}border-${key}: ${Math.ceil(size)}px solid ${color || 'black'};`;
-          }, '');
-
-          return {
-            style,
-          };
-        },
       },
 
       /**
@@ -437,6 +439,18 @@ export const Table = Node.create({
             value: null,
             type: 'auto',
           },
+        },
+        parseDOM: (element) => {
+          if (!isImportedTableElement(element)) return undefined;
+
+          // Imported HTML tables usually have no structural width metadata.
+          // Default them to 100% so visual rendering matches DOCX export behavior.
+          return {
+            tableWidth: {
+              value: IMPORT_DEFAULT_TABLE_WIDTH_PCT,
+              type: 'pct',
+            },
+          };
         },
         rendered: false,
       },
@@ -707,42 +721,26 @@ export const Table = Node.create({
        */
       addRowBefore:
         () =>
-        ({ state, dispatch, chain }) => {
-          if (!originalAddRowBefore(state)) return false;
+        ({ state, dispatch, editor }) => {
+          if (!isInTable(state)) return false;
 
-          let { rect, attrs: currentCellAttrs } = getCurrentCellAttrs(state);
+          const { rect } = getCurrentCellAttrs(state);
+          const tablePos = rect.tableStart - 1;
+          const tableNode = state.doc.nodeAt(tablePos);
+          if (!tableNode) return false;
 
-          return chain()
-            .command(() => originalAddRowBefore(state, dispatch))
-            .command(({ tr }) => {
-              let table = tr.doc.nodeAt(rect.tableStart - 1);
-              if (!table) return false;
-              let updatedMap = TableMap.get(table);
-              let newRowIndex = rect.top;
+          const tr = state.tr;
+          const result = insertRowAtIndex({
+            tr,
+            tablePos,
+            tableNode,
+            sourceRowIndex: rect.top,
+            insertIndex: rect.top,
+            schema: editor.schema,
+          });
 
-              if (newRowIndex < 0 || newRowIndex >= updatedMap.height) {
-                return false;
-              }
-
-              for (let col = 0; col < updatedMap.width; col++) {
-                let cellIndex = newRowIndex * updatedMap.width + col;
-                let cellPos = updatedMap.map[cellIndex];
-                let cellAbsolutePos = rect.tableStart + cellPos;
-                let cell = tr.doc.nodeAt(cellAbsolutePos);
-                if (cell) {
-                  let attrs = {
-                    ...currentCellAttrs,
-                    colspan: cell.attrs.colspan,
-                    rowspan: cell.attrs.rowspan,
-                    colwidth: cell.attrs.colwidth,
-                  };
-                  tr.setNodeMarkup(cellAbsolutePos, null, attrs);
-                }
-              }
-
-              return true;
-            })
-            .run();
+          if (result && dispatch) dispatch(tr);
+          return result;
         },
 
       /**
@@ -755,40 +753,26 @@ export const Table = Node.create({
        */
       addRowAfter:
         () =>
-        ({ state, dispatch, chain }) => {
-          if (!originalAddRowAfter(state)) return false;
+        ({ state, dispatch, editor }) => {
+          if (!isInTable(state)) return false;
 
-          let { rect, attrs: currentCellAttrs } = getCurrentCellAttrs(state);
+          const { rect } = getCurrentCellAttrs(state);
+          const tablePos = rect.tableStart - 1;
+          const tableNode = state.doc.nodeAt(tablePos);
+          if (!tableNode) return false;
 
-          return chain()
-            .command(() => originalAddRowAfter(state, dispatch))
-            .command(({ tr }) => {
-              let table = tr.doc.nodeAt(rect.tableStart - 1);
-              if (!table) return false;
-              let updatedMap = TableMap.get(table);
-              let newRowIndex = rect.top + 1;
+          const tr = state.tr;
+          const result = insertRowAtIndex({
+            tr,
+            tablePos,
+            tableNode,
+            sourceRowIndex: rect.top,
+            insertIndex: rect.top + 1,
+            schema: editor.schema,
+          });
 
-              if (newRowIndex >= updatedMap.height) return false;
-
-              for (let col = 0; col < updatedMap.width; col++) {
-                let cellIndex = newRowIndex * updatedMap.width + col;
-                let cellPos = updatedMap.map[cellIndex];
-                let cellAbsolutePos = rect.tableStart + cellPos;
-                let cell = tr.doc.nodeAt(cellAbsolutePos);
-                if (cell) {
-                  let attrs = {
-                    ...currentCellAttrs,
-                    colspan: cell.attrs.colspan,
-                    rowspan: cell.attrs.rowspan,
-                    colwidth: cell.attrs.colwidth,
-                  };
-                  tr.setNodeMarkup(cellAbsolutePos, null, attrs);
-                }
-              }
-
-              return true;
-            })
-            .run();
+          if (result && dispatch) dispatch(tr);
+          return result;
         },
 
       /**
@@ -1127,7 +1111,7 @@ export const Table = Node.create({
             if (['tableCell', 'tableHeader'].includes(node.type.name)) {
               tr.setNodeMarkup(pos, undefined, {
                 ...node.attrs,
-                borders: createCellBorders({ size: 0 }),
+                borders: createCellBorders({ size: 0, space: 0, val: 'none', color: 'auto' }),
               });
             }
           });
@@ -1136,6 +1120,13 @@ export const Table = Node.create({
           tr.setNodeMarkup(table.pos, undefined, {
             ...table.node.attrs,
             borders: createTableBorders({ size: 0 }),
+            // TODO: This works around the issue that table borders are duplicated between
+            // the attributes of the table and the tableProperties attribute.
+            // This can be removed when the redundancy is eliminated.
+            tableProperties: {
+              ...table.node.attrs.tableProperties,
+              borders: createTableBorders({ size: 0, space: 0, val: 'none', color: 'auto' }),
+            },
           });
 
           return true;

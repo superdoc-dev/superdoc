@@ -20,24 +20,30 @@ const removeWhitespaces = (node) => {
  * Flattens ALL lists to ensure each list contains exactly ONE list item.
  * Handles both multi-item lists and nested lists.
  */
-export function flattenListsInHtml(html, editor) {
-  // pick the right parser & Node interface
-  let parser, NodeInterface;
-  if (editor.options?.mockDocument) {
-    const win = editor.options.mockDocument.defaultView;
-    parser = new win.DOMParser();
-    NodeInterface = win.Node;
-  } else {
-    parser = new DOMParser();
-    NodeInterface = window.Node;
+export function flattenListsInHtml(html, editor, domDocument) {
+  const resolvedDocument =
+    domDocument ??
+    editor?.options?.document ??
+    editor?.options?.mockDocument ??
+    (typeof document !== 'undefined' ? document : null);
+
+  const win = resolvedDocument?.defaultView ?? (typeof window !== 'undefined' ? window : null);
+  const DOMParserConstructor = win?.DOMParser ?? (typeof DOMParser !== 'undefined' ? DOMParser : null);
+  if (!DOMParserConstructor) {
+    console.warn(
+      '[super-editor] HTML list processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment. Skipping list flattening.',
+    );
+    return html;
   }
+
+  const parser = new DOMParserConstructor();
 
   const doc = removeWhitespaces(parser.parseFromString(html, 'text/html'));
 
   // Keep processing until all lists are flattened
   let foundList;
   while ((foundList = findListToFlatten(doc))) {
-    flattenFoundList(foundList, editor, NodeInterface);
+    flattenFoundList(foundList, editor);
   }
 
   return doc.body.innerHTML;
@@ -213,8 +219,17 @@ export function createSingleItemList({ li, rootNumId, level, listNumberingType }
 /**
  * Converts flatten lists back to normal list structure.
  */
-export function unflattenListsInHtml(html) {
-  const parser = new DOMParser();
+export function unflattenListsInHtml(html, domDocument) {
+  const win = domDocument?.defaultView ?? (typeof window !== 'undefined' ? window : null);
+  const DOMParserConstructor = win?.DOMParser ?? (typeof DOMParser !== 'undefined' ? DOMParser : null);
+  if (!DOMParserConstructor) {
+    console.warn(
+      '[super-editor] HTML list processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment. Skipping list unflattening.',
+    );
+    return html;
+  }
+
+  const parser = new DOMParserConstructor();
   const doc = parser.parseFromString(html, 'text/html');
   const allNodes = [...doc.body.children];
 

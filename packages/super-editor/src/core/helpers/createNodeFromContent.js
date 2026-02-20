@@ -22,6 +22,11 @@ export function elementFromString(value, editor) {
   const wrappedValue = `<body>${value}</body>`;
   const html = htmlHandler(wrappedValue, editor);
 
+  // If htmlHandler returned null (no DOM available), return null
+  if (html === null) {
+    return null;
+  }
+
   return removeWhitespaces(html);
 }
 
@@ -64,6 +69,17 @@ export function createNodeFromContent(content, editor, options) {
   }
 
   if (isTextContent) {
+    // Try to parse the HTML content
+    const element = elementFromString(content, editor);
+
+    // If elementFromString returned null (no DOM available), we can't parse HTML
+    if (element === null) {
+      console.warn(
+        '[super-editor] Cannot parse HTML content without a DOM. HTML insertion requires a browser environment or JSDOM. Skipping insertion.',
+      );
+      return null;
+    }
+
     // Check for invalid content
     if (options.errorOnInvalidContent) {
       let hasInvalidContent = false;
@@ -96,9 +112,9 @@ export function createNodeFromContent(content, editor, options) {
       });
 
       if (options.slice) {
-        DOMParser.fromSchema(contentCheckSchema).parseSlice(elementFromString(content, editor), options.parseOptions);
+        DOMParser.fromSchema(contentCheckSchema).parseSlice(element, options.parseOptions);
       } else {
-        DOMParser.fromSchema(contentCheckSchema).parse(elementFromString(content, editor), options.parseOptions);
+        DOMParser.fromSchema(contentCheckSchema).parse(element, options.parseOptions);
       }
 
       if (options.errorOnInvalidContent && hasInvalidContent) {
@@ -111,10 +127,10 @@ export function createNodeFromContent(content, editor, options) {
     const parser = DOMParser.fromSchema(schema);
 
     if (options.slice) {
-      return parser.parseSlice(elementFromString(content, editor), options.parseOptions).content;
+      return parser.parseSlice(element, options.parseOptions).content;
     }
 
-    return parser.parse(elementFromString(content, editor), options.parseOptions);
+    return parser.parse(element, options.parseOptions);
   }
 
   return createNodeFromContent('', editor, options);

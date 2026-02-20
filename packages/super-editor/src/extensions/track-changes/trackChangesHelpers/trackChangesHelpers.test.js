@@ -1,7 +1,9 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
+import { Node as ProseMirrorNode } from 'prosemirror-model';
 import { undo } from 'prosemirror-history';
+import { ySyncPluginKey } from 'y-prosemirror';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 import {
   markInsertion,
@@ -18,7 +20,11 @@ import {
 } from './index.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
+import { handleTrackChangeNode } from '@converter/v2/importer/trackChangesImporter.js';
+import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
+import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { findTextPos } from './testUtils.js';
 
 describe('trackChangesHelpers', () => {
   let editor;
@@ -142,6 +148,15 @@ describe('trackChangesHelpers', () => {
     expect(tracked).toBeTruthy();
   });
 
+  it('markInsertion uses provided id for replace operations', () => {
+    const state = createState(createDocWithText('Hello'));
+    const tr = state.tr.insertText('X', 1);
+    const customId = 'shared-replacement-id';
+
+    const mark = markInsertion({ tr, from: 1, to: 2, user, date, id: customId });
+    expect(mark.attrs.id).toBe(customId);
+  });
+
   it('markDeletion applies trackDelete marks and collects nodes', () => {
     const state = createState(createDocWithText('World'));
     const tr = state.tr;
@@ -154,6 +169,158 @@ describe('trackChangesHelpers', () => {
     const inlineNodes = documentHelpers.findInlineNodes(applied.doc);
     const hasDelete = inlineNodes.some(({ node }) => node.marks.some((m) => m.type.name === TrackDeleteMarkName));
     expect(hasDelete).toBe(true);
+  });
+
+  it('markDeletion reassigns existing deletions and removes own insertions for replacements', () => {
+    const ownInsertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ins-own',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    const oldDeleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'del-old',
+      author: 'Other User',
+      authorEmail: 'other@example.com',
+      date,
+    });
+
+    const run = schema.nodes.run.create({}, [
+      schema.text('Keep '),
+      schema.text('OwnInsert', [ownInsertMark]),
+      schema.text(' OldDelete', [oldDeleteMark]),
+      schema.text(' Plain'),
+    ]);
+    const doc = schema.nodes.doc.create({}, schema.nodes.paragraph.create({}, run));
+    const state = createState(doc);
+    const tr = state.tr;
+
+    const ownInsertPos = findTextPos(state.doc, 'OwnInsert');
+    const plainPos = findTextPos(state.doc, ' Plain');
+    expect(ownInsertPos).toBeTypeOf('number');
+    expect(plainPos).toBeTypeOf('number');
+
+    const replacementId = 'replacement-id';
+    const result = markDeletion({
+      tr,
+      from: ownInsertPos,
+      to: plainPos + ' Plain'.length,
+      user,
+      date,
+      id: replacementId,
+    });
+    const finalState = state.apply(tr);
+
+    expect(result.deletionMark.attrs.id).toBe(replacementId);
+    expect(result.nodes.some((node) => node.text?.includes('OldDelete'))).toBe(true);
+    expect(result.nodes.some((node) => node.text?.includes('Plain'))).toBe(true);
+    expect(result.deletionMap.maps.length).toBeGreaterThan(0);
+
+    expect(finalState.doc.textContent).not.toContain('OwnInsert');
+
+    let reassignedDeletedText = '';
+    let hasOldDeletionId = false;
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      node.marks.forEach((mark) => {
+        if (mark.type.name !== TrackDeleteMarkName) return;
+        if (mark.attrs.id === replacementId) {
+          reassignedDeletedText += node.text;
+        }
+        if (mark.attrs.id === 'del-old') {
+          hasOldDeletionId = true;
+        }
+      });
+    });
+
+    expect(reassignedDeletedText).toContain('OldDelete');
+    expect(reassignedDeletedText).toContain('Plain');
+    expect(hasOldDeletionId).toBe(false);
+  });
+
+  it('markDeletion preserves existing deletions on plain delete actions', () => {
+    const oldDeleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'del-old',
+      author: 'Other User',
+      authorEmail: 'other@example.com',
+      date,
+    });
+
+    const run = schema.nodes.run.create({}, [
+      schema.text('Keep '),
+      schema.text('OldDelete', [oldDeleteMark]),
+      schema.text(' Plain'),
+    ]);
+    const doc = schema.nodes.doc.create({}, schema.nodes.paragraph.create({}, run));
+    const state = createState(doc);
+    const tr = state.tr;
+
+    const oldDeletePos = findTextPos(state.doc, 'OldDelete');
+    const plainPos = findTextPos(state.doc, ' Plain');
+    expect(oldDeletePos).toBeTypeOf('number');
+    expect(plainPos).toBeTypeOf('number');
+
+    markDeletion({
+      tr,
+      from: oldDeletePos,
+      to: plainPos + ' Plain'.length,
+      user,
+      date,
+    });
+    const finalState = state.apply(tr);
+
+    let hasOldDeleteId = false;
+    let plainHasDeleteMark = false;
+    let plainHasOldDeleteId = false;
+
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      const deleteMarks = node.marks.filter((mark) => mark.type.name === TrackDeleteMarkName);
+      if (!deleteMarks.length) return;
+
+      if (deleteMarks.some((mark) => mark.attrs.id === 'del-old')) {
+        hasOldDeleteId = true;
+      }
+
+      if (node.text.includes('Plain')) {
+        plainHasDeleteMark = true;
+        plainHasOldDeleteId = deleteMarks.some((mark) => mark.attrs.id === 'del-old');
+      }
+    });
+
+    expect(hasOldDeleteId).toBe(true);
+    expect(plainHasDeleteMark).toBe(true);
+    expect(plainHasOldDeleteId).toBe(false);
+  });
+
+  it('removes Word-imported insertions without authorEmail when deleted', () => {
+    const insertXml = `<w:ins w:id="1" w:author="Word Author" w:date="2024-09-02T15:56:00Z">
+        <w:r>
+          <w:t>Inserted</w:t>
+        </w:r>
+      </w:ins>`;
+    const nodes = parseXmlToJson(insertXml).elements;
+    const result = handleTrackChangeNode({ docx: {}, nodes, nodeListHandler: defaultNodeListHandler() });
+    expect(result.nodes.length).toBe(1);
+
+    const insertedMark = result.nodes?.[0]?.content?.[0]?.marks?.find((mark) => mark.type === TrackInsertMarkName);
+    expect(insertedMark).toBeDefined();
+    expect(insertedMark.attrs?.authorEmail).toBeUndefined();
+
+    const runNodes = result.nodes.map((node) => ProseMirrorNode.fromJSON(schema, node));
+    const paragraph = schema.nodes.paragraph.create({}, runNodes);
+    const doc = schema.nodes.doc.create({}, paragraph);
+    const state = createState(doc);
+
+    const textEntry = documentHelpers.findInlineNodes(state.doc).find(({ node }) => node.isText);
+    expect(textEntry).toBeDefined();
+
+    const deleteTr = state.tr.delete(textEntry.pos, textEntry.pos + textEntry.node.nodeSize);
+    deleteTr.setMeta('inputType', 'deleteContentBackward');
+    const trackedDelete = trackedTransaction({ tr: deleteTr, state, user });
+    const finalState = state.apply(trackedDelete);
+
+    expect(finalState.doc.textContent).toBe('');
   });
 
   it('addMarkStep adds format mark metadata for styling changes', () => {
@@ -177,6 +344,39 @@ describe('trackChangesHelpers', () => {
     expect(meta.step).toBe(step);
     expect(meta.formatMark?.type.name).toBe(TrackFormatMarkName);
     expect(newTr.getMeta(CommentsPluginKey)).toEqual({ type: 'force' });
+  });
+
+  it('addMarkStep tracks textStyle attr changes on imported-like marks', () => {
+    const importedTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#112233',
+    });
+    const doc = createDocWithText('Format me', [importedTextStyle]);
+    const state = createState(doc);
+    const changedTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#FF0000',
+    });
+    const step = new AddMarkStep(1, 9, changedTextStyle);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.before).toEqual([{ type: 'textStyle', attrs: importedTextStyle.attrs }]);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'textStyle', attrs: changedTextStyle.attrs }]);
   });
 
   it('removeMarkStep records previous formatting when mark removed', () => {
@@ -250,6 +450,15 @@ describe('trackChangesHelpers', () => {
     const state = createState(createDocWithText('abc'));
     const tr = state.tr.insertText('!', 1);
     tr.setMeta('custom', true);
+    const result = trackedTransaction({ tr, state, user });
+    expect(result).toBe(tr);
+  });
+
+  it('trackedTransaction skips Yjs-origin transactions', () => {
+    const state = createState(createDocWithText('abc'));
+    const tr = state.tr.insertText('!', 1);
+    tr.setMeta('inputType', 'insertText');
+    tr.setMeta(ySyncPluginKey, { isChangeOrigin: true });
     const result = trackedTransaction({ tr, state, user });
     expect(result).toBe(tr);
   });

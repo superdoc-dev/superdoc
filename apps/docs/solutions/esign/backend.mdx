@@ -1,0 +1,258 @@
+---
+title: Backend Implementation
+sidebarTitle: Backend
+---
+
+After the user signs, your backend creates the final PDF using the SuperDoc API.
+
+## Flow
+
+```
+Frontend sends → Backend processes → PDF created
+    ↓                   ↓                 ↓
+Signing data    1. Annotate fields    Stored
+                2. Apply signature
+```
+
+## Complete example
+
+<CodeGroup>
+
+```javascript Node.js
+app.post('/api/sign', async (req, res) => {
+  try {
+    const { eventId, document, auditTrail, documentFields, signerFields, signer } = req.body;
+
+    if (!document?.url) {
+      return res.status(400).json({ error: 'document.url is required' });
+    }
+    
+    // 1. Fill document fields
+    const annotated = await fetch('https://api.superdoc.dev/v1/annotate?to=pdf', {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${process.env.SUPERDOC_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        document: { url: document.url },
+        fields: [...documentFields, ...signerFields]
+      })
+    });
+    
+    if (!annotated.ok) throw new Error('Annotation failed');
+    
+    // 2. Apply digital signature
+    const annotatedData = await annotated.json();
+    const signed = await fetch('https://api.superdoc.dev/v1/sign', {
+      method: 'POST', 
+      headers: { 
+        'Authorization': `Bearer ${process.env.SUPERDOC_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        eventId,
+        document: { base64: annotatedData?.document?.base64 },
+        auditTrail,
+        signer
+      })
+    });
+    
+    if (!signed.ok) throw new Error('Signing failed');
+    
+    // 3. Save signed PDF
+    const signedData = await signed.json();
+    const signedPdfBase64 = signedData?.document?.base64;
+    await saveToS3(Buffer.from(signedPdfBase64, 'base64'), `signed/${eventId}.pdf`);
+
+    // 4. Log for compliance
+    await db.signatures.create({
+      eventId,
+      signerName: signerFields.find(f => f.id === '1')?.value,
+      signedAt: new Date(),
+      auditTrail: JSON.stringify(auditTrail)
+    });
+    
+    res.json({ success: true, documentId: eventId });
+    
+  } catch (error) {
+    console.error('Signing failed:', error);
+    res.status(500).json({ error: 'Failed to sign document' });
+  }
+});
+```
+
+```python Python
+from flask import Flask, request, jsonify
+import requests
+import base64
+import boto3
+
+app = Flask(__name__)
+s3 = boto3.client('s3')
+
+@app.route('/api/sign', methods=['POST'])
+def sign():
+    try:
+        data = request.json
+
+        if not data.get('document', {}).get('url'):
+            return jsonify({'error': 'document.url is required'}), 400
+        
+        # 1. Fill document fields
+        annotated = requests.post(
+            'https://api.superdoc.dev/v1/annotate?to=pdf',
+            headers={'Authorization': f'Bearer {API_KEY}'},
+            json={
+                'document': {'url': data['document']['url']},
+                'fields': data['documentFields'] + data['signerFields']
+            }
+        )
+        
+        if annotated.status_code != 200:
+            raise Exception('Annotation failed')
+        
+        # 2. Apply digital signature
+        annotated_json = annotated.json()
+        signed = requests.post(
+            'https://api.superdoc.dev/v1/sign',
+            headers={'Authorization': f'Bearer {API_KEY}'},
+            json={
+                'eventId': data['eventId'],
+                'document': {'base64': annotated_json.get('document', {}).get('base64')},
+                'auditTrail': data['auditTrail'],
+                'signer': data.get('signer')
+            }
+        )
+        
+        if signed.status_code != 200:
+            raise Exception('Signing failed')
+        
+        # 3. Save signed PDF
+        signed_json = signed.json()
+        signed_base64 = signed_json.get('document', {}).get('base64')
+        s3.put_object(
+            Bucket='signed-documents',
+            Key=f"signed/{data['eventId']}.pdf",
+            Body=base64.b64decode(signed_base64)
+        )
+        
+        # 4. Log for compliance
+        db.signatures.insert({
+            'event_id': data['eventId'],
+            'signer_name': next((f['value'] for f in data['signerFields'] 
+                                if f['id'] == '1'), None),
+            'signed_at': datetime.now(),
+            'audit_trail': json.dumps(data['auditTrail'])
+        })
+        
+        return jsonify({'success': True, 'documentId': data['eventId']})
+        
+    except Exception as e:
+        print(f'Signing failed: {e}')
+        return jsonify({'error': 'Failed to sign document'}), 500
+```
+
+</CodeGroup>
+
+## Download/PDF generation
+
+Handle download requests to generate PDFs on-demand:
+
+<CodeGroup>
+
+```javascript Node.js
+app.post('/api/generate-pdf', async (req, res) => {
+  const { documentSource, fields } = req.body;
+
+  if (!documentSource || typeof documentSource !== 'string') {
+    return res.status(400).json({ error: 'documentSource URL is required' });
+  }
+
+  const result = await fetch('https://api.superdoc.dev/v1/annotate?to=pdf', {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${process.env.SUPERDOC_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      document: { url: documentSource },
+      fields: [...(fields?.document || []), ...(fields?.signer || [])]
+    })
+  });
+  
+  if (!result.ok) throw new Error('PDF generation failed');
+  
+  // Send PDF back to frontend
+  const data = await result.json();
+  const pdfBase64 = data?.document?.base64;
+  res.type('application/pdf');
+  res.send(Buffer.from(pdfBase64, 'base64'));
+});
+```
+
+```python Python
+@app.route('/api/generate-pdf', methods=['POST'])
+def generate_pdf():
+    data = request.json
+    
+    if not isinstance(data.get('documentSource'), str):
+        return jsonify({'error': 'documentSource URL is required'}), 400
+    
+    result = requests.post(
+        'https://api.superdoc.dev/v1/annotate?to=pdf',
+        headers={'Authorization': f'Bearer {API_KEY}'},
+        json={
+            'document': {'url': data['documentSource']},
+            'fields': (data.get('fields', {}).get('document', []) +
+                       data.get('fields', {}).get('signer', []))
+        }
+    )
+    
+    if result.status_code != 200:
+        raise Exception('PDF generation failed')
+    
+    pdf_base64 = result.json().get('document', {}).get('base64')
+    return base64.b64decode(pdf_base64), 200, {'Content-Type': 'application/pdf'}
+```
+
+</CodeGroup>
+
+## Data structure
+
+The frontend sends the `onSubmit` payload plus a document reference and signer details your backend can access:
+
+```json
+{
+  "eventId": "session-123",
+  "document": { "url": "https://example.com/agreement.docx" },
+  "signer": {
+    "name": "Jane Smith",
+    "email": "jane@example.com"
+  },
+  "documentFields": [
+    { "id": "1", "value": "Jane Smith" }
+  ],
+  "signerFields": [
+    { "id": "1", "value": "Jane Smith" },
+    { "id": "2", "value": true }
+  ],
+  "auditTrail": [
+    { "type": "ready", "timestamp": "2024-01-15T10:30:00Z" },
+    { "type": "scroll", "timestamp": "2024-01-15T10:30:15Z", 
+      "data": { "percent": 100 } },
+    { "type": "field_change", "timestamp": "2024-01-15T10:30:30Z",
+      "data": { "fieldId": "1", "value": "Jane Smith" } },
+    { "type": "submit", "timestamp": "2024-01-15T10:30:45Z" }
+  ],
+  "timestamp": "2024-01-15T10:30:45Z",
+  "duration": 45,
+  "isFullyCompleted": true
+}
+```
+
+## API reference
+
+- [Authentication](/api-reference/authentication) - Get your API key
+- [Annotate endpoint](/api-reference/documents/annotate) - Fill fields
+- [Sign endpoint](/api-reference/signature/sign) - Apply signature

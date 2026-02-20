@@ -1,4 +1,4 @@
-import { isHeadless } from '@/utils/headless-helpers.js';
+import { isHeadless } from '@utils/headless-helpers.js';
 /**
  * Adjusts pagination breaks based on editor zoom/positioning
  *

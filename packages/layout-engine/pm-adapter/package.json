@@ -10,11 +10,15 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./*": {
+      "source": "./src/*"
     }
   },
   "scripts": {
     "build": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:debug": "vitest --inspect-brk --pool threads --poolOptions.threads.singleThread",
     "extract:docx": "vite-node --config ../../super-editor/vite.config.js --mode test scripts/extract-pm-json.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
@@ -22,12 +26,20 @@
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "type-check": "tsc --noEmit"
   },
+  "devDependencies": {
+    "vitest": "catalog:",
+    "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/painter-dom": "workspace:*"
+  },
   "dependencies": {
-    "@superdoc/common": "*",
-    "@superdoc/contracts": "*",
-    "@superdoc/measuring-dom": "*",
-    "@superdoc/style-engine": "*",
-    "@superdoc/word-layout": "*",
-    "@superdoc/url-validation": "*"
+    "@superdoc/super-editor": "workspace:*",
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/locale-utils": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/style-engine": "workspace:*",
+    "@superdoc/word-layout": "workspace:*",
+    "@superdoc/url-validation": "workspace:*",
+    "@superdoc/font-utils": "workspace:*"
   }
 }

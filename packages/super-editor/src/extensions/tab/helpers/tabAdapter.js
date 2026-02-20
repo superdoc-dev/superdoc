@@ -67,6 +67,16 @@ export function createLayoutRequest(doc, paragraphPos, view, helpers, revision, 
         pos: entry.pos,
         nodeSize: node.nodeSize,
       });
+    } else if (node.type.name === 'lineBreak' || node.type.name === 'hardBreak') {
+      // Track line breaks to reset tab position calculation on new lines.
+      // Without this, tabs after line breaks would be measured from the
+      // previous line's position instead of the start of the new line.
+      spans.push({
+        type: node.type.name,
+        spanId,
+        pos: entry.pos,
+        nodeSize: node.nodeSize,
+      });
     } else if (node.type.name === 'text') {
       spans.push({
         type: 'text',
@@ -133,6 +143,7 @@ export function calculateTabLayout(request, measurement, view) {
   } = request;
 
   const tabs = {};
+  const leftIndentPx = request.indents?.left ?? 0;
   let currentX = indentWidth;
 
   const measureText = (span) => {
@@ -150,6 +161,9 @@ export function calculateTabLayout(request, measurement, view) {
     const span = spans[i];
     if (span.type === 'text') {
       currentX += measureText(span);
+    } else if (span.type === 'lineBreak' || span.type === 'hardBreak') {
+      // Reset horizontal position to left indent for the new line
+      currentX = leftIndentPx;
     } else if (span.type === 'tab') {
       const followingText = collectFollowingText(spans, i + 1);
 
@@ -297,24 +311,21 @@ export function applyLayoutResult(result, paragraph, paragraphPos) {
 }
 
 /**
- * Collect text content following a tab until the next tab or end of paragraph.
+ * Collect text content following a tab until the next tab, line break, or end of paragraph.
  *
  * Used for center/right/decimal tab alignment calculations, where the width of
- * following text determines the tab's rendered width.
+ * following text determines the tab's rendered width. Stops at line breaks because
+ * text after a line break belongs to a new line and should not affect the current tab.
  *
- * @param {Array} spans - Array of span objects (text or tab) from flattenParagraph
+ * @param {Array} spans - Array of span objects (text, tab, lineBreak, hardBreak) from flattenParagraph
  * @param {number} startIndex - Index in spans array to start collecting from (exclusive)
- * @returns {string} Concatenated text from all text spans until next tab or end
- *
- * @example
- * // For center alignment: "Center\tText Here" → measures "Text Here"
- * collectFollowingText(spans, tabIndex + 1) // Returns "Text Here"
+ * @returns {string} Concatenated text from all text spans until next tab, line break, or end
  */
 function collectFollowingText(spans, startIndex) {
   let text = '';
   for (let i = startIndex; i < spans.length; i++) {
     const span = spans[i];
-    if (span.type === 'tab') break;
+    if (span.type === 'tab' || span.type === 'lineBreak' || span.type === 'hardBreak') break;
     if (span.type === 'text') text += span.text || '';
   }
   return text;
@@ -325,23 +336,19 @@ function collectFollowingText(spans, startIndex) {
  *
  * Used to measure text width for center/right/decimal alignment using ProseMirror's
  * DOM measurement utilities. Returns the document positions of the first and last
- * text spans following a tab.
+ * text spans following a tab. Stops at line breaks because text after a line break
+ * belongs to a new line and should not affect the current tab's alignment.
  *
- * @param {Array} spans - Array of span objects (text or tab) from flattenParagraph
+ * @param {Array} spans - Array of span objects (text, tab, lineBreak, hardBreak) from flattenParagraph
  * @param {number} startIndex - Index in spans array to start searching from (exclusive)
  * @returns {{from: number, to: number}|null} Document range of following text, or null if no text found
- *
- * @example
- * // For paragraph "Prefix\tSuffix Text\tMore"
- * // When called at first tab position:
- * getFollowingTextRange(spans, 1) // Returns { from: 8, to: 19 } for "Suffix Text"
  */
 function getFollowingTextRange(spans, startIndex) {
   let from = null;
   let to = null;
   for (let i = startIndex; i < spans.length; i++) {
     const span = spans[i];
-    if (span.type === 'tab') break;
+    if (span.type === 'tab' || span.type === 'lineBreak' || span.type === 'hardBreak') break;
     if (span.type === 'text' && typeof span.from === 'number' && typeof span.to === 'number') {
       if (from === null) from = span.from;
       to = span.to;

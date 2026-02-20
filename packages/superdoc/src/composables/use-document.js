@@ -68,6 +68,7 @@ export default function useDocument(params, superdocConfig) {
   const annotations = ref(params.annotations || []);
   const conversations = ref(initConversations());
   const conversationsBackup = ref(conversations.value);
+  const commentThreadingProfile = ref(params.commentThreadingProfile || null);
 
   function initConversations() {
     if (!config.modules.comments) return [];
@@ -108,6 +109,7 @@ export default function useDocument(params, superdocConfig) {
     fields,
     annotations,
     conversations,
+    commentThreadingProfile,
 
     // Actions
     setEditor,

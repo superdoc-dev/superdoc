@@ -639,4 +639,261 @@ describe('FloatingObjectManager', () => {
       expect(result.offsetX).toBe(0);
     });
   });
+
+  describe('setLayoutContext', () => {
+    it('updates column context for wrapping calculations', () => {
+      const initialColumns = { width: 400, gap: 20, count: 1 };
+      const manager = createFloatingObjectManager(initialColumns, { left: 50, right: 50 }, 500);
+
+      // Register an image with initial context
+      const imageBlock = createMockImageBlock({
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          alignH: 'left',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      });
+
+      manager.registerDrawing(imageBlock, createMockMeasure(), 100, 0, 1);
+
+      // Initial wrapping calculation
+      const initialResult = manager.computeAvailableWidth(120, 20, 400, 0, 1);
+      expect(initialResult.width).toBe(400 - 200 - 10); // 190
+      expect(initialResult.offsetX).toBe(210); // 200 + 10
+
+      // Update context to multi-column layout
+      const newColumns = { width: 200, gap: 24, count: 2 };
+      manager.setLayoutContext(newColumns, { left: 36, right: 36 }, 612);
+
+      // Register another image with new context
+      const imageBlock2 = createMockImageBlock({
+        id: 'test-image-2',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          alignH: 'left',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      });
+
+      manager.registerDrawing(imageBlock2, createMockMeasure(), 200, 1, 1);
+
+      // New wrapping calculation should use updated column width
+      const newResult = manager.computeAvailableWidth(220, 20, 200, 1, 1);
+      // Column 1 boundary calculation uses new margins
+      expect(newResult.width).toBeLessThanOrEqual(200);
+    });
+
+    it('updates margins for positioning calculations', () => {
+      const initialMargins = { left: 72, right: 72 };
+      const initialColumns = { width: 468, gap: 0, count: 1 };
+      const manager = createFloatingObjectManager(initialColumns, initialMargins, 612);
+
+      // Register image with margin-relative positioning
+      const imageBlock = createMockImageBlock({
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'margin',
+          alignH: 'left',
+          offsetH: 0,
+          offsetV: 0,
+        },
+      });
+
+      manager.registerDrawing(imageBlock, createMockMeasure(), 100, 0, 1);
+
+      const zones = manager.getAllFloatsForPage(1);
+      expect(zones[0].bounds.x).toBe(72); // Initial left margin
+
+      // Update context with narrower margins
+      const newMargins = { left: 36, right: 36 };
+      const newColumns = { width: 540, gap: 0, count: 1 };
+      manager.setLayoutContext(newColumns, newMargins, 612);
+
+      // Register new image with updated context
+      const imageBlock2 = createMockImageBlock({
+        id: 'test-image-2',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'margin',
+          alignH: 'left',
+          offsetH: 0,
+          offsetV: 0,
+        },
+      });
+
+      manager.registerDrawing(imageBlock2, createMockMeasure(), 200, 0, 1);
+
+      const newZones = manager.getAllFloatsForPage(1);
+      const newImageZone = newZones.find((z) => z.imageBlockId === 'test-image-2');
+      expect(newImageZone?.bounds.x).toBe(36); // Updated left margin
+    });
+
+    it('updates page width for page-relative positioning', () => {
+      const initialColumns = { width: 468, gap: 0, count: 1 };
+      const manager = createFloatingObjectManager(initialColumns, { left: 72, right: 72 }, 612);
+
+      // Register image with page-relative positioning (origin at physical page edge)
+      const imageBlock = createMockImageBlock({
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'right',
+          offsetH: 0,
+          offsetV: 0,
+        },
+      });
+
+      manager.registerDrawing(imageBlock, createMockMeasure(), 100, 0, 1);
+
+      const zones = manager.getAllFloatsForPage(1);
+      // Right-aligned relative to the page edge: 0 + 612 - 200 = 412
+      expect(zones[0].bounds.x).toBe(412);
+
+      // Update to A4 page size
+      const newColumns = { width: 698, gap: 0, count: 1 };
+      manager.setLayoutContext(newColumns, { left: 72, right: 72 }, 842);
+
+      const imageBlock2 = createMockImageBlock({
+        id: 'test-image-2',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'right',
+          offsetH: 0,
+          offsetV: 0,
+        },
+      });
+
+      manager.registerDrawing(imageBlock2, createMockMeasure(), 200, 0, 1);
+
+      const newZones = manager.getAllFloatsForPage(1);
+      const newImageZone = newZones.find((z) => z.imageBlockId === 'test-image-2');
+      // Right-aligned relative to the new page width: 0 + 842 - 200 = 642
+      expect(newImageZone?.bounds.x).toBe(642);
+    });
+
+    it('handles context update for multi-column to single-column transition', () => {
+      const initialColumns = { width: 234, gap: 48, count: 2 };
+      const manager = createFloatingObjectManager(initialColumns, { left: 36, right: 36 }, 612);
+
+      // Register image in column 1
+      const imageBlock = createMockImageBlock({
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          alignH: 'left',
+          offsetH: 0,
+          offsetV: 0,
+        },
+      });
+
+      manager.registerDrawing(imageBlock, createMockMeasure(), 100, 1, 1);
+
+      const zones = manager.getAllFloatsForPage(1);
+      // Column 1 starts at: marginLeft + columnIndex * (width + gap) = 36 + 1 * (234 + 48) = 318
+      expect(zones[0].bounds.x).toBe(318);
+
+      // Transition to single column with wider margins
+      const newColumns = { width: 468, gap: 0, count: 1 };
+      manager.setLayoutContext(newColumns, { left: 72, right: 72 }, 612);
+
+      const imageBlock2 = createMockImageBlock({
+        id: 'test-image-2',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          alignH: 'left',
+          offsetH: 0,
+          offsetV: 0,
+        },
+      });
+
+      manager.registerDrawing(imageBlock2, createMockMeasure(), 200, 0, 1);
+
+      const newZones = manager.getAllFloatsForPage(1);
+      const newImageZone = newZones.find((z) => z.imageBlockId === 'test-image-2');
+      // Single column starts at left margin: 72
+      expect(newImageZone?.bounds.x).toBe(72);
+    });
+
+    it('correctly computes wrapping with updated column gap', () => {
+      const initialColumns = { width: 200, gap: 20, count: 2 };
+      const manager = createFloatingObjectManager(initialColumns, { left: 50, right: 50 }, 500);
+
+      // Update to wider gap
+      const newColumns = { width: 200, gap: 40, count: 2 };
+      manager.setLayoutContext(newColumns, { left: 50, right: 50 }, 500);
+
+      // Register image in second column
+      const imageBlock = createMockImageBlock({
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          alignH: 'left',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      });
+
+      manager.registerDrawing(imageBlock, createMockMeasure(), 100, 1, 1);
+
+      // The image is positioned at the start of column 1: 50 + 1 * (200 + 40) = 290
+      // For text in column 1, the offsetX is column-relative (not absolute)
+      // So the offsetX from the column start = image width + distances = 200 + 10 = 210
+      const result = manager.computeAvailableWidth(120, 20, 200, 1, 1);
+
+      // The image blocks text, reducing available width
+      expect(result.width).toBeLessThanOrEqual(200);
+      expect(result.offsetX).toBeGreaterThanOrEqual(0);
+    });
+
+    it('preserves existing floats when context is updated', () => {
+      const initialColumns = { width: 400, gap: 0, count: 1 };
+      const manager = createFloatingObjectManager(initialColumns, { left: 50, right: 50 }, 500);
+
+      // Register two images before context update
+      const imageBlock1 = createMockImageBlock({ id: 'image-1' });
+      const imageBlock2 = createMockImageBlock({ id: 'image-2' });
+
+      manager.registerDrawing(imageBlock1, createMockMeasure(), 100, 0, 1);
+      manager.registerDrawing(imageBlock2, createMockMeasure(), 200, 0, 1);
+
+      expect(manager.getAllFloatsForPage(1)).toHaveLength(2);
+
+      // Update context
+      const newColumns = { width: 500, gap: 0, count: 1 };
+      manager.setLayoutContext(newColumns, { left: 40, right: 40 }, 600);
+
+      // Existing floats should still be present
+      expect(manager.getAllFloatsForPage(1)).toHaveLength(2);
+
+      // New float should use updated context
+      const imageBlock3 = createMockImageBlock({ id: 'image-3' });
+      manager.registerDrawing(imageBlock3, createMockMeasure(), 300, 0, 1);
+
+      expect(manager.getAllFloatsForPage(1)).toHaveLength(3);
+    });
+  });
 });

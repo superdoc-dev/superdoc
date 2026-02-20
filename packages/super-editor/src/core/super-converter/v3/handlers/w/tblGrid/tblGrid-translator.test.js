@@ -296,6 +296,54 @@ describe('w:tblGrid translator', () => {
       expect(widths).toEqual(['2000', '4000']);
     });
 
+    it('prefers stored grid column count when preferTableGrid is true', () => {
+      const params = {
+        node: {
+          attrs: {
+            grid: [{ col: 2000 }, { col: 4000 }],
+          },
+        },
+        extraParams: {
+          preferTableGrid: true,
+          totalColumns: 2,
+          firstRow: {
+            content: [
+              { type: 'tableCell', attrs: { colspan: 1, colwidth: [50] } },
+              { type: 'tableCell', attrs: { colspan: 1, colwidth: [60] } },
+              { type: 'tableCell', attrs: { colspan: 1, colwidth: [70] } },
+            ],
+          },
+        },
+      };
+
+      const result = translator.decode(params);
+      expect(result.elements).toHaveLength(2);
+      const widths = result.elements.map((el) => el.attributes['w:w']);
+      expect(widths).toEqual(['2000', '4000']);
+    });
+
+    it('derives grid widths from tableHeader cells in header-only first row', () => {
+      const params = {
+        node: {
+          attrs: {},
+        },
+        extraParams: {
+          firstRow: {
+            content: [
+              { type: 'tableHeader', attrs: { colspan: 1, colwidth: [80] } },
+              { type: 'tableHeader', attrs: { colspan: 1, colwidth: [120] } },
+            ],
+          },
+        },
+      };
+
+      const result = translator.decode(params);
+      expect(result.name).toBe('w:tblGrid');
+      const widths = result.elements.map((el) => el.attributes['w:w']);
+      // 80 * 20 = 1600, 120 * 20 = 2400 (via mocked pixelsToTwips)
+      expect(widths).toEqual(['1600', '2400']);
+    });
+
     it('preserves narrow grid columns for placeholder cells without inflating width', () => {
       const params = {
         node: {

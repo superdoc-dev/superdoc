@@ -1,20 +1,26 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["../../packages/superdoc/src/**/*"],
   "compilerOptions": {
     "allowJs": true,
     "checkJs": false,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "rootDir": "../../",
     "outDir": "dist",
     "declarationMap": true,
     "skipLibCheck": true,
+    "baseUrl": "../..",
     "paths": {
-      "@superdoc/common": ["../../shared/common/index.ts"],
-      "@superdoc/common/*": ["../../shared/common/*"]
-    },
-    "typeRoots": ["./node_modules/@types/*", "../../node_modules/@types/*"]
+      "@core/*": ["packages/super-editor/src/core/*"],
+      "@extensions/*": ["packages/super-editor/src/extensions/*"],
+      "@features/*": ["packages/super-editor/src/features/*"],
+      "@components/*": ["packages/super-editor/src/components/*"],
+      "@helpers/*": ["packages/super-editor/src/core/helpers/*"],
+      "@converter/*": ["packages/super-editor/src/core/super-converter/*"],
+      "@tests/*": ["packages/super-editor/src/tests/*"],
+      "@translator": ["packages/super-editor/src/core/super-converter/v3/node-translator/"],
+      "@utils/*": ["packages/super-editor/src/utils/*"],
+      "@shared/*": ["shared/*"]
+    }
   },
-  "exclude": ["node_modules", "dist", "**/*.test.js", "**/*.test.ts"]
+  "include": ["src", "../super-editor/src"]
 }

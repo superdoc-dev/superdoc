@@ -2,8 +2,12 @@ import type { SectionBreakBlock } from '@superdoc/contracts';
 export type SectionState = {
   activeTopMargin: number;
   activeBottomMargin: number;
+  activeLeftMargin: number;
+  activeRightMargin: number;
   pendingTopMargin: number | null;
   pendingBottomMargin: number | null;
+  pendingLeftMargin: number | null;
+  pendingRightMargin: number | null;
   activeHeaderDistance: number;
   activeFooterDistance: number;
   pendingHeaderDistance: number | null;
@@ -24,6 +28,8 @@ export type SectionState = {
     count: number;
     gap: number;
   } | null;
+  activeOrientation: 'portrait' | 'landscape' | null;
+  pendingOrientation: 'portrait' | 'landscape' | null;
   hasAnyPages: boolean;
 };
 export type BreakDecision = {
@@ -44,11 +50,13 @@ export declare function scheduleSectionBreak(
     left: number;
     right: number;
   },
+  maxHeaderContentHeight?: number,
+  maxFooterContentHeight?: number,
 ): {
   decision: BreakDecision;
   state: SectionState;
 };
 /**
- * Apply pending margins/pageSize/columns to active values at a page boundary and clear pending.
+ * Apply pending margins/pageSize/columns/orientation to active values at a page boundary and clear pending.
  */
 export declare function applyPendingToActive(state: SectionState): SectionState;

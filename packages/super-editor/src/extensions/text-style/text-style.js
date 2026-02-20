@@ -70,6 +70,62 @@ export const TextStyle = Mark.create({
        * @param {string} [styleId] - Style identifier for referencing predefined styles
        */
       styleId: {},
+      /**
+       * Vertical alignment for subscript/superscript text (DOCX w:vertAlign).
+       * Standard values: 'superscript', 'subscript', 'baseline'.
+       * When both vertAlign and position are present, position takes precedence.
+       * Renders as CSS vertical-align with 65% font-size scaling for super/subscript.
+       * @category Attribute
+       * @param {string} [vertAlign] - Vertical alignment mode ('superscript' | 'subscript' | 'baseline')
+       */
+      vertAlign: {
+        default: null,
+        renderDOM: (attrs) => {
+          if (!attrs.vertAlign || attrs.position) return {};
+          if (attrs.vertAlign === 'superscript') {
+            return { style: 'vertical-align: super; font-size: 65%;' };
+          }
+          if (attrs.vertAlign === 'subscript') {
+            return { style: 'vertical-align: sub; font-size: 65%;' };
+          }
+          if (attrs.vertAlign === 'baseline') {
+            return { style: 'vertical-align: baseline;' };
+          }
+          return {};
+        },
+        parseDOM: (el) => {
+          const va = el.style?.verticalAlign;
+          if (va === 'super') return 'superscript';
+          if (va === 'sub') return 'subscript';
+          if (va === 'baseline') return 'baseline';
+          return null;
+        },
+      },
+      /**
+       * Custom vertical position offset in points (DOCX w:position).
+       * Numeric value specifying vertical offset (positive raises, negative lowers).
+       * Format: '{number}pt' (e.g., '2pt', '-1.5pt').
+       * Takes precedence over vertAlign when both are present.
+       * Renders as CSS vertical-align with the exact offset value.
+       * @category Attribute
+       * @param {string} [position] - Vertical position offset (e.g., '2pt', '-1pt')
+       */
+      position: {
+        default: null,
+        renderDOM: (attrs) => {
+          if (!attrs.position) return {};
+          return { style: `vertical-align: ${attrs.position};` };
+        },
+        parseDOM: (el) => {
+          const va = el.style?.verticalAlign;
+          if (!va) return null;
+          const numeric = parseFloat(va);
+          if (!Number.isNaN(numeric)) {
+            return `${numeric}pt`;
+          }
+          return null;
+        },
+      },
     };
   },
 

@@ -13,9 +13,9 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname, resolve, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { createDocumentJson } from '../../../super-editor/src/core/super-converter/v2/importer/docxImporter.js';
-import DocxZipper from '../../../super-editor/src/core/DocxZipper.js';
-import { parseXmlToJson } from '../../../super-editor/src/core/super-converter/v2/docxHelper.js';
+import { createDocumentJson } from "@superdoc/super-editor/src/core/super-converter/v2/importer/docxImporter.js";
+import DocxZipper from "@superdoc/super-editor/src/core/DocxZipper.js";
+import { parseXmlToJson } from "@superdoc/super-editor/src/core/super-converter/v2/docxHelper.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -87,11 +87,6 @@ async function extractPMJson() {
 
   // Convert to PM JSON
   const converter = {
-    telemetry: {
-      trackFileStructure: () => {},
-      trackUsage: () => {},
-      trackStatistic: () => {},
-    },
     docHiglightColors: new Set(),
   };
 

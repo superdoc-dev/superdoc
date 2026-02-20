@@ -50,7 +50,7 @@ describe('table_in_list roundtrip', () => {
     const buffer = await zipFolderToBuffer(folderPath);
 
     const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
-    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts });
+    const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
     expect(exportedBuffer?.byteLength || exportedBuffer?.length || 0).toBeGreaterThan(0);

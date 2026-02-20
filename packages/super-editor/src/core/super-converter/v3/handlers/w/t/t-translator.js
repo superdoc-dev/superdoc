@@ -16,13 +16,26 @@ const SD_NODE_NAME = 'text';
 const validXmlAttributes = [createAttributeHandler('xml:space', 'xmlSpace')];
 
 /**
- * Translate a text node or link node.
+ * Translate a text node or link node from OOXML to SuperDoc format.
+ *
+ * This function handles the conversion of <w:t> and <w:delText> elements to SuperDoc text nodes.
+ * It intelligently manages whitespace preservation based on xml:space attributes at multiple levels.
+ *
+ * Whitespace preservation precedence (highest to lowest):
+ * 1. Element-level xml:space attribute (via encodedAttrs or node attributes)
+ * 2. Text content-level xml:space attribute
+ * 3. Document-level xml:space attribute (params.converter.documentAttributes)
+ *
+ * The document-level xml:space is particularly important for PDF-to-DOCX converted documents,
+ * which often set xml:space="preserve" at the document root instead of on individual elements.
+ *
  * Link nodes look the same as text nodes but with a link attr.
  * Also, tracked changes are text marks so those need to be separated here.
- * We need to check here and re-route as necessary
- * @param {import('@translator').SCEncoderConfig} params
+ * We need to check here and re-route as necessary.
+ *
+ * @param {import('@translator').SCEncoderConfig} params - The encoding parameters
  * @param {import('@translator').EncodedAttributes} [encodedAttrs] - The already encoded attributes
- * @returns {import('@translator').SCEncoderResult}
+ * @returns {import('@translator').SCEncoderResult} The encoded SuperDoc text node or null if encoding fails
  */
 const encode = (params, encodedAttrs = {}) => {
   const { node } = params.extraParams;
@@ -37,13 +50,32 @@ const encode = (params, encodedAttrs = {}) => {
 
   if (elements.length === 1) {
     text = elements[0].text;
-    const xmlSpace = encodedAttrs.xmlSpace ?? elements[0]?.attributes?.['xml:space'];
+    // Check for xml:space="preserve" at multiple levels:
+    // 1. On the element's own attributes (via encodedAttrs)
+    // 2. On the element's attributes directly
+    // 3. On the text content's attributes (rare)
+    // 4. At the document level (for PDF-to-DOCX converted documents)
+    const docXmlSpace = params.converter?.documentAttributes?.['xml:space'];
+    const xmlSpace =
+      encodedAttrs.xmlSpace ?? attributes?.['xml:space'] ?? elements[0]?.attributes?.['xml:space'] ?? docXmlSpace;
     if (xmlSpace !== 'preserve' && typeof text === 'string') {
       // Only trim regular ASCII whitespace, not NBSP (U+00A0) which is used intentionally for alignment
       text = text.replace(/^[ \t\n\r]+/, '').replace(/[ \t\n\r]+$/, '');
     }
-    // Handle the removal of a temporary wrapper that we added to preserve empty spaces
+    // Remove [[sdspace]] placeholders that were injected during XML parsing (SuperConverter.parseXmlToJson).
+    // These placeholders prevent xml-js from discarding whitespace-only text runs during parsing.
+    // Now that we've preserved the whitespace through the parsing stage and applied appropriate
+    // trimming rules above, we remove the placeholders to restore the original content.
     text = text.replace(/\[\[sdspace\]\]/g, '');
+
+    // If the text is whitespace-only after placeholder removal and xml:space != 'preserve',
+    // drop the node entirely. This prevents creating empty/whitespace text nodes that ProseMirror
+    // may treat as invalid. The placeholder was only needed to prevent xml-js from dropping
+    // the node during parsing - but if xml:space doesn't require preservation, we should drop it.
+    const isWhitespaceOnly = /^[ \t\n\r]*$/.test(text);
+    if (xmlSpace !== 'preserve' && isWhitespaceOnly) {
+      return null;
+    }
   } else if (!elements.length && encodedAttrs.xmlSpace === 'preserve') {
     // Word sometimes will have an empty text node with a space attribute, in that case it should be a space
     text = ' ';

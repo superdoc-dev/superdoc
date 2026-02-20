@@ -2,6 +2,7 @@ import type { DrawingBlock, DrawingMeasure, DrawingFragment } from '@superdoc/co
 import type { NormalizedColumns } from './layout-image.js';
 import type { PageState } from './paginator.js';
 import { extractBlockPmRange } from './layout-utils.js';
+import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
 
 /**
  * Context for laying out a drawing block (vector shape) within the page layout.
@@ -79,9 +80,15 @@ export function layoutDrawingBlock({
   let width = measure.width;
   let height = measure.height;
 
-  if (width > maxWidth && maxWidth > 0) {
-    const scale = maxWidth / width;
-    width = maxWidth;
+  const attrs = block.attrs as Record<string, unknown> | undefined;
+  const indentLeft = typeof attrs?.hrIndentLeft === 'number' ? attrs.hrIndentLeft : 0;
+  const indentRight = typeof attrs?.hrIndentRight === 'number' ? attrs.hrIndentRight : 0;
+  const maxWidthForBlock =
+    attrs?.isFullWidth === true && maxWidth > 0 ? Math.max(1, maxWidth - indentLeft - indentRight) : maxWidth;
+
+  if (width > maxWidthForBlock && maxWidthForBlock > 0) {
+    const scale = maxWidthForBlock / width;
+    width = maxWidthForBlock;
     height *= scale;
   }
 
@@ -105,14 +112,14 @@ export function layoutDrawingBlock({
     kind: 'drawing',
     blockId: block.id,
     drawingKind: block.drawingKind,
-    x: columnX(state.columnIndex) + marginLeft,
+    x: columnX(state.columnIndex) + marginLeft + indentLeft,
     y: state.cursorY + marginTop,
     width,
     height,
     geometry: measure.geometry,
     scale: measure.scale,
     drawingContentId: block.drawingContentId,
-    zIndex: block.zIndex,
+    zIndex: getFragmentZIndex(block),
     pmStart: pmRange.pmStart,
     pmEnd: pmRange.pmEnd,
   };

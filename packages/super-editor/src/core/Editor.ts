@@ -1,21 +1,14 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
+import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
-import type {
-  EditorHelpers,
-  ExtensionStorage,
-  ProseMirrorJSON,
-  PageStyles,
-  TelemetryData,
-  Toolbar,
-} from './types/EditorTypes.js';
+import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
 import type { ChainableCommandObject, CanObject, EditorCommands } from './types/ChainedCommands.js';
 import type { EditorEventMap, FontsResolvedPayload, Comment } from './types/EditorEvents.js';
 import type { SchemaSummaryJSON } from './types/EditorSchema.js';
 
 import { EditorState as PmEditorState } from 'prosemirror-state';
-import { EditorView } from 'prosemirror-view';
 import { DOMSerializer as PmDOMSerializer } from 'prosemirror-model';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import { helpers } from '@core/index.js';
@@ -24,14 +17,20 @@ import { ExtensionService } from './ExtensionService.js';
 import { CommandService } from './CommandService.js';
 import { Attribute } from './Attribute.js';
 import { SuperConverter } from '@core/super-converter/SuperConverter.js';
-import { Commands, Editable, EditorFocus, Keymap } from './extensions/index.js';
+import { Commands, Editable, EditorFocus, Keymap, PositionTrackerExtension } from './extensions/index.js';
 import { createDocument } from './helpers/createDocument.js';
 import { isActive } from './helpers/isActive.js';
 import { trackedTransaction } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 import { getNecessaryMigrations } from '@core/migrations/index.js';
-import { getRichTextExtensions } from '../extensions/index.js';
+import { getStarterExtensions, getRichTextExtensions } from '../extensions/index.js';
+import {
+  InvalidStateError,
+  NoSourcePathError,
+  FileSystemNotAvailableError,
+  DocumentLoadError,
+} from './errors/index.js';
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
@@ -48,13 +47,29 @@ import { createLinkedChildEditor } from '@core/child-editor/index.js';
 import { unflattenListsInHtml } from './inputRules/html/html-helpers.js';
 import { SuperValidator } from '@core/super-validator/index.js';
 import { createDocFromMarkdown, createDocFromHTML } from '@core/helpers/index.js';
-import { transformListsInCopiedContent } from '@core/inputRules/html/transform-copied-lists.js';
-import { applyStyleIsolationClass } from '../utils/styleIsolation.js';
+import { COMMENT_FILE_BASENAMES } from '@core/super-converter/constants.js';
 import { isHeadless } from '../utils/headless-helpers.js';
+import { canUseDOM } from '../utils/canUseDOM.js';
 import { buildSchemaSummary } from './schema-summary.js';
+import { PresentationEditor } from './presentation-editor/index.js';
+import type { EditorRenderer } from './renderers/EditorRenderer.js';
+import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
+import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
+import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
+import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
+import type { DocumentApi } from '@superdoc/document-api';
+import { createDocumentApi } from '@superdoc/document-api';
+import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
+
+/**
+ * Constants for layout calculations
+ */
+const PIXELS_PER_INCH = 96;
+const MAX_HEIGHT_BUFFER_PX = 50;
+const MAX_WIDTH_BUFFER_PX = 20;
 
 /**
  * Image storage structure used by the image extension
@@ -62,6 +77,84 @@ declare const version: string | undefined;
 interface ImageStorage {
   media: Record<string, unknown>;
 }
+
+/**
+ * Editor lifecycle state.
+ *
+ * State machine:
+ * ```
+ * initialized -> documentLoading -> ready <-> saving
+ *                                     |
+ *                                     v
+ *                                  closed -> documentLoading -> ready
+ *                                     |
+ *                                     v
+ *                                 destroyed
+ * ```
+ */
+export type EditorLifecycleState = 'initialized' | 'documentLoading' | 'ready' | 'saving' | 'closed' | 'destroyed';
+
+/**
+ * Options for opening a document.
+ */
+export interface OpenOptions {
+  /** Document mode ('docx', 'text', 'html') */
+  mode?: 'docx' | 'text' | 'html';
+
+  /** HTML content to initialize with (for text/html mode) */
+  html?: string;
+
+  /** Markdown content to initialize with */
+  markdown?: string;
+
+  /** JSON content to initialize with */
+  json?: ProseMirrorJSON | null;
+
+  /** Whether comments are enabled */
+  isCommentsEnabled?: boolean;
+
+  /** Prevent default styles from being applied in docx mode */
+  suppressDefaultDocxStyles?: boolean;
+
+  /** Document mode ('editing', 'viewing', 'suggesting') */
+  documentMode?: 'editing' | 'viewing' | 'suggesting';
+
+  /** Pre-parsed docx content (for when document is already loaded) */
+  content?: unknown;
+
+  /** Media files from docx */
+  mediaFiles?: Record<string, unknown>;
+
+  /** Font data from docx */
+  fonts?: Record<string, unknown>;
+}
+
+/**
+ * Options for saving a document.
+ */
+export interface SaveOptions {
+  /** Whether this is the final document version */
+  isFinalDoc?: boolean;
+
+  /** Comment export type */
+  commentsType?: string;
+
+  /** Comments to include in export */
+  comments?: Array<{ id: string; [key: string]: unknown }>;
+
+  /** Highlight color for fields */
+  fieldsHighlightColor?: string | null;
+
+  /** ZIP compression method for docx export. Defaults to 'DEFLATE'. Use 'STORE' for faster exports without compression. */
+  compression?: 'DEFLATE' | 'STORE';
+}
+
+/**
+ * Options for exporting a document.
+ * Currently identical to SaveOptions, but may be extended in the future
+ * with format-specific options (e.g., format?: 'docx' | 'json' | 'xml').
+ */
+export type ExportOptions = SaveOptions;
 
 /**
  * Main editor class that manages document state, extensions, and user interactions
@@ -88,15 +181,48 @@ export class Editor extends EventEmitter<EditorEventMap> {
   schema!: Schema;
 
   /**
-   * ProseMirror view instance
+   * ProseMirror view instance.
+   * Undefined in headless mode or before the editor is mounted.
    */
-  view!: EditorView;
+  view?: PmEditorView;
+
+  /**
+   * Renderer responsible for attaching/destroying the editing surface.
+   */
+  #renderer: EditorRenderer | null = null;
+
+  /**
+   * ProseMirror editor state (exists with or without a view)
+   */
+  private _state!: EditorState;
+
+  /**
+   * Whether the editor instance has been destroyed.
+   */
+  #isDestroyed = false;
+
+  /**
+   * Editor lifecycle state.
+   * Tracks the current phase of the editor's document lifecycle.
+   */
+  #editorLifecycleState: EditorLifecycleState = 'initialized';
+
+  /**
+   * Document API instance (lazy-initialized).
+   */
+  #documentApi: DocumentApi | null = null;
+
+  /**
+   * Source path of the currently opened document.
+   * Set when opening from a file path, null when opening from Blob/Buffer or blank.
+   */
+  #sourcePath: string | null = null;
 
   /**
    * Active PresentationEditor instance when layout mode is enabled.
    * Set by PresentationEditor constructor to enable renderer-neutral helpers.
    */
-  presentationEditor: import('./PresentationEditor.js').PresentationEditor | null = null;
+  presentationEditor: PresentationEditor | null = null;
 
   /**
    * Whether the editor currently has focus
@@ -128,10 +254,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   setHighContrastMode?: (enabled: boolean) => void;
 
+  /**
+   * Telemetry instance for tracking document opens
+   */
+  #telemetry: Telemetry | null = null;
+
+  /**
+   * Guard flag to prevent double-tracking document open
+   */
+  #documentOpenTracked = false;
+
   options: EditorOptions = {
     element: null,
     selector: null,
     isHeadless: false,
+    document: null,
     mockDocument: null,
     mockWindow: null,
     content: '', // XML content
@@ -157,6 +294,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     isCommentsEnabled: false,
     isNewFile: false,
     scale: 1,
+    viewOptions: { layout: 'print' },
     annotations: false,
     isInternal: false,
     externalExtensions: [],
@@ -194,9 +332,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // async (file) => url;
     handleImageUpload: null,
 
-    // telemetry
-    telemetry: null,
-
     // Docx xml updated by User
     customUpdatedFiles: {},
 
@@ -213,33 +348,107 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
+
+    // License key (resolved in #initTelemetry; undefined means "not explicitly set")
+    licenseKey: undefined,
+
+    // Telemetry configuration
+    telemetry: { enabled: true },
   };
 
   /**
-   * Create a new Editor instance
+   * Create a new Editor instance.
+   *
+   * **Legacy mode (backward compatible):**
+   * When `content` or `fileSource` is provided, the editor initializes synchronously
+   * with the document loaded immediately. This preserves existing behavior where
+   * `editor.view` is available right after construction.
+   *
+   * **New mode (document lifecycle API):**
+   * When no `content` or `fileSource` is provided, only core services (extensions,
+   * commands, schema) are initialized. Call `editor.open()` to load a document.
+   *
    * @param options - Editor configuration options
+   *
+   * @example
+   * ```typescript
+   * // Legacy mode (still works)
+   * const editor = new Editor({ content: docx, element: el });
+   * console.log(editor.view.state.doc); // Works immediately
+   *
+   * // New mode
+   * const editor = new Editor({ element: el });
+   * await editor.open('/path/to/doc.docx');
+   * ```
    */
   constructor(options: Partial<EditorOptions>) {
     super();
 
-    this.#initContainerElement(options);
-    this.#checkHeadless(options);
-    this.setOptions(options);
+    const resolvedOptions = { ...options };
+    const domAvailable = canUseDOM();
+    const isHeadlessRequested = Boolean(resolvedOptions.isHeadless);
+    const mountRequested = Boolean(resolvedOptions.element || resolvedOptions.selector);
+    const domDocumentForImport =
+      resolvedOptions.document ?? resolvedOptions.mockDocument ?? (domAvailable ? document : null);
 
-    const modes: Record<string, () => void> = {
-      docx: () => this.#init(),
-      text: () => this.#initRichText(),
-      html: () => this.#initRichText(),
-      default: () => {
-        console.log('Not implemented.');
-      },
-    };
+    const requiresDomForImport =
+      Boolean(resolvedOptions.html || resolvedOptions.markdown) ||
+      ((resolvedOptions.mode === 'text' || resolvedOptions.mode === 'html') &&
+        typeof resolvedOptions.content === 'string');
 
-    const initMode = modes[this.options.mode!] ?? modes.default;
+    if (!domDocumentForImport && requiresDomForImport) {
+      throw new Error(
+        '[super-editor] HTML/Markdown import requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
+      );
+    }
+
+    if (!domAvailable && mountRequested && !isHeadlessRequested) {
+      throw new Error(
+        '[super-editor] Cannot mount an editor without a DOM. Provide DOM globals (e.g. via JSDOM) or pass { isHeadless: true }.',
+      );
+    }
+
+    if (!domAvailable && !isHeadlessRequested) {
+      resolvedOptions.isHeadless = true;
+    }
+
+    if (resolvedOptions.isHeadless) {
+      resolvedOptions.element = null;
+      resolvedOptions.selector = null;
+    }
+
+    this.#checkHeadless(resolvedOptions);
+    this.setOptions(resolvedOptions);
+    this.#renderer = resolvedOptions.renderer ?? (domAvailable ? new ProseMirrorRenderer() : null);
+    this.#initTelemetry();
 
     const { setHighContrastMode } = useHighContrastMode();
     this.setHighContrastMode = setHighContrastMode;
-    initMode();
+
+    // New API mode: only when explicitly requested via deferDocumentLoad option
+    // This preserves 100% backward compatibility - the original editor ALWAYS created a view
+    const useNewApiMode = resolvedOptions.deferDocumentLoad === true;
+
+    if (useNewApiMode) {
+      // NEW MODE: Initialize core only, wait for open()
+      // This is opt-in to ensure zero breaking changes
+      this.#initCore();
+      this.#editorLifecycleState = 'initialized';
+    } else {
+      // LEGACY MODE (default): Exact current behavior - synchronous, view created immediately
+      const modes: Record<string, () => void> = {
+        docx: () => this.#init(),
+        text: () => this.#initRichText(),
+        html: () => this.#initRichText(),
+        default: () => {
+          console.log('Not implemented.');
+        },
+      };
+
+      const initMode = modes[this.options.mode!] ?? modes.default;
+      initMode();
+      this.#editorLifecycleState = 'ready';
+    }
   }
 
   /**
@@ -257,27 +466,486 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Initialize the container element for the editor
    */
   #initContainerElement(options: Partial<EditorOptions>): void {
-    if (!options.element && options.selector) {
-      const { selector } = options;
-      if (selector.startsWith('#') || selector.startsWith('.')) {
-        options.element = document.querySelector(selector) as HTMLElement;
-      } else {
-        options.element = document.getElementById(selector);
-      }
+    this.#renderer?.initContainerElement?.(options);
+  }
 
-      const textModes = ['text', 'html'];
-      if (textModes.includes(options.mode!) && options.element) {
-        options.element.classList.add('sd-super-editor-html');
-      }
-    }
+  #shouldMountRenderer(): boolean {
+    return canUseDOM() && !this.options.isHeadless;
+  }
 
-    if (options.isHeadless) {
-      options.element = null;
+  #getDomDocument(): Document | null {
+    return this.options.document ?? this.options.mockDocument ?? (canUseDOM() ? document : null);
+  }
+
+  #emitCreateAsync(): void {
+    setTimeout(() => {
+      if (this.isDestroyed) return;
+      this.emit('create', { editor: this });
+    }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
+  }
+
+  /**
+   * Initialize telemetry if configured
+   */
+  #initTelemetry(): void {
+    const { telemetry: telemetryConfig, licenseKey } = this.options;
+
+    // Skip in test environments and when telemetry is not enabled
+    if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
       return;
     }
 
-    options.element = options.element || document.createElement('div');
-    applyStyleIsolationClass(options.element);
+    // Skip for sub-editors that are not primary document editors
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+      return;
+    }
+
+    if (!telemetryConfig?.enabled) {
+      return;
+    }
+
+    // Root-level licenseKey has a priority; fall back to deprecated telemetry.licenseKey
+    const resolvedLicenseKey =
+      licenseKey !== undefined ? licenseKey : (telemetryConfig.licenseKey ?? COMMUNITY_LICENSE_KEY);
+
+    try {
+      this.#telemetry = new Telemetry({
+        enabled: true,
+        endpoint: telemetryConfig.endpoint,
+        licenseKey: resolvedLicenseKey,
+        metadata: telemetryConfig.metadata,
+      });
+      console.debug('[super-editor] Telemetry: enabled');
+    } catch {
+      // Fail silently - telemetry should never break the app
+    }
+  }
+
+  /**
+   * Ensure document metadata is generated and track telemetry if enabled
+   */
+  #trackDocumentOpen(): void {
+    // Always generate metadata (GUID, timestamp) regardless of telemetry
+    this.getDocumentIdentifier().then((documentId) => {
+      // Only track if telemetry enabled and not already tracked
+      if (!this.#telemetry || this.#documentOpenTracked) return;
+
+      try {
+        const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+        this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
+        this.#documentOpenTracked = true;
+      } catch {
+        // Fail silently - telemetry should never break the app
+      }
+    });
+  }
+
+  /**
+   * Assert that the editor is in one of the allowed states.
+   * Throws InvalidStateError if not.
+   */
+  #assertState(...allowed: EditorLifecycleState[]): void {
+    if (!allowed.includes(this.#editorLifecycleState)) {
+      throw new InvalidStateError(
+        `Invalid operation: editor is in '${this.#editorLifecycleState}' state, expected one of: ${allowed.join(', ')}`,
+      );
+    }
+  }
+
+  /**
+   * Wraps an async operation with state transitions for safe lifecycle management.
+   *
+   * This method ensures atomic state transitions during async operations:
+   * 1. Sets state to `during` before executing the operation
+   * 2. On success: sets state to `success` and returns the operation result
+   * 3. On error: sets state to `failure` and re-throws the error
+   *
+   * This prevents race conditions and ensures the editor is always in a valid state,
+   * even when operations fail.
+   *
+   * @template T - The return type of the operation
+   * @param during - State to set while the operation is running
+   * @param success - State to set if the operation succeeds
+   * @param failure - State to set if the operation fails
+   * @param operation - Async operation to execute
+   * @returns Promise resolving to the operation's return value
+   * @throws Re-throws any error from the operation after setting failure state
+   *
+   * @example
+   * ```typescript
+   * // Used internally for save operations:
+   * await this.#withState('saving', 'ready', 'ready', async () => {
+   *   const data = await this.exportDocument();
+   *   await this.#writeToPath(path, data);
+   * });
+   * ```
+   */
+  async #withState<T>(
+    during: EditorLifecycleState,
+    success: EditorLifecycleState,
+    failure: EditorLifecycleState,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    this.#editorLifecycleState = during;
+    try {
+      const result = await operation();
+      this.#editorLifecycleState = success;
+      return result;
+    } catch (error) {
+      this.#editorLifecycleState = failure;
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize core editor services for new lifecycle API mode.
+   *
+   * When `deferDocumentLoad: true` is set, this method initializes only the
+   * document-independent components:
+   * - Extension service (loads and configures all extensions)
+   * - Command service (registers all editor commands)
+   * - ProseMirror schema (derived from extensions, reusable across documents)
+   *
+   * These services are created once during construction and reused when opening
+   * different documents via the `open()` method. This enables efficient document
+   * switching without recreating the entire editor infrastructure.
+   *
+   * Called exclusively from the constructor when `deferDocumentLoad` is true.
+   *
+   * @remarks
+   * This is part of the new lifecycle API that separates editor initialization
+   * from document loading. The schema and extensions remain constant while
+   * documents can be opened, closed, and reopened.
+   *
+   * @see #loadDocument - Loads document-specific state after core initialization
+   */
+  #initCore(): void {
+    // Apply default extensions if none provided
+    if (!this.options.extensions?.length) {
+      this.options.extensions = this.options.mode === 'docx' ? getStarterExtensions() : getRichTextExtensions();
+    }
+
+    this.#createExtensionService();
+    this.#createCommandService();
+    this.#createSchema();
+
+    // Register event listeners once during core init (not per-document)
+    this.#registerEventListeners();
+  }
+
+  /**
+   * Register all event listeners from options.
+   *
+   * Called once during core initialization. These listeners persist across
+   * document open/close cycles since the callbacks are set at construction time.
+   */
+  #registerEventListeners(): void {
+    this.on('create', this.options.onCreate!);
+    this.on('update', this.options.onUpdate!);
+    this.on('selectionUpdate', this.options.onSelectionUpdate!);
+    this.on('transaction', this.options.onTransaction!);
+    this.on('focus', this.#onFocus.bind(this));
+    this.on('blur', this.options.onBlur!);
+    this.on('destroy', this.options.onDestroy!);
+    this.on('trackedChangesUpdate', this.options.onTrackedChangesUpdate!);
+    this.on('commentsLoaded', this.options.onCommentsLoaded!);
+    this.on('commentClick', this.options.onCommentClicked!);
+    this.on('commentsUpdate', this.options.onCommentsUpdate!);
+    this.on('locked', this.options.onDocumentLocked!);
+    this.on('collaborationReady', this.#onCollaborationReady.bind(this));
+    this.on('comment-positions', this.options.onCommentLocationsUpdate!);
+    this.on('list-definitions-change', this.options.onListDefinitionsChange!);
+    this.on('fonts-resolved', this.options.onFontsResolved!);
+    this.on('exception', this.options.onException!);
+  }
+
+  /**
+   * Load a document into the editor from various source types.
+   *
+   * This method handles the complete document loading pipeline:
+   * 1. **Source resolution**: Determines source type (path/File/Blob/Buffer/blank)
+   * 2. **Content loading**:
+   *    - String path: Reads file from disk (Node.js) or fetches URL (browser)
+   *    - File/Blob: Extracts docx archive data
+   *    - Buffer: Processes binary data (Node.js)
+   *    - undefined/null: Creates blank document
+   * 3. **Document initialization**: Creates converter, media, fonts, initial state
+   * 4. **View mounting**: Attaches ProseMirror view (unless headless)
+   * 5. **Event wiring**: Connects all lifecycle event handlers
+   *
+   * Called by `open()` after state validation, wrapped in `#withState()` for
+   * atomic state transitions.
+   *
+   * @param source - Document source:
+   *   - `string`: File path (Node.js reads from disk, browser fetches as URL)
+   *   - `File | Blob`: Browser file object or blob
+   *   - `Buffer`: Node.js buffer containing docx data
+   *   - `undefined | null`: Creates a blank document
+   * @param options - Document-level options (mode, comments, styles, etc.)
+   * @returns Promise that resolves when document is fully loaded and ready
+   * @throws {DocumentLoadError} If any step of document loading fails. The error
+   *   wraps the underlying cause for debugging.
+   *
+   * @remarks
+   * - Sets `#sourcePath` for path-based sources (enables `save()`)
+   * - Sets `#sourcePath = null` for Blob/Buffer sources (requires `saveTo()`)
+   * - In browser, string paths are treated as URLs to fetch
+   * - In Node.js, string paths are read from the filesystem
+   *
+   * @see open - Public API that calls this method
+   * @see #unloadDocument - Cleanup counterpart that reverses this process
+   */
+  async #loadDocument(source?: string | File | Blob | Buffer, options?: OpenOptions): Promise<void> {
+    try {
+      // Merge options with defaults
+      const resolvedMode = options?.mode ?? this.options.mode ?? 'docx';
+      const resolvedOptions = {
+        ...this.options,
+        mode: resolvedMode,
+        isCommentsEnabled: options?.isCommentsEnabled ?? this.options.isCommentsEnabled,
+        suppressDefaultDocxStyles: options?.suppressDefaultDocxStyles ?? this.options.suppressDefaultDocxStyles,
+        documentMode: options?.documentMode ?? this.options.documentMode ?? 'editing',
+        html: options?.html,
+        markdown: options?.markdown,
+        jsonOverride: options?.json ?? null,
+      };
+
+      // Determine source type and load XML data
+      if (typeof source === 'string') {
+        // Node.js: read file from path
+        if (typeof process !== 'undefined' && process.versions?.node) {
+          // Dynamic require to avoid bundler issues
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const fs = require('fs') as typeof import('fs');
+          const buffer = fs.readFileSync(source);
+          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(buffer, true))!;
+          resolvedOptions.content = docx;
+          resolvedOptions.mediaFiles = mediaFiles;
+          resolvedOptions.fonts = fonts;
+          resolvedOptions.fileSource = buffer;
+          this.#sourcePath = source;
+        } else {
+          // Browser: fetch the file
+          const response = await fetch(source);
+          if (!response.ok) {
+            console.debug('[SuperDoc] Fetch failed:', response.status, response.statusText);
+            throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+          }
+          const blob = await response.blob();
+          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(blob))!;
+          resolvedOptions.content = docx;
+          resolvedOptions.mediaFiles = mediaFiles;
+          resolvedOptions.fonts = fonts;
+          resolvedOptions.fileSource = blob;
+          // In browser, path is just a suggested filename
+          this.#sourcePath = source.split('/').pop() || null;
+        }
+      } else if (source != null && typeof source === 'object') {
+        // File, Blob, Buffer, or ArrayBuffer-like object
+        // Check for Buffer in Node.js (Buffer.isBuffer is more reliable than instanceof)
+        const isNodeBuffer = typeof Buffer !== 'undefined' && (Buffer.isBuffer(source) || source instanceof Buffer);
+        const isBlob = typeof Blob !== 'undefined' && source instanceof Blob;
+        const isArrayBuffer = source instanceof ArrayBuffer;
+        const hasArrayBuffer = typeof source === 'object' && 'buffer' in source && source.buffer instanceof ArrayBuffer;
+
+        if (isNodeBuffer || isBlob || isArrayBuffer || hasArrayBuffer) {
+          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(
+            source as File | Blob | Buffer,
+            isNodeBuffer,
+          ))!;
+          resolvedOptions.content = docx;
+          resolvedOptions.mediaFiles = mediaFiles;
+          resolvedOptions.fonts = fonts;
+          resolvedOptions.fileSource = source as File | Blob | Buffer;
+          this.#sourcePath = null;
+        } else {
+          // Unknown object type - try to load it anyway
+          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(source as File | Blob | Buffer, false))!;
+          resolvedOptions.content = docx;
+          resolvedOptions.mediaFiles = mediaFiles;
+          resolvedOptions.fonts = fonts;
+          resolvedOptions.fileSource = source as File | Blob | Buffer;
+          this.#sourcePath = null;
+        }
+      } else {
+        // Blank document (source is undefined or null)
+        // For docx mode without pre-parsed content, load the blank.docx template
+        const shouldLoadBlankDocx =
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+
+        if (shouldLoadBlankDocx) {
+          // Decode base64 blank.docx without fetch
+          const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
+          const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
+          const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
+          // Use Uint8Array to ensure compatibility with both Node Buffer and browser Blob
+          const uint8Array = new Uint8Array(arrayBuffer);
+          let fileSource: File | Blob | Buffer;
+          if (canUseBuffer) {
+            fileSource = Buffer.from(uint8Array);
+          } else if (typeof Blob !== 'undefined') {
+            fileSource = new Blob([uint8Array as BlobPart]);
+          } else {
+            throw new Error('Blob is not available to create blank DOCX');
+          }
+          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
+          resolvedOptions.content = docx;
+          resolvedOptions.mediaFiles = mediaFiles;
+          resolvedOptions.fonts = fonts;
+          resolvedOptions.fileSource = fileSource;
+          resolvedOptions.isNewFile = true;
+          this.#sourcePath = null;
+        } else {
+          // Use pre-parsed content from options if provided, otherwise create minimal structure
+          resolvedOptions.content = (options?.content ?? []) as string | Record<string, unknown> | DocxFileEntry[];
+          resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
+          resolvedOptions.fonts = options?.fonts ?? {};
+          resolvedOptions.fileSource = null;
+          resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
+          this.#sourcePath = null;
+        }
+      }
+
+      // Update options
+      this.setOptions(resolvedOptions);
+
+      // Create converter
+      this.#createConverter();
+
+      // Initialize media
+      this.#initMedia();
+
+      // Initialize fonts (if not headless)
+      const shouldMountRenderer = this.#shouldMountRenderer();
+      if (shouldMountRenderer) {
+        this.#initContainerElement(this.options);
+        this.#initFonts();
+      }
+
+      // Create initial state
+      this.#createInitialState({ includePlugins: !shouldMountRenderer });
+
+      // In headless mode, run synthetic transaction pass
+      if (!shouldMountRenderer) {
+        const tr = this.state.tr.setMeta('forcePluginPass', true).setMeta('addToHistory', false);
+        this.#dispatchTransaction(tr);
+      }
+
+      // Mount if not headless
+      if (shouldMountRenderer) {
+        this.mount(this.options.element!);
+        this.#configureStateWithExtensionPlugins();
+      }
+
+      // Emit create event
+      if (!shouldMountRenderer) {
+        this.#emitCreateAsync();
+      }
+
+      // Initialize default styles (if not headless)
+      if (shouldMountRenderer) {
+        this.initDefaultStyles();
+        this.#checkFonts();
+      }
+
+      // Migrate lists if needed
+      const shouldMigrateListsOnInit = Boolean(
+        this.options.markdown ||
+          this.options.html ||
+          this.options.loadFromSchema ||
+          this.options.jsonOverride ||
+          this.options.mode === 'html' ||
+          this.options.mode === 'text',
+      );
+      if (shouldMigrateListsOnInit) {
+        this.migrateListsToV2();
+      }
+
+      // Set document mode
+      this.setDocumentMode(this.options.documentMode!, 'init');
+
+      // Initialize collaboration data for new files
+      this.initializeCollaborationData();
+
+      // Initialize comments
+      if (!this.options.ydoc && !this.options.isChildEditor) {
+        this.#initComments();
+      }
+
+      // Initialize dev tools and copy handler
+      if (shouldMountRenderer) {
+        this.#initDevTools();
+        this.#registerCopyHandler();
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.debug('[SuperDoc] Document load error:', err.message);
+      throw new DocumentLoadError(`Failed to load document: ${err.message}`, err);
+    }
+  }
+
+  /**
+   * Unload the current document and clean up all document-specific resources.
+   *
+   * This method performs a complete cleanup of document state while preserving
+   * the core editor services (schema, extensions, commands) for reuse:
+   *
+   * **Resources cleaned up:**
+   * - ProseMirror view (unmounted from DOM)
+   * - Header/footer editors (destroyed)
+   * - Document converter instance
+   * - Media references and image storage
+   * - Source path reference
+   * - Document-specific options (content, fileSource, initialState)
+   * - ProseMirror editor state
+   *
+   * **Resources preserved:**
+   * - ProseMirror schema
+   * - Extension service and registered extensions
+   * - Command service and registered commands
+   * - Event listeners (registered once during core init, reused across documents)
+   *
+   * After cleanup, the editor transitions to 'closed' state and can be reopened
+   * with a new document via `open()`.
+   *
+   * Called by `close()` after emitting the `documentClose` event.
+   *
+   * @remarks
+   * This is a critical part of the document lifecycle API that enables efficient
+   * document switching. By preserving schema and extensions, we avoid expensive
+   * reinitialization when opening multiple documents sequentially.
+   *
+   * @see close - Public API that calls this method
+   * @see #loadDocument - Counterpart method that loads document resources
+   */
+  #unloadDocument(): void {
+    // Unmount the view
+    this.unmount();
+
+    // Destroy header/footer editors
+    this.destroyHeaderFooterEditors();
+
+    // Reset converter
+    this.converter = undefined!;
+
+    // Clear media references
+    if (this.storage.image) {
+      (this.storage.image as ImageStorage).media = {};
+    }
+
+    // Clear source path
+    this.#sourcePath = null;
+
+    // Clear document-specific state
+    this.options.initialState = null;
+    this.options.content = '';
+    this.options.fileSource = null;
+
+    // Reset internal state
+    this._state = undefined!;
   }
 
   /**
@@ -290,15 +958,24 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#createConverter();
     this.#initMedia();
 
-    if (!this.options.isHeadless) {
-      this.#initFonts();
-    }
-
     this.on('beforeCreate', this.options.onBeforeCreate!);
     this.emit('beforeCreate', { editor: this });
     this.on('contentError', this.options.onContentError!);
 
-    this.mount(this.options.element!);
+    const shouldMountRenderer = this.#shouldMountRenderer();
+    this.#createInitialState({ includePlugins: !shouldMountRenderer });
+    // In headless mode the view never dispatches an initial transaction,
+    // so run one synthetic pass to let appendTransaction hooks (e.g. numbering) populate derived attrs.
+    if (!shouldMountRenderer) {
+      const tr = this.state.tr.setMeta('forcePluginPass', true).setMeta('addToHistory', false);
+      this.#dispatchTransaction(tr);
+    }
+    if (shouldMountRenderer) {
+      this.#initContainerElement(this.options);
+      this.#initFonts();
+      this.mount(this.options.element!);
+      this.#configureStateWithExtensionPlugins();
+    }
 
     this.on('create', this.options.onCreate!);
     this.on('update', this.options.onUpdate!);
@@ -318,8 +995,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
 
-    if (!this.options.isHeadless) {
-      this.initializeCollaborationData();
+    if (!shouldMountRenderer) {
+      this.#emitCreateAsync();
+    }
+
+    this.initializeCollaborationData();
+
+    if (shouldMountRenderer) {
       this.initDefaultStyles();
       this.#checkFonts();
     }
@@ -339,14 +1021,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     this.setDocumentMode(this.options.documentMode!, 'init');
 
-    if (!this.options.ydoc) {
-      if (!this.options.isChildEditor) {
-        this.#initComments();
-      }
+    if (!this.options.ydoc && !this.options.isChildEditor) {
+      this.#initComments();
     }
 
-    this.#initDevTools();
-    this.#registerCopyHandler();
+    if (shouldMountRenderer) {
+      this.#initDevTools();
+      this.#registerCopyHandler();
+    }
   }
 
   /**
@@ -365,7 +1047,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.emit('beforeCreate', { editor: this });
     this.on('contentError', this.options.onContentError!);
 
-    this.mount(this.options.element!);
+    const shouldMountRenderer = this.#shouldMountRenderer();
+    this.#createInitialState({ includePlugins: !shouldMountRenderer });
+    if (shouldMountRenderer) {
+      this.#initContainerElement(this.options);
+      this.mount(this.options.element!);
+      this.#configureStateWithExtensionPlugins();
+    }
 
     this.on('create', this.options.onCreate!);
     this.on('update', this.options.onUpdate!);
@@ -378,22 +1066,31 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('commentClick', this.options.onCommentClicked!);
     this.on('locked', this.options.onDocumentLocked!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
+
+    if (!shouldMountRenderer) {
+      this.#emitCreateAsync();
+    }
   }
 
   mount(el: HTMLElement | null): void {
     this.#createView(el);
 
-    window.setTimeout(() => {
+    setTimeout(() => {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
   }
 
   unmount(): void {
-    if (this.view) {
+    if (this.#renderer) {
+      this.#renderer.destroy();
+    } else if (this.view) {
       this.view.destroy();
     }
-    this.view = undefined!;
+    this.view = undefined;
   }
 
   /**
@@ -420,18 +1117,36 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // Set up minimal navigator for Node.js environments
     if (typeof navigator === 'undefined') {
       // Create a minimal navigator object with required properties
-      const minimalNavigator = {
+      // @ts-expect-error - Partial navigator object for headless mode
+      (global as typeof globalThis & { navigator?: unknown }).navigator = {
         platform: 'node',
         userAgent: 'Node.js',
       };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (global as any).navigator = minimalNavigator;
     }
 
+    // Deprecation warnings for legacy mock options
     if (options.mockDocument) {
+      console.warn(
+        '[super-editor] `mockDocument` is deprecated and will be removed in a future version. ' +
+          'Use `document` instead (e.g., `new Editor({ document: jsdomDocument })`). ' +
+          'See https://docs.superdoc.dev/guide/headless for migration guidance.',
+      );
       (global as typeof globalThis).document = options.mockDocument;
+    }
+    if (options.mockWindow) {
+      console.warn(
+        '[super-editor] `mockWindow` is deprecated and will be removed in a future version. ' +
+          'Prefer passing `document` only. Global window assignment is no longer required for headless mode.',
+      );
       (global as typeof globalThis).window = options.mockWindow as Window & typeof globalThis;
     }
+  }
+
+  /**
+   * Check if web layout mode is enabled (OOXML ST_View 'web')
+   */
+  isWebLayout(): boolean {
+    return this.options.viewOptions?.layout === 'web';
   }
 
   /**
@@ -445,7 +1160,59 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Get the editor state
    */
   get state(): EditorState {
-    return this.view?.state;
+    return this._state;
+  }
+
+  /**
+   * Get the current editor lifecycle state.
+   *
+   * @returns The current lifecycle state ('initialized', 'documentLoading', 'ready', 'saving', 'closed', 'destroyed')
+   */
+  get lifecycleState(): EditorLifecycleState {
+    return this.#editorLifecycleState;
+  }
+
+  /**
+   * Get the source path of the currently opened document.
+   *
+   * Returns the file path if the document was opened from a path (Node.js),
+   * or null if opened from a Blob/Buffer or created as a blank document.
+   *
+   * In browsers, this is only a suggested filename, not an actual filesystem path.
+   */
+  get sourcePath(): string | null {
+    return this.#sourcePath;
+  }
+
+  /**
+   * Replace the editor state entirely.
+   *
+   * Use this method when you need to set a completely new EditorState
+   * (e.g., in tests or when loading a new document). For incremental
+   * changes, prefer using transactions via `editor.dispatch()` or commands.
+   *
+   * **Important:** This method bypasses the transaction system entirely.
+   * No transaction events will be emitted, no history entries will be created,
+   * and plugins will not receive transaction metadata. Use `editor.dispatch()`
+   * with transactions for changes that should be undoable or tracked.
+   *
+   * @param newState - The new EditorState to set
+   *
+   * @example
+   * ```typescript
+   * const newState = EditorState.create({
+   *   schema: editor.schema,
+   *   doc: newDoc,
+   *   plugins: editor.state.plugins,
+   * });
+   * editor.setState(newState);
+   * ```
+   */
+  setState(newState: EditorState): void {
+    this._state = newState;
+    if (this.view && !this.view.isDestroyed) {
+      this.view.updateState(newState);
+    }
   }
 
   /**
@@ -460,6 +1227,31 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   get commands(): EditorCommands {
     return this.#commandService?.commands;
+  }
+
+  /**
+   * Programmatic document API for querying and mutating the document.
+   *
+   * Lazily creates a {@link DocumentApi} backed by the editor's adapter graph.
+   * The instance is cached for the current document session and
+   * invalidated on {@link close} so a fresh adapter set is created on reopen.
+   *
+   * @throws {InvalidStateError} If the editor is not in `ready` or `saving` state.
+   *
+   * @example
+   * ```ts
+   * const result = editor.doc.find({ nodeType: 'paragraph' });
+   *
+   * // Fetch node info for the first match
+   * const info = editor.doc.getNode(result.matches[0]);
+   * ```
+   */
+  get doc(): DocumentApi {
+    this.#assertState('ready', 'saving');
+    if (!this.#documentApi) {
+      this.#documentApi = createDocumentApi(getDocumentApiAdapters(this));
+    }
+    return this.#documentApi;
   }
 
   /**
@@ -480,7 +1272,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Check if editor is destroyed.
    */
   get isDestroyed(): boolean {
-    return this.view?.isDestroyed ?? true;
+    return Boolean(this.#isDestroyed || this.view?.isDestroyed);
   }
 
   /**
@@ -529,7 +1321,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // Viewing mode: Not editable, no tracked changes, no comments
     if (cleanedMode === 'viewing') {
-      this.commands.toggleTrackChangesShowOriginal();
+      this.commands.toggleTrackChangesShowOriginal?.();
       this.setEditable(false, false);
       this.setOptions({ documentMode: 'viewing' });
       if (pm) pm.classList.add('view-mode');
@@ -537,17 +1329,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // Suggesting: Editable, tracked changes plugin enabled, comments
     else if (cleanedMode === 'suggesting') {
-      this.commands.disableTrackChangesShowOriginal();
-      this.commands.enableTrackChanges();
+      this.commands.disableTrackChangesShowOriginal?.();
+      this.commands.enableTrackChanges?.();
       this.setOptions({ documentMode: 'suggesting' });
       this.setEditable(true, false);
       if (pm) pm.classList.remove('view-mode');
     }
 
-    // Editing: Editable, tracked changes plguin disabled, comments
+    // Editing: Editable, tracked changes plugin disabled, comments
     else if (cleanedMode === 'editing') {
-      this.commands.disableTrackChangesShowOriginal();
-      this.commands.disableTrackChanges();
+      this.commands.disableTrackChangesShowOriginal?.();
+      this.commands.disableTrackChanges?.();
       this.setEditable(true, false);
       this.setOptions({ documentMode: 'editing' });
       if (pm) pm.classList.remove('view-mode');
@@ -572,91 +1364,95 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get viewport coordinates for a document position. Falls back to the PresentationEditor
-   * when running without a ProseMirror view (layout mode).
+   * Get viewport coordinates for a document position.
+   * In presentation mode the ProseMirror view is hidden off-screen, so we
+   * delegate to PresentationEditor which uses visual layout coordinates.
    */
   coordsAtPos(pos: number): ReturnType<PmEditorView['coordsAtPos']> | null {
-    if (this.view) {
-      return this.view.coordsAtPos(pos);
+    if (this.presentationEditor) {
+      return this.presentationEditor.coordsAtPos(pos);
     }
 
-    const layoutRects = this.presentationEditor?.getRangeRects?.(pos, pos);
-    if (Array.isArray(layoutRects) && layoutRects.length > 0) {
-      const rect = layoutRects[0];
-      return {
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-        width: rect.width,
-        height: rect.height,
-      } as ReturnType<PmEditorView['coordsAtPos']>;
+    if (this.view) {
+      return this.view.coordsAtPos(pos);
     }
 
     return null;
   }
 
   /**
-   * Get position from client-space coordinates. Falls back to PresentationEditor hit testing in layout mode.
+   * Get the DOM element for a document position.
+   * In presentation mode, returns the painted element.
+   */
+  getElementAtPos(
+    pos: number,
+    options: { forceRebuild?: boolean; fallbackToCoords?: boolean } = {},
+  ): HTMLElement | null {
+    if (this.presentationEditor) {
+      return this.presentationEditor.getElementAtPos(pos, options);
+    }
+
+    if (!this.view) return null;
+    if (!Number.isFinite(pos)) return null;
+
+    const maxPos = this.view.state.doc.content.size;
+    const clampedPos = Math.max(0, Math.min(pos, maxPos));
+
+    try {
+      const { node } = this.view.domAtPos(clampedPos);
+      if (node && node.nodeType === 1) {
+        return node as HTMLElement;
+      }
+      if (node && node.nodeType === 3) {
+        return node.parentElement;
+      }
+      return node?.parentElement ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get position from client-space coordinates.
+   * In layout/presentation mode, uses PresentationEditor hit testing for accurate coordinate mapping.
+   * Falls back to ProseMirror view for standard editing mode.
    */
   posAtCoords(coords: Parameters<PmEditorView['posAtCoords']>[0]): ReturnType<PmEditorView['posAtCoords']> {
+    // In presentation/layout mode, use the layout engine's hit testing
+    // which properly converts visible surface coordinates to document positions
+    if (typeof this.presentationEditor?.hitTest === 'function') {
+      // Extract coordinates from various possible coordinate formats
+      const coordsObj = coords as {
+        clientX?: number;
+        clientY?: number;
+        left?: number;
+        top?: number;
+        x?: number;
+        y?: number;
+      };
+      const clientX = coordsObj?.clientX ?? coordsObj?.left ?? coordsObj?.x ?? null;
+      const clientY = coordsObj?.clientY ?? coordsObj?.top ?? coordsObj?.y ?? null;
+      if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        const hit = this.presentationEditor.hitTest(clientX as number, clientY as number);
+        if (hit) {
+          return {
+            pos: hit.pos,
+            inside: hit.pos,
+          };
+        }
+      }
+    }
+
+    // Fall back to ProseMirror view for standard editing mode
     if (this.view) {
       return this.view.posAtCoords(coords);
     }
-    if (typeof this.presentationEditor?.hitTest !== 'function') {
-      return null;
-    }
 
-    // Extract coordinates from various possible coordinate formats
-    const coordsObj = coords as {
-      clientX?: number;
-      clientY?: number;
-      left?: number;
-      top?: number;
-      x?: number;
-      y?: number;
-    };
-    const clientX = coordsObj?.clientX ?? coordsObj?.left ?? coordsObj?.x ?? null;
-    const clientY = coordsObj?.clientY ?? coordsObj?.top ?? coordsObj?.y ?? null;
-    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
-      return null;
-    }
-
-    const hit = this.presentationEditor.hitTest(clientX as number, clientY as number);
-    if (!hit) {
-      return null;
-    }
-
-    return {
-      pos: hit.pos,
-      inside: hit.pos,
-    };
+    return null;
   }
 
   #registerCopyHandler(): void {
-    const dom = this.view?.dom;
-    if (!dom) {
-      return;
-    }
-
-    dom.addEventListener('copy', (event: ClipboardEvent) => {
-      const clipboardData = event.clipboardData;
-      if (!clipboardData) return;
-
-      event.preventDefault();
-
-      const { from, to } = this.view.state.selection;
-      const slice = this.view.state.doc.slice(from, to);
-      const fragment = slice.content;
-
-      const div = document.createElement('div');
-      const serializer = PmDOMSerializer.fromSchema(this.view.state.schema);
-      div.appendChild(serializer.serializeFragment(fragment));
-
-      const html = transformListsInCopiedContent(div.innerHTML);
-
-      clipboardData.setData('text/html', html);
-    });
+    this.#renderer?.registerCopyHandler?.(this);
   }
 
   /**
@@ -676,13 +1472,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const provider = this.options.collaborationProvider;
 
     const postSyncInit = () => {
-      provider.off('synced', postSyncInit);
+      provider.off?.('synced', postSyncInit);
       this.#insertNewFileData();
     };
 
     if (provider.synced) this.#insertNewFileData();
     // If we are not sync'd yet, wait for the event then insert the data
-    else provider.on('synced', postSyncInit);
+    else provider.on?.('synced', postSyncInit);
   }
 
   /**
@@ -785,14 +1581,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @param handlePlugins Optional function for handling plugin merge.
    */
   registerPlugin(plugin: Plugin, handlePlugins?: (plugin: Plugin, plugins: Plugin[]) => Plugin[]): void {
+    if (this.isDestroyed) return;
     if (!this.state?.plugins) return;
     const plugins =
       typeof handlePlugins === 'function'
         ? handlePlugins(plugin, [...this.state.plugins])
         : [...this.state.plugins, plugin];
 
-    const state = this.state.reconfigure({ plugins });
-    this.view.updateState(state);
+    this._state = this.state.reconfigure({ plugins });
+    this.view?.updateState(this._state);
   }
 
   /**
@@ -814,11 +1611,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
         ? `${nameOrPluginKey}$`
         : ((nameOrPluginKey?.key as string | undefined) ?? '');
 
-    const state = this.state.reconfigure({
+    this._state = this.state.reconfigure({
       plugins: this.state.plugins.filter((plugin) => !this.#getPluginKeyName(plugin).startsWith(name)),
     });
 
-    this.view.updateState(state);
+    this.view?.updateState(this._state);
   }
 
   /**
@@ -827,7 +1624,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #createExtensionService(): void {
     const allowedExtensions = ['extension', 'node', 'mark'];
 
-    const coreExtensions = [Editable, Commands, EditorFocus, Keymap];
+    const coreExtensions = [Editable, Commands, EditorFocus, Keymap, PositionTrackerExtension];
     const externalExtensions = this.options.externalExtensions || [];
 
     const allExtensions = [...coreExtensions, ...this.options.extensions!].filter((extension) => {
@@ -859,11 +1656,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media: this.options.mediaFiles,
         fonts: this.options.fonts,
         debug: true,
-        telemetry: this.options.telemetry,
         fileSource: this.options.fileSource,
         documentId: this.options.documentId,
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
+        isNewFile: this.options.isNewFile ?? false,
       });
     }
   }
@@ -878,7 +1675,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       return;
     }
 
-    const mediaMap = this.options.ydoc.getMap('media');
+    const mediaMap = (this.options.ydoc as { getMap: (name: string) => Map<string, unknown> }).getMap('media');
 
     // We are creating a new file and need to set the media
     if (this.options.isNewFile) {
@@ -900,15 +1697,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Initialize fonts
    */
   #initFonts(): void {
-    const results = this.converter.getFontFaceImportString();
-
-    if (results?.styleString?.length) {
-      const style = document.createElement('style');
-      style.textContent = results.styleString;
-      document.head.appendChild(style);
-
-      this.fontsImported = results.fontsImported;
-    }
+    this.#renderer?.initFonts?.(this);
   }
 
   /**
@@ -994,7 +1783,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set the document version
    */
   static setDocumentVersion(doc: DocxFileEntry[], version: string): string {
-    return SuperConverter.setStoredSuperdocVersion(doc, version) ?? version;
+    const result = SuperConverter.setStoredSuperdocVersion(doc, version);
+    if (typeof result === 'string') {
+      return result;
+    }
+    return version;
   }
 
   /**
@@ -1081,6 +1874,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     try {
       const { mode, content, fragment, loadFromSchema } = this.options;
+      const domDocument = this.#getDomDocument();
       const hasJsonContent = (value: unknown): value is Record<string, unknown> =>
         typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -1095,10 +1889,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
           // Check for markdown BEFORE html (since markdown gets converted to HTML)
           if (this.options.markdown) {
-            doc = createDocFromMarkdown(this.options.markdown, this, { isImport: true });
+            doc = createDocFromMarkdown(this.options.markdown, this, {
+              isImport: true,
+              document: domDocument,
+              onUnsupportedContent: this.options.onUnsupportedContent,
+              warnOnUnsupportedContent: this.options.warnOnUnsupportedContent,
+            });
           }
           // If we have a new doc, and have html data, we initialize from html
-          else if (this.options.html) doc = createDocFromHTML(this.options.html, this, { isImport: true });
+          else if (this.options.html)
+            doc = createDocFromHTML(this.options.html, this, {
+              isImport: true,
+              document: domDocument,
+              onUnsupportedContent: this.options.onUnsupportedContent,
+              warnOnUnsupportedContent: this.options.warnOnUnsupportedContent,
+            });
           else if (this.options.jsonOverride) doc = this.schema.nodeFromJSON(this.options.jsonOverride);
 
           if (fragment) doc = yXmlFragmentToProseMirrorRootNode(fragment, this.schema);
@@ -1108,7 +1913,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // If we are in HTML mode, we initialize from either content or html (or blank)
       else if (mode === 'text' || mode === 'html') {
         if (loadFromSchema && hasJsonContent(content)) doc = this.schema.nodeFromJSON(content);
-        else if (typeof content === 'string') doc = createDocFromHTML(content, this);
+        else if (typeof content === 'string')
+          doc = createDocFromHTML(content, this, {
+            document: domDocument,
+            onUnsupportedContent: this.options.onUnsupportedContent,
+            warnOnUnsupportedContent: this.options.warnOnUnsupportedContent,
+          });
         else doc = this.schema.topNodeType.createAndFill()!;
       }
     } catch (err) {
@@ -1123,31 +1933,60 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Create the PM editor view
    */
-  #createView(element: HTMLElement | null): void {
+  #createInitialState({ includePlugins = false }: { includePlugins?: boolean } = {}): void {
+    if (this._state) return;
+
     const doc = this.#generatePmData();
 
     // Only initialize the doc if we are not using Yjs/collaboration.
-    const state: { schema: Schema; doc?: PmNode } = { schema: this.schema };
-    if (!this.options.ydoc) state.doc = doc;
+    const config: { schema: Schema; doc?: PmNode } = { schema: this.schema };
+    if (!this.options.ydoc) config.doc = doc;
 
-    this.options.initialState = PmEditorState.create(state);
+    let initialState = PmEditorState.create(config);
 
-    this.view = new EditorView(element, {
-      ...this.options.editorProps,
-      dispatchTransaction: this.#dispatchTransaction.bind(this),
-      state: this.options.initialState,
-      handleClick: this.#handleNodeSelection.bind(this),
-    });
+    if (includePlugins) {
+      initialState = initialState.reconfigure({
+        plugins: [...this.extensionService.plugins],
+      });
+    }
 
-    const newState = this.state.reconfigure({
+    this.options.initialState = initialState;
+    this._state = initialState;
+  }
+
+  #configureStateWithExtensionPlugins(): void {
+    const configuredState = this.state.reconfigure({
       plugins: [...this.extensionService.plugins],
     });
 
-    this.view.updateState(newState);
+    this._state = configuredState;
+    this.view?.updateState(configuredState);
+  }
+
+  /**
+   * Create the PM editor view
+   */
+  #createView(element: HTMLElement | null): void {
+    if (!this._state) {
+      this.#createInitialState();
+    }
+
+    if (!this.#renderer) {
+      if (!canUseDOM()) {
+        throw new Error('[super-editor] Cannot create an editor view without a renderer.');
+      }
+      this.#renderer = new ProseMirrorRenderer();
+    }
+
+    this.view = this.#renderer.attach({
+      element,
+      editorProps: this.options.editorProps,
+      dispatchTransaction: this.#dispatchTransaction.bind(this),
+      state: this.state,
+      handleClick: this.#handleNodeSelection.bind(this),
+    });
 
     this.createNodeViews();
-
-    (this.options.telemetry as TelemetryData | null)?.trackUsage?.('editor_initialized', {});
   }
 
   /**
@@ -1163,19 +2002,38 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get the maximum content size
+   * Get the maximum content size based on page dimensions and margins
+   * @returns Size object with width and height in pixels, or empty object if no page size
+   * @note In web layout mode, returns empty object to skip content constraints.
+   *       CSS max-width: 100% handles responsive display while preserving full resolution.
    */
   getMaxContentSize(): { width?: number; height?: number } {
     if (!this.converter) return {};
+
+    // In web layout mode: skip constraints, let CSS handle responsive sizing
+    // This preserves full image resolution while CSS max-width: 100% handles display
+    if (this.isWebLayout()) {
+      return {};
+    }
+
     const { pageSize = {}, pageMargins = {} } = this.converter.pageStyles ?? {};
     const { width, height } = pageSize;
-    const { top = 0, bottom = 0, left = 0, right = 0 } = pageMargins;
 
-    // All sizes are in inches so we multiply by 96 to get pixels
     if (!width || !height) return {};
 
-    const maxHeight = height * 96 - top * 96 - bottom * 96 - 50;
-    const maxWidth = width * 96 - left * 96 - right * 96 - 20;
+    // Print layout mode: use document margins (inches converted to pixels)
+    const getMarginPx = (side: 'top' | 'bottom' | 'left' | 'right'): number => {
+      return (pageMargins?.[side] ?? 0) * PIXELS_PER_INCH;
+    };
+
+    const topPx = getMarginPx('top');
+    const bottomPx = getMarginPx('bottom');
+    const leftPx = getMarginPx('left');
+    const rightPx = getMarginPx('right');
+
+    // All sizes are in inches so we multiply by PIXELS_PER_INCH to get pixels
+    const maxHeight = height * PIXELS_PER_INCH - topPx - bottomPx - MAX_HEIGHT_BUFFER_PX;
+    const maxWidth = width * PIXELS_PER_INCH - leftPx - rightPx - MAX_WIDTH_BUFFER_PX;
     return {
       width: maxWidth,
       height: maxHeight,
@@ -1186,73 +2044,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Attach styles and attributes to the editor element
    */
   updateEditorStyles(element: HTMLElement, proseMirror: HTMLElement): void {
-    const { pageSize, pageMargins } = this.converter.pageStyles ?? {};
-
-    if (!proseMirror || !element) {
-      return;
-    }
-
-    proseMirror.setAttribute('role', 'document');
-    proseMirror.setAttribute('aria-multiline', 'true');
-    proseMirror.setAttribute('aria-label', 'Main content area, start typing to enter text.');
-    proseMirror.setAttribute('aria-description', '');
-    proseMirror.classList.remove('view-mode');
-
-    // Set fixed dimensions and padding that won't change with scaling
-    if (pageSize) {
-      element.style.width = pageSize.width + 'in';
-      element.style.minWidth = pageSize.width + 'in';
-      element.style.minHeight = pageSize.height + 'in';
-    }
-
-    if (pageMargins) {
-      element.style.paddingLeft = pageMargins.left + 'in';
-      element.style.paddingRight = pageMargins.right + 'in';
-    }
-
-    element.style.boxSizing = 'border-box';
-    element.style.isolation = 'isolate'; // to create new stacking context.
-
-    proseMirror.style.outline = 'none';
-    proseMirror.style.border = 'none';
-    element.style.backgroundColor = '#fff';
-    proseMirror.style.backgroundColor = '#fff';
-
-    // Typeface and font size
-    const { typeface, fontSizePt, fontFamilyCss } = this.converter.getDocumentDefaultStyles() ?? {};
-
-    const resolvedFontFamily = fontFamilyCss || typeface;
-    if (resolvedFontFamily) {
-      element.style.fontFamily = resolvedFontFamily;
-    }
-    if (fontSizePt) {
-      element.style.fontSize = `${fontSizePt}pt`;
-    }
-
-    // Mobile styles
-    element.style.transformOrigin = 'top left';
-    element.style.touchAction = 'auto';
-    (element.style as CSSStyleDeclaration & { webkitOverflowScrolling?: string }).webkitOverflowScrolling = 'touch';
-
-    // Calculate line height
-    const defaultLineHeight = 1.2;
-    proseMirror.style.lineHeight = String(defaultLineHeight);
-
-    // If we are not using pagination, we still need to add some padding for header/footer
-    // Always pad the body to the page top margin so the body baseline
-    // starts at pageTop + topMargin (Word parity). Pagination decorations
-    // will only reserve header overflow beyond this margin.
-    if (this.presentationEditor && pageMargins?.top != null) {
-      proseMirror.style.paddingTop = `${pageMargins.top}in`;
-    } else if (this.presentationEditor) {
-      // Fallback for missing margins
-      proseMirror.style.paddingTop = '1in';
-    } else {
-      proseMirror.style.paddingTop = '0';
-    }
-
-    // Keep footer padding managed by pagination; set to 0 here.
-    proseMirror.style.paddingBottom = '0';
+    this.#renderer?.updateEditorStyles?.(this, element, proseMirror);
   }
 
   /**
@@ -1264,12 +2056,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   initDefaultStyles(element: HTMLElement | null = this.element): void {
     if (this.options.isHeadless || this.options.suppressDefaultDocxStyles) return;
-
-    const proseMirror = element?.querySelector('.ProseMirror') as HTMLElement;
-
-    this.updateEditorStyles(element!, proseMirror);
-
-    this.initMobileStyles(element);
+    this.#renderer?.initDefaultStyles?.(this, element);
   }
 
   /**
@@ -1277,60 +2064,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Sets up scaling based on viewport width and handles orientation changes.
    */
   initMobileStyles(element: HTMLElement | null): void {
-    if (!element) {
-      return;
-    }
-
-    const initialWidth = element.offsetWidth;
-
-    const updateScale = () => {
-      const minPageSideMargin = 10;
-      const elementWidth = initialWidth;
-      const availableWidth = document.documentElement.clientWidth - minPageSideMargin;
-
-      this.options.scale = Math.min(1, availableWidth / elementWidth);
-
-      const superEditorElement = element.closest('.super-editor') as HTMLElement;
-      const superEditorContainer = element.closest('.super-editor-container') as HTMLElement;
-
-      if (!superEditorElement || !superEditorContainer) {
-        return;
-      }
-
-      if (this.options.scale! < 1) {
-        superEditorElement.style.maxWidth = `${elementWidth * this.options.scale!}px`;
-        superEditorContainer.style.minWidth = '0px';
-
-        element.style.transform = `scale(${this.options.scale})`;
-      } else {
-        superEditorElement.style.maxWidth = '';
-        superEditorContainer.style.minWidth = '';
-
-        element.style.transform = 'none';
-      }
-    };
-
-    // Initial scale
-    updateScale();
-
-    const handleResize = () => {
-      setTimeout(() => {
-        updateScale();
-      }, 150);
-    };
-
-    if ('orientation' in screen && 'addEventListener' in screen.orientation) {
-      screen.orientation.addEventListener('change', handleResize);
-    } else {
-      // jsdom (and some older browsers) don't implement matchMedia; skip listener in that case
-      const mediaQueryList =
-        typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
-      if (mediaQueryList?.addEventListener) {
-        mediaQueryList.addEventListener('change', handleResize);
-      }
-    }
-
-    window.addEventListener('resize', () => handleResize);
+    this.#renderer?.initMobileStyles?.(this, element);
   }
 
   /**
@@ -1366,7 +2100,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #initComments(): void {
     if (!this.options.isCommentsEnabled) return;
-    if (this.options.isHeadless) return;
     if (!this.options.shouldLoadComments) return;
     const replacedFile = this.options.replacedFile;
     this.emit('commentsLoaded', {
@@ -1375,8 +2108,18 @@ export class Editor extends EventEmitter<EditorEventMap> {
       comments: this.converter.comments || [],
     });
 
+    // Reset replacedFile synchronously in both headless and mounted paths
+    // to ensure consistent behavior for consumers reading this flag after commentsLoaded.
+    this.options.replacedFile = false;
+
+    // In headless mode we support comment data (for export and server-side workflows),
+    // but skip comment UI behaviors that rely on a mounted view.
+    if (this.options.isHeadless) {
+      return;
+    }
+
+    // Force comment plugin update after a short delay to allow DOM to settle.
     setTimeout(() => {
-      this.options.replacedFile = false;
       const st = this.state;
       if (!st) return;
       const tr = st.tr.setMeta(CommentsPluginKey, { type: 'force' });
@@ -1389,94 +2132,124 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #dispatchTransaction(transaction: Transaction): void {
     if (this.isDestroyed) return;
-    const start = Date.now();
+    const perf = this.view?.dom?.ownerDocument?.defaultView?.performance ?? globalThis.performance;
+    const perfNow = () => (perf?.now ? perf.now() : Date.now());
+    const perfStart = perfNow();
 
-    let state: EditorState;
+    const prevState = this.state;
+    let nextState: EditorState;
+    let transactionToApply = transaction;
+    const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
-      const trackChangesState = TrackChangesBasePluginKey.getState(this.view.state);
+      const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
+      const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
 
-      const tr = isTrackChangesActive
+      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      if (shouldTrack && forceTrackChanges && !this.options.user) {
+        throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
+      }
+
+      transactionToApply = shouldTrack
         ? trackedTransaction({
-            tr: transaction,
-            state: this.state,
+            tr: transactionToApply,
+            state: prevState,
             user: this.options.user!,
           })
-        : transaction;
+        : transactionToApply;
 
-      const { state: newState } = this.view.state.applyTransaction(tr);
-      state = newState;
+      const { state: appliedState } = prevState.applyTransaction(transactionToApply);
+      nextState = appliedState;
     } catch (error) {
+      if (forceTrackChanges) throw error;
       // just in case
-      state = this.state.apply(transaction);
+      nextState = prevState.apply(transactionToApply);
       console.log(error);
     }
 
-    const selectionHasChanged = !this.state.selection.eq(state.selection);
-    this.view.updateState(state);
+    const selectionHasChanged = !prevState.selection.eq(nextState.selection);
 
-    const end = Date.now();
+    this._state = nextState;
+    if (this.view) {
+      this.view.updateState(nextState);
+    }
+
+    const end = perfNow();
+
     this.emit('transaction', {
       editor: this,
-      transaction,
-      duration: end - start,
+      transaction: transactionToApply,
+      duration: end - perfStart,
     });
 
     if (selectionHasChanged) {
       this.emit('selectionUpdate', {
         editor: this,
-        transaction,
+        transaction: transactionToApply,
       });
     }
 
-    const focus = transaction.getMeta('focus');
+    const focus = transactionToApply.getMeta('focus');
     if (focus) {
       this.emit('focus', {
         editor: this,
         event: focus.event,
-        transaction,
+        transaction: transactionToApply,
       });
     }
 
-    const blur = transaction.getMeta('blur');
+    const blur = transactionToApply.getMeta('blur');
     if (blur) {
       this.emit('blur', {
         editor: this,
         event: blur.event,
-        transaction,
+        transaction: transactionToApply,
       });
     }
 
-    if (!transaction.docChanged) {
-      return;
-    }
-
-    // Track document modifications and promote to GUID if needed
-    if (transaction.docChanged && this.converter) {
-      if (!this.converter.documentGuid) {
-        this.converter.promoteToGuid();
-        console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+    if (transactionToApply.docChanged) {
+      // Track document modifications and promote to GUID if needed
+      if (transaction.docChanged && this.converter) {
+        if (!this.converter.documentGuid) {
+          this.converter.promoteToGuid();
+          console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+        }
+        this.converter.documentModified = true;
       }
-      this.converter.documentModified = true;
-    }
 
-    this.emit('update', {
-      editor: this,
-      transaction,
-    });
+      this.emit('update', {
+        editor: this,
+        transaction: transactionToApply,
+      });
+    }
   }
 
   /**
    * Public dispatch method for transaction dispatching.
-   * Allows external callers (e.g., SuperDoc stores) to dispatch plugin meta
-   * transactions without accessing editor.view directly.
+   *
+   * Allows external callers (e.g., SuperDoc stores, headless workflows) to dispatch
+   * transactions without accessing editor.view directly. This method works in both
+   * mounted and headless modes.
+   *
+   * In headless mode, this is the primary way to apply state changes since there is
+   * no ProseMirror view to dispatch through.
+   *
+   * @param tr - The ProseMirror transaction to dispatch
+   *
+   * @example
+   * ```typescript
+   * // Headless mode: insert text without a view
+   * const editor = new Editor({ isHeadless: true, content: docx });
+   * editor.dispatch(editor.state.tr.insertText('Hello'));
+   * ```
    */
   dispatch(tr: Transaction): void {
     this.#dispatchTransaction(tr);
   }
 
   /**
-   * Get document identifier for telemetry (async - may generate hash)
+   * Get document unique identifier (async)
+   * Returns a stable identifier for the document (identifierHash or contentHash)
    */
   async getDocumentIdentifier(): Promise<string | null> {
     return (await this.converter?.getDocumentIdentifier()) || null;
@@ -1494,23 +2267,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   isDocumentModified(): boolean {
     return this.converter?.documentModified || false;
-  }
-
-  /**
-   * Get telemetry data (async because of lazy hash generation)
-   */
-  async getTelemetryData(): Promise<{
-    documentId: string | null;
-    isModified: boolean;
-    isPermanentId: boolean;
-    version: string | null;
-  }> {
-    return {
-      documentId: await this.getDocumentIdentifier(),
-      isModified: this.isDocumentModified(),
-      isPermanentId: !!this.converter?.documentGuid,
-      version: this.converter?.getSuperdocVersion(),
-    };
   }
 
   /**
@@ -1554,12 +2310,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
   getJSON(): ProseMirrorJSON {
     const json = this.state.doc.toJSON();
     try {
-      // Check if the document has bodySectPr in attrs, and add from converter if missing
+      // Always sync converter bodySectPr into doc attrs so layout/export see latest section defaults
       const jsonObj = json as ProseMirrorJSON;
       const attrs = jsonObj.attrs as Record<string, unknown> | undefined;
-      const hasBody = attrs && 'bodySectPr' in attrs;
       const converter = this.converter as unknown as { bodySectPr?: unknown };
-      if (!hasBody && converter && converter.bodySectPr) {
+      if (converter && converter.bodySectPr) {
         jsonObj.attrs = attrs || {};
         (jsonObj.attrs as Record<string, unknown>).bodySectPr = converter.bodySectPr;
       }
@@ -1588,13 +2343,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Get the editor content as HTML
    */
   getHTML({ unflattenLists = false }: { unflattenLists?: boolean } = {}): string {
-    const tempDocument = document.implementation.createHTMLDocument();
-    const container = tempDocument.createElement('div');
-    const fragment = PmDOMSerializer.fromSchema(this.schema).serializeFragment(this.state.doc.content);
+    const domDocument = this.#getDomDocument();
+    if (!domDocument) {
+      throw new Error(
+        '[super-editor] getHTML() requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
+      );
+    }
+
+    const container = domDocument.createElement('div');
+    const fragment = PmDOMSerializer.fromSchema(this.schema).serializeFragment(this.state.doc.content, {
+      document: domDocument,
+    });
     container.appendChild(fragment);
     let html = container.innerHTML;
     if (unflattenLists) {
-      html = unflattenListsInHtml(html);
+      html = unflattenListsInHtml(html, domDocument);
     }
     return html;
   }
@@ -1603,35 +2366,92 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Get the editor content as Markdown
    */
   async getMarkdown(): Promise<string> {
+    const domDocument = this.#getDomDocument();
+    if (!domDocument) {
+      throw new Error(
+        '[super-editor] getMarkdown() requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
+      );
+    }
+
+    // Type alias to avoid repeated verbose casts when manipulating DOM globals
+    type MutableGlobals = Record<string, unknown> & {
+      document?: Document;
+      window?: Window & typeof globalThis;
+      navigator?: Navigator;
+    };
+    const globals = globalThis as unknown as MutableGlobals;
+
+    const shouldInjectGlobals = globals.document === undefined;
+    const savedGlobals = shouldInjectGlobals
+      ? {
+          document: globals.document,
+          window: globals.window,
+          navigatorDescriptor: Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+        }
+      : null;
+
+    if (shouldInjectGlobals) {
+      globals.document = domDocument;
+      if (!globals.window && domDocument.defaultView) {
+        globals.window = domDocument.defaultView as Window & typeof globalThis;
+      }
+      if (!globals.navigator && domDocument.defaultView?.navigator) {
+        globals.navigator = domDocument.defaultView.navigator;
+      }
+    }
+
     // Lazy-load markdown libraries to avoid requiring 'document' at import time
     // These libraries (specifically rehype) execute code that accesses document.createElement()
     // during module initialization, which breaks Node.js compatibility
-    const [
-      { unified },
-      { default: rehypeParse },
-      { default: rehypeRemark },
-      { default: remarkStringify },
-      { default: remarkGfm },
-    ] = await Promise.all([
-      import('unified'),
-      import('rehype-parse'),
-      import('rehype-remark'),
-      import('remark-stringify'),
-      import('remark-gfm'),
-    ]);
+    try {
+      const [
+        { unified },
+        { default: rehypeParse },
+        { default: rehypeRemark },
+        { default: remarkStringify },
+        { default: remarkGfm },
+      ] = await Promise.all([
+        import('unified'),
+        import('rehype-parse'),
+        import('rehype-remark'),
+        import('remark-stringify'),
+        import('remark-gfm'),
+      ]);
 
-    const html = this.getHTML();
-    const file = unified()
-      .use(rehypeParse, { fragment: true })
-      .use(rehypeRemark)
-      .use(remarkGfm)
-      .use(remarkStringify, {
-        bullet: '-',
-        fences: true,
-      })
-      .processSync(html);
+      const html = this.getHTML();
+      const file = unified()
+        .use(rehypeParse, { fragment: true })
+        .use(rehypeRemark)
+        .use(remarkGfm)
+        .use(remarkStringify, {
+          bullet: '-',
+          fences: true,
+        })
+        .processSync(html);
 
-    return String(file);
+      return String(file);
+    } finally {
+      if (savedGlobals) {
+        // Restore or delete each global based on its original state
+        if (savedGlobals.document === undefined) {
+          delete globals.document;
+        } else {
+          globals.document = savedGlobals.document;
+        }
+
+        if (savedGlobals.window === undefined) {
+          delete globals.window;
+        } else {
+          globals.window = savedGlobals.window;
+        }
+
+        if (savedGlobals.navigatorDescriptor) {
+          Object.defineProperty(globalThis, 'navigator', savedGlobals.navigatorDescriptor);
+        } else {
+          delete globals.navigator;
+        }
+      }
+    }
   }
 
   /**
@@ -1731,17 +2551,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @returns The updated document in JSON
    */
   #prepareDocumentForExport(comments: Comment[] = []): ProseMirrorJSON {
-    const newState = PmEditorState.create({
-      schema: this.schema,
-      doc: this.state.doc,
-      plugins: this.state.plugins,
-    });
-
-    const { tr, doc } = newState;
-
+    // Use Transform directly instead of creating a throwaway EditorState.
+    // EditorState.create() calls Plugin.init() for every plugin, and
+    // yUndoPlugin.init() registers persistent observers on the shared ydoc
+    // that are never cleaned up — causing an observer leak that degrades
+    // collaboration performance over time.
+    const doc = this.state.doc;
+    const tr = new Transform(doc);
     prepareCommentsForExport(doc, tr, this.schema, comments);
-    const updatedState = newState.apply(tr);
-    return updatedState.doc.toJSON();
+    return tr.doc.toJSON();
   }
 
   getUpdatedJson(): ProseMirrorJSON {
@@ -1756,9 +2574,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     commentsType = 'external',
     exportJsonOnly = false,
     exportXmlOnly = false,
-    comments = [],
+    comments,
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
+    compression,
   }: {
     isFinalDoc?: boolean;
     commentsType?: string;
@@ -1767,10 +2586,23 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments?: Comment[];
     getUpdatedDocs?: boolean;
     fieldsHighlightColor?: string | null;
-  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
+    compression?: 'DEFLATE' | 'STORE';
+  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string | null> | ProseMirrorJSON | string | undefined> {
     try {
+      // Use provided comments, or fall back to imported comments from converter
+      const effectiveComments = comments ?? this.converter.comments ?? [];
+
+      // Normalize commentJSON property (imported comments provide `elements`)
+      const preparedComments = effectiveComments.map((comment: Comment) => {
+        const elements = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : undefined;
+        return {
+          ...comment,
+          commentJSON: comment.commentJSON ?? elements,
+        };
+      });
+
       // Pre-process the document state to prepare for export
-      const json = this.#prepareDocumentForExport(comments);
+      const json = this.#prepareDocumentForExport(preparedComments);
 
       // Export the document to DOCX
       // GUID will be handled automatically in converter.exportToDocx if document was modified
@@ -1780,7 +2612,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         (this.storage.image as ImageStorage).media,
         isFinalDoc,
         commentsType,
-        comments,
+        preparedComments,
         this,
         exportJsonOnly,
         fieldsHighlightColor,
@@ -1798,6 +2630,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
         : null;
 
       const rels = this.converter.schemaToXml(this.converter.convertedXml['word/_rels/document.xml.rels'].elements[0]);
+      const footnotesData = this.converter.convertedXml['word/footnotes.xml'];
+      const footnotesXml = footnotesData?.elements?.[0] ? this.converter.schemaToXml(footnotesData.elements[0]) : null;
+      const footnotesRelsData = this.converter.convertedXml['word/_rels/footnotes.xml.rels'];
+      const footnotesRelsXml = footnotesRelsData?.elements?.[0]
+        ? this.converter.schemaToXml(footnotesRelsData.elements[0])
+        : null;
 
       const media = this.converter.addedMedia;
 
@@ -1812,38 +2650,44 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
       const numbering = this.converter.schemaToXml(numberingData.elements[0]);
-      const updatedDocs: Record<string, string> = {
+
+      // Export core.xml (contains dcterms:created timestamp)
+      const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
+      const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
+
+      const updatedDocs: Record<string, string | null> = {
         ...this.options.customUpdatedFiles,
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
         'word/numbering.xml': String(numbering),
-
-        // Replace & with &amp; in styles.xml as DOCX viewers can't handle it
-        'word/styles.xml': String(styles).replace(/&/gi, '&amp;'),
+        'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
+        ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };
 
       if (hasCustomSettings) {
         updatedDocs['word/settings.xml'] = String(customSettings);
       }
 
-      if (comments.length) {
-        const commentsXml = this.converter.schemaToXml(this.converter.convertedXml['word/comments.xml'].elements[0]);
-        const commentsExtendedXml = this.converter.schemaToXml(
-          this.converter.convertedXml['word/commentsExtended.xml'].elements[0],
-        );
-        const commentsExtensibleXml = this.converter.schemaToXml(
-          this.converter.convertedXml['word/commentsExtensible.xml'].elements[0],
-        );
-        const commentsIdsXml = this.converter.schemaToXml(
-          this.converter.convertedXml['word/commentsIds.xml'].elements[0],
-        );
+      if (footnotesXml) {
+        updatedDocs['word/footnotes.xml'] = String(footnotesXml);
+      }
 
-        updatedDocs['word/comments.xml'] = String(commentsXml);
-        updatedDocs['word/commentsExtended.xml'] = String(commentsExtendedXml);
-        updatedDocs['word/commentsExtensible.xml'] = String(commentsExtensibleXml);
-        updatedDocs['word/commentsIds.xml'] = String(commentsIdsXml);
+      if (footnotesRelsXml) {
+        updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
+      }
+
+      // Serialize each comment file if it exists in convertedXml, otherwise mark as null
+      // for deletion from the zip (removes stale originals).
+      const commentFiles = COMMENT_FILE_BASENAMES.map((name) => `word/${name}`);
+      for (const path of commentFiles) {
+        const data = this.converter.convertedXml[path];
+        if (data?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(data.elements[0]));
+        } else {
+          updatedDocs[path] = null;
+        }
       }
 
       const zipper = new DocxZipper();
@@ -1867,11 +2711,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media,
         fonts: this.options.fonts,
         isHeadless: this.options.isHeadless,
-      });
-
-      (this.options.telemetry as TelemetryData | null)?.trackUsage?.('document_export', {
-        documentType: 'docx',
-        timestamp: new Date().toISOString(),
+        compression,
       });
 
       return result;
@@ -1890,7 +2730,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     try {
       console.debug('🔗 [super-editor] Ending collaboration');
       this.options.collaborationProvider?.disconnect?.();
-      this.options.ydoc.destroy();
+      (this.options.ydoc as { destroy: () => void }).destroy();
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('exception', { error: err, editor: this });
@@ -1898,10 +2738,331 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
   }
 
+  // ============================================================================
+  // Document Lifecycle API
+  // ============================================================================
+
+  /**
+   * Open a document in the editor.
+   *
+   * @param source - Document source:
+   *   - `string` - File path (Node.js reads from disk, browser fetches URL)
+   *   - `File | Blob` - Browser file object
+   *   - `Buffer` - Node.js buffer
+   *   - `undefined` - Creates a blank document
+   * @param options - Document options (mode, comments, etc.)
+   * @returns Promise that resolves when document is loaded
+   *
+   * @throws {InvalidStateError} If editor is not in 'initialized' or 'closed' state
+   * @throws {DocumentLoadError} If document loading fails
+   *
+   * @example
+   * ```typescript
+   * const editor = new Editor({ element: myDiv });
+   *
+   * // Open from file path (Node.js)
+   * await editor.open('/path/to/document.docx');
+   *
+   * // Open from File object (browser)
+   * await editor.open(fileInput.files[0]);
+   *
+   * // Open blank document
+   * await editor.open();
+   *
+   * // Open with options
+   * await editor.open('/path/to/doc.docx', { isCommentsEnabled: true });
+   * ```
+   */
+  async open(source?: string | File | Blob | Buffer, options?: OpenOptions): Promise<void> {
+    this.#assertState('initialized', 'closed');
+
+    await this.#withState('documentLoading', 'ready', 'closed', async () => {
+      await this.#loadDocument(source, options);
+    });
+
+    this.emit('documentOpen', { editor: this, sourcePath: this.#sourcePath });
+  }
+
+  /**
+   * Static factory method for one-liner document opening.
+   * Creates an Editor instance and opens the document in one call.
+   *
+   * Smart defaults enable minimal configuration:
+   * - No element/selector → headless mode
+   * - No extensions → uses getStarterExtensions() for docx, getRichTextExtensions() for text/html
+   * - No mode → defaults to 'docx'
+   *
+   * @param source - Document source (path, File, Blob, Buffer, or undefined for blank)
+   * @param config - Combined editor and document options (all optional)
+   * @returns Promise resolving to the ready Editor instance
+   *
+   * @example
+   * ```typescript
+   * // Minimal headless usage - just works!
+   * const editor = await Editor.open('/path/to/doc.docx');
+   *
+   * // With options
+   * const editor = await Editor.open('/path/to/doc.docx', {
+   *   isCommentsEnabled: true,
+   * });
+   *
+   * // With UI element (automatically not headless)
+   * const editor = await Editor.open('/path/to/doc.docx', {
+   *   element: document.getElementById('editor'),
+   * });
+   *
+   * // Blank document
+   * const editor = await Editor.open();
+   * ```
+   */
+  static async open(
+    source?: string | File | Blob | Buffer,
+    config?: Partial<EditorOptions> & OpenOptions,
+  ): Promise<Editor> {
+    // Apply smart defaults
+    const hasElement = config?.element != null || config?.selector != null;
+    const resolvedConfig: Partial<EditorOptions> = {
+      mode: 'docx',
+      isHeadless: !hasElement,
+      ...config,
+    };
+
+    // Separate editor-level config from document-level options
+    const {
+      // OpenOptions (document-level)
+      html,
+      markdown,
+      isCommentsEnabled,
+      suppressDefaultDocxStyles,
+      documentMode,
+      content,
+      mediaFiles,
+      fonts,
+      // Everything else is EditorOptions
+      ...editorConfig
+    } = resolvedConfig;
+
+    const openOptions: OpenOptions = {
+      mode: resolvedConfig.mode as 'docx' | 'text' | 'html',
+      html,
+      markdown,
+      isCommentsEnabled,
+      suppressDefaultDocxStyles,
+      documentMode: documentMode as 'editing' | 'viewing' | 'suggesting' | undefined,
+      content,
+      mediaFiles,
+      fonts,
+    };
+
+    // Use new API mode for static factory
+    const editor = new Editor({ ...editorConfig, deferDocumentLoad: true });
+    await editor.open(source, openOptions);
+    return editor;
+  }
+
+  /**
+   * Close the current document.
+   *
+   * This unloads the document but keeps the editor instance alive.
+   * The editor can be reused by calling `open()` again.
+   *
+   * This method is idempotent - calling it when already closed is a no-op.
+   *
+   * @example
+   * ```typescript
+   * await editor.open('/doc1.docx');
+   * // ... work with document ...
+   * editor.close();
+   *
+   * await editor.open('/doc2.docx');  // Reuse the same editor
+   * ```
+   */
+  close(): void {
+    // Idempotent: calling close() when already closed is a no-op
+    if (this.#editorLifecycleState === 'closed' || this.#editorLifecycleState === 'initialized') {
+      return;
+    }
+
+    if (this.#editorLifecycleState === 'destroyed') {
+      return;
+    }
+
+    this.#assertState('ready');
+    this.emit('documentClose', { editor: this });
+    this.#unloadDocument();
+    this.#documentApi = null;
+    this.#editorLifecycleState = 'closed';
+  }
+
+  /**
+   * Save the document to the original source path.
+   *
+   * Only works if the document was opened from a file path.
+   * If opened from Blob/Buffer or created blank, use `saveTo()` or `exportDocument()`.
+   *
+   * @param options - Save options (comments, final doc, etc.)
+   * @throws {InvalidStateError} If editor is not in 'ready' state
+   * @throws {NoSourcePathError} If no source path is available
+   * @throws {FileSystemNotAvailableError} If file system access is not available
+   *
+   * @example
+   * ```typescript
+   * const editor = await Editor.open('/path/to/doc.docx');
+   * // ... make changes ...
+   * await editor.save();  // Saves back to /path/to/doc.docx
+   * ```
+   */
+  async save(options?: SaveOptions): Promise<void> {
+    this.#assertState('ready');
+
+    if (!this.#sourcePath) {
+      throw new NoSourcePathError('No source path. Use saveTo(path) or exportDocument() instead.');
+    }
+
+    await this.#withState('saving', 'ready', 'ready', async () => {
+      const data = await this.exportDocument(options);
+      await this.#writeToPath(this.#sourcePath!, data);
+    });
+  }
+
+  /**
+   * Save the document to a specific path.
+   *
+   * Updates the source path to the new location after saving.
+   *
+   * @param path - File path to save to
+   * @param options - Save options
+   * @throws {InvalidStateError} If editor is not in 'ready' state
+   * @throws {FileSystemNotAvailableError} If file system access is not available
+   *
+   * @example
+   * ```typescript
+   * const editor = await Editor.open(blobData);  // No source path
+   * await editor.saveTo('/path/to/new-doc.docx');
+   * await editor.save();  // Now saves to /path/to/new-doc.docx
+   * ```
+   */
+  async saveTo(path: string, options?: SaveOptions): Promise<void> {
+    this.#assertState('ready');
+
+    await this.#withState('saving', 'ready', 'ready', async () => {
+      const data = await this.exportDocument(options);
+      await this.#writeToPath(path, data);
+      this.#sourcePath = path;
+    });
+  }
+
+  /**
+   * Export the document as a Blob or Buffer.
+   *
+   * This is a convenience wrapper around `exportDocx()` that returns
+   * the document data without writing to a file.
+   *
+   * @param options - Export options
+   * @returns Promise resolving to Blob (browser) or Buffer (Node.js)
+   * @throws {InvalidStateError} If editor is not in 'ready' state
+   *
+   * @example
+   * ```typescript
+   * const blob = await editor.exportDocument();
+   *
+   * // Create download link in browser
+   * const url = URL.createObjectURL(blob);
+   * const a = document.createElement('a');
+   * a.href = url;
+   * a.download = 'document.docx';
+   * a.click();
+   * ```
+   */
+  async exportDocument(options?: ExportOptions): Promise<Blob | Buffer> {
+    // Allow exporting from 'ready' or 'saving' state (saving calls exportDocument internally)
+    this.#assertState('ready', 'saving');
+
+    const result = await this.exportDocx({
+      isFinalDoc: options?.isFinalDoc,
+      commentsType: options?.commentsType,
+      comments: options?.comments,
+      fieldsHighlightColor: options?.fieldsHighlightColor,
+      compression: options?.compression,
+    });
+
+    return result as Blob | Buffer;
+  }
+
+  /**
+   * Writes document data to a file path.
+   *
+   * **Browser behavior:**
+   * In browsers, the `path` parameter is only used as a suggested filename.
+   * The File System Access API shows a save dialog and the user chooses the actual location.
+   *
+   * **Node.js behavior:**
+   * The path is an actual filesystem path, written directly.
+   */
+  async #writeToPath(path: string, data: Blob | Buffer): Promise<void> {
+    // Detect Node.js environment more reliably
+    const isNode =
+      typeof globalThis !== 'undefined' &&
+      typeof globalThis.process !== 'undefined' &&
+      globalThis.process.versions?.node != null;
+
+    // Also check for Buffer which is Node.js specific
+    const hasNodeBuffer = typeof Buffer !== 'undefined' && typeof Buffer.isBuffer === 'function';
+
+    if (isNode || hasNodeBuffer) {
+      try {
+        // Dynamic require to avoid bundler issues
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs') as typeof import('fs');
+        const buffer = Buffer.isBuffer(data) ? data : Buffer.from(await (data as Blob).arrayBuffer());
+        fs.writeFileSync(path, buffer);
+        return;
+      } catch {
+        // Fall through to browser methods if require fails
+      }
+    }
+
+    // Browser with File System Access API
+    // NOTE: path is only used as suggestedName; user picks actual location via dialog
+    if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+      const handle = await (
+        window as Window & { showSaveFilePicker: (options: unknown) => Promise<FileSystemFileHandle> }
+      ).showSaveFilePicker({
+        suggestedName: path.split('/').pop() || 'document.docx',
+        types: [
+          {
+            description: 'Word Document',
+            accept: { 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(data as Blob);
+      await writable.close();
+      return;
+    }
+
+    // Browser without File System Access API
+    throw new FileSystemNotAvailableError(
+      'File System Access API not available. Use exportDocument() to get the document data and handle the download manually.',
+    );
+  }
+
   /**
    * Destroy the editor and clean up resources
    */
   destroy(): void {
+    // Close document if open
+    if (this.#editorLifecycleState === 'ready') {
+      this.close();
+    }
+
+    // Already destroyed - idempotent
+    if (this.#editorLifecycleState === 'destroyed') {
+      return;
+    }
+
+    this.#isDestroyed = true;
     this.emit('destroy');
 
     this.unmount();
@@ -1909,6 +3070,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.destroyHeaderFooterEditors();
     this.#endCollaboration();
     this.removeAllListeners();
+
+    // Clear references
+    this.extensionService = undefined!;
+    this.schema = undefined!;
+    this.#commandService = undefined!;
+    this.#documentApi = null;
+
+    this.#editorLifecycleState = 'destroyed';
   }
 
   destroyHeaderFooterEditors(): void {
@@ -1947,7 +3116,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     console.debug('[checkVersionMigrations] Current editor version', __APP_VERSION__);
     if (!this.options.ydoc) return;
 
-    const metaMap = this.options.ydoc.getMap('meta');
+    const metaMap = (this.options.ydoc as { getMap: (name: string) => Map<string, unknown> }).getMap('meta');
     let docVersion = metaMap.get('version');
     if (!docVersion) docVersion = 'initial';
     console.debug('[checkVersionMigrations] Document version', docVersion);
@@ -2051,14 +3220,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   replaceNodeWithHTML(targetNode: { node: PmNode; pos: number }, html: string): void {
     const { tr } = this.state;
-    const { dispatch } = this.view;
 
     if (!targetNode || !html) return;
     const start = targetNode.pos;
     const end = start + targetNode.node.nodeSize;
     const htmlNode = createDocFromHTML(html, this);
     tr.replaceWith(start, end, htmlNode);
-    dispatch(tr);
+    this.dispatch(tr);
   }
 
   /**
@@ -2070,7 +3238,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   prepareForAnnotations(annotationValues: FieldValue[] = []): void {
     const { tr } = this.state;
     const newTr = AnnotatorHelpers.processTables({ state: this.state, tr, annotationValues });
-    this.view.dispatch(newTr);
+    this.dispatch(newTr);
   }
 
   /**
@@ -2088,7 +3256,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Annotate the document with the given annotation values.
    */
   annotate(annotationValues: FieldValue[] = [], hiddenIds: string[] = [], removeEmptyFields: boolean = false): void {
-    const { state, view, schema } = this;
+    const { state, schema } = this;
     let tr = state.tr;
 
     tr = AnnotatorHelpers.processTables({ state: this.state, tr, annotationValues });
@@ -2102,7 +3270,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
     });
 
     // Dispatch everything in a single transaction, which makes this undo-able in a single undo
-    if (tr.docChanged) view.dispatch(tr.scrollIntoView());
+    if (tr.docChanged) {
+      const finalTr = tr.scrollIntoView();
+      this.dispatch(finalTr);
+    }
   }
 
   /**
@@ -2110,7 +3281,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * This can be reverted via closePreview()
    */
   previewAnnotations(annotationValues: FieldValue[] = [], hiddenIds: string[] = []): void {
-    this.originalState = this.view.state;
+    this.originalState = this.state;
     this.annotate(annotationValues, hiddenIds);
   }
 
@@ -2119,7 +3290,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   closePreview(): void {
     if (!this.originalState) return;
-    this.view.updateState(this.originalState);
+    if (this.view) {
+      this.view.updateState(this.originalState);
+    } else {
+      this._state = this.originalState;
+    }
   }
 
   /**
@@ -2143,13 +3318,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   #initDevTools(): void {
-    if (this.options.isHeaderOrFooter) return;
-
-    if (process.env.NODE_ENV === 'development' || this.options.isDebug) {
-      (window as Window & { superdocdev?: unknown }).superdocdev = {
-        converter: this.converter,
-        editor: this,
-      };
-    }
+    this.#renderer?.initDevTools?.(this);
   }
 }

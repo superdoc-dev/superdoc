@@ -1,7 +1,7 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { Extension } from '@core/Extension.js';
-import { applyStyleIsolationClass } from '@/utils/styleIsolation.js';
+import { applyStyleIsolationClass } from '@utils/styleIsolation.js';
 
 /**
  * Configuration options for NodeResizer
@@ -64,6 +64,11 @@ const nodeResizer = (nodeNames = ['image'], editor) => {
           return DecorationSet.empty;
         }
 
+        // Skip watermarks - they should not be interactive/resizable
+        if (node.attrs?.vmlWatermark === true) {
+          return DecorationSet.empty;
+        }
+
         const decorations = [];
 
         // Only create decoration if one of the resizable nodes is selected
@@ -117,7 +122,7 @@ const nodeResizer = (nodeNames = ['image'], editor) => {
       // Add scroll handler to update handle positions during scroll
       scrollHandler = () => {
         if (currentWrapper && resizeContainer) {
-          updateHandlePositions(currentWrapper.firstElementChild);
+          updateHandlePositions(currentWrapper);
         }
       };
 
@@ -172,6 +177,9 @@ const nodeResizer = (nodeNames = ['image'], editor) => {
     const node = view.state.doc.nodeAt(pos);
     if (!nodeNames.includes(node?.type.name)) return;
 
+    // Skip watermarks - they should not be interactive/resizable
+    if (node?.attrs?.vmlWatermark === true) return;
+
     // Store current wrapper for scroll updates
     currentWrapper = wrapper;
 
@@ -196,7 +204,7 @@ const nodeResizer = (nodeNames = ['image'], editor) => {
     // Position the container relative to the resizable element
     applyStyleIsolationClass(resizeContainer);
     document.body.appendChild(resizeContainer);
-    updateHandlePositions(wrapper.firstElementChild);
+    updateHandlePositions(wrapper);
   }
 
   function hideResizeHandles() {

@@ -5,10 +5,11 @@ import { onMounted, shallowRef } from 'vue';
 import { SuperDoc } from 'superdoc';
 
 import { CustomMark } from './custom-mark.js';
-import { nextTick } from 'process';
+import { nextTick } from 'vue';
 
 window.fileData = null;
-const useLayoutEngine = new URLSearchParams(window.location.search).get('layout') === '1';
+const urlParams = new URLSearchParams(window.location.search);
+const useLayoutEngine = urlParams.get('layout') === '1';
 const superdoc = shallowRef(null);
 const hideRulerByDefault = true;
 
@@ -36,9 +37,12 @@ const init = async () => {
 
   // Get query params to determine if this is a toolbar test
   // In such case we want to add a custom button for testing
-  const isToolbarTest = window.location.search.includes('includeCustomButton=true');
-  const isFontsTest = window.location.search.includes('includeFontsResolved=true');
-  const isCommentsTest = window.location.search.includes('includeComments=true');
+  const isToolbarTest = urlParams.get('includeCustomButton') === 'true';
+  const isFontsTest = urlParams.get('includeFontsResolved') === 'true';
+  const isCommentsTest = urlParams.get('includeComments') === 'true';
+  const documentMode = urlParams.get('documentMode');
+  const commentsVisible = urlParams.get('commentsVisible');
+  const trackChangesVisible = urlParams.get('trackChangesVisible');
 
   if (isToolbarTest) {
     config.editorExtensions = [CustomMark];
@@ -70,6 +74,15 @@ const init = async () => {
   }
 
   config.modules = { ...config.modules, comments: isCommentsTest };
+  if (documentMode) {
+    config.documentMode = documentMode;
+  }
+  if (commentsVisible === 'true' || commentsVisible === 'false') {
+    config.comments = { visible: commentsVisible === 'true' };
+  }
+  if (trackChangesVisible === 'true' || trackChangesVisible === 'false') {
+    config.trackChanges = { visible: trackChangesVisible === 'true' };
+  }
 
   if (superdoc.value) superdoc.value.destroy();
 

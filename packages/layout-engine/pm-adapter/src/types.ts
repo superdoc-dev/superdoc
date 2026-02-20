@@ -3,18 +3,21 @@
  */
 
 import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta } from '@superdoc/contracts';
-import type { Engines } from '@superdoc/contracts';
-import type {
-  StyleContext as StyleEngineContext,
-  StyleNode as StyleEngineNode,
-  ComputedParagraphStyle,
-} from '@superdoc/style-engine';
+import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
+import type { paragraphToFlowBlocks } from './converters/paragraph.js';
+import type { tableNodeToBlock } from './converters/table.js';
+import type { contentBlockNodeToDrawingBlock } from './converters/content-block.js';
+import type { imageNodeToBlock } from './converters/image.js';
+import type {
+  shapeContainerNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+  vectorShapeNodeToDrawingBlock,
+} from './converters/shapes.js';
 export type { ConverterContext } from './converter-context.js';
-
 export type StyleContext = StyleEngineContext;
-export type StyleNode = StyleEngineNode;
 export type { ComputedParagraphStyle };
 
 export type ThemeColorPalette = Record<string, string>;
@@ -90,6 +93,18 @@ export interface AdapterOptions {
   blockIdPrefix?: string;
 
   /**
+   * Optional list of ProseMirror node type names that should be treated as atom/leaf nodes
+   * for position mapping. Use this to keep PM positions correct when custom atom nodes exist.
+   */
+  atomNodeTypes?: Iterable<string>;
+
+  /**
+   * Optional precomputed position map keyed by the PM JSON nodes passed to toFlowBlocks.
+   * When provided, this is used directly instead of building a new position map.
+   */
+  positions?: PositionMap;
+
+  /**
    * Optional media files map for hydrating image blocks.
    * Key: normalized file path (e.g., "word/media/image1.jpeg")
    * Value: base64-encoded image data
@@ -139,6 +154,13 @@ export interface AdapterOptions {
   enableRichHyperlinks?: boolean;
 
   /**
+   * Feature flag for propagating comment annotations into FlowBlocks.
+   * When false, comment marks are ignored and no comment highlights appear.
+   * Defaults to `true`.
+   */
+  enableComments?: boolean;
+
+  /**
    * Theme color palette extracted from the DOCX `word/theme/theme1.xml` part.
    * Used to resolve `w:themeColor` marks when `w:val` is missing.
    */
@@ -157,6 +179,17 @@ export interface AdapterOptions {
    * renders match the original Word document more closely.
    */
   converterContext?: ConverterContext;
+
+  /**
+   * Optional FlowBlock cache for incremental conversion.
+   * When provided, paragraph blocks are cached and reused when content hasn't changed.
+   * This can significantly improve toFlowBlocks performance for large documents.
+   *
+   * The cache is managed externally (typically by PresentationEditor) and should
+   * persist across render cycles. Call cache.clear() on document load or when
+   * conversion settings change (tracked changes mode, comments enabled, etc.).
+   */
+  flowBlockCache?: import('./cache.js').FlowBlockCache;
 }
 
 /**
@@ -211,16 +244,6 @@ export type Position = { start: number; end: number };
 export type PositionMap = WeakMap<PMNode, Position>;
 
 /**
- * Bookmark pair tracking
- */
-export type BookmarkPair = number;
-
-/**
- * Block position data
- */
-export type BlockPositionData = Position;
-
-/**
  * PM document map for batch processing
  */
 export type PMDocumentMap = Record<string, PMNode | object | null | undefined>;
@@ -250,37 +273,40 @@ export type FlowBlocksResult = {
 export interface NodeHandlerContext {
   // Block accumulation
   blocks: FlowBlock[];
-  recordBlockKind: (kind: FlowBlock['kind']) => void;
+  recordBlockKind?: (kind: FlowBlock['kind']) => void;
 
   // ID generation & positions
   nextBlockId: BlockIdGenerator;
+  blockIdPrefix?: string;
   positions: PositionMap;
 
   // Style & defaults
   defaultFont: string;
   defaultSize: number;
-  styleContext: StyleContext;
-  converterContext?: ConverterContext;
-
-  // List counters
-  listCounterContext: ListCounterContext;
+  converterContext: ConverterContext;
 
   // Tracked changes & hyperlinks
   trackedChangesConfig: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
 
+  // Comments
+  enableComments: boolean;
+
   // Bookmarks
   bookmarks: Map<string, number>;
 
   // Section state (mutable)
-  sectionState: {
+  sectionState?: {
     ranges: SectionRange[];
     currentSectionIndex: number;
     currentParagraphIndex: number;
   };
 
   // Converters for nested content
-  converters?: NestedConverters;
+  converters: NestedConverters;
+  themeColors?: ThemeColorPalette;
+  // FlowBlock cache for incremental conversion (optional)
+  flowBlockCache?: import('./cache.js').FlowBlockCache;
 }
 
 /**
@@ -298,6 +324,32 @@ export type ListCounterContext = {
   resetListCounter: (numId: number, ilvl: number) => void;
 };
 
+export type ParagraphToFlowBlocksParams = {
+  para: PMNode;
+  nextBlockId: BlockIdGenerator;
+  positions: PositionMap;
+  trackedChangesConfig: TrackedChangesConfig;
+  hyperlinkConfig: HyperlinkConfig;
+  themeColors?: ThemeColorPalette;
+  bookmarks: Map<string, number>;
+  converters: NestedConverters;
+  enableComments: boolean;
+  converterContext: ConverterContext;
+  stableBlockId?: string;
+};
+
+export type TableNodeToBlockParams = {
+  nextBlockId: BlockIdGenerator;
+  positions: PositionMap;
+  trackedChangesConfig: TrackedChangesConfig;
+  bookmarks: Map<string, number>;
+  hyperlinkConfig: HyperlinkConfig;
+  themeColors?: ThemeColorPalette;
+  converterContext: ConverterContext;
+  converters: NestedConverters;
+  enableComments: boolean;
+};
+
 export type ParagraphToFlowBlocksConverter = (
   para: PMNode,
   nextBlockId: BlockIdGenerator,
@@ -311,6 +363,8 @@ export type ParagraphToFlowBlocksConverter = (
   hyperlinkConfig?: HyperlinkConfig,
   themeColors?: ThemeColorPalette,
   converterContext?: ConverterContext,
+  enableComments?: boolean,
+  stableBlockId?: string,
 ) => FlowBlock[];
 
 export type ImageNodeToBlockConverter = (
@@ -332,51 +386,15 @@ export type TableNodeToBlockOptions = {
   converters?: NestedConverters;
 };
 
-export type TableNodeToBlockConverter = (
-  node: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig?: HyperlinkConfig,
-  themeColors?: ThemeColorPalette,
-  paragraphToFlowBlocks?: ParagraphToFlowBlocksConverter,
-  converterContext?: ConverterContext,
-  options?: TableNodeToBlockOptions,
-) => FlowBlock | null;
-
 export type NestedConverters = {
-  paragraphToFlowBlocks?: ParagraphToFlowBlocksConverter;
-  tableNodeToBlock?: TableNodeToBlockConverter;
-  imageNodeToBlock?: ImageNodeToBlockConverter;
-  vectorShapeNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeGroupNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeContainerNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-  shapeTextboxNodeToDrawingBlock?: DrawingNodeToBlockConverter;
-};
-
-/**
- * List rendering attributes
- */
-export type ListRenderingAttrs = {
-  markerText?: string;
-  justification?: 'left' | 'right' | 'center';
-  path?: number[];
-  numberingType?: string;
-  suffix?: 'tab' | 'space' | 'nothing';
-};
-
-/**
- * Marker parameters for list items
- */
-export type MarkerParams = {
-  listType: 'bullet' | 'ordered';
-  listNode: PMNode;
-  itemNode: PMNode;
-  fallbackOrder: number;
+  paragraphToFlowBlocks: typeof paragraphToFlowBlocks;
+  tableNodeToBlock: typeof tableNodeToBlock;
+  contentBlockNodeToDrawingBlock: typeof contentBlockNodeToDrawingBlock;
+  imageNodeToBlock: typeof imageNodeToBlock;
+  vectorShapeNodeToDrawingBlock: typeof vectorShapeNodeToDrawingBlock;
+  shapeGroupNodeToDrawingBlock: typeof shapeGroupNodeToDrawingBlock;
+  shapeContainerNodeToDrawingBlock: typeof shapeContainerNodeToDrawingBlock;
+  shapeTextboxNodeToDrawingBlock: typeof shapeTextboxNodeToDrawingBlock;
 };
 
 /**
@@ -392,10 +410,3 @@ export interface OoxmlBorder {
  * Underline style type derived from TextRun contract
  */
 export type UnderlineStyle = NonNullable<import('@superdoc/contracts').TextRun['underline']>['style'];
-
-/**
- * Engine type aliases
- */
-export type NumberingLevelEngine = Engines.NumberingLevel;
-export type EngineParagraphSpacing = Engines.ParagraphSpacing;
-export type EngineParagraphIndent = Engines.ParagraphIndent;

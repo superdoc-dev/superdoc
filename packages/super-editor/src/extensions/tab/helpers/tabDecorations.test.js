@@ -256,7 +256,7 @@ describe('getTabDecorations', () => {
       const textNode = createTextNode('Hello');
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([textNode, tabNode], {
-        tabStops: [{ val: 'left', pos: 100 }],
+        tabStops: [{ val: 'left', pos: pixelsToTwips(100) }],
       });
 
       const doc = createMockDoc([
@@ -282,7 +282,7 @@ describe('getTabDecorations', () => {
       const tabNode = createTabNode();
       const textNode2 = createTextNode('World');
       const paragraph = createParagraphNode([textNode1, tabNode, textNode2], {
-        tabStops: [{ val: 'right', pos: 200 }],
+        tabStops: [{ val: 'right', pos: pixelsToTwips(200) }],
       });
 
       const doc = createMockDoc([
@@ -310,7 +310,7 @@ describe('getTabDecorations', () => {
       const tabNode = createTabNode();
       const textNode2 = createTextNode('World');
       const paragraph = createParagraphNode([textNode1, tabNode, textNode2], {
-        tabStops: [{ val: 'center', pos: 200 }],
+        tabStops: [{ val: 'center', pos: pixelsToTwips(200) }],
       });
 
       const doc = createMockDoc([
@@ -338,7 +338,7 @@ describe('getTabDecorations', () => {
       const tabNode = createTabNode();
       const textNode2 = createTextNode('12.99');
       const paragraph = createParagraphNode([textNode1, tabNode, textNode2], {
-        tabStops: [{ val: 'decimal', pos: 200, decimalChar: '.' }],
+        tabStops: [{ val: 'decimal', pos: pixelsToTwips(200), decimalChar: '.' }],
       });
 
       const doc = createMockDoc([
@@ -370,7 +370,7 @@ describe('getTabDecorations', () => {
       const tabNode = createTabNode();
       const textNode2 = createTextNode('15');
       const paragraph = createParagraphNode([textNode1, tabNode, textNode2], {
-        tabStops: [{ val: 'decimal', pos: 200, decimalChar: '.' }],
+        tabStops: [{ val: 'decimal', pos: pixelsToTwips(200), decimalChar: '.' }],
       });
 
       const doc = createMockDoc([
@@ -398,7 +398,7 @@ describe('getTabDecorations', () => {
       const tabNode = createTabNode();
       const textNode2 = createTextNode('12,99');
       const paragraph = createParagraphNode([textNode1, tabNode, textNode2], {
-        tabStops: [{ val: 'decimal', pos: 200, decimalChar: ',' }],
+        tabStops: [{ val: 'decimal', pos: pixelsToTwips(200), decimalChar: ',' }],
       });
 
       const doc = createMockDoc([
@@ -428,7 +428,7 @@ describe('getTabDecorations', () => {
       const textNode = createTextNode('Hello');
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([textNode, tabNode], {
-        tabStops: [{ val: 'clear', pos: 100 }],
+        tabStops: [{ val: 'clear', pos: pixelsToTwips(100) }],
       });
 
       const doc = createMockDoc([
@@ -481,7 +481,7 @@ describe('getTabDecorations', () => {
       const textNode = createTextNode('Chapter 1');
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([textNode, tabNode], {
-        tabStops: [{ val: 'left', pos: 200, leader: 'dot' }],
+        tabStops: [{ val: 'left', pos: pixelsToTwips(200), leader: 'dot' }],
       });
 
       const doc = createMockDoc([
@@ -505,7 +505,7 @@ describe('getTabDecorations', () => {
       const textNode = createTextNode('Chapter 1');
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([textNode, tabNode], {
-        tabStops: [{ val: 'left', pos: 200, leader: 'heavy' }],
+        tabStops: [{ val: 'left', pos: pixelsToTwips(200), leader: 'heavy' }],
       });
 
       const doc = createMockDoc([
@@ -529,7 +529,7 @@ describe('getTabDecorations', () => {
       const textNode = createTextNode('Chapter 1');
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([textNode, tabNode], {
-        tabStops: [{ val: 'left', pos: 200, leader: 'hyphen' }],
+        tabStops: [{ val: 'left', pos: pixelsToTwips(200), leader: 'hyphen' }],
       });
 
       const doc = createMockDoc([
@@ -553,7 +553,7 @@ describe('getTabDecorations', () => {
       const textNode = createTextNode('Chapter 1');
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([textNode, tabNode], {
-        tabStops: [{ val: 'left', pos: 200, leader: 'middleDot' }],
+        tabStops: [{ val: 'left', pos: pixelsToTwips(200), leader: 'middleDot' }],
       });
 
       const doc = createMockDoc([
@@ -578,7 +578,7 @@ describe('getTabDecorations', () => {
       const textNode = createTextNode('Chapter 1');
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([textNode, tabNode], {
-        tabStops: [{ val: 'left', pos: 200, leader: 'underscore' }],
+        tabStops: [{ val: 'left', pos: pixelsToTwips(200), leader: 'underscore' }],
       });
 
       const doc = createMockDoc([
@@ -602,7 +602,7 @@ describe('getTabDecorations', () => {
       const textNode = createTextNode('Chapter 1');
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([textNode, tabNode], {
-        tabStops: [{ val: 'left', pos: 200, leader: 'unknown' }],
+        tabStops: [{ val: 'left', pos: pixelsToTwips(200), leader: 'unknown' }],
       });
 
       const doc = createMockDoc([
@@ -633,8 +633,8 @@ describe('getTabDecorations', () => {
       const textNode3 = createTextNode('C');
       const paragraph = createParagraphNode([textNode1, tabNode1, textNode2, tabNode2, textNode3], {
         tabStops: [
-          { val: 'left', pos: 100 },
-          { val: 'left', pos: 200 },
+          { val: 'left', pos: pixelsToTwips(100) },
+          { val: 'left', pos: pixelsToTwips(200) },
         ],
       });
 
@@ -795,7 +795,7 @@ describe('getTabDecorations', () => {
     it('should handle errors gracefully without crashing', () => {
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([tabNode], {
-        tabStops: [{ val: 'decimal', pos: 100, decimalChar: '.' }],
+        tabStops: [{ val: 'decimal', pos: pixelsToTwips(100), decimalChar: '.' }],
       });
 
       const doc = createMockDoc([
@@ -920,7 +920,7 @@ describe('getTabDecorations', () => {
     it('should include leader styles in decoration when present', () => {
       const tabNode = createTabNode();
       const paragraph = createParagraphNode([tabNode], {
-        tabStops: [{ val: 'left', pos: 100, leader: 'dot' }],
+        tabStops: [{ val: 'left', pos: pixelsToTwips(100), leader: 'dot' }],
       });
 
       const doc = createMockDoc([

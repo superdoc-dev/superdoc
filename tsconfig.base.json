@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "lib": ["ES2020", "DOM"],
     "allowJs": true,
     "checkJs": false,
@@ -14,52 +14,15 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "baseUrl": ".",
-    "paths": {
-      "@superdoc/contracts": ["packages/layout-engine/contracts/src"],
-      "@superdoc/geometry-utils": ["packages/layout-engine/geometry-utils/src"],
-      "@superdoc/pm-adapter": ["packages/layout-engine/pm-adapter/src"],
-      "@superdoc/measuring-dom": ["packages/layout-engine/measuring/dom/src"],
-      "@superdoc/layout-engine": ["packages/layout-engine/layout-engine/src"],
-      "@superdoc/painter-dom": ["packages/layout-engine/painters/dom/src"],
-      "@superdoc/painter-pdf": ["packages/layout-engine/painters/pdf/src"],
-      "@superdoc/v1-beta-demo": ["packages/layout-engine/v1-beta-demo/src"],
-      "@superdoc/layout-bridge": ["packages/layout-engine/layout-bridge/src"],
-      "@superdoc/style-engine": ["packages/layout-engine/style-engine/src"],
-      "@superdoc/url-validation": ["shared/url-validation/index.js"],
-      "@superdoc/preset-geometry": ["packages/preset-geometry/index.js"],
-      "@core/*": ["packages/super-editor/src/core/*"],
-      "@extensions/*": ["packages/super-editor/src/extensions/*"],
-      "@features/*": ["packages/super-editor/src/features/*"],
-      "@components/*": ["packages/super-editor/src/components/*"],
-      "@helpers/*": ["packages/super-editor/src/core/helpers/*"],
-      "@converter/*": ["packages/super-editor/src/core/super-converter/*"],
-      "@tests/*": ["packages/super-editor/src/tests/*"],
-      "@translator": ["packages/super-editor/src/core/super-converter/v3/node-translator/"]
-    }
+    "customConditions": ["source"]
   },
-  "include": [
-    "packages/super-editor/src/**/*",
-    "packages/layout-engine/contracts/src/**/*",
-    "packages/layout-engine/geometry-utils/src/**/*",
-    "packages/layout-engine/pm-adapter/src/**/*",
-    "packages/layout-engine/measuring/dom/src/**/*",
-    "packages/layout-engine/layout-engine/src/**/*",
-    "packages/layout-engine/painters/dom/src/**/*",
-    "packages/layout-engine/painters/pdf/src/**/*",
-    "packages/layout-engine/v1-beta-demo/src/**/*",
-    "packages/layout-engine/layout-bridge/src/**/*",
-    "packages/layout-engine/style-engine/src/**/*",
-    "packages/layout-engine/tests/src/**/*"
-  ],
   "exclude": [
-    "node_modules",
-    "dist",
-    "examples",
-    "e2e-tests",
     "**/*.test.js",
     "**/*.test.ts",
-    "packages/collaboration-yjs/examples/**",
-    "packages/super-editor/src/core/super-converter/**/*"
+    "**/*.test.tsx",
+    "**/*.spec.js",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/__tests__/**"
   ]
 }

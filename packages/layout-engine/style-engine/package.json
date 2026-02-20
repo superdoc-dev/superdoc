@@ -6,17 +6,25 @@
   "private": true,
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "source": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./ooxml": {
+      "source": "./src/ooxml/index.ts",
+      "default": "./src/ooxml/index.ts"
+    }
   },
   "scripts": {
     "build": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@superdoc/contracts": "*"
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/font-utils": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

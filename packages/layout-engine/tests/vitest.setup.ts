@@ -1,4 +1,4 @@
-import { resolveCanvas } from '../measuring/dom/src/canvas-resolver.js';
+import { resolveCanvas } from '@superdoc/measuring-dom/canvas-resolver';
 import { installNodeCanvasPolyfill } from '@superdoc/measuring-dom';
 
 const { Canvas } = resolveCanvas();

@@ -25,12 +25,13 @@ export const TranslatorTypes = Object.freeze({
 
 /** @typedef {import('../../v2/importer/types').NodeHandlerParams} SCEncoderConfig */
 /** @typedef {import('../../v2/types').SuperDocNode} SCEncoderResult */
+/** @typedef {import('@superdoc/common').Comment} Comment */
 /**
  * @typedef {Object} SCDecoderConfig
  * @property {{ attrs?: any, marks?: any[], type: string, content?: any[], text?: string }} node
  * @property {any[]} [children]
  * @property {any[]} [relationships]
- * @property {import('../../../../../../superdoc/src/components/CommentsLayer/types').Comment[]} [comments]
+ * @property {Comment[]} [comments]
  * @property {'external' | 'clean'} [commentsExportType]
  * @property {any[]} [exportedCommentDefs]
  * @property {Record<string, any>} [extraParams]

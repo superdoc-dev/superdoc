@@ -1,11 +1,11 @@
 // @ts-check
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findParentNode } from '@helpers/index.js';
+import { findParentNode } from '../helpers/findParentNode.js';
 import { removeNumberingProperties } from './removeNumberingProperties.js';
 import { decreaseListIndent } from './decreaseListIndent.js';
 import { updateNumberingProperties } from './changeListLevel.js';
 
-vi.mock(import('@helpers/index.js'), async (importOriginal) => {
+vi.mock(import('../helpers/findParentNode.js'), async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,

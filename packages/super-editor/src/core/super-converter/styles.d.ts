@@ -1,55 +1,33 @@
-/**
- * Resolves paragraph properties from styles chain
- */
-export function resolveParagraphProperties(
-  params: unknown,
-  inlineProps: unknown,
-  insideTable?: boolean,
-  overrideInlineStyleId?: boolean,
-  tableStyleId?: string | null,
-): unknown;
+import type { ParagraphProperties, ParagraphSpacing, RunProperties } from '@superdoc/style-engine/ooxml';
 
-/**
- * Gets default properties for a translator
- */
-export function getDefaultProperties(params: unknown, translator: unknown): unknown;
+export { combineRunProperties, resolveParagraphProperties, resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
-/**
- * Gets style properties by style ID
- */
-export function getStyleProperties(
-  params: unknown,
-  styleId: string,
-  translator: unknown,
-): { properties: unknown; isDefault: boolean };
+export interface ConverterMarkLike {
+  attrs: Record<string, unknown>;
+  type: string | { name?: string };
+}
 
-/**
- * Gets numbering properties
- */
-export function getNumberingProperties(
-  params: unknown,
-  ilvl: number,
-  numId: number,
-  translator: unknown,
-  tries?: number,
-): unknown;
+export interface ConverterMarkDefinition {
+  attrs: Record<string, unknown>;
+  type: string;
+}
 
-/**
- * Encodes marks from run properties
- */
-export function encodeMarksFromRPr(runProperties: unknown, docx: unknown): unknown;
+export function encodeMarksFromRPr(
+  runProperties: RunProperties,
+  docx: Record<string, unknown> | null | undefined,
+): ConverterMarkDefinition[];
 
-/**
- * Encodes CSS from paragraph properties
- */
-export function encodeCSSFromPPr(paragraphProperties: unknown): unknown;
+export function encodeCSSFromPPr(
+  paragraphProperties: ParagraphProperties | null | undefined,
+  hasPreviousParagraph?: boolean,
+  nextParagraphProps?: ParagraphProperties | null,
+): Record<string, string>;
 
-/**
- * Encodes CSS from run properties
- */
-export function encodeCSSFromRPr(runProperties: unknown, docx: unknown): unknown;
+export function encodeCSSFromRPr(
+  runProperties: RunProperties | null | undefined,
+  docx: Record<string, unknown> | null | undefined,
+): Record<string, string>;
 
-/**
- * Decodes run properties from marks
- */
-export function decodeRPrFromMarks(marks: unknown): unknown;
+export function decodeRPrFromMarks(marks: ConverterMarkLike[] | null | undefined): RunProperties;
+
+export function getSpacingStyle(spacing: ParagraphSpacing, isListItem?: boolean): Record<string, string>;

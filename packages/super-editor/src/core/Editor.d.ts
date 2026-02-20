@@ -1,6 +1,7 @@
 import type { EditorView } from 'prosemirror-view';
 import type { EditorState } from 'prosemirror-state';
 import type { Schema } from 'prosemirror-model';
+import type { EditorCommands, ChainedCommand, CanObject } from './types/ChainedCommands.js';
 
 /**
  * Minimal type definition for Editor class
@@ -40,8 +41,22 @@ export declare class Editor {
   /** Get coordinates at a document position */
   coordsAtPos?: (pos: number) => { left: number; top: number } | undefined;
 
-  /** Command service */
-  commands?: any;
+  /**
+   * Command service - provides access to all editor commands.
+   * Use `editor.commands.toggleBold()` to execute commands.
+   */
+  commands: EditorCommands;
+
+  /**
+   * Create a chain of commands to call multiple commands at once.
+   * Commands are executed in order when `.run()` is called.
+   */
+  chain(): ChainedCommand;
+
+  /**
+   * Check if a command or chain of commands can be executed without executing it.
+   */
+  can(): CanObject;
 
   [key: string]: any;
 }

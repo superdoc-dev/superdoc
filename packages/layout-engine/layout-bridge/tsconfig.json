@@ -6,11 +6,5 @@
     "composite": true,
     "declaration": true
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../contracts" },
-    { "path": "../measuring/dom" },
-    { "path": "../layout-engine" },
-    { "path": "../painters/dom" }
-  ]
+  "include": ["src"]
 }

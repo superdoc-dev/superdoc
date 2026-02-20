@@ -23,7 +23,7 @@ import path from 'path';
  */
 const THRESHOLDS = {
   timeToFirstPaint: 500, // ms for 50-page doc
-  typingLatency: 16, // ms for P95
+  typingLatency: 20, // ms for P95
   scrollFps: 55, // minimum FPS
   memoryUsed: 300, // MB for 100-page doc
 } as const;

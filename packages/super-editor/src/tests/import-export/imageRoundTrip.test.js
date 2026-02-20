@@ -754,7 +754,6 @@ describe('Image Import/Export Round Trip Tests', () => {
         headerIds: {},
         footers: {},
         footerIds: {},
-        telemetry: null,
       };
       const editor = { options: {}, emit: () => {} };
       const result = createDocumentJson(docxFixture, converter, editor);

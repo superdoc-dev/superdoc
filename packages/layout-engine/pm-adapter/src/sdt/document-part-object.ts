@@ -25,56 +25,55 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
     bookmarks,
     hyperlinkConfig,
     converters,
-    listCounterContext,
+    converterContext,
+    enableComments,
     trackedChangesConfig,
+    themeColors,
   } = context;
   const docPartGallery = getDocPartGallery(node);
   const docPartObjectId = getDocPartObjectId(node);
   const tocInstruction = getNodeInstruction(node);
   const docPartSdtMetadata = resolveNodeSdtMetadata(node, 'docPartObject');
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
-  if (docPartGallery === 'Table of Contents' && paragraphToFlowBlocks) {
+  if (docPartGallery === 'Table of Contents') {
     processTocChildren(
       Array.from(node.content),
       { docPartGallery, docPartObjectId, tocInstruction, sdtMetadata: docPartSdtMetadata },
       {
         nextBlockId,
         positions,
-        defaultFont,
-        defaultSize,
-        styleContext,
         bookmarks,
         hyperlinkConfig,
+        enableComments,
+        trackedChangesConfig,
+        converters,
+        converterContext,
       },
       { blocks, recordBlockKind },
-      paragraphToFlowBlocks,
     );
   } else if (paragraphToFlowBlocks) {
     // For non-ToC gallery types (page numbers, etc.), process child paragraphs normally
     for (const child of node.content) {
       if (child.type === 'paragraph') {
-        const childBlocks = paragraphToFlowBlocks(
-          child,
+        const childBlocks = paragraphToFlowBlocks({
+          para: child,
           nextBlockId,
           positions,
-          defaultFont,
-          defaultSize,
-          styleContext,
-          listCounterContext,
           trackedChangesConfig,
           bookmarks,
           hyperlinkConfig,
-        );
+          converters,
+          themeColors,
+          enableComments,
+          converterContext,
+        });
         for (const block of childBlocks) {
           blocks.push(block);
-          recordBlockKind(block.kind);
+          recordBlockKind?.(block.kind);
         }
       }
     }

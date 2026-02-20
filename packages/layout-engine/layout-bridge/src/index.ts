@@ -13,8 +13,15 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
+import { computeLinePmRange as computeLinePmRangeUnified } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX, measureCharacterX } from './text-measurement.js';
-import { clickToPositionDom } from './dom-mapping.js';
+import { clickToPositionDom, findPageElement } from './dom-mapping.js';
+import {
+  isListItem,
+  getWordLayoutConfig,
+  calculateTextStartIndent,
+  extractParagraphIndent,
+} from './list-indent-utils.js';
 
 export type { HeaderFooterType } from '@superdoc/contracts';
 export {
@@ -44,16 +51,17 @@ export type { HeaderFooterBatch, DigitBucket } from './layoutHeaderFooter';
 export { findWordBoundaries, findParagraphBoundaries } from './text-boundaries';
 export type { BoundaryRange } from './text-boundaries';
 export { incrementalLayout, measureCache } from './incrementalLayout';
-export type { HeaderFooterLayoutResult } from './incrementalLayout';
+export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
 // Re-export computeDisplayPageNumber from layout-engine for section-aware page numbering
-export { computeDisplayPageNumber, type DisplayPageInfo } from '../../layout-engine/src/index';
+export { computeDisplayPageNumber, type DisplayPageInfo } from '@superdoc/layout-engine';
 export { remeasureParagraph } from './remeasure';
 export { measureCharacterX } from './text-measurement';
-export { clickToPositionDom } from './dom-mapping';
+export { clickToPositionDom, findPageElement } from './dom-mapping';
+export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
+export type { TextIndentCalculationParams } from './list-indent-utils';
 export { LayoutVersionManager } from './layout-version-manager';
 export type { VersionedLayoutState, LayoutVersionMetrics } from './layout-version-manager';
-export { LayoutVersionLogger, LayoutVersionMetricsCollector, globalLayoutVersionMetrics } from './instrumentation';
-export type { LayoutVersionTelemetry } from './instrumentation';
+export { LayoutVersionLogger } from './instrumentation';
 
 // Font Metrics Cache
 export { FontMetricsCache } from './font-metrics-cache';
@@ -74,6 +82,10 @@ export type { LocalLayoutResult, TextRun } from './local-paragraph-layout';
 // PM DOM Fallback
 export { PmDomFallback } from './pm-dom-fallback';
 export type { PageTransform, PmEditorView } from './pm-dom-fallback';
+
+// Page Geometry Helper
+export { PageGeometryHelper } from './page-geometry-helper';
+export type { PageGeometryConfig } from './page-geometry-helper';
 
 // Layout Scheduler
 export { LayoutScheduler, Priority } from './layout-scheduler';
@@ -139,19 +151,22 @@ export type { FocusWatchdogConfig } from './focus-watchdog';
 export { TypingPerfBenchmark } from './benchmarks';
 export type { BenchmarkResult, BenchmarkScenario } from './benchmarks';
 
-// Drag Handler
-export { DragHandler, createDragHandler } from './drag-handler';
-export type {
-  FieldAnnotationDragData,
-  DragStartEvent,
-  DropEvent,
-  DragOverEvent,
-  DragStartCallback,
-  DropCallback,
-  DragOverCallback,
-  DragEndCallback,
-  DragHandlerConfig,
-} from './drag-handler';
+// Paragraph Hash Utilities
+export {
+  hashParagraphBorder,
+  hashParagraphBorders,
+  hashParagraphAttrs,
+  hashBorderSpec,
+  hashTableBorderValue,
+  hashTableBorders,
+  hashCellBorders,
+  hasStringProp,
+  hasNumberProp,
+  hasBooleanProp,
+  getRunStringProp,
+  getRunNumberProp,
+  getRunBooleanProp,
+} from './paragraph-hash-utils';
 
 export type Point = { x: number; y: number };
 export type PageHit = { pageIndex: number; page: Layout['pages'][number] };
@@ -165,6 +180,7 @@ export type FragmentHit = {
 
 export type PositionHit = {
   pos: number;
+  layoutEpoch: number;
   blockId: string;
   pageIndex: number;
   column: number;
@@ -207,39 +223,70 @@ const isAtomicFragment = (fragment: Fragment): fragment is AtomicFragment => {
 };
 
 /**
- * Click mapping telemetry for tracking DOM vs geometry mapping usage.
- * Exposed for performance monitoring and optimization decisions.
+ * Finds the nearest paragraph or atomic fragment to a point on a page.
+ *
+ * When a click lands in whitespace (no fragment hit), this snaps to the closest
+ * fragment by vertical distance. Used as a fallback when hitTestFragment misses.
  */
-export interface ClickMappingTelemetry {
-  /** Total click mappings attempted */
-  total: number;
-  /** Successful DOM-based mappings */
-  domSuccess: number;
-  /** Successful geometry-based mappings */
-  geometrySuccess: number;
-  /** Failed mappings (returned null) */
-  failed: number;
-}
+function snapToNearestFragment(
+  pageHit: PageHit,
+  blocks: FlowBlock[],
+  measures: Measure[],
+  pageRelativePoint: Point,
+): FragmentHit | null {
+  const fragments = pageHit.page.fragments.filter(
+    (f: Fragment | undefined): f is Fragment => f != null && typeof f === 'object',
+  );
+  let nearestHit: FragmentHit | null = null;
+  let nearestDist = Infinity;
 
-/**
- * Global click mapping telemetry instance.
- * Reset this periodically to avoid unbounded growth.
- */
-export const clickMappingTelemetry: ClickMappingTelemetry = {
-  total: 0,
-  domSuccess: 0,
-  geometrySuccess: 0,
-  failed: 0,
-};
+  for (const frag of fragments) {
+    const isPara = frag.kind === 'para';
+    const isAtomic = isAtomicFragment(frag);
+    if (!isPara && !isAtomic) continue;
 
-/**
- * Resets click mapping telemetry counters.
- */
-export function resetClickMappingTelemetry(): void {
-  clickMappingTelemetry.total = 0;
-  clickMappingTelemetry.domSuccess = 0;
-  clickMappingTelemetry.geometrySuccess = 0;
-  clickMappingTelemetry.failed = 0;
+    const blockIndex = findBlockIndexByFragmentId(blocks, frag.blockId);
+    if (blockIndex === -1) continue;
+    const block = blocks[blockIndex];
+    const measure = measures[blockIndex];
+    if (!block || !measure) continue;
+
+    let fragHeight = 0;
+    if (isAtomic) {
+      fragHeight = frag.height;
+    } else if (isPara && block.kind === 'paragraph' && measure.kind === 'paragraph') {
+      fragHeight = measure.lines
+        .slice(frag.fromLine, frag.toLine)
+        .reduce((sum: number, line: Line) => sum + line.lineHeight, 0);
+    } else {
+      continue;
+    }
+
+    const top = frag.y;
+    const bottom = frag.y + fragHeight;
+    let dist: number;
+    if (pageRelativePoint.y < top) {
+      dist = top - pageRelativePoint.y;
+    } else if (pageRelativePoint.y > bottom) {
+      dist = pageRelativePoint.y - bottom;
+    } else {
+      dist = 0;
+    }
+
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      const pageY = Math.max(0, Math.min(pageRelativePoint.y - top, fragHeight));
+      nearestHit = {
+        fragment: frag,
+        block,
+        measure,
+        pageIndex: pageHit.pageIndex,
+        pageY,
+      };
+    }
+  }
+
+  return nearestHit;
 }
 
 const logClickStage = (_level: 'log' | 'warn' | 'error', _stage: string, _payload: Record<string, unknown>) => {
@@ -345,19 +392,87 @@ const rangesOverlap = (startA: number | undefined, endA: number | undefined, sta
 /**
  * Find the page hit given layout and a coordinate relative to the layout container.
  * Accounts for gaps between pages when calculating page boundaries.
+ *
+ * This function performs a spatial lookup to determine which page contains a given coordinate.
+ * It handles:
+ * - Per-page height variations (some pages may be taller/shorter than others)
+ * - Gaps between pages (configurable spacing)
+ * - Clicks in gaps (snaps to nearest page center for better UX)
+ * - Edge cases (clicks outside all pages)
+ *
+ * **Performance:**
+ * - With geometryHelper: O(1) cached lookup via binary search or linear scan of cached positions
+ * - Without geometryHelper: O(n) fallback calculation where n = number of pages
+ *
+ * **Recommendation:** Always provide a geometryHelper for optimal performance and consistency
+ * with other geometry calculations (selection rendering, cursor positioning).
+ *
+ * @param layout - The layout containing page data (pages, pageSize, pageGap)
+ * @param point - Point in container space to test (x, y coordinates from top-left of layout container)
+ * @param geometryHelper - Optional PageGeometryHelper for cached lookups. When provided, ensures
+ *   consistent page position calculations across all geometry operations (click-to-position,
+ *   selection highlighting, cursor rendering). Strongly recommended for performance.
+ * @returns Page hit information containing pageIndex and page object, or null if point is in a gap
+ *   and no nearest page can be determined (empty layout) or point is far outside all pages.
+ *   When point is in a gap between pages, returns the nearest page by distance to page center.
+ *
+ * @example
+ * ```typescript
+ * // With geometry helper (recommended)
+ * const helper = new PageGeometryHelper({ layout });
+ * const hit = hitTestPage(layout, { x: 100, y: 550 }, helper);
+ * if (hit) {
+ *   console.log(`Clicked on page ${hit.pageIndex}`);
+ * }
+ *
+ * // Without geometry helper (fallback)
+ * const hit = hitTestPage(layout, { x: 100, y: 550 });
+ * ```
  */
-export function hitTestPage(layout: Layout, point: Point): PageHit | null {
+export function hitTestPage(
+  layout: Layout,
+  point: Point,
+  geometryHelper?: import('./page-geometry-helper').PageGeometryHelper,
+): PageHit | null {
+  // Use geometry helper if provided for cached, accurate page positions
+  if (geometryHelper) {
+    const pageIndex = geometryHelper.getPageIndexAtY(point.y);
+    if (pageIndex !== null) {
+      return { pageIndex, page: layout.pages[pageIndex] };
+    }
+    const nearest = geometryHelper.getNearestPageIndex(point.y);
+    if (nearest !== null) {
+      return { pageIndex: nearest, page: layout.pages[nearest] };
+    }
+    return null;
+  }
+
+  // Fallback to inline calculation (for backward compatibility)
   const pageGap = layout.pageGap ?? 0;
   let cursorY = 0;
+  let nearestIndex: number | null = null;
+  let nearestDistance = Infinity;
   for (let pageIndex = 0; pageIndex < layout.pages.length; pageIndex += 1) {
     const page = layout.pages[pageIndex];
+    // Use per-page height if available
+    const pageHeight = page.size?.h ?? layout.pageSize.h;
     const top = cursorY;
-    const bottom = top + layout.pageSize.h;
+    const bottom = top + pageHeight;
     if (point.y >= top && point.y < bottom) {
       return { pageIndex, page };
     }
+    // Track nearest page by distance to center for gap hits
+    const center = top + pageHeight / 2;
+    const distance = Math.abs(point.y - center);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = pageIndex;
+    }
     // Add gap after each page (gap appears between pages)
     cursorY = bottom + pageGap;
+  }
+  if (nearestIndex !== null) {
+    return { pageIndex: nearestIndex, page: layout.pages[nearestIndex] };
   }
   return null;
 }
@@ -392,7 +507,7 @@ export function hitTestFragment(
     // Calculate fragment's actual height from its lines, not measure.totalHeight
     const fragmentHeight = measure.lines
       .slice(fragment.fromLine, fragment.toLine)
-      .reduce((sum, line) => sum + line.lineHeight, 0);
+      .reduce((sum: number, line: Line) => sum + line.lineHeight, 0);
 
     const withinX = point.x >= fragment.x && point.x <= fragment.x + fragment.width;
     const withinY = point.y >= fragment.y && point.y <= fragment.y + fragmentHeight;
@@ -531,7 +646,18 @@ export const hitTestTableFragment = (
     if (!rowMeasure || !row) continue;
 
     // Find the column at localX using column widths
+    // IMPORTANT: For rows with rowspan cells from above, the first cell may not start at grid column 0.
+    // We need to calculate the X offset for columns occupied by rowspans.
+    const firstCellGridStart = rowMeasure.cells[0]?.gridColumnStart ?? 0;
     let colX = 0;
+    // Calculate X offset for columns before the first cell (occupied by rowspans from above)
+    if (firstCellGridStart > 0 && tableMeasure.columnWidths) {
+      for (let col = 0; col < firstCellGridStart && col < tableMeasure.columnWidths.length; col++) {
+        colX += tableMeasure.columnWidths[col];
+      }
+    }
+    const initialColX = colX;
+
     let colIndex = -1;
     // Bounds check: skip if row has no cells
     if (rowMeasure.cells.length === 0 || row.cells.length === 0) continue;
@@ -545,8 +671,13 @@ export const hitTestTableFragment = (
     }
 
     if (colIndex === -1) {
-      // Click is to the right of all columns, use the last column
-      colIndex = rowMeasure.cells.length - 1;
+      if (localX < initialColX) {
+        // Click is in a rowspanned area (left of all cells in this row) - use first cell
+        colIndex = 0;
+      } else {
+        // Click is to the right of all columns - use last cell
+        colIndex = rowMeasure.cells.length - 1;
+      }
       if (colIndex < 0) continue;
     }
 
@@ -587,9 +718,9 @@ export const hitTestTableFragment = (
       const blockEndY = blockStartY + blockHeight;
 
       // Calculate position within the cell (accounting for cell padding)
-      const padding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
+      const padding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
       const cellLocalX = localX - colX - (padding.left ?? 4);
-      const cellLocalY = localY - rowY - (padding.top ?? 2);
+      const cellLocalY = localY - rowY - (padding.top ?? 0);
       const paragraphBlock = cellBlock as ParagraphBlock;
       const paragraphMeasure = cellBlockMeasure as ParagraphMeasure;
 
@@ -605,7 +736,7 @@ export const hitTestTableFragment = (
           measure: tableMeasure,
           pageIndex: pageHit.pageIndex,
           cellRowIndex: rowIndex,
-          cellColIndex: colIndex,
+          cellColIndex: colIndex, // Use cell array index for PM selection (not gridColIndex)
           cellBlock: paragraphBlock,
           cellMeasure: paragraphMeasure,
           localX: Math.max(0, cellLocalX),
@@ -633,15 +764,91 @@ export const hitTestTableFragment = (
  * coordinates. The function will attempt DOM mapping first, falling back to geometry
  * if needed.
  *
+ * **Algorithm (Geometry-based):**
+ * 1. Hit-test to find the page containing the click point
+ * 2. Transform container coordinates to page-relative coordinates
+ * 3. Hit-test to find the fragment (paragraph, table, drawing) at the point
+ * 4. For paragraphs: find line at Y, then character at X using Canvas-based text measurement
+ * 5. For tables: find cell, then paragraph within cell, then character position
+ * 6. For drawings/images: return the fragment's PM position range
+ * 7. If no direct hit, snap to nearest fragment on the page
+ *
+ * **Performance:**
+ * - DOM mapping: O(1) DOM query via elementFromPoint
+ * - Geometry mapping: O(n) where n = number of fragments on the clicked page
+ * - With geometryHelper: Page lookups are O(1) cached
+ *
  * @param layout - The layout data containing pages and fragments
  * @param blocks - Array of flow blocks from the document
  * @param measures - Array of text measurements for the blocks
- * @param containerPoint - Click point in layout container space (for geometry mapping)
- * @param domContainer - Optional DOM container element (enables DOM mapping)
- * @param clientX - Optional client X coordinate (required for DOM mapping)
- * @param clientY - Optional client Y coordinate (required for DOM mapping)
- * @returns Position hit with PM position and metadata, or null if mapping fails
+ * @param containerPoint - Click point in layout container space (x, y from top-left of layout container).
+ *   Used for geometry-based mapping when DOM mapping is unavailable.
+ * @param domContainer - Optional DOM container element. When provided with clientX/clientY, enables
+ *   DOM-based mapping which is more accurate and handles PM position gaps correctly.
+ * @param clientX - Optional client X coordinate (viewport space). Required for DOM mapping.
+ * @param clientY - Optional client Y coordinate (viewport space). Required for DOM mapping.
+ * @param geometryHelper - Optional PageGeometryHelper for cached page position lookups. Strongly
+ *   recommended for performance and consistency. When provided, ensures page positions match
+ *   exactly with selection rendering and cursor positioning. Without it, falls back to inline
+ *   calculation which may have subtle differences from other geometry operations.
+ * @returns Position hit with PM position and metadata (blockId, pageIndex, column, lineIndex),
+ *   or null if mapping fails (click outside all content, invalid coordinates, etc.).
+ *
+ * @example
+ * ```typescript
+ * // DOM-based mapping (preferred)
+ * const hit = clickToPosition(
+ *   layout, blocks, measures,
+ *   { x: containerX, y: containerY },
+ *   domElement,
+ *   event.clientX,
+ *   event.clientY,
+ *   geometryHelper
+ * );
+ *
+ * // Geometry-based mapping (fallback)
+ * const hit = clickToPosition(
+ *   layout, blocks, measures,
+ *   { x: containerX, y: containerY },
+ *   undefined, undefined, undefined,
+ *   geometryHelper
+ * );
+ *
+ * if (hit) {
+ *   view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, hit.pos)));
+ * }
+ * ```
  */
+const readLayoutEpochFromDom = (domContainer: HTMLElement, clientX: number, clientY: number): number | null => {
+  const doc = domContainer.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
+  if (!doc || typeof doc.elementsFromPoint !== 'function') {
+    return null;
+  }
+
+  let hitChain: Element[] = [];
+  try {
+    hitChain = doc.elementsFromPoint(clientX, clientY) ?? [];
+  } catch {
+    return null;
+  }
+
+  let latestEpoch: number | null = null;
+  for (const el of hitChain) {
+    if (!(el instanceof HTMLElement)) continue;
+    if (!domContainer.contains(el)) continue;
+    const raw = el.dataset.layoutEpoch;
+    if (raw == null) continue;
+    const epoch = Number(raw);
+    if (!Number.isFinite(epoch)) continue;
+    // Pick the newest epoch in the hit chain to avoid stale descendants blocking mapping.
+    if (latestEpoch == null || epoch > latestEpoch) {
+      latestEpoch = epoch;
+    }
+  }
+
+  return latestEpoch;
+};
+
 export function clickToPosition(
   layout: Layout,
   blocks: FlowBlock[],
@@ -650,8 +857,9 @@ export function clickToPosition(
   domContainer?: HTMLElement,
   clientX?: number,
   clientY?: number,
+  geometryHelper?: import('./page-geometry-helper').PageGeometryHelper,
 ): PositionHit | null {
-  clickMappingTelemetry.total++;
+  const layoutEpoch = layout.layoutEpoch ?? 0;
 
   logClickStage('log', 'entry', {
     point: containerPoint,
@@ -663,6 +871,7 @@ export function clickToPosition(
   if (domContainer != null && clientX != null && clientY != null) {
     logClickStage('log', 'dom-attempt', { trying: 'DOM-based mapping' });
     const domPos = clickToPositionDom(domContainer, clientX, clientY);
+    const domLayoutEpoch = readLayoutEpochFromDom(domContainer, clientX, clientY) ?? layoutEpoch;
 
     if (domPos != null) {
       logPositionDebug({
@@ -671,7 +880,6 @@ export function clickToPosition(
         clientX,
         clientY,
       });
-      clickMappingTelemetry.domSuccess++;
       // DOM mapping succeeded - we need to construct a PositionHit with metadata
       // Find the block containing this position to get blockId
       let blockId = '';
@@ -693,13 +901,29 @@ export function clickToPosition(
               if (blockIndex !== -1) {
                 const measure = measures[blockIndex];
                 if (measure && measure.kind === 'paragraph') {
-                  for (let li = fragment.fromLine; li < fragment.toLine; li++) {
-                    const line = measure.lines[li];
-                    const range = computeLinePmRange(blocks[blockIndex], line);
-                    if (range.pmStart != null && range.pmEnd != null) {
-                      if (domPos >= range.pmStart && domPos <= range.pmEnd) {
-                        lineIndex = li;
-                        break;
+                  // Use fragment-specific remeasured lines when present to avoid index mismatches.
+                  if (fragment.lines && fragment.lines.length > 0) {
+                    for (let localIndex = 0; localIndex < fragment.lines.length; localIndex++) {
+                      const line = fragment.lines[localIndex];
+                      if (!line) continue;
+                      const range = computeLinePmRange(blocks[blockIndex], line);
+                      if (range.pmStart != null && range.pmEnd != null) {
+                        if (domPos >= range.pmStart && domPos <= range.pmEnd) {
+                          lineIndex = fragment.fromLine + localIndex;
+                          break;
+                        }
+                      }
+                    }
+                  } else {
+                    for (let li = fragment.fromLine; li < fragment.toLine; li++) {
+                      const line = measure.lines[li];
+                      if (!line) continue;
+                      const range = computeLinePmRange(blocks[blockIndex], line);
+                      if (range.pmStart != null && range.pmEnd != null) {
+                        if (domPos >= range.pmStart && domPos <= range.pmEnd) {
+                          lineIndex = li;
+                          break;
+                        }
                       }
                     }
                   }
@@ -713,19 +937,18 @@ export function clickToPosition(
                 lineIndex,
                 usedMethod: 'DOM',
               });
-              return { pos: domPos, blockId, pageIndex, column, lineIndex };
+              return { pos: domPos, layoutEpoch: domLayoutEpoch, blockId, pageIndex, column, lineIndex };
             }
           }
         }
       }
 
-      // Position found but couldn't locate in fragments - still return it
       logClickStage('log', 'success', {
         pos: domPos,
         usedMethod: 'DOM',
         note: 'position found but fragment not located',
       });
-      return { pos: domPos, blockId: '', pageIndex: 0, column: 0, lineIndex: -1 };
+      return { pos: domPos, layoutEpoch: domLayoutEpoch, blockId: '', pageIndex: 0, column: 0, lineIndex: -1 };
     }
 
     logClickStage('log', 'dom-fallback', { reason: 'DOM mapping returned null, trying geometry' });
@@ -733,7 +956,32 @@ export function clickToPosition(
 
   // Fallback to geometry-based mapping
   logClickStage('log', 'geometry-attempt', { trying: 'geometry-based mapping' });
-  const pageHit = hitTestPage(layout, containerPoint);
+
+  // When normalizeClientPoint produces containerPoint, it adjusts Y by the page's DOM
+  // offset, making containerPoint page-relative rather than container-space. On page 1
+  // the offset is ~0 so it doesn't matter, but on page 2+ this causes hitTestPage to
+  // find the wrong page and pageRelativePoint to be doubly subtracted.
+  //
+  // Fix: when DOM info is available, determine the page from elementsFromPoint (same
+  // technique normalizeClientPoint uses) and treat containerPoint as already page-relative.
+  let pageHit: PageHit | null = null;
+  let isContainerPointPageRelative = false;
+
+  if (domContainer != null && clientX != null && clientY != null) {
+    const pageEl = findPageElement(domContainer, clientX, clientY);
+    if (pageEl) {
+      const domPageIndex = Number(pageEl.dataset.pageIndex ?? 'NaN');
+      if (Number.isFinite(domPageIndex) && domPageIndex >= 0 && domPageIndex < layout.pages.length) {
+        pageHit = { pageIndex: domPageIndex, page: layout.pages[domPageIndex] };
+        isContainerPointPageRelative = true;
+      }
+    }
+  }
+
+  if (!pageHit) {
+    pageHit = hitTestPage(layout, containerPoint, geometryHelper);
+  }
+
   if (!pageHit) {
     logClickStage('warn', 'no-page', {
       point: containerPoint,
@@ -741,103 +989,164 @@ export function clickToPosition(
     return null;
   }
 
-  // Account for gaps between pages when calculating page-relative Y
-  const pageGap = layout.pageGap ?? 0;
-  const pageRelativePoint: Point = {
-    x: containerPoint.x,
-    y: containerPoint.y - pageHit.pageIndex * (layout.pageSize.h + pageGap),
-  };
+  // Calculate page-relative point
+  let pageRelativePoint: Point;
+  if (isContainerPointPageRelative) {
+    // containerPoint is already page-relative (normalizeClientPoint adjusted Y by page offset)
+    pageRelativePoint = containerPoint;
+  } else {
+    // containerPoint is in container-space, subtract page top to get page-relative
+    const pageTopY = geometryHelper
+      ? geometryHelper.getPageTop(pageHit.pageIndex)
+      : calculatePageTopFallback(layout, pageHit.pageIndex);
+    pageRelativePoint = {
+      x: containerPoint.x,
+      y: containerPoint.y - pageTopY,
+    };
+  }
+
   logClickStage('log', 'page-hit', {
     pageIndex: pageHit.pageIndex,
     pageRelativePoint,
   });
 
-  const fragmentHit = hitTestFragment(layout, pageHit, blocks, measures, pageRelativePoint);
+  let fragmentHit = hitTestFragment(layout, pageHit, blocks, measures, pageRelativePoint);
+
+  // If no fragment was hit (e.g., whitespace), snap to nearest hit-testable fragment on the page.
+  // But skip snap-to-nearest when the click is within a table fragment — otherwise the snap
+  // picks a nearby paragraph and returns its position, preventing clicks in empty table cell
+  // space (below text lines) from reaching hitTestTableFragment below.
+  if (!fragmentHit) {
+    const isWithinTableFragment = pageHit.page.fragments
+      .filter((f) => f.kind === 'table')
+      .some((f) => {
+        const tf = f as TableFragment;
+        return (
+          pageRelativePoint.x >= tf.x &&
+          pageRelativePoint.x <= tf.x + tf.width &&
+          pageRelativePoint.y >= tf.y &&
+          pageRelativePoint.y <= tf.y + tf.height
+        );
+      });
+    if (!isWithinTableFragment) {
+      fragmentHit = snapToNearestFragment(pageHit, blocks, measures, pageRelativePoint);
+    }
+  }
+
   if (fragmentHit) {
     const { fragment, block, measure, pageIndex, pageY } = fragmentHit;
-    if (fragment.kind !== 'para' || measure.kind !== 'paragraph' || block.kind !== 'paragraph') {
-      logClickStage('warn', 'fragment-type-mismatch', {
-        fragmentKind: fragment.kind,
-        measureKind: measure.kind,
-        blockKind: block.kind,
-      });
-      return null;
-    }
-    const lineIndex = findLineIndexAtY(measure, pageY, fragment.fromLine, fragment.toLine);
-    if (lineIndex == null) {
-      logClickStage('warn', 'no-line', {
+    // Handle paragraph fragments
+    if (fragment.kind === 'para' && measure.kind === 'paragraph' && block.kind === 'paragraph') {
+      const lineIndex = findLineIndexAtY(measure, pageY, fragment.fromLine, fragment.toLine);
+      if (lineIndex == null) {
+        logClickStage('warn', 'no-line', {
+          blockId: fragment.blockId,
+          pageIndex,
+          pageY,
+        });
+        return null;
+      }
+      const line = measure.lines[lineIndex];
+
+      const isRTL = isRtlBlock(block);
+      // Type guard: Validate indent structure and ensure numeric values
+      const indentLeft = typeof block.attrs?.indent?.left === 'number' ? block.attrs.indent.left : 0;
+      const indentRight = typeof block.attrs?.indent?.right === 'number' ? block.attrs.indent.right : 0;
+      const paraIndentLeft = Number.isFinite(indentLeft) ? indentLeft : 0;
+      const paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
+
+      const totalIndent = paraIndentLeft + paraIndentRight;
+      const availableWidth = Math.max(0, fragment.width - totalIndent);
+
+      // Validation: Warn when indents exceed fragment width (potential layout issue)
+      if (totalIndent > fragment.width) {
+        console.warn(
+          `[clickToPosition] Paragraph indents (${totalIndent}px) exceed fragment width (${fragment.width}px) ` +
+            `for block ${fragment.blockId}. This may indicate a layout miscalculation. ` +
+            `Available width clamped to 0.`,
+        );
+      }
+
+      // List items use textAlign: 'left' in the DOM for non-justify alignments.
+      // For justify, the DOM uses textAlign: 'left' but applies word-spacing for actual justify effect.
+      // We only override alignment for list items when NOT justified, so justify caret positioning works correctly.
+      const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
+      const isListItem = markerWidth > 0;
+      const paraAlignment = block.attrs?.alignment;
+      const isJustified = paraAlignment === 'justify';
+      const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;
+
+      const pos = mapPointToPm(block, line, pageRelativePoint.x - fragment.x, isRTL, availableWidth, alignmentOverride);
+      if (pos == null) {
+        logClickStage('warn', 'no-position', {
+          blockId: fragment.blockId,
+          lineIndex,
+          isRTL,
+        });
+        return null;
+      }
+
+      const column = determineColumn(layout, fragment.x);
+      logPositionDebug({
+        origin: 'geometry',
+        pos,
         blockId: fragment.blockId,
         pageIndex,
-        pageY,
-      });
-      return null;
-    }
-    const line = measure.lines[lineIndex];
-
-    const isRTL = isRtlBlock(block);
-    // Type guard: Validate indent structure and ensure numeric values
-    const indentLeft = typeof block.attrs?.indent?.left === 'number' ? block.attrs.indent.left : 0;
-    const indentRight = typeof block.attrs?.indent?.right === 'number' ? block.attrs.indent.right : 0;
-    const paraIndentLeft = Number.isFinite(indentLeft) ? indentLeft : 0;
-    const paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
-
-    const totalIndent = paraIndentLeft + paraIndentRight;
-    const availableWidth = Math.max(0, fragment.width - totalIndent);
-
-    // Validation: Warn when indents exceed fragment width (potential layout issue)
-    if (totalIndent > fragment.width) {
-      console.warn(
-        `[clickToPosition] Paragraph indents (${totalIndent}px) exceed fragment width (${fragment.width}px) ` +
-          `for block ${fragment.blockId}. This may indicate a layout miscalculation. ` +
-          `Available width clamped to 0.`,
-      );
-    }
-
-    // List items are rendered with left alignment in the DOM regardless of paragraph alignment
-    const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
-    const isListItem = markerWidth > 0;
-    const alignmentOverride = isListItem ? 'left' : undefined;
-
-    const pos = mapPointToPm(block, line, pageRelativePoint.x - fragment.x, isRTL, availableWidth, alignmentOverride);
-    if (pos == null) {
-      logClickStage('warn', 'no-position', {
-        blockId: fragment.blockId,
+        column,
         lineIndex,
+        x: pageRelativePoint.x - fragment.x,
+        y: pageRelativePoint.y,
         isRTL,
       });
-      return null;
+
+      logClickStage('log', 'success', {
+        blockId: fragment.blockId,
+        pos,
+        pageIndex,
+        column,
+        lineIndex,
+        origin: 'paragraph',
+      });
+
+      return {
+        pos,
+        layoutEpoch,
+        blockId: fragment.blockId,
+        pageIndex,
+        column,
+        lineIndex, // lineIndex is now already absolute (within measure.lines), no need to add fragment.fromLine
+      };
     }
 
-    const column = determineColumn(layout, fragment.x);
-    clickMappingTelemetry.geometrySuccess++;
-    logPositionDebug({
-      origin: 'geometry',
-      pos,
-      blockId: fragment.blockId,
-      pageIndex,
-      column,
-      lineIndex,
-      x: pageRelativePoint.x - fragment.x,
-      y: pageRelativePoint.y,
-      isRTL,
-    });
+    // Handle atomic fragments (drawing, image)
+    if (isAtomicFragment(fragment)) {
+      const pmRange = getAtomicPmRange(fragment, block);
+      const pos = pmRange.pmStart ?? pmRange.pmEnd ?? null;
+      if (pos == null) {
+        logClickStage('warn', 'atomic-without-range', {
+          fragmentId: fragment.blockId,
+        });
+        return null;
+      }
 
-    logClickStage('log', 'success', {
-      blockId: fragment.blockId,
-      pos,
-      pageIndex,
-      column,
-      lineIndex,
-      origin: 'paragraph',
-    });
+      logClickStage('log', 'success', {
+        blockId: fragment.blockId,
+        pos,
+        pageIndex,
+        column: determineColumn(layout, fragment.x),
+        lineIndex: -1,
+        origin: 'atomic-fragment-hit',
+      });
 
-    return {
-      pos,
-      blockId: fragment.blockId,
-      pageIndex,
-      column,
-      lineIndex, // lineIndex is now already absolute (within measure.lines), no need to add fragment.fromLine
-    };
+      return {
+        pos,
+        layoutEpoch,
+        blockId: fragment.blockId,
+        pageIndex,
+        column: determineColumn(layout, fragment.x),
+        lineIndex: -1,
+      };
+    }
   }
 
   // Try table fragment hit testing
@@ -868,15 +1177,17 @@ export function clickToPosition(
         );
       }
 
-      // List items in table cells are also rendered with left alignment
+      // List items in table cells use textAlign: 'left' in the DOM for non-justify alignments.
+      // For justify, we don't override so justify caret positioning works correctly.
       const cellMarkerWidth = cellMeasure.marker?.markerWidth ?? 0;
       const isListItem = cellMarkerWidth > 0;
-      const alignmentOverride = isListItem ? 'left' : undefined;
+      const cellAlignment = cellBlock.attrs?.alignment;
+      const isJustified = cellAlignment === 'justify';
+      const alignmentOverride = isListItem && !isJustified ? 'left' : undefined;
 
       const pos = mapPointToPm(cellBlock, line, localX, isRTL, availableWidth, alignmentOverride);
 
       if (pos != null) {
-        clickMappingTelemetry.geometrySuccess++;
         logClickStage('log', 'success', {
           blockId: tableHit.fragment.blockId,
           pos,
@@ -888,6 +1199,7 @@ export function clickToPosition(
 
         return {
           pos,
+          layoutEpoch,
           blockId: tableHit.fragment.blockId,
           pageIndex,
           column: determineColumn(layout, tableHit.fragment.x),
@@ -899,7 +1211,6 @@ export function clickToPosition(
     // Fallback: return first position in the cell if line/position mapping fails
     const firstRun = cellBlock.runs?.[0];
     if (firstRun && firstRun.pmStart != null) {
-      clickMappingTelemetry.geometrySuccess++;
       logClickStage('log', 'success', {
         blockId: tableHit.fragment.blockId,
         pos: firstRun.pmStart,
@@ -911,6 +1222,7 @@ export function clickToPosition(
 
       return {
         pos: firstRun.pmStart,
+        layoutEpoch,
         blockId: tableHit.fragment.blockId,
         pageIndex,
         column: determineColumn(layout, tableHit.fragment.x),
@@ -925,20 +1237,19 @@ export function clickToPosition(
     });
   }
 
+  // If we still haven't found a fragment, try direct atomic fragment hit test
+  // This handles cases where the atomic fragment wasn't caught by the snap-to-nearest logic
   const atomicHit = hitTestAtomicFragment(pageHit, blocks, measures, pageRelativePoint);
   if (atomicHit && isAtomicFragment(atomicHit.fragment)) {
     const { fragment, block, pageIndex } = atomicHit;
     const pmRange = getAtomicPmRange(fragment, block);
     const pos = pmRange.pmStart ?? pmRange.pmEnd ?? null;
     if (pos == null) {
-      clickMappingTelemetry.failed++;
       logClickStage('warn', 'atomic-without-range', {
         fragmentId: fragment.blockId,
       });
       return null;
     }
-
-    clickMappingTelemetry.geometrySuccess++;
 
     logClickStage('log', 'success', {
       blockId: fragment.blockId,
@@ -946,19 +1257,18 @@ export function clickToPosition(
       pageIndex,
       column: determineColumn(layout, fragment.x),
       lineIndex: -1,
-      origin: 'atomic',
+      origin: 'atomic-direct-hit',
     });
 
     return {
       pos,
+      layoutEpoch,
       blockId: fragment.blockId,
       pageIndex,
       column: determineColumn(layout, fragment.x),
       lineIndex: -1,
     };
   }
-
-  clickMappingTelemetry.failed++;
 
   logClickStage('warn', 'no-fragment', {
     pageIndex: pageHit.pageIndex,
@@ -1027,7 +1337,7 @@ function findBlockIndexByFragmentId(
       if (block.kind !== 'paragraph') continue;
 
       // Check if any run in this block overlaps the target range
-      const hasOverlap = block.runs.some((run) => {
+      const hasOverlap = block.runs.some((run: Run) => {
         if (run.pmStart == null || run.pmEnd == null) return false;
         return run.pmEnd > targetPmRange.from && run.pmStart < targetPmRange.to;
       });
@@ -1045,7 +1355,7 @@ type TableRowBlock = TableBlock['rows'][number];
 type TableCellBlock = TableRowBlock['cells'][number];
 type TableCellMeasure = TableMeasure['rows'][number]['cells'][number];
 
-const DEFAULT_CELL_PADDING = { top: 2, bottom: 2, left: 4, right: 4 };
+const DEFAULT_CELL_PADDING = { top: 0, bottom: 0, left: 4, right: 4 };
 
 const getCellPaddingFromRow = (cellIdx: number, row?: TableRowBlock) => {
   const padding = row?.cells?.[cellIdx]?.attrs?.padding ?? {};
@@ -1076,7 +1386,71 @@ const sumLineHeights = (measure: ParagraphMeasure, fromLine: number, toLine: num
 };
 
 /**
+ * Calculates cumulative Y position for a page (fallback when no geometry helper provided).
+ *
+ * This function provides an inline calculation alternative to PageGeometryHelper for backward
+ * compatibility. It computes the Y offset of a page by summing heights and gaps of all
+ * preceding pages.
+ *
+ * **Why This Exists:**
+ * - Backward compatibility: Some callers may not have a PageGeometryHelper instance
+ * - Simpler API: No need to instantiate a helper for one-off calculations
+ * - Testing: Easier to test individual calculations in isolation
+ *
+ * **Difference from PageGeometryHelper:**
+ * - PageGeometryHelper: Caches cumulative positions for O(1) lookups
+ * - calculatePageTopFallback: Recalculates on every call - O(n) where n = pageIndex
+ * - PageGeometryHelper: Guaranteed consistent with other geometry operations
+ * - calculatePageTopFallback: May have subtle differences if layout changes between calls
+ *
+ * **Performance:**
+ * - Time: O(n) where n = pageIndex (must iterate through all preceding pages)
+ * - Space: O(1) (no cache, just accumulator variable)
+ * - For documents with many pages: PageGeometryHelper is significantly faster
+ * - For single-page documents or small pageIndex: Negligible difference
+ *
+ * **When to Use:**
+ * - One-off calculations where caching overhead isn't justified
+ * - Backward compatibility with code that doesn't use PageGeometryHelper
+ * - Testing individual page position calculations
+ *
+ * **Recommendation:**
+ * Use PageGeometryHelper whenever possible for better performance and consistency.
+ * This fallback should only be used when a geometry helper is truly unavailable.
+ *
+ * @param layout - The layout containing page data
+ * @param pageIndex - Zero-based index of the page to calculate Y position for
+ * @returns Cumulative Y position in pixels from container top to page top
+ * @private
+ *
+ * @example
+ * ```typescript
+ * // Calculate Y position of page 2 (third page)
+ * // Assumes page 0 height = 1000, page 1 height = 1200, gap = 24
+ * const y = calculatePageTopFallback(layout, 2);
+ * // Returns: 1000 + 24 + 1200 + 24 = 2248
+ * ```
+ */
+const calculatePageTopFallback = (layout: Layout, pageIndex: number): number => {
+  const pageGap = layout.pageGap ?? 0;
+  let y = 0;
+  for (let i = 0; i < pageIndex; i++) {
+    const pageHeight = layout.pages[i]?.size?.h ?? layout.pageSize.h;
+    y += pageHeight + pageGap;
+  }
+  return y;
+};
+
+/**
  * Given a PM range [from, to), return selection rectangles for highlighting.
+ *
+ * @param layout - The layout containing page and fragment data
+ * @param blocks - Array of flow blocks
+ * @param measures - Array of measurements corresponding to blocks
+ * @param from - Start PM position
+ * @param to - End PM position
+ * @param geometryHelper - Optional PageGeometryHelper for accurate Y calculations (recommended)
+ * @returns Array of selection rectangles in container space
  */
 export function selectionToRects(
   layout: Layout,
@@ -1084,6 +1458,7 @@ export function selectionToRects(
   measures: Measure[],
   from: number,
   to: number,
+  geometryHelper?: import('./page-geometry-helper').PageGeometryHelper,
 ): Rect[] {
   if (from === to) {
     return [];
@@ -1092,8 +1467,12 @@ export function selectionToRects(
   const rects: Rect[] = [];
   const debugEntries: Record<string, unknown>[] = [];
 
-  layout.pages.forEach((page, pageIndex) => {
-    page.fragments.forEach((fragment) => {
+  layout.pages.forEach((page: Layout['pages'][number], pageIndex: number) => {
+    // Calculate cumulative Y offset for this page
+    const pageTopY = geometryHelper
+      ? geometryHelper.getPageTop(pageIndex)
+      : calculatePageTopFallback(layout, pageIndex);
+    page.fragments.forEach((fragment: Fragment) => {
       if (fragment.kind === 'para') {
         const blockIndex = findBlockIndexByFragmentId(blocks, fragment.blockId, { from, to });
         if (blockIndex === -1) {
@@ -1122,42 +1501,47 @@ export function selectionToRects(
           const charOffsetTo = pmPosToCharOffset(block, line, sliceTo);
           // Detect list items by checking for marker presence
           const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
-          const isListItem = markerWidth > 0;
-          // List items are always rendered with left alignment in the DOM (painter forces textAlign: 'left'),
-          // regardless of the paragraph's alignment attribute. Pass 'left' override to match DOM rendering.
-          const alignmentOverride = isListItem ? 'left' : undefined;
+          const isListItemFlag = isListItem(markerWidth, block);
+          // List items use textAlign: 'left' in the DOM for non-justify alignments.
+          // For justify, we don't override so justify selection rectangles are calculated correctly.
+          const blockAlignment = block.attrs?.alignment;
+          const isJustified = blockAlignment === 'justify';
+          const alignmentOverride = isListItemFlag && !isJustified ? 'left' : undefined;
           const startX = mapPmToX(block, line, charOffsetFrom, fragment.width, alignmentOverride);
           const endX = mapPmToX(block, line, charOffsetTo, fragment.width, alignmentOverride);
 
-          // Align with painter DOM indent handling (padding/text-indent on lines)
-          // Text content always starts at paraIndentLeft from fragment.x:
-          // - For non-list lines: painter applies CSS paddingLeft + textIndent
-          // - For list lines: marker sits in hanging indent area, text starts at paraIndentLeft
-          // The markerWidth is just the marker's rendered width, not where text starts.
-          const paraIndentLeft = block.attrs?.indent?.left ?? 0;
-          const firstLineOffset = (block.attrs?.indent?.firstLine ?? 0) - (block.attrs?.indent?.hanging ?? 0);
+          // Calculate text indent using shared utility
+          const indent = extractParagraphIndent(block.attrs?.indent);
+          const wordLayout = getWordLayoutConfig(block);
           const isFirstLine = index === fragment.fromLine;
-          // For list items, text starts at paraIndentLeft (marker sits in hanging indent area)
-          // For non-list first lines, also add firstLineOffset
-          let indentAdjust = paraIndentLeft;
-          if (isFirstLine && !isListItem) {
-            indentAdjust += firstLineOffset;
-          }
+          const indentAdjust = calculateTextStartIndent({
+            isFirstLine,
+            isListItem: isListItemFlag,
+            markerWidth,
+            markerTextWidth: fragment.markerTextWidth ?? measure.marker?.markerTextWidth ?? undefined,
+            paraIndentLeft: indent.left,
+            firstLineIndent: indent.firstLine,
+            hangingIndent: indent.hanging,
+            wordLayout,
+          });
 
           const rectX = fragment.x + indentAdjust + Math.min(startX, endX);
-          const rectWidth = Math.max(1, Math.abs(endX - startX));
+          const rectWidth = Math.max(
+            1,
+            Math.min(Math.abs(endX - startX), line.width), // clamp to line width to prevent runaway widths
+          );
           const lineOffset = lineHeightBeforeIndex(measure, index) - lineHeightBeforeIndex(measure, fragment.fromLine);
           const rectY = fragment.y + lineOffset;
           rects.push({
             x: rectX,
-            y: rectY + pageIndex * (layout.pageSize.h + (layout.pageGap ?? 0)),
+            y: rectY + pageTopY,
             width: rectWidth,
             height: line.lineHeight,
             pageIndex,
           });
 
           if (SELECTION_DEBUG_ENABLED) {
-            const runs = block.runs.slice(line.fromRun, line.toRun + 1).map((run, idx) => {
+            const runs = block.runs.slice(line.fromRun, line.toRun + 1).map((run: Run, idx: number) => {
               const isAtomic =
                 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation';
               const text = isAtomic ? '' : (run.text ?? '');
@@ -1226,7 +1610,7 @@ export function selectionToRects(
         const tableMeasure = measure as TableMeasure;
         const tableFragment = fragment as TableFragment;
 
-        const rowHeights = tableMeasure.rows.map((rowMeasure, idx) => {
+        const rowHeights = tableMeasure.rows.map((rowMeasure: TableMeasure['rows'][number], idx: number) => {
           if (tableFragment.partialRow && tableFragment.partialRow.rowIndex === idx) {
             return tableFragment.partialRow.partialHeight;
           }
@@ -1329,10 +1713,14 @@ export function selectionToRects(
             renderedBlocks.forEach((info) => {
               const paragraphMarkerWidth = info.measure.marker?.markerWidth ?? 0;
               // List items in table cells are also rendered with left alignment
-              const isListItem = paragraphMarkerWidth > 0;
-              const alignmentOverride = isListItem ? 'left' : undefined;
-              // Get paragraph indent for text positioning (same logic as regular paragraphs)
-              const paraIndentLeft = info.block.kind === 'paragraph' ? (info.block.attrs?.indent?.left ?? 0) : 0;
+              const cellIsListItem = isListItem(paragraphMarkerWidth, info.block);
+              const alignmentOverride = cellIsListItem ? 'left' : undefined;
+              // Extract paragraph indent for text positioning
+              const cellIndent = extractParagraphIndent(
+                info.block.kind === 'paragraph' ? info.block.attrs?.indent : undefined,
+              );
+              const cellWordLayout = getWordLayoutConfig(info.block);
+
               const intersectingLines = findLinesIntersectingRange(info.block, info.measure, from, to);
 
               intersectingLines.forEach(({ line, index }) => {
@@ -1351,16 +1739,31 @@ export function selectionToRects(
                 const startX = mapPmToX(info.block, line, charOffsetFrom, availableWidth, alignmentOverride);
                 const endX = mapPmToX(info.block, line, charOffsetTo, availableWidth, alignmentOverride);
 
-                // Text starts at paraIndentLeft from the cell content area
-                const rectX = fragment.x + cellX + padding.left + paraIndentLeft + Math.min(startX, endX);
-                const rectWidth = Math.max(1, Math.abs(endX - startX));
+                // Calculate text indent using shared utility
+                const isFirstLine = index === info.startLine;
+                const textIndentAdjust = calculateTextStartIndent({
+                  isFirstLine,
+                  isListItem: cellIsListItem,
+                  markerWidth: paragraphMarkerWidth,
+                  markerTextWidth: info.measure?.marker?.markerTextWidth ?? undefined,
+                  paraIndentLeft: cellIndent.left,
+                  firstLineIndent: cellIndent.firstLine,
+                  hangingIndent: cellIndent.hanging,
+                  wordLayout: cellWordLayout,
+                });
+
+                const rectX = fragment.x + cellX + padding.left + textIndentAdjust + Math.min(startX, endX);
+                const rectWidth = Math.max(
+                  1,
+                  Math.min(Math.abs(endX - startX), line.width), // clamp to line width to prevent runaway widths
+                );
                 const lineOffset =
                   lineHeightBeforeIndex(info.measure, index) - lineHeightBeforeIndex(info.measure, info.startLine);
                 const rectY = fragment.y + rowOffset + blockTopCursor + lineOffset;
 
                 rects.push({
                   x: rectX,
-                  y: rectY + pageIndex * (layout.pageSize.h + (layout.pageGap ?? 0)),
+                  y: rectY + pageTopY,
                   width: rectWidth,
                   height: line.lineHeight,
                   pageIndex,
@@ -1396,7 +1799,7 @@ export function selectionToRects(
         if (!rangesOverlap(pmRange.pmStart, pmRange.pmEnd, from, to)) return;
         rects.push({
           x: fragment.x,
-          y: fragment.y + pageIndex * (layout.pageSize.h + (layout.pageGap ?? 0)),
+          y: fragment.y + pageTopY,
           width: fragment.width,
           height: fragment.height,
           pageIndex,
@@ -1532,7 +1935,7 @@ export function findLinesIntersectingRange(
     return [];
   }
   const hits: { line: Line; index: number }[] = [];
-  measure.lines.forEach((line, idx) => {
+  measure.lines.forEach((line: Line, idx: number) => {
     const range = computeLinePmRange(block, line);
     if (range.pmStart == null || range.pmEnd == null) {
       return;
@@ -1597,68 +2000,7 @@ export function findLinesIntersectingRange(
  * @see pmPosToCharOffset - Related function that skips empty runs during character offset calculation
  */
 export function computeLinePmRange(block: FlowBlock, line: Line): { pmStart?: number; pmEnd?: number } {
-  if (block.kind !== 'paragraph') return {};
-
-  let pmStart: number | undefined;
-  let pmEnd: number | undefined;
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (!run) continue;
-
-    const text =
-      'src' in run || run.kind === 'lineBreak' || run.kind === 'break' || run.kind === 'fieldAnnotation'
-        ? ''
-        : (run.text ?? '');
-    const runLength = text.length;
-    const runPmStart = run.pmStart ?? null;
-    const runPmEnd = run.pmEnd ?? (runPmStart != null ? runPmStart + runLength : null);
-
-    if (runPmStart == null || runPmEnd == null) continue;
-
-    // Runtime validation: warn about invalid PM positions that indicate data corruption
-    if (!Number.isFinite(runPmStart) || runPmStart < 0) {
-      console.warn(
-        `[computeLinePmRange] Invalid runPmStart (${runPmStart}) in block ${block.id}, run ${runIndex}. ` +
-          `This may indicate layout data corruption. Expected a non-negative finite number.`,
-      );
-    }
-    if (!Number.isFinite(runPmEnd) || runPmEnd < 0) {
-      console.warn(
-        `[computeLinePmRange] Invalid runPmEnd (${runPmEnd}) in block ${block.id}, run ${runIndex}. ` +
-          `This may indicate layout data corruption. Expected a non-negative finite number.`,
-      );
-    }
-
-    // Empty runs still carry caret information via their PM positions.
-    // Preserve those positions so zero-width lines (e.g., empty table cells)
-    // expose pmStart/pmEnd for cursor hit testing.
-    // This is intentional behavior for SD-1108 - DO NOT remove.
-    // NOTE: pmPosToCharOffset skips empty runs because they contribute no pixels,
-    // but we preserve them here for spatial operations like click-to-position.
-    if (runLength === 0) {
-      if (pmStart == null) {
-        pmStart = runPmStart;
-      }
-      pmEnd = runPmEnd;
-      continue;
-    }
-
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-    const startOffset = isFirstRun ? line.fromChar : 0;
-    const endOffset = isLastRun ? line.toChar : runLength;
-
-    const sliceStart = runPmStart + startOffset;
-    const sliceEnd = Math.min(runPmStart + endOffset, runPmEnd);
-
-    if (pmStart == null) {
-      pmStart = sliceStart;
-    }
-    pmEnd = sliceEnd;
-  }
-
-  return { pmStart, pmEnd };
+  return computeLinePmRangeUnified(block, line);
 }
 
 /**
@@ -1904,14 +2246,15 @@ const mapPointToPm = (
   const result = findCharacterAtX(block, line, x, range.pmStart, availableWidthOverride, alignmentOverride);
 
   // Handle RTL text by reversing the position
+  let pmPosition = result.pmPosition;
   if (isRTL) {
     const charOffset = result.charOffset;
     const charsInLine = Math.max(1, line.toChar - line.fromChar);
     const reversedOffset = Math.max(0, Math.min(charsInLine, charsInLine - charOffset));
-    return charOffsetToPm(block, line, reversedOffset, range.pmStart);
+    pmPosition = charOffsetToPm(block, line, reversedOffset, range.pmStart);
   }
 
-  return result.pmPosition;
+  return pmPosition;
 };
 
 /**
@@ -1952,14 +2295,29 @@ const mapPmToX = (
   // Type guard: Validate indent structure and ensure numeric values
   let paraIndentLeft = 0;
   let paraIndentRight = 0;
+  let effectiveLeft = 0;
   if (block.kind === 'paragraph') {
     const indentLeft = typeof block.attrs?.indent?.left === 'number' ? block.attrs.indent.left : 0;
     const indentRight = typeof block.attrs?.indent?.right === 'number' ? block.attrs.indent.right : 0;
     paraIndentLeft = Number.isFinite(indentLeft) ? indentLeft : 0;
     paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
+    effectiveLeft = paraIndentLeft;
+    const wl = getWordLayoutConfig(block);
+    const isListParagraph = Boolean(block.attrs?.numberingProperties) || Boolean(wl?.marker);
+    if (isListParagraph) {
+      const explicitTextStart =
+        typeof wl?.marker?.textStartX === 'number' && Number.isFinite(wl.marker.textStartX)
+          ? wl.marker.textStartX
+          : typeof wl?.textStartPx === 'number' && Number.isFinite(wl.textStartPx)
+            ? wl.textStartPx
+            : undefined;
+      if (typeof explicitTextStart === 'number' && explicitTextStart > paraIndentLeft) {
+        effectiveLeft = explicitTextStart;
+      }
+    }
   }
 
-  const totalIndent = paraIndentLeft + paraIndentRight;
+  const totalIndent = effectiveLeft + paraIndentRight;
   const availableWidth = Math.max(0, fragmentWidth - totalIndent);
 
   // Validation: Warn when indents exceed fragment width (potential layout issue)

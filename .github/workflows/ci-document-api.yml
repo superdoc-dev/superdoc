@@ -1,0 +1,36 @@
+name: CI Document API
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'packages/document-api/**'
+      - 'apps/docs/document-api/**'
+      - 'package.json'
+      - '.github/workflows/ci-document-api.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-document-api-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check contract parity and generated outputs
+        run: pnpm run docapi:check

@@ -3,10 +3,18 @@ import { handleShapeTextboxImport } from './handle-shape-textbox-import';
 import { parseInlineStyles } from './parse-inline-styles';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter';
+import { preProcessTextBoxContent } from '@converter/v3/handlers/wp/helpers/textbox-content-helpers.js';
 
 vi.mock('./parse-inline-styles');
 vi.mock('@converter/v2/importer/docxImporter');
 vi.mock('@converter/v2/importer/paragraphNodeImporter');
+vi.mock('@converter/v3/handlers/wp/helpers/textbox-content-helpers.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    preProcessTextBoxContent: vi.fn((content) => content),
+  };
+});
 
 describe('handleShapeTextboxImport', () => {
   const createShape = (attributes = {}, elements = []) => ({
@@ -243,5 +251,58 @@ describe('handleShapeTextboxImport', () => {
       attrs: {},
       content: [],
     });
+  });
+
+  it('should preprocess textbox content for field codes (PAGE, NUMPAGES, etc.)', () => {
+    const textboxContentElement = createTextboxContent([{ name: 'w:p', elements: [] }]);
+
+    const pict = {
+      elements: [createShape({}, [createTextbox({}, [textboxContentElement])])],
+    };
+
+    const params = { docx: { some: 'data' }, filename: 'header1.xml' };
+    const options = {
+      params,
+      pNode: {},
+      pict,
+    };
+
+    handleShapeTextboxImport(options);
+
+    expect(preProcessTextBoxContent).toHaveBeenCalledWith(textboxContentElement, params);
+  });
+
+  it('should use preprocessed content for paragraph extraction', () => {
+    const originalParagraph = { name: 'w:p', elements: [{ name: 'w:r', elements: [] }] };
+    const processedParagraph = { name: 'w:p', elements: [{ name: 'sd:pageRef', attributes: {} }] };
+
+    const textboxContentElement = createTextboxContent([originalParagraph]);
+
+    // Mock preprocessing to return modified content
+    preProcessTextBoxContent.mockReturnValueOnce({
+      name: 'w:txbxContent',
+      elements: [processedParagraph],
+    });
+
+    handleParagraphNode.mockReturnValue({ nodes: [{ type: 'paragraph', content: [] }] });
+
+    const pict = {
+      elements: [createShape({}, [createTextbox({}, [textboxContentElement])])],
+    };
+
+    const options = {
+      params: { docx: {} },
+      pNode: {},
+      pict,
+    };
+
+    handleShapeTextboxImport(options);
+
+    // Verify handleParagraphNode received the preprocessed paragraph, not the original
+    expect(handleParagraphNode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [processedParagraph],
+      }),
+    );
   });
 });

@@ -40,8 +40,19 @@ export class CommandService {
   }
 
   /**
-   * Get all editor commands
-   * @returns {import('./commands/types/index.js').EditorCommands} Commands object
+   * Get all editor commands. Commands are executable methods that modify the editor state
+   * via transactions. In headless mode (when view is unavailable), commands automatically
+   * fall back to using editor.dispatch instead of view.dispatch.
+   *
+   * @returns {import('./commands/types/index.js').EditorCommands} Commands object containing all registered commands
+   *
+   * @example
+   * // In mounted mode (with view)
+   * editor.commands.insertText('hello'); // uses view.dispatch
+   *
+   * @example
+   * // In headless mode (no view)
+   * editor.commands.insertText('hello'); // falls back to editor.dispatch
    */
   get commands() {
     const { editor, state } = this;
@@ -55,9 +66,8 @@ export class CommandService {
         const fn = command(...args)(props);
 
         if (!tr.getMeta('preventDispatch')) {
-          // Only dispatch if view exists (it may not exist during initialization)
-          if (view && typeof view.dispatch === 'function') {
-            view.dispatch(tr);
+          if (!this.#dispatchWithFallback(tr, { editor, view })) {
+            return false;
           }
         }
 
@@ -87,10 +97,32 @@ export class CommandService {
   }
 
   /**
-   * Creates a chain of commands.
-   * @param {import("prosemirror-state").Transaction} [startTr] - Start transaction.
-   * @param {boolean} [shouldDispatch=true] - Whether to dispatch the transaction.
-   * @returns {import('./commands/types/index.js').ChainableCommandObject} The command chain.
+   * Creates a chain of commands. Allows multiple commands to be executed in sequence
+   * on the same transaction, with a single dispatch at the end. In headless mode,
+   * the chain automatically falls back to using editor.dispatch instead of view.dispatch.
+   *
+   * @param {import("prosemirror-state").Transaction} [startTr] - Optional transaction to use as the starting point. If not provided, uses state.tr.
+   * @param {boolean} [shouldDispatch=true] - Whether to dispatch the transaction when run() is called.
+   * @returns {import('./commands/types/index.js').ChainableCommandObject} The command chain object with all commands and a run() method.
+   *
+   * @example
+   * // Chain multiple commands in mounted mode
+   * editor.chain()
+   *   .insertText('hello')
+   *   .selectAll()
+   *   .run(); // dispatches once via view.dispatch
+   *
+   * @example
+   * // Chain in headless mode
+   * headlessEditor.chain()
+   *   .insertText('hello')
+   *   .run(); // falls back to editor.dispatch
+   *
+   * @example
+   * // Chain without dispatching (for testing/validation)
+   * const canExecute = editor.chain()
+   *   .insertText('test')
+   *   .run(); // returns boolean but doesn't dispatch
    */
   createChain(startTr, shouldDispatch = true) {
     const { editor, state, rawCommands } = this;
@@ -101,7 +133,9 @@ export class CommandService {
 
     const run = () => {
       if (!hasStartTr && shouldDispatch && !tr.getMeta('preventDispatch')) {
-        view.dispatch(tr);
+        if (!this.#dispatchWithFallback(tr, { editor, view })) {
+          return false;
+        }
       }
 
       return callbacks.every((cb) => cb === true);
@@ -167,6 +201,8 @@ export class CommandService {
       editor,
       view,
       state: chainableEditorState(tr, state),
+      // Commands check truthiness of `dispatch` to know if side effects are allowed.
+      // Actual dispatching is handled by CommandService after command returns.
       dispatch: shouldDispatch ? () => undefined : undefined,
       chain: () => this.createChain(tr, shouldDispatch),
       can: () => this.createCan(tr),
@@ -180,5 +216,42 @@ export class CommandService {
     };
 
     return props;
+  }
+
+  /**
+   * Private helper method to dispatch transactions with automatic fallback for headless mode.
+   * Prefers view.dispatch when available (mounted editor), falls back to editor.dispatch
+   * for headless mode. Includes validation checks and wraps errors with context.
+   *
+   * @param {import("prosemirror-state").Transaction} tr - The transaction to dispatch.
+   * @param {Object} options - Dispatch options.
+   * @param {Object} options.editor - The editor instance.
+   * @param {Object} [options.view] - The editor view (may be null/undefined in headless mode).
+   * @returns {boolean} True if dispatch succeeded, false if editor was destroyed or unavailable.
+   *
+   * @throws {Error} Throws wrapped error with context: `[CommandService] Dispatch failed: <original error message>`
+   */
+  #dispatchWithFallback(tr, { editor, view }) {
+    if (editor?.isDestroyed) {
+      console.warn('[CommandService] Cannot dispatch: editor is destroyed');
+      return false;
+    }
+
+    try {
+      if (view && typeof view.dispatch === 'function') {
+        view.dispatch(tr);
+      } else if (typeof editor?.dispatch === 'function') {
+        editor.dispatch(tr);
+      } else {
+        console.warn('[CommandService] No dispatch method available (editor may not be initialized)');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      const err = new Error(`[CommandService] Dispatch failed: ${error.message}`);
+      // @ts-expect-error - cause is supported in modern environments
+      err.cause = error;
+      throw err;
+    }
   }
 }

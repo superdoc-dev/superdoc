@@ -4,8 +4,8 @@ export * from './Schema.js';
 export * from './Attribute.js';
 export * from './CommandService.js';
 export * from './Extension.js';
+export * from './PositionTracker.js';
 export * from './super-converter/SuperConverter.js';
-export * from './OxmlNode.js';
 
 export * as coreExtensions from './extensions/index.js';
 export * as helpers from './helpers/index.js';
@@ -17,7 +17,6 @@ export * from './Editor.js';
 export { default as DocxZipper } from './DocxZipper.js';
 
 // Export types
-export type * from './types/EditorConfig.js';
 export type * from './types/EditorTypes.js';
 export type * from './types/EditorEvents.js';
 export type * from './EventEmitter.js';

@@ -18,10 +18,11 @@ describe('buildAnchorMap', () => {
             {
               kind: 'para',
               blockId: '0-paragraph',
+              fromLine: 0,
+              toLine: 1,
               x: 0,
               y: 0,
               width: 100,
-              height: 20,
               pmStart: 5,
               pmEnd: 25, // Contains _Toc1 (10) and _Toc2 (30 is outside)
             },
@@ -34,20 +35,22 @@ describe('buildAnchorMap', () => {
             {
               kind: 'para',
               blockId: '1-paragraph',
+              fromLine: 0,
+              toLine: 1,
               x: 0,
               y: 0,
               width: 100,
-              height: 20,
               pmStart: 25,
               pmEnd: 45, // Contains _Toc2 (30)
             },
             {
               kind: 'para',
               blockId: '2-paragraph',
+              fromLine: 0,
+              toLine: 1,
               x: 0,
               y: 25,
               width: 100,
-              height: 20,
               pmStart: 45,
               pmEnd: 60, // Contains _Toc3 (50)
             },
@@ -55,8 +58,7 @@ describe('buildAnchorMap', () => {
           margins: { top: 72, right: 72, bottom: 72, left: 72 },
         },
       ],
-      width: 612,
-      height: 792,
+      pageSize: { w: 612, h: 792 },
     };
 
     const anchorMap = buildAnchorMap(bookmarks, layout);
@@ -80,10 +82,11 @@ describe('buildAnchorMap', () => {
             {
               kind: 'para',
               blockId: '0-paragraph',
+              fromLine: 0,
+              toLine: 1,
               x: 0,
               y: 0,
               width: 100,
-              height: 20,
               pmStart: 5,
               pmEnd: 25,
             },
@@ -91,8 +94,7 @@ describe('buildAnchorMap', () => {
           margins: { top: 72, right: 72, bottom: 72, left: 72 },
         },
       ],
-      width: 612,
-      height: 792,
+      pageSize: { w: 612, h: 792 },
     };
 
     // Should log warning but not throw
@@ -118,23 +120,15 @@ describe('buildAnchorMap', () => {
               width: 100,
               height: 100,
               // Image fragments don't have pmStart/pmEnd (type assertion needed for test)
-            } as unknown as {
-              kind: 'para';
-              blockId: string;
-              x: number;
-              y: number;
-              width: number;
-              height: number;
-              pmStart: number;
-              pmEnd: number;
             },
             {
               kind: 'para',
               blockId: '0-paragraph',
+              fromLine: 0,
+              toLine: 1,
               x: 0,
               y: 100,
               width: 100,
-              height: 20,
               pmStart: 5,
               pmEnd: 25,
             },
@@ -142,8 +136,7 @@ describe('buildAnchorMap', () => {
           margins: { top: 72, right: 72, bottom: 72, left: 72 },
         },
       ],
-      width: 612,
-      height: 792,
+      pageSize: { w: 612, h: 792 },
     };
 
     const anchorMap = buildAnchorMap(bookmarks, layout);
@@ -185,10 +178,13 @@ describe('resolvePageRefTokens', () => {
 
     expect(affectedBlockIds.size).toBe(1);
     expect(affectedBlockIds.has('0-paragraph')).toBe(true);
-    expect(blocks[0].runs[1].text).toBe('5');
-    // Verify token metadata is cleared after resolution
-    expect(blocks[0].runs[1].token).toBeUndefined();
-    expect(blocks[0].runs[1].pageRefMetadata).toBeUndefined();
+    const block = blocks[0];
+    if (block.kind === 'paragraph') {
+      expect((block.runs[1] as { text?: string }).text).toBe('5');
+      // Verify token metadata is cleared after resolution
+      expect((block.runs[1] as { token?: string }).token).toBeUndefined();
+      expect((block.runs[1] as { pageRefMetadata?: unknown }).pageRefMetadata).toBeUndefined();
+    }
   });
 
   it('handles multiple tokens in same paragraph', () => {
@@ -239,8 +235,11 @@ describe('resolvePageRefTokens', () => {
     const affectedBlockIds = resolvePageRefTokens(blocks, anchorMap);
 
     expect(affectedBlockIds.size).toBe(1);
-    expect(blocks[0].runs[1].text).toBe('3');
-    expect(blocks[0].runs[3].text).toBe('7');
+    const block = blocks[0];
+    if (block.kind === 'paragraph') {
+      expect((block.runs[1] as { text?: string }).text).toBe('3');
+      expect((block.runs[3] as { text?: string }).text).toBe('7');
+    }
   });
 
   it('keeps placeholder text when bookmark not in anchor map', () => {
@@ -269,7 +268,10 @@ describe('resolvePageRefTokens', () => {
 
     // Block not affected since token wasn't resolved
     expect(affectedBlockIds.size).toBe(0);
-    expect(blocks[0].runs[0].text).toBe('??'); // Unchanged
+    const block = blocks[0];
+    if (block.kind === 'paragraph') {
+      expect((block.runs[0] as { text?: string }).text).toBe('??'); // Unchanged
+    }
   });
 
   it('skips non-paragraph blocks', () => {

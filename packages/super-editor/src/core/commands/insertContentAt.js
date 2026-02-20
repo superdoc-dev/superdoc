@@ -16,6 +16,17 @@ const isFragment = (nodeOrFragment) => {
 };
 
 /**
+ * Checks if a string looks like it contains HTML tags.
+ * Matches complete tag pairs (e.g., <div>...</div>) or self-closing tags (e.g., <br/>, <img ...>).
+ * @param {string} str
+ * @returns {boolean}
+ */
+const looksLikeHTML = (str) =>
+  /^\s*<[a-zA-Z][^>]*>.*<\/[a-zA-Z][^>]*>\s*$/s.test(str) || // Complete tag pair
+  /^\s*<[a-zA-Z][^>]*\/>\s*$/.test(str) || // Self-closing tag
+  /^\s*<(br|hr|img|input|meta|link|area|base|col|embed|param|source|track|wbr)\b[^>]*>\s*$/i.test(str); // Void elements
+
+/**
  * Inserts content at the specified position.
  * - Bare strings with newlines → insertText (keeps literal \n)
  * - HTML-looking strings → parse and replaceWith
@@ -24,8 +35,14 @@ const isFragment = (nodeOrFragment) => {
  * @param {import("prosemirror-model").ResolvedPos|number|{from:number,to:number}} position
  * @param {string|Array<string|{text?:string}>|ProseMirrorNode|ProseMirrorFragment} value
  * @param {Object} options
+ * @param {boolean} [options.asText=false] - Force literal text insertion, bypassing HTML parsing
+ * @param {boolean} [options.updateSelection=true] - Move cursor to end of inserted content
+ * @param {boolean} [options.applyInputRules=false] - Trigger input rules after insertion
+ * @param {boolean} [options.applyPasteRules=false] - Trigger paste rules after insertion
+ * @param {Object} [options.parseOptions] - ProseMirror DOMParser options
  * @returns {boolean}
  */
+
 // prettier-ignore
 export const insertContentAt =
   (position, value, options) =>
@@ -42,6 +59,55 @@ export const insertContentAt =
       ...options,
     };
 
+    let { from, to } =
+      typeof position === 'number'
+        ? { from: position, to: position }
+        : { from: position.from, to: position.to };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FAST PATH: Plain text insertion (no HTML processing, no DOM required)
+    // ─────────────────────────────────────────────────────────────────────────
+    const isBareString = typeof value === 'string';
+    const isArrayOfText = Array.isArray(value) && value.every((v) => typeof v === 'string' || (v && typeof v.text === 'string'));
+    const isTextObject = !!value && typeof value === 'object' && !Array.isArray(value) && typeof value.text === 'string';
+
+    // Determine if we should use plain text insertion (skip HTML processing entirely)
+    const usePlainTextPath =
+      options.asText ||
+      isArrayOfText ||
+      isTextObject ||
+      (isBareString && !looksLikeHTML(value));
+
+    if (usePlainTextPath) {
+      let textContent;
+      if (isArrayOfText) {
+        textContent = value.map((v) => (typeof v === 'string' ? v : (v && v.text) || '')).join('');
+      } else if (isTextObject) {
+        textContent = value.text;
+      } else {
+        textContent = typeof value === 'string' ? value : '';
+      }
+
+      tr.insertText(textContent, from, to);
+
+      if (options.updateSelection) {
+        selectionToInsertionEnd(tr, tr.steps.length - 1, -1);
+      }
+
+      if (options.applyInputRules) {
+        tr.setMeta('applyInputRules', { from, text: textContent });
+      }
+
+      if (options.applyPasteRules) {
+        tr.setMeta('applyPasteRules', { from, text: textContent });
+      }
+
+      return true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HTML PATH: Parse as HTML content (requires DOM for full list processing)
+    // ─────────────────────────────────────────────────────────────────────────
     let content;
 
     try {
@@ -63,22 +129,11 @@ export const insertContentAt =
       return false;
     }
 
-    let { from, to } =
-      typeof position === 'number'
-        ? { from: position, to: position }
-        : { from: position.from, to: position.to };
-
-    // Heuristic:
-    // - Bare strings that LOOK like HTML: let parser handle (replaceWith)
-    // - Bare strings with one or more newlines: force text insertion (insertText)
-    const isBareString = typeof value === 'string';
-    const looksLikeHTML = isBareString && /^\s*<[a-zA-Z][^>]*>.*<\/[a-zA-Z][^>]*>\s*$/s.test(value);
-    const hasNewline = isBareString && /[\r\n]/.test(value);
-    const forceTextInsert =
-      !!options.asText ||
-      (hasNewline && !looksLikeHTML) ||
-      (Array.isArray(value) && value.every((v) => typeof v === 'string' || (v && typeof v.text === 'string'))) ||
-      (!!value && typeof value === 'object' && typeof value.text === 'string');
+    // If HTML parsing failed (returned null), skip insertion entirely
+    if (content === null) {
+      // HTML parsing failed (no DOM available) - already warned in createNodeFromContent
+      return false;
+    }
 
     // Inspect parsed nodes to decide text vs block replacement
     let isOnlyTextContent = true;
@@ -108,16 +163,9 @@ export const insertContentAt =
 
     let newContent;
 
-    // Use insertText for pure text OR when explicitly/heuristically forced
-    if (isOnlyTextContent || forceTextInsert) {
-      if (Array.isArray(value)) {
-        newContent = value.map((v) => (typeof v === 'string' ? v : (v && v.text) || '')).join('');
-      } else if (typeof value === 'object' && !!value && !!value.text) {
-        newContent = value.text;
-      } else {
-        newContent = typeof value === 'string' ? value : '';
-      }
-
+    // Use insertText for pure text content parsed from HTML
+    if (isOnlyTextContent) {
+      newContent = typeof value === 'string' ? value : '';
       tr.insertText(newContent, from, to);
     } else {
       newContent = content;

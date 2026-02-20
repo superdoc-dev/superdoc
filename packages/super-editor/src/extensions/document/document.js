@@ -1,6 +1,7 @@
 // @ts-check
 
 import { Node } from '@core/index.js';
+import { setSectionPageMarginsAtSelection } from '@core/commands/setSectionPageMarginsAtSelection.js';
 
 /**
  * Configuration options for Document
@@ -99,6 +100,11 @@ export const Document = Node.create({
         ({ commands }) => {
           return commands.setContent('<p></p>');
         },
+
+      /**
+       * Set section page margins (top/right/bottom/left) for the section at the current selection.
+       */
+      setSectionPageMarginsAtSelection,
     };
   },
 });

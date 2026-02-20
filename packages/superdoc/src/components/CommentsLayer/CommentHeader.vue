@@ -6,6 +6,7 @@ import { computed, getCurrentInstance } from 'vue';
 import { isAllowed, PERMISSIONS } from '@superdoc/core/collaboration/permissions.js';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import Avatar from '@superdoc/components/general/Avatar.vue';
+import { useUiFontFamily } from '@superdoc/composables/useUiFontFamily.js';
 
 const emit = defineEmits(['resolve', 'reject', 'overflow-select']);
 const commentsStore = useCommentsStore();
@@ -33,6 +34,8 @@ const { proxy } = getCurrentInstance();
 const role = proxy.$superdoc.config.role;
 const isInternal = proxy.$superdoc.config.isInternal;
 const isOwnComment = props.comment.creatorEmail === proxy.$superdoc.config.user.email;
+
+const { uiFontFamily } = useUiFontFamily();
 
 const OVERFLOW_OPTIONS = Object.freeze({
   edit: { label: 'Edit', key: 'edit' },
@@ -157,7 +160,13 @@ const getCurrentUser = computed(() => {
         @click.stop.prevent="handleReject"
       ></div>
 
-      <n-dropdown v-if="allowOverflow" trigger="click" :options="getOverflowOptions" @select="handleSelect">
+      <n-dropdown
+        v-if="allowOverflow"
+        trigger="click"
+        :options="getOverflowOptions"
+        @select="handleSelect"
+        :content-style="{ fontFamily: uiFontFamily }"
+      >
         <div class="overflow-menu__icon" @click.stop.prevent>
           <div class="overflow-icon" v-html="superdocIcons.overflow"></div>
         </div>

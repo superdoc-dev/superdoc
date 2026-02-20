@@ -41,6 +41,11 @@ export type HeaderFooterRegion = {
   width: number;
   /** Height of the region in pixels */
   height: number;
+  /**
+   * Minimum Y coordinate from layout (can be negative if content extends above y=0).
+   * Used to adjust editor host positioning for content with negative offsets.
+   */
+  minY?: number;
 };
 
 /**
@@ -88,9 +93,6 @@ export class EditorOverlayManager {
 
   /** Full-width border line element (MS Word style) */
   #borderLine: HTMLElement | null = null;
-
-  /** Dimming overlay element (for dimming body content during editing) */
-  #dimmingOverlay: HTMLElement | null = null;
 
   /**
    * Creates a new EditorOverlayManager instance.
@@ -275,6 +277,7 @@ export class EditorOverlayManager {
         const editorContainer = this.#activeEditorHost.querySelector('.super-editor');
         if (editorContainer instanceof HTMLElement) {
           editorContainer.style.top = '0';
+          editorContainer.style.transform = '';
         }
       }
     }
@@ -457,18 +460,6 @@ export class EditorOverlayManager {
         // Store this offset so the editor container can use it
         editorHost.dataset.contentOffset = String(fragmentTop);
       }
-    }
-  }
-
-  /**
-   * Hides and removes the dimming overlay.
-   * @internal Reserved for future implementation of body dimming during header/footer editing.
-   */
-  // eslint-disable-next-line no-unused-private-class-members
-  #hideDimmingOverlay(): void {
-    if (this.#dimmingOverlay) {
-      this.#dimmingOverlay.remove();
-      this.#dimmingOverlay = null;
     }
   }
 

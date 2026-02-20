@@ -1,4 +1,5 @@
 import type {
+  DrawingBlock,
   Fragment,
   Line,
   ParagraphBlock,
@@ -8,9 +9,11 @@ import type {
   TableMeasure,
 } from '@superdoc/contracts';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
+import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
-import { applySdtContainerStyling } from '../utils/sdt-helpers.js';
+import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import { applyBorder, borderValueToSpec } from './border-utils.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
 
@@ -29,12 +32,30 @@ export type TableRenderDependencies = {
   context: FragmentRenderContext;
   /** Lookup map for retrieving block data and measurements */
   blockLookup: BlockLookup;
+  /** Optional SDT boundary overrides for container styling */
+  sdtBoundary?: SdtBoundaryOptions;
   /** Function to render a line of paragraph content */
-  renderLine: (block: ParagraphBlock, line: Line, context: FragmentRenderContext) => HTMLElement;
+  renderLine: (
+    block: ParagraphBlock,
+    line: Line,
+    context: FragmentRenderContext,
+    lineIndex: number,
+    isLastLine: boolean,
+  ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
+  /** Function to render drawing content (images, shapes, shape groups) */
+  renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply fragment positioning and dimensions */
   applyFragmentFrame: (el: HTMLElement, fragment: Fragment) => void;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
+  /** Function to apply container SDT metadata as data attributes */
+  applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Function to apply CSS styles to an element */
   applyStyles: ApplyStylesFn;
 };
@@ -101,7 +122,20 @@ export type TableRenderDependencies = {
  * ```
  */
 export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement => {
-  const { doc, fragment, blockLookup, context, renderLine, applyFragmentFrame, applySdtDataset, applyStyles } = deps;
+  const {
+    doc,
+    fragment,
+    blockLookup,
+    context,
+    sdtBoundary,
+    renderLine,
+    captureLineSnapshot,
+    renderDrawingContent,
+    applyFragmentFrame,
+    applySdtDataset,
+    applyContainerSdtDataset,
+    applyStyles,
+  } = deps;
 
   // Check document first before using it in error handlers
   if (!doc) {
@@ -138,7 +172,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   const block = lookup.block as TableBlock;
   const measure = lookup.measure as TableMeasure;
+  // Use per-fragment rescaled column widths when available (SD-1859: mixed-orientation docs
+  // where measurement width differs from section width). Falls back to measured widths.
+  const effectiveColumnWidths = fragment.columnWidths ?? measure.columnWidths;
   const tableBorders = block.attrs?.borders;
+  const tableIndentValue = (block.attrs?.tableIndent as { width?: unknown } | null | undefined)?.width;
+  const tableIndent = typeof tableIndentValue === 'number' && Number.isFinite(tableIndentValue) ? tableIndentValue : 0;
   // Note: We don't use createTableBorderOverlay because we implement single-owner
   // border model where cells handle all borders (including outer table borders)
   // to prevent double borders when rendering with absolutely-positioned divs.
@@ -149,19 +188,21 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   applyFragmentFrame(container, fragment);
   container.style.height = `${fragment.height}px`;
   applySdtDataset(container, block.attrs?.sdt);
+  applyContainerSdtDataset?.(container, block.attrs?.containerSdt);
 
   // Apply SDT container styling (document sections, structured content blocks)
-  applySdtContainerStyling(doc, container, block.attrs?.sdt);
+  applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
-  // Add table-specific class for resize overlay targeting
-  container.classList.add('superdoc-table-fragment');
+  // Add table-specific class for resize overlay targeting and click mapping
+  container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {
-    // Build row-aware boundary segments
-    // For each grid column boundary, track which row ranges have actual cell edges there
-    const columnCount = measure.columnWidths.length;
-    const rowCount = block.rows.length;
+    // Build row-aware boundary segments scoped to THIS fragment's rows.
+    // When a table splits across pages, each fragment only renders a subset of rows
+    // (repeated headers + body rows from fromRow to toRow). Segments must match
+    // exactly the rendered rows so resize handles don't overflow the fragment.
+    const columnCount = effectiveColumnWidths.length;
 
     // boundarySegments[colIndex] = array of {fromRow, toRow, y, height} segments where this boundary exists
     const boundarySegments: Array<Array<{ fromRow: number; toRow: number; y: number; height: number }>> = [];
@@ -169,10 +210,35 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       boundarySegments.push([]);
     }
 
-    // For each row, determine which grid columns have cell boundaries
+    // Build the list of rows actually rendered in this fragment, matching the
+    // rendering order: repeated headers first, then body rows.
+    // NOTE: This header-then-body iteration must stay in sync with the rendering
+    // loop below (~line 315) which uses the same order to render row elements.
+    const renderedRows: Array<{ rowIndex: number; height: number }> = [];
+
+    // Repeated header rows (only on continuation fragments)
+    if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
+      for (let r = 0; r < fragment.repeatHeaderCount; r++) {
+        const rowMeasure = measure.rows[r];
+        if (!rowMeasure) break;
+        renderedRows.push({ rowIndex: r, height: rowMeasure.height });
+      }
+    }
+
+    // Body rows (fromRow to toRow), with partial row height for mid-row splits
+    for (let r = fragment.fromRow; r < fragment.toRow; r++) {
+      const rowMeasure = measure.rows[r];
+      if (!rowMeasure) break;
+      const isPartialRow = fragment.partialRow && fragment.partialRow.rowIndex === r;
+      const actualHeight = isPartialRow ? fragment.partialRow!.partialHeight : rowMeasure.height;
+      renderedRows.push({ rowIndex: r, height: actualHeight });
+    }
+
+    // For each rendered row, determine which grid columns have cell boundaries
     // A boundary exists at column X if there's a cell that ENDS at column X (gridColumnStart + colSpan = X)
     let rowY = 0;
-    for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+    for (let i = 0; i < renderedRows.length; i++) {
+      const { rowIndex, height } = renderedRows[i];
       const rowMeasure = measure.rows[rowIndex];
       if (!rowMeasure) continue;
 
@@ -200,22 +266,22 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         const segments = boundarySegments[boundaryCol];
         const lastSegment = segments[segments.length - 1];
 
-        // If the last segment ends at this row, extend it
-        if (lastSegment && lastSegment.toRow === rowIndex) {
-          lastSegment.toRow = rowIndex + 1;
-          lastSegment.height += rowMeasure.height;
+        // If the last segment ends at the previous rendered row, extend it
+        if (lastSegment && i > 0 && lastSegment.toRow === i) {
+          lastSegment.toRow = i + 1;
+          lastSegment.height += height;
         } else {
           // Start a new segment
           segments.push({
-            fromRow: rowIndex,
-            toRow: rowIndex + 1,
+            fromRow: i,
+            toRow: i + 1,
             y: rowY,
-            height: rowMeasure.height,
+            height,
           });
         }
       }
 
-      rowY += rowMeasure.height;
+      rowY += height;
     }
 
     const metadata = {
@@ -263,7 +329,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   let y = 0;
 
-  // If this is a continuation fragment with repeated headers, render headers first
+  // If this is a continuation fragment with repeated headers, render headers first.
+  // NOTE: This header-then-body iteration must stay in sync with the metadata
+  // segment builder above (~line 199) which uses the same order.
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
     for (let r = 0; r < fragment.repeatHeaderCount; r += 1) {
       const rowMeasure = measure.rows[r];
@@ -277,16 +345,122 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         row: block.rows[r],
         totalRows: block.rows.length,
         tableBorders,
-        columnWidths: measure.columnWidths,
+        columnWidths: effectiveColumnWidths,
         allRowHeights,
+        tableIndent,
         context,
         renderLine,
+        captureLineSnapshot,
+        renderDrawingContent,
         applySdtDataset,
+        tableSdt: block.attrs?.sdt ?? null,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
       });
       y += rowMeasure.height;
+    }
+  }
+
+  // Render rowspan continuation cells ("ghost cells")
+  // When a table continues from a previous fragment, some grid columns in the
+  // first body rows may be occupied by rowspan cells that started on a previous page.
+  // Create empty cells to maintain table structure and borders (matching Word behavior).
+  if (fragment.continuesFromPrev && fragment.fromRow > 0) {
+    const repeatCount = fragment.repeatHeaderCount ?? 0;
+
+    for (let r = repeatCount; r < fragment.fromRow; r++) {
+      const srcRowMeasure = measure.rows[r];
+      if (!srcRowMeasure) continue;
+
+      for (let ci = 0; ci < srcRowMeasure.cells.length; ci++) {
+        const srcCellMeasure = srcRowMeasure.cells[ci];
+        const rowSpan = srcCellMeasure.rowSpan ?? 1;
+        if (rowSpan <= 1) continue;
+
+        const spanEndRow = r + rowSpan;
+        if (spanEndRow <= fragment.fromRow) continue;
+
+        // This cell's rowspan extends into this fragment's body rows
+        const gridCol = srcCellMeasure.gridColumnStart ?? 0;
+        const colSpan = srcCellMeasure.colSpan ?? 1;
+
+        // Calculate x position (sum of columns before gridCol)
+        let ghostX = 0;
+        for (let i = 0; i < gridCol && i < effectiveColumnWidths.length; i++) {
+          ghostX += effectiveColumnWidths[i];
+        }
+
+        // Calculate width (sum of spanned columns)
+        let ghostWidth = 0;
+        for (let i = gridCol; i < gridCol + colSpan && i < effectiveColumnWidths.length; i++) {
+          ghostWidth += effectiveColumnWidths[i];
+        }
+
+        // Calculate height: from fromRow to min(spanEndRow, toRow)
+        const effectiveEnd = Math.min(spanEndRow, fragment.toRow);
+        let ghostHeight = 0;
+        for (let ri = fragment.fromRow; ri < effectiveEnd; ri++) {
+          ghostHeight += allRowHeights[ri] ?? 0;
+        }
+
+        if (ghostWidth <= 0 || ghostHeight <= 0) continue;
+
+        // Create ghost cell
+        const ghostDiv = doc.createElement('div');
+        ghostDiv.style.position = 'absolute';
+        ghostDiv.style.left = `${ghostX}px`;
+        ghostDiv.style.top = `${y}px`;
+        ghostDiv.style.width = `${ghostWidth}px`;
+        ghostDiv.style.height = `${ghostHeight}px`;
+        ghostDiv.style.boxSizing = 'border-box';
+        ghostDiv.style.overflow = 'hidden';
+
+        // Resolve borders for the ghost cell
+        const srcCell = block.rows[r]?.cells?.[ci];
+        const cellBordersAttr = srcCell?.attrs?.borders;
+        const hasExplicitBorders =
+          cellBordersAttr &&
+          (cellBordersAttr.top !== undefined ||
+            cellBordersAttr.right !== undefined ||
+            cellBordersAttr.bottom !== undefined ||
+            cellBordersAttr.left !== undefined);
+        const isFirstCol = gridCol === 0;
+        const isLastCol = gridCol + colSpan >= effectiveColumnWidths.length;
+
+        if (hasExplicitBorders && tableBorders) {
+          // Use cell's borders, with table top border for continuation
+          applyBorder(ghostDiv, 'Top', cellBordersAttr.top ?? borderValueToSpec(tableBorders.top));
+          applyBorder(
+            ghostDiv,
+            'Left',
+            cellBordersAttr.left ?? borderValueToSpec(isFirstCol ? tableBorders.left : tableBorders.insideV),
+          );
+          applyBorder(
+            ghostDiv,
+            'Right',
+            cellBordersAttr.right ?? borderValueToSpec(isLastCol ? tableBorders.right : tableBorders.insideV),
+          );
+          if (effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow) {
+            applyBorder(ghostDiv, 'Bottom', cellBordersAttr.bottom ?? borderValueToSpec(tableBorders.insideH));
+          }
+        } else if (tableBorders) {
+          // Resolve from table borders
+          applyBorder(ghostDiv, 'Top', borderValueToSpec(tableBorders.top));
+          applyBorder(ghostDiv, 'Left', borderValueToSpec(isFirstCol ? tableBorders.left : tableBorders.insideV));
+          applyBorder(ghostDiv, 'Right', borderValueToSpec(isLastCol ? tableBorders.right : tableBorders.insideV));
+          if (effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow) {
+            applyBorder(ghostDiv, 'Bottom', borderValueToSpec(tableBorders.insideH));
+          }
+        }
+
+        // Apply cell background if present
+        if (srcCell?.attrs?.background) {
+          ghostDiv.style.backgroundColor = srcCell.attrs.background;
+        }
+
+        container.appendChild(ghostDiv);
+      }
     }
   }
 
@@ -312,11 +486,15 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       row: block.rows[r],
       totalRows: block.rows.length,
       tableBorders,
-      columnWidths: measure.columnWidths,
+      columnWidths: effectiveColumnWidths,
       allRowHeights,
+      tableIndent,
       context,
       renderLine,
+      captureLineSnapshot,
+      renderDrawingContent,
       applySdtDataset,
+      tableSdt: block.attrs?.sdt ?? null,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)

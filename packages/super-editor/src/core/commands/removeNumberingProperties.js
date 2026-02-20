@@ -1,5 +1,5 @@
 // @ts-check
-import { findParentNode } from '@helpers/index.js';
+import { findParentNode } from '../helpers/findParentNode.js';
 import { isList } from '@core/commands/list-helpers';
 import { decreaseListIndent } from './decreaseListIndent.js';
 import { updateNumberingProperties } from './changeListLevel.js';

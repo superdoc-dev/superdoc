@@ -1,6 +1,8 @@
 blank_issues_enabled: false
-
 contact_links:
-  - name: 💬 Join our Discord
-    url: https://discord.gg/<YOUR_INVITE_CODE>
-    about: Have a question, need help, or want to chat? Join our community Discord.
+  - name: Questions & Discussion
+    url: https://discord.gg/wjMccuygvy
+    about: Ask questions or chat with the community on Discord
+  - name: Want to contribute?
+    url: https://github.com/superdoc-dev/superdoc/blob/main/CONTRIBUTING.md
+    about: Check out our contributing guide to get started

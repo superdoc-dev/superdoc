@@ -1,13 +1,10 @@
 import { defineConfig } from 'vitest/config';
+import baseConfig from '../../../vitest.baseConfig';
 
 export default defineConfig({
+  ...baseConfig,
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
-  },
-  resolve: {
-    alias: {
-      '@superdoc/contracts': '../../contracts/src/index.ts',
-    },
   },
 });

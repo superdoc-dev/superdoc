@@ -20,7 +20,7 @@ export const toolbarTexts = {
   deleteRow: 'Delete row',
   deleteColumn: 'Delete column',
   deleteTable: 'Delete table',
-  transparentBorders: 'Transparent borders',
+  removeBorders: 'Remove borders',
   mergeCells: 'Merge cells',
   splitCell: 'Split cell',
   fixTables: 'Fix tables',

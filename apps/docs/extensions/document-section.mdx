@@ -1,0 +1,324 @@
+---
+title: Document Section extension
+sidebarTitle: Document Section
+---
+
+Encapsulate and manage discrete parts of documents. Legal clauses stay locked while sales updates pricing.
+
+## Installation
+
+Included by default in SuperDoc.
+
+```javascript
+import { DocumentSection } from 'superdoc/super-editor';
+```
+
+## Commands
+
+### `createDocumentSection`
+
+Create a new document section.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.createDocumentSection({
+  id: 'legal-1',
+  title: 'Terms & Conditions',
+  description: 'Legal terms',
+  isLocked: true,
+  html: '<p>Content...</p>'
+})
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.createDocumentSection({
+      id: 'legal-1',
+      title: 'Terms & Conditions',
+      description: 'Legal terms',
+      isLocked: true,
+      html: '<p>Content...</p>'
+    })
+  },
+});
+```
+</CodeGroup>
+
+### `removeSectionAtSelection`
+
+Remove the section at the current cursor position.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.removeSectionAtSelection()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.removeSectionAtSelection()
+  },
+});
+```
+</CodeGroup>
+
+### `removeSectionById`
+
+Remove a section by its ID.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.removeSectionById('legal-1')
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.removeSectionById('legal-1')
+  },
+});
+```
+</CodeGroup>
+
+### `lockSectionById`
+
+Lock a section to prevent editing.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.lockSectionById('legal-1')
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.lockSectionById('legal-1')
+  },
+});
+```
+</CodeGroup>
+
+### `updateSectionById`
+
+Update a section's content or attributes.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.updateSectionById({
+  id: 'legal-1',
+  html: '<p>Updated...</p>',
+  attrs: { title: 'New Title' }
+})
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.updateSectionById({
+      id: 'legal-1',
+      html: '<p>Updated...</p>',
+      attrs: { title: 'New Title' }
+    })
+  },
+});
+```
+</CodeGroup>
+
+## Helpers
+
+<CodeGroup>
+```javascript Usage
+// Get all sections
+const sections = editor.helpers.documentSection.getAllSections(editor);
+
+// Export sections
+const html = editor.helpers.documentSection.exportSectionsToHTML(editor);
+const json = editor.helpers.documentSection.exportSectionsToJSON(editor);
+
+// Create a linked editor for a section
+const childEditor = editor.helpers.documentSection.getLinkedSectionEditor(
+  'section-id',
+  { element: '#editor' },
+  parentEditor
+);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // Get all sections
+    const sections = editor.helpers.documentSection.getAllSections(editor);
+
+    // Export sections
+    const html = editor.helpers.documentSection.exportSectionsToHTML(editor);
+    const json = editor.helpers.documentSection.exportSectionsToJSON(editor);
+
+    // Create a linked editor for a section
+    const childEditor = editor.helpers.documentSection.getLinkedSectionEditor(
+      'section-id',
+      { element: '#editor' },
+      editor
+    );
+  },
+});
+```
+</CodeGroup>
+
+## Attributes
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `id` | string/number | auto | Unique identifier |
+| `title` | string | '' | Section label (w:alias in Word) |
+| `description` | string | '' | Metadata (w:tag in Word) |
+| `sectionType` | string | '' | Business classification |
+| `isLocked` | boolean | false | Edit prevention |
+
+## Word export
+
+Sections export as Word content controls:
+
+```xml
+<w:sdt>
+  <w:sdtPr>
+    <w:alias w:val="Terms & Conditions"/>
+    <w:tag w:val="Legal terms"/>
+    <w:lock w:val="sdtContentLocked"/>
+  </w:sdtPr>
+  <w:sdtContent>
+    <!-- Section content -->
+  </w:sdtContent>
+</w:sdt>
+```
+
+## Common patterns
+
+### Contract structure
+
+<CodeGroup>
+```javascript Usage
+const contractSections = [
+  { id: 'parties', title: '1. Parties', isLocked: false },
+  { id: 'terms', title: '2. Terms', isLocked: true },
+  { id: 'pricing', title: '3. Pricing', isLocked: false },
+  { id: 'signatures', title: '4. Signatures', isLocked: true }
+];
+
+contractSections.forEach(section => {
+  editor.commands.createDocumentSection({
+    ...section,
+    html: loadTemplate(section.id)
+  });
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    const contractSections = [
+      { id: 'parties', title: '1. Parties', isLocked: false },
+      { id: 'terms', title: '2. Terms', isLocked: true },
+      { id: 'pricing', title: '3. Pricing', isLocked: false },
+      { id: 'signatures', title: '4. Signatures', isLocked: true }
+    ];
+
+    contractSections.forEach(section => {
+      editor.commands.createDocumentSection({
+        ...section,
+        html: loadTemplate(section.id)
+      });
+    });
+  },
+});
+```
+</CodeGroup>
+
+### Role-based locking
+
+<CodeGroup>
+```javascript Usage
+function applyRolePermissions(userRole) {
+  const sections = editor.helpers.documentSection.getAllSections(editor);
+
+  sections.forEach(({ node }) => {
+    const { id, sectionType } = node.attrs;
+
+    if (sectionType === 'legal' && userRole !== 'legal') {
+      editor.commands.lockSectionById(id);
+    }
+  });
+}
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    function applyRolePermissions(userRole) {
+      const sections = editor.helpers.documentSection.getAllSections(editor);
+
+      sections.forEach(({ node }) => {
+        const { id, sectionType } = node.attrs;
+
+        if (sectionType === 'legal' && userRole !== 'legal') {
+          editor.commands.lockSectionById(id);
+        }
+      });
+    }
+  },
+});
+```
+</CodeGroup>
+
+## Related
+
+- [Field Annotation](/extensions/field-annotation) - Form fields
+- [Structured Content](/extensions/structured-content) - Structured content blocks

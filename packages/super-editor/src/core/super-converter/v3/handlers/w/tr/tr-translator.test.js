@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@core/super-converter/helpers.js', () => ({
   twipsToPixels: vi.fn((val) => (val ? parseInt(val, 10) / 20 : 0)),
   pixelsToTwips: vi.fn((val) => (val ? Math.round(val * 20) : 0)),
+  eighthPointsToPixels: vi.fn((val) => (val != null ? parseInt(val, 10) / 8 : 0)),
 }));
 
 vi.mock('@core/super-converter/v2/exporter/helpers/index.js', () => ({
@@ -31,6 +32,12 @@ vi.mock('../tc', () => ({
   },
 }));
 
+vi.mock('../tblBorders', () => ({
+  translator: {
+    encode: vi.fn(() => ({})),
+  },
+}));
+
 vi.mock('../trPr', () => ({
   translator: {
     encode: vi.fn(() => ({ encoded: 'trPr' })),
@@ -41,6 +48,7 @@ vi.mock('../trPr', () => ({
 import { translator } from './tr-translator.js';
 import { NodeTranslator } from '@translator';
 import { translator as tcTranslator } from '../tc';
+import { translator as tblBordersTranslator } from '../tblBorders';
 import { translator as trPrTranslator } from '../trPr';
 import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
 
@@ -185,6 +193,47 @@ describe('w:tr translator', () => {
       expect(trPrTranslator.encode).not.toHaveBeenCalled();
       expect(tcTranslator.encode).not.toHaveBeenCalled();
     });
+
+    it('merges w:trPr/w:tblPrEx/w:tblBorders into tableBorders passed to cells', () => {
+      const baseTableBorders = {
+        top: { size: 0.5, val: 'single' },
+      };
+
+      const tblBorders = {
+        name: 'w:tblBorders',
+        elements: [{ name: 'w:top', attributes: { 'w:val': 'nil' } }],
+      };
+
+      const mockRowWithOverride = {
+        name: 'w:tr',
+        elements: [
+          {
+            name: 'w:tblPrEx',
+            elements: [tblBorders],
+          },
+          { name: 'w:tc', elements: [] },
+        ],
+      };
+
+      tblBordersTranslator.encode.mockReturnValue({
+        top: { val: 'none' },
+      });
+
+      const params = {
+        nodes: [mockRowWithOverride],
+        extraParams: {
+          row: mockRowWithOverride,
+          rowBorders: baseTableBorders,
+          columnWidths: [100],
+          activeRowSpans: [],
+        },
+      };
+
+      translator.encode(params, {});
+
+      const firstCellCall = tcTranslator.encode.mock.calls[0][0];
+      expect(firstCellCall.extraParams.rowBorders.top).toEqual({ val: 'none' });
+    });
   });
 
   describe('decode', () => {
@@ -257,6 +306,37 @@ describe('w:tr translator', () => {
           },
         },
       });
+    });
+
+    it('trims cells to the stored grid when preferTableGrid is true', () => {
+      const placeholder = { type: 'tableCell', attrs: { __placeholder: 'gridBefore', colwidth: [0] }, content: [] };
+      const cell = () => ({ type: 'tableCell', attrs: { colspan: 1 }, content: [] });
+      const mockNode = {
+        type: 'tableRow',
+        attrs: {
+          tableRowProperties: { gridBefore: 1 },
+        },
+        content: [placeholder, cell(), cell(), cell()],
+      };
+      const params = {
+        node: mockNode,
+        extraParams: {
+          preferTableGrid: true,
+          totalColumns: 3,
+        },
+      };
+
+      translator.decode(params, {});
+
+      expect(translateChildNodes).toHaveBeenCalledWith(
+        expect.objectContaining({
+          node: expect.objectContaining({
+            content: expect.arrayContaining([expect.any(Object), expect.any(Object)]),
+          }),
+        }),
+      );
+      const translateCall = translateChildNodes.mock.calls[0][0];
+      expect(translateCall.node.content).toHaveLength(2);
     });
   });
 });

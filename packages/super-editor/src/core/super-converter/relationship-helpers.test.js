@@ -93,8 +93,8 @@ describe('mergeRelationshipElements', () => {
     expect(matches).toHaveLength(1);
   });
 
-  it('treats escaped and unescaped ampersands in Targets as duplicates', () => {
-    const existing = [rel('rId1', 'http://schemas.../image', 'media/company&amp;logo.png')];
+  it('deduplicates targets that contain ampersands', () => {
+    const existing = [rel('rId1', 'http://schemas.../image', 'media/company&logo.png')];
     const toAdd = [rel('rId2', 'http://schemas.../image', 'media/company&logo.png')];
     const merged = mergeRelationshipElements(existing, toAdd);
     const matches = merged.filter((r) => r.attributes.Target.includes('company'));

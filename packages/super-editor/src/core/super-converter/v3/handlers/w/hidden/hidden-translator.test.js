@@ -1,35 +1,32 @@
 import { describe, it, expect } from 'vitest';
+
 import { translator } from './hidden-translator.js';
+import { NodeTranslator } from '../../../node-translator/node-translator.js';
 
-describe('w:hidden translator', () => {
-  describe('encode', () => {
-    it('returns true for "1", "true", or missing w:val', () => {
-      expect(translator.encode({ nodes: [{ attributes: { 'w:val': '1' } }] })).toBe(true);
-      expect(translator.encode({ nodes: [{ attributes: { 'w:val': 'true' } }] })).toBe(true);
-      expect(translator.encode({ nodes: [{ attributes: {} }] })).toBe(true); // defaults to '1'
-    });
-
-    it('returns false for other values', () => {
-      expect(translator.encode({ nodes: [{ attributes: { 'w:val': '0' } }] })).toBe(false);
-      expect(translator.encode({ nodes: [{ attributes: { 'w:val': 'false' } }] })).toBe(false);
-      expect(translator.encode({ nodes: [{ attributes: { 'w:val': 'any other string' } }] })).toBe(false);
-    });
-  });
-
-  describe('decode', () => {
-    it('creates a w:hidden element if hidden is true', () => {
-      const { attributes: result } = translator.decode({ node: { attrs: { hidden: true } } });
-      expect(result).toEqual({});
-    });
-
-    it('returns undefined if hidden is false or missing', () => {
-      expect(translator.decode({ node: { attrs: { hidden: false } } })).toBeUndefined();
-      expect(translator.decode({ node: { attrs: {} } })).toBeUndefined();
-    });
-  });
-
-  it('has correct metadata', () => {
+describe('w:hidden translator (attribute)', () => {
+  it('exposes correct translator meta', () => {
     expect(translator.xmlName).toBe('w:hidden');
     expect(translator.sdNodeOrKeyName).toBe('hidden');
+    expect(typeof translator.encode).toBe('function');
+  });
+
+  it('builds NodeTranslator instance', () => {
+    expect(translator).toBeInstanceOf(NodeTranslator);
+    expect(translator.xmlName).toBe('w:hidden');
+    expect(translator.sdNodeOrKeyName).toBe('hidden');
+  });
+
+  describe('encode', () => {
+    it('encodes with provided w:val as-is', () => {
+      const params = { nodes: [{ attributes: { 'w:val': '1' } }] };
+      const out = translator.encode(params);
+      expect(out).toBe(true);
+    });
+
+    it('passes through raw attributes when missing encoded boolean', () => {
+      const params = { nodes: [{ attributes: {} }] };
+      const out = translator.encode(params);
+      expect(out).toBe(true);
+    });
   });
 });

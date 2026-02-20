@@ -1,0 +1,58 @@
+---
+title: SuperEditor API
+sidebarTitle: Overview
+keywords: "supereditor class, prosemirror docx, tiptap alternative, editor commands, document manipulation api"
+---
+
+<Tip>
+**Looking for programmatic document access?** The [Document API](/document-api/overview) is coming soon with a stable, engine-agnostic interface for querying and manipulating documents.
+</Tip>
+
+SuperEditor is the core DOCX editing engine that powers SuperDoc. Use it directly when you need fine-grained control.
+
+## When to use SuperEditor vs SuperDoc
+
+**Use SuperDoc (recommended):**
+
+- Standard DOCX editing needs
+- Built-in UI and modules
+- Collaboration and comments
+- Quick integration
+
+**Use SuperEditor directly:**
+
+- Custom UI implementation
+- Framework-specific integrations
+- [Headless/server-side processing](/core/supereditor/configuration#headless-converter-nodejs)
+- Custom extension development
+
+## Quick start
+
+```javascript
+import "superdoc/style.css";
+import { Editor } from "superdoc/super-editor";
+
+// Open a DOCX file in the browser
+const response = await fetch("/document.docx");
+const file = await response.blob();
+
+const editor = await Editor.open(file, {
+  element: document.getElementById("editor"),
+  documentMode: "editing",
+});
+```
+
+## Key initialization steps
+
+1. **Import styles and the Editor class**
+2. **Call `Editor.open()`** - Pass a file source and options. The editor handles parsing, extensions, and mounting automatically.
+
+## Components
+
+The `SuperEditor` Vue component wraps the `Editor` class with reactive props and events. Use it in Vue apps for automatic lifecycle management. For other frameworks, use `Editor.open()` directly.
+
+## API structure
+
+- **[Configuration](/core/supereditor/configuration)** - Initialization options
+- **[Methods](/core/supereditor/methods)** - Control the editor and access properties
+- **[Events](/core/supereditor/events)** - React to changes

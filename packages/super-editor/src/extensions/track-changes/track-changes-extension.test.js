@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { EditorState } from 'prosemirror-state';
+import { EditorState, TextSelection } from 'prosemirror-state';
 import { TrackChanges } from './track-changes.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from './constants.js';
 import { TrackChangesBasePlugin, TrackChangesBasePluginKey } from './plugins/trackChangesBasePlugin.js';
@@ -24,6 +24,14 @@ describe('TrackChanges extension commands', () => {
     });
 
   const markPresent = (doc, markName) => doc.nodeAt(1)?.marks.some((mark) => mark.type.name === markName);
+  const getFirstTextRange = (doc) => {
+    let range = null;
+    doc.descendants((node, pos) => {
+      if (!node.isText || range) return;
+      range = { from: pos, to: pos + node.nodeSize };
+    });
+    return range;
+  };
 
   beforeEach(() => {
     ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
@@ -203,6 +211,136 @@ describe('TrackChanges extension commands', () => {
     expect(markPresent(afterReject.doc, 'italic')).toBe(false);
   });
 
+  it('rejectTrackedChangesBetween restores imported textStyle attrs for color suggestions', () => {
+    const oldTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#112233',
+    });
+    const newTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#FF0000',
+    });
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-color-1',
+      before: [{ type: 'textStyle', attrs: oldTextStyle.attrs }],
+      after: [{ type: 'textStyle', attrs: newTextStyle.attrs }],
+    });
+    const doc = createDoc('Styled', [newTextStyle, formatMark]);
+    const rejectState = createState(doc);
+
+    let afterReject;
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state: rejectState,
+      dispatch: (tr) => {
+        afterReject = rejectState.apply(tr);
+      },
+    });
+
+    expect(afterReject).toBeDefined();
+    expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
+
+    let restoredTextStyle;
+    afterReject.doc.descendants((node) => {
+      if (!node.isText) {
+        return;
+      }
+
+      restoredTextStyle = node.marks.find((mark) => mark.type.name === 'textStyle');
+      if (restoredTextStyle) {
+        return false;
+      }
+    });
+
+    expect(restoredTextStyle).toBeDefined();
+    expect(restoredTextStyle.attrs).toEqual(oldTextStyle.attrs);
+  });
+
+  it('rejectTrackedChangesBetween removes sparse after textStyle snapshots against richer live marks', () => {
+    const suggestedTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#FF0000',
+    });
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-sparse-after',
+      before: [],
+      after: [{ type: 'textStyle', attrs: { color: '#FF0000' } }],
+    });
+    const doc = createDoc('Styled', [suggestedTextStyle, formatMark]);
+    const rejectState = createState(doc);
+
+    let afterReject;
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state: rejectState,
+      dispatch: (tr) => {
+        afterReject = rejectState.apply(tr);
+      },
+    });
+
+    expect(afterReject).toBeDefined();
+    expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
+    expect(markPresent(afterReject.doc, 'textStyle')).toBe(false);
+  });
+
+  it('rejectTrackedChangesBetween restores full before snapshot across tracked mark types', () => {
+    const beforeTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Times New Roman, serif',
+      fontSize: '11pt',
+      color: '#111111',
+    });
+    const afterTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12pt',
+      color: '#FF0000',
+    });
+    const afterItalic = schema.marks.italic.create();
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-snapshot-reject',
+      before: [
+        { type: 'bold', attrs: {} },
+        { type: 'textStyle', attrs: beforeTextStyle.attrs },
+      ],
+      after: [
+        { type: 'italic', attrs: {} },
+        { type: 'textStyle', attrs: afterTextStyle.attrs },
+      ],
+    });
+    const doc = createDoc('Styled', [afterItalic, afterTextStyle, formatMark]);
+    const rejectState = createState(doc);
+
+    let afterReject;
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state: rejectState,
+      dispatch: (tr) => {
+        afterReject = rejectState.apply(tr);
+      },
+    });
+
+    expect(afterReject).toBeDefined();
+    expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
+    expect(markPresent(afterReject.doc, 'bold')).toBe(true);
+    expect(markPresent(afterReject.doc, 'italic')).toBe(false);
+
+    const textStyle = afterReject.doc.nodeAt(1)?.marks.find((mark) => mark.type.name === 'textStyle');
+    expect(textStyle?.attrs).toEqual(beforeTextStyle.attrs);
+  });
+
   it('acceptTrackedChangeById and rejectTrackedChangeById should NOT link two insertions', () => {
     const prevMark = schema.marks[TrackInsertMarkName].create({ id: 'prev' });
     const targetMark = schema.marks[TrackInsertMarkName].create({ id: 'ins-id' });
@@ -236,6 +374,91 @@ describe('TrackChanges extension commands', () => {
     // Call one time not multiple
     expect(rejectSpy).toHaveBeenCalledTimes(1);
     expect(rejectSpy).toHaveBeenCalledWith(2, 3);
+  });
+
+  it('interaction: color suggestion reject removes inline color styling from DOM', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Plain text</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.commands.enableTrackChanges();
+
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+      interactionEditor.commands.setColor('#FF0000');
+
+      const coloredInline = interactionEditor.view.dom.querySelector('span[style*="color"]');
+      expect(coloredInline).toBeTruthy();
+      let hasTrackFormat = false;
+      interactionEditor.state.doc.descendants((node) => {
+        if (!node.isText) {
+          return;
+        }
+        if (node.marks.some((mark) => mark.type.name === TrackFormatMarkName)) {
+          hasTrackFormat = true;
+          return false;
+        }
+      });
+      expect(hasTrackFormat).toBe(true);
+
+      interactionEditor.commands.rejectTrackedChangesBetween(0, interactionEditor.state.doc.content.size);
+
+      const coloredInlineAfterReject = interactionEditor.view.dom.querySelector('span[style*="color"]');
+      expect(coloredInlineAfterReject).toBeNull();
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: rejecting multi-format suggestions reverts all tracked formatting', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Plain text</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+
+      interactionEditor.commands.setFontFamily('Times New Roman, serif');
+      interactionEditor.commands.enableTrackChanges();
+
+      interactionEditor.commands.toggleBold();
+      interactionEditor.commands.setColor('#FF00AA');
+      interactionEditor.commands.toggleUnderline();
+      interactionEditor.commands.setFontFamily('Arial, sans-serif');
+
+      interactionEditor.commands.rejectTrackedChangesBetween(0, interactionEditor.state.doc.content.size);
+
+      const textPos = getFirstTextRange(interactionEditor.state.doc);
+      const textNode = interactionEditor.state.doc.nodeAt(textPos.from);
+      const marks = textNode?.marks || [];
+      const textStyle = marks.find((mark) => mark.type.name === 'textStyle');
+
+      expect(marks.some((mark) => mark.type.name === TrackFormatMarkName)).toBe(false);
+      expect(marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+      expect(marks.some((mark) => mark.type.name === 'underline')).toBe(false);
+      expect(textStyle?.attrs?.color).not.toBe('#FF00AA');
+      expect(textStyle?.attrs?.fontFamily).toBe('Times New Roman, serif');
+    } finally {
+      interactionEditor.destroy();
+    }
   });
 
   it('acceptTrackedChangeById links contiguous insertion segments sharing an id across formatting', () => {
@@ -566,5 +789,348 @@ describe('TrackChanges extension commands', () => {
       }),
     ).toBe(true);
     expect(rejectAll).toHaveBeenCalledWith(0, doc.content.size);
+  });
+
+  describe('insertTrackedChange', () => {
+    it('inserts text as a tracked change with both delete and insert marks', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 7,
+        to: 12,
+        text: 'universe',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      expect(dispatch).toHaveBeenCalled();
+      // Track changes keeps deleted content with a mark, so both old and new text are present
+      expect(nextState.doc.textContent).toContain('Hello');
+      expect(nextState.doc.textContent).toContain('universe');
+      // Check for both marks in the document
+      let hasDeleteMark = false;
+      let hasInsertMark = false;
+      nextState.doc.descendants((node) => {
+        if (node.marks.some((m) => m.type.name === TrackDeleteMarkName)) hasDeleteMark = true;
+        if (node.marks.some((m) => m.type.name === TrackInsertMarkName)) hasInsertMark = true;
+      });
+      expect(hasDeleteMark).toBe(true);
+      expect(hasInsertMark).toBe(true);
+    });
+
+    it('returns false when no change is needed', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      const dispatch = vi.fn();
+      const result = commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hello',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(false);
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it('uses provided user for tracked change author', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+      });
+
+      commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hi',
+        user: { name: 'Custom User', email: 'custom@example.com' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      expect(meta.insertedMark.attrs.author).toBe('Custom User');
+      expect(meta.insertedMark.attrs.authorEmail).toBe('custom@example.com');
+    });
+
+    it('falls back to editor user when user option not provided', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+      });
+
+      commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hi',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Editor User', email: 'editor@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      expect(meta.insertedMark.attrs.author).toBe('Editor User');
+      expect(meta.insertedMark.attrs.authorEmail).toBe('editor@example.com');
+    });
+
+    it('calls addCommentReply when comment is provided', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      const addCommentReply = vi.fn();
+      const dispatch = vi.fn((tr) => {
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hi',
+        comment: 'This is a suggestion',
+        user: { name: 'Commenter', email: 'commenter@example.com', image: 'https://example.com/avatar.png' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply },
+        },
+      });
+
+      expect(addCommentReply).toHaveBeenCalledWith({
+        parentId: expect.any(String),
+        content: 'This is a suggestion',
+        author: 'Commenter',
+        authorEmail: 'commenter@example.com',
+        authorImage: 'https://example.com/avatar.png',
+      });
+    });
+
+    it('does not call addCommentReply when comment is empty', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      const addCommentReply = vi.fn();
+      const dispatch = vi.fn((tr) => {
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Hi',
+        comment: '   ',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply },
+        },
+      });
+
+      expect(addCommentReply).not.toHaveBeenCalled();
+    });
+
+    it('replaces text and creates tracked marks', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 1,
+        to: 6,
+        text: 'Goodbye',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      // Track changes keeps deleted "Hello" with mark and adds inserted "Goodbye"
+      expect(nextState.doc.textContent).toContain('Goodbye');
+      expect(nextState.doc.textContent).toContain('world');
+    });
+
+    it('handles pure deletion (empty replacement text)', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 6,
+        to: 12,
+        text: '',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      expect(dispatch).toHaveBeenCalled();
+      // The deleted content should be marked with TrackDeleteMarkName
+      // Check anywhere in the doc for the mark
+      let hasDeleteMark = false;
+      nextState.doc.descendants((node) => {
+        if (node.marks.some((m) => m.type.name === TrackDeleteMarkName)) {
+          hasDeleteMark = true;
+        }
+      });
+      expect(hasDeleteMark).toBe(true);
+    });
+
+    it('handles pure insertion (from equals to)', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+
+      let nextState;
+      const dispatch = vi.fn((tr) => {
+        nextState = state.apply(tr);
+      });
+
+      const result = commands.insertTrackedChange({
+        from: 6,
+        to: 6,
+        text: ' world',
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      expect(nextState.doc.textContent).toBe('Hello world');
+      // Check anywhere in the doc for the mark
+      let hasInsertMark = false;
+      nextState.doc.descendants((node) => {
+        if (node.marks.some((m) => m.type.name === TrackInsertMarkName)) {
+          hasInsertMark = true;
+        }
+      });
+      expect(hasInsertMark).toBe(true);
+    });
+
+    it('replacement marks share the same ID for proper comment linking', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 7,
+        to: 12,
+        text: 'universe',
+        user: { name: 'Test', email: 'test@example.com' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      // Both marks should exist and share the same ID
+      expect(meta.insertedMark).toBeDefined();
+      expect(meta.deletionMark).toBeDefined();
+      expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
+    });
+
+    it('attaches comment to replacement using shared ID', () => {
+      const doc = createDoc('Hello world');
+      const state = createState(doc);
+
+      const addCommentReply = vi.fn();
+      let dispatchedTr;
+      const dispatch = vi.fn((tr) => {
+        dispatchedTr = tr;
+        state.apply(tr);
+      });
+
+      commands.insertTrackedChange({
+        from: 7,
+        to: 12,
+        text: 'universe',
+        comment: 'Replacing world with universe',
+        user: { name: 'Test', email: 'test@example.com' },
+      })({
+        state,
+        dispatch,
+        editor: {
+          options: { user: { name: 'Default', email: 'default@example.com' } },
+          commands: { addCommentReply },
+        },
+      });
+
+      const meta = dispatchedTr.getMeta(TrackChangesBasePluginKey);
+      const sharedId = meta.insertedMark.attrs.id;
+
+      // Comment should be attached using the shared ID
+      expect(addCommentReply).toHaveBeenCalledWith({
+        parentId: sharedId,
+        content: 'Replacing world with universe',
+        author: 'Test',
+        authorEmail: 'test@example.com',
+        authorImage: undefined,
+      });
+    });
   });
 });

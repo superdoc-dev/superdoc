@@ -7,6 +7,7 @@
 
 import type { DrawingBlock, ImageBlock, VectorShapeDrawing, ShapeGroupDrawing, ImageAnchor } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
+import type { EffectExtent, LineEnds } from '../utilities.js';
 import {
   pickNumber,
   isPlainObject,
@@ -21,10 +22,13 @@ import {
   normalizeShapeGroupChildren,
   normalizeFillColor,
   normalizeStrokeColor,
+  normalizeLineEnds,
+  normalizeEffectExtent,
   normalizeTextContent,
   normalizeTextVerticalAlign,
   normalizeTextInsets,
   normalizeZIndex,
+  resolveFloatingZIndex,
 } from '../utilities.js';
 
 // ============================================================================
@@ -52,6 +56,11 @@ const V_ALIGN_VALUES = new Set(['top', 'center', 'bottom']);
  */
 const getAttrs = (node: PMNode): Record<string, unknown> => {
   return isPlainObject(node.attrs) ? (node.attrs as Record<string, unknown>) : {};
+};
+
+const isHiddenDrawing = (attrs: Record<string, unknown>): boolean => {
+  if (toBoolean(attrs.hidden) === true) return true;
+  return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
 };
 
 type ShapeDrawingBlock = VectorShapeDrawing | ShapeGroupDrawing;
@@ -308,14 +317,17 @@ const normalizeAnchorData = (
  * const block = buildDrawingBlock(attrs, nextBlockId, positions, node, geometry, 'vectorShape');
  * ```
  */
-const buildDrawingBlock = (
+export const buildDrawingBlock = (
   rawAttrs: Record<string, unknown>,
   nextBlockId: BlockIdGenerator,
   positions: PositionMap,
   node: PMNode,
   geometry: ShapeDrawingGeometry,
   drawingKind: ShapeDrawingBlock['drawingKind'],
-  extraProps?: Partial<ShapeDrawingBlock>,
+  extraProps?: Partial<ShapeDrawingBlock> & {
+    lineEnds?: LineEnds;
+    effectExtent?: EffectExtent;
+  },
 ): ShapeDrawingBlock => {
   const normalizedWrap = normalizeWrap(rawAttrs.wrap);
   const baseAnchor = normalizeAnchorData(rawAttrs.anchorData, rawAttrs, normalizedWrap?.behindDoc);
@@ -326,9 +338,10 @@ const buildDrawingBlock = (
     attrsWithPm.pmEnd = pos.end;
   }
 
+  const behindDoc = baseAnchor?.behindDoc === true || normalizedWrap?.behindDoc === true;
   // Try to get zIndex from relativeHeight first, fallback to direct zIndex attribute
   const zIndexFromRelativeHeight = normalizeZIndex(rawAttrs.originalAttributes);
-  const finalZIndex = zIndexFromRelativeHeight ?? coerceNumber(rawAttrs.zIndex);
+  const resolvedZIndex = resolveFloatingZIndex(behindDoc, zIndexFromRelativeHeight, coerceNumber(rawAttrs.zIndex) ?? 1);
 
   return {
     kind: 'drawing',
@@ -340,7 +353,7 @@ const buildDrawingBlock = (
       toBoxSpacing(rawAttrs.margin as Record<string, unknown> | undefined),
     anchor: baseAnchor,
     wrap: normalizedWrap,
-    zIndex: finalZIndex,
+    zIndex: resolvedZIndex,
     drawingContentId: typeof rawAttrs.drawingContentId === 'string' ? rawAttrs.drawingContentId : undefined,
     drawingContent: toDrawingContentSnapshot(rawAttrs.drawingContent),
     attrs: attrsWithPm,
@@ -375,15 +388,27 @@ export function vectorShapeNodeToDrawingBlock(
   positions: PositionMap,
 ): DrawingBlock | null {
   const rawAttrs = getAttrs(node);
+  if (isHiddenDrawing(rawAttrs)) {
+    return null;
+  }
+  const effectExtent = normalizeEffectExtent(rawAttrs.effectExtent);
+  const baseWidth = coercePositiveNumber(rawAttrs.width, 1);
+  const baseHeight = coercePositiveNumber(rawAttrs.height, 1);
+  const extraWidth = (effectExtent?.left ?? 0) + (effectExtent?.right ?? 0);
+  const extraHeight = (effectExtent?.top ?? 0) + (effectExtent?.bottom ?? 0);
   const geometry: ShapeDrawingGeometry = {
-    width: coercePositiveNumber(rawAttrs.width, 1),
-    height: coercePositiveNumber(rawAttrs.height, 1),
+    width: coercePositiveNumber(baseWidth + extraWidth, 1),
+    height: coercePositiveNumber(baseHeight + extraHeight, 1),
     rotation: coerceNumber(rawAttrs.rotation) ?? 0,
     flipH: coerceBoolean(rawAttrs.flipH) ?? false,
     flipV: coerceBoolean(rawAttrs.flipV) ?? false,
   };
 
-  return buildDrawingBlock(rawAttrs, nextBlockId, positions, node, geometry, 'vectorShape');
+  const lineEnds = normalizeLineEnds(rawAttrs.lineEnds);
+  return buildDrawingBlock(rawAttrs, nextBlockId, positions, node, geometry, 'vectorShape', {
+    lineEnds,
+    effectExtent,
+  });
 }
 
 /**
@@ -400,6 +425,9 @@ export function shapeGroupNodeToDrawingBlock(
   positions: PositionMap,
 ): DrawingBlock | null {
   const rawAttrs = getAttrs(node);
+  if (isHiddenDrawing(rawAttrs)) {
+    return null;
+  }
   const groupTransform = isShapeGroupTransform(rawAttrs.groupTransform) ? { ...rawAttrs.groupTransform } : undefined;
   const size = normalizeShapeSize(rawAttrs.size);
   const width = size?.width ?? groupTransform?.width ?? 1;
@@ -434,6 +462,9 @@ export function shapeContainerNodeToDrawingBlock(
   positions: PositionMap,
 ): DrawingBlock | null {
   const rawAttrs = getAttrs(node);
+  if (isHiddenDrawing(rawAttrs)) {
+    return null;
+  }
   const geometry: ShapeDrawingGeometry = {
     width: coercePositiveNumber(rawAttrs.width, 1),
     height: coercePositiveNumber(rawAttrs.height, 1),
@@ -459,6 +490,9 @@ export function shapeTextboxNodeToDrawingBlock(
   positions: PositionMap,
 ): DrawingBlock | null {
   const rawAttrs = getAttrs(node);
+  if (isHiddenDrawing(rawAttrs)) {
+    return null;
+  }
   const geometry: ShapeDrawingGeometry = {
     width: coercePositiveNumber(rawAttrs.width, 1),
     height: coercePositiveNumber(rawAttrs.height, 1),
@@ -487,7 +521,7 @@ export function handleVectorShapeNode(node: PMNode, context: NodeHandlerContext)
   const drawingBlock = vectorShapeNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -504,7 +538,7 @@ export function handleShapeGroupNode(node: PMNode, context: NodeHandlerContext):
   const drawingBlock = shapeGroupNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -521,7 +555,7 @@ export function handleShapeContainerNode(node: PMNode, context: NodeHandlerConte
   const drawingBlock = shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -538,6 +572,6 @@ export function handleShapeTextboxNode(node: PMNode, context: NodeHandlerContext
   const drawingBlock = shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }

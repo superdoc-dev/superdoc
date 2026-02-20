@@ -656,6 +656,98 @@ describe('EditorAdapter', () => {
     });
   });
 
+  describe('insertFormattedContent', () => {
+    it('calls editor.commands.insertContent with contentType for html', () => {
+      updateEditorState(defaultSegments, { from: 1, to: 5 });
+
+      mockAdapter.insertFormattedContent('<p>Hello <a href="https://example.com">link</a></p>', {
+        contentType: 'html',
+        position: 'replace',
+      });
+
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 1, to: 5 });
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith(
+        '<p>Hello <a href="https://example.com">link</a></p>',
+        { contentType: 'html' },
+      );
+    });
+
+    it('calls editor.commands.insertContent with contentType for markdown', () => {
+      updateEditorState(defaultSegments, { from: 1, to: 5 });
+
+      mockAdapter.insertFormattedContent('# Heading\n\n[link](https://example.com)', {
+        contentType: 'markdown',
+        position: 'replace',
+      });
+
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith('# Heading\n\n[link](https://example.com)', {
+        contentType: 'markdown',
+      });
+    });
+
+    it('falls back to insertText for contentType: text', () => {
+      updateEditorState(defaultSegments, { from: 1, to: 5 });
+
+      const insertSpy = vi.spyOn(mockAdapter, 'insertText');
+      mockAdapter.insertFormattedContent('plain text', { contentType: 'text', position: 'replace' });
+
+      expect(insertSpy).toHaveBeenCalledWith('plain text', { contentType: 'text', position: 'replace' });
+      expect(mockEditor.commands.insertContent).not.toHaveBeenCalledWith(expect.anything(), {
+        contentType: 'text',
+      });
+
+      insertSpy.mockRestore();
+    });
+
+    it('falls back to insertText when no contentType is provided', () => {
+      updateEditorState(defaultSegments, { from: 1, to: 5 });
+
+      const insertSpy = vi.spyOn(mockAdapter, 'insertText');
+      mockAdapter.insertFormattedContent('just text', { position: 'replace' });
+
+      expect(insertSpy).toHaveBeenCalledWith('just text', { position: 'replace' });
+
+      insertSpy.mockRestore();
+    });
+
+    it('sets selection to collapsed range at from for position: before', () => {
+      updateEditorState(defaultSegments, { from: 3, to: 8 });
+
+      mockAdapter.insertFormattedContent('<p>Before</p>', {
+        contentType: 'html',
+        position: 'before',
+      });
+
+      // 'before' collapses to from: to = from
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 3, to: 3 });
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith('<p>Before</p>', { contentType: 'html' });
+    });
+
+    it('sets selection to collapsed range at to for position: after', () => {
+      updateEditorState(defaultSegments, { from: 3, to: 8 });
+
+      mockAdapter.insertFormattedContent('<p>After</p>', {
+        contentType: 'html',
+        position: 'after',
+      });
+
+      // 'after' collapses to to: from = to
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 8, to: 8 });
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith('<p>After</p>', { contentType: 'html' });
+    });
+
+    it('uses full selection range for position: replace (default)', () => {
+      updateEditorState(defaultSegments, { from: 3, to: 8 });
+
+      mockAdapter.insertFormattedContent('<p>Replace</p>', {
+        contentType: 'html',
+      });
+
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 3, to: 8 });
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith('<p>Replace</p>', { contentType: 'html' });
+    });
+  });
+
   describe('replaceText with appended content', () => {
     it('handles appended text correctly (prefix equals original, suffix is 0)', () => {
       const boldMark = schema.marks.bold.create();

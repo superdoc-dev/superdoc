@@ -1353,8 +1353,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // must be registered first so all paragraphs can wrap around them.
   const preRegisteredAnchors = collectPreRegisteredAnchors(blocks, measures);
 
-  // Map to store pre-computed positions for page-relative anchors (for fragment creation later)
-  const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number; pageNumber: number }>();
+  // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
+  // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
+  const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
 
   for (const entry of preRegisteredAnchors) {
     // Ensure first page exists
@@ -1420,8 +1421,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // This prevents the section break logic from seeing "content" on the page and creating a new page.
     floatManager.registerDrawing(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
 
-    // Store pre-computed position for later use when creating the fragment
-    preRegisteredPositions.set(entry.block.id, { anchorX, anchorY, pageNumber: state.page.number });
+    // Store pre-computed position for later use when creating the fragment.
+    preRegisteredPositions.set(entry.block.id, { anchorX, anchorY });
   }
 
   // Pre-compute keepNext chains for correct pagination grouping.
@@ -1932,14 +1933,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       // Check if this is a pre-registered page-relative anchor
       const preRegPos = preRegisteredPositions.get(block.id);
-      if (
-        preRegPos &&
-        Number.isFinite(preRegPos.anchorX) &&
-        Number.isFinite(preRegPos.anchorY) &&
-        Number.isFinite(preRegPos.pageNumber)
-      ) {
-        // Use pre-computed position for page-relative anchors
-        const state = paginator.getPageByNumber(preRegPos.pageNumber);
+      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
+        // Use pre-computed coordinates, but place on the current pagination page where this block is encountered.
+        const state = paginator.ensurePage();
         const imgBlock = block as ImageBlock;
         const imgMeasure = measure as ImageMeasure;
 
@@ -2008,14 +2004,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       // Check if this is a pre-registered page-relative anchor
       const preRegPos = preRegisteredPositions.get(block.id);
-      if (
-        preRegPos &&
-        Number.isFinite(preRegPos.anchorX) &&
-        Number.isFinite(preRegPos.anchorY) &&
-        Number.isFinite(preRegPos.pageNumber)
-      ) {
-        // Use pre-computed position for page-relative anchored drawings
-        const state = paginator.getPageByNumber(preRegPos.pageNumber);
+      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
+        // Use pre-computed coordinates, but place on the current pagination page where this block is encountered.
+        const state = paginator.ensurePage();
         const drawBlock = block as DrawingBlock;
         const drawMeasure = measure as DrawingMeasure;
 

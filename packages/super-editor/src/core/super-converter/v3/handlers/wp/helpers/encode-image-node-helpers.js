@@ -328,9 +328,11 @@ export function handleImageNode(node, params, isAnchor) {
   });
 
   const shouldStretch = Boolean(stretch && fillRect);
-  // Use cover mode when stretching, unless srcRect already produced an explicit clipPath
-  // or srcRect has negative values (Word already adjusted mapping).
+  // Use cover mode for plain stretch/fillRect when there is no explicit srcRect clipping.
+  // When srcRect emits clipping, we set explicit objectFit='fill' so clip-path math applies
+  // to a fully filled extent box (avoids "thin strip" rendering for cropped anchors).
   const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
+  const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
@@ -434,6 +436,7 @@ export function handleImageNode(node, params, isAnchor) {
       : {}),
     wrapTopAndBottom: wrap.type === 'TopAndBottom',
     shouldCover,
+    ...(shouldFillClippedStretch ? { objectFit: 'fill' } : {}),
     ...(clipPath ? { clipPath } : {}),
     rawSrcRect: srcRect,
     originalPadding: {

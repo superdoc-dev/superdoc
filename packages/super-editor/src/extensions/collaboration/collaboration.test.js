@@ -256,6 +256,32 @@ describe('collaboration helpers', () => {
     );
   });
 
+  it('does not persist null comment xml payloads into meta.docx', async () => {
+    const existingDocx = [
+      { name: 'word/document.xml', content: '<old doc />' },
+      { name: 'word/comments.xml', content: '<old comments />' },
+      { name: 'word/commentsExtended.xml', content: '<old comments extended />' },
+    ];
+    const ydoc = createYDocStub({ docxValue: existingDocx });
+    const metas = ydoc._maps.metas;
+
+    const editor = {
+      options: { ydoc, user: { id: 'user-null-comments' } },
+      exportDocx: vi.fn().mockResolvedValue({
+        'word/document.xml': '<new doc />',
+        'word/comments.xml': null,
+        'word/commentsExtended.xml': null,
+      }),
+    };
+
+    await updateYdocDocxData(editor);
+
+    const persistedDocx = metas.set.mock.calls.at(-1)?.[1] || [];
+    expect(persistedDocx.some((file) => file.name === 'word/comments.xml')).toBe(false);
+    expect(persistedDocx.some((file) => file.name === 'word/commentsExtended.xml')).toBe(false);
+    expect(persistedDocx.every((file) => typeof file.content === 'string')).toBe(true);
+  });
+
   it('triggers transaction when new file is added', async () => {
     const existingDocx = [{ name: 'word/document.xml', content: '<doc />' }];
     const ydoc = createYDocStub({ docxValue: existingDocx });

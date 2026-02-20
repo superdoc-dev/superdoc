@@ -115,6 +115,12 @@ export interface SuperDocTemplateBuilderProps {
   /** Content Security Policy nonce for dynamically injected styles */
   cspNonce?: string;
 
+  /** Telemetry configuration for SuperDoc */
+  telemetry?: { enabled: boolean; metadata?: Record<string, any> };
+
+  /** License key for SuperDoc */
+  licenseKey?: string;
+
   // Events
   onReady?: () => void;
   onTrigger?: (event: TriggerEvent) => void;

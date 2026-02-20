@@ -1400,6 +1400,22 @@ importers:
 
   shared/url-validation: {}
 
+  tests/behavior:
+    dependencies:
+      '@superdoc/document-api':
+        specifier: workspace:*
+        version: link:../../packages/document-api
+      superdoc:
+        specifier: workspace:*
+        version: link:../../packages/superdoc
+    devDependencies:
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.58.1
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@types/node@22.19.8)(esbuild@0.27.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+
   tests/visual:
     dependencies:
       superdoc:

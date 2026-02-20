@@ -250,6 +250,37 @@ Control the document editing toolbar:
 />
 ```
 
+## Telemetry
+
+Telemetry is enabled by default with `source: 'template-builder'` metadata. You can override or extend the defaults:
+
+```tsx
+<SuperDocTemplateBuilder
+  telemetry={{
+    enabled: true,
+    metadata: { source: "my-app", environment: "production" },
+  }}
+/>
+```
+
+To disable telemetry:
+
+```tsx
+<SuperDocTemplateBuilder telemetry={{ enabled: false }} />
+```
+
+For more details on how telemetry works, see the [Telemetry](/resources/telemetry) page.
+
+## License key
+
+Pass your license key to activate commercial features:
+
+```tsx
+<SuperDocTemplateBuilder licenseKey="your-license-key" />
+```
+
+The key is forwarded to the underlying SuperDoc instance.
+
 ## Complete example
 
 Putting it all together:

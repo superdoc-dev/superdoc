@@ -214,9 +214,20 @@ const handleNewFile = async (file) => {
     currentFile.value = await getFileObject(url, file.name, file.type);
   }
 
-  nextTick(() => {
-    init();
-  });
+  // In collab mode, use replaceFile() on the existing editor instead of
+  // destroying and recreating SuperDoc. This avoids the Y.js race condition
+  // where empty room state overwrites the DOCX content during reinit.
+  if (useCollaboration && activeEditor.value && !isMarkdown && !isHtml) {
+    try {
+      await activeEditor.value.replaceFile(currentFile.value);
+      console.log('[collab] Replaced file via editor.replaceFile()');
+    } catch (err) {
+      console.error('[collab] replaceFile failed, falling back to full reinit:', err);
+      nextTick(() => init());
+    }
+  } else {
+    nextTick(() => init());
+  }
 
   sidebarInstanceKey.value += 1;
 };
@@ -713,7 +724,7 @@ onMounted(async () => {
     const ydoc = new Y.Doc();
     const provider = new HocuspocusProvider({
       url: 'ws://localhost:3050',
-      name: 'superdoc-dev-room',
+      name: urlParams.get('room') || 'superdoc-dev-room',
       document: ydoc,
     });
 

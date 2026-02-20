@@ -1,3 +1,42 @@
+# [1.15.0](https://github.com/superdoc-dev/superdoc/compare/v1.14.0...v1.15.0) (2026-02-20)
+
+
+### Bug Fixes
+
+* **ai-actions:** preserve html/markdown insertion and prevent repeated formatted replacement ([#2117](https://github.com/superdoc-dev/superdoc/issues/2117)) ([9f685e9](https://github.com/superdoc-dev/superdoc/commit/9f685e964b5156d0d177e2fa0a72a4129d2a0443))
+* **ai:** support headless mode in EditorAdapter.applyPatch ([#1859](https://github.com/superdoc-dev/superdoc/issues/1859)) ([cf9275d](https://github.com/superdoc-dev/superdoc/commit/cf9275d3bffd144491701508103af4c7b8f1708e))
+* **collaboration:** memory leaks, Vue stack overflow, and Liveblocks stability (SD-1924) ([#2030](https://github.com/superdoc-dev/superdoc/issues/2030)) ([a6827fd](https://github.com/superdoc-dev/superdoc/commit/a6827fdda860171124aae4838d354dd68d52d017)), closes [#prepareDocumentForExport](https://github.com/superdoc-dev/superdoc/issues/prepareDocumentForExport)
+* **collab:** prevent stale view when remote Y.js changes bypass sdBlockRev increment ([#2099](https://github.com/superdoc-dev/superdoc/issues/2099)) ([0895a93](https://github.com/superdoc-dev/superdoc/commit/0895a93bb9e718f4f533a55e8f4022ed0ebc97bc))
+* **converter:** handle null list lvlText and always clear numbering cache ([#2113](https://github.com/superdoc-dev/superdoc/issues/2113)) ([336958c](https://github.com/superdoc-dev/superdoc/commit/336958ca9b39ebcc436fc77fb1daae82ddbd8b0c))
+* **document-api:** remove search match cap and validate moveComment bounds ([6d3de67](https://github.com/superdoc-dev/superdoc/commit/6d3de67ee398f5bbdd55a589e86a5c2bf321268a))
+* export docx blobs with docx mime type ([#1849](https://github.com/superdoc-dev/superdoc/issues/1849)) ([1bc466d](https://github.com/superdoc-dev/superdoc/commit/1bc466d25fc01618fa4a54f6e3c4120e43a7e89e))
+* **export:** prevent DOCX corruption from entity encoding and orphaned delInstrText (SD-1943) ([#2102](https://github.com/superdoc-dev/superdoc/issues/2102)) ([56e917f](https://github.com/superdoc-dev/superdoc/commit/56e917fff93175b27529afc2c8e744b21ea3bc29)), closes [#replaceSpecialCharacters](https://github.com/superdoc-dev/superdoc/issues/replaceSpecialCharacters) [#1988](https://github.com/superdoc-dev/superdoc/issues/1988)
+* **layout-bridge:** correct cell selection for tables with rowspan ([#1839](https://github.com/superdoc-dev/superdoc/issues/1839)) ([0b782be](https://github.com/superdoc-dev/superdoc/commit/0b782be3d17df0f72f4c0ce8f7e44e663422e841))
+* **layout,converter:** text box rendering and page-relative anchor positioning (SD-1331, SD-1838) ([#2034](https://github.com/superdoc-dev/superdoc/issues/2034)) ([3947f39](https://github.com/superdoc-dev/superdoc/commit/3947f39718d0f03a62e0fc900ec0f25676df84ac))
+* **layout:** route list text-start calculations through resolveListTextStartPx ([02b14b8](https://github.com/superdoc-dev/superdoc/commit/02b14b856c3e58aa6b0c9ad7b46943b748a3d2b5))
+* **painter-dom:** use absolute page Y for page-relative anchors in header/footer decorations ([0b9bc72](https://github.com/superdoc-dev/superdoc/commit/0b9bc72899d30e5464c1e68a6c0a9a3d3071ae7c))
+* preserve selection highlight when opening toolbar dropdowns ([#2097](https://github.com/superdoc-dev/superdoc/issues/2097)) ([a33568e](https://github.com/superdoc-dev/superdoc/commit/a33568ec43739178ddda4239aeae34d117fe5cca))
+* structured content renders correct on hover and select ([#1843](https://github.com/superdoc-dev/superdoc/issues/1843)) ([dab3f04](https://github.com/superdoc-dev/superdoc/commit/dab3f048a83934eef993e1cc868cc81bb4b625ea))
+* **super-editor:** add unsupported-content reporting across HTML/Markdown import paths ([#2115](https://github.com/superdoc-dev/superdoc/issues/2115)) ([84880b7](https://github.com/superdoc-dev/superdoc/commit/84880b781cb389c6cef27f4299645f6e6c07958a))
+* **super-editor:** handle partial comment file-sets and clean up stale parts on export ([#2123](https://github.com/superdoc-dev/superdoc/issues/2123)) ([f63ae0a](https://github.com/superdoc-dev/superdoc/commit/f63ae0aae0daaedfd3faba77e43023c4f7245e7f))
+* **super-editor:** restore <hr> contentBlock parsing and harden VML HR export fallback ([#2118](https://github.com/superdoc-dev/superdoc/issues/2118)) ([da51b1f](https://github.com/superdoc-dev/superdoc/commit/da51b1f6bd0aa6dca44f6431e16f03b1e8d7cc54))
+* table headers are incorrectly imported from html ([#2112](https://github.com/superdoc-dev/superdoc/issues/2112)) ([e8d1480](https://github.com/superdoc-dev/superdoc/commit/e8d1480bac4ba9dd0908ef7298b8ac15d584d2d1))
+* table resizing regression ([#2091](https://github.com/superdoc-dev/superdoc/issues/2091)) ([20ed24e](https://github.com/superdoc-dev/superdoc/commit/20ed24ed2a6d080b5c90511f63f6fde66b358e83))
+* table resizing regression ([#2091](https://github.com/superdoc-dev/superdoc/issues/2091)) ([9a07f1c](https://github.com/superdoc-dev/superdoc/commit/9a07f1ceadec4d7669a8b43c5bafd010edc2ec17))
+* **tables:** align tableHeader attrs with tableCell to fix oversized DOCX export widths ([#2114](https://github.com/superdoc-dev/superdoc/issues/2114)) ([38f0430](https://github.com/superdoc-dev/superdoc/commit/38f04306591e86dad09fb4cdb979f38e7fec4eda))
+* **tables:** fix autofit column scaling, cell width overflow, and page break splitting ([#1987](https://github.com/superdoc-dev/superdoc/issues/1987)) ([61a3f6f](https://github.com/superdoc-dev/superdoc/commit/61a3f6f13ee71d6d10c0fe74fb62a044cbe98c97))
+* **tables:** prevent tblInd double-shrink when using tblGrid widths (SD-1494) ([8750ece](https://github.com/superdoc-dev/superdoc/commit/8750ece019a439a350e93f6595d5833735c1ca35))
+* track changes comment text for formatting changes ([#2013](https://github.com/superdoc-dev/superdoc/issues/2013)) ([b2a43ff](https://github.com/superdoc-dev/superdoc/commit/b2a43ffad086df316a4a6b4d5695fd00507f9f78))
+* wire DocumentApi to Editor.doc with lifecycle-safe caching ([57326ea](https://github.com/superdoc-dev/superdoc/commit/57326eaf417309051132c6f39c6b819c23193af5))
+
+
+### Features
+
+* cropped images ([#1940](https://github.com/superdoc-dev/superdoc/issues/1940)) ([3767a49](https://github.com/superdoc-dev/superdoc/commit/3767a49f950425e20f756fcd82052d8f4855f660))
+* extend document-api with format, examples, create.heading ([#2092](https://github.com/superdoc-dev/superdoc/issues/2092)) ([fdf8c7c](https://github.com/superdoc-dev/superdoc/commit/fdf8c7cab059dde93ef60c801be8b15a0121b30c))
+* **lists:** support hidden list indicators via w:vanish ([#2069](https://github.com/superdoc-dev/superdoc/issues/2069)) ([#2080](https://github.com/superdoc-dev/superdoc/issues/2080)) ([0bed0fd](https://github.com/superdoc-dev/superdoc/commit/0bed0fd6e9c40d9b8fbba7ef22d02258d2d363c0))
+* the document API limited alpha ([#2087](https://github.com/superdoc-dev/superdoc/issues/2087)) ([091c24c](https://github.com/superdoc-dev/superdoc/commit/091c24cc907731f26f765d03289b458136519b0c))
+
 # [1.15.0-next.18](https://github.com/superdoc-dev/superdoc/compare/v1.15.0-next.17...v1.15.0-next.18) (2026-02-19)
 
 

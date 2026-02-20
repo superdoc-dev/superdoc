@@ -1324,3 +1324,102 @@ describe('SuperConverter styles fallback', () => {
     expect(styles?.elements?.[0]?.elements?.[0]?.attributes?.['w:styleId']).toBe('AltStyle2');
   });
 });
+
+describe('SuperConverter comment cleanup on export', () => {
+  const makeCommentCleanupDocx = () => [
+    {
+      name: 'word/document.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>Test</w:t></w:r></w:p></w:body>
+        </w:document>`,
+    },
+    {
+      name: 'word/_rels/document.xml.rels',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>
+          <Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="./commentsExtended.xml"/>
+          <Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2016/09/relationships/commentsIds" Target="/word/commentsIds.xml"/>
+          <Relationship Id="rId4" Type="http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible" Target="word/commentsExtensible.xml"/>
+          <Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>
+          <Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="comments.xml"/>
+        </Relationships>`,
+    },
+    {
+      name: 'docProps/custom.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties">
+        </Properties>`,
+    },
+    {
+      name: 'word/numbering.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    },
+    {
+      name: 'word/comments.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    },
+    {
+      name: 'word/commentsExtended.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"/>`,
+    },
+    {
+      name: 'word/commentsIds.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w16cid:commentsIds xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid"/>`,
+    },
+    {
+      name: 'word/commentsExtensible.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w16cex:commentsExtensible xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex"/>`,
+    },
+  ];
+
+  it('removes stale comment files and prunes only comment relationships when no comments remain', async () => {
+    const converter = new SuperConverter({ docx: makeCommentCleanupDocx() });
+    converter.numbering = { abstracts: {}, definitions: {} };
+
+    const exportToXmlJsonSpy = vi.spyOn(converter, 'exportToXmlJson').mockReturnValue({
+      result: converter.convertedXml['word/document.xml'].elements[0],
+      params: {
+        relationships: [],
+        media: {},
+        exportedCommentDefs: [],
+      },
+    });
+
+    await converter.exportToDocx({}, {}, {}, false, 'external', [], null, false, null);
+
+    expect(converter.convertedXml['word/comments.xml']).toBeUndefined();
+    expect(converter.convertedXml['word/commentsExtended.xml']).toBeUndefined();
+    expect(converter.convertedXml['word/commentsIds.xml']).toBeUndefined();
+    expect(converter.convertedXml['word/commentsExtensible.xml']).toBeUndefined();
+
+    const relationships =
+      converter.convertedXml['word/_rels/document.xml.rels'].elements.find((el) => el.name === 'Relationships')
+        .elements || [];
+
+    expect(
+      relationships.some((rel) =>
+        [
+          'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments',
+          'http://schemas.microsoft.com/office/2011/relationships/commentsExtended',
+          'http://schemas.microsoft.com/office/2016/09/relationships/commentsIds',
+          'http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible',
+        ].includes(rel.attributes?.Type),
+      ),
+    ).toBe(false);
+
+    // Non-comment relationships are retained even if they share a target name.
+    expect(relationships.some((rel) => rel.attributes?.Type?.includes('/hyperlink'))).toBe(true);
+    expect(
+      relationships.some((rel) => rel.attributes?.Type?.includes('/header') && rel.attributes?.Id === 'rId6'),
+    ).toBe(true);
+
+    exportToXmlJsonSpy.mockRestore();
+  });
+});

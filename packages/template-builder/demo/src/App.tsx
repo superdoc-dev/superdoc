@@ -248,6 +248,12 @@ export function App() {
           fields={fieldsConfig}
           list={listConfig}
           toolbar={true}
+          telemetry={{
+            enabled: true,
+            metadata: {
+              source: 'template-builder-demo',
+            },
+          }}
           onReady={handleReady}
           onTrigger={handleTrigger}
           onFieldInsert={handleFieldInsert}

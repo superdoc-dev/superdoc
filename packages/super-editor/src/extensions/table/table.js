@@ -215,6 +215,18 @@ import {
   insertRowAtIndex,
 } from './tableHelpers/appendRows.js';
 
+const IMPORT_CONTEXT_SELECTOR = '[data-superdoc-import="true"]';
+const IMPORT_DEFAULT_TABLE_WIDTH_PCT = 5000; // OOXML percent units where 5000 == 100%
+
+/**
+ * Detects whether a table element is being parsed from imported content
+ * (e.g. insertContent with contentType "html"/"markdown").
+ *
+ * @param {Element} element
+ * @returns {boolean}
+ */
+const isImportedTableElement = (element) => Boolean(element?.closest?.(IMPORT_CONTEXT_SELECTOR));
+
 /**
  * Table configuration options
  * @typedef {Object} TableConfig
@@ -427,6 +439,18 @@ export const Table = Node.create({
             value: null,
             type: 'auto',
           },
+        },
+        parseDOM: (element) => {
+          if (!isImportedTableElement(element)) return undefined;
+
+          // Imported HTML tables usually have no structural width metadata.
+          // Default them to 100% so visual rendering matches DOCX export behavior.
+          return {
+            tableWidth: {
+              value: IMPORT_DEFAULT_TABLE_WIDTH_PCT,
+              type: 'pct',
+            },
+          };
         },
         rendered: false,
       },

@@ -1,99 +1,132 @@
 ---
-title: Angular
+title: Angular Integration
+sidebarTitle: Angular
 keywords: "angular docx editor, angular word component, superdoc angular, angular document editor, angular integration"
 ---
 
-SuperDoc works with Angular through direct DOM manipulation.
+SuperDoc works with Angular through direct DOM manipulation. No wrapper needed.
 
-## Installation
+## Install
 
 ```bash
 npm install superdoc
 ```
 
-## Basic component
+## Basic setup
 
 ```typescript
 import { Component, ElementRef, ViewChild, OnInit, OnDestroy } from '@angular/core';
 import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
 
 @Component({
-  selector: 'app-document-editor',
-  template: `
-    <div #editor class="editor-container"></div>
-  `,
-  styles: [`
-    .editor-container {
-      height: 700px;
-    }
-  `]
+  selector: 'app-editor',
+  template: `<div #editor style="height: 700px"></div>`,
 })
-export class DocumentEditorComponent implements OnInit, OnDestroy {
-  @ViewChild('editor', { static: true }) editorElement!: ElementRef;
+export class EditorComponent implements OnInit, OnDestroy {
+  @ViewChild('editor', { static: true }) editorRef!: ElementRef;
   private superdoc: SuperDoc | null = null;
 
   ngOnInit() {
     this.superdoc = new SuperDoc({
-      selector: this.editorElement.nativeElement,
-      document: 'contract.docx'
+      selector: this.editorRef.nativeElement,
+      document: 'contract.docx',
+      documentMode: 'editing',
     });
   }
 
   ngOnDestroy() {
-    this.superdoc = null;
-  }
-
-  async exportDocument() {
-    if (this.superdoc) {
-      await this.superdoc.export();
-    }
+    this.superdoc?.destroy();
   }
 }
 ```
 
-## With file input
+## Full component
+
+A reusable editor component with mode switching and export:
+
+```typescript
+import { Component, ElementRef, ViewChild, Input, OnInit, OnDestroy } from '@angular/core';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+@Component({
+  selector: 'app-doc-editor',
+  template: `
+    <div class="controls">
+      <button (click)="setMode('editing')">Edit</button>
+      <button (click)="setMode('suggesting')">Review</button>
+      <button (click)="setMode('viewing')">View</button>
+      <button (click)="exportDoc()">Export</button>
+    </div>
+    <div #editor style="height: 700px"></div>
+  `,
+})
+export class DocEditorComponent implements OnInit, OnDestroy {
+  @ViewChild('editor', { static: true }) editorRef!: ElementRef;
+  @Input() document!: File | string;
+  @Input() user?: { name: string; email: string };
+
+  private superdoc: SuperDoc | null = null;
+
+  ngOnInit() {
+    this.superdoc = new SuperDoc({
+      selector: this.editorRef.nativeElement,
+      document: this.document,
+      documentMode: 'editing',
+      user: this.user,
+      onReady: () => console.log('Editor ready'),
+    });
+  }
+
+  ngOnDestroy() {
+    this.superdoc?.destroy();
+  }
+
+  setMode(mode: 'editing' | 'viewing' | 'suggesting') {
+    this.superdoc?.setDocumentMode(mode);
+  }
+
+  async exportDoc() {
+    await this.superdoc?.export({ isFinalDoc: true });
+  }
+}
+```
+
+## Handle file uploads
 
 ```typescript
 @Component({
-  selector: 'app-editor',
+  selector: 'app-upload-editor',
   template: `
-    <input type="file" accept=".docx" (change)="onFileSelected($event)">
-    <div #editor></div>
-  `
+    <input type="file" accept=".docx" (change)="onFileChange($event)" />
+    <div #editor style="height: 700px"></div>
+  `,
 })
-export class EditorComponent {
-  @ViewChild('editor', { static: false }) editorElement!: ElementRef;
+export class UploadEditorComponent implements OnDestroy {
+  @ViewChild('editor', { static: true }) editorRef!: ElementRef;
   private superdoc: SuperDoc | null = null;
 
-  onFileSelected(event: Event) {
+  onFileChange(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
-    if (file && this.editorElement) {
-      this.superdoc = new SuperDoc({
-        selector: this.editorElement.nativeElement,
-        document: file
-      });
-    }
-  }
-}
-```
+    if (!file) return;
 
-## Service pattern
-
-```typescript
-@Injectable({ providedIn: 'root' })
-export class DocumentService {
-  private superdoc: SuperDoc | null = null;
-
-  initialize(element: HTMLElement, document: File | string) {
+    this.superdoc?.destroy();
     this.superdoc = new SuperDoc({
-      selector: element,
-      document
+      selector: this.editorRef.nativeElement,
+      document: file,
+      documentMode: 'editing',
     });
-    return this.superdoc;
   }
 
-  destroy() {
-    this.superdoc = null;
+  ngOnDestroy() {
+    this.superdoc?.destroy();
   }
 }
 ```
+
+## Next steps
+
+- [Configuration](/core/superdoc/configuration) - Full configuration options
+- [Methods](/core/superdoc/methods) - All available methods
+- [Angular Example](https://github.com/superdoc-dev/superdoc/tree/main/examples/getting-started/angular) - Working example on GitHub

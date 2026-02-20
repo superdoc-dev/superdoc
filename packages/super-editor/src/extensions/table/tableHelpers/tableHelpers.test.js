@@ -7,6 +7,7 @@ import { createCell } from './createCell.js';
 import { createColGroup } from './createColGroup.js';
 import { createTableBorders } from './createTableBorders.js';
 import { getColStyleDeclaration } from './getColStyleDeclaration.js';
+import { createCellBorders } from '../../table-cell/helpers/createCellBorders.js';
 import { deleteTableWhenSelected } from './deleteTableWhenSelected.js';
 import { isCellSelection } from './isCellSelection.js';
 import { cellAround } from './cellAround.js';
@@ -18,6 +19,7 @@ import {
   buildFormattedCellBlock,
   buildRowFromTemplateRow,
   insertRowsAtTableEnd,
+  insertRowAtIndex,
 } from './appendRows.js';
 
 const cellMinWidth = 80;
@@ -397,6 +399,7 @@ describe('tableHelpers', () => {
       });
 
       expect(newRow?.content.content[0].type.name).toBe('tableCell');
+      expect(newRow?.content.content[0].attrs.borders).toEqual(createCellBorders());
     });
 
     it('buildRowFromTemplateRow copies style when copyRowStyle is true', () => {
@@ -461,6 +464,27 @@ describe('tableHelpers', () => {
 
       const updatedTable = tr.doc.nodeAt(tablePos);
       expect(updatedTable?.childCount).toBe(initialChildCount);
+    });
+
+    it('insertRowAtIndex keeps default body borders when source row has headers', () => {
+      const { table, state } = buildTableDoc(2, 1, true);
+      const tr = state.tr;
+      const tablePos = 0;
+
+      const didInsert = insertRowAtIndex({
+        tr,
+        tablePos,
+        tableNode: table,
+        sourceRowIndex: 0,
+        insertIndex: 1,
+        schema,
+      });
+
+      expect(didInsert).toBe(true);
+      const updatedTable = tr.doc.nodeAt(tablePos);
+      const insertedCell = updatedTable?.child(1)?.child(0);
+      expect(insertedCell?.type.name).toBe('tableCell');
+      expect(insertedCell?.attrs.borders).toEqual(createCellBorders());
     });
   });
 });

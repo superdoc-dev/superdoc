@@ -1,5 +1,5 @@
 /**
- * Run both visual and interaction baselines.
+ * Run visual baselines.
  *
  * Usage:
  *   pnpm baseline
@@ -16,6 +16,7 @@ function extractVersion(args: string[]): string | undefined {
     '--filter',
     '--match',
     '--exclude',
+    '--doc',
     '--parallel',
     '--output',
     '--browser',
@@ -49,7 +50,6 @@ async function main(): Promise<void> {
   }
 
   await runCommand(['exec', 'tsx', 'scripts/baseline-visual.ts', ...passThrough]);
-  await runCommand(['exec', 'tsx', 'scripts/baseline-interactions.ts', ...passThrough]);
 }
 
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;

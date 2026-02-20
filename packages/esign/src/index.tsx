@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import type { SuperDoc } from 'superdoc';
 import type * as Types from './types';
 import { textToImageDataUrl } from './utils/signature';
@@ -22,10 +22,13 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
     onStateChange,
     onFieldChange,
     onFieldsDiscovered,
+    telemetry,
+    licenseKey,
     isDisabled = false,
     className,
     style,
     documentHeight = '600px',
+    pdf,
   } = props;
 
   const [scrolled, setScrolled] = useState(!document.validation?.scroll?.required);
@@ -188,6 +191,14 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
     return nextTrail;
   };
 
+  const stableTelemetry = useMemo(
+    () => ({
+      enabled: telemetry?.enabled ?? true,
+      metadata: { source: 'esign', ...telemetry?.metadata },
+    }),
+    [telemetry?.enabled, JSON.stringify(telemetry?.metadata)],
+  );
+
   // Initialize SuperDoc - uses abort pattern to handle React 18 Strict Mode
   // which intentionally double-invokes effects to help identify cleanup issues
   useEffect(() => {
@@ -204,20 +215,28 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
 
       instance = new SuperDoc({
         selector: containerRef.current!,
-        document: document.source,
+        document: pdf && typeof document.source === 'string' ? { url: document.source, type: 'pdf' } : document.source,
         documentMode: 'viewing',
         modules: {
           comments: false,
+          ...(pdf ? { pdf } : {}),
         },
         viewOptions: {
           layout: document.viewOptions?.layout ?? (document.layoutMode === 'responsive' ? 'web' : 'print'),
         },
+        telemetry: stableTelemetry,
+        ...(licenseKey && { licenseKey }),
         onReady: () => {
           // Guard callback execution if cleanup already ran
           if (aborted) return;
           if (instance?.activeEditor) {
             discoverAndApplyFields(instance.activeEditor);
           }
+          addAuditEvent({ type: 'ready' });
+          setIsReady(true);
+        },
+        onPdfDocumentReady: () => {
+          if (aborted) return;
           addAuditEvent({ type: 'ready' });
           setIsReady(true);
         },
@@ -238,7 +257,16 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
       superdocRef.current = null;
     };
     // Use primitives to avoid re-init on every render when object references change
-  }, [document.source, document.mode, document.layoutMode, document.viewOptions?.layout, discoverAndApplyFields]);
+  }, [
+    document.source,
+    document.mode,
+    document.layoutMode,
+    document.viewOptions?.layout, 
+    pdf,
+    discoverAndApplyFields,
+    stableTelemetry,
+    licenseKey,
+  ]);
 
   useEffect(() => {
     if (!document.validation?.scroll?.required || !isReady) return;

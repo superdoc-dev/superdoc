@@ -25,6 +25,10 @@ const MEMORY_THRESHOLDS = {
   cacheMemory: 100, // MB for cache alone
   leakTolerance: 15, // MB acceptable leak after GC (increased for test stability)
 } as const;
+const LEAK_SAMPLE_COUNT = 5;
+const hasExposedGC = typeof global.gc === 'function';
+const gcOnly = hasExposedGC ? it : it.skip;
+let hasWarnedMissingGc = false;
 
 /**
  * Test fixture paths
@@ -92,8 +96,55 @@ function forceGC(): void {
   if (global.gc) {
     global.gc();
   } else {
-    console.warn('Garbage collection not available. Run tests with --expose-gc flag.');
+    if (!hasWarnedMissingGc) {
+      hasWarnedMissingGc = true;
+      console.warn('Garbage collection not available. Run tests with --expose-gc flag.');
+    }
   }
+}
+
+/**
+ * Compute median of numeric samples.
+ *
+ * @param values - Numeric sample values
+ * @returns Median value
+ */
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+/**
+ * Capture repeated heap deltas for a memory-sensitive operation.
+ *
+ * @param operation - Workload to profile between baseline and post-GC snapshots
+ * @param sampleCount - Number of repeated samples to collect
+ * @returns Sample deltas and median delta (MB)
+ */
+function sampleHeapDeltas(
+  operation: () => void,
+  sampleCount = LEAK_SAMPLE_COUNT,
+): { samples: number[]; median: number } {
+  const samples: number[] = [];
+
+  for (let i = 0; i < sampleCount; i++) {
+    forceGC();
+    const baseline = captureMemorySnapshot();
+
+    operation();
+
+    forceGC();
+    const afterOperation = captureMemorySnapshot();
+
+    samples.push(calculateMemoryDelta(baseline, afterOperation));
+  }
+
+  return {
+    samples,
+    median: median(samples),
+  };
 }
 
 /**
@@ -341,95 +392,65 @@ describe('Memory Profiling', () => {
   });
 
   describe('Memory Leak Detection', () => {
-    it('should release memory after 10 render cycles', () => {
+    gcOnly('should release memory after 10 render cycles', () => {
       const baseDoc = loadPMJsonFixture(FIXTURES.basic);
       const doc = expandDocumentToPages(baseDoc, 50);
 
-      forceGC();
-      const baseline = captureMemorySnapshot();
-
-      // Perform 10 render cycles
-      for (let cycle = 0; cycle < 10; cycle++) {
-        // Create blocks and simulate layout
-        const { blocks } = toFlowBlocks(doc);
-
-        // Simulate render operations
-        const renderData = blocks.map((block) => ({
-          block,
-          rendered: true,
-        }));
-
-        // Data goes out of scope at end of iteration
-      }
-
-      // Force GC after cycles
-      forceGC();
-      const afterCycles = captureMemorySnapshot();
-
-      const memoryLeak = calculateMemoryDelta(baseline, afterCycles);
+      const { samples, median: memoryLeak } = sampleHeapDeltas(() => {
+        // Perform 10 render cycles
+        for (let cycle = 0; cycle < 10; cycle++) {
+          // Create blocks and simulate layout allocations
+          void toFlowBlocks(doc).blocks.map((block) => ({
+            block,
+            rendered: true,
+          }));
+        }
+      });
 
       console.log('Memory Leak Test (10 cycles):');
-      console.log(`  Baseline: ${formatBytes(baseline.heapUsed)}`);
-      console.log(`  After 10 cycles + GC: ${formatBytes(afterCycles.heapUsed)}`);
-      console.log(`  Leak: ${memoryLeak.toFixed(1)} MB`);
+      console.log(`  Samples: ${samples.map((value) => `${value.toFixed(1)} MB`).join(', ')}`);
+      console.log(`  Median leak: ${memoryLeak.toFixed(1)} MB`);
       console.log(`  Tolerance: ${MEMORY_THRESHOLDS.leakTolerance} MB`);
 
       // Allow small amount of retained memory
       expect(memoryLeak).toBeLessThan(MEMORY_THRESHOLDS.leakTolerance);
     });
 
-    it('should not retain references after document unload', () => {
-      forceGC();
-      const baseline = captureMemorySnapshot();
+    gcOnly('should not retain references after document unload', () => {
+      const { samples, median: retained } = sampleHeapDeltas(() => {
+        // Load, process, then release in scope
+        {
+          const baseDoc = loadPMJsonFixture(FIXTURES.basic);
+          const largeDoc = expandDocumentToPages(baseDoc, 100);
+          const { blocks } = toFlowBlocks(largeDoc);
 
-      // Load, process, then release in scope
-      {
-        const baseDoc = loadPMJsonFixture(FIXTURES.basic);
-        const largeDoc = expandDocumentToPages(baseDoc, 100);
-        const { blocks } = toFlowBlocks(largeDoc);
-
-        // Simulate full layout
-        const layoutData = blocks.map((b) => ({ block: b, layout: {} }));
-
-        // All data should be released when scope exits
-      }
-
-      // Force GC
-      forceGC();
-      const afterUnload = captureMemorySnapshot();
-
-      const retained = calculateMemoryDelta(baseline, afterUnload);
+          // Simulate full layout allocations
+          void blocks.map((block) => ({ block, layout: {} }));
+        }
+      });
 
       console.log('Document Unload Test:');
-      console.log(`  Baseline: ${formatBytes(baseline.heapUsed)}`);
-      console.log(`  After unload + GC: ${formatBytes(afterUnload.heapUsed)}`);
-      console.log(`  Retained: ${retained.toFixed(1)} MB`);
+      console.log(`  Samples: ${samples.map((value) => `${value.toFixed(1)} MB`).join(', ')}`);
+      console.log(`  Median retained: ${retained.toFixed(1)} MB`);
 
       expect(retained).toBeLessThan(MEMORY_THRESHOLDS.leakTolerance);
     });
 
-    it('should handle rapid load/unload cycles without accumulation', () => {
+    gcOnly('should handle rapid load/unload cycles without accumulation', () => {
       const baseDoc = loadPMJsonFixture(FIXTURES.basic);
       const doc = expandDocumentToPages(baseDoc, 20);
 
-      forceGC();
-      const baseline = captureMemorySnapshot();
-
-      // Perform 50 rapid load/unload cycles
-      for (let i = 0; i < 50; i++) {
-        const { blocks } = toFlowBlocks(doc);
-        // Immediately release
-      }
-
-      forceGC();
-      const afterCycles = captureMemorySnapshot();
-
-      const accumulated = calculateMemoryDelta(baseline, afterCycles);
+      const { samples, median: accumulated } = sampleHeapDeltas(() => {
+        // Perform 50 rapid load/unload cycles
+        for (let i = 0; i < 50; i++) {
+          void toFlowBlocks(doc).blocks;
+          // Immediately release
+        }
+      });
 
       console.log('Rapid Load/Unload Test (50 cycles):');
-      console.log(`  Baseline: ${formatBytes(baseline.heapUsed)}`);
-      console.log(`  After cycles + GC: ${formatBytes(afterCycles.heapUsed)}`);
-      console.log(`  Accumulated: ${accumulated.toFixed(1)} MB`);
+      console.log(`  Samples: ${samples.map((value) => `${value.toFixed(1)} MB`).join(', ')}`);
+      console.log(`  Median accumulated: ${accumulated.toFixed(1)} MB`);
 
       // Should not accumulate significant memory
       expect(accumulated).toBeLessThan(MEMORY_THRESHOLDS.leakTolerance);

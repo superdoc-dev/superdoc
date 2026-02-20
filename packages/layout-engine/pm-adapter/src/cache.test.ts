@@ -1,6 +1,224 @@
 import { describe, it, expect } from 'vitest';
-import { shiftBlockPositions, shiftCachedBlocks } from './cache.js';
+import { FlowBlockCache, shiftBlockPositions, shiftCachedBlocks } from './cache.js';
 import type { FlowBlock, ParagraphBlock, ImageBlock, DrawingBlock, Run } from '@superdoc/contracts';
+
+describe('FlowBlockCache', () => {
+  const makeParagraphNode = (text: string, rev: number) => ({
+    type: 'paragraph',
+    attrs: { sdBlockId: 'p1', sdBlockRev: rev, paraId: null },
+    content: [{ type: 'run', content: [{ type: 'text', text }] }],
+  });
+
+  const mockBlocks: FlowBlock[] = [
+    { kind: 'paragraph', id: 'p1', runs: [{ text: 'hello', pmStart: 0, pmEnd: 5 } as Run] } as ParagraphBlock,
+  ];
+
+  it('returns MISS when no cached entry exists', () => {
+    const cache = new FlowBlockCache();
+    cache.begin();
+
+    const node = makeParagraphNode('hello', 1);
+    const result = cache.get('p1', node);
+
+    expect(result.entry).toBeNull();
+  });
+
+  it('returns HIT when sdBlockRev matches', () => {
+    const cache = new FlowBlockCache();
+    const node = makeParagraphNode('hello', 1);
+
+    // Populate cache
+    cache.begin();
+    cache.set('p1', JSON.stringify(node), 1, mockBlocks, 0);
+    cache.commit();
+
+    // Same node, same rev → HIT
+    cache.begin();
+    const result = cache.get('p1', node);
+
+    expect(result.entry).not.toBeNull();
+    expect(result.entry!.blocks).toBe(mockBlocks);
+  });
+
+  it('retains serialized node across fast-path hits so external fallback stays incremental', () => {
+    const cache = new FlowBlockCache();
+    const node = makeParagraphNode('hello', 5);
+
+    // Render 1: cache is populated with serialized JSON.
+    cache.begin();
+    cache.set('p1', JSON.stringify(node), 5, mockBlocks, 0);
+    cache.commit();
+
+    // Render 2: local-only fast path hit, caller writes lookup payload into next generation.
+    cache.begin();
+    const fastPathHit = cache.get('p1', node);
+    expect(fastPathHit.entry).not.toBeNull();
+    cache.set('p1', fastPathHit.nodeJson, fastPathHit.nodeRev, fastPathHit.entry!.blocks, 0);
+    cache.commit();
+
+    // Render 3: collaboration/external change mode requires JSON fallback.
+    // With unchanged content this should still be a HIT.
+    cache.setHasExternalChanges(true);
+    cache.begin();
+    const externalFallback = cache.get('p1', node);
+
+    expect(externalFallback.entry).not.toBeNull();
+  });
+
+  it('returns MISS when sdBlockRev differs', () => {
+    const cache = new FlowBlockCache();
+    const nodeV1 = makeParagraphNode('hello', 1);
+    const nodeV2 = makeParagraphNode('hello world', 2);
+
+    // Populate with v1
+    cache.begin();
+    cache.set('p1', JSON.stringify(nodeV1), 1, mockBlocks, 0);
+    cache.commit();
+
+    // v2 has different rev → MISS
+    cache.begin();
+    const result = cache.get('p1', nodeV2);
+
+    expect(result.entry).toBeNull();
+  });
+
+  it('returns MISS when content changes with same sdBlockRev and externalChanges flag is set', () => {
+    const cache = new FlowBlockCache();
+    const nodeOriginal = makeParagraphNode('hello', 5);
+    const nodeModifiedByYjs = makeParagraphNode('hello world from remote user', 5); // Same rev, different content!
+
+    // Populate cache with original content
+    cache.begin();
+    cache.set('p1', JSON.stringify(nodeOriginal), 5, mockBlocks, 0);
+    cache.commit();
+
+    // Y.js-origin transaction changed content but blockNodePlugin didn't increment sdBlockRev.
+    // With the externalChanges flag, the fast path falls through to JSON comparison.
+    cache.setHasExternalChanges(true);
+    cache.begin();
+    const result = cache.get('p1', nodeModifiedByYjs);
+
+    expect(result.entry).toBeNull(); // Correct: JSON comparison catches the content change
+  });
+
+  it('returns HIT when content is unchanged even with externalChanges flag', () => {
+    const cache = new FlowBlockCache();
+    const node = makeParagraphNode('hello', 5);
+
+    cache.begin();
+    cache.set('p1', JSON.stringify(node), 5, mockBlocks, 0);
+    cache.commit();
+
+    // externalChanges flag is set but content is identical — should still HIT
+    cache.setHasExternalChanges(true);
+    cache.begin();
+    const result = cache.get('p1', node);
+
+    expect(result.entry).not.toBeNull(); // JSON comparison confirms content is same
+  });
+
+  it('without externalChanges flag, same sdBlockRev trusts fast path (HIT)', () => {
+    const cache = new FlowBlockCache();
+    const nodeOriginal = makeParagraphNode('hello', 5);
+    const nodeModified = makeParagraphNode('hello world', 5); // Same rev, different content
+
+    cache.begin();
+    cache.set('p1', JSON.stringify(nodeOriginal), 5, mockBlocks, 0);
+    cache.commit();
+
+    // Without the flag, fast path trusts sdBlockRev → HIT (this is the performance path)
+    cache.begin();
+    const result = cache.get('p1', nodeModified);
+
+    expect(result.entry).not.toBeNull(); // Fast path HIT — correct for local-only edits
+  });
+
+  it('commit() clears externalChanges flag', () => {
+    const cache = new FlowBlockCache();
+    const nodeOriginal = makeParagraphNode('hello', 5);
+    const nodeModified = makeParagraphNode('hello world', 5);
+
+    cache.begin();
+    cache.set('p1', JSON.stringify(nodeOriginal), 5, mockBlocks, 0);
+    cache.commit();
+
+    // Set flag and commit (which should clear it)
+    cache.setHasExternalChanges(true);
+    cache.begin();
+    cache.set('p1', JSON.stringify(nodeOriginal), 5, mockBlocks, 0);
+    cache.commit(); // This clears externalChanges
+
+    // Now query with modified content — flag was cleared, so fast path applies
+    cache.begin();
+    const result = cache.get('p1', nodeModified);
+
+    expect(result.entry).not.toBeNull(); // Fast path HIT — flag was cleared by commit
+  });
+
+  it('returns MISS via JSON fallback when sdBlockRev is unavailable', () => {
+    const cache = new FlowBlockCache();
+    const nodeNoRev = { type: 'paragraph', attrs: { sdBlockId: 'p1' }, content: [{ type: 'text', text: 'hello' }] };
+    const nodeNoRevModified = {
+      type: 'paragraph',
+      attrs: { sdBlockId: 'p1' },
+      content: [{ type: 'text', text: 'hello world' }],
+    };
+
+    // Populate without rev
+    cache.begin();
+    cache.set('p1', JSON.stringify(nodeNoRev), null, mockBlocks, 0);
+    cache.commit();
+
+    // Different content, no rev → falls to JSON comparison → MISS
+    cache.begin();
+    const result = cache.get('p1', nodeNoRevModified);
+
+    expect(result.entry).toBeNull(); // Correct: JSON comparison catches the change
+  });
+
+  it('clear() resets all cache state', () => {
+    const cache = new FlowBlockCache();
+    const node = makeParagraphNode('hello', 1);
+
+    cache.begin();
+    cache.set('p1', JSON.stringify(node), 1, mockBlocks, 0);
+    cache.commit();
+
+    cache.clear();
+
+    cache.begin();
+    const result = cache.get('p1', node);
+
+    expect(result.entry).toBeNull(); // Cache was cleared
+  });
+
+  it('commit() discards entries not seen in current render', () => {
+    const cache = new FlowBlockCache();
+    const nodeA = makeParagraphNode('hello', 1);
+    const nodeB = {
+      ...makeParagraphNode('world', 1),
+      attrs: { ...makeParagraphNode('world', 1).attrs, sdBlockId: 'p2' },
+    };
+
+    // Render 1: both paragraphs
+    cache.begin();
+    cache.set('p1', JSON.stringify(nodeA), 1, mockBlocks, 0);
+    cache.set('p2', JSON.stringify(nodeB), 1, mockBlocks, 10);
+    cache.commit();
+
+    // Render 2: only p1 (p2 was deleted)
+    cache.begin();
+    cache.get('p1', nodeA); // access p1
+    cache.set('p1', JSON.stringify(nodeA), 1, mockBlocks, 0);
+    cache.commit();
+
+    // Render 3: p2 should be gone
+    cache.begin();
+    const result = cache.get('p2', nodeB);
+
+    expect(result.entry).toBeNull(); // p2 was pruned
+  });
+});
 
 describe('shiftBlockPositions', () => {
   describe('paragraph blocks', () => {

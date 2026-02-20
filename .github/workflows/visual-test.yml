@@ -1,0 +1,137 @@
+name: Visual Tests
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/superdoc/**'
+      - 'packages/layout-engine/**'
+      - 'packages/super-editor/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - 'tests/visual/**'
+      - 'shared/**'
+      - '!**/*.md'
+  workflow_dispatch:
+
+concurrency:
+  group: visual-test-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    runs-on: ubuntu-latest
+    env:
+      SD_VISUAL_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_VISUAL_TESTING_R2_ACCOUNT_ID }}
+      SD_VISUAL_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID }}
+      SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY }}
+      SD_VISUAL_TESTING_R2_BUCKET: ${{ secrets.SD_VISUAL_TESTING_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Build SuperDoc
+        run: pnpm build
+
+      - name: Get Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> $GITHUB_OUTPUT
+        working-directory: tests/visual
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+        working-directory: tests/visual
+
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium firefox webkit
+        working-directory: tests/visual
+
+      - name: Download test documents from R2
+        run: pnpm docs:download
+        working-directory: tests/visual
+
+      - name: Download baselines from R2
+        run: pnpm exec tsx scripts/download-baselines.ts
+        working-directory: tests/visual
+
+      # Visual tests use continue-on-error because screenshot diffs are
+      # expected when rendering improves. The PR comment signals diffs
+      # were detected so the team can investigate locally.
+      # NOTE: Reports are NOT uploaded as artifacts because this is a
+      # public repo — screenshots could expose test document content.
+      - name: Run visual tests
+        id: visual-tests
+        continue-on-error: true
+        run: pnpm test
+        working-directory: tests/visual
+
+      - name: Comment on PR with visual diff results
+        if: github.event_name == 'pull_request' && steps.visual-tests.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- visual-test-report -->';
+            const body = [
+              marker,
+              '### Visual diffs detected',
+              '',
+              'Pixel differences were found in visual tests. This is **not blocking** — reproduce locally with `cd tests/visual && pnpm docs:download && pnpm test` to review diffs.',
+            ].join('\n');
+
+            // Update existing comment or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  validate:
+    if: always()
+    needs: [visual]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            exit 1
+          fi

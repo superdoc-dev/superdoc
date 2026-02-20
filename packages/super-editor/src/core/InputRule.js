@@ -392,9 +392,12 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
         continue;
       }
 
-      // Remove linebreaktype here - we don't want it when pasting HTML
+      // Internal/runtime-only attributes must not be preserved across paste.
       if (child.hasAttribute('linebreaktype')) {
         child.removeAttribute('linebreaktype');
+      }
+      if (child.hasAttribute('data-sd-block-id')) {
+        child.removeAttribute('data-sd-block-id');
       }
 
       walkAndClean(child);
@@ -408,7 +411,7 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
 /**
  * Reusable paste-handling utility that replicates the logic formerly held only
  * inside the `inputRulesPlugin` paste handler. This allows other components
- * (e.g. slash-menu items) to invoke the same paste logic without duplicating
+ * (e.g. context-menu items) to invoke the same paste logic without duplicating
  * code.
  *
  * @param {Object}   params

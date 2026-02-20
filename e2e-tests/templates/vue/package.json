@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.2.8",
+    "@fontsource/inter": "catalog:",
     "superdoc": "workspace:*",
     "vue": "catalog:"
   },

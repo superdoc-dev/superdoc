@@ -10,8 +10,9 @@ jobs:
   getting-started:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        example: [react, vue, vanilla, cdn]
+        example: [react, vue, vanilla, cdn, angular]
     steps:
       - uses: actions/checkout@v6
 
@@ -36,6 +37,7 @@ jobs:
   collaboration:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         example: [superdoc-yjs, hocuspocus, liveblocks]
     steps:
@@ -68,6 +70,7 @@ jobs:
   features:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         example: [track-changes, ai-redlining, comments, custom-toolbar]
     steps:
@@ -89,6 +92,17 @@ jobs:
       - name: Run smoke test
         working-directory: examples/__tests__
         run: EXAMPLE=features/${{ matrix.example }} npx playwright test
+
+  validate:
+    if: always()
+    needs: [getting-started, collaboration, features, headless]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            exit 1
+          fi
 
   headless:
     runs-on: ubuntu-latest

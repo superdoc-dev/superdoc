@@ -162,7 +162,7 @@ export const hasListDefinition = (editor, numId, ilvl) => {
  */
 export const changeNumIdSameAbstract = (numId, level, listType, editor) => {
   const newId = getNewListId(editor, 'definitions');
-  const { abstract } = ListHelpers.getListDefinitionDetails({ numId, level, listType, editor });
+  const { abstract } = ListHelpers.getListDefinitionDetails({ numId, level, listType, editor }) || {};
 
   const numbering = editor.converter.numbering;
   const newNumbering = { ...numbering };
@@ -243,7 +243,7 @@ export const getNewListId = (editor, grouping = 'definitions') => {
  * @param {import("prosemirror-model").NodeType} [params.listType] - The type of the list (e.g., 'orderedList', 'bulletList'). Required when generating new definitions
  * @param {Object} params.editor - The editor instance containing converter and numbering data
  * @param {number} [params.tries=0] - The number of recursion attempts to avoid infinite loops (max 1)
- * @returns {Object} The list definition details
+ * @returns {Object | null} The list definition details or null if not found
  */
 export const getListDefinitionDetails = ({ numId, level, listType, editor, tries = 0 }) => {
   const { definitions, abstracts } = editor.converter.numbering;
@@ -263,17 +263,7 @@ export const getListDefinitionDetails = ({ numId, level, listType, editor, tries
 
   const abstract = abstracts[abstractId];
   if (!abstract) {
-    return {
-      start: null,
-      numFmt: null,
-      lvlText: null,
-      listNumberingType: null,
-      suffix: null,
-      justification: null,
-      customFormat: null,
-      abstract: null,
-      abstractId,
-    };
+    return null;
   }
 
   // Handle style link recursion (max 1 retry)
@@ -304,17 +294,7 @@ export const getListDefinitionDetails = ({ numId, level, listType, editor, tries
   );
 
   if (!listDefinition) {
-    return {
-      start: null,
-      numFmt: null,
-      lvlText: null,
-      suffix: null,
-      justification: null,
-      listNumberingType: null,
-      customFormat: null,
-      abstract,
-      abstractId,
-    };
+    return null;
   }
 
   // Extract level properties safely

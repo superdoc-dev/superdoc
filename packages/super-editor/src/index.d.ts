@@ -127,6 +127,16 @@ export interface EditorCommands {
 // DATA TYPES
 // ============================================
 
+/** An unsupported HTML element that was dropped during import. */
+export interface UnsupportedContentItem {
+  /** The tag name, e.g. "HR", "DETAILS" */
+  tagName: string;
+  /** The outerHTML of the element (truncated to 200 chars) */
+  outerHTML: string;
+  /** How many instances of this tag were dropped */
+  count: number;
+}
+
 /** Binary data source (works in both browser and Node.js - Buffer extends Uint8Array) */
 export type BinaryData = ArrayBuffer | ArrayBufferView;
 
@@ -324,6 +334,8 @@ export declare const SuperInput: any;
 export declare const BasicUpload: any;
 export declare const Toolbar: any;
 export declare const AIWriter: any;
+export declare const ContextMenu: any;
+/** @deprecated Use ContextMenu instead */
 export declare const SlashMenu: any;
 
 // ============================================

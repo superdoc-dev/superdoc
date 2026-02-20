@@ -1,0 +1,24 @@
+---
+title: Lists operations
+sidebarTitle: Lists
+description: Generated Lists operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+List inspection and list mutations.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| [`lists.list`](./list) | `lists.list` | No | `idempotent` | No | No |
+| [`lists.get`](./get) | `lists.get` | No | `idempotent` | No | No |
+| [`lists.insert`](./insert) | `lists.insert` | Yes | `non-idempotent` | Yes | Yes |
+| [`lists.setType`](./set-type) | `lists.setType` | Yes | `conditional` | No | Yes |
+| [`lists.indent`](./indent) | `lists.indent` | Yes | `conditional` | No | Yes |
+| [`lists.outdent`](./outdent) | `lists.outdent` | Yes | `conditional` | No | Yes |
+| [`lists.restart`](./restart) | `lists.restart` | Yes | `conditional` | No | Yes |
+| [`lists.exit`](./exit) | `lists.exit` | Yes | `conditional` | No | Yes |

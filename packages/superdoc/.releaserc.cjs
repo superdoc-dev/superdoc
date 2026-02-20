@@ -1,4 +1,40 @@
 /* eslint-env node */
+const path = require('path')
+
+/*
+ * Commit filter: superdoc bundles multiple sub-packages, so git log must
+ * include commits touching any of them. Keep in sync with release-superdoc.yml.
+ */
+const SUPERDOC_PACKAGES = [
+  'packages/superdoc',
+  'packages/super-editor',
+  'packages/layout-engine',
+  'packages/ai',
+  'packages/word-layout',
+  'packages/preset-geometry',
+]
+
+Object.keys(require.cache)
+  .filter(m =>
+    path.posix.normalize(m).endsWith('/node_modules/git-log-parser/src/index.js')
+  )
+  .forEach(moduleName => {
+    const parse = require.cache[moduleName].exports.parse
+    require.cache[moduleName].exports.parse = (config, options) => {
+      const repoRoot = path.resolve(options.cwd, '..', '..')
+      const packagePaths = SUPERDOC_PACKAGES.map(p => path.join(repoRoot, p))
+
+      if (Array.isArray(config._)) {
+        config._.push(...packagePaths)
+      } else if (config._) {
+        config._ = [config._, ...packagePaths]
+      } else {
+        config._ = packagePaths
+      }
+
+      return parse(config, options)
+    }
+  })
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH
 
@@ -21,7 +57,6 @@ const config = {
   ],
   tagFormat: 'v${version}',
   plugins: [
-    'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
     // NPM plugin MUST come before git plugin
@@ -75,7 +110,7 @@ config.plugins.push(['semantic-release-linear-app', {
 config.plugins.push([
   '@semantic-release/github',
   {
-    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc** v${nextRelease.version}\n\nThe release is available on [GitHub release](<github_release_url>)',
+    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
   }
 ])
 

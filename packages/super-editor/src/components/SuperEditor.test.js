@@ -43,8 +43,8 @@ vi.mock('./cursor-helpers.js', () => ({
   checkNodeSpecificClicks: checkNodeSpecificClicksMock,
 }));
 
-vi.mock('./slash-menu/SlashMenu.vue', () => ({
-  default: { name: 'SlashMenu', render: () => null },
+vi.mock('./context-menu/ContextMenu.vue', () => ({
+  default: { name: 'ContextMenu', render: () => null },
 }));
 
 vi.mock('./rulers/Ruler.vue', () => ({
@@ -355,6 +355,43 @@ describe('SuperEditor.vue', () => {
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
+  });
+
+  it('renders SlashMenu only when context menus are enabled', async () => {
+    vi.useFakeTimers();
+    EditorConstructor.loadXmlData
+      .mockResolvedValueOnce(['<docx />', {}, {}, {}])
+      .mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+    const mountAndReady = async (disableContextMenu) => {
+      const fileSource = new Blob([], { type: DOCX_MIME });
+      const wrapper = mount(SuperEditor, {
+        props: {
+          documentId: `doc-context-menu-${disableContextMenu ? 'off' : 'on'}`,
+          fileSource,
+          options: { disableContextMenu },
+        },
+      });
+
+      await flushPromises();
+
+      const instance = getEditorInstance();
+      instance.listeners.collaborationReady();
+      vi.runAllTimers();
+      await flushPromises();
+
+      return wrapper;
+    };
+
+    const enabledWrapper = await mountAndReady(false);
+    expect(enabledWrapper.findComponent({ name: 'ContextMenu' }).exists()).toBe(true);
+    enabledWrapper.unmount();
+
+    const disabledWrapper = await mountAndReady(true);
+    expect(disabledWrapper.findComponent({ name: 'ContextMenu' }).exists()).toBe(false);
+    disabledWrapper.unmount();
+
+    vi.useRealTimers();
   });
 
   describe('handleMarginClick', () => {

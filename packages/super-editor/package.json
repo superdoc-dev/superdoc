@@ -115,6 +115,7 @@
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
     "@superdoc/common": "workspace:*",
+    "@superdoc/document-api": "workspace:*",
     "@superdoc/contracts": "workspace:*",
     "@superdoc/layout-bridge": "workspace:*",
     "@superdoc/measuring-dom": "workspace:*",

@@ -126,4 +126,102 @@ describe('handleStructuredContentNode', () => {
 
     expect(result.attrs.sdtPr).toEqual(sdtPr);
   });
+
+  describe('w:lock parsing', () => {
+    it('parses sdtLocked lock mode', () => {
+      const sdtPrElements = [{ name: 'w:lock', attributes: { 'w:val': 'sdtLocked' } }];
+      const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);
+
+      const params = {
+        nodes: [node],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+
+      const result = handleStructuredContentNode(params);
+
+      expect(result.attrs.lockMode).toBe('sdtLocked');
+    });
+
+    it('parses contentLocked lock mode', () => {
+      const sdtPrElements = [{ name: 'w:lock', attributes: { 'w:val': 'contentLocked' } }];
+      const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);
+
+      const params = {
+        nodes: [node],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+
+      const result = handleStructuredContentNode(params);
+
+      expect(result.attrs.lockMode).toBe('contentLocked');
+    });
+
+    it('parses sdtContentLocked lock mode', () => {
+      const sdtPrElements = [{ name: 'w:lock', attributes: { 'w:val': 'sdtContentLocked' } }];
+      const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);
+
+      const params = {
+        nodes: [node],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+
+      const result = handleStructuredContentNode(params);
+
+      expect(result.attrs.lockMode).toBe('sdtContentLocked');
+    });
+
+    it('defaults to unlocked when w:lock element is missing', () => {
+      const sdtPrElements = [{ name: 'w:tag', attributes: { 'w:val': 'test' } }];
+      const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);
+
+      const params = {
+        nodes: [node],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+
+      const result = handleStructuredContentNode(params);
+
+      expect(result.attrs.lockMode).toBe('unlocked');
+    });
+
+    it('defaults to unlocked for invalid lock mode values', () => {
+      const sdtPrElements = [{ name: 'w:lock', attributes: { 'w:val': 'invalidMode' } }];
+      const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);
+
+      const params = {
+        nodes: [node],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+
+      const result = handleStructuredContentNode(params);
+
+      expect(result.attrs.lockMode).toBe('unlocked');
+    });
+
+    it('parses unlocked lock mode explicitly', () => {
+      const sdtPrElements = [{ name: 'w:lock', attributes: { 'w:val': 'unlocked' } }];
+      const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);
+
+      const params = {
+        nodes: [node],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+
+      const result = handleStructuredContentNode(params);
+
+      expect(result.attrs.lockMode).toBe('unlocked');
+    });
+  });
 });

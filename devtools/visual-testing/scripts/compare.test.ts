@@ -4,6 +4,10 @@ import {
   findLatestResultsFolder,
   findPngFiles,
   matchesFilterWithBrowserPrefix,
+  docPathToScreenshotFilter,
+  buildRestoreCandidates,
+  shouldRestoreAfterBaselineSwitch,
+  restoreSuperdocVersion,
 } from './compare.js';
 
 describe('extractVersionFromFolder', () => {
@@ -110,5 +114,97 @@ describe('matchesFilterWithBrowserPrefix', () => {
     const value = 'tables/doc/p001.png';
     const result = matchesFilterWithBrowserPrefix(value, undefined, ['tables'], [], []);
     expect(result).toBe(true);
+  });
+});
+
+describe('docPathToScreenshotFilter', () => {
+  it('converts a nested .docx path to its screenshot filter', () => {
+    expect(docPathToScreenshotFilter('comments-tcs/basic-comments.docx')).toBe('comments-tcs/basic-comments');
+  });
+
+  it('converts a flat .docx path to a bare name', () => {
+    expect(docPathToScreenshotFilter('simple.docx')).toBe('simple');
+  });
+
+  it('sanitizes special characters in the filename', () => {
+    expect(docPathToScreenshotFilter('folder/My Doc (v2).docx')).toBe('folder/my-doc-v2');
+  });
+
+  it('strips the test-docs/ prefix', () => {
+    expect(docPathToScreenshotFilter('test-docs/basic/simple.docx')).toBe('basic/simple');
+  });
+
+  it('strips leading ./ and backslashes', () => {
+    expect(docPathToScreenshotFilter('./basic\\nested.docx')).toBe('basic/nested');
+  });
+
+  it('handles a path with no extension', () => {
+    expect(docPathToScreenshotFilter('folder/readme')).toBe('folder/readme');
+  });
+});
+
+describe('buildRestoreCandidates', () => {
+  it('prefers harness specifier and adds installed version fallback', () => {
+    expect(buildRestoreCandidates('file:../superdoc/superdoc.tgz', '1.4.0')).toEqual([
+      'file:../superdoc/superdoc.tgz',
+      '1.4.0',
+    ]);
+  });
+
+  it('deduplicates identical candidates', () => {
+    expect(buildRestoreCandidates('1.4.0', '1.4.0')).toEqual(['1.4.0']);
+  });
+
+  it('skips unknown candidate values', () => {
+    expect(buildRestoreCandidates('unknown', 'unknown')).toEqual([]);
+  });
+});
+
+describe('shouldRestoreAfterBaselineSwitch', () => {
+  it('returns false without versionSpec', () => {
+    expect(shouldRestoreAfterBaselineSwitch(undefined, undefined, ['1.4.0'])).toBe(false);
+  });
+
+  it('returns false when running in --target mode', () => {
+    expect(shouldRestoreAfterBaselineSwitch('1.4.0', '1.5.0', ['1.3.0'])).toBe(false);
+  });
+
+  it('returns false when current and baseline versions match after normalization', () => {
+    expect(shouldRestoreAfterBaselineSwitch('1.4.0', undefined, ['v.1.4.0'])).toBe(false);
+  });
+
+  it('returns true when baseline switch changes version context', () => {
+    expect(shouldRestoreAfterBaselineSwitch('1.4.0', undefined, ['1.3.0'])).toBe(true);
+  });
+});
+
+describe('restoreSuperdocVersion', () => {
+  it('stops after first successful restore', async () => {
+    const calls: string[] = [];
+    await restoreSuperdocVersion(['1.4.0', '1.3.0'], async (candidate) => {
+      calls.push(candidate);
+    });
+
+    expect(calls).toEqual(['1.4.0']);
+  });
+
+  it('falls back to the next candidate after a failure', async () => {
+    const calls: string[] = [];
+    await restoreSuperdocVersion(['bad', '1.4.0'], async (candidate) => {
+      calls.push(candidate);
+      if (candidate === 'bad') {
+        throw new Error('install failed');
+      }
+    });
+
+    expect(calls).toEqual(['bad', '1.4.0']);
+  });
+
+  it('throws with attempted candidates when all restores fail', async () => {
+    await expect(
+      restoreSuperdocVersion(['bad-a', 'bad-b'], async (candidate) => {
+        throw new Error(`failed:${candidate}`);
+      }),
+    ).rejects.toThrow('Unable to restore previous SuperDoc version.');
   });
 });

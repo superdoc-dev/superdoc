@@ -13,7 +13,29 @@ npm install @superdoc-dev/react
 ```
 
 <Note>
-`superdoc` is included as a dependency - you don't need to install it separately.
+`superdoc` is included as a dependency, so `npm install @superdoc-dev/react` works out of the box.
+
+If you need to pin the underlying `superdoc` version, add an override in your app's `package.json`:
+
+```json
+{
+  "overrides": {
+    "superdoc": "1.14.1"
+  }
+}
+```
+
+For pnpm, use:
+
+```json
+{
+  "pnpm": {
+    "overrides": {
+      "superdoc": "1.14.1"
+    }
+  }
+}
+```
 </Note>
 
 ## Quick Start
@@ -150,6 +172,74 @@ Once you have the SuperDoc instance via `getInstance()`, you can call any SuperD
 ---
 
 ## Common Patterns
+
+### PDF setup (React)
+
+Use `pdfjs-dist` with `modules.pdf` for predictable PDF rendering.
+
+```jsx
+import { useMemo } from 'react';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
+
+const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+
+function PdfEditor({ document }) {
+  const modules = useMemo(
+    () => ({
+      pdf: {
+        pdfLib: pdfjsLib,
+        setWorker: true,
+        workerSrc,
+        textLayer: true,
+      },
+    }),
+    [],
+  );
+
+  return (
+    <SuperDocEditor
+      document={document} // File/Blob, URL string, or { type: 'pdf', url/data, name }
+      modules={modules}
+      onPdfDocumentReady={() => console.log('PDF ready')}
+    />
+  );
+}
+```
+
+<Tip>
+Use `document.data` for local `File`/`Blob` and `document.url` for remote URLs.
+</Tip>
+
+### Whiteboard stickers (PDF)
+
+When using whiteboard sticker drag/drop in React, register stickers when the whiteboard instance is available and pass the sticker id via `application/sticker`.
+
+```jsx
+const STICKERS = [
+  { id: 'cite-source', src: '/stickers/cite-source.svg', width: 52, height: 52 },
+];
+
+const onStickerDragStart = (event, stickerId) => {
+  event.dataTransfer.setData('application/sticker', stickerId);
+  event.dataTransfer.setData('text/plain', '');
+};
+
+<SuperDocEditor
+  document={file}
+  modules={{ whiteboard: { enabled: true } }}
+  onReady={({ superdoc }) => {
+    const register = (whiteboard) => whiteboard?.register('stickers', STICKERS);
+    superdoc.on('whiteboard:init', ({ whiteboard }) => register(whiteboard));
+    register(superdoc.whiteboard);
+  }}
+/>
+```
+
+<Tip>
+For drop placement, switch whiteboard to `select` mode before dragging stickers.
+</Tip>
 
 ### File Upload
 
@@ -404,20 +494,6 @@ function CollaborativeEditor() {
   Learn more about setting up real-time collaboration
 </Card>
 </CardGroup>
-
-### AI Features
-
-```jsx
-<SuperDocEditor
-  document={file}
-  modules={{
-    ai: {
-      apiKey: 'your-api-key',
-      endpoint: 'https://api.example.com/ai',
-    },
-  }}
-/>
-```
 
 ### Search and Navigate
 

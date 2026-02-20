@@ -1,0 +1,22 @@
+{
+  "name": "@superdoc/document-api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The SuperDoc document API",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./types": {
+      "types": "./src/types/index.ts",
+      "source": "./src/types/index.ts",
+      "default": "./src/types/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ]
+}

@@ -44,13 +44,6 @@
     "typescript": "catalog:"
   },
   "module": "src/index.ts",
-  "optionalDependencies": {
-    "@superdoc-dev/cli-darwin-arm64": "workspace:*",
-    "@superdoc-dev/cli-darwin-x64": "workspace:*",
-    "@superdoc-dev/cli-linux-x64": "workspace:*",
-    "@superdoc-dev/cli-linux-arm64": "workspace:*",
-    "@superdoc-dev/cli-windows-x64": "workspace:*"
-  },
   "publishConfig": {
     "access": "public"
   }

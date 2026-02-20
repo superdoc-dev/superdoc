@@ -705,4 +705,143 @@ describe('writeAdapter', () => {
     expect(trackedReceipt.success).toBe(true);
     expect(insertTrackedChange).toHaveBeenCalledTimes(1);
   });
+
+  // -- blockId + offset adapter normalization --
+
+  it('normalizes blockId + offset to TextAddress and inserts at the correct position', () => {
+    const { editor, dispatch, tr } = makeEditor('Hello');
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        blockId: 'p1',
+        offset: 3,
+        text: 'X',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(receipt.resolution.target).toEqual({
+      kind: 'text',
+      blockId: 'p1',
+      range: { start: 3, end: 3 },
+    });
+    // PM position = block start (1) + offset (3) = 4
+    expect(tr.insertText).toHaveBeenCalledWith('X', 4, 4);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes blockId without offset to offset 0', () => {
+    const { editor, dispatch, tr } = makeEditor('Hello');
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        blockId: 'p1',
+        text: 'X',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(receipt.resolution.target).toEqual({
+      kind: 'text',
+      blockId: 'p1',
+      range: { start: 0, end: 0 },
+    });
+    expect(tr.insertText).toHaveBeenCalledWith('X', 1, 1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws TARGET_NOT_FOUND for unknown blockId via friendly locator', () => {
+    const { editor } = makeEditor('Hello');
+
+    expect(() =>
+      writeAdapter(
+        editor,
+        {
+          kind: 'insert',
+          blockId: 'missing',
+          text: 'X',
+        },
+        { changeMode: 'direct' },
+      ),
+    ).toThrow('Mutation target could not be resolved.');
+  });
+
+  it('throws INVALID_TARGET when blockId and target are both present (defensive adapter validation)', () => {
+    const { editor } = makeEditor('Hello');
+
+    expect(() =>
+      writeAdapter(
+        editor,
+        {
+          kind: 'insert',
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+          blockId: 'p1',
+          text: 'X',
+        },
+        { changeMode: 'direct' },
+      ),
+    ).toThrow('Cannot combine target with blockId');
+  });
+
+  it('throws INVALID_TARGET when offset is present without blockId (defensive adapter validation)', () => {
+    const { editor } = makeEditor('Hello');
+
+    expect(() =>
+      writeAdapter(
+        editor,
+        {
+          kind: 'insert',
+          offset: 5,
+          text: 'X',
+        } as any,
+        { changeMode: 'direct' },
+      ),
+    ).toThrow('offset requires blockId');
+  });
+
+  it('throws INVALID_TARGET when offset is mixed with canonical target (defensive adapter validation)', () => {
+    const { editor } = makeEditor('Hello');
+
+    expect(() =>
+      writeAdapter(
+        editor,
+        {
+          kind: 'insert',
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+          offset: 3,
+          text: 'X',
+        } as any,
+        { changeMode: 'direct' },
+      ),
+    ).toThrow('Cannot combine target with offset');
+  });
+
+  it('normalizes blockId + offset for tracked inserts', () => {
+    const { editor, insertTrackedChange } = makeEditor('Hello');
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        blockId: 'p1',
+        offset: 2,
+        text: 'X',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(insertTrackedChange).toHaveBeenCalledTimes(1);
+    expect(insertTrackedChange.mock.calls[0]?.[0]).toMatchObject({
+      from: 3,
+      to: 3,
+      text: 'X',
+    });
+  });
 });

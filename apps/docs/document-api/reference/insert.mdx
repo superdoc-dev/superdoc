@@ -23,6 +23,7 @@ description: Generated reference for insert
 - `TARGET_NOT_FOUND`
 - `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
@@ -34,7 +35,46 @@ description: Generated reference for insert
 ```json
 {
   "additionalProperties": false,
+  "allOf": [
+    {
+      "not": {
+        "required": [
+          "target",
+          "blockId"
+        ]
+      }
+    },
+    {
+      "not": {
+        "required": [
+          "target",
+          "offset"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "offset"
+        ]
+      },
+      "then": {
+        "required": [
+          "blockId"
+        ]
+      }
+    }
+  ],
   "properties": {
+    "blockId": {
+      "description": "Block ID for block-relative targeting.",
+      "type": "string"
+    },
+    "offset": {
+      "description": "Character offset within the block identified by blockId.",
+      "minimum": 0,
+      "type": "integer"
+    },
     "target": {
       "additionalProperties": false,
       "properties": {

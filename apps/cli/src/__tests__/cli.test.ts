@@ -296,6 +296,13 @@ describe('superdoc CLI', () => {
     expect(result.stdout).not.toContain('<doc>  Document path or stdin');
   });
 
+  test('describe command doc.insert includes --block-id and --offset flags', async () => {
+    const result = await runCli(['describe', 'command', 'doc.insert', '--output', 'pretty']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('--block-id');
+    expect(result.stdout).toContain('--offset');
+  });
+
   test('call executes an operation from canonical input payload', async () => {
     const result = await runCli([
       'call',
@@ -947,6 +954,85 @@ describe('superdoc CLI', () => {
     expect(verifyResult.code).toBe(0);
     const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
     expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
+  test('insert with --block-id and --offset targets a specific block position', async () => {
+    const insertSource = join(TEST_DIR, 'insert-blockid-offset-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-blockid-offset-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    // Get a real blockId from the document
+    const target = await firstTextRange(['find', insertSource, '--type', 'text', '--pattern', 'Wilde']);
+
+    const insertResult = await runCli([
+      'insert',
+      insertSource,
+      '--block-id',
+      target.blockId,
+      '--offset',
+      '0',
+      '--text',
+      'CLI_BLOCKID_OFFSET_INSERT_1597',
+      '--out',
+      insertOut,
+    ]);
+
+    expect(insertResult.code).toBe(0);
+
+    const verifyResult = await runCli([
+      'find',
+      insertOut,
+      '--type',
+      'text',
+      '--pattern',
+      'CLI_BLOCKID_OFFSET_INSERT_1597',
+    ]);
+    expect(verifyResult.code).toBe(0);
+    const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
+    expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
+  test('insert with --block-id alone defaults offset to 0', async () => {
+    const insertSource = join(TEST_DIR, 'insert-blockid-only-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-blockid-only-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    const target = await firstTextRange(['find', insertSource, '--type', 'text', '--pattern', 'Wilde']);
+
+    const insertResult = await runCli([
+      'insert',
+      insertSource,
+      '--block-id',
+      target.blockId,
+      '--text',
+      'CLI_BLOCKID_ONLY_INSERT_1597',
+      '--out',
+      insertOut,
+    ]);
+
+    expect(insertResult.code).toBe(0);
+
+    const insertEnvelope = parseJsonOutput<
+      SuccessEnvelope<{
+        target: TextRange;
+      }>
+    >(insertResult);
+    // blockId alone → offset defaults to 0 → collapsed range at start
+    expect(insertEnvelope.data.target.range.start).toBe(0);
+    expect(insertEnvelope.data.target.range.end).toBe(0);
+  });
+
+  test('insert with --offset but no --block-id returns INVALID_ARGUMENT', async () => {
+    const insertSource = join(TEST_DIR, 'insert-offset-no-blockid-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-offset-no-blockid-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    const result = await runCli(['insert', insertSource, '--offset', '5', '--text', 'should-fail', '--out', insertOut]);
+
+    expect(result.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('INVALID_ARGUMENT');
+    expect(envelope.error.message).toContain('offset requires blockId');
   });
 
   test('create paragraph writes output and adds a new paragraph with seed text', async () => {

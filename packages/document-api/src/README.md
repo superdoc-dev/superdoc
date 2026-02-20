@@ -43,7 +43,7 @@ lives in adapter layers that map engine behavior into `QueryResult` and other AP
 - For text selectors (`{ type: 'text', ... }`), `matches` are containing block addresses.
 - Exact matched spans are returned in `context[*].textRanges` as `TextAddress`.
 - Mutating operations should target `TextAddress` values from `context[*].textRanges`.
-- `insert` also supports omitting `target`; adapters resolve a deterministic default insertion point (first paragraph start when available).
+- `insert` supports three targeting modes: canonical `TextAddress`, block-relative (`blockId` + optional `offset`), or default insertion point when all target fields are omitted.
 - Structural creation is exposed under `create.*` (for example `create.paragraph`), separate from text mutations.
 
 ## Adapter Error Convention
@@ -92,6 +92,18 @@ const target = result.context?.[0]?.textRanges?.[0];
 if (target) {
   editor.doc.replace({ target, text: 'bar' });
 }
+```
+
+### Workflow: Block-Relative Insert
+
+Insert text at a specific position within a known block, without constructing a full `TextAddress`:
+
+```ts
+// Insert at the start of a block
+editor.doc.insert({ blockId: 'paragraph-1', text: 'Hello ' });
+
+// Insert at a specific character offset within a block
+editor.doc.insert({ blockId: 'paragraph-1', offset: 5, text: 'world' });
 ```
 
 ### Workflow: Tracked-Mode Insert
@@ -208,9 +220,17 @@ Return document summary metadata (block count, word count, character count).
 
 ### `insert`
 
-Insert text at an optional `TextAddress` target. When `target` is omitted, the adapter resolves a deterministic default insertion point. Supports dry-run and tracked mode.
+Insert text at a target location. Supports three targeting modes:
 
-- **Input**: `InsertInput` (`{ target?, text }`)
+1. **Canonical target**: `{ target: TextAddress, text }` — full address with block ID and range.
+2. **Block-relative**: `{ blockId, offset?, text }` — friendly shorthand. `offset` defaults to 0 when omitted.
+3. **Default insertion point**: `{ text }` — no target; adapter resolves to first paragraph start.
+
+Exactly one targeting mode is allowed per call. Mixing `target` with `blockId`/`offset` throws `INVALID_TARGET`. `offset` without `blockId` throws `INVALID_TARGET`. `offset` must be a non-negative integer.
+
+Supports dry-run and tracked mode.
+
+- **Input**: `InsertInput` (`{ target?, blockId?, offset?, text }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes

@@ -2,7 +2,7 @@
   "contractVersion": "0.1.0",
   "generatedAt": null,
   "sourceCommit": null,
-  "sourceHash": "3e7edc551feb80b42bfa59f928a0ce1f34ecb7cf71952d5a489107089105d543",
+  "sourceHash": "d53e75c131bc35996800d18ff3b67961de5d6d031ba20f4a6a03106e1117acaa",
   "tools": [
     {
       "description": "Read Document API data via `find`.",
@@ -1013,7 +1013,36 @@
       "idempotency": "non-idempotent",
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "offset"]
+            }
+          },
+          {
+            "if": {
+              "required": ["offset"]
+            },
+            "then": {
+              "required": ["blockId"]
+            }
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative targeting.",
+            "type": "string"
+          },
+          "offset": {
+            "description": "Character offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -1356,7 +1385,12 @@
         ]
       },
       "possibleFailureCodes": ["INVALID_TARGET", "NO_OP"],
-      "preApplyThrows": ["TARGET_NOT_FOUND", "TRACK_CHANGE_COMMAND_UNAVAILABLE", "CAPABILITY_UNAVAILABLE"],
+      "preApplyThrows": [
+        "TARGET_NOT_FOUND",
+        "TRACK_CHANGE_COMMAND_UNAVAILABLE",
+        "CAPABILITY_UNAVAILABLE",
+        "INVALID_TARGET"
+      ],
       "remediationHints": [],
       "successSchema": {
         "additionalProperties": false,

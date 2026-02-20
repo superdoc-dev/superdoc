@@ -68,6 +68,51 @@ type ResolvedWriteTarget = {
   resolution: ReturnType<typeof buildTextMutationResolution>;
 };
 
+/**
+ * Normalize block-relative locator fields (blockId + offset) into a canonical TextAddress.
+ * This runs inside the adapter layer so that the resolution uses engine-specific block lookup.
+ *
+ * Returns the original request unchanged when no friendly locator is present.
+ */
+function normalizeInsertLocator(request: WriteRequest): WriteRequest {
+  if (request.kind !== 'insert') return request;
+
+  const hasBlockId = request.blockId !== undefined;
+  const hasOffset = request.offset !== undefined;
+
+  // Defensive: reject offset mixed with canonical target.
+  if (hasOffset && request.target) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
+      fields: ['target', 'offset'],
+    });
+  }
+
+  // Defensive: reject orphaned offset without blockId (safety net for direct adapter callers).
+  if (hasOffset && !hasBlockId) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
+      fields: ['offset', 'blockId'],
+    });
+  }
+
+  if (!hasBlockId) return request;
+
+  // Defensive: reject mixed locator modes at adapter boundary (safety net).
+  if (request.target) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
+      fields: ['target', 'blockId'],
+    });
+  }
+
+  const effectiveOffset = request.offset ?? 0;
+  const target: TextAddress = {
+    kind: 'text',
+    blockId: request.blockId,
+    range: { start: effectiveOffset, end: effectiveOffset },
+  };
+
+  return { kind: 'insert', target, text: request.text };
+}
+
 function resolveWriteTarget(editor: Editor, request: WriteRequest): ResolvedWriteTarget | null {
   const requestedTarget = request.target;
 
@@ -184,14 +229,18 @@ function toFailureReceipt(failure: ReceiptFailure, resolvedTarget: ResolvedWrite
 }
 
 export function writeAdapter(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
-  const resolvedTarget = resolveWriteTarget(editor, request);
+  // Normalize friendly locator fields (blockId + offset) into canonical TextAddress
+  // before resolution. This is the adapter-layer normalization per the contract.
+  const normalizedRequest = normalizeInsertLocator(request);
+
+  const resolvedTarget = resolveWriteTarget(editor, normalizedRequest);
   if (!resolvedTarget) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {
-      target: request.target,
+      target: normalizedRequest.target,
     });
   }
 
-  const validationFailure = validateWriteRequest(request, resolvedTarget);
+  const validationFailure = validateWriteRequest(normalizedRequest, resolvedTarget);
   if (validationFailure) {
     return toFailureReceipt(validationFailure, resolvedTarget);
   }
@@ -203,8 +252,8 @@ export function writeAdapter(editor: Editor, request: WriteRequest, options?: Mu
   }
 
   if (mode === 'tracked') {
-    return applyTrackedWrite(editor, request, resolvedTarget);
+    return applyTrackedWrite(editor, normalizedRequest, resolvedTarget);
   }
 
-  return applyDirectWrite(editor, request, resolvedTarget);
+  return applyDirectWrite(editor, normalizedRequest, resolvedTarget);
 }

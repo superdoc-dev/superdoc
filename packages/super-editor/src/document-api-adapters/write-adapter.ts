@@ -69,48 +69,99 @@ type ResolvedWriteTarget = {
 };
 
 /**
- * Normalize block-relative locator fields (blockId + offset) into a canonical TextAddress.
+ * Normalize block-relative locator fields into a canonical TextAddress.
  * This runs inside the adapter layer so that the resolution uses engine-specific block lookup.
+ *
+ * - Insert: blockId + offset → collapsed TextAddress
+ * - Replace/Delete: blockId + start + end → ranged TextAddress
  *
  * Returns the original request unchanged when no friendly locator is present.
  */
-function normalizeInsertLocator(request: WriteRequest): WriteRequest {
-  if (request.kind !== 'insert') return request;
+function normalizeWriteLocator(request: WriteRequest): WriteRequest {
+  if (request.kind === 'insert') {
+    const hasBlockId = request.blockId !== undefined;
+    const hasOffset = request.offset !== undefined;
 
-  const hasBlockId = request.blockId !== undefined;
-  const hasOffset = request.offset !== undefined;
+    // Defensive: reject offset mixed with canonical target.
+    if (hasOffset && request.target) {
+      throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
+        fields: ['target', 'offset'],
+      });
+    }
 
-  // Defensive: reject offset mixed with canonical target.
-  if (hasOffset && request.target) {
-    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
-      fields: ['target', 'offset'],
-    });
+    // Defensive: reject orphaned offset without blockId (safety net for direct adapter callers).
+    if (hasOffset && !hasBlockId) {
+      throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
+        fields: ['offset', 'blockId'],
+      });
+    }
+
+    if (!hasBlockId) return request;
+
+    // Defensive: reject mixed locator modes at adapter boundary (safety net).
+    if (request.target) {
+      throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
+        fields: ['target', 'blockId'],
+      });
+    }
+
+    const effectiveOffset = request.offset ?? 0;
+    const target: TextAddress = {
+      kind: 'text',
+      blockId: request.blockId!,
+      range: { start: effectiveOffset, end: effectiveOffset },
+    };
+
+    return { kind: 'insert', target, text: request.text };
   }
 
-  // Defensive: reject orphaned offset without blockId (safety net for direct adapter callers).
-  if (hasOffset && !hasBlockId) {
-    throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
-      fields: ['offset', 'blockId'],
-    });
+  // replace / delete: range normalization (blockId + start + end → TextAddress)
+  if (request.kind === 'replace' || request.kind === 'delete') {
+    const hasBlockId = request.blockId !== undefined;
+    const hasStart = request.start !== undefined;
+    const hasEnd = request.end !== undefined;
+
+    // Defensive: reject range fields mixed with canonical target.
+    if (request.target && (hasBlockId || hasStart || hasEnd)) {
+      throw new DocumentApiAdapterError(
+        'INVALID_TARGET',
+        `Cannot combine target with blockId/start/end on ${request.kind} request.`,
+        { fields: ['target', 'blockId', 'start', 'end'] },
+      );
+    }
+
+    // Defensive: reject orphaned start/end without blockId.
+    if (!hasBlockId && (hasStart || hasEnd)) {
+      throw new DocumentApiAdapterError('INVALID_TARGET', `start/end require blockId on ${request.kind} request.`, {
+        fields: ['blockId', 'start', 'end'],
+      });
+    }
+
+    if (!hasBlockId) return request;
+
+    // Defensive: reject incomplete range.
+    if (!hasStart || !hasEnd) {
+      throw new DocumentApiAdapterError(
+        'INVALID_TARGET',
+        `blockId requires both start and end on ${request.kind} request.`,
+        { fields: ['blockId', 'start', 'end'] },
+      );
+    }
+
+    const target: TextAddress = {
+      kind: 'text',
+      blockId: request.blockId!,
+      range: { start: request.start!, end: request.end! },
+    };
+
+    // Construct clean canonical objects — no leftover friendly fields.
+    if (request.kind === 'replace') {
+      return { kind: 'replace', target, text: request.text };
+    }
+    return { kind: 'delete', target, text: '' };
   }
 
-  if (!hasBlockId) return request;
-
-  // Defensive: reject mixed locator modes at adapter boundary (safety net).
-  if (request.target) {
-    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
-      fields: ['target', 'blockId'],
-    });
-  }
-
-  const effectiveOffset = request.offset ?? 0;
-  const target: TextAddress = {
-    kind: 'text',
-    blockId: request.blockId,
-    range: { start: effectiveOffset, end: effectiveOffset },
-  };
-
-  return { kind: 'insert', target, text: request.text };
+  return request;
 }
 
 function resolveWriteTarget(editor: Editor, request: WriteRequest): ResolvedWriteTarget | null {
@@ -231,7 +282,7 @@ function toFailureReceipt(failure: ReceiptFailure, resolvedTarget: ResolvedWrite
 export function writeAdapter(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
   // Normalize friendly locator fields (blockId + offset) into canonical TextAddress
   // before resolution. This is the adapter-layer normalization per the contract.
-  const normalizedRequest = normalizeInsertLocator(request);
+  const normalizedRequest = normalizeWriteLocator(request);
 
   const resolvedTarget = resolveWriteTarget(editor, normalizedRequest);
   if (!resolvedTarget) {

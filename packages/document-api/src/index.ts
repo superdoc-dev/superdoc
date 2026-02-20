@@ -180,6 +180,8 @@ export type {
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 export { DocumentApiValidationError } from './errors.js';
 export type { InsertInput } from './insert/insert.js';
+export type { ReplaceInput } from './replace/replace.js';
+export type { DeleteInput } from './delete/delete.js';
 
 /**
  * Callable capability accessor returned by `createDocumentApi`.

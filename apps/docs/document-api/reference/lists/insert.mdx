@@ -24,6 +24,7 @@ description: Generated reference for lists.insert
 - `COMMAND_UNAVAILABLE`
 - `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
@@ -34,7 +35,23 @@ description: Generated reference for lists.insert
 ```json
 {
   "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
   "properties": {
+    "nodeId": {
+      "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+      "type": "string"
+    },
     "position": {
       "enum": [
         "before",
@@ -66,7 +83,6 @@ description: Generated reference for lists.insert
     }
   },
   "required": [
-    "target",
     "position"
   ],
   "type": "object"

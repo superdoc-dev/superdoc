@@ -1320,7 +1320,70 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "start"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["start"]
+            },
+            "then": {
+              "required": ["blockId", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["end"]
+            },
+            "then": {
+              "required": ["blockId", "start"]
+            }
+          },
+          {
+            "if": {
+              "required": ["blockId"]
+            },
+            "then": {
+              "required": ["start", "end"]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["blockId", "start", "end"]
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative range targeting.",
+            "type": "string"
+          },
+          "end": {
+            "description": "End offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -1351,7 +1414,7 @@
             "type": "string"
           }
         },
-        "required": ["target", "text"],
+        "required": ["text"],
         "type": "object"
       },
       "memberPath": "comments.add",
@@ -1364,7 +1427,7 @@
         "supportsTrackedMode": false,
         "throws": {
           "postApplyForbidden": true,
-          "preApply": ["TARGET_NOT_FOUND", "COMMAND_UNAVAILABLE", "CAPABILITY_UNAVAILABLE"]
+          "preApply": ["TARGET_NOT_FOUND", "COMMAND_UNAVAILABLE", "CAPABILITY_UNAVAILABLE", "INVALID_TARGET"]
         }
       },
       "outputSchema": {
@@ -2377,9 +2440,72 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "start"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["start"]
+            },
+            "then": {
+              "required": ["blockId", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["end"]
+            },
+            "then": {
+              "required": ["blockId", "start"]
+            }
+          },
+          {
+            "if": {
+              "required": ["blockId"]
+            },
+            "then": {
+              "required": ["start", "end"]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["blockId", "start", "end"]
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative range targeting.",
+            "type": "string"
+          },
           "commentId": {
             "type": "string"
+          },
+          "end": {
+            "description": "End offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
           },
           "target": {
             "additionalProperties": false,
@@ -2408,7 +2534,7 @@
             "type": "object"
           }
         },
-        "required": ["commentId", "target"],
+        "required": ["commentId"],
         "type": "object"
       },
       "memberPath": "comments.move",
@@ -2421,7 +2547,7 @@
         "supportsTrackedMode": false,
         "throws": {
           "postApplyForbidden": true,
-          "preApply": ["TARGET_NOT_FOUND", "COMMAND_UNAVAILABLE", "CAPABILITY_UNAVAILABLE"]
+          "preApply": ["TARGET_NOT_FOUND", "COMMAND_UNAVAILABLE", "CAPABILITY_UNAVAILABLE", "INVALID_TARGET"]
         }
       },
       "outputSchema": {
@@ -4420,35 +4546,21 @@
               },
               {
                 "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": ["target"]
+                  },
+                  {
+                    "required": ["nodeId"]
+                  }
+                ],
                 "properties": {
                   "kind": {
                     "const": "before"
                   },
-                  "target": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "kind": {
-                        "const": "block"
-                      },
-                      "nodeId": {
-                        "type": "string"
-                      },
-                      "nodeType": {
-                        "enum": ["paragraph", "heading", "listItem", "table", "tableRow", "tableCell", "image", "sdt"]
-                      }
-                    },
-                    "required": ["kind", "nodeType", "nodeId"],
-                    "type": "object"
-                  }
-                },
-                "required": ["kind", "target"],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "const": "after"
+                  "nodeId": {
+                    "description": "Node ID shorthand — adapter resolves to a full BlockNodeAddress.",
+                    "type": "string"
                   },
                   "target": {
                     "additionalProperties": false,
@@ -4467,7 +4579,45 @@
                     "type": "object"
                   }
                 },
-                "required": ["kind", "target"],
+                "required": ["kind"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": ["target"]
+                  },
+                  {
+                    "required": ["nodeId"]
+                  }
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "after"
+                  },
+                  "nodeId": {
+                    "description": "Node ID shorthand — adapter resolves to a full BlockNodeAddress.",
+                    "type": "string"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "block"
+                      },
+                      "nodeId": {
+                        "type": "string"
+                      },
+                      "nodeType": {
+                        "enum": ["paragraph", "heading", "listItem", "table", "tableRow", "tableCell", "image", "sdt"]
+                      }
+                    },
+                    "required": ["kind", "nodeType", "nodeId"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind"],
                 "type": "object"
               }
             ]
@@ -4498,7 +4648,9 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET",
+            "AMBIGUOUS_TARGET"
           ]
         }
       },
@@ -4725,35 +4877,21 @@
               },
               {
                 "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": ["target"]
+                  },
+                  {
+                    "required": ["nodeId"]
+                  }
+                ],
                 "properties": {
                   "kind": {
                     "const": "before"
                   },
-                  "target": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "kind": {
-                        "const": "block"
-                      },
-                      "nodeId": {
-                        "type": "string"
-                      },
-                      "nodeType": {
-                        "enum": ["paragraph", "heading", "listItem", "table", "tableRow", "tableCell", "image", "sdt"]
-                      }
-                    },
-                    "required": ["kind", "nodeType", "nodeId"],
-                    "type": "object"
-                  }
-                },
-                "required": ["kind", "target"],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "const": "after"
+                  "nodeId": {
+                    "description": "Node ID shorthand — adapter resolves to a full BlockNodeAddress.",
+                    "type": "string"
                   },
                   "target": {
                     "additionalProperties": false,
@@ -4772,7 +4910,45 @@
                     "type": "object"
                   }
                 },
-                "required": ["kind", "target"],
+                "required": ["kind"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": ["target"]
+                  },
+                  {
+                    "required": ["nodeId"]
+                  }
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "after"
+                  },
+                  "nodeId": {
+                    "description": "Node ID shorthand — adapter resolves to a full BlockNodeAddress.",
+                    "type": "string"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "block"
+                      },
+                      "nodeId": {
+                        "type": "string"
+                      },
+                      "nodeType": {
+                        "enum": ["paragraph", "heading", "listItem", "table", "tableRow", "tableCell", "image", "sdt"]
+                      }
+                    },
+                    "required": ["kind", "nodeType", "nodeId"],
+                    "type": "object"
+                  }
+                },
+                "required": ["kind"],
                 "type": "object"
               }
             ]
@@ -4797,7 +4973,9 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET",
+            "AMBIGUOUS_TARGET"
           ]
         }
       },
@@ -5074,7 +5252,70 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "start"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["start"]
+            },
+            "then": {
+              "required": ["blockId", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["end"]
+            },
+            "then": {
+              "required": ["blockId", "start"]
+            }
+          },
+          {
+            "if": {
+              "required": ["blockId"]
+            },
+            "then": {
+              "required": ["start", "end"]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["blockId", "start", "end"]
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative range targeting.",
+            "type": "string"
+          },
+          "end": {
+            "description": "End offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -5102,7 +5343,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "delete",
@@ -5115,7 +5355,12 @@
         "supportsTrackedMode": true,
         "throws": {
           "postApplyForbidden": true,
-          "preApply": ["TARGET_NOT_FOUND", "TRACK_CHANGE_COMMAND_UNAVAILABLE", "CAPABILITY_UNAVAILABLE"]
+          "preApply": [
+            "TARGET_NOT_FOUND",
+            "TRACK_CHANGE_COMMAND_UNAVAILABLE",
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
+          ]
         }
       },
       "outputSchema": {
@@ -6296,7 +6541,70 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "start"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["start"]
+            },
+            "then": {
+              "required": ["blockId", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["end"]
+            },
+            "then": {
+              "required": ["blockId", "start"]
+            }
+          },
+          {
+            "if": {
+              "required": ["blockId"]
+            },
+            "then": {
+              "required": ["start", "end"]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["blockId", "start", "end"]
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative range targeting.",
+            "type": "string"
+          },
+          "end": {
+            "description": "End offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -6324,7 +6632,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "format.bold",
@@ -6341,7 +6648,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -6955,7 +7263,70 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "start"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["start"]
+            },
+            "then": {
+              "required": ["blockId", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["end"]
+            },
+            "then": {
+              "required": ["blockId", "start"]
+            }
+          },
+          {
+            "if": {
+              "required": ["blockId"]
+            },
+            "then": {
+              "required": ["start", "end"]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["blockId", "start", "end"]
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative range targeting.",
+            "type": "string"
+          },
+          "end": {
+            "description": "End offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -6983,7 +7354,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "format.italic",
@@ -7000,7 +7370,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -7614,7 +7985,70 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "start"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["start"]
+            },
+            "then": {
+              "required": ["blockId", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["end"]
+            },
+            "then": {
+              "required": ["blockId", "start"]
+            }
+          },
+          {
+            "if": {
+              "required": ["blockId"]
+            },
+            "then": {
+              "required": ["start", "end"]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["blockId", "start", "end"]
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative range targeting.",
+            "type": "string"
+          },
+          "end": {
+            "description": "End offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -7642,7 +8076,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "format.strikethrough",
@@ -7659,7 +8092,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -8273,7 +8707,70 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "start"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["start"]
+            },
+            "then": {
+              "required": ["blockId", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["end"]
+            },
+            "then": {
+              "required": ["blockId", "start"]
+            }
+          },
+          {
+            "if": {
+              "required": ["blockId"]
+            },
+            "then": {
+              "required": ["start", "end"]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["blockId", "start", "end"]
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative range targeting.",
+            "type": "string"
+          },
+          "end": {
+            "description": "End offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -8301,7 +8798,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "format.underline",
@@ -8318,7 +8814,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -9894,7 +10391,19 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["nodeId"]
+          }
+        ],
         "properties": {
+          "nodeId": {
+            "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+            "type": "string"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -9912,7 +10421,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "lists.exit",
@@ -9929,7 +10437,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -10123,7 +10632,19 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["nodeId"]
+          }
+        ],
         "properties": {
+          "nodeId": {
+            "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+            "type": "string"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -10141,7 +10662,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "lists.indent",
@@ -10158,7 +10678,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -10270,7 +10791,19 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["nodeId"]
+          }
+        ],
         "properties": {
+          "nodeId": {
+            "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+            "type": "string"
+          },
           "position": {
             "enum": ["before", "after"]
           },
@@ -10294,7 +10827,7 @@
             "type": "string"
           }
         },
-        "required": ["target", "position"],
+        "required": ["position"],
         "type": "object"
       },
       "memberPath": "lists.insert",
@@ -10311,7 +10844,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -10641,7 +11175,19 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["nodeId"]
+          }
+        ],
         "properties": {
+          "nodeId": {
+            "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+            "type": "string"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -10659,7 +11205,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "lists.outdent",
@@ -10676,7 +11221,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -10788,7 +11334,19 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["nodeId"]
+          }
+        ],
         "properties": {
+          "nodeId": {
+            "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+            "type": "string"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -10806,7 +11364,6 @@
             "type": "object"
           }
         },
-        "required": ["target"],
         "type": "object"
       },
       "memberPath": "lists.restart",
@@ -10823,7 +11380,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -10935,9 +11493,21 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["nodeId"]
+          }
+        ],
         "properties": {
           "kind": {
             "enum": ["ordered", "bullet"]
+          },
+          "nodeId": {
+            "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+            "type": "string"
           },
           "target": {
             "additionalProperties": false,
@@ -10956,7 +11526,7 @@
             "type": "object"
           }
         },
-        "required": ["target", "kind"],
+        "required": ["kind"],
         "type": "object"
       },
       "memberPath": "lists.setType",
@@ -10973,7 +11543,8 @@
             "TARGET_NOT_FOUND",
             "COMMAND_UNAVAILABLE",
             "TRACK_CHANGE_COMMAND_UNAVAILABLE",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
           ]
         }
       },
@@ -11160,7 +11731,70 @@
       },
       "inputSchema": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "not": {
+              "required": ["target", "blockId"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "start"]
+            }
+          },
+          {
+            "not": {
+              "required": ["target", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["start"]
+            },
+            "then": {
+              "required": ["blockId", "end"]
+            }
+          },
+          {
+            "if": {
+              "required": ["end"]
+            },
+            "then": {
+              "required": ["blockId", "start"]
+            }
+          },
+          {
+            "if": {
+              "required": ["blockId"]
+            },
+            "then": {
+              "required": ["start", "end"]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": ["target"]
+          },
+          {
+            "required": ["blockId", "start", "end"]
+          }
+        ],
         "properties": {
+          "blockId": {
+            "description": "Block ID for block-relative range targeting.",
+            "type": "string"
+          },
+          "end": {
+            "description": "End offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start offset within the block identified by blockId.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "target": {
             "additionalProperties": false,
             "properties": {
@@ -11191,7 +11825,7 @@
             "type": "string"
           }
         },
-        "required": ["target", "text"],
+        "required": ["text"],
         "type": "object"
       },
       "memberPath": "replace",
@@ -11204,7 +11838,12 @@
         "supportsTrackedMode": true,
         "throws": {
           "postApplyForbidden": true,
-          "preApply": ["TARGET_NOT_FOUND", "TRACK_CHANGE_COMMAND_UNAVAILABLE", "CAPABILITY_UNAVAILABLE"]
+          "preApply": [
+            "TARGET_NOT_FOUND",
+            "TRACK_CHANGE_COMMAND_UNAVAILABLE",
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET"
+          ]
         }
       },
       "outputSchema": {
@@ -13206,5 +13845,5 @@
     }
   },
   "sourceCommit": null,
-  "sourceHash": "d53e75c131bc35996800d18ff3b67961de5d6d031ba20f4a6a03106e1117acaa"
+  "sourceHash": "dd10c0218ba8a9148e8a3412053672bbbe88976f7a779650602aa98dec6efeee"
 }

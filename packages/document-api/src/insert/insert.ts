@@ -1,6 +1,7 @@
 import { executeWrite, type MutationOptions, type WriteAdapter } from '../write/write.js';
 import type { TextAddress, TextMutationReceipt } from '../types/index.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { isRecord, isTextAddress, assertNoUnknownFields, assertNonNegativeInteger } from '../validation-primitives.js';
 
 export interface InsertInput {
   target?: TextAddress;
@@ -18,30 +19,8 @@ export interface InsertInput {
  */
 const INSERT_INPUT_ALLOWED_KEYS = new Set(['text', 'target', 'blockId', 'offset']);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value != null && !Array.isArray(value);
-}
-
-function isInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value);
-}
-
-function isTextAddress(value: unknown): value is TextAddress {
-  if (!isRecord(value)) return false;
-  if (value.kind !== 'text') return false;
-  if (typeof value.blockId !== 'string') return false;
-
-  const range = value.range;
-  if (!isRecord(range)) return false;
-  if (!isInteger(range.start) || !isInteger(range.end)) return false;
-  return range.start <= range.end;
-}
-
 /**
  * Validates InsertInput and throws DocumentApiValidationError on violations.
- *
- * This is the first input validation in an execute* function in the document-api —
- * a new pattern. Previously all validation lived in the adapter layer.
  *
  * Validation order:
  * 0. Input shape guard (must be non-null plain object)
@@ -58,27 +37,17 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
     throw new DocumentApiValidationError('INVALID_TARGET', 'Insert input must be a non-null object.');
   }
 
-  const inputObj = input;
-
   // Step 1: pos runtime rejection (PR A — pos is not yet supported)
-  if ('pos' in inputObj) {
+  if ('pos' in input) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'pos locator is not yet supported.', {
       field: 'pos',
     });
   }
 
   // Step 2: Unknown field rejection (strict allowlist)
-  for (const key of Object.keys(inputObj)) {
-    if (!INSERT_INPUT_ALLOWED_KEYS.has(key)) {
-      throw new DocumentApiValidationError(
-        'INVALID_TARGET',
-        `Unknown field "${key}" on insert input. Allowed fields: ${[...INSERT_INPUT_ALLOWED_KEYS].join(', ')}.`,
-        { field: key },
-      );
-    }
-  }
+  assertNoUnknownFields(input, INSERT_INPUT_ALLOWED_KEYS, 'insert');
 
-  const { target, text, blockId, offset } = inputObj;
+  const { target, text, blockId, offset } = input;
   const hasTarget = target !== undefined;
   const hasBlockId = blockId !== undefined;
   const hasOffset = offset !== undefined;
@@ -130,13 +99,7 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
 
   // Step 6: Numeric bounds — offset must be a non-negative integer
   if (hasOffset) {
-    if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) {
-      throw new DocumentApiValidationError(
-        'INVALID_TARGET',
-        `offset must be a non-negative integer, got ${JSON.stringify(offset)}.`,
-        { field: 'offset', value: offset },
-      );
-    }
+    assertNonNegativeInteger(offset, 'offset');
   }
 }
 

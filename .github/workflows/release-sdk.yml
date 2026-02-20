@@ -96,7 +96,10 @@ jobs:
 
       - name: Publish Node SDK (dry run)
         if: ${{ inputs.dry-run }}
-        run: pnpm --prefix packages/sdk/langs/node publish --access public --tag latest --no-git-checks --dry-run
+        run: |
+          echo "Would publish the following Node package:"
+          pnpm --prefix packages/sdk/langs/node pack
+          ls -la packages/sdk/langs/node/*.tgz
 
       # ---------------------------------------------------------------
       # Python SDK

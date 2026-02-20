@@ -2077,6 +2077,9 @@ export class PresentationEditor extends EventEmitter {
     const layout = this.#layoutState.layout;
     if (!layout) return false;
 
+    // Reject non-finite or non-integer input to fail fast instead of timing out
+    if (!Number.isInteger(pageNumber)) return false;
+
     // Convert 1-based page number to 0-based index
     const pageIndex = pageNumber - 1;
 
@@ -4452,11 +4455,17 @@ export class PresentationEditor extends EventEmitter {
     const layout = this.#layoutState.layout;
     if (!layout) return;
 
-    const pageHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
+    const defaultHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
     const virtualGap = this.#layoutOptions.virtualization?.gap ?? 0;
 
-    // Calculate approximate y position for the page
-    const yPosition = pageIndex * (pageHeight + virtualGap);
+    // Use cumulative per-page heights so mixed-size documents scroll to the
+    // correct position. The renderer's virtualizer uses the same prefix-sum
+    // approach, so the scroll position lands inside the correct window.
+    let yPosition = 0;
+    for (let i = 0; i < pageIndex; i++) {
+      const pageHeight = layout.pages[i]?.size?.h ?? defaultHeight;
+      yPosition += pageHeight + virtualGap;
+    }
 
     // Scroll viewport to the calculated position
     if (this.#visibleHost) {

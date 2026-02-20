@@ -122,6 +122,11 @@ export interface SuperDocESignProps {
 
   pdf?: PdfModuleConfig;
 
+  /** Telemetry configuration for SuperDoc */
+  telemetry?: { enabled: boolean; metadata?: Record<string, any> };
+  /** License key for SuperDoc */
+  licenseKey?: string;
+
   isDisabled?: boolean;
   className?: string;
   style?: React.CSSProperties;

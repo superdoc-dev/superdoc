@@ -2342,6 +2342,15 @@ export class PresentationEditor extends EventEmitter {
       if (transaction) {
         this.#epochMapper.recordTransaction(transaction);
         this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
+
+        // Detect Y.js-origin transactions (remote collaboration changes).
+        // These bypass the blockNodePlugin's sdBlockRev increment to prevent
+        // feedback loops, so the FlowBlockCache's fast revision comparison
+        // cannot be trusted — signal it to fall through to JSON comparison.
+        const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
+        if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
+          this.#flowBlockCache?.setHasExternalChanges(true);
+        }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
         this.#pendingDocChange = true;

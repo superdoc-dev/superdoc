@@ -2,6 +2,7 @@ packages:
   - e2e-tests
   - e2e-tests/templates/vue
   - tests/visual
+  - tests/behavior
   - apps/*
   - packages/**/*
   - shared/*

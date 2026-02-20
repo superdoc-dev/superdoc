@@ -44,6 +44,20 @@ import { Node, Attribute } from '@core/index.js';
  */
 
 /**
+ * Default attributes for a horizontal rule content block.
+ * Single source of truth shared by both `parseDOM` (for `<hr>` tags)
+ * and the `insertHorizontalRule` command.
+ * @returns {ContentBlockAttributes}
+ */
+export function createDefaultHorizontalRuleAttrs() {
+  return {
+    horizontalRule: true,
+    size: { width: '100%', height: 2 },
+    background: '#e5e7eb',
+  };
+}
+
+/**
  * @module ContentBlock
  * @sidebarTitle Content Block
  * @snippetPath /snippets/extensions/content-block.mdx
@@ -147,6 +161,14 @@ export const ContentBlock = Node.create({
     return [
       {
         tag: `div[data-type="${this.name}"]`,
+        // Paragraph registers a broad `tag: 'div'` rule at default priority 50.
+        // Without explicit priority, PM's insertion-order tie-breaking lets
+        // paragraph consume our div first. Priority 60 ensures contentBlock wins.
+        priority: 60,
+      },
+      {
+        tag: 'hr',
+        getAttrs: () => createDefaultHorizontalRuleAttrs(),
       },
     ];
   },
@@ -170,11 +192,7 @@ export const ContentBlock = Node.create({
         ({ commands }) => {
           return commands.insertContent({
             type: this.name,
-            attrs: {
-              horizontalRule: true,
-              size: { width: '100%', height: 2 },
-              background: '#e5e7eb',
-            },
+            attrs: createDefaultHorizontalRuleAttrs(),
           });
         },
 

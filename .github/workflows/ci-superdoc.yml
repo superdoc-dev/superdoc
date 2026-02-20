@@ -33,6 +33,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
       - name: Install canvas system dependencies
         run: |
           sudo apt-get update

@@ -22,13 +22,17 @@ export function createInsertContentTool(actions: AIToolActions): AIToolDefinitio
       const args = step.args ?? {};
       const position: 'before' | 'after' | 'replace' =
         args.position === 'before' || args.position === 'after' ? args.position : 'replace';
+      const contentType =
+        args.contentType === 'html' || args.contentType === 'markdown' || args.contentType === 'text'
+          ? args.contentType
+          : undefined;
 
       const action = actions.insertContent;
       if (typeof action !== 'function') {
         throw new Error(ERROR_MESSAGES.ACTION_NOT_AVAILABLE('insertContent'));
       }
 
-      const result: Result = await action(instruction, { position });
+      const result: Result = await action(instruction, { position, contentType });
       return {
         success: Boolean(result?.success),
         data: result,

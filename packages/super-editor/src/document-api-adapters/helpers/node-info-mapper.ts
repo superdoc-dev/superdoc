@@ -289,48 +289,142 @@ function mapFootnoteRefNode(candidate: InlineCandidate): FootnoteRefNodeInfo {
   return { nodeType: 'footnoteRef', kind: 'inline', properties };
 }
 
+function parseBooleanToken(value: string): boolean | undefined {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === '0' || normalized === 'false' || normalized === 'off' || normalized === 'none') return false;
+  if (normalized === '1' || normalized === 'true' || normalized === 'on' || normalized === 'single') return true;
+  return undefined;
+}
+
+function resolveBooleanLike(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') return parseBooleanToken(value);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const explicit = resolveBooleanLike(
+      record.val ?? record.value ?? record.type ?? record['w:val'] ?? record['w:value'],
+    );
+    if (explicit != null) return explicit;
+    return true;
+  }
+  return undefined;
+}
+
+function resolveUnderlineLike(values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (value == null) continue;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) continue;
+      return normalized !== 'none' && normalized !== 'false' && normalized !== '0';
+    }
+    const resolved = resolveBooleanLike(value);
+    if (resolved != null) return resolved;
+  }
+  return undefined;
+}
+
+function resolveColorValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.val === 'string') return record.val;
+    if (typeof record.value === 'string') return record.value;
+    if (typeof record['w:val'] === 'string') return record['w:val'] as string;
+  }
+  return undefined;
+}
+
+function resolveHighlightValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const highlightValue = record.val ?? record.value ?? record['w:val'];
+    if (typeof highlightValue === 'string') {
+      const normalized = highlightValue.trim();
+      if (!normalized) return undefined;
+      if (normalized.toLowerCase() === 'none') return 'transparent';
+      return normalized;
+    }
+
+    const fill = record.fill ?? record['w:fill'];
+    if (typeof fill === 'string') {
+      const normalized = fill.trim();
+      if (!normalized || normalized.toLowerCase() === 'auto') return undefined;
+      return normalized.startsWith('#') ? normalized : `#${normalized}`;
+    }
+  }
+  return undefined;
+}
+
+function resolveFontValue(runProperties: Record<string, unknown>): string | undefined {
+  const fromRFonts = runProperties.rFonts;
+  if (fromRFonts && typeof fromRFonts === 'object') {
+    const fonts = fromRFonts as Record<string, unknown>;
+    const selected = fonts.ascii ?? fonts.hAnsi ?? fonts.eastAsia ?? fonts.cs;
+    if (typeof selected === 'string') return selected;
+  }
+
+  const fromFontFamily = runProperties.fontFamily;
+  if (typeof fromFontFamily === 'string') return fromFontFamily;
+  if (fromFontFamily && typeof fromFontFamily === 'object') {
+    const fonts = fromFontFamily as Record<string, unknown>;
+    const selected = fonts.ascii ?? fonts.hAnsi ?? fonts.eastAsia ?? fonts.cs;
+    if (typeof selected === 'string') return selected;
+  }
+
+  return undefined;
+}
+
+function resolveFontSizeValue(runProperties: Record<string, unknown>): number | undefined {
+  const candidate = runProperties.sz ?? runProperties.size ?? runProperties.fontSize;
+  if (typeof candidate === 'number') return candidate;
+  if (typeof candidate === 'string') {
+    const parsed = Number.parseFloat(candidate);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 function mapRunNode(candidate: InlineCandidate): RunNodeInfo {
-  const attrs = (candidate.node?.attrs ?? candidate.attrs ?? {}) as {
-    runProperties?: {
-      bold?: boolean;
-      italic?: boolean;
-      underline?: { val?: string } | boolean;
-      rFonts?: { ascii?: string; hAnsi?: string; eastAsia?: string; cs?: string };
-      sz?: number;
-      color?: { val?: string };
-      highlight?: string;
-      rStyle?: string;
-      lang?: { val?: string };
-      u?: { val?: string };
-    } | null;
-  };
-  const runProperties = attrs.runProperties ?? undefined;
-  const underline = Boolean(
-    runProperties?.underline === true ||
-      runProperties?.u?.val === 'single' ||
-      (typeof runProperties?.underline === 'object' &&
-        typeof runProperties?.underline?.val === 'string' &&
-        runProperties.underline.val !== 'none'),
-  );
-  const font =
-    runProperties?.rFonts?.ascii ??
-    runProperties?.rFonts?.hAnsi ??
-    runProperties?.rFonts?.eastAsia ??
-    runProperties?.rFonts?.cs;
+  const attrs = (candidate.node?.attrs ?? candidate.attrs ?? {}) as { runProperties?: Record<string, unknown> | null };
+  const runProperties =
+    attrs.runProperties && typeof attrs.runProperties === 'object'
+      ? (attrs.runProperties as Record<string, unknown>)
+      : undefined;
+  const underline = resolveUnderlineLike([runProperties?.underline, runProperties?.u]);
+  const strike = resolveBooleanLike(runProperties?.strike) ?? resolveBooleanLike(runProperties?.dstrike) ?? undefined;
+  const languageRaw = runProperties?.lang;
+  const language =
+    typeof languageRaw === 'string'
+      ? languageRaw
+      : languageRaw &&
+          typeof languageRaw === 'object' &&
+          typeof (languageRaw as Record<string, unknown>).val === 'string'
+        ? ((languageRaw as Record<string, unknown>).val as string)
+        : undefined;
 
   return {
     nodeType: 'run',
     kind: 'inline',
     properties: {
-      bold: runProperties?.bold ?? undefined,
-      italic: runProperties?.italic ?? undefined,
-      underline: underline || undefined,
-      font: typeof font === 'string' ? font : undefined,
-      size: typeof runProperties?.sz === 'number' ? runProperties.sz : undefined,
-      color: runProperties?.color?.val ?? undefined,
-      highlight: runProperties?.highlight ?? undefined,
-      styleId: runProperties?.rStyle ?? undefined,
-      language: runProperties?.lang?.val ?? undefined,
+      bold: resolveBooleanLike(runProperties?.bold) ?? undefined,
+      italic: resolveBooleanLike(runProperties?.italic) ?? undefined,
+      underline: underline ?? undefined,
+      strike,
+      font: runProperties ? resolveFontValue(runProperties) : undefined,
+      size: runProperties ? resolveFontSizeValue(runProperties) : undefined,
+      color: resolveColorValue(runProperties?.color),
+      highlight: resolveHighlightValue(runProperties?.highlight),
+      styleId:
+        typeof runProperties?.rStyle === 'string'
+          ? runProperties.rStyle
+          : typeof runProperties?.styleId === 'string'
+            ? runProperties.styleId
+            : undefined,
+      language,
     },
   };
 }

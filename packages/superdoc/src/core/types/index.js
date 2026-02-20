@@ -166,6 +166,7 @@
  *   Example (custom font):
  *     uiDisplayFallbackFont: '"Inter", Arial, sans-serif'
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
+ * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
  * @property {Object} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
  * @property {Object} [layoutEngineOptions.trackedChanges] Optional override for paginated track-changes rendering (e.g., `{ mode: 'final' }` to force final view or `{ enabled: false }` to strip metadata entirely)
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created
@@ -200,6 +201,8 @@
  * @property {boolean} [disableContextMenu] Whether to disable slash / right-click custom context menu
  * @property {string} [html] HTML content to initialize the editor with
  * @property {string} [markdown] Markdown content to initialize the editor with
+ * @property {((items: Array<{tagName: string, outerHTML: string, count: number}>) => void) | null} [onUnsupportedContent] Callback invoked with unsupported HTML elements dropped during import. When provided, console.warn is NOT emitted.
+ * @property {boolean} [warnOnUnsupportedContent] When true and no onUnsupportedContent callback is provided, emits a console.warn with unsupported items
  * @property {boolean} [isDebug=false] Whether to enable debug mode
  * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
  * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles

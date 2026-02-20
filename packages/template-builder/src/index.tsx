@@ -113,6 +113,8 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
       list = {},
       toolbar,
       cspNonce,
+      telemetry,
+      licenseKey,
       onReady,
       onTrigger,
       onFieldInsert,
@@ -150,6 +152,13 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
     const availableFields = fieldsRef.current.available || [];
     const toolbarSettings = useMemo(() => resolveToolbar(toolbar), [toolbar]);
+    const stableTelemetry = useMemo(
+      () => ({
+        enabled: telemetry?.enabled ?? true,
+        metadata: { source: 'template-builder', ...telemetry?.metadata },
+      }),
+      [telemetry?.enabled, JSON.stringify(telemetry?.metadata)],
+    );
 
     const computeFilteredFields = useCallback(
       (query: string) => {
@@ -470,6 +479,8 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           modules,
           toolbar: toolbarSettings?.selector,
           cspNonce,
+          telemetry: stableTelemetry,
+          ...(licenseKey && { licenseKey }),
           onReady: handleReady,
         });
 
@@ -491,7 +502,18 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         superdocRef.current = null;
       };
-    }, [document?.source, document?.mode, trigger, discoverFields, onReady, onTrigger, toolbarSettings, cspNonce]);
+    }, [
+      document?.source,
+      document?.mode,
+      trigger,
+      discoverFields,
+      onReady,
+      onTrigger,
+      toolbarSettings,
+      cspNonce,
+      stableTelemetry,
+      licenseKey,
+    ]);
 
     const handleMenuSelect = useCallback(
       async (field: Types.FieldDefinition) => {

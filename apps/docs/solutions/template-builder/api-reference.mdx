@@ -73,6 +73,23 @@ None - the component works with zero configuration.
   `string` - space-separated tool names - `object` - full toolbar configuration
 </ParamField>
 
+<ParamField path="telemetry" type="object">
+  Telemetry configuration. Enabled by default with `source: 'template-builder'` metadata. See [Telemetry](/resources/telemetry) for details.
+
+  <Expandable title="properties">
+    <ParamField path="enabled" type="boolean" default="true">
+      Enable or disable telemetry
+    </ParamField>
+    <ParamField path="metadata" type="Record<string, any>">
+      Custom metadata merged with the default `{ source: 'template-builder' }`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="licenseKey" type="string">
+  License key for SuperDoc. Passed directly to the underlying SuperDoc instance.
+</ParamField>
+
 <ParamField path="onReady" type="() => void">
   Called when the document is loaded and ready
 </ParamField>

@@ -1,0 +1,23 @@
+{
+  "name": "@superdoc-testing/behavior",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:trace": "TRACE=1 playwright test",
+    "test:screenshots": "SCREENSHOTS=1 playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:html": "playwright test --reporter=html && playwright show-report",
+    "harness": "vite --config harness/vite.config.ts harness/",
+    "setup": "playwright install --with-deps"
+  },
+  "dependencies": {
+    "superdoc": "workspace:*",
+    "@superdoc/document-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "vite": "catalog:"
+  }
+}

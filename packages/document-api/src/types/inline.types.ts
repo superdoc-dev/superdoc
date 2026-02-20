@@ -22,6 +22,7 @@ export interface RunProperties {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  strike?: boolean;
   font?: string;
   size?: number;
   color?: string;

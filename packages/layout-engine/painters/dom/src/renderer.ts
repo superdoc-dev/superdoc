@@ -3397,6 +3397,9 @@ export class DomPainter {
           if (part.formatting.fontSize) {
             span.style.fontSize = `${part.formatting.fontSize}px`;
           }
+          if (part.formatting.letterSpacing != null) {
+            span.style.letterSpacing = `${part.formatting.letterSpacing}px`;
+          }
         }
         currentParagraph.appendChild(span);
       }

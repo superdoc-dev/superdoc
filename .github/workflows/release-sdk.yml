@@ -1,0 +1,124 @@
+name: 📦 Release SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.0.0-alpha.7). Leave empty to release the current version."
+        required: false
+        type: string
+      dry-run:
+        description: "Dry run — build and validate without publishing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # PyPI trusted publishing (OIDC)
+
+concurrency:
+  group: release-sdk
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.dry-run && '' || 'pypi' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Python build tools
+        run: pip install build
+
+      # ---------------------------------------------------------------
+      # Show current version (visible in the Actions run summary)
+      # ---------------------------------------------------------------
+      - name: Show current version
+        run: |
+          CURRENT=$(node -p "require('./packages/sdk/package.json').version")
+          echo "### SDK Release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | Version |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Current (in repo)** | \`${CURRENT}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "| **Releasing** | \`${{ inputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Releasing** | \`${CURRENT}\` (unchanged) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "| **Dry run** | \`${{ inputs.dry-run }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      # ---------------------------------------------------------------
+      # Set version (if provided)
+      # ---------------------------------------------------------------
+      - name: Set version
+        if: inputs.version != ''
+        run: node packages/sdk/scripts/sync-sdk-version.mjs --set "${{ inputs.version }}"
+
+      # ---------------------------------------------------------------
+      # Generate + validate
+      # ---------------------------------------------------------------
+      - name: Generate all artifacts
+        run: pnpm run generate:all
+
+      - name: Validate SDK
+        run: node packages/sdk/scripts/sdk-validate.mjs
+
+      # ---------------------------------------------------------------
+      # Node SDK
+      # ---------------------------------------------------------------
+      - name: Build Node SDK
+        run: pnpm --prefix packages/sdk/langs/node run build
+
+      - name: Publish Node SDK
+        if: ${{ !inputs.dry-run }}
+        run: pnpm --prefix packages/sdk/langs/node publish --access public --tag latest --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish Node SDK (dry run)
+        if: ${{ inputs.dry-run }}
+        run: pnpm --prefix packages/sdk/langs/node publish --access public --tag latest --no-git-checks --dry-run
+
+      # ---------------------------------------------------------------
+      # Python SDK
+      # ---------------------------------------------------------------
+      - name: Prepare Python SDK tools
+        run: |
+          rm -rf packages/sdk/langs/python/superdoc/tools
+          cp -r packages/sdk/tools packages/sdk/langs/python/superdoc/tools
+          rm -f packages/sdk/langs/python/superdoc/tools/__init__.py
+
+      - name: Build Python SDK
+        run: python -m build
+        working-directory: packages/sdk/langs/python
+
+      - name: Publish Python SDK to PyPI
+        if: ${{ !inputs.dry-run }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/dist/
+
+      - name: Publish Python SDK (dry run)
+        if: ${{ inputs.dry-run }}
+        run: |
+          echo "Would publish the following Python packages:"
+          ls -la packages/sdk/langs/python/dist/

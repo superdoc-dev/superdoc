@@ -26,6 +26,7 @@ const EXACT_SUPERDOC_IMPORTS = new Set([
   '@superdoc-dev/esign',
   '@superdoc-dev/esign/styles.css',
   '@superdoc-dev/react',
+  '@superdoc-dev/sdk',
   '@superdoc-dev/react/style.css',
   '@superdoc-dev/template-builder',
   '@superdoc-dev/template-builder/defaults',

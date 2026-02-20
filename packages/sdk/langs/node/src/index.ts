@@ -1,4 +1,3 @@
- 
 import { createDocApi } from './generated/client.js';
 import { SuperDocRuntime, type SuperDocClientOptions } from './runtime/process.js';
 

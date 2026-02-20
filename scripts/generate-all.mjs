@@ -4,9 +4,10 @@
  * Full generation DAG — produces all derived artifacts from source-of-truth inputs.
  *
  * Phases (sequential — each depends on the previous):
- *   1. docapi:sync          → packages/document-api/generated/** + apps/docs/document-api/reference/**
+ *   1. docapi:sync             → packages/document-api/generated/** + apps/docs/document-api/reference/**
  *   2. cli:export-sdk-contract → apps/cli/generated/sdk-contract.json
- *   3. sdk codegen           → packages/sdk/langs/{node,python}/…/generated/** + packages/sdk/tools/*.json
+ *   3. docs:sync-engine        → SDK overview operations table in apps/docs/document-engine/sdks.mdx
+ *   4. sdk codegen             → packages/sdk/langs/{node,python}/…/generated/** + packages/sdk/tools/*.json
  *
  * Before generation, gitignored output directories are cleaned to prevent stale file accumulation.
  * apps/docs/document-api/reference/ is NOT cleaned here — it stays committed (Mintlify deploys from git)
@@ -79,8 +80,12 @@ async function main() {
   console.log('\n--- Phase 2: cli:export-sdk-contract ---');
   await run('bun', [path.join(REPO_ROOT, 'apps/cli/scripts/export-sdk-contract.ts')]);
 
-  // Phase 4: SDK codegen (Node + Python clients + tool catalogs)
-  console.log('\n--- Phase 3: sdk codegen ---');
+  // Phase 4: Docs — SDK overview operations table
+  console.log('\n--- Phase 3: docs:sync-engine ---');
+  await run('pnpm', ['exec', 'tsx', path.join(REPO_ROOT, 'apps/docs/scripts/generate-sdk-overview.ts')]);
+
+  // Phase 5: SDK codegen (Node + Python clients + tool catalogs)
+  console.log('\n--- Phase 4: sdk codegen ---');
   await run('node', [path.join(REPO_ROOT, 'packages/sdk/codegen/src/generate-all.mjs')]);
 
   console.log('\ngenerate:all complete.');

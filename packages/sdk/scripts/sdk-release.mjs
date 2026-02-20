@@ -111,42 +111,17 @@ async function main() {
   });
 
   // --- Python SDK ---
-  // TODO: Remove this guard when PyPI publishing is ready.
-  // eslint-disable-next-line no-constant-condition
-  if (true) {
-    console.log('\n--- Python SDK (skipped — not yet published to PyPI) ---');
-  } else {
-  console.log('\n--- Python SDK ---');
+  // Python publishing is handled by the release-sdk.yml workflow via PyPI trusted publishing (OIDC).
+  // This script only builds the wheel for local verification.
+  console.log('\n--- Python SDK (build only — publish via release-sdk.yml workflow) ---');
   const pythonToolsSymlink = path.join(PYTHON_SDK_DIR, 'superdoc', 'tools');
 
   await withMaterializedTools(pythonToolsSymlink, '../../../tools', async () => {
-    // Clean previous build artifacts
     await rm(path.join(PYTHON_SDK_DIR, 'dist'), { recursive: true, force: true });
     await rm(path.join(PYTHON_SDK_DIR, 'build'), { recursive: true, force: true });
 
-    // Build sdist + wheel
     await run('python3', ['-m', 'build'], { cwd: PYTHON_SDK_DIR });
-
-    if (dryRun) {
-      console.log('  (dry-run) Would publish Python wheel via twine.');
-      try {
-        await run('python3', ['-m', 'twine', 'check', 'dist/*'], { cwd: PYTHON_SDK_DIR });
-      } catch {
-        console.log('  (dry-run) twine not available — skipping dist check.');
-      }
-    } else {
-      const pypiToken = process.env.PYPI_TOKEN ?? process.env.TWINE_PASSWORD;
-      if (!pypiToken) {
-        throw new Error('Missing PyPI auth token. Set PYPI_TOKEN or TWINE_PASSWORD before sdk:release.');
-      }
-      await run('python3', ['-m', 'twine', 'upload', 'dist/*'], {
-        cwd: PYTHON_SDK_DIR,
-        env: {
-          TWINE_USERNAME: '__token__',
-          TWINE_PASSWORD: pypiToken,
-        },
-      });
-    }
+    console.log('  Python wheel built. Use the release-sdk.yml workflow to publish to PyPI.');
 
     // Clean build artifacts
     await rm(path.join(PYTHON_SDK_DIR, 'dist'), { recursive: true, force: true });
@@ -154,7 +129,6 @@ async function main() {
     await rm(path.join(PYTHON_SDK_DIR, 'superdoc_sdk.egg-info'), { recursive: true, force: true });
     try { await rm(path.join(PYTHON_SDK_DIR, 'setup.py'), { force: true }); } catch { /* noop */ }
   });
-  } // end skip-python guard
 
   console.log(`\nSDK release${dryRun ? ' dry-run' : ''} complete.`);
 }

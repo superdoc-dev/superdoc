@@ -3555,7 +3555,12 @@ export class PresentationEditor extends EventEmitter {
       }
       node = selection.node;
     } else {
-      const $pos = selection.$from;
+      const $pos = (selection as Selection & { $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode } })
+        .$from;
+      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
       for (let depth = $pos.depth; depth > 0; depth--) {
         const candidate = $pos.node(depth);
         if (candidate.type?.name === 'structuredContentBlock') {
@@ -3706,10 +3711,22 @@ export class PresentationEditor extends EventEmitter {
       node = selection.node;
       pos = selection.from;
     } else {
-      const $pos = selection.$from;
+      const $pos = (
+        selection as Selection & {
+          $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode; before?: (depth: number) => number };
+        }
+      ).$from;
+      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
       for (let depth = $pos.depth; depth > 0; depth--) {
         const candidate = $pos.node(depth);
         if (candidate.type?.name === 'structuredContent') {
+          if (typeof $pos.before !== 'function') {
+            this.#clearSelectedStructuredContentInlineClass();
+            return;
+          }
           node = candidate;
           pos = $pos.before(depth);
           break;

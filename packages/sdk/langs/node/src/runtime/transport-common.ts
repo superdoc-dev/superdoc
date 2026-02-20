@@ -1,5 +1,3 @@
-import { SuperDocCliError } from './errors.js';
-
 export type ParamType = 'string' | 'number' | 'boolean' | 'json' | 'string[]';
 export type ParamKind = 'doc' | 'flag' | 'jsonFlag';
 

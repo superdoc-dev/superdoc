@@ -176,7 +176,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: T_NOT_FOUND_TRACKED,
+      throws: [...T_NOT_FOUND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'insert.mdx',
     referenceGroup: 'core',

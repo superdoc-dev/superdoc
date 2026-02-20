@@ -12,7 +12,7 @@ npm install @superdoc-dev/template-builder
 
 ```jsx
 import SuperDocTemplateBuilder from '@superdoc-dev/template-builder';
-import 'superdoc/dist/style.css';
+import 'superdoc/style.css';
 
 function TemplateEditor() {
   return (
@@ -23,42 +23,30 @@ function TemplateEditor() {
       }}
       fields={{
         available: [
-          { id: '1324567890', label: 'Customer Name', category: 'Contact' },
-          { id: '1324567891', label: 'Invoice Date', category: 'Invoice' },
-          { id: '1324567892', label: 'Amount', category: 'Invoice' },
+          { id: '1324567890', label: 'Customer Name' },
+          { id: '1324567891', label: 'Invoice Date' },
+          { id: '1324567892', label: 'Signature', mode: 'block', fieldType: 'signer' },
         ],
       }}
-      onTrigger={(event) => {
-        console.log('User typed trigger at', event.position);
-      }}
       onFieldInsert={(field) => {
-        console.log('Field inserted:', field.alias);
+        console.log('Field inserted:', field.alias, field.fieldType);
       }}
     />
   );
 }
 ```
 
-## What You Receive
-
-```javascript
-{
-  fields: [
-    { id: "1324567890", alias: "Customer Name", tag: "contact" },
-    { id: "1324567891", alias: "Invoice Date", tag: "invoice" }
-  ],
-  document: { /* ProseMirror document JSON */ }
-}
-```
-
 ## Features
 
-- **🎯 Trigger Detection** - Type `{{` (customizable) to insert fields
-- **📝 Field Management** - Insert, update, delete, and navigate fields
-- **🔍 Field Discovery** - Automatically finds existing fields in documents
-- **🎨 UI Agnostic** - Bring your own menus, panels, and components
-- **📄 SDT Based** - Uses structured content tags for Word compatibility
-- **⚡ Simple API** - Clear callbacks for trigger events and field changes
+- **Trigger Detection** - Type `{{` (customizable) to insert fields
+- **Field Management** - Insert, update, delete, and navigate fields
+- **Field Discovery** - Automatically finds existing fields in documents
+- **Field Types** - Distinguish owner vs signer fields with visual styling
+- **Field Creation** - Allow users to create custom fields inline
+- **Linked Fields** - Insert copies of existing fields that share a group
+- **UI Agnostic** - Bring your own menus, panels, and components
+- **SDT Based** - Uses structured content tags for Word compatibility
+- **Export** - Download as `.docx` or get a Blob for API storage
 
 ## API
 
@@ -75,7 +63,8 @@ function TemplateEditor() {
   // Field configuration
   fields={{
     available: FieldDefinition[],  // Fields user can insert
-    initial: TemplateField[]       // Pre-existing fields
+    initial: TemplateField[],      // Pre-existing fields
+    allowCreate: boolean,          // Show "Create New Field" in menu
   }}
 
   // UI components (optional)
@@ -97,6 +86,9 @@ function TemplateEditor() {
   //   excludeItems: ['italic', 'bold'],
   // }}
 
+  // Content Security Policy nonce (optional)
+  cspNonce="abc123"
+
   // Telemetry (optional, enabled by default)
   telemetry={{ enabled: true, metadata: { source: 'template-builder' } }}
 
@@ -111,17 +103,19 @@ function TemplateEditor() {
   onFieldDelete={(fieldId) => {}}
   onFieldsChange={(fields) => {}}
   onFieldSelect={(field) => {}}
+  onFieldCreate={(field) => {}}     // Called when user creates a custom field
+  onExport={(event) => {}}          // Called after export with fields and blob
 />
 ```
 
 ### Ref Methods
 
 ```jsx
-const ref = useRef();
+const ref = useRef<SuperDocTemplateBuilderHandle>(null);
 
 // Insert fields
-ref.current.insertField({ alias: 'Customer Name' });
-ref.current.insertBlockField({ alias: 'Terms Block' });
+ref.current.insertField({ alias: 'Customer Name', fieldType: 'owner' });
+ref.current.insertBlockField({ alias: 'Signature', fieldType: 'signer' });
 
 // Update/delete fields
 ref.current.updateField(fieldId, { alias: 'New Name' });
@@ -129,27 +123,114 @@ ref.current.deleteField(fieldId);
 
 // Navigation
 ref.current.selectField(fieldId);
-ref.current.nextField(); // Tab behavior
-ref.current.previousField(); // Shift+Tab behavior
+ref.current.nextField();
+ref.current.previousField();
 
 // Get data
 const fields = ref.current.getFields();
-const template = await ref.current.exportTemplate();
+const blob = await ref.current.exportTemplate({ triggerDownload: false });
+
+// Access SuperDoc instance
+const superdoc = ref.current.getSuperDoc();
 ```
+
+## Field Types
+
+Fields can have a `fieldType` property to distinguish between different roles (e.g. `'owner'` vs `'signer'`). This is stored in the SDT tag metadata and flows through the entire system.
+
+### Defining field types
+
+```jsx
+const availableFields = [
+  { id: '1', label: 'Company Name', fieldType: 'owner' },
+  { id: '2', label: 'Signer Name', fieldType: 'signer' },
+  { id: '3', label: 'Date' },  // defaults to 'owner'
+];
+```
+
+### Visual styling
+
+Import the optional CSS to color-code fields in the editor by type:
+
+```jsx
+import '@superdoc-dev/template-builder/field-types.css';
+```
+
+Customize colors via CSS variables:
+
+```css
+:root {
+  --superdoc-field-owner-color: #629be7;   /* default blue */
+  --superdoc-field-signer-color: #d97706;  /* default amber */
+}
+```
+
+### Accessing field type in callbacks
+
+All field callbacks include `fieldType`:
+
+```jsx
+onFieldInsert={(field) => {
+  console.log(field.fieldType); // 'owner' | 'signer' | ...
+}}
+
+onFieldsChange={(fields) => {
+  const signerFields = fields.filter(f => f.fieldType === 'signer');
+}}
+```
+
+## Custom Field Creation
+
+Enable inline field creation in the dropdown menu:
+
+```jsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: [...],
+    allowCreate: true,
+  }}
+  onFieldCreate={async (field) => {
+    // field.id starts with 'custom_'
+    // field.fieldType is 'owner' or 'signer' (user-selected)
+    const saved = await api.createField(field);
+    return { ...field, id: saved.id }; // return modified field or void
+  }}
+/>
+```
+
+The create form lets users pick inline/block mode and owner/signer field type.
+
+## Linked Fields (Groups)
+
+When a user selects an existing field from the menu, a linked copy is inserted. Linked fields share a group ID and stay in sync. The menu shows an "Existing Fields" section with grouped entries.
+
+When the last field in a group is deleted, the remaining field's group tag is automatically removed.
 
 ## Custom Components
 
 ### Field Menu
 
 ```jsx
-const CustomFieldMenu = ({ isVisible, position, availableFields, onSelect, onClose }) => {
+const CustomFieldMenu = ({
+  isVisible,
+  position,
+  availableFields,
+  filteredFields,     // filtered by typed query after {{
+  filterQuery,        // the query text
+  allowCreate,
+  existingFields,     // fields already in the document
+  onSelect,
+  onSelectExisting,
+  onClose,
+  onCreateField,
+}) => {
   if (!isVisible) return null;
 
   return (
     <div style={{ position: 'fixed', left: position?.left, top: position?.top }}>
-      {availableFields.map((field) => (
+      {filteredFields.map((field) => (
         <button key={field.id} onClick={() => onSelect(field)}>
-          {field.label}
+          {field.label} {field.fieldType && `(${field.fieldType})`}
         </button>
       ))}
       <button onClick={onClose}>Cancel</button>
@@ -169,9 +250,9 @@ const CustomFieldList = ({ fields, onSelect, onDelete, selectedFieldId }) => {
         <div
           key={field.id}
           onClick={() => onSelect(field)}
-          style={{ background: selectedFieldId === field.id ? '#blue' : '#gray' }}
+          style={{ background: selectedFieldId === field.id ? 'lightblue' : 'white' }}
         >
-          {field.alias}
+          {field.alias} {field.fieldType && `[${field.fieldType}]`}
           <button onClick={() => onDelete(field.id)}>Delete</button>
         </div>
       ))}
@@ -186,7 +267,7 @@ Enable Tab/Shift+Tab navigation:
 
 ```jsx
 function TemplateEditor() {
-  const ref = useRef();
+  const ref = useRef<SuperDocTemplateBuilderHandle>(null);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Tab') {
@@ -209,65 +290,43 @@ function TemplateEditor() {
 
 ## Export Template
 
-The `exportTemplate` method supports two modes of operation via the `ExportConfig` interface:
+The `exportTemplate` method supports two modes via `ExportConfig`:
 
-### 1. Download Mode (Default)
-
-Automatically downloads the template as a file in the browser:
+### Download Mode (Default)
 
 ```jsx
-const handleDownload = async () => {
-  // Download with default filename "document.docx"
-  await ref.current?.exportTemplate();
-
-  // Or with custom filename
-  await ref.current?.exportTemplate({
-    fileName: 'invoice-template.docx',
-  });
-};
+await ref.current?.exportTemplate();
+await ref.current?.exportTemplate({ fileName: 'invoice-template' });
 ```
 
-### 2. Blob Mode (for Database/API)
-
-Get the template as a Blob for saving to your database or API:
+### Blob Mode (for Database/API)
 
 ```jsx
-const handleSave = async () => {
-  // Get the blob without triggering download
-  const blob = await ref.current?.exportTemplate({
-    fileName: 'invoice-template.docx',
-    triggerDownload: false,
-  });
+const blob = await ref.current?.exportTemplate({
+  fileName: 'invoice-template',
+  triggerDownload: false,
+});
 
-  if (blob) {
-    // Send to your API/database
-    const formData = new FormData();
-    formData.append('template', blob, 'invoice-template.docx');
-
-    await fetch('/api/templates', {
-      method: 'POST',
-      body: formData,
-    });
-  }
-};
-```
-
-### ExportConfig Interface
-
-```typescript
-interface ExportConfig {
-  fileName?: string;         // Default: "document"
-  triggerDownload?: boolean; // Default: true
+if (blob) {
+  const formData = new FormData();
+  formData.append('template', blob, 'invoice-template.docx');
+  await fetch('/api/templates', { method: 'POST', body: formData });
 }
-
-// Method signature
-exportTemplate(config?: ExportConfig): Promise<void | Blob>
 ```
 
-**Return value:**
+### onExport Callback
 
-- `Promise<void>` when `triggerDownload: true` (download happens automatically)
-- `Promise<Blob>` when `triggerDownload: false` (returns the docx data)
+Fires after every export with the field list and optional blob:
+
+```jsx
+<SuperDocTemplateBuilder
+  onExport={(event) => {
+    console.log(event.fields);    // TemplateField[]
+    console.log(event.fileName);  // string
+    console.log(event.blob);      // Blob | undefined (only in blob mode)
+  }}
+/>
+```
 
 ## Telemetry
 
@@ -292,10 +351,11 @@ import type {
   FieldDefinition,
   TriggerEvent,
   ExportConfig,
+  ExportEvent,
+  FieldMenuProps,
+  FieldListProps,
   SuperDocTemplateBuilderHandle,
 } from '@superdoc-dev/template-builder';
-
-const ref = useRef<SuperDocTemplateBuilderHandle>(null);
 ```
 
 ## License

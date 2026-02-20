@@ -232,6 +232,78 @@ onFieldsDiscovered={(fields) => {
 }}
 ```
 
+## PDF support
+
+Render PDF documents in eSign by passing the `pdf` prop. This forwards the PDF module config to SuperDoc internally. The component handles format detection automatically — when `pdf` is provided with a URL source, it tells SuperDoc to use the PDF renderer.
+
+```jsx
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
+
+const pdfWorkerUrl = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
+
+<SuperDocESign
+  eventId="session-1"
+  document={{
+    source: "https://example.com/document.pdf",
+    mode: "full",
+    viewOptions: { layout: "print" },
+    validation: { scroll: { required: true } },
+  }}
+  pdf={{
+    pdfLib: pdfjsLib,
+    workerSrc: pdfWorkerUrl,
+    setWorker: true,
+    outputScale: 2,
+  }}
+  fields={{
+    signer: [
+      {
+        id: "1",
+        type: "checkbox",
+        label: "I have read and agree to these terms",
+        validation: { required: true },
+      },
+    ],
+  }}
+  download={{ label: "Download PDF" }}
+  onDownload={async (data) => {
+    // Browser-side download — no server needed
+    const response = await fetch(data.documentSource);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = data.fileName || "document.pdf";
+    a.click();
+    URL.revokeObjectURL(url);
+  }}
+  onSubmit={handleSubmit}
+/>
+```
+
+### `pdf` prop
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `pdfLib` | `object` | **Required.** The `pdfjs-dist` library instance |
+| `workerSrc` | `string` | PDF.js worker source URL (falls back to CDN when omitted) |
+| `setWorker` | `boolean` | Whether to auto-configure the pdf.js worker |
+| `textLayer` | `boolean` | Enable text layer for text selection (default: `false`) |
+| `outputScale` | `number` | Canvas render scale — higher values produce sharper output |
+
+### How it works
+
+- SuperDoc fires `onPdfDocumentReady` instead of `onReady` for PDFs. The eSign component handles both callbacks, so it works regardless of document type.
+- PDFs don't have a ProseMirror editor, so `fields.document` has no effect. Use `fields.signer` for interactive fields like checkboxes and signatures.
+- Use `viewOptions: { layout: 'print' }` for fixed page widths that match the original PDF layout.
+
+<Note>
+Memoize the `pdf` config object to avoid unnecessary re-initialization. Use `useMemo` in React or a stable reference from the caller.
+</Note>
+
 ## Styling
 
 The component can be styled using standard CSS. Optionally import default styles:

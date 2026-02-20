@@ -178,6 +178,8 @@ export type {
   SetCommentInternalInput,
 } from './comments/comments.js';
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
+export { DocumentApiValidationError } from './errors.js';
+export type { InsertInput } from './insert/insert.js';
 
 /**
  * Callable capability accessor returned by `createDocumentApi`.

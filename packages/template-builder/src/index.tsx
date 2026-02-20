@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback, useMemo, forwardRef, useImper
 import type { SuperDoc } from 'superdoc';
 import type * as Types from './types';
 import { FieldMenu, FieldList } from './defaults';
+import { areTemplateFieldsEqual, resolveToolbar, clampToViewport, getPresentationEditor } from './utils';
 
 export * from './types';
 export { FieldMenu, FieldList };
@@ -23,85 +24,23 @@ const getTemplateFieldsFromEditor = (editor: Editor): Types.TemplateField[] => {
     const nodeType = node?.type?.name || '';
     const mode = nodeType.includes('Block') ? 'block' : 'inline';
 
+    const parsedTag = (() => {
+      try {
+        return typeof attrs.tag === 'string' && attrs.tag.startsWith('{') ? JSON.parse(attrs.tag) : null;
+      } catch {
+        return null;
+      }
+    })();
+
     return {
       id: attrs.id,
       alias: attrs.alias || attrs.label || '',
       tag: attrs.tag,
       mode,
       group: structuredContentHelpers.getGroup?.(attrs.tag) ?? undefined,
+      fieldType: parsedTag?.fieldType ?? 'owner',
     } as Types.TemplateField;
   });
-};
-
-const areTemplateFieldsEqual = (a: Types.TemplateField[], b: Types.TemplateField[]): boolean => {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-
-  for (let index = 0; index < a.length; index += 1) {
-    const left = a[index];
-    const right = b[index];
-
-    if (!right) return false;
-
-    if (
-      left.id !== right.id ||
-      left.alias !== right.alias ||
-      left.tag !== right.tag ||
-      left.position !== right.position ||
-      left.mode !== right.mode ||
-      left.group !== right.group
-    ) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-const resolveToolbar = (toolbar: Types.SuperDocTemplateBuilderProps['toolbar']) => {
-  if (!toolbar) return null;
-
-  if (toolbar === true) {
-    return {
-      selector: '#superdoc-toolbar',
-      config: {} as Omit<Types.ToolbarConfig, 'selector'>,
-      renderDefaultContainer: true,
-    };
-  }
-
-  if (typeof toolbar === 'string') {
-    return {
-      selector: toolbar,
-      config: {} as Omit<Types.ToolbarConfig, 'selector'>,
-      renderDefaultContainer: false,
-    };
-  }
-
-  const { selector, ...config } = toolbar;
-  return {
-    selector: selector || '#superdoc-toolbar',
-    config,
-    renderDefaultContainer: selector === undefined,
-  };
-};
-
-const MENU_VIEWPORT_PADDING = 10;
-const MENU_APPROX_WIDTH = 250;
-const MENU_APPROX_HEIGHT = 300;
-
-const clampToViewport = (rect: DOMRect): DOMRect => {
-  const maxLeft = window.innerWidth - MENU_APPROX_WIDTH - MENU_VIEWPORT_PADDING;
-  const maxTop = window.innerHeight - MENU_APPROX_HEIGHT - MENU_VIEWPORT_PADDING;
-
-  const clampedLeft = Math.min(rect.left, maxLeft);
-  const clampedTop = Math.min(rect.top, maxTop);
-
-  return new DOMRect(
-    Math.max(clampedLeft, MENU_VIEWPORT_PADDING),
-    Math.max(clampedTop, MENU_VIEWPORT_PADDING),
-    rect.width,
-    rect.height,
-  );
 };
 
 const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, Types.SuperDocTemplateBuilderProps>(
@@ -192,19 +131,27 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         const editor = superdocRef.current.activeEditor;
         const previousFields = templateFields;
 
+        const tagData =
+          field.metadata || field.fieldType
+            ? JSON.stringify({
+                ...field.metadata,
+                ...(field.fieldType ? { fieldType: field.fieldType } : {}),
+              })
+            : undefined;
+
         const success =
           mode === 'inline'
             ? editor.commands.insertStructuredContentInline?.({
                 attrs: {
                   alias: field.alias,
-                  tag: field.metadata ? JSON.stringify(field.metadata) : undefined,
+                  tag: tagData,
                 },
                 text: field.defaultValue || field.alias,
               })
             : editor.commands.insertStructuredContentBlock?.({
                 attrs: {
                   alias: field.alias,
-                  tag: field.metadata ? JSON.stringify(field.metadata) : undefined,
+                  tag: tagData,
                 },
                 text: field.defaultValue || field.alias,
               });
@@ -400,6 +347,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           if (aborted) return;
           if (instance?.activeEditor) {
             const editor = instance.activeEditor;
+            const pe = getPresentationEditor(instance);
 
             editor.on('update', ({ editor: e }: any) => {
               const { state } = e;
@@ -410,8 +358,8 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
                 const text = state.doc.textBetween(triggerStart, from);
 
                 if (text === trigger) {
-                  const coords = e.view.coordsAtPos(from);
-                  const bounds = clampToViewport(new DOMRect(coords.left, coords.top, 0, 0));
+                  const coords = pe?.coordsAtPos(from) ?? e.view.coordsAtPos(from);
+                  const bounds = clampToViewport(new DOMRect(coords.left, coords.bottom ?? coords.top, 0, 0));
 
                   const cleanup = () => {
                     const editor = superdocRef.current?.activeEditor;
@@ -457,8 +405,8 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               const queryText = state.doc.textBetween(menuTriggerFromRef.current, from);
               updateMenuFilter(queryText);
 
-              const coords = e.view.coordsAtPos(from);
-              const bounds = clampToViewport(new DOMRect(coords.left, coords.top, 0, 0));
+              const coords = pe?.coordsAtPos(from) ?? e.view.coordsAtPos(from);
+              const bounds = clampToViewport(new DOMRect(coords.left, coords.bottom ?? coords.top, 0, 0));
               setMenuPosition(bounds);
             });
 
@@ -535,6 +483,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               alias: createdField.label,
               metadata: createdField.metadata,
               defaultValue: createdField.defaultValue,
+              fieldType: createdField.fieldType,
             });
             setMenuVisible(false);
             return;
@@ -545,6 +494,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           alias: field.label,
           metadata: field.metadata,
           defaultValue: field.defaultValue,
+          fieldType: field.fieldType,
         });
         setMenuVisible(false);
       },
@@ -571,6 +521,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         const tagWithGroup = structuredContentHelpers.createTagObject?.({
           group: groupId,
+          ...(field.fieldType ? { fieldType: field.fieldType } : {}),
         });
 
         const mode = field.mode || 'inline';

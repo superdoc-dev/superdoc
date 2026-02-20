@@ -723,6 +723,9 @@ importers:
       '@superdoc-dev/esign':
         specifier: workspace:*
         version: link:..
+      pdfjs-dist:
+        specifier: 5.4.624
+        version: 5.4.624
       react:
         specifier: 'catalog:'
         version: 19.2.4

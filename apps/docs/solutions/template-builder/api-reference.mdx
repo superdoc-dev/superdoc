@@ -37,7 +37,7 @@ None - the component works with zero configuration.
       Pre-existing fields in the document (auto-discovered if not provided)
     </ParamField>
     <ParamField path="allowCreate" type="boolean" default="false">
-      Enable users to create new fields on the fly
+      Show a "Create New Field" option in the menu. The create form lets users pick inline/block mode and owner/signer field type.
     </ParamField>
   </Expandable>
 </ParamField>
@@ -46,7 +46,7 @@ None - the component works with zero configuration.
   Field insertion menu configuration
 
   <Expandable title="properties">
-    <ParamField path="component" type="React.ComponentType<MenuProps>">
+    <ParamField path="component" type="React.ComponentType<FieldMenuProps>">
       Custom menu component
     </ParamField>
     <ParamField path="trigger" type="string" default="'{{'">
@@ -59,18 +59,36 @@ None - the component works with zero configuration.
   Field list sidebar configuration
 
   <Expandable title="properties">
-    <ParamField path="component" type="React.ComponentType<ListProps>">
+    <ParamField path="component" type="React.ComponentType<FieldListProps>">
       Custom list component
     </ParamField>
-    <ParamField path="position" type="'left' | 'right'" default="'right'">
-      Sidebar position
+    <ParamField path="position" type="'left' | 'right'">
+      Sidebar position. Omit to hide the sidebar entirely.
     </ParamField>
   </Expandable>
 </ParamField>
 
-<ParamField path="toolbar" type="boolean | string | object">
-  Document editing toolbar. Can be: - `boolean` - show/hide default toolbar -
-  `string` - space-separated tool names - `object` - full toolbar configuration
+<ParamField path="toolbar" type="boolean | string | ToolbarConfig">
+  Document editing toolbar.
+  - `true` — render a default toolbar container
+  - `string` — CSS selector of an existing element to mount the toolbar into
+  - `object` — full toolbar configuration (see ToolbarConfig)
+</ParamField>
+
+<ParamField path="cspNonce" type="string">
+  Content Security Policy nonce for dynamically injected styles
+</ParamField>
+
+<ParamField path="className" type="string">
+  CSS class name for the root container
+</ParamField>
+
+<ParamField path="style" type="React.CSSProperties">
+  Inline styles for the root container
+</ParamField>
+
+<ParamField path="documentHeight" type="string" default="'600px'">
+  Height of the document editor area
 </ParamField>
 
 <ParamField path="telemetry" type="object">
@@ -122,7 +140,7 @@ None - the component works with zero configuration.
   path="onFieldCreate"
   type="(field: FieldDefinition) => void | Promise<FieldDefinition | void>"
 >
-  Called when user creates a new field (requires `fields.allowCreate = true`)
+  Called when user creates a new field (requires `fields.allowCreate = true`). Return a modified `FieldDefinition` to override the field before insertion, or `void` to use the field as-is.
 </ParamField>
 
 <ParamField path="onExport" type="(event: ExportEvent) => void">
@@ -149,12 +167,13 @@ Available fields that users can insert:
 
 ```typescript
 interface FieldDefinition {
-  id: string; // Unique identifier
-  label: string; // Display name
-  defaultValue?: string; // Default value for new instances
-  metadata?: Record<string, any>; // Custom metadata
-  mode?: "inline" | "block"; // Field insertion mode (default: "inline")
-  group?: string; // Category/group name
+  id: string;                      // Unique identifier
+  label: string;                   // Display name
+  defaultValue?: string;           // Default value for new instances
+  metadata?: Record<string, any>;  // Custom metadata stored in the SDT tag
+  mode?: "inline" | "block";       // Insertion mode (default: "inline")
+  group?: string;                  // Group ID for linked fields
+  fieldType?: string;              // Field type, e.g. "owner" or "signer" (default: "owner")
 }
 ```
 
@@ -164,12 +183,13 @@ Fields that exist in the template document:
 
 ```typescript
 interface TemplateField {
-  id: string | number; // Unique instance ID
-  alias: string; // Field name/label
-  tag?: string; // JSON metadata string
-  position?: number; // Position in document
+  id: string | number;       // Unique instance ID
+  alias: string;             // Field name/label
+  tag?: string;              // JSON metadata string
+  position?: number;         // Position in document
   mode?: "inline" | "block"; // Rendering mode
-  group?: string; // Group ID for related fields
+  group?: string;            // Group ID for linked fields
+  fieldType?: string;        // Field type, e.g. "owner" or "signer"
 }
 ```
 
@@ -179,13 +199,9 @@ Information about trigger detection:
 
 ```typescript
 interface TriggerEvent {
-  query: string; // Text after trigger pattern
-  position: {
-    // Cursor position
-    top: number;
-    left: number;
-  };
-  mode: "inline" | "block"; // Context mode
+  position: { from: number; to: number }; // Document position of the trigger
+  bounds?: DOMRect;                        // Viewport coordinates for menu positioning
+  cleanup: () => void;                     // Removes the trigger text from the document
 }
 ```
 
@@ -196,36 +212,42 @@ Data provided when a template is exported:
 ```typescript
 interface ExportEvent {
   fields: TemplateField[]; // All fields in the template
-  blob?: Blob; // Document blob (when triggerDownload: false)
-  fileName: string; // Export filename
+  blob?: Blob;             // Document blob (when triggerDownload: false)
+  fileName: string;        // Export filename
 }
 ```
 
-### MenuProps
+### FieldMenuProps
 
 Props passed to custom menu components:
 
 ```typescript
-interface MenuProps {
-  fields: FieldDefinition[]; // Available fields
-  onInsert: (field: FieldDefinition) => void; // Insert handler
-  onClose: () => void; // Close menu handler
-  position: { top: number; left: number }; // Menu position
-  query: string; // Current search query
-  mode: "inline" | "block"; // Insertion mode
+interface FieldMenuProps {
+  isVisible: boolean;                      // Whether the menu should be shown
+  position?: DOMRect;                      // Viewport coordinates for positioning
+  availableFields: FieldDefinition[];      // All available fields
+  filteredFields?: FieldDefinition[];      // Fields filtered by the typed query
+  filterQuery?: string;                    // Text typed after the trigger pattern
+  allowCreate?: boolean;                   // Whether "Create New Field" is enabled
+  existingFields?: TemplateField[];        // Fields already in the document
+  onSelect: (field: FieldDefinition) => void;        // Insert a new field
+  onSelectExisting?: (field: TemplateField) => void;  // Insert a linked copy
+  onClose: () => void;                     // Close the menu
+  onCreateField?: (field: FieldDefinition) => void | Promise<FieldDefinition | void>;
 }
 ```
 
-### ListProps
+### FieldListProps
 
 Props passed to custom list components:
 
 ```typescript
-interface ListProps {
-  fields: TemplateField[]; // Fields in template
-  selectedField: TemplateField | null; // Currently selected field
-  onFieldSelect: (field: TemplateField) => void; // Selection handler
-  onFieldDelete: (fieldId: string | number) => void; // Delete handler
+interface FieldListProps {
+  fields: TemplateField[];                          // Fields in the template
+  onSelect: (field: TemplateField) => void;         // Select/navigate to a field
+  onDelete: (fieldId: string | number) => void;     // Delete a field
+  onUpdate?: (field: TemplateField) => void;        // Update a field
+  selectedFieldId?: string | number;                // Currently selected field ID
 }
 ```
 
@@ -235,8 +257,8 @@ Configuration for template export:
 
 ```typescript
 interface ExportConfig {
-  fileName?: string; // Download filename
-  triggerDownload?: boolean; // Auto-download file
+  fileName?: string;         // Download filename (default: "document")
+  triggerDownload?: boolean;  // Auto-download file (default: true)
 }
 ```
 
@@ -250,12 +272,12 @@ const builderRef = useRef<SuperDocTemplateBuilderHandle>(null);
 
 ### insertField()
 
-Insert a field at the current cursor position:
+Insert an inline field at the current cursor position:
 
 ```typescript
 builderRef.current?.insertField({
   alias: "customer_name",
-  mode: "inline",
+  fieldType: "owner",
 });
 ```
 
@@ -267,8 +289,8 @@ Insert a block-level field:
 
 ```typescript
 builderRef.current?.insertBlockField({
-  alias: "terms_section",
-  mode: "block",
+  alias: "signature",
+  fieldType: "signer",
 });
 ```
 
@@ -281,7 +303,6 @@ Update an existing field:
 ```typescript
 builderRef.current?.updateField("field-id", {
   alias: "new_name",
-  tag: JSON.stringify({ groupId: "123" }),
 });
 ```
 
@@ -295,7 +316,7 @@ Remove a field from the template:
 builderRef.current?.deleteField("field-id");
 ```
 
-Returns `boolean` - true if deleted successfully.
+Returns `boolean` - true if deleted successfully. If the deleted field was the last in a group with two members, the remaining field's group tag is automatically removed.
 
 ### selectField()
 
@@ -337,7 +358,7 @@ Export the template as a .docx file:
 ```typescript
 // Trigger download
 await builderRef.current?.exportTemplate({
-  fileName: "my-template.docx",
+  fileName: "my-template",
   triggerDownload: true,
 });
 
@@ -345,9 +366,6 @@ await builderRef.current?.exportTemplate({
 const blob = await builderRef.current?.exportTemplate({
   triggerDownload: false,
 });
-
-// Use blob for API upload or database storage
-await uploadToServer(blob);
 ```
 
 Returns `Promise<void | Blob>` depending on `triggerDownload` setting.
@@ -359,33 +377,28 @@ Access the underlying SuperDoc editor instance:
 ```typescript
 const superdoc = builderRef.current?.getSuperDoc();
 
-// Use SuperDoc API directly
-if (superdoc) {
-  const editor = superdoc.getEditor();
+if (superdoc?.activeEditor) {
   // Full access to SuperDoc/SuperEditor APIs
+  superdoc.activeEditor.commands.search("hello");
 }
 ```
 
 Returns `SuperDoc | null`.
 
-## Default components
+## Field type styling
 
-The package exports default UI components you can use as a starting point:
+Import the optional CSS to color-code fields by type in the editor:
 
-```typescript
-import {
-  DefaultFieldMenu,
-  DefaultFieldList,
-} from "@superdoc-dev/template-builder/defaults";
+```jsx
+import "@superdoc-dev/template-builder/field-types.css";
+```
 
-// Use as-is or extend
-function MyCustomMenu(props: MenuProps) {
-  return (
-    <div>
-      <DefaultFieldMenu {...props} />
-      <button onClick={props.onClose}>Cancel</button>
-    </div>
-  );
+Override colors with CSS variables:
+
+```css
+:root {
+  --superdoc-field-owner-color: #629be7;
+  --superdoc-field-signer-color: #d97706;
 }
 ```
 
@@ -393,22 +406,19 @@ function MyCustomMenu(props: MenuProps) {
 
 Target these classes for custom styling:
 
-| Class                           | Element                  |
-| ------------------------------- | ------------------------ |
-| `.superdoc-template-builder`    | Root container           |
-| `.superdoc-field-menu`          | Field insertion popup    |
-| `.superdoc-field-menu-item`     | Individual menu item     |
-| `.superdoc-field-list`          | Sidebar container        |
-| `.superdoc-field-list-item`     | Individual field in list |
-| `.superdoc-field-list-group`    | Grouped fields container |
-| `.superdoc-field-tag`           | Field in document        |
-| `.superdoc-field-tag--selected` | Selected field           |
-| `.superdoc-field-tag--inline`   | Inline field mode        |
-| `.superdoc-field-tag--block`    | Block field mode         |
+| Class                                    | Element                  |
+| ---------------------------------------- | ------------------------ |
+| `.superdoc-template-builder`             | Root container           |
+| `.superdoc-template-builder-sidebar`     | Sidebar wrapper          |
+| `.superdoc-template-builder-document`    | Document area wrapper    |
+| `.superdoc-template-builder-editor`      | Editor container         |
+| `.superdoc-template-builder-toolbar`     | Default toolbar container|
+| `.superdoc-field-menu`                   | Field insertion popup    |
+| `.superdoc-field-list`                   | Sidebar field list       |
 
 ## Import types
 
-All TypeScript types are exported for use in your code:
+All TypeScript types are exported:
 
 ```typescript
 import type {
@@ -418,23 +428,13 @@ import type {
   TemplateField,
   TriggerEvent,
   ExportEvent,
-  MenuProps,
-  ListProps,
   ExportConfig,
+  FieldMenuProps,
+  FieldListProps,
+  ToolbarConfig,
+  DocumentConfig,
+  FieldsConfig,
+  MenuConfig,
+  ListConfig,
 } from "@superdoc-dev/template-builder";
 ```
-
-## Keyboard shortcuts
-
-Built-in keyboard navigation:
-
-| Shortcut       | Action                          |
-| -------------- | ------------------------------- |
-| `Tab`          | Jump to next field              |
-| `Shift + Tab`  | Jump to previous field          |
-| `{{` (default) | Open field menu                 |
-| `Esc`          | Close field menu                |
-| `Enter`        | Insert selected field from menu |
-| `↑` / `↓`      | Navigate menu items             |
-
-The trigger pattern is configurable via the `menu.trigger` prop.

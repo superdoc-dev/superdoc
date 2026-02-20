@@ -29,6 +29,7 @@ const EXACT_SUPERDOC_IMPORTS = new Set([
   '@superdoc-dev/react/style.css',
   '@superdoc-dev/template-builder',
   '@superdoc-dev/template-builder/defaults',
+  '@superdoc-dev/template-builder/field-types.css',
   '@superdoc-dev/superdoc-yjs-collaboration',
 ]);
 

@@ -736,4 +736,304 @@ describe('createDocumentApi', () => {
     expect(directResult).toEqual(getResult);
     expect(capAdpt.get).toHaveBeenCalledTimes(2);
   });
+
+  describe('insert friendly locator validation', () => {
+    function makeApi() {
+      return createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+    }
+
+    function expectValidationError(fn: () => void, messageMatch?: string | RegExp) {
+      try {
+        fn();
+        expect.fail('Expected DocumentApiValidationError to be thrown');
+      } catch (err: unknown) {
+        const e = err as { name: string; code: string; message: string };
+        expect(e.name).toBe('DocumentApiValidationError');
+        expect(e.code).toBe('INVALID_TARGET');
+        if (messageMatch) {
+          if (typeof messageMatch === 'string') {
+            expect(e.message).toContain(messageMatch);
+          } else {
+            expect(e.message).toMatch(messageMatch);
+          }
+        }
+      }
+    }
+
+    // -- Truth table: valid cases --
+
+    it('accepts no-target (default insertion point)', () => {
+      const api = makeApi();
+      const result = api.insert({ text: 'hello' });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts canonical target', () => {
+      const api = makeApi();
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      const result = api.insert({ target, text: 'hello' });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts blockId alone (offset defaults to 0)', () => {
+      const api = makeApi();
+      const result = api.insert({ blockId: 'p1', text: 'hello' });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts blockId + offset', () => {
+      const api = makeApi();
+      const result = api.insert({ blockId: 'p1', offset: 5, text: 'hello' });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts offset of 0', () => {
+      const api = makeApi();
+      const result = api.insert({ blockId: 'p1', offset: 0, text: 'hello' });
+      expect(result.success).toBe(true);
+    });
+
+    // -- Truth table: invalid cases --
+
+    it('rejects target + blockId (mixed modes)', () => {
+      const api = makeApi();
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      expectValidationError(
+        () => api.insert({ target, blockId: 'p2', text: 'hello' }),
+        'Cannot combine target with blockId',
+      );
+    });
+
+    it('rejects offset without blockId', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ offset: 5, text: 'hello' } as any), 'offset requires blockId');
+    });
+
+    it('rejects target + offset without blockId', () => {
+      const api = makeApi();
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      expectValidationError(
+        () => api.insert({ target, offset: 5, text: 'hello' } as any),
+        'Cannot combine target with offset',
+      );
+    });
+
+    it('rejects null target', () => {
+      const api = makeApi();
+      expectValidationError(
+        () => api.insert({ target: null, text: 'hello' } as any),
+        'target must be a text address object',
+      );
+    });
+
+    it('rejects malformed target objects', () => {
+      const api = makeApi();
+      expectValidationError(
+        () => api.insert({ target: { kind: 'text', blockId: 'p1' }, text: 'hello' } as any),
+        'target must be a text address object',
+      );
+    });
+
+    // -- Numeric bounds --
+
+    it('rejects negative offset', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ blockId: 'p1', offset: -1, text: 'hello' }), 'non-negative integer');
+    });
+
+    it('rejects non-integer offset', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ blockId: 'p1', offset: 1.5, text: 'hello' }), 'non-negative integer');
+    });
+
+    // -- Type checks --
+
+    it('rejects non-string blockId', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ blockId: 42, text: 'hello' } as any), 'blockId must be a string');
+    });
+
+    it('rejects non-string text', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ text: 42 } as any), 'text must be a string');
+    });
+
+    // -- Validation error shape --
+
+    it('throws DocumentApiValidationError (not plain Error)', () => {
+      const api = makeApi();
+      try {
+        api.insert({ offset: 5, text: 'hello' } as any);
+        expect.fail('Expected error');
+      } catch (err: unknown) {
+        expect((err as Error).constructor.name).toBe('DocumentApiValidationError');
+        expect((err as { code: string }).code).toBe('INVALID_TARGET');
+      }
+    });
+
+    // -- Input shape guard --
+
+    it('rejects null input', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert(null as any), 'non-null object');
+    });
+
+    it('rejects numeric input', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert(42 as any), 'non-null object');
+    });
+
+    it('rejects undefined input', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert(undefined as any), 'non-null object');
+    });
+
+    // -- pos runtime rejection --
+
+    it('rejects pos (not yet supported)', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ text: 'hi', pos: 3 } as any), 'pos locator is not yet supported');
+    });
+
+    // -- Validation precedence: pos before unknown-field --
+
+    it('returns pos error before unknown-field error', () => {
+      const api = makeApi();
+      expectValidationError(
+        () => api.insert({ text: 'hi', pos: 3, block_id: 'x' } as any),
+        'pos locator is not yet supported',
+      );
+    });
+
+    it('returns pos error before mode-exclusivity error', () => {
+      const api = makeApi();
+      expectValidationError(
+        () => api.insert({ text: 'hi', pos: 3, blockId: 'x' } as any),
+        'pos locator is not yet supported',
+      );
+    });
+
+    // -- Unknown field rejection --
+
+    it('rejects unknown top-level fields', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ text: 'hi', block_id: 'abc' } as any), 'Unknown field "block_id"');
+    });
+
+    // -- Backward compatibility parity --
+
+    it('sends same adapter request for insert({ text }) as before', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ text: 'hello' });
+      expect(writeAdpt.write).toHaveBeenCalledWith(
+        { kind: 'insert', text: 'hello' },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+
+    it('sends same adapter request for insert({ target, text }) as before', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+      api.insert({ target, text: 'hello' });
+      expect(writeAdpt.write).toHaveBeenCalledWith(
+        { kind: 'insert', target, text: 'hello' },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+
+    it('passes blockId + offset through to adapter for normalization', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ blockId: 'p1', offset: 5, text: 'hello' });
+      expect(writeAdpt.write).toHaveBeenCalledWith(
+        {
+          kind: 'insert',
+          blockId: 'p1',
+          offset: 5,
+          text: 'hello',
+        },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+
+    it('passes blockId without offset through to adapter', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ blockId: 'p1', text: 'hello' });
+      expect(writeAdpt.write).toHaveBeenCalledWith(
+        {
+          kind: 'insert',
+          blockId: 'p1',
+          text: 'hello',
+        },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+  });
 });

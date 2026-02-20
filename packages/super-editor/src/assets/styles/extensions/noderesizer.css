@@ -1,12 +1,12 @@
 /* Resize handles container */
-.sd-editor-resize-container {
+.super-editor .sd-editor-resize-container {
   position: absolute;
   pointer-events: none;
   z-index: 11;
 }
 
 /* Resize handles */
-.sd-editor-resize-handle {
+.super-editor .sd-editor-resize-handle {
   position: absolute;
   width: 12px;
   height: 12px;
@@ -18,53 +18,53 @@
   transition: all 0.1s ease;
 }
 
-.sd-editor-resize-handle:hover {
+.super-editor .sd-editor-resize-handle:hover {
   background-color: #228be6;
   transform: scale(1.1);
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
 }
 
 /* Handle positions */
-.sd-editor-resize-handle-nw {
+.super-editor .sd-editor-resize-handle-nw {
   top: -6px;
   left: -6px;
   cursor: nwse-resize;
 }
 
-.sd-editor-resize-handle-ne {
+.super-editor .sd-editor-resize-handle-ne {
   top: -6px;
   right: -6px;
   cursor: nesw-resize;
 }
 
-.sd-editor-resize-handle-sw {
+.super-editor .sd-editor-resize-handle-sw {
   bottom: -6px;
   left: -6px;
   cursor: nesw-resize;
 }
 
-.sd-editor-resize-handle-se {
+.super-editor .sd-editor-resize-handle-se {
   bottom: -6px;
   right: -6px;
   cursor: nwse-resize;
 }
 
 /* Hide handles when editor loses focus */
-.ProseMirror:not(.ProseMirror-focused) .sd-editor-resize-container {
+.super-editor .ProseMirror:not(.ProseMirror-focused) .sd-editor-resize-container {
   display: none;
 }
 
 /* Smooth transitions for resizing */
-.sd-editor-resizable-wrapper * {
+.super-editor .sd-editor-resizable-wrapper * {
   transition: none;
 }
 
-.sd-editor-resizable-wrapper *:not([style*='width']) {
+.super-editor .sd-editor-resizable-wrapper *:not([style*='width']) {
   transition: all 0.2s ease;
 }
 
 /* Resize feedback indicator */
-.sd-editor-resizable-wrapper::after {
+.super-editor .sd-editor-resizable-wrapper::after {
   content: 'Drag corners to resize';
   position: absolute;
   bottom: -25px;
@@ -82,6 +82,6 @@
   z-index: 12;
 }
 
-.sd-editor-resizable-wrapper:hover::after {
+.super-editor .sd-editor-resizable-wrapper:hover::after {
   opacity: 1;
 }

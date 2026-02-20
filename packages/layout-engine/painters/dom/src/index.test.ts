@@ -6539,7 +6539,7 @@ describe('Link accessibility - Focus styles', () => {
     const styleTag = document.querySelector('[data-superdoc-link-styles]');
     expect(styleTag).toBeTruthy();
     expect(styleTag?.textContent).toContain(':focus-visible');
-    expect(styleTag?.textContent).toContain('sr-only');
+    expect(styleTag?.textContent).toContain('superdoc-sr-only');
   });
 
   it('should not inject styles twice', () => {
@@ -6954,7 +6954,7 @@ describe('Link accessibility - Tooltip aria-describedby', () => {
     // Look for the description element in the mount, not document
     const descElem = mount.querySelector(`#${describedBy}`);
     expect(descElem?.textContent).toBe('Visit our homepage for more information');
-    expect(descElem?.className).toContain('sr-only');
+    expect(descElem?.className).toContain('superdoc-sr-only');
   });
 
   it('should maintain title attribute for visual tooltip', () => {

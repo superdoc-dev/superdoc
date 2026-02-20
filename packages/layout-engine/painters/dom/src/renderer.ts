@@ -4047,7 +4047,7 @@ export class DomPainter {
     const descId = `link-desc-${linkId}`;
     const descElem = this.doc.createElement('span');
     descElem.id = descId;
-    descElem.className = 'sr-only'; // Screen reader only class
+    descElem.className = 'superdoc-sr-only'; // Screen reader only class
     descElem.textContent = tooltip;
 
     // Insert description element after the link

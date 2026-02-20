@@ -443,6 +443,32 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+    optionalDependencies:
+      '@superdoc-dev/cli-darwin-arm64':
+        specifier: workspace:*
+        version: link:platforms/cli-darwin-arm64
+      '@superdoc-dev/cli-darwin-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-darwin-x64
+      '@superdoc-dev/cli-linux-arm64':
+        specifier: workspace:*
+        version: link:platforms/cli-linux-arm64
+      '@superdoc-dev/cli-linux-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-linux-x64
+      '@superdoc-dev/cli-windows-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-windows-x64
+
+  apps/cli/platforms/cli-darwin-arm64: {}
+
+  apps/cli/platforms/cli-darwin-x64: {}
+
+  apps/cli/platforms/cli-linux-arm64: {}
+
+  apps/cli/platforms/cli-linux-x64: {}
+
+  apps/cli/platforms/cli-windows-x64: {}
 
   apps/docs:
     devDependencies:
